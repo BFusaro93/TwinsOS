@@ -177,7 +177,7 @@ export function SnowRateTiersEditor({ jobId }: { jobId: string }) {
           <button
             type="button"
             onClick={() => removeTier(i)}
-            className="ml-auto text-slate-300 dark:text-neutral-600 hover:text-red-500 dark:hover:text-red-400"
+            className="ml-auto text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>

@@ -92,7 +92,7 @@ function compareRaw(a: unknown, b: unknown, type: ReportFieldType): number {
 function PartialHint({ result }: { result: ReportResult }) {
   if (!result.truncated) return null;
   return (
-    <p className="text-center text-xs text-amber-600">
+    <p className="text-center text-xs text-amber-600 dark:text-amber-400">
       Partial — based on {result.rowCount.toLocaleString()}
       {result.totalCount !== undefined ? ` of ${result.totalCount.toLocaleString()}` : ""} rows
     </p>
@@ -105,7 +105,7 @@ function KpiVisual({ result, visual }: { result: ReportResult; visual: VisualSpe
   const raw = col && row ? row[col.key] : undefined;
   return (
     <div className="flex h-full flex-col items-center justify-center gap-1 py-4">
-      <p className="text-3xl font-bold text-slate-900">
+      <p className="text-3xl font-bold text-slate-900 dark:text-neutral-100">
         {col && raw !== undefined ? formatCellValue(raw, col.type) : "—"}
       </p>
       {result.rowCount > 1 && !result.truncated && (
@@ -132,7 +132,7 @@ function GaugeVisual({ result, visual }: { result: ReportResult; visual: VisualS
 
   return (
     <div className="flex h-full flex-col justify-center gap-3 py-4">
-      <p className="text-center text-2xl font-bold text-slate-900">
+      <p className="text-center text-2xl font-bold text-slate-900 dark:text-neutral-100">
         {col && raw !== undefined ? formatCellValue(raw, col.type) : "—"}
       </p>
       {hasBudget && (
@@ -142,7 +142,7 @@ function GaugeVisual({ result, visual }: { result: ReportResult; visual: VisualS
       )}
       <div className="relative px-1">
         <div
-          className="absolute -top-2.5 -translate-x-1/2 text-slate-700"
+          className="absolute -top-2.5 -translate-x-1/2 text-slate-700 dark:text-neutral-300"
           style={{ left: `${pct}%` }}
         >
           ▼
@@ -212,7 +212,7 @@ function CrosstabVisual({ result, visual }: { result: ReportResult; visual: Visu
     <div className="max-h-72 overflow-auto">
       <table className="w-full text-xs">
         <thead>
-          <tr className="border-b bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <tr className="border-b bg-slate-50 dark:bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             <th className="whitespace-nowrap px-3 py-2 text-left">{labelCol.label}</th>
             {headerValues.map((h) => (
               <th key={h} className="whitespace-nowrap px-3 py-2 text-right">
@@ -224,24 +224,24 @@ function CrosstabVisual({ result, visual }: { result: ReportResult; visual: Visu
         </thead>
         <tbody>
           {rowOrder.map((r) => (
-            <tr key={r} className="border-b last:border-0 hover:bg-slate-50">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-700">{r}</td>
+            <tr key={r} className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-700 dark:text-neutral-300">{r}</td>
               {headerValues.map((h) => {
                 const v = cellMap.get(`${r}|${h}`);
                 return (
-                  <td key={h} className="px-3 py-2 text-right tabular-nums text-slate-700">
+                  <td key={h} className="px-3 py-2 text-right tabular-nums text-slate-700 dark:text-neutral-300">
                     {v === undefined ? "—" : formatCellValue(v, valueCol.type)}
                   </td>
                 );
               })}
-              <td className="px-3 py-2 text-right tabular-nums font-medium text-slate-800">
+              <td className="px-3 py-2 text-right tabular-nums font-medium text-slate-800 dark:text-neutral-100">
                 {formatCellValue(rowTotals.get(r) ?? 0, valueCol.type)}
               </td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr className="border-t bg-slate-50 font-medium text-slate-800">
+          <tr className="border-t bg-slate-50 dark:bg-muted/40 font-medium text-slate-800 dark:text-neutral-100">
             <td className="px-3 py-2">Total</td>
             {headerValues.map((h) => (
               <td key={h} className="px-3 py-2 text-right tabular-nums">
@@ -395,7 +395,7 @@ export function VisualRenderer({
 }) {
   if (result.rows.length === 0) {
     return (
-      <div className={cn("flex h-full items-center justify-center text-xs text-slate-400", className)}>
+      <div className={cn("flex h-full items-center justify-center text-xs text-slate-400 dark:text-neutral-500", className)}>
         No data for the current filters.
       </div>
     );

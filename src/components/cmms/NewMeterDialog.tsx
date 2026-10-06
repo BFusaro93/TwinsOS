@@ -124,7 +124,7 @@ export function NewMeterDialog({ open, onOpenChange, initialData }: NewMeterDial
             {/* Meter Name */}
             <div className="grid gap-1.5">
               <Label htmlFor="meter-name">
-                Meter Name <span className="text-red-500">*</span>
+                Meter Name <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="meter-name"
@@ -137,7 +137,7 @@ export function NewMeterDialog({ open, onOpenChange, initialData }: NewMeterDial
             {/* Asset / Vehicle */}
             <div className="grid gap-1.5">
               <Label>
-                Asset / Vehicle <span className="text-red-500">*</span>
+                Asset / Vehicle <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <EntityCombobox
                 assets={assets ?? []}
@@ -153,7 +153,7 @@ export function NewMeterDialog({ open, onOpenChange, initialData }: NewMeterDial
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label htmlFor="meter-unit">
-                  Unit <span className="text-red-500">*</span>
+                  Unit <span className="text-red-500 dark:text-red-400">*</span>
                 </Label>
                 <Input
                   id="meter-unit"
@@ -165,7 +165,7 @@ export function NewMeterDialog({ open, onOpenChange, initialData }: NewMeterDial
 
               <div className="grid gap-1.5">
                 <Label htmlFor="meter-source">
-                  Source <span className="text-red-500">*</span>
+                  Source <span className="text-red-500 dark:text-red-400">*</span>
                 </Label>
                 <Select value={source} onValueChange={(v) => setSource(v as "manual" | "samsara")}>
                   <SelectTrigger id="meter-source">
@@ -183,7 +183,7 @@ export function NewMeterDialog({ open, onOpenChange, initialData }: NewMeterDial
             {!isEditing && (
               <div className="grid gap-1.5">
                 <Label htmlFor="meter-current">
-                  Current Reading <span className="text-red-500">*</span>
+                  Current Reading <span className="text-red-500 dark:text-red-400">*</span>
                 </Label>
                 <Input
                   id="meter-current"

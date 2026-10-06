@@ -89,7 +89,7 @@ export function InvoiceDetailSheet({ invoiceId, onOpenChange }: Props) {
           </button>
           {canResize && (
             <div className="flex flex-1 items-center">
-              <GripVertical className="h-4 w-4 text-slate-300 dark:text-neutral-600" />
+              <GripVertical className="h-4 w-4 text-slate-300 dark:text-neutral-500" />
             </div>
           )}
         </div>

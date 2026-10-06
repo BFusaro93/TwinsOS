@@ -89,12 +89,12 @@ function jobRevenueCents(job: CRMJob): number {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  scheduled:   "bg-blue-100 text-blue-700",
-  in_progress: "bg-yellow-100 text-yellow-700",
-  completed:   "bg-green-100 text-green-700",
-  cancelled:   "bg-red-100 text-red-600",
-  skipped:     "bg-slate-100 text-slate-500",
-  hold:        "bg-orange-100 text-orange-700",
+  scheduled:   "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  in_progress: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  completed:   "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  cancelled:   "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400",
+  skipped:     "bg-muted text-muted-foreground",
+  hold:        "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -250,14 +250,14 @@ export function JobsList() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
-          { label: "Total Jobs",  value: stats.total,               color: "text-slate-900" },
-          { label: "Scheduled",   value: stats.scheduled,           color: "text-blue-700" },
-          { label: "In Progress", value: stats.inProgress,          color: "text-yellow-700" },
-          { label: "Completed",   value: stats.completed,           color: "text-green-700" },
-          { label: "Revenue",     value: formatCurrency(stats.revenue), color: "text-slate-900" },
+          { label: "Total Jobs",  value: stats.total,               color: "text-slate-900 dark:text-neutral-100" },
+          { label: "Scheduled",   value: stats.scheduled,           color: "text-blue-700 dark:text-blue-400" },
+          { label: "In Progress", value: stats.inProgress,          color: "text-yellow-700 dark:text-yellow-400" },
+          { label: "Completed",   value: stats.completed,           color: "text-green-700 dark:text-green-400" },
+          { label: "Revenue",     value: formatCurrency(stats.revenue), color: "text-slate-900 dark:text-neutral-100" },
         ].map((s) => (
-          <div key={s.label} className="rounded-lg border bg-white p-4 shadow-sm text-center">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{s.label}</p>
+          <div key={s.label} className="rounded-lg border bg-card p-4 shadow-sm text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">{s.label}</p>
             <p className={`mt-1 text-2xl font-bold ${s.color}`}>{s.value}</p>
           </div>
         ))}
@@ -272,10 +272,10 @@ export function JobsList() {
               key={mode}
               onClick={() => setViewMode(mode)}
               className={cn(
-                "px-3 capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2",
+                "px-3 capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:focus-visible:ring-neutral-600 focus-visible:ring-offset-2",
                 viewMode === mode
                   ? "bg-slate-800 text-white"
-                  : "bg-white text-slate-600 hover:bg-slate-50"
+                  : "bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
               )}
             >
               {mode === "active" ? "Active" : mode === "unscheduled" ? "Unscheduled" : "Completed"}
@@ -301,7 +301,7 @@ export function JobsList() {
           </SelectContent>
         </Select>
         {viewMode === "active" && (
-          <div className="flex items-center gap-1 text-sm text-slate-500">
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <Input
               type="date"
               value={fromDate}
@@ -321,7 +321,7 @@ export function JobsList() {
           <Button
             variant="ghost"
             size="sm"
-            className="text-xs text-slate-500"
+            className="text-xs text-muted-foreground"
             onClick={() => { setTypeFilter("all"); setSearch(""); }}
           >
             Clear filters
@@ -331,17 +331,17 @@ export function JobsList() {
 
       {/* Jobs grouped by date */}
       {isLoading && (
-        <div className="py-12 text-center text-slate-400 text-sm">Loading jobs…</div>
+        <div className="py-12 text-center text-slate-400 dark:text-neutral-500 text-sm">Loading jobs…</div>
       )}
 
       {!isLoading && dateKeys.length === 0 && (
-        <div className="py-12 text-center text-slate-400 text-sm">
+        <div className="py-12 text-center text-slate-400 dark:text-neutral-500 text-sm">
           No jobs found for the selected filters.
         </div>
       )}
 
       {dateKeys.length > 0 && (
-        <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+        <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
           <table className="w-full text-sm table-fixed">
             <colgroup>
               <col className="w-[26%]" />
@@ -353,7 +353,7 @@ export function JobsList() {
               <col className="w-8" />
             </colgroup>
             <thead>
-              <tr className="border-b bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 <th className="px-4 py-2.5 text-left">Client</th>
                 <th className="px-4 py-2.5 text-left">Services</th>
                 <th className="px-4 py-2.5 text-left">Type</th>
@@ -365,8 +365,8 @@ export function JobsList() {
             </thead>
             {dateKeys.map((dateKey) => (
               <tbody key={dateKey}>
-                <tr className="bg-slate-50/60">
-                  <td colSpan={7} className="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <tr className="bg-slate-50/60 dark:bg-muted/40">
+                  <td colSpan={7} className="px-4 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     {dateKey === "Unscheduled"
                       ? "Unscheduled"
                       : new Date(dateKey + "T00:00:00").toLocaleDateString("en-US", {
@@ -374,7 +374,7 @@ export function JobsList() {
                           month: "long",
                           day: "numeric",
                         })}
-                    <span className="ml-2 normal-case text-slate-400">({grouped[dateKey].length})</span>
+                    <span className="ml-2 normal-case text-slate-400 dark:text-neutral-500">({grouped[dateKey].length})</span>
                   </td>
                 </tr>
                 {grouped[dateKey].map((o) => (
@@ -405,39 +405,39 @@ function JobRow({ occurrence, onClick }: { occurrence: JobSummary; onClick: () =
     : (job.services ?? []).map((s) => s.serviceName).filter(Boolean).join(", ");
 
   return (
-    <tr className="border-b last:border-0 hover:bg-slate-50 transition-colors cursor-pointer" onClick={onClick}>
+    <tr className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 transition-colors cursor-pointer" onClick={onClick}>
       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-        <Link href={`/crm/clients/${job.clientId}`} className="font-medium text-brand-600 hover:underline">
+        <Link href={`/crm/clients/${job.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">
           {job.clientName ?? "—"}
         </Link>
         {job.serviceAddress && (
-          <p className="text-xs text-slate-400 mt-0.5">{job.serviceAddress}</p>
+          <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">{job.serviceAddress}</p>
         )}
       </td>
       <td className="px-4 py-3">
-        <p className="text-slate-700 text-xs max-w-xs truncate">
-          {serviceNames || <span className="text-slate-400 italic">No services</span>}
+        <p className="text-slate-700 dark:text-neutral-300 text-xs max-w-xs truncate">
+          {serviceNames || <span className="text-slate-400 dark:text-neutral-500 italic">No services</span>}
         </p>
       </td>
-      <td className="px-4 py-3 text-slate-500 text-xs">
+      <td className="px-4 py-3 text-muted-foreground text-xs">
         {JOB_TYPE_LABEL[job.jobType] ?? job.jobType}
       </td>
-      <td className="px-4 py-3 text-slate-600 text-xs">
-        {crewName ?? <span className="text-slate-400 italic">Unassigned</span>}
+      <td className="px-4 py-3 text-slate-600 dark:text-neutral-400 text-xs">
+        {crewName ?? <span className="text-slate-400 dark:text-neutral-500 italic">Unassigned</span>}
       </td>
-      <td className="px-4 py-3 text-right tabular-nums text-slate-700 text-sm">
+      <td className="px-4 py-3 text-right tabular-nums text-slate-700 dark:text-neutral-300 text-sm">
         {formatCurrency(jobRevenueCents(job))}
       </td>
       <td className="px-4 py-3 text-center">
-        <Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[status] ?? "bg-slate-100 text-slate-500")}>
+        <Badge variant="outline" className={cn("text-[10px] border-transparent", STATUS_COLOR[status] ?? "bg-muted text-muted-foreground")}>
           {STATUS_LABEL[status] ?? status}
         </Badge>
         {visitCount > 1 && (
-          <p className="mt-0.5 text-[10px] text-slate-400">{completedCount}/{visitCount} visits</p>
+          <p className="mt-0.5 text-[10px] text-slate-400 dark:text-neutral-500">{completedCount}/{visitCount} visits</p>
         )}
       </td>
       <td className="px-4 py-3 text-center">
-        <ChevronRight className="h-4 w-4 text-slate-300" />
+        <ChevronRight className="h-4 w-4 text-slate-300 dark:text-neutral-500" />
       </td>
     </tr>
   );

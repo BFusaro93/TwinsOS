@@ -35,10 +35,10 @@ function daysBetween(fromYmd: string, to: Date): number {
 
 function StatCard({ label, value, sub, valueClass }: { label: string; value: string | number; sub?: string; valueClass?: string }) {
   return (
-    <div className="rounded-lg border bg-white p-4 shadow-sm text-center">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{label}</p>
-      <p className={`mt-1 text-3xl font-bold ${valueClass ?? "text-slate-900"}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
+    <div className="rounded-lg border bg-card p-4 shadow-sm text-center">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">{label}</p>
+      <p className={`mt-1 text-3xl font-bold ${valueClass ?? "text-slate-900 dark:text-neutral-100"}`}>{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
     </div>
   );
 }
@@ -112,14 +112,14 @@ export function InjuryCasesPage() {
             label="Days Since Last Injury"
             value={isLoading ? "…" : stats.daysSince ?? "—"}
             sub={stats.lastDate ? `Last incident ${formatDate(stats.lastDate)}` : "No injuries on record"}
-            valueClass="text-green-600"
+            valueClass="text-green-600 dark:text-green-400"
           />
         </div>
-        <StatCard label="Open" value={stats.open} valueClass="text-red-600" />
-        <StatCard label="Closed" value={stats.closed} valueClass="text-green-600" />
+        <StatCard label="Open" value={stats.open} valueClass="text-red-600 dark:text-red-400" />
+        <StatCard label="Closed" value={stats.closed} valueClass="text-green-600 dark:text-green-400" />
         <StatCard label="Injuries YTD" value={stats.ytd} sub={`${stats.recordableYtd} recordable`} />
-        <StatCard label="Days Away YTD" value={stats.daysAwayYtd} valueClass="text-orange-600" />
-        <StatCard label="Near Misses YTD" value={stats.nearMissYtd} valueClass="text-sky-600" />
+        <StatCard label="Days Away YTD" value={stats.daysAwayYtd} valueClass="text-orange-600 dark:text-orange-400" />
+        <StatCard label="Near Misses YTD" value={stats.nearMissYtd} valueClass="text-sky-600 dark:text-sky-400" />
       </div>
 
       <Tabs defaultValue="cases" className="flex min-h-0 flex-col">
@@ -153,7 +153,7 @@ export function InjuryCasesPage() {
         </Select>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border bg-white">
+      <div className="overflow-x-auto rounded-lg border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -184,7 +184,7 @@ export function InjuryCasesPage() {
               </TableRow>
             ) : (
               filtered.map((c) => (
-                <TableRow key={c.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setSelectedId(c.id)}>
+                <TableRow key={c.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40" onClick={() => setSelectedId(c.id)}>
                   <TableCell className="font-mono text-xs text-muted-foreground">{c.caseNumber}</TableCell>
                   <TableCell className="font-medium">{c.employeeName}</TableCell>
                   <TableCell className="max-w-[220px] truncate text-sm text-muted-foreground">

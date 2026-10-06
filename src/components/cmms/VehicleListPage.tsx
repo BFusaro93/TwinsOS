@@ -259,10 +259,10 @@ export function VehicleListPage() {
           onVisibleKeysChange={setVisibleKeys}
         />
       </div>
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               {col("icon") && <TableHead className="w-12" />}
               <SortableTableHead label="Name" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               {col("assetTag") && <SortableTableHead label="Asset Tag" sortKey="assetTag" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
@@ -290,7 +290,7 @@ export function VehicleListPage() {
             {!isLoading && filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={visibleKeys.length} className="py-12 text-center">
-                  <p className="text-sm text-slate-400">No vehicles found</p>
+                  <p className="text-sm text-slate-400 dark:text-neutral-500">No vehicles found</p>
                 </TableCell>
               </TableRow>
             )}
@@ -298,7 +298,7 @@ export function VehicleListPage() {
             {!isLoading && sorted.map((vehicle) => (
               <TableRow
                 key={vehicle.id}
-                className="cursor-pointer hover:bg-slate-50"
+                className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
                 onClick={() => setSheetVehicleId(vehicle.id)}
               >
                 {col("icon") && (
@@ -323,31 +323,31 @@ export function VehicleListPage() {
                 )}
                 <TableCell className="font-medium">{vehicle.name}</TableCell>
                 {col("assetTag") && (
-                  <TableCell className="font-mono text-xs text-slate-500">{vehicle.assetTag}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{vehicle.assetTag}</TableCell>
                 )}
                 {col("equipmentNumber") && (
-                  <TableCell className="font-mono text-xs text-slate-600">{vehicle.equipmentNumber ?? "—"}</TableCell>
+                  <TableCell className="font-mono text-xs text-slate-600 dark:text-neutral-400">{vehicle.equipmentNumber ?? "—"}</TableCell>
                 )}
                 {col("make") && (
-                  <TableCell className="text-slate-600">{vehicle.make ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{vehicle.make ?? "—"}</TableCell>
                 )}
                 {col("model") && (
-                  <TableCell className="text-slate-600">{vehicle.model ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{vehicle.model ?? "—"}</TableCell>
                 )}
                 {col("year") && (
-                  <TableCell className="text-slate-600">{vehicle.year ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{vehicle.year ?? "—"}</TableCell>
                 )}
                 {col("licensePlate") && (
-                  <TableCell className="font-mono text-xs text-slate-600">{vehicle.licensePlate ?? "—"}</TableCell>
+                  <TableCell className="font-mono text-xs text-slate-600 dark:text-neutral-400">{vehicle.licensePlate ?? "—"}</TableCell>
                 )}
                 {col("division") && (
-                  <TableCell className="text-slate-600">{vehicle.division ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{vehicle.division ?? "—"}</TableCell>
                 )}
                 {col("assignedCrew") && (
-                  <TableCell className="text-slate-600">{vehicle.assignedCrew ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{vehicle.assignedCrew ?? "—"}</TableCell>
                 )}
                 {col("fuelType") && (
-                  <TableCell className="text-slate-600">{vehicle.fuelType ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{vehicle.fuelType ?? "—"}</TableCell>
                 )}
                 {col("status") && (
                   <TableCell>
@@ -372,13 +372,13 @@ export function VehicleListPage() {
         action={
           <div className="flex flex-wrap items-center gap-2">
             {/* View toggles */}
-            <div className="flex items-center rounded-md border bg-white shadow-sm">
+            <div className="flex items-center rounded-md border bg-card shadow-sm">
               <Button
                 variant="ghost"
                 size="sm"
                 className={cn(
                   "rounded-r-none border-r px-3",
-                  viewMode === "list" && "bg-slate-100 font-semibold"
+                  viewMode === "list" && "bg-muted font-semibold"
                 )}
                 onClick={() => setViewMode("list")}
               >
@@ -390,7 +390,7 @@ export function VehicleListPage() {
                 size="sm"
                 className={cn(
                   "rounded-none border-r px-3",
-                  viewMode === "table" && "bg-slate-100 font-semibold"
+                  viewMode === "table" && "bg-muted font-semibold"
                 )}
                 onClick={() => setViewMode("table")}
               >
@@ -402,7 +402,7 @@ export function VehicleListPage() {
                 size="sm"
                 className={cn(
                   "rounded-l-none px-3",
-                  viewMode === "service" && "bg-amber-50 font-semibold text-amber-700"
+                  viewMode === "service" && "bg-amber-50 dark:bg-amber-950/40 font-semibold text-amber-700 dark:text-amber-400"
                 )}
                 onClick={() => setViewMode("service")}
               >

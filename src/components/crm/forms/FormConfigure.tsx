@@ -128,16 +128,16 @@ export function FormConfigure({ form }: Props) {
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
       {/* ── Confirmation ──────────────────────────────────────────────────────── */}
-      <section className="rounded-lg border bg-white p-6 shadow-sm space-y-4">
+      <section className="rounded-lg border bg-card p-6 shadow-sm space-y-4">
         <div>
-          <h3 className="text-sm font-semibold text-slate-800">Confirmation</h3>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Confirmation</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
             What happens after a user submits this form
           </p>
         </div>
 
         <div className="space-y-2">
-          <Label className="text-xs font-medium text-slate-700">Response type</Label>
+          <Label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Response type</Label>
           <div className="flex gap-3">
             {([
               { value: "message", label: "Simple Message" },
@@ -148,8 +148,8 @@ export function FormConfigure({ form }: Props) {
                 onClick={() => setConfirmType(value)}
                 className={`flex-1 rounded-md border py-2 text-sm font-medium transition-colors ${
                   confirmType === value
-                    ? "border-brand-500 bg-brand-50 text-brand-700"
-                    : "border-slate-200 text-slate-500 hover:border-slate-300"
+                    ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+                    : "border-border text-muted-foreground hover:border-slate-300 dark:hover:border-neutral-700"
                 }`}
               >
                 {label}
@@ -160,18 +160,18 @@ export function FormConfigure({ form }: Props) {
 
         {confirmType === "message" ? (
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-700">Confirmation message</Label>
+            <Label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Confirmation message</Label>
             <textarea
               value={confirmMessage}
               onChange={(e) => setConfirmMessage(e.target.value)}
               rows={3}
               placeholder="Thank you! Your response has been submitted."
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
             />
           </div>
         ) : (
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-slate-700">Redirect URL</Label>
+            <Label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Redirect URL</Label>
             <Input
               value={confirmUrl}
               onChange={(e) => setConfirmUrl(e.target.value)}
@@ -183,11 +183,11 @@ export function FormConfigure({ form }: Props) {
       </section>
 
       {/* ── Email Notifications ──────────────────────────────────────────────── */}
-      <section className="rounded-lg border bg-white p-6 shadow-sm space-y-4">
+      <section className="rounded-lg border bg-card p-6 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-slate-800">Email Notifications</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Email Notifications</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
               Send an email when this form is submitted
             </p>
           </div>
@@ -198,28 +198,28 @@ export function FormConfigure({ form }: Props) {
         </div>
 
         {notifications.length === 0 && (
-          <div className="rounded-md border border-dashed bg-slate-50 py-6 text-center text-xs text-slate-400">
+          <div className="rounded-md border border-dashed bg-slate-50 dark:bg-muted/40 py-6 text-center text-xs text-slate-400 dark:text-neutral-500">
             No notifications configured
           </div>
         )}
 
         {notifications.map((n, idx) => (
-          <div key={n._key} className="rounded-md border bg-slate-50 p-4 space-y-3">
+          <div key={n._key} className="rounded-md border bg-slate-50 dark:bg-muted/40 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Mail className="h-3.5 w-3.5 text-slate-400" />
-                <span className="text-xs font-semibold text-slate-600">
+                <Mail className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
+                <span className="text-xs font-semibold text-slate-600 dark:text-neutral-400">
                   Notification #{idx + 1}
                 </span>
               </div>
-              <button onClick={() => removeNotification(n._key)} className="text-slate-400 hover:text-red-600">
+              <button onClick={() => removeNotification(n._key)} className="text-slate-400 dark:text-neutral-500 hover:text-red-600 dark:hover:text-red-400">
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label className="text-[10px] uppercase tracking-wide text-slate-400">From Name</Label>
+                <Label className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-neutral-500">From Name</Label>
                 <Input
                   value={n.fromName}
                   onChange={(e) => updateNotification(n._key, { fromName: e.target.value })}
@@ -228,7 +228,7 @@ export function FormConfigure({ form }: Props) {
                 />
               </div>
               <div>
-                <Label className="text-[10px] uppercase tracking-wide text-slate-400">From Email</Label>
+                <Label className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-neutral-500">From Email</Label>
                 <Input
                   value={n.fromEmail}
                   onChange={(e) => updateNotification(n._key, { fromEmail: e.target.value })}
@@ -239,7 +239,7 @@ export function FormConfigure({ form }: Props) {
             </div>
 
             <div>
-              <Label className="text-[10px] uppercase tracking-wide text-slate-400">
+              <Label className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Recipients (emails, roles, or &ldquo;account&rdquo; for the submitter)
               </Label>
               <Input
@@ -251,7 +251,7 @@ export function FormConfigure({ form }: Props) {
             </div>
 
             <div>
-              <Label className="text-[10px] uppercase tracking-wide text-slate-400">Subject</Label>
+              <Label className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-neutral-500">Subject</Label>
               <Input
                 value={n.subject}
                 onChange={(e) => updateNotification(n._key, { subject: e.target.value })}
@@ -260,12 +260,12 @@ export function FormConfigure({ form }: Props) {
             </div>
 
             <div>
-              <Label className="text-[10px] uppercase tracking-wide text-slate-400">Body</Label>
+              <Label className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-neutral-500">Body</Label>
               <textarea
                 value={n.body}
                 onChange={(e) => updateNotification(n._key, { body: e.target.value })}
                 rows={3}
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="mt-1 w-full rounded-md border border-border bg-card px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
             </div>
 
@@ -274,10 +274,10 @@ export function FormConfigure({ form }: Props) {
                 checked={n.sendCopy}
                 onCheckedChange={(v) => updateNotification(n._key, { sendCopy: v })}
               />
-              <Label className="text-xs text-slate-600">Include a copy of the form response</Label>
+              <Label className="text-xs text-slate-600 dark:text-neutral-400">Include a copy of the form response</Label>
             </div>
 
-            <p className="text-[10px] text-slate-400">
+            <p className="text-[10px] text-slate-400 dark:text-neutral-500">
               Merge fields available: [formname], [submittedname], [submittedemail], [submittedphone], [submittedmessage], [companyname], [companyphone], or any field label on this form (e.g. a &quot;How can we help?&quot; field → [howcanwehelp]).
             </p>
           </div>
@@ -285,18 +285,18 @@ export function FormConfigure({ form }: Props) {
       </section>
 
       {/* ── Account Management ────────────────────────────────────────────────── */}
-      <section className="rounded-lg border bg-white p-6 shadow-sm space-y-5">
+      <section className="rounded-lg border bg-card p-6 shadow-sm space-y-5">
         <div>
-          <h3 className="text-sm font-semibold text-slate-800">Account Management</h3>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Account Management</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
             How client records are created or updated when this form is submitted
           </p>
         </div>
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-700">Automatically Manage Accounts</p>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">Automatically Manage Accounts</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
               {autoManage
                 ? "Accounts will be automatically created or updated on submission"
                 : "You will manually review each submission in Form Responses"}
@@ -306,8 +306,8 @@ export function FormConfigure({ form }: Props) {
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs font-medium text-slate-700">Update Options</Label>
-          <p className="text-[11px] text-slate-400">
+          <Label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Update Options</Label>
+          <p className="text-[11px] text-slate-400 dark:text-neutral-500">
             When a form is submitted by an existing account, how should it be updated?
             Public submissions are unverified, so an existing account&apos;s email, phone,
             name and filled-in address are never overwritten — differences are listed on
@@ -325,8 +325,8 @@ export function FormConfigure({ form }: Props) {
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs font-medium text-slate-700">Account Matching</Label>
-          <p className="text-[11px] text-slate-400">
+          <Label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Account Matching</Label>
+          <p className="text-[11px] text-slate-400 dark:text-neutral-500">
             When should a response be matched to an existing account?
           </p>
           <Select value={matchingStrategy} onValueChange={(v) => setMatchingStrategy(v as AccountMatchingStrategy)}>
@@ -346,17 +346,17 @@ export function FormConfigure({ form }: Props) {
       </section>
 
       {/* ── Tag Settings ──────────────────────────────────────────────────────── */}
-      <section className="rounded-lg border bg-white p-6 shadow-sm space-y-4">
+      <section className="rounded-lg border bg-card p-6 shadow-sm space-y-4">
         <div>
-          <h3 className="text-sm font-semibold text-slate-800">Tag Settings</h3>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Tag Settings</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
             Automatically add or remove client tags when this form is submitted
           </p>
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs font-medium text-slate-700">Tags on Submit — Add</Label>
-          <p className="text-[11px] text-slate-400">
+          <Label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Tags on Submit — Add</Label>
+          <p className="text-[11px] text-slate-400 dark:text-neutral-500">
             Tags to add to the client account when the form is submitted (comma-separated)
           </p>
           <Input
@@ -368,8 +368,8 @@ export function FormConfigure({ form }: Props) {
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs font-medium text-slate-700">Tags on Submit — Remove</Label>
-          <p className="text-[11px] text-slate-400">
+          <Label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Tags on Submit — Remove</Label>
+          <p className="text-[11px] text-slate-400 dark:text-neutral-500">
             Tags to remove from the client account when the form is submitted (comma-separated)
           </p>
           <Input

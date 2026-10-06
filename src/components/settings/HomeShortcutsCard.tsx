@@ -58,23 +58,23 @@ export function HomeShortcutsCard() {
   }
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <div className="px-6 py-4">
-        <h2 className="text-sm font-semibold text-slate-900">Home Page Shortcuts</h2>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Home Page Shortcuts</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
           External app tiles shown on the home page (e.g. Samsara, Gusto). Each opens in a new tab.
         </p>
       </div>
       <Separator />
       <div className="flex flex-col gap-4 px-6 py-4">
         {rows.length === 0 && (
-          <p className="text-sm text-slate-400">No shortcuts yet.</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No shortcuts yet.</p>
         )}
         {rows.map((row) => {
           const selectedIcon = HOME_SHORTCUT_ICONS.find((o) => o.key === row.icon) ?? HOME_SHORTCUT_ICONS[0];
           const SelectedIcon = selectedIcon.icon;
           return (
-            <div key={row.id} className="flex flex-col gap-2 rounded-md border border-slate-200 p-3 md:flex-row md:items-start md:gap-3">
+            <div key={row.id} className="flex flex-col gap-2 rounded-md border border-border p-3 md:flex-row md:items-start md:gap-3">
               <Select value={row.icon} onValueChange={(v) => updateRow(row.id, { icon: v })}>
                 <SelectTrigger className="h-9 w-full md:w-32">
                   <SelectValue>
@@ -116,7 +116,7 @@ export function HomeShortcutsCard() {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-9 shrink-0 text-red-500 hover:text-red-600"
+                className="h-9 shrink-0 text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400"
                 onClick={() => removeRow(row.id)}
               >
                 <Trash2 className="h-4 w-4" />
@@ -130,7 +130,7 @@ export function HomeShortcutsCard() {
             <Plus className="h-3.5 w-3.5" /> Add Shortcut
           </Button>
           <div className="flex items-center gap-3">
-            {saved && <span className="text-xs text-brand-600">Saved</span>}
+            {saved && <span className="text-xs text-brand-600 dark:text-brand-400">Saved</span>}
             <Button size="sm" onClick={handleSave} disabled={isPending}>
               {isPending ? "Saving…" : "Save Changes"}
             </Button>

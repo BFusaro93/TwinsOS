@@ -91,7 +91,7 @@ export function ClientPortalTab() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 py-8 text-slate-400">
+      <div className="flex items-center gap-2 py-8 text-slate-400 dark:text-neutral-500">
         <Loader2 className="h-4 w-4 animate-spin" />
         <span className="text-sm">Loading portal settings…</span>
       </div>
@@ -101,10 +101,10 @@ export function ClientPortalTab() {
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
       {/* Branding */}
-      <section className="rounded-xl border border-slate-200 bg-white">
+      <section className="rounded-xl border border-border bg-card">
         <div className="border-b px-4 py-3 flex items-center gap-2">
-          <Palette className="h-4 w-4 text-slate-400" />
-          <h2 className="text-sm font-semibold text-slate-800">Branding</h2>
+          <Palette className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Branding</h2>
         </div>
         <div className="p-4 flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-4">
@@ -115,7 +115,7 @@ export function ClientPortalTab() {
                 onChange={(e) => patch("company_name", e.target.value)}
                 placeholder="Your Company Name"
               />
-              <p className="text-xs text-slate-400">Displayed in the portal header and emails</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">Displayed in the portal header and emails</p>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Accent Color</Label>
@@ -124,7 +124,7 @@ export function ClientPortalTab() {
                   type="color"
                   value={form.accent_color}
                   onChange={(e) => patch("accent_color", e.target.value)}
-                  className="h-9 w-16 cursor-pointer rounded-md border border-slate-200 p-0.5"
+                  className="h-9 w-16 cursor-pointer rounded-md border border-border p-0.5"
                 />
                 <Input
                   value={form.accent_color}
@@ -142,7 +142,7 @@ export function ClientPortalTab() {
               onChange={(e) => patch("logo_url", e.target.value)}
               placeholder="https://cdn.example.com/logo.png"
             />
-            <p className="text-xs text-slate-400">Publicly accessible image URL. Recommended: 200×60px PNG or SVG.</p>
+            <p className="text-xs text-slate-400 dark:text-neutral-500">Publicly accessible image URL. Recommended: 200×60px PNG or SVG.</p>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Welcome Message</Label>
@@ -151,22 +151,22 @@ export function ClientPortalTab() {
               onChange={(e) => patch("welcome_message", e.target.value)}
               placeholder="Welcome to your client portal! Here you can view your invoices, services, and estimates."
               rows={2}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+              className="rounded-md border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 resize-none"
             />
           </div>
         </div>
       </section>
 
       {/* Support contact */}
-      <section className="rounded-xl border border-slate-200 bg-white">
+      <section className="rounded-xl border border-border bg-card">
         <div className="border-b px-4 py-3 flex items-center gap-2">
-          <Phone className="h-4 w-4 text-slate-400" />
-          <h2 className="text-sm font-semibold text-slate-800">Support Contact</h2>
+          <Phone className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Support Contact</h2>
         </div>
         <div className="p-4 grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <Label className="flex items-center gap-1.5">
-              <Phone className="h-3.5 w-3.5 text-slate-400" /> Support Phone
+              <Phone className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" /> Support Phone
             </Label>
             <PhoneInput
               value={form.support_phone}
@@ -176,7 +176,7 @@ export function ClientPortalTab() {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label className="flex items-center gap-1.5">
-              <Mail className="h-3.5 w-3.5 text-slate-400" /> Support Email
+              <Mail className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" /> Support Email
             </Label>
             <Input
               value={form.support_email}
@@ -189,16 +189,16 @@ export function ClientPortalTab() {
       </section>
 
       {/* Feature toggles */}
-      <section className="rounded-xl border border-slate-200 bg-white">
+      <section className="rounded-xl border border-border bg-card">
         <div className="border-b px-4 py-3 flex items-center gap-2">
-          <Globe className="h-4 w-4 text-slate-400" />
-          <h2 className="text-sm font-semibold text-slate-800">Portal Features</h2>
+          <Globe className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Portal Features</h2>
         </div>
         <div className="p-4 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-700">Show Estimates</p>
-              <p className="text-xs text-slate-400 mt-0.5">Clients can view open and accepted estimates</p>
+              <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">Show Estimates</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">Clients can view open and accepted estimates</p>
             </div>
             <Switch
               checked={form.allow_estimates}
@@ -207,8 +207,8 @@ export function ClientPortalTab() {
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-700">Allow Tickets</p>
-              <p className="text-xs text-slate-400 mt-0.5">Clients can submit support tickets from the portal</p>
+              <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">Allow Tickets</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">Clients can submit support tickets from the portal</p>
             </div>
             <Switch
               checked={form.allow_tickets}
@@ -217,8 +217,8 @@ export function ClientPortalTab() {
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-700">Document Library</p>
-              <p className="text-xs text-slate-400 mt-0.5">Clients can browse and download shared company documents</p>
+              <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">Document Library</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">Clients can browse and download shared company documents</p>
             </div>
             <Switch
               checked={form.allow_documents}
@@ -232,25 +232,25 @@ export function ClientPortalTab() {
       <PortalDocumentLibrary />
 
       {/* Ticket categories */}
-      <section className="rounded-xl border border-slate-200 bg-white">
+      <section className="rounded-xl border border-border bg-card">
         <div className="border-b px-4 py-3 flex items-center gap-2">
-          <Ticket className="h-4 w-4 text-slate-400" />
-          <h2 className="text-sm font-semibold text-slate-800">Visible Ticket Categories</h2>
-          <span className="ml-auto text-xs text-slate-400">
+          <Ticket className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Visible Ticket Categories</h2>
+          <span className="ml-auto text-xs text-slate-400 dark:text-neutral-500">
             {form.portal_ticket_categories.length} of {allCategories.length} visible
           </span>
         </div>
         <div className="p-4">
           {allCategories.length === 0 ? (
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-400 dark:text-neutral-500">
               No ticket categories defined yet.{" "}
-              <a href="/crm/settings?tab=crm" className="text-brand-600 hover:underline">
+              <a href="/crm/settings?tab=crm" className="text-brand-600 dark:text-brand-400 hover:underline">
                 Add categories in CRM settings →
               </a>
             </p>
           ) : (
             <div className="flex flex-col gap-2">
-              <p className="text-xs text-slate-500 mb-1">
+              <p className="text-xs text-muted-foreground mb-1">
                 Choose which categories clients can select when submitting a ticket. Internal-only categories (e.g. &quot;Collections&quot;, &quot;Internal Note&quot;) should stay hidden.
               </p>
               {allCategories.map((cat) => {
@@ -259,24 +259,24 @@ export function ClientPortalTab() {
                   <div
                     key={cat}
                     className={`flex items-center justify-between rounded-lg border px-3 py-2 cursor-pointer transition ${
-                      visible ? "border-brand-200 bg-brand-50" : "border-slate-200 hover:bg-slate-50"
+                      visible ? "border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30" : "border-border hover:bg-slate-50 dark:hover:bg-muted/40"
                     }`}
                     onClick={() => toggleCategory(cat)}
                   >
                     <div className="flex items-center gap-2">
                       {visible ? (
-                        <Eye className="h-4 w-4 text-brand-500" />
+                        <Eye className="h-4 w-4 text-brand-500 dark:text-brand-400" />
                       ) : (
-                        <EyeOff className="h-4 w-4 text-slate-300" />
+                        <EyeOff className="h-4 w-4 text-slate-300 dark:text-neutral-500" />
                       )}
-                      <span className={`text-sm ${visible ? "text-slate-800 font-medium" : "text-slate-500"}`}>
+                      <span className={`text-sm ${visible ? "text-slate-800 dark:text-neutral-100 font-medium" : "text-muted-foreground"}`}>
                         {cat}
                       </span>
                     </div>
                     <span className={`text-xs rounded-full px-2 py-0.5 border ${
                       visible
-                        ? "bg-brand-100 text-brand-700 border-brand-200"
-                        : "bg-slate-100 text-slate-400 border-slate-200"
+                        ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 border-brand-200 dark:border-brand-800"
+                        : "bg-muted text-slate-400 dark:text-neutral-500 border-border"
                     }`}>
                       {visible ? "Visible" : "Hidden"}
                     </span>
@@ -289,14 +289,14 @@ export function ClientPortalTab() {
       </section>
 
       {/* Preview link */}
-      <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-        <Globe className="h-4 w-4 text-slate-400 shrink-0" />
+      <div className="flex items-center gap-3 rounded-lg border border-border bg-slate-50 dark:bg-muted/40 px-4 py-3">
+        <Globe className="h-4 w-4 text-slate-400 dark:text-neutral-500 shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-slate-700">Client portal is live at:</p>
+          <p className="text-sm text-slate-700 dark:text-neutral-300">Client portal is live at:</p>
           <a
             href="/portal/login"
             target="_blank"
-            className="text-sm text-brand-600 hover:underline font-mono"
+            className="text-sm text-brand-600 dark:text-brand-400 hover:underline font-mono"
           >
             {typeof window !== "undefined" ? window.location.origin : ""}/portal/login
           </a>

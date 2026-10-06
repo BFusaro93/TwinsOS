@@ -81,19 +81,19 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
           <DialogTitle>Add Reading</DialogTitle>
           <DialogDescription>
             Log a new reading for{" "}
-            <span className="font-medium text-slate-700">{meter.assetName}</span> —{" "}
+            <span className="font-medium text-slate-700 dark:text-neutral-300">{meter.assetName}</span> —{" "}
             {meter.name}
           </DialogDescription>
         </DialogHeader>
 
         {/* Current value context */}
-        <div className="rounded-md border bg-slate-50 px-4 py-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+        <div className="rounded-md border bg-slate-50 dark:bg-muted/40 px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             Current Reading
           </p>
-          <p className="mt-0.5 text-lg font-bold text-slate-900">
+          <p className="mt-0.5 text-lg font-bold text-slate-900 dark:text-neutral-100">
             {meter.currentValue.toLocaleString()}{" "}
-            <span className="text-sm font-normal text-slate-400">{meter.unit}</span>
+            <span className="text-sm font-normal text-slate-400 dark:text-neutral-500">{meter.unit}</span>
           </p>
         </div>
 
@@ -102,7 +102,7 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
             {/* Reading Value */}
             <div className="grid gap-1.5">
               <Label htmlFor="reading-value">
-                Reading Value <span className="text-red-500">*</span>
+                Reading Value <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="reading-value"
@@ -112,7 +112,7 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
                 value={readingValue}
                 onChange={(e) => setReadingValue(e.target.value)}
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Must be ≥ current reading ({meter.currentValue.toLocaleString()} {meter.unit})
               </p>
             </div>
@@ -120,7 +120,7 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
             {/* Reading Date */}
             <div className="grid gap-1.5">
               <Label htmlFor="reading-date">
-                Reading Date <span className="text-red-500">*</span>
+                Reading Date <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="reading-date"

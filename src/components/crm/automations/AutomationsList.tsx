@@ -242,8 +242,8 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
   const templateSection = (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-amber-500" />
-        <p className="text-sm font-semibold text-slate-700">Start from a template</p>
+        <Sparkles className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+        <p className="text-sm font-semibold text-slate-700 dark:text-neutral-300">Start from a template</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {AUTOMATION_TEMPLATES.map((t) => {
@@ -251,11 +251,11 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
           return (
             <div
               key={t.name}
-              className="flex flex-col justify-between gap-3 rounded-lg border bg-white p-4 shadow-sm"
+              className="flex flex-col justify-between gap-3 rounded-lg border bg-card p-4 shadow-sm"
             >
               <div>
-                <p className="text-sm font-semibold text-slate-800">{t.name}</p>
-                <p className="mt-1 text-xs text-slate-500">{t.description}</p>
+                <p className="text-sm font-semibold text-slate-800 dark:text-neutral-100">{t.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{t.description}</p>
               </div>
               {canModify && (
                 <Button
@@ -297,10 +297,10 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
       ) : (
         <div className="flex flex-col gap-6">
           {templateSection}
-        <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50">
+              <TableRow className="bg-slate-50 dark:bg-muted/40">
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Last Modified</TableHead>
@@ -312,18 +312,18 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
               {automations.map((a) => (
                 <TableRow
                   key={a.id}
-                  className="cursor-pointer hover:bg-slate-50"
+                  className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
                   onClick={() => router.push(`/crm/communication/automations/${a.id}`)}
                 >
                   <TableCell className="font-medium">{a.name}</TableCell>
-                  <TableCell className="text-slate-500 text-sm">
+                  <TableCell className="text-muted-foreground text-sm">
                     {a.description ? (
                       <span className="line-clamp-1 max-w-xs">{a.description}</span>
                     ) : (
-                      <span className="italic text-slate-300">No description</span>
+                      <span className="italic text-slate-300 dark:text-neutral-500">No description</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-slate-500 text-sm">
+                  <TableCell className="text-muted-foreground text-sm">
                     {format(new Date(a.updatedAt), "MMM d, yyyy")}
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
@@ -339,11 +339,11 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
                         }
                       />
                       {a.isActive ? (
-                        <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
+                        <Badge variant="outline" className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400">
                           Enabled
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="border-slate-200 bg-slate-100 text-slate-500">
+                        <Badge variant="outline" className="border-border bg-muted text-muted-foreground">
                           Disabled
                         </Badge>
                       )}
@@ -363,7 +363,7 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-slate-400 hover:text-red-600"
+                          className="h-7 w-7 text-slate-400 dark:text-neutral-500 hover:text-red-600 dark:hover:text-red-400"
                           onClick={() => void handleDelete(a.id, a.name)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />

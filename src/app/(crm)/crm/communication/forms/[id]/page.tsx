@@ -53,7 +53,7 @@ export default function FormDetailPage({ params }: { params: Promise<{ id: strin
 
   if (!form) {
     return (
-      <div className="flex h-full items-center justify-center text-slate-400">
+      <div className="flex h-full items-center justify-center text-slate-400 dark:text-neutral-500">
         Form not found
       </div>
     );
@@ -119,14 +119,14 @@ export default function FormDetailPage({ params }: { params: Promise<{ id: strin
               onClick={() => setTab(key)}
               className={cn(
                 "flex items-center gap-2 text-sm font-medium transition-colors",
-                activeTab === key ? "text-brand-600" : "text-slate-400 hover:text-slate-600"
+                activeTab === key ? "text-brand-600 dark:text-brand-400" : "text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
               )}
             >
               <span className={cn(
                 "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
                 activeTab === key
                   ? "bg-brand-600 text-white"
-                  : "bg-slate-100 text-slate-400"
+                  : "bg-muted text-slate-400 dark:text-neutral-500"
               )}>
                 {idx + 1}
               </span>

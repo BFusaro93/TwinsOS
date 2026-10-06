@@ -103,7 +103,7 @@ export function PausePMScheduleDialog({ open, onOpenChange, pmScheduleId, schedu
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-slate-700">
+          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
             <Checkbox
               checked={untilResumed}
               onCheckedChange={(v) => {
@@ -114,7 +114,7 @@ export function PausePMScheduleDialog({ open, onOpenChange, pmScheduleId, schedu
             Until I resume it
           </label>
 
-          <label className={`flex items-start gap-2 text-sm ${untilResumed ? "text-slate-400" : "text-slate-700"}`}>
+          <label className={`flex items-start gap-2 text-sm ${untilResumed ? "text-slate-400 dark:text-neutral-500" : "text-slate-700 dark:text-neutral-300"}`}>
             <Checkbox
               checked={recursYearly}
               disabled={untilResumed}
@@ -124,7 +124,7 @@ export function PausePMScheduleDialog({ open, onOpenChange, pmScheduleId, schedu
             <span>
               Repeat every year
               {recursYearly && startsOn && resumesOn && !untilResumed && (
-                <span className="block text-xs text-slate-500">
+                <span className="block text-xs text-muted-foreground">
                   Paused {formatDate(startsOn).replace(/, \d{4}$/, "")} → {formatDate(resumesOn).replace(/, \d{4}$/, "")} each year, e.g. mowers over winter.
                 </span>
               )}
@@ -136,7 +136,7 @@ export function PausePMScheduleDialog({ open, onOpenChange, pmScheduleId, schedu
             <Input id="pause-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Off-season — mowers stored" />
           </div>
 
-          {error && startsOn && <p className="text-xs text-red-500">{error}</p>}
+          {error && startsOn && <p className="text-xs text-red-500 dark:text-red-400">{error}</p>}
         </div>
 
         <DialogFooter>

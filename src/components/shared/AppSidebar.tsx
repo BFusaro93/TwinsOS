@@ -1,3 +1,4 @@
+// dark-mode-codemod: skip — dark sidebar chrome in both themes
 "use client";
 
 import Link from "next/link";
@@ -60,7 +61,7 @@ export function AppSidebar() {
         {NAV_SECTIONS.map((section) => (
           <div key={section.label} className="mb-4">
             {!sidebarCollapsed && (
-              <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
+              <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
                 {section.label}
               </p>
             )}
@@ -81,8 +82,8 @@ export function AppSidebar() {
                   className={cn(
                     "flex items-center gap-3 px-4 py-2 text-sm transition-colors",
                     isActive
-                      ? "border-l-2 border-brand-400 bg-card/5 text-brand-400"
-                      : "border-l-2 border-transparent text-slate-300 dark:text-neutral-600 hover:bg-card/5 hover:text-white",
+                      ? "border-l-2 border-brand-400 bg-white/5 text-brand-400"
+                      : "border-l-2 border-transparent text-slate-300 hover:bg-white/5 hover:text-white",
                     sidebarCollapsed && "justify-center px-0"
                   )}
                   title={sidebarCollapsed ? item.label : undefined}
@@ -103,7 +104,7 @@ export function AppSidebar() {
         <Link
           href="/home"
           className={cn(
-            "flex items-center gap-2 rounded-md px-3 py-2 text-xs text-slate-400 dark:text-neutral-500 transition-colors hover:bg-card/5 hover:text-slate-200",
+            "flex items-center gap-2 rounded-md px-3 py-2 text-xs text-slate-400 transition-colors hover:bg-white/5 hover:text-slate-200",
             sidebarCollapsed && "justify-center px-2"
           )}
           title={sidebarCollapsed ? "Home" : undefined}
@@ -123,7 +124,7 @@ export function AppSidebar() {
             <p className="truncate text-sm font-medium text-slate-200">
               {currentUser.name}
             </p>
-            <p className="truncate text-xs capitalize text-slate-400 dark:text-neutral-500">{currentUser.role}</p>
+            <p className="truncate text-xs capitalize text-slate-400">{currentUser.role}</p>
           </div>
         </div>
       )}

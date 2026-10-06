@@ -179,7 +179,7 @@ function EstimateAttachmentsTab({ estimateId }: { estimateId: string }) {
             : "border-border bg-card hover:border-slate-300 dark:hover:border-neutral-700"
         )}
       >
-        <Upload className={cn("mx-auto h-8 w-8 mb-3", dragging ? "text-brand-400" : "text-slate-300 dark:text-neutral-600")} />
+        <Upload className={cn("mx-auto h-8 w-8 mb-3", dragging ? "text-brand-400" : "text-slate-300 dark:text-neutral-500")} />
         <p className="text-sm font-medium text-slate-600 dark:text-neutral-400 mb-1">
           {dragging ? "Drop files here" : "Drag & drop files here"}
         </p>
@@ -209,7 +209,7 @@ function EstimateAttachmentsTab({ estimateId }: { estimateId: string }) {
         <div className="rounded-lg border bg-card shadow-sm divide-y">
           {attachments.map((a) => (
             <div key={a.id} className="flex items-center gap-3 px-4 py-3 group">
-              <Paperclip className="h-4 w-4 text-slate-300 dark:text-neutral-600 shrink-0" />
+              <Paperclip className="h-4 w-4 text-slate-300 dark:text-neutral-500 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-slate-800 dark:text-neutral-100 truncate">{a.fileName}</p>
                 <p className="text-xs text-slate-400 dark:text-neutral-500">

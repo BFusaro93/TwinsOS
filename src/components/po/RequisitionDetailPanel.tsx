@@ -67,8 +67,8 @@ interface RequisitionDetailPanelProps {
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1.5">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-slate-900 dark:text-neutral-100">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -200,7 +200,7 @@ function DetailsTab({
   return (
     <div className="flex flex-col gap-5 p-6">
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Approval Status
         </p>
         <ApprovalFlowIndicator currentStatus={status} />
@@ -227,7 +227,7 @@ function DetailsTab({
         {/* Approval chain (shown once in pending / approved / rejected) */}
         {status !== "draft" && status !== "ordered" && status !== "closed" && (
           <div className="mt-4">
-            <p className="mb-2 text-xs font-medium text-slate-500">Approval Chain</p>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">Approval Chain</p>
             <ApprovalChain
               entityId={req.id}
               // The hook writes the DB status; only update local state here
@@ -274,7 +274,7 @@ function DetailsTab({
                     key={po.id}
                     type="button"
                     onClick={onPoClick}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 hover:bg-brand-100 transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-2 py-0.5 text-xs font-medium text-brand-700 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors"
                   >
                     <ExternalLink className="h-3 w-3" />
                     {po.poNumber}
@@ -292,7 +292,7 @@ function DetailsTab({
           <MetaRow
             label="Work Order"
             value={
-              <Badge variant="outline" className="border-brand-200 bg-brand-50 text-brand-700">
+              <Badge variant="outline" className="border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400">
                 {req.workOrderId}
               </Badge>
             }
@@ -302,7 +302,7 @@ function DetailsTab({
           <MetaRow
             label="CRM Job"
             value={
-              <Badge variant="outline" className="border-brand-200 bg-brand-50 text-brand-700">
+              <Badge variant="outline" className="border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400">
                 {req.crmJobId}
               </Badge>
             }
@@ -317,7 +317,7 @@ function DetailsTab({
 
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             Line Items
           </p>
           {canEditLines && (
@@ -404,7 +404,7 @@ function DetailsTab({
           </DialogHeader>
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-600">Item *</label>
+              <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Item *</label>
               <CatalogItemCombobox
                 products={products}
                 parts={parts}
@@ -423,7 +423,7 @@ function DetailsTab({
             </div>
             <div className="flex gap-3">
               <div className="flex flex-1 flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Quantity</label>
+                <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Quantity</label>
                 <Input
                   type="number"
                   min={1}
@@ -432,7 +432,7 @@ function DetailsTab({
                 />
               </div>
               <div className="flex flex-1 flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Unit Cost ($)</label>
+                <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Unit Cost ($)</label>
                 <Input
                   type="number"
                   step="any"
@@ -445,7 +445,7 @@ function DetailsTab({
             </div>
             {canAssignProject && (
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-slate-600">Project</label>
+                <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Project</label>
                 <Select value={addProjectId} onValueChange={setAddProjectId}>
                   <SelectTrigger className="text-sm">
                     <SelectValue placeholder="No project" />
@@ -466,29 +466,29 @@ function DetailsTab({
         </DialogContent>
       </Dialog>
 
-      <div className="rounded-md bg-slate-50 p-3 text-sm">
-        <div className="flex justify-between py-1 text-slate-600">
+      <div className="rounded-md bg-slate-50 dark:bg-muted/40 p-3 text-sm">
+        <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
           <span>Subtotal</span>
           <span>{formatCurrency(subtotal)}</span>
         </div>
         {req.discountCost > 0 && (
-          <div className="flex justify-between py-1 text-slate-600">
+          <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
             <span>Discount</span>
             <span>-{formatCurrency(req.discountCost)}</span>
           </div>
         )}
-        <div className="flex justify-between py-1 text-slate-600">
+        <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
           <span>{taxLabel}</span>
           <span>{formatCurrency(salesTax)}</span>
         </div>
         {req.shippingCost > 0 && (
-          <div className="flex justify-between py-1 text-slate-600">
+          <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
             <span>Shipping / Other</span>
             <span>{formatCurrency(req.shippingCost)}</span>
           </div>
         )}
         <Separator className="my-1" />
-        <div className="flex justify-between py-1 font-semibold text-slate-900">
+        <div className="flex justify-between py-1 font-semibold text-slate-900 dark:text-neutral-100">
           <span>Grand Total</span>
           <span>{formatCurrency(grandTotal)}</span>
         </div>
@@ -502,7 +502,7 @@ function HistoryTab({ req }: { req: Requisition }) {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Comments
         </p>
         <CommentsSection recordType="requisition" recordId={req.id} canWrite={canComment(req)} />
@@ -510,7 +510,7 @@ function HistoryTab({ req }: { req: Requisition }) {
 
       <Separator className="mb-6" />
 
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
         Audit Trail
       </p>
       <AuditTrailTab recordType="requisition" recordId={req.id} />
@@ -630,10 +630,10 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-6 py-4 pr-12">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">
             {requisition.requisitionNumber}
           </h2>
-          <p className="text-sm text-slate-500">{requisition.title}</p>
+          <p className="text-sm text-muted-foreground">{requisition.title}</p>
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge variant={status} label={APPROVAL_STATUS_LABELS[status]} />
@@ -642,7 +642,7 @@ export function RequisitionDetailPanel({ requisition }: RequisitionDetailPanelPr
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+              className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
               onClick={() => setDeleteConfirmOpen(true)}
             >
               <Trash2 className="h-4 w-4" />

@@ -35,12 +35,12 @@ function formatPct(n: number, d: number) {
 // ── Stage colors (mirror EstimatesList) ───────────────────────────────────────
 
 const STAGE_COLOR: Record<EstimateStage, string> = {
-  draft:    "bg-slate-100 text-slate-600",
-  quote:    "bg-blue-100 text-blue-700",
-  sent:     "bg-violet-100 text-violet-700",
-  accepted: "bg-green-100 text-green-700",
-  lost:     "bg-red-100 text-red-700",
-  invoiced: "bg-teal-100 text-teal-700",
+  draft:    "bg-muted text-slate-600 dark:text-neutral-400",
+  quote:    "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
+  sent:     "bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400",
+  accepted: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  lost:     "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400",
+  invoiced: "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-400",
 };
 
 const STAGE_LABEL: Record<EstimateStage, string> = {
@@ -58,7 +58,7 @@ const ALL_STAGES: EstimateStage[] = ["draft", "quote", "sent", "accepted", "lost
 // (crm_estimate_stages) — a stage value can be anything, not just ALL_STAGES, so
 // these read with a fallback instead of indexing the Record directly.
 function stageColorClass(stage: string): string {
-  return STAGE_COLOR[stage as EstimateStage] ?? "bg-slate-100 text-slate-600";
+  return STAGE_COLOR[stage as EstimateStage] ?? "bg-muted text-slate-600 dark:text-neutral-400";
 }
 function stageLabelText(stage: string): string {
   return STAGE_LABEL[stage as EstimateStage] ?? stage;
@@ -163,11 +163,11 @@ function useEstimatesReportData(rangeStart: string) {
 
 function SummaryRow({ items }: { items: Array<{ label: string; value: string }> }) {
   return (
-    <div className="mb-4 flex flex-wrap gap-6 rounded-lg bg-slate-50 px-4 py-3">
+    <div className="mb-4 flex flex-wrap gap-6 rounded-lg bg-slate-50 dark:bg-muted/40 px-4 py-3">
       {items.map((item) => (
         <div key={item.label}>
-          <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{item.label}</p>
-          <p className="text-sm font-bold text-slate-800">{item.value}</p>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">{item.label}</p>
+          <p className="text-sm font-bold text-slate-800 dark:text-neutral-100">{item.value}</p>
         </div>
       ))}
     </div>
@@ -178,7 +178,7 @@ function TH({ children, right }: { children: React.ReactNode; right?: boolean })
   return (
     <th
       className={cn(
-        "px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400",
+        "px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500",
         right ? "text-right" : "text-left"
       )}
     >
@@ -193,7 +193,7 @@ function TD({ children, right, muted }: { children: React.ReactNode; right?: boo
       className={cn(
         "px-3 py-2 text-sm",
         right ? "text-right" : "text-left",
-        muted ? "text-slate-400" : "text-slate-700"
+        muted ? "text-slate-400 dark:text-neutral-500" : "text-slate-700 dark:text-neutral-300"
       )}
     >
       {children}
@@ -204,7 +204,7 @@ function TD({ children, right, muted }: { children: React.ReactNode; right?: boo
 function EmptyRow({ cols }: { cols: number }) {
   return (
     <tr>
-      <td colSpan={cols} className="px-3 py-8 text-center text-sm text-slate-400">
+      <td colSpan={cols} className="px-3 py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
         No data for selected period.
       </td>
     </tr>
@@ -240,7 +240,7 @@ function ByStageReport({ estimates }: { estimates: RawEstimate[] }) {
       ]} />
       <div className="overflow-auto rounded-lg border">
         <table className="w-full border-collapse">
-          <thead className="border-b bg-slate-50">
+          <thead className="border-b bg-slate-50 dark:bg-muted/40">
             <tr>
               <TH>Stage</TH>
               <TH right>Count</TH>
@@ -253,7 +253,7 @@ function ByStageReport({ estimates }: { estimates: RawEstimate[] }) {
               <EmptyRow cols={4} />
             ) : (
               rows.map((r) => (
-                <tr key={r.stage} className="hover:bg-slate-50/50">
+                <tr key={r.stage} className="hover:bg-slate-50/50 dark:hover:bg-muted/40">
                   <TD>
                     <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", stageColorClass(r.stage))}>
                       {stageLabelText(r.stage)}
@@ -289,7 +289,7 @@ function WonEstimatesReport({ estimates }: { estimates: RawEstimate[] }) {
       ]} />
       <div className="overflow-auto rounded-lg border">
         <table className="w-full border-collapse">
-          <thead className="border-b bg-slate-50">
+          <thead className="border-b bg-slate-50 dark:bg-muted/40">
             <tr>
               <TH>Estimate #</TH>
               <TH>Client</TH>
@@ -303,7 +303,7 @@ function WonEstimatesReport({ estimates }: { estimates: RawEstimate[] }) {
               <EmptyRow cols={5} />
             ) : (
               won.map((e) => (
-                <tr key={e.id} className="hover:bg-slate-50/50">
+                <tr key={e.id} className="hover:bg-slate-50/50 dark:hover:bg-muted/40">
                   <TD>{e.estimate_number ?? "—"}</TD>
                   <TD>{e.clients?.display_name ?? "—"}</TD>
                   <TD>{e.description ?? "—"}</TD>
@@ -362,7 +362,7 @@ function WonByServiceReport({ lineItems }: { lineItems: RawLineItem[] }) {
       ]} />
       <div className="overflow-auto rounded-lg border">
         <table className="w-full border-collapse">
-          <thead className="border-b bg-slate-50">
+          <thead className="border-b bg-slate-50 dark:bg-muted/40">
             <tr>
               <TH>Service</TH>
               <TH right># Estimates</TH>
@@ -376,7 +376,7 @@ function WonByServiceReport({ lineItems }: { lineItems: RawLineItem[] }) {
               <EmptyRow cols={5} />
             ) : (
               rows.map((r) => (
-                <tr key={r.service} className="hover:bg-slate-50/50">
+                <tr key={r.service} className="hover:bg-slate-50/50 dark:hover:bg-muted/40">
                   <TD>{r.service}</TD>
                   <TD right>{r.estimateCount}</TD>
                   <TD right>{r.totalQty.toLocaleString()}</TD>
@@ -420,7 +420,7 @@ function WonServiceProductsReport({ lineItems }: { lineItems: RawLineItem[] }) {
       ]} />
       <div className="overflow-auto rounded-lg border">
         <table className="w-full border-collapse">
-          <thead className="border-b bg-slate-50">
+          <thead className="border-b bg-slate-50 dark:bg-muted/40">
             <tr>
               <TH>Service</TH>
               <TH right>Qty</TH>
@@ -439,7 +439,7 @@ function WonServiceProductsReport({ lineItems }: { lineItems: RawLineItem[] }) {
                   ? ((li.total_cents - (li.direct_cost_cents ?? 0)) / li.total_cents) * 100
                   : 0;
                 return (
-                  <tr key={li.id} className="hover:bg-slate-50/50">
+                  <tr key={li.id} className="hover:bg-slate-50/50 dark:hover:bg-muted/40">
                     <TD>{li.service_name || "—"}</TD>
                     <TD right>{li.qty ?? 0}</TD>
                     <TD right>{formatCurrency(li.rate_cents ?? 0)}</TD>
@@ -449,7 +449,7 @@ function WonServiceProductsReport({ lineItems }: { lineItems: RawLineItem[] }) {
                       <span
                         className={cn(
                           "text-xs font-medium",
-                          margin >= 40 ? "text-green-600" : margin >= 20 ? "text-amber-600" : "text-red-500"
+                          margin >= 40 ? "text-green-600 dark:text-green-400" : margin >= 20 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400"
                         )}
                       >
                         {Math.round(margin)}%
@@ -498,7 +498,7 @@ export function EstimatesReportSection() {
   return (
     <section>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">Estimates</h2>
+        <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-neutral-500">Estimates</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
             <SelectTrigger className="h-8 w-40 text-xs">
@@ -517,14 +517,14 @@ export function EstimatesReportSection() {
                 type="date"
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
-                className="h-8 rounded-md border px-2 text-xs text-slate-700"
+                className="h-8 rounded-md border px-2 text-xs text-slate-700 dark:text-neutral-300"
               />
-              <span className="text-xs text-slate-400">to</span>
+              <span className="text-xs text-slate-400 dark:text-neutral-500">to</span>
               <input
                 type="date"
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
-                className="h-8 rounded-md border px-2 text-xs text-slate-700"
+                className="h-8 rounded-md border px-2 text-xs text-slate-700 dark:text-neutral-300"
               />
             </>
           )}

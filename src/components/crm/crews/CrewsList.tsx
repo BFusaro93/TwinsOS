@@ -86,7 +86,7 @@ function DayOfWeekSelect({
           {DAYS_SHORT.map((day, i) => (
             <div
               key={i}
-              className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50"
+              className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
               onClick={() => {
                 const next = value.includes(i)
                   ? value.filter((d) => d !== i)
@@ -100,7 +100,7 @@ function DayOfWeekSelect({
           ))}
           <div className="border-t mx-2 my-1" />
           <div
-            className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50"
+            className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
             onClick={() => onChange(allSelected ? [] : [...ALL_DAYS])}
           >
             <Checkbox checked={allSelected} className="pointer-events-none" />
@@ -187,7 +187,7 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
       <SectionBar title="Team Assignments" />
       <div className="p-0">
         {members.length === 0 && !pickingNew ? (
-          <div className="py-8 text-center text-sm text-slate-400">
+          <div className="py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
             No assignments yet — click Add Assignment below
           </div>
         ) : (
@@ -207,7 +207,7 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
                   </SelectContent>
                 </Select>
                 <button
-                  className="shrink-0 text-slate-400 hover:text-slate-600 transition-colors"
+                  className="shrink-0 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 transition-colors"
                   onClick={() => setPickingNew(false)}
                 >
                   <X className="h-4 w-4" />
@@ -241,7 +241,7 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
                   />
                   <PermissionGate permission="payroll_show_wage_burden">
                     <div className="flex items-center gap-1 shrink-0">
-                      <span className="text-xs text-slate-400">$</span>
+                      <span className="text-xs text-slate-400 dark:text-neutral-500">$</span>
                       <Input
                         type="number"
                         min="0"
@@ -252,11 +252,11 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
                         title="Labor burden rate ($/hr)"
                         onBlur={(e) => handleChangeBurden(m, e.target.value)}
                       />
-                      <span className="text-xs text-slate-400">/hr</span>
+                      <span className="text-xs text-slate-400 dark:text-neutral-500">/hr</span>
                     </div>
                   </PermissionGate>
                   <button
-                    className="shrink-0 text-red-400 hover:text-red-600 transition-colors"
+                    className="shrink-0 text-red-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                     onClick={() => handleRemove(m)}
                   >
                     <X className="h-4 w-4" />
@@ -296,7 +296,7 @@ function Field({
   return (
     <tr className="border-b last:border-0">
       <td
-        className={`px-4 py-2.5 text-sm whitespace-nowrap w-32 sm:w-48 ${bold ? "font-semibold text-slate-800" : "text-slate-500"}`}
+        className={`px-4 py-2.5 text-sm whitespace-nowrap w-32 sm:w-48 ${bold ? "font-semibold text-slate-800 dark:text-neutral-100" : "text-muted-foreground"}`}
       >
         {label}
       </td>
@@ -393,7 +393,7 @@ function TeamDetailsTab({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">
                 The shared crew login (e.g. a field team&apos;s clock-in account) that sees this team&apos;s
                 visits in the Crew App.
               </p>
@@ -604,13 +604,13 @@ function CrewDialog({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col overflow-hidden">
-          <TabsList className="shrink-0 border-b bg-white rounded-none justify-start px-6 py-0 h-10 gap-0 overflow-x-auto flex-nowrap">
+          <TabsList className="shrink-0 border-b bg-card rounded-none justify-start px-6 py-0 h-10 gap-0 overflow-x-auto flex-nowrap">
             {tabList.map((tab) => (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
                 disabled={tab.disabled}
-                className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-sm font-medium text-slate-500 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 data-[state=active]:shadow-none disabled:opacity-40 disabled:cursor-not-allowed"
+                className="h-full rounded-none border-b-2 border-transparent px-4 py-0 text-sm font-medium text-muted-foreground data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {tab.label}
               </TabsTrigger>
@@ -620,7 +620,7 @@ function CrewDialog({
           <div className="flex-1 overflow-auto p-6">
             <TabsContent value="details" className="mt-0">
               {activeCrew && (
-                <p className="mb-3 text-xs text-green-600 font-medium">
+                <p className="mb-3 text-xs text-green-600 dark:text-green-400 font-medium">
                   ✓ Team created — switch to Team Assignments to add members, then Save.
                 </p>
               )}
@@ -636,7 +636,7 @@ function CrewDialog({
         </Tabs>
 
         {/* Footer */}
-        <div className="shrink-0 flex justify-end gap-2 border-t px-6 py-3 bg-white">
+        <div className="shrink-0 flex justify-end gap-2 border-t px-6 py-3 bg-card">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSave} disabled={creating || updating}>
             {creating || updating ? "Saving…" : activeCrew ? "Save" : "Create & Continue"}
@@ -725,7 +725,7 @@ export function CrewsList() {
             onClick={() => setFilter(t.value)}
             className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
               filter === t.value
-                ? "bg-white text-slate-800"
+                ? "bg-card text-slate-800 dark:text-neutral-100"
                 : "text-slate-300 hover:text-white"
             }`}
           >
@@ -742,10 +742,10 @@ export function CrewsList() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 border-b bg-slate-50">
-            <tr className="text-left text-xs font-semibold text-slate-500">
+          <thead className="sticky top-0 border-b bg-slate-50 dark:bg-muted/40">
+            <tr className="text-left text-xs font-semibold text-muted-foreground">
               <th className="px-4 py-3">Description</th>
               <th className="px-4 py-3">Team Code</th>
               <th className="px-4 py-3">Members</th>
@@ -768,7 +768,7 @@ export function CrewsList() {
                 <td colSpan={4} className="py-20 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <Users className="h-8 w-8 text-slate-200" />
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-slate-400 dark:text-neutral-500">
                       {search ? "No crews match your search" : "No crews yet"}
                     </p>
                   </div>
@@ -778,44 +778,44 @@ export function CrewsList() {
               filtered.map((crew) => (
                 <tr
                   key={crew.id}
-                  className={`border-b ${canManageTeams ? "cursor-pointer hover:bg-slate-50" : "cursor-default"}`}
+                  className={`border-b ${canManageTeams ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40" : "cursor-default"}`}
                   onClick={() => canManageTeams && setDialogCrew(crew)}
                 >
                   <td className="px-4 py-2.5">
-                    <span className="text-brand-600 hover:underline font-medium">
+                    <span className="text-brand-600 dark:text-brand-400 hover:underline font-medium">
                       {crew.name}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 font-mono text-slate-600">
+                  <td className="px-4 py-2.5 font-mono text-slate-600 dark:text-neutral-400">
                     {crew.code ?? "—"}
                   </td>
-                  <td className="px-4 py-2.5 text-slate-500 text-xs">
+                  <td className="px-4 py-2.5 text-muted-foreground text-xs">
                     {crew.members && crew.members.length > 0
                       ? crew.members.map((m) => m.employeeName ?? "").join(", ")
-                      : <span className="text-slate-300">—</span>}
+                      : <span className="text-slate-300 dark:text-neutral-500">—</span>}
                   </td>
                   <td
-                    className="px-4 py-2.5 text-slate-600"
+                    className="px-4 py-2.5 text-slate-600 dark:text-neutral-400"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <PermissionGate
                       permission="sched_teams"
                       fallback={
-                        <span className={`text-sm ${crew.isActive ? "text-slate-700" : "text-slate-400"}`}>
+                        <span className={`text-sm ${crew.isActive ? "text-slate-700 dark:text-neutral-300" : "text-slate-400 dark:text-neutral-500"}`}>
                           {crew.isActive ? "Active" : "Inactive"}
                         </span>
                       }
                     >
                       {crew.isActive ? (
                         <button
-                          className="text-sm text-slate-700 hover:text-red-600 transition-colors"
+                          className="text-sm text-slate-700 dark:text-neutral-300 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                           onClick={() => void handleDeactivate(crew.id, crew.name)}
                         >
                           Active
                         </button>
                       ) : (
                         <button
-                          className="text-sm text-slate-400 hover:text-green-600 transition-colors"
+                          className="text-sm text-slate-400 dark:text-neutral-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
                           onClick={() => handleActivate(crew.id)}
                         >
                           Inactive

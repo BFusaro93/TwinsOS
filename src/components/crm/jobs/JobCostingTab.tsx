@@ -342,7 +342,7 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
               <td className="px-4 py-2.5 text-right tabular-nums">
                 {estimatedBudgetedHours > 0
                   ? fmtVarianceHrs(estimatedBudgetedHours, actualStaffHrs)
-                  : <span className="text-slate-300 dark:text-neutral-600">—</span>}
+                  : <span className="text-slate-300 dark:text-neutral-500">—</span>}
               </td>
             </tr>
             {/* Labor Cost */}
@@ -357,7 +357,7 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
               <td className="px-4 py-2.5 text-right tabular-nums">
                 {estimatedLaborCostCents > 0
                   ? fmtVarianceCents(estimatedLaborCostCents, actualLaborCostCents)
-                  : <span className="text-slate-300 dark:text-neutral-600">—</span>}
+                  : <span className="text-slate-300 dark:text-neutral-500">—</span>}
               </td>
             </tr>
             {/* Material Cost */}
@@ -372,7 +372,7 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
               <td className="px-4 py-2.5 text-right tabular-nums">
                 {estimatedMaterialCostCents > 0
                   ? fmtVarianceCents(estimatedMaterialCostCents, actualMaterialCostCents)
-                  : <span className="text-slate-300 dark:text-neutral-600">—</span>}
+                  : <span className="text-slate-300 dark:text-neutral-500">—</span>}
               </td>
             </tr>
             {/* Total Cost */}
@@ -387,7 +387,7 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
               <td className="px-4 py-2.5 text-right tabular-nums">
                 {estimatedCostCents > 0
                   ? fmtVarianceCents(estimatedCostCents, actualTotalCostCents)
-                  : <span className="text-slate-300 dark:text-neutral-600">—</span>}
+                  : <span className="text-slate-300 dark:text-neutral-500">—</span>}
               </td>
             </tr>
             {/* Revenue */}
@@ -399,7 +399,7 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
               <td className="px-4 py-2.5 text-right tabular-nums text-slate-400 dark:text-neutral-500 italic text-xs">
                 actual billed separately
               </td>
-              <td className="px-4 py-2.5 text-right text-slate-300 dark:text-neutral-600">—</td>
+              <td className="px-4 py-2.5 text-right text-slate-300 dark:text-neutral-500">—</td>
             </tr>
             {/* Target Rev / Man Hr */}
             <tr className="border-b">
@@ -415,7 +415,7 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
                   <span className={targetOverUnderCents >= 0 ? "text-green-600 dark:text-green-400 font-medium" : "text-red-600 dark:text-red-400 font-medium"}>
                     {targetOverUnderCents >= 0 ? "+" : ""}{formatCurrency(targetOverUnderCents)}
                   </span>
-                ) : <span className="text-slate-300 dark:text-neutral-600">—</span>}
+                ) : <span className="text-slate-300 dark:text-neutral-500">—</span>}
               </td>
             </tr>
           </tbody>
@@ -468,7 +468,7 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
                 <td className="px-4 py-2.5">
                   <button
                     onClick={() => void handleDeleteMaterial(m.id)}
-                    className="opacity-0 group-hover:opacity-100 rounded p-1 hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-300 dark:text-neutral-600 hover:text-red-500 dark:hover:text-red-400 transition-opacity"
+                    className="opacity-0 group-hover:opacity-100 rounded p-1 hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 transition-opacity"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

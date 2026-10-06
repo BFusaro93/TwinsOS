@@ -1,3 +1,4 @@
+// dark-mode-codemod: skip — dark sidebar chrome in both themes
 "use client";
 
 import Link from "next/link";

@@ -103,7 +103,7 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
             <div className="flex items-baseline justify-between">
               <Label>Message</Label>
               <span
-                className={`text-[11px] ${message.length > MAX_CHARS ? "text-red-500" : "text-slate-400"}`}
+                className={`text-[11px] ${message.length > MAX_CHARS ? "text-red-500 dark:text-red-400" : "text-slate-400 dark:text-neutral-500"}`}
               >
                 {message.length}/{MAX_CHARS}
               </span>
@@ -121,7 +121,7 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
                   type="button"
                   title={mt.label}
                   onClick={() => setMessage((m) => m + mt.tag)}
-                  className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 hover:bg-brand-100 hover:text-brand-700"
+                  className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-slate-600 dark:text-neutral-400 hover:bg-brand-100 dark:hover:bg-brand-900/40 hover:text-brand-700 dark:hover:text-brand-400"
                 >
                   {mt.tag}
                 </button>

@@ -444,7 +444,7 @@ export function InvoicesList({ clientId }: Props) {
   }
 
   function SortIcon({ col }: { col: string }) {
-    if (sortKey !== col) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-slate-300 dark:text-neutral-600" />;
+    if (sortKey !== col) return <ArrowUpDown className="ml-1 inline h-3 w-3 text-slate-300 dark:text-neutral-500" />;
     return sortDir === "asc"
       ? <ArrowUp className="ml-1 inline h-3 w-3 text-slate-600 dark:text-neutral-400" />
       : <ArrowDown className="ml-1 inline h-3 w-3 text-slate-600 dark:text-neutral-400" />;
@@ -832,7 +832,7 @@ export function InvoicesList({ clientId }: Props) {
                 variant="outline"
                 className="h-7 bg-[#5a5a5a] border-[#6a6a6a] text-white hover:bg-[#6a6a6a] text-xs px-3"
               >
-                Actions {someSelected && <span className="ml-1 rounded-full bg-card/20 px-1.5 text-[10px]">{selectedIds.size}</span>}
+                Actions {someSelected && <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedIds.size}</span>}
                 <ChevronDown className="ml-1 h-3 w-3" />
               </Button>
             </DropdownMenuTrigger>
@@ -924,7 +924,7 @@ export function InvoicesList({ clientId }: Props) {
                         ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300"
                         : key === "past_due"
                           ? "bg-red-500/30 text-red-200"
-                          : "bg-card/20 text-white"
+                          : "bg-white/20 text-white"
                     )}>
                       {count}
                     </span>

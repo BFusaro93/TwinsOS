@@ -89,7 +89,7 @@ export function TagsEventDialog({ open, onOpenChange, event }: Props) {
         <div className="flex flex-col gap-5 py-2">
           {/* Add tags */}
           <div className="flex flex-col gap-2">
-            <p className="text-sm font-medium text-slate-700">Add tags</p>
+            <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">Add tags</p>
             <div className="flex gap-2">
               <Select value={addInput} onValueChange={setAddInput}>
                 <SelectTrigger className="flex-1">
@@ -113,7 +113,7 @@ export function TagsEventDialog({ open, onOpenChange, event }: Props) {
             {addTags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {addTags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="gap-1 bg-green-50 text-green-700 border-green-200">
+                  <Badge key={tag} variant="secondary" className="gap-1 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
                     +{tag}
                     <button onClick={() => removeFromList(tag, addTags, setAddTags)}>
                       <X className="h-3 w-3" />
@@ -126,7 +126,7 @@ export function TagsEventDialog({ open, onOpenChange, event }: Props) {
 
           {/* Remove tags */}
           <div className="flex flex-col gap-2">
-            <p className="text-sm font-medium text-slate-700">Remove tags</p>
+            <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">Remove tags</p>
             <div className="flex gap-2">
               <Select value={removeInput} onValueChange={setRemoveInput}>
                 <SelectTrigger className="flex-1">
@@ -150,7 +150,7 @@ export function TagsEventDialog({ open, onOpenChange, event }: Props) {
             {removeTags.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {removeTags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="gap-1 bg-red-50 text-red-700 border-red-200">
+                  <Badge key={tag} variant="secondary" className="gap-1 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800">
                     -{tag}
                     <button onClick={() => removeFromList(tag, removeTags, setRemoveTags)}>
                       <X className="h-3 w-3" />

@@ -76,9 +76,9 @@ export function ChatDialog({
 
         <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
           {isLoading ? (
-            <p className="text-sm text-slate-400">Loading…</p>
+            <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>
           ) : messages.length === 0 ? (
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-400 dark:text-neutral-500">
               {viewerIsStaff
                 ? "No messages yet."
                 : "Send a message and our team will get back to you."}
@@ -93,12 +93,12 @@ export function ChatDialog({
                       "max-w-[80%] rounded-2xl px-3 py-2 text-sm",
                       isOwnSide
                         ? "bg-brand-500 text-white"
-                        : "bg-slate-100 text-slate-800"
+                        : "bg-muted text-slate-800 dark:text-neutral-100"
                     )}
                   >
                     {m.body}
                   </div>
-                  <span className="mt-0.5 px-1 text-[10px] text-slate-400">
+                  <span className="mt-0.5 px-1 text-[10px] text-slate-400 dark:text-neutral-500">
                     {m.senderName} ·{" "}
                     {new Date(m.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                   </span>

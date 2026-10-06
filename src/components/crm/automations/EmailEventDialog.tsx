@@ -217,7 +217,7 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
                   value={betweenStart}
                   onChange={(e) => setBetweenStart(e.target.value)}
                 />
-                <span className="text-sm text-slate-500">and</span>
+                <span className="text-sm text-muted-foreground">and</span>
                 <Input
                   type="time"
                   className="w-36"
@@ -282,14 +282,14 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
                 minHeight={300}
               />
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                <span className="text-[11px] text-slate-400">Insert merge tag:</span>
+                <span className="text-[11px] text-slate-400 dark:text-neutral-500">Insert merge tag:</span>
                 {MERGE_TAGS.map(({ tag, label }) => (
                   <button
                     key={tag}
                     type="button"
                     title={label}
                     onClick={() => insertMergeTag(tag)}
-                    className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 hover:bg-slate-200 transition-colors font-mono"
+                    className="rounded bg-muted px-1.5 py-0.5 text-xs text-slate-600 dark:text-neutral-400 hover:bg-slate-200 dark:hover:bg-neutral-700 transition-colors font-mono"
                   >
                     {tag}
                   </button>

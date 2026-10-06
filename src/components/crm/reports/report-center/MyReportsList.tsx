@@ -50,7 +50,7 @@ export function MyReportsList() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted-foreground">
           Saved custom analyses built from your CRM data.
         </p>
         {canManage && (
@@ -70,13 +70,13 @@ export function MyReportsList() {
           ))}
         </div>
       ) : reports.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-white py-16 text-center">
-          <BarChart3 className="h-8 w-8 text-slate-300" />
+        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-card py-16 text-center">
+          <BarChart3 className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
           <div>
-            <p className="text-sm font-medium text-slate-700">
+            <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">
               No custom reports yet
             </p>
-            <p className="mt-0.5 text-sm text-slate-500">
+            <p className="mt-0.5 text-sm text-muted-foreground">
               Build your first analysis — pick a dataset, choose columns, group
               and total however you like.
             </p>
@@ -91,11 +91,11 @@ export function MyReportsList() {
           )}
         </div>
       ) : (
-        <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+        <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <tr className="border-b bg-slate-50 dark:bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-2.5 text-left">Name</th>
                   <th className="px-4 py-2.5 text-left">Description</th>
                   <th className="px-4 py-2.5 text-left">Dataset</th>
@@ -107,24 +107,24 @@ export function MyReportsList() {
                 {reports.map((report) => (
                   <tr
                     key={report.id}
-                    className="border-b last:border-0 hover:bg-slate-50"
+                    className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40"
                   >
                     <td className="px-4 py-2.5">
                       <Link
                         href={`/crm/admin/reports/analysis/${report.id}`}
-                        className="font-medium text-blue-600 hover:underline"
+                        className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
                       >
                         {report.name}
                       </Link>
                     </td>
-                    <td className="px-4 py-2.5 text-slate-600">
+                    <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">
                       {report.description || "—"}
                     </td>
-                    <td className="px-4 py-2.5 text-slate-600">
+                    <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">
                       {DATASET_MAP[report.config.dataset]?.label ??
                         report.config.dataset}
                     </td>
-                    <td className="px-4 py-2.5 text-slate-600">
+                    <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">
                       {formatDate(report.updatedAt)}
                     </td>
                     <td className="px-2 py-2.5">
@@ -153,7 +153,7 @@ export function MyReportsList() {
                                 Duplicate
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                className="text-red-600 focus:text-red-600"
+                                className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
                                 onClick={() => setPendingDelete(report)}
                               >
                                 Delete

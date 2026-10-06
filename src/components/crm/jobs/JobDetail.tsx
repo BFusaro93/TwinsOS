@@ -2157,7 +2157,7 @@ function VisitRow({
               <button
                 onClick={() => { setDispatching(true); setSkipping(false); setEditingNote(false); }}
                 title={isFreshDispatch ? "Dispatch to a date/crew" : "Change date/crew"}
-                className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-orange-50 dark:hover:bg-orange-950/40 text-slate-300 dark:text-neutral-600 hover:text-orange-500 dark:hover:text-orange-400"
+                className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-orange-50 dark:hover:bg-orange-950/40 text-slate-300 dark:text-neutral-500 hover:text-orange-500 dark:hover:text-orange-400"
               >
                 <Send className="h-3.5 w-3.5" />
               </button>
@@ -2168,7 +2168,7 @@ function VisitRow({
                 title="Chemical applications"
                 className={cn(
                   "rounded p-1 hover:bg-teal-50 dark:hover:bg-teal-950/40 hover:text-teal-600 dark:hover:text-teal-400 transition-opacity",
-                  showChemicals ? "text-teal-600 dark:text-teal-400" : "text-slate-300 dark:text-neutral-600 opacity-0 group-hover:opacity-100"
+                  showChemicals ? "text-teal-600 dark:text-teal-400" : "text-slate-300 dark:text-neutral-500 opacity-0 group-hover:opacity-100"
                 )}
               >
                 <FlaskConical className="h-3.5 w-3.5" />
@@ -2178,7 +2178,7 @@ function VisitRow({
               <button
                 onClick={() => { setSkipping(true); setEditingNote(false); }}
                 title="Skip visit"
-                className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-300 dark:text-neutral-600 hover:text-amber-500 dark:hover:text-amber-400"
+                className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-300 dark:text-neutral-500 hover:text-amber-500 dark:hover:text-amber-400"
               >
                 <SkipForward className="h-3.5 w-3.5" />
               </button>
@@ -2186,7 +2186,7 @@ function VisitRow({
             <button
               onClick={onDelete}
               title="Delete visit"
-              className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-300 dark:text-neutral-600 hover:text-red-500 dark:hover:text-red-400"
+              className="rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>

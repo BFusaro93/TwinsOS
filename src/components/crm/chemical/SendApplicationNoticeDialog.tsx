@@ -161,27 +161,27 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
         </DialogHeader>
 
         <div className="space-y-4 py-1">
-          <div className="flex items-center gap-3 rounded-md border bg-slate-50 px-3 py-2 text-sm">
-            <span className="text-slate-400 text-xs font-medium w-8">To</span>
-            <span className="font-medium text-slate-700">{clientName}</span>
+          <div className="flex items-center gap-3 rounded-md border bg-slate-50 dark:bg-muted/40 px-3 py-2 text-sm">
+            <span className="text-slate-400 dark:text-neutral-500 text-xs font-medium w-8">To</span>
+            <span className="font-medium text-slate-700 dark:text-neutral-300">{clientName}</span>
             {clientEmail
-              ? <span className="text-slate-400">&lt;{clientEmail}&gt;</span>
+              ? <span className="text-slate-400 dark:text-neutral-500">&lt;{clientEmail}&gt;</span>
               : <Badge variant="destructive" className="text-[10px]">No email on file</Badge>
             }
           </div>
 
           <div
-            className="flex flex-wrap items-center gap-1.5 rounded-md border bg-white px-3 py-2 text-sm cursor-text min-h-[38px]"
+            className="flex flex-wrap items-center gap-1.5 rounded-md border bg-card px-3 py-2 text-sm cursor-text min-h-[38px]"
             onClick={(e) => (e.currentTarget.querySelector("input") as HTMLInputElement | null)?.focus()}
           >
-            <span className="text-slate-400 text-xs font-medium w-8 shrink-0">CC</span>
+            <span className="text-slate-400 dark:text-neutral-500 text-xs font-medium w-8 shrink-0">CC</span>
             {ccEmails.map((email) => (
-              <span key={email} className="flex items-center gap-1 bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 text-xs">
+              <span key={email} className="flex items-center gap-1 bg-muted text-slate-700 dark:text-neutral-300 rounded px-1.5 py-0.5 text-xs">
                 {email}
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setCcEmails((prev) => prev.filter((e2) => e2 !== email)); }}
-                  className="text-slate-400 hover:text-slate-700 leading-none"
+                  className="text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300 leading-none"
                   aria-label={`Remove ${email}`}
                 >
                   ×
@@ -197,7 +197,7 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
               }}
               onBlur={commitCcInput}
               placeholder={ccEmails.length === 0 ? "Add CC recipients…" : ""}
-              className="flex-1 min-w-[160px] text-xs outline-none bg-transparent placeholder:text-slate-400"
+              className="flex-1 min-w-[160px] text-xs outline-none bg-transparent placeholder:text-slate-400 dark:placeholder:text-neutral-500"
             />
           </div>
 
@@ -233,7 +233,7 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
                 value={bodyHtml}
                 onChange={(e) => setBodyHtml(e.target.value)}
                 rows={12}
-                className="w-full rounded border border-slate-200 p-2 text-xs font-mono focus:border-brand-400 focus:outline-none resize-y"
+                className="w-full rounded border border-border p-2 text-xs font-mono focus:border-brand-400 focus:outline-none resize-y"
                 placeholder="Email body (HTML supported)…"
               />
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -243,7 +243,7 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
                     type="button"
                     title={mt.label}
                     onClick={() => setBodyHtml((b) => b + mt.tag)}
-                    className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 hover:bg-brand-100 hover:text-brand-700"
+                    className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-slate-600 dark:text-neutral-400 hover:bg-brand-100 dark:hover:bg-brand-900/40 hover:text-brand-700 dark:hover:text-brand-400"
                   >
                     {mt.tag}
                   </button>
@@ -252,7 +252,7 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
             </TabsContent>
 
             <TabsContent value="preview" className="mt-2">
-              <div className="min-h-[240px] rounded border bg-white p-4 text-sm overflow-auto">
+              <div className="min-h-[240px] rounded border bg-card p-4 text-sm overflow-auto">
                 <SandboxedHtmlPreview html={previewResolve(bodyHtml)} minHeight={208} />
               </div>
             </TabsContent>

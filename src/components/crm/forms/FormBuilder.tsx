@@ -469,13 +469,13 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
   return (
     <div className="flex h-full flex-col gap-4">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-4 rounded-lg border bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-4 rounded-lg border bg-card p-4 shadow-sm">
         <div className="flex items-center gap-3">
           <span className={cn(
             "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide border",
             form.status === "published"
-              ? "bg-green-50 text-green-700 border-green-300"
-              : "bg-slate-100 text-slate-500 border-slate-300"
+              ? "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700"
+              : "bg-muted text-muted-foreground border-slate-300 dark:border-neutral-700"
           )}>
             {form.status}
           </span>
@@ -484,7 +484,7 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
               href={publicUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-xs text-brand-600 hover:underline"
+              className="flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:underline"
             >
               <Globe className="h-3 w-3" />
               {publicUrl}
@@ -508,7 +508,7 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
       </div>
 
       {/* Builder tab bar */}
-      <div className="flex gap-1 rounded-lg border bg-slate-50 p-1 self-start">
+      <div className="flex gap-1 rounded-lg border bg-slate-50 dark:bg-muted/40 p-1 self-start">
         {([
           { key: "fields",   label: "Fields",   icon: Layers },
           { key: "rules",    label: "Rules",    icon: GitBranch },
@@ -520,8 +520,8 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
             className={cn(
               "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
               builderTab === key
-                ? "bg-white shadow-sm text-slate-800"
-                : "text-slate-500 hover:text-slate-700"
+                ? "bg-card shadow-sm text-slate-800 dark:text-neutral-100"
+                : "text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
             )}
           >
             <Icon className="h-3.5 w-3.5" />
@@ -544,13 +544,13 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
                       "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
                       activePage === page
                         ? "bg-brand-600 border-brand-600 text-white"
-                        : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                        : "bg-card border-border text-slate-600 dark:text-neutral-400 hover:border-slate-300 dark:hover:border-neutral-700"
                     )}
                   >
                     PAGE {page}
                     <span className={cn(
                       "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                      activePage === page ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                      activePage === page ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
                     )}>
                       {fields.filter((f) => (f.pageNumber ?? 1) === page).length}
                     </span>
@@ -569,7 +569,7 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
             </div>
             <button
               onClick={addPage}
-              className="flex items-center gap-1 rounded-md border border-dashed border-slate-300 px-2.5 py-1.5 text-xs text-slate-400 hover:border-brand-400 hover:text-brand-600 transition-colors"
+              className="flex items-center gap-1 rounded-md border border-dashed border-slate-300 dark:border-neutral-700 px-2.5 py-1.5 text-xs text-slate-400 dark:text-neutral-500 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
             >
               <Plus className="h-3 w-3" />
               Add Page
@@ -579,7 +579,7 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
           {/* Fields for active page */}
           <div className="flex flex-col gap-3">
             {pageFields.length === 0 && (
-              <div className="rounded-lg border border-dashed bg-white p-10 text-center text-sm text-slate-400">
+              <div className="rounded-lg border border-dashed bg-card p-10 text-center text-sm text-slate-400 dark:text-neutral-500">
                 No fields on this page — click Add Field below
               </div>
             )}
@@ -672,15 +672,15 @@ function FieldCard({
     <div
       id={`field-${field._key}`}
       className={cn(
-        "rounded-lg border bg-white shadow-sm",
-        hasError && "border-red-400 ring-1 ring-red-200"
+        "rounded-lg border bg-card shadow-sm",
+        hasError && "border-red-400 ring-1 ring-red-200 dark:ring-red-800"
       )}
     >
       {/* Card header row */}
       <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr_auto_auto_auto] gap-3 items-start p-4">
         {/* Type selector */}
         <div className="space-y-1">
-          <Label className="text-[10px] uppercase tracking-widest text-slate-400">Type</Label>
+          <Label className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-neutral-500">Type</Label>
           <Select
             value={field.fieldType}
             onValueChange={(v) => onChangeType(v as FormFieldType)}
@@ -691,7 +691,7 @@ function FieldCard({
             <SelectContent>
               {FIELD_TYPE_GROUPS.map((group) => (
                 <SelectGroup key={group.label}>
-                  <SelectLabel className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
+                  <SelectLabel className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-neutral-500 font-semibold">
                     {group.label}
                   </SelectLabel>
                   {group.types.map((t) => (
@@ -705,7 +705,7 @@ function FieldCard({
 
         {/* Label / heading text */}
         <div className="space-y-1">
-          <Label className={cn("text-[10px] uppercase tracking-widest", hasError ? "text-red-500" : "text-slate-400")}>
+          <Label className={cn("text-[10px] uppercase tracking-widest", hasError ? "text-red-500 dark:text-red-400" : "text-slate-400 dark:text-neutral-500")}>
             {field.fieldType === "header" ? "Heading Text" :
              field.fieldType === "paragraph" ? "Label (optional)" :
              field.fieldType === "divider" ? "—" : "Label"}
@@ -713,7 +713,7 @@ function FieldCard({
           </Label>
           {field.fieldType === "divider" ? (
             <div className="h-8 flex items-center">
-              <div className="w-full border-t border-slate-300" />
+              <div className="w-full border-t border-slate-300 dark:border-neutral-700" />
             </div>
           ) : (
             <Input
@@ -732,7 +732,7 @@ function FieldCard({
 
         {/* Required (hidden for display types) */}
         <div className="space-y-1 flex flex-col items-center pt-0.5">
-          <Label className="text-[10px] uppercase tracking-widest text-slate-400">Req.</Label>
+          <Label className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-neutral-500">Req.</Label>
           <Checkbox
             checked={lockRequired ? true : requiredUnenforceable ? false : field.required}
             disabled={isDisplay || lockRequired || requiredUnenforceable}
@@ -751,23 +751,23 @@ function FieldCard({
           <button
             onClick={onMoveUp}
             disabled={idx === 0}
-            className="flex h-6 w-6 items-center justify-center rounded hover:bg-slate-100 disabled:opacity-30"
+            className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-30"
           >
-            <ArrowUp className="h-3.5 w-3.5 text-slate-500" />
+            <ArrowUp className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
           <button
             onClick={onMoveDown}
             disabled={idx === totalFields - 1}
-            className="flex h-6 w-6 items-center justify-center rounded hover:bg-slate-100 disabled:opacity-30"
+            className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-30"
           >
-            <ArrowDown className="h-3.5 w-3.5 text-slate-500" />
+            <ArrowDown className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
         </div>
 
         {/* Delete */}
         <button
           onClick={onRemove}
-          className="mt-5 flex h-7 w-7 items-center justify-center rounded text-slate-400 hover:bg-red-50 hover:text-red-600"
+          className="mt-5 flex h-7 w-7 items-center justify-center rounded text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-400"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -781,8 +781,8 @@ function FieldCard({
           {path,name,size} object — mapping one silently wrote the literal
           text "[object Object]" into whatever CRM field it was mapped to. */}
       {!isDisplay && field.fieldType !== "sms_optin" && field.fieldType !== "attachment" && (
-        <div className="border-t border-slate-100 px-4 py-2.5 flex items-center gap-3">
-          <Label className="text-[10px] uppercase tracking-widest text-slate-400 shrink-0 w-24">
+        <div className="border-t border-slate-100 dark:border-neutral-800 px-4 py-2.5 flex items-center gap-3">
+          <Label className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-neutral-500 shrink-0 w-24">
             Map to field
           </Label>
           <Select
@@ -800,7 +800,7 @@ function FieldCard({
             </SelectContent>
           </Select>
           {field.mappedField && (
-            <span className="text-[10px] text-brand-600 font-medium">mapped</span>
+            <span className="text-[10px] text-brand-600 dark:text-brand-400 font-medium">mapped</span>
           )}
         </div>
       )}
@@ -845,26 +845,26 @@ function RulesEditor({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-muted-foreground">
         Set conditional rules to control form behavior — jump to a page or add a tag based on a
         field value.
       </p>
 
       {rules.length === 0 && (
-        <div className="rounded-lg border border-dashed bg-white p-10 text-center text-sm text-slate-400">
+        <div className="rounded-lg border border-dashed bg-card p-10 text-center text-sm text-slate-400 dark:text-neutral-500">
           No rules yet — click Add Rule to get started
         </div>
       )}
 
       {rules.map((rule, idx) => (
-        <div key={rule._key} className="rounded-lg border bg-white p-4 shadow-sm">
+        <div key={rule._key} className="rounded-lg border bg-card p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3 mb-3">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               Rule #{idx + 1}
             </span>
             <button
               onClick={() => onRemoveRule(rule._key)}
-              className="text-slate-400 hover:text-red-600"
+              className="text-slate-400 dark:text-neutral-500 hover:text-red-600 dark:hover:text-red-400"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -873,7 +873,7 @@ function RulesEditor({
           {/* IF */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-slate-500 w-6">If</span>
+              <span className="text-xs font-medium text-muted-foreground w-6">If</span>
               <Select
                 value={rule.sourceFieldKey ?? "__none__"}
                 onValueChange={(v) => onUpdateRule(rule._key, { sourceFieldKey: v === "__none__" ? null : v })}
@@ -917,7 +917,7 @@ function RulesEditor({
 
             {/* THEN */}
             <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-slate-500 w-6">Then</span>
+              <span className="text-xs font-medium text-muted-foreground w-6">Then</span>
               <Select
                 value={rule.action}
                 onValueChange={(v) => onUpdateRule(rule._key, { action: v as FormRuleAction, actionValue: null })}
@@ -997,9 +997,9 @@ function SettingsPanel({
   const [name, setName] = useState(form.name);
 
   return (
-    <div className="rounded-lg border bg-white p-6 shadow-sm space-y-5 max-w-lg">
+    <div className="rounded-lg border bg-card p-6 shadow-sm space-y-5 max-w-lg">
       <div>
-        <Label className="text-xs font-medium text-slate-700">Form Name</Label>
+        <Label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Form Name</Label>
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -1008,7 +1008,7 @@ function SettingsPanel({
         />
       </div>
       <div>
-        <Label className="text-xs font-medium text-slate-700">Submit Button Label</Label>
+        <Label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Submit Button Label</Label>
         <Input
           defaultValue={(form.settings.submitLabel as string) ?? "Submit"}
           onBlur={(e) => {
@@ -1030,8 +1030,8 @@ function FieldTypeConfig({
   onUpdate: (patch: Partial<DraftField>) => void;
   onUpdateConfig: (patch: Record<string, unknown>) => void;
 }) {
-  const baseClass = "border-t border-slate-100 px-4 pb-4 pt-3 space-y-3";
-  const labelClass = "text-[10px] uppercase tracking-widest text-slate-400";
+  const baseClass = "border-t border-slate-100 dark:border-neutral-800 px-4 pb-4 pt-3 space-y-3";
+  const labelClass = "text-[10px] uppercase tracking-widest text-slate-400 dark:text-neutral-500";
   const inputClass = "h-7 text-xs";
 
   if (OPTIONS_TYPES.includes(field.fieldType)) {
@@ -1048,7 +1048,7 @@ function FieldTypeConfig({
             }
             rows={4}
             placeholder={"Option A\nOption B\nOption C"}
-            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="mt-1 w-full rounded-md border border-border bg-card px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
         </div>
         <PlaceholderRow field={field} onUpdate={onUpdate} inputClass={inputClass} labelClass={labelClass} />
@@ -1174,7 +1174,7 @@ function FieldTypeConfig({
             className={cn("mt-1", inputClass)}
           />
         </div>
-        <p className="text-[11px] text-slate-400">This field is invisible to form submitters. Map it to a client field to populate data silently on submit.</p>
+        <p className="text-[11px] text-slate-400 dark:text-neutral-500">This field is invisible to form submitters. Map it to a client field to populate data silently on submit.</p>
       </div>
     );
   }
@@ -1189,7 +1189,7 @@ function FieldTypeConfig({
             onChange={(e) => onUpdate({ description: e.target.value || null })}
             rows={3}
             placeholder="Enter the paragraph body text…"
-            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="mt-1 w-full rounded-md border border-border bg-card px-3 py-2 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
         </div>
       </div>
@@ -1199,7 +1199,7 @@ function FieldTypeConfig({
   if (field.fieldType === "sms_optin") {
     return (
       <div className={baseClass}>
-        <p className="text-[11px] text-slate-400">
+        <p className="text-[11px] text-slate-400 dark:text-neutral-500">
           No mapping needed — a checked box on submit automatically records SMS
           consent on the matched/created client. Keep the label/consent text a
           standalone, explicit statement rather than folding it into general
@@ -1224,7 +1224,7 @@ function FieldTypeConfig({
     return (
       <div className={baseClass}>
         <DescriptionRow field={field} onUpdate={onUpdate} inputClass={inputClass} labelClass={labelClass} />
-        <p className="text-[11px] text-slate-400">Max file size: 15 MB. Accepted formats: JPEG, PNG, WEBP, GIF, PDF.</p>
+        <p className="text-[11px] text-slate-400 dark:text-neutral-500">Max file size: 15 MB. Accepted formats: JPEG, PNG, WEBP, GIF, PDF.</p>
       </div>
     );
   }
@@ -1296,8 +1296,8 @@ function RatingPreview({ max }: { max: number }) {
           className={cn(
             "flex h-8 w-8 items-center justify-center rounded border text-xs font-semibold",
             i === 0
-              ? "border-slate-300 bg-white text-slate-500"
-              : "border-brand-300 bg-brand-50 text-brand-700"
+              ? "border-slate-300 dark:border-neutral-700 bg-card text-muted-foreground"
+              : "border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
           )}
         >
           {i}

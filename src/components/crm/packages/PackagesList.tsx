@@ -47,7 +47,7 @@ export function PackagesList({ onAdd, onEdit }: Props) {
           {(["active", "inactive", "all"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-3 py-1.5 capitalize transition-colors ${
-                tab === t ? "bg-brand-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
+                tab === t ? "bg-brand-600 text-white" : "bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
               }`}>{t}</button>
           ))}
         </div>
@@ -58,10 +58,10 @@ export function PackagesList({ onAdd, onEdit }: Props) {
         )}
       </div>
 
-      <div className="rounded-lg border bg-white shadow-sm overflow-x-auto">
+      <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               <th className="px-4 py-3 text-left">Package</th>
               <th className="px-4 py-3 text-left">Code</th>
               <th className="px-4 py-3 text-center">Visits</th>
@@ -72,26 +72,26 @@ export function PackagesList({ onAdd, onEdit }: Props) {
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Loading…</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400 dark:text-neutral-500">Loading…</td></tr>
             )}
             {!isLoading && filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No packages found.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400 dark:text-neutral-500">No packages found.</td></tr>
             )}
             {filtered.map((pkg) => (
               <tr key={pkg.id} onClick={canEdit ? () => onEdit(pkg) : undefined}
-                className={`border-b last:border-0 hover:bg-slate-50 ${canEdit ? "cursor-pointer" : ""}`}>
+                className={`border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 ${canEdit ? "cursor-pointer" : ""}`}>
                 <td className="px-4 py-3">
-                  <p className="font-medium text-slate-800">{pkg.name}</p>
+                  <p className="font-medium text-slate-800 dark:text-neutral-100">{pkg.name}</p>
                   {pkg.description && (
-                    <p className="text-xs text-slate-400 truncate max-w-xs mt-0.5">{pkg.description}</p>
+                    <p className="text-xs text-slate-400 dark:text-neutral-500 truncate max-w-xs mt-0.5">{pkg.description}</p>
                   )}
                 </td>
-                <td className="px-4 py-3 text-slate-500">{pkg.code ?? "—"}</td>
-                <td className="px-4 py-3 text-center text-slate-600">{(pkg.services ?? []).length}</td>
-                <td className="px-4 py-3 text-slate-500 text-xs">
+                <td className="px-4 py-3 text-muted-foreground">{pkg.code ?? "—"}</td>
+                <td className="px-4 py-3 text-center text-slate-600 dark:text-neutral-400">{(pkg.services ?? []).length}</td>
+                <td className="px-4 py-3 text-muted-foreground text-xs">
                   {(pkg.services ?? []).length > 0
                     ? (pkg.services ?? []).map((s) => s.serviceName).join(", ")
-                    : <span className="italic text-slate-400">None</span>
+                    : <span className="italic text-slate-400 dark:text-neutral-500">None</span>
                   }
                 </td>
                 <td className="px-4 py-3 text-center">
@@ -102,8 +102,8 @@ export function PackagesList({ onAdd, onEdit }: Props) {
                 <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-center gap-1">
                     {canEdit && (
-                      <button onClick={() => onEdit(pkg)} className="rounded p-1 hover:bg-slate-100" title="Edit">
-                        <Pencil className="h-3.5 w-3.5 text-slate-400" />
+                      <button onClick={() => onEdit(pkg)} className="rounded p-1 hover:bg-muted" title="Edit">
+                        <Pencil className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                       </button>
                     )}
                     {canDelete && (
@@ -115,7 +115,7 @@ export function PackagesList({ onAdd, onEdit }: Props) {
                             });
                           }
                         }}
-                        className="rounded p-1 hover:bg-red-50" title="Delete">
+                        className="rounded p-1 hover:bg-red-50 dark:hover:bg-red-950/40" title="Delete">
                         <Trash2 className="h-3.5 w-3.5 text-red-400" />
                       </button>
                     )}

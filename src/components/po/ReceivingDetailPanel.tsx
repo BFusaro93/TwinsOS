@@ -37,8 +37,8 @@ interface ReceivingDetailPanelProps {
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1.5">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-slate-900 dark:text-neutral-100">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -74,7 +74,7 @@ function DetailsTab({
   return (
     <div className="flex flex-col gap-5 p-6">
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Status</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Status</p>
         <StatusFlowIndicator steps={RECEIVING_FLOW_STEPS} currentIndex={receivingIndex} />
       </div>
 
@@ -88,7 +88,7 @@ function DetailsTab({
             <button
               type="button"
               onClick={onPOClick}
-              className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 hover:bg-brand-100 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-2 py-0.5 text-xs font-medium text-brand-700 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors"
             >
               <ExternalLink className="h-3 w-3" />
               {receipt.poNumber}
@@ -101,7 +101,7 @@ function DetailsTab({
       </dl>
 
       {hasMaintParts && (
-        <div className="flex items-start gap-2 rounded-md border border-brand-200 bg-brand-50 p-3 text-sm text-brand-800">
+        <div className="flex items-start gap-2 rounded-md border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 p-3 text-sm text-brand-800 dark:text-brand-300">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
             <span className="font-medium">Maintenance Parts note:</span> Items marked as
@@ -111,13 +111,13 @@ function DetailsTab({
       )}
 
       <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Receipt Lines
         </p>
         <div className="overflow-hidden rounded-md border">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50 text-xs">
+              <TableRow className="bg-slate-50 dark:bg-muted/40 text-xs">
                 <TableHead>Item</TableHead>
                 <TableHead>Part #</TableHead>
                 <TableHead className="text-right">Unit Cost</TableHead>
@@ -142,7 +142,7 @@ function DetailsTab({
                             ? onPartClick(productInfo.partId)
                             : onProductClick(productInfo.productId)
                         }
-                        className="text-left font-medium text-brand-600 hover:underline"
+                        className="text-left font-medium text-brand-600 dark:text-brand-400 hover:underline"
                       >
                         {displayName}
                       </button>
@@ -150,28 +150,28 @@ function DetailsTab({
                       <span>{displayName}</span>
                     )}
                   </TableCell>
-                  <TableCell className="font-mono text-xs text-slate-500">
+                  <TableCell className="font-mono text-xs text-muted-foreground">
                     {line.partNumber}
                   </TableCell>
-                  <TableCell className="text-right text-slate-600">
+                  <TableCell className="text-right text-slate-600 dark:text-neutral-400">
                     {formatCurrency(line.unitCost)}
                   </TableCell>
                   <TableCell className="text-right">{line.quantityOrdered}</TableCell>
-                  <TableCell className="text-right font-medium text-green-700">
+                  <TableCell className="text-right font-medium text-green-700 dark:text-green-400">
                     {line.quantityReceived}
                   </TableCell>
                   <TableCell className="text-right">
                     {line.quantityRemaining > 0 ? (
-                      <span className="font-medium text-orange-600">{line.quantityRemaining}</span>
+                      <span className="font-medium text-orange-600 dark:text-orange-400">{line.quantityRemaining}</span>
                     ) : (
-                      <span className="text-slate-400">0</span>
+                      <span className="text-slate-400 dark:text-neutral-500">0</span>
                     )}
                   </TableCell>
                   <TableCell>
                     {line.isMaintPart ? (
-                      <span className="text-xs font-medium text-purple-700">Maint. Part</span>
+                      <span className="text-xs font-medium text-purple-700 dark:text-purple-400">Maint. Part</span>
                     ) : (
-                      <span className="text-xs text-slate-400">Material</span>
+                      <span className="text-xs text-slate-400 dark:text-neutral-500">Material</span>
                     )}
                   </TableCell>
                 </TableRow>
@@ -182,23 +182,23 @@ function DetailsTab({
         </div>
       </div>
 
-      <div className="rounded-md bg-slate-50 p-3 text-sm">
-        <div className="flex justify-between py-1 text-slate-600">
+      <div className="rounded-md bg-slate-50 dark:bg-muted/40 p-3 text-sm">
+        <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
           <span>Subtotal</span>
           <span>{formatCurrency(receipt.subtotal)}</span>
         </div>
-        <div className="flex justify-between py-1 text-slate-600">
+        <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
           <span>{taxLabel}</span>
           <span>{formatCurrency(receipt.salesTax)}</span>
         </div>
         {receipt.shippingCost > 0 && (
-          <div className="flex justify-between py-1 text-slate-600">
+          <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
             <span>Shipping / Other</span>
             <span>{formatCurrency(receipt.shippingCost)}</span>
           </div>
         )}
         <Separator className="my-1" />
-        <div className="flex justify-between py-1 font-semibold text-slate-900">
+        <div className="flex justify-between py-1 font-semibold text-slate-900 dark:text-neutral-100">
           <span>Grand Total</span>
           <span>{formatCurrency(receipt.grandTotal)}</span>
         </div>
@@ -211,13 +211,13 @@ function HistoryTab({ receipt }: { receipt: GoodsReceipt }) {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Comments
         </p>
         <CommentsSection recordType="receiving" recordId={receipt.id} />
       </div>
       <Separator className="mb-6" />
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
         Audit Trail
       </p>
       <AuditTrailTab recordType="receiving" recordId={receipt.id} />
@@ -312,8 +312,8 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-6 py-4 pr-12">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">{receipt.receiptNumber}</h2>
-          <p className="text-sm text-slate-500">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">{receipt.receiptNumber}</h2>
+          <p className="text-sm text-muted-foreground">
             {receipt.vendorName} · {receipt.poNumber}
           </p>
         </div>

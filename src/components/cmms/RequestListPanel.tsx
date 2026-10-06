@@ -16,7 +16,7 @@ export function RequestListPanel({ requests, selectedId, onSelect }: RequestList
   return (
     <div className="flex flex-col overflow-y-auto">
       {requests.length === 0 && (
-        <p className="px-4 py-8 text-center text-sm text-slate-400">
+        <p className="px-4 py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
           No requests found
         </p>
       )}
@@ -30,8 +30,8 @@ export function RequestListPanel({ requests, selectedId, onSelect }: RequestList
             key={req.id}
             onClick={() => onSelect(req.id)}
             className={cn(
-              "flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50",
-              isSelected && "border-l-2 border-l-brand-500 bg-brand-50 hover:bg-brand-50"
+              "flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-muted/40",
+              isSelected && "border-l-2 border-l-brand-500 bg-brand-50 dark:bg-brand-900/30 hover:bg-brand-50 dark:hover:bg-brand-900/30"
             )}
           >
             {/* Avatar */}
@@ -47,14 +47,14 @@ export function RequestListPanel({ requests, selectedId, onSelect }: RequestList
             {/* Content */}
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm font-semibold text-slate-900">
+                <span className="truncate text-sm font-semibold text-slate-900 dark:text-neutral-100">
                   {req.requestNumber}
                 </span>
-                <span className="shrink-0 text-xs text-slate-400">
+                <span className="shrink-0 text-xs text-slate-400 dark:text-neutral-500">
                   {relativeTime(req.createdAt)}
                 </span>
               </div>
-              <p className="mt-0.5 truncate text-xs text-slate-600">{req.title}</p>
+              <p className="mt-0.5 truncate text-xs text-slate-600 dark:text-neutral-400">{req.title}</p>
               <div className="mt-1 flex items-center gap-1.5">
                 <StatusBadge
                   variant={req.status}
@@ -67,7 +67,7 @@ export function RequestListPanel({ requests, selectedId, onSelect }: RequestList
                 {req.status === "converted" && req.linkedWorkOrderNumber && (
                   <Badge
                     variant="outline"
-                    className="border-blue-200 bg-blue-50 text-blue-700 text-[10px]"
+                    className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 text-[10px]"
                   >
                     &rarr; {req.linkedWorkOrderNumber}
                   </Badge>

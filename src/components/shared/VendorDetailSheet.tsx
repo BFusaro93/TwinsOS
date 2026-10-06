@@ -313,7 +313,7 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
           <div className="mb-2 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Parts
-              <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-600">({linkedParts.length})</span>
+              <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({linkedParts.length})</span>
             </p>
             {canWriteEquipt && (
               <Button
@@ -374,7 +374,7 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
                         <td className="px-2 py-2">
                           {canWriteEquipt && (
                             <button
-                              className="rounded p-1 text-slate-300 dark:text-neutral-600 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                              className="rounded p-1 text-slate-300 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                               title="Unlink part from vendor"
                               onClick={() => handleUnlinkPart(part)}
                             >
@@ -396,7 +396,7 @@ function PartsProductsTab({ vendor }: { vendor: Vendor }) {
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Products
-              <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-600">({products.length})</span>
+              <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({products.length})</span>
             </p>
             <div className="overflow-hidden rounded-md border">
               <table className="w-full text-sm">
@@ -578,7 +578,7 @@ function SpendHistoryTab({ vendor }: { vendor: Vendor }) {
           <div className="mb-6">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Purchase Orders
-              <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-600">({formatCurrency(poSpend)})</span>
+              <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({formatCurrency(poSpend)})</span>
             </p>
             <div className="overflow-hidden rounded-md border">
               <table className="w-full text-sm">
@@ -622,7 +622,7 @@ function SpendHistoryTab({ vendor }: { vendor: Vendor }) {
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Work Order Charges (CMMS)
-              <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-600">({formatCurrency(cmmsSpend)})</span>
+              <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({formatCurrency(cmmsSpend)})</span>
             </p>
             <div className="overflow-hidden rounded-md border">
               <table className="w-full text-sm">

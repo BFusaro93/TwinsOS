@@ -302,7 +302,7 @@ function LineItemRow({
     <tr className="group border-b text-xs hover:bg-slate-50 dark:hover:bg-muted/40">
       {/* Service name */}
       <td className="w-36 px-3 py-2 font-medium text-slate-700 dark:text-neutral-300 align-middle">
-        {row.name ?? <span className="italic text-slate-300 dark:text-neutral-600">—</span>}
+        {row.name ?? <span className="italic text-slate-300 dark:text-neutral-500">—</span>}
       </td>
       {/* Description */}
       <td className="px-3 py-2">
@@ -427,7 +427,7 @@ function LineItemRow({
       <td className="w-24 px-2 py-2 text-right tabular-nums align-middle">
         {row.discountCents > 0 ? (
           <div className="flex flex-col items-end leading-tight">
-            <span className="text-[10px] text-slate-300 dark:text-neutral-600 line-through">{formatCurrency(row.totalCents)}</span>
+            <span className="text-[10px] text-slate-300 dark:text-neutral-500 line-through">{formatCurrency(row.totalCents)}</span>
             <span className="font-medium text-slate-700 dark:text-neutral-300">{formatCurrency(row.totalCents - row.discountCents)}</span>
           </div>
         ) : (
@@ -454,7 +454,7 @@ function LineItemRow({
               type="button"
               onClick={handleDelete}
               disabled={locked}
-              className="text-slate-300 dark:text-neutral-600 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
+              className="text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>

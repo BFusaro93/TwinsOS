@@ -91,7 +91,7 @@ export function ReportScheduleDialog({ reportKey, reportName }: { reportKey: str
               {schedules.map((s) => (
                 <div key={s.id} className="flex items-start justify-between gap-2 rounded-md border p-2">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs text-slate-700">{s.recipients.join(", ")}</p>
+                    <p className="truncate text-xs text-slate-700 dark:text-neutral-300">{s.recipients.join(", ")}</p>
                     <div className="mt-1 flex items-center gap-2">
                       {s.last_run_status && (
                         <Badge variant={s.last_run_status === "success" ? "secondary" : "destructive"} className="text-[10px]">
@@ -131,7 +131,7 @@ export function ReportScheduleDialog({ reportKey, reportName }: { reportKey: str
                       className="h-7 w-7"
                       onClick={() => deleteSchedule.mutate(s.id)}
                     >
-                      <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                      <Trash2 className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
                     </Button>
                   </div>
                 </div>
@@ -140,7 +140,7 @@ export function ReportScheduleDialog({ reportKey, reportName }: { reportKey: str
           )}
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-600">Add recipients (comma or newline separated)</label>
+            <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Add recipients (comma or newline separated)</label>
             <Textarea
               rows={3}
               placeholder="you@company.com, ops@company.com"
@@ -150,7 +150,7 @@ export function ReportScheduleDialog({ reportKey, reportName }: { reportKey: str
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-slate-600">Send time</label>
+            <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Send time</label>
             <Select value={String(hourLocal)} onValueChange={(value) => setHourLocal(Number(value))}>
               <SelectTrigger className="w-[120px]">
                 <SelectValue />

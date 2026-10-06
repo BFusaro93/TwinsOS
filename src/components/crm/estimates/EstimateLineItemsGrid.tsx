@@ -223,7 +223,7 @@ function SectionRow({
             type="button"
             {...attributes}
             {...listeners}
-            className="shrink-0 cursor-grab touch-none text-slate-300 dark:text-neutral-600 hover:text-muted-foreground active:cursor-grabbing"
+            className="shrink-0 cursor-grab touch-none text-slate-300 dark:text-neutral-500 hover:text-muted-foreground active:cursor-grabbing"
             title="Drag to reorder"
           >
             <GripVertical className="h-3.5 w-3.5" />
@@ -532,7 +532,7 @@ function LineItemRow({
               type="button"
               {...attributes}
               {...listeners}
-              className="cursor-grab touch-none text-slate-300 dark:text-neutral-600 hover:text-muted-foreground active:cursor-grabbing"
+              className="cursor-grab touch-none text-slate-300 dark:text-neutral-500 hover:text-muted-foreground active:cursor-grabbing"
               title="Drag to reorder"
             >
               <GripVertical className="h-3.5 w-3.5" />
@@ -731,7 +731,7 @@ function LineItemRow({
         <td className="w-20 px-2 py-1.5 text-right tabular-nums">
           {row.discountCents > 0 ? (
             <div className="flex flex-col items-end leading-tight">
-              <span className="text-[10px] text-slate-300 dark:text-neutral-600 line-through">{centsToDisplay(row.totalCents)}</span>
+              <span className="text-[10px] text-slate-300 dark:text-neutral-500 line-through">{centsToDisplay(row.totalCents)}</span>
               <span className="font-medium text-slate-700 dark:text-neutral-300">{centsToDisplay(row.totalCents - row.discountCents)}</span>
             </div>
           ) : (

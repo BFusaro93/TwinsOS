@@ -16,6 +16,9 @@
  *   3. Leave it alone — solid fills (bg-green-600), `text-white`, overlays —
  *      which read fine on dark.
  *
+ * A file containing the comment `dark-mode-codemod: skip` is left alone
+ * (use it for surfaces that are dark in both themes).
+ *
  * Idempotent: a class that already has a dark counterpart is skipped, so it
  * is safe to re-run. Anything the codemod can't decide (gradients, svg
  * fill/stroke, hex literals, inline style colors) is listed for manual review.
@@ -76,7 +79,7 @@ function darkUtil(kind, side, color, shade) {
       if (n === 700) return "text-neutral-300";
       if (n === 600 || n === 500) return "text-neutral-400";
       if (n === 400) return "text-neutral-500";
-      if (n === 300) return "text-neutral-600";
+      if (n === 300) return "text-neutral-500";
       return null;
     }
     if (isBorderish) {
@@ -153,7 +156,9 @@ function transformClassText(text, { startsTouch, endsTouch }, file, lineOf) {
 
   // A surface that is dark in BOTH themes (bg-[#4a4a4a], bg-slate-800, bg-black…)
   // carries light text on purpose; flipping that text would make it vanish.
-  const fixedDark = tokens.some((t) => isFixedDarkBg(t[0]));
+  // `text-slate-300 hover:text-white` is the filter-pill idiom on the fixed
+  // dark-gray list toolbars: light text that brightens on hover.
+  const fixedDark = tokens.some((t) => isFixedDarkBg(t[0])) || tokens.some((t) => t[0] === "hover:text-white");
   const pageShell = tokens.some((t) => /^(?:min-)?h-(?:dvh|screen)$/.test(t[0]));
 
   let out = "";
@@ -190,6 +195,9 @@ function transformClassText(text, { startsTouch, endsTouch }, file, lineOf) {
     let replacement = tok;
     let dark = null;
 
+    // bg-white/5..30 is a highlight laid over a dark surface (sidebar rows,
+    // toolbar buttons) — it must stay white, not become the dark card color.
+    if (baseUtil === "bg-white" && alpha && Number(alpha) <= 30) { out += tok; return; }
     if (swapTarget && !sideName) {
       replacement = `${prefix}${swapTarget}${alpha ? "/" + alpha : ""}`;
       stats.swapped++;
@@ -220,6 +228,9 @@ function transformClassText(text, { startsTouch, endsTouch }, file, lineOf) {
 
 function transformFile(file) {
   const src = fs.readFileSync(file, "utf8");
+  // Opt-out for components that are a fixed dark surface in BOTH themes
+  // (photo lightbox, annotation editor): put this comment anywhere in the file.
+  if (src.includes("dark-mode-codemod: skip")) { stats.files++; return; }
   const kind = file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, kind);
   const lineOf = (offsetInSrc) => sf.getLineAndCharacterOfPosition(offsetInSrc).line + 1;

@@ -26,7 +26,7 @@ function CheckRow({ label, checked, sublabel, pending, readOnly, onToggle }: Che
     >
       <div className={cn(
         "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
-        checked ? "border-brand-500 bg-brand-500 text-white" : "border-border bg-card text-slate-300 dark:text-neutral-600"
+        checked ? "border-brand-500 bg-brand-500 text-white" : "border-border bg-card text-slate-300 dark:text-neutral-500"
       )}>
         {pending
           ? <Loader2 className="h-3 w-3 animate-spin" />

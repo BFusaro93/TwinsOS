@@ -251,11 +251,11 @@ export function ReportTable({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
         {truncated && (
           <div
             role="status"
-            className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+            className="flex items-start gap-2 border-b border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-900 dark:text-amber-200"
           >
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
@@ -277,14 +277,14 @@ export function ReportTable({
           />
         )}
         {result.rows.length === 0 ? (
-          <div className="flex items-center justify-center py-16 text-sm text-slate-400">
+          <div className="flex items-center justify-center py-16 text-sm text-slate-400 dark:text-neutral-500">
             No rows for the selected filters.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <tr className="border-b bg-slate-50 dark:bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   {displayColumns.map((col) => (
                     <th
                       key={col.key}
@@ -306,7 +306,7 @@ export function ReportTable({
                   below unchanged. */}
               {result.totals && result.groupSubtotals && (
                 <tbody>
-                  <tr className="border-b bg-slate-200 font-semibold text-slate-800">
+                  <tr className="border-b bg-slate-200 dark:bg-neutral-700 font-semibold text-slate-800 dark:text-neutral-100">
                     {displayColumns.map((col) => {
                       const total = result.totals?.[col.key];
                       const hasTotal = col.totalable && total !== undefined && total !== null;
@@ -353,7 +353,7 @@ export function ReportTable({
                   return (
                     <Fragment key={i}>
                       {showSectionHeader && (
-                        <tr className="border-b bg-slate-100 font-semibold text-slate-700">
+                        <tr className="border-b bg-muted font-semibold text-slate-700 dark:text-neutral-300">
                           {displayColumns.map((col) => {
                             const total = subtotal?.[col.key];
                             const hasTotal = col.totalable && total !== undefined && total !== null;
@@ -377,7 +377,7 @@ export function ReportTable({
                           })}
                         </tr>
                       )}
-                      <tr className="border-b last:border-0 hover:bg-slate-50">
+                      <tr className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
                         {displayColumns.map((col) => {
                           const ruleMatch = matchFormatRule(row[col.key], col.key, formatRules);
                           const cellValue = row[col.key];
@@ -395,7 +395,7 @@ export function ReportTable({
                             <td
                               key={col.key}
                               className={cn(
-                                "px-3 py-2 text-slate-700",
+                                "px-3 py-2 text-slate-700 dark:text-neutral-300",
                                 NUMERIC_TYPES.includes(col.type) &&
                                   "text-right tabular-nums"
                               )}
@@ -412,7 +412,7 @@ export function ReportTable({
               </tbody>
               {result.totals && !result.groupSubtotals && (
                 <tfoot>
-                  <tr className="border-t bg-slate-50 font-medium text-slate-800">
+                  <tr className="border-t bg-slate-50 dark:bg-muted/40 font-medium text-slate-800 dark:text-neutral-100">
                     {displayColumns.map((col, i) => {
                       const total = result.totals?.[col.key];
                       const hasTotal = col.totalable && total !== undefined && total !== null;

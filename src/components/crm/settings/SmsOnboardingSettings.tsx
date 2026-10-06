@@ -100,7 +100,7 @@ export function SmsOnboardingSettings() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12 text-slate-400">
+      <div className="flex items-center justify-center py-12 text-slate-400 dark:text-neutral-500">
         <Loader2 className="h-5 w-5 animate-spin" />
       </div>
     );
@@ -140,24 +140,24 @@ export function SmsOnboardingSettings() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h3 className="text-base font-semibold text-slate-900">Your own texting number</h3>
-        <p className="mt-1 text-sm text-slate-500">
+        <h3 className="text-base font-semibold text-slate-900 dark:text-neutral-100">Your own texting number</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
           Register your own business with carriers so appointment reminders and updates come from your own phone
           number instead of a shared one. This is a one-time setup that Twilio reviews — approval can take anywhere
           from a few hours to a few days.{" "}
-          <GuideLink href="/settings/support/sms-onboarding-guide" className="text-green-700 underline hover:text-green-800">
+          <GuideLink href="/settings/support/sms-onboarding-guide" className="text-green-700 dark:text-green-400 underline hover:text-green-800 dark:hover:text-green-300">
             See the full guide
           </GuideLink>{" "}
           for wording that gets approved on the first try.
         </p>
       </div>
 
-      <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-center gap-3 rounded-md border border-border bg-slate-50 dark:bg-muted/40 p-4">
         <Badge variant={status === "complete" ? "default" : status.endsWith("rejected") ? "destructive" : "secondary"}>
           {STATUS_LABEL[status]}
         </Badge>
         {registration?.twilio_phone_number && (
-          <span className="text-sm text-slate-600">Your number: {registration.twilio_phone_number}</span>
+          <span className="text-sm text-slate-600 dark:text-neutral-400">Your number: {registration.twilio_phone_number}</span>
         )}
         <div className="ml-auto flex gap-2">
           {["profile_submitted", "brand_submitted", "campaign_submitted"].includes(status) && (
@@ -176,7 +176,7 @@ export function SmsOnboardingSettings() {
       </div>
 
       {failureReason && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <div className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 p-4 text-sm text-red-800 dark:text-red-300">
           <p className="font-medium">Twilio&apos;s last review notes:</p>
           <p className="mt-1 whitespace-pre-wrap font-mono text-xs">{failureReason}</p>
           <p className="mt-2">Fix the relevant fields below and save to resubmit.</p>
@@ -221,7 +221,7 @@ export function SmsOnboardingSettings() {
                 ))}
               </SelectContent>
             </Select>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Twilio requires one of a fixed list — landscaping isn&apos;t its own category, so pick the closest (most
               landscaping/lawn-care businesses fit under Construction or Agriculture).
             </p>
@@ -277,7 +277,7 @@ export function SmsOnboardingSettings() {
 
         <div>
           <Label className="text-sm font-medium">Authorized representative</Label>
-          <p className="text-xs text-slate-500">The person Twilio/carriers can contact about this registration.</p>
+          <p className="text-xs text-muted-foreground">The person Twilio/carriers can contact about this registration.</p>
           <div className="mt-2 grid grid-cols-2 gap-4">
             <Input
               placeholder="First name"
@@ -316,7 +316,7 @@ export function SmsOnboardingSettings() {
         <div className="space-y-4 border-t pt-4">
           <div>
             <Label className="text-sm font-medium">How customers consent — Method 1: website form</Label>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               The page where prospects/clients submit their info with an unchecked-by-default SMS opt-in checkbox.
             </p>
             <Input
@@ -334,7 +334,7 @@ export function SmsOnboardingSettings() {
           </div>
           <div>
             <Label className="text-sm font-medium">How customers consent — Method 2: verbal opt-in script</Label>
-            <p className="text-xs text-slate-500">Exact wording staff read aloud when a client calls in.</p>
+            <p className="text-xs text-muted-foreground">Exact wording staff read aloud when a client calls in.</p>
             <Textarea
               className="mt-2"
               rows={4}

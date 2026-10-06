@@ -84,7 +84,7 @@ export function DashboardsList() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted-foreground">
           Multi-tab dashboards built from your saved analyses.
         </p>
         {canManage && <NewDashboardMenu />}
@@ -97,13 +97,13 @@ export function DashboardsList() {
           ))}
         </div>
       ) : dashboards.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-white py-16 text-center">
-          <LayoutDashboard className="h-8 w-8 text-slate-300" />
+        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-card py-16 text-center">
+          <LayoutDashboard className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
           <div>
-            <p className="text-sm font-medium text-slate-700">
+            <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">
               No dashboards yet
             </p>
-            <p className="mt-0.5 text-sm text-slate-500">
+            <p className="mt-0.5 text-sm text-muted-foreground">
               Combine your saved analyses into a multi-tab dashboard.
             </p>
           </div>
@@ -117,11 +117,11 @@ export function DashboardsList() {
           )}
         </div>
       ) : (
-        <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+        <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <tr className="border-b bg-slate-50 dark:bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   <th className="px-4 py-2.5 text-left">Name</th>
                   <th className="px-4 py-2.5 text-left">Description</th>
                   <th className="px-4 py-2.5 text-left">Tabs</th>
@@ -133,12 +133,12 @@ export function DashboardsList() {
                 {dashboards.map((dashboard) => (
                   <tr
                     key={dashboard.id}
-                    className="border-b last:border-0 hover:bg-slate-50"
+                    className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40"
                   >
                     <td className="px-4 py-2.5">
                       <Link
                         href={`/crm/admin/reports/dashboards/${dashboard.id}`}
-                        className="font-medium text-blue-600 hover:underline"
+                        className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
                       >
                         {dashboard.name}
                       </Link>
@@ -153,14 +153,14 @@ export function DashboardsList() {
                         </Badge>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-slate-600">
+                    <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">
                       {dashboard.description || "—"}
                     </td>
-                    <td className="px-4 py-2.5 text-slate-600">
+                    <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">
                       {dashboard.config.tabs.length}{" "}
                       {dashboard.config.tabs.length === 1 ? "tab" : "tabs"}
                     </td>
-                    <td className="px-4 py-2.5 text-slate-600">
+                    <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">
                       {formatDate(dashboard.updatedAt)}
                     </td>
                     <td className="px-2 py-2.5">
@@ -194,7 +194,7 @@ export function DashboardsList() {
                                 Duplicate
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                className="text-red-600 focus:text-red-600"
+                                className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
                                 onClick={() => setPendingDelete(dashboard)}
                               >
                                 Delete

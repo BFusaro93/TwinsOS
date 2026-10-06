@@ -118,7 +118,7 @@ export function NewRequestDialog({ open, onOpenChange, initialData }: NewRequest
             {/* Request Title */}
             <div className="grid gap-1.5">
               <Label htmlFor="req-title">
-                Request Title <span className="text-red-500">*</span>
+                Request Title <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Input
                 id="req-title"
@@ -131,7 +131,7 @@ export function NewRequestDialog({ open, onOpenChange, initialData }: NewRequest
             {/* Priority */}
             <div className="grid gap-1.5">
               <Label htmlFor="req-priority">
-                Priority <span className="text-red-500">*</span>
+                Priority <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Select value={priority} onValueChange={setPriority}>
                 <SelectTrigger id="req-priority">
@@ -161,7 +161,7 @@ export function NewRequestDialog({ open, onOpenChange, initialData }: NewRequest
             {/* Description */}
             <div className="grid gap-1.5">
               <Label htmlFor="req-description">
-                Description <span className="text-red-500">*</span>
+                Description <span className="text-red-500 dark:text-red-400">*</span>
               </Label>
               <Textarea
                 id="req-description"

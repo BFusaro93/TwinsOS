@@ -788,7 +788,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
             <div className="min-w-0 mr-3">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-muted-foreground">#{ticket.ticketNumber}</span>
-                <span className="text-slate-300 dark:text-neutral-600">·</span>
+                <span className="text-slate-300 dark:text-neutral-500">·</span>
                 <span className="text-sm font-semibold text-slate-900 dark:text-neutral-100 truncate">{ticket.subject ?? "(no subject)"}</span>
               </div>
             </div>

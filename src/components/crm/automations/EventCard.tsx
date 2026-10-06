@@ -15,13 +15,13 @@ const EVENT_META: Record<
   EventType,
   { label: string; icon: React.ElementType; color: string }
 > = {
-  wait: { label: "Wait", icon: Clock, color: "border-slate-400" },
+  wait: { label: "Wait", icon: Clock, color: "border-slate-400 dark:border-neutral-600" },
   email: { label: "Email", icon: Mail, color: "border-blue-500" },
   alert: { label: "Alert", icon: Bell, color: "border-amber-500" },
   ticket: { label: "Ticket", icon: Tag, color: "border-purple-500" },
   text_message: { label: "Text Message", icon: MessageSquare, color: "border-green-500" },
   if_branch: { label: "IF Branch", icon: GitBranch, color: "border-orange-500" },
-  note: { label: "Note", icon: StickyNote, color: "border-gray-400" },
+  note: { label: "Note", icon: StickyNote, color: "border-gray-400 dark:border-neutral-600" },
   update: { label: "Update", icon: RefreshCw, color: "border-cyan-500" },
   tags: { label: "Tags", icon: Hash, color: "border-pink-500" },
 };
@@ -74,21 +74,21 @@ export function EventCard({ event, onClick, onDelete }: Props) {
     <div
       onClick={onClick}
       className={cn(
-        "relative flex items-start gap-2 rounded-md border-l-4 border border-slate-200 p-3 bg-white transition-shadow select-none",
+        "relative flex items-start gap-2 rounded-md border-l-4 border border-border p-3 bg-card transition-shadow select-none",
         onClick && "cursor-pointer hover:shadow-sm",
         meta.color
       )}
     >
-      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold text-slate-700">{meta.label}</p>
-        <p className="mt-0.5 truncate text-[11px] text-slate-400">{summary}</p>
+        <p className="text-xs font-semibold text-slate-700 dark:text-neutral-300">{meta.label}</p>
+        <p className="mt-0.5 truncate text-[11px] text-slate-400 dark:text-neutral-500">{summary}</p>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <div
           className={cn(
             "h-2 w-2 rounded-full",
-            event.isActive ? "bg-green-400" : "bg-slate-300"
+            event.isActive ? "bg-green-400" : "bg-slate-300 dark:bg-neutral-600"
           )}
           title={event.isActive ? "Active" : "Inactive"}
         />
@@ -98,7 +98,7 @@ export function EventCard({ event, onClick, onDelete }: Props) {
               e.stopPropagation();
               onDelete();
             }}
-            className="text-slate-300 hover:text-red-500 transition-colors"
+            className="text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
             title="Delete event"
           >
             <X className="h-3.5 w-3.5" />

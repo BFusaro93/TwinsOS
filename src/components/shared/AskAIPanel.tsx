@@ -41,7 +41,7 @@ export function AskAIPanel({ open, onOpenChange }: AskAIPanelProps) {
       <DialogContent className="flex h-[600px] max-h-[80vh] flex-col sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-emerald-700" />
+            <Sparkles className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
             Ask AI
           </DialogTitle>
           <DialogDescription>
@@ -50,9 +50,9 @@ export function AskAIPanel({ open, onOpenChange }: AskAIPanelProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 rounded-md border border-slate-100 p-3">
+        <ScrollArea className="flex-1 rounded-md border border-slate-100 dark:border-neutral-800 p-3">
           {messages.length === 0 ? (
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-400 dark:text-neutral-500">
               Ask a &ldquo;how do I&rdquo; question, or ask whether something is actually tracked in the app.
             </p>
           ) : (
@@ -64,7 +64,7 @@ export function AskAIPanel({ open, onOpenChange }: AskAIPanelProps) {
                     "max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
                     m.role === "user"
                       ? "ml-auto bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-900"
+                      : "bg-muted text-slate-900 dark:text-neutral-100"
                   )}
                 >
                   {m.content || (isStreaming && i === messages.length - 1 ? "…" : "")}
@@ -72,7 +72,7 @@ export function AskAIPanel({ open, onOpenChange }: AskAIPanelProps) {
               ))}
             </div>
           )}
-          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+          {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
         </ScrollArea>
 
         <div className="flex gap-2">

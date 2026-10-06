@@ -88,11 +88,11 @@ export function ApiKeysCard() {
   const revokedKeys = (keys ?? []).filter((k) => k.revokedAt);
 
   return (
-    <div className="rounded-xl border bg-white shadow-sm">
+    <div className="rounded-xl border bg-card shadow-sm">
       <div className="flex items-center justify-between border-b px-6 py-4">
         <div>
-          <p className="text-sm font-semibold text-slate-900">Public API Keys</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Public API Keys</p>
+          <p className="text-xs text-muted-foreground">
             Scoped keys for direct API access — separate from the Zapier connection above.
           </p>
         </div>
@@ -101,10 +101,10 @@ export function ApiKeysCard() {
         </Button>
       </div>
 
-      <div className="border-b bg-slate-50 px-6 py-3">
+      <div className="border-b bg-slate-50 dark:bg-muted/40 px-6 py-3">
         <GuideLink
           href="/settings/support/api-docs"
-          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400"
         >
           View the public API + MCP docs — every endpoint, tool, scope, and request shape
           <ArrowRight className="h-3 w-3" />
@@ -112,13 +112,13 @@ export function ApiKeysCard() {
       </div>
 
       <div className="border-b px-6 py-4">
-        <p className="text-sm font-semibold text-slate-900">Connect an AI agent (MCP)</p>
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Connect an AI agent (MCP)</p>
+        <p className="mt-1 text-xs text-muted-foreground">
           Any API key above also works as an MCP server connection — same key, same scopes. Point Claude (or any
           MCP client) at:
         </p>
         <div className="mt-2 flex items-center gap-2">
-          <code className="flex-1 truncate rounded bg-slate-100 px-2 py-1.5 font-mono text-xs text-slate-700">
+          <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 font-mono text-xs text-slate-700 dark:text-neutral-300">
             {mcpUrl}
           </code>
           <Button size="sm" variant="outline" onClick={() => copyToClipboard(mcpUrl)}>
@@ -128,10 +128,10 @@ export function ApiKeysCard() {
       </div>
 
       <div className="px-6 py-5">
-        {isLoading && <p className="text-sm text-slate-400">Loading…</p>}
+        {isLoading && <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>}
 
         {!isLoading && activeKeys.length === 0 && revokedKeys.length === 0 && (
-          <p className="text-sm text-slate-400">No API keys yet. Create one to get started.</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No API keys yet. Create one to get started.</p>
         )}
 
         {activeKeys.length > 0 && (
@@ -139,8 +139,8 @@ export function ApiKeysCard() {
             {activeKeys.map((key) => (
               <li key={key.id} className="flex items-center justify-between py-3">
                 <div>
-                  <p className="text-sm font-medium text-slate-900">{key.name}</p>
-                  <p className="font-mono text-xs text-slate-500">{key.keyPrefix}…</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">{key.name}</p>
+                  <p className="font-mono text-xs text-muted-foreground">{key.keyPrefix}…</p>
                   {(() => {
                     // A key created before a scope was removed from the
                     // catalog (e.g. the write:sensitive tiers PR #81 dropped)
@@ -150,7 +150,7 @@ export function ApiKeysCard() {
                     // Create Key's checklist could ever grant today.
                     const activeScopeCount = key.scopes.filter(isKnownScope).length;
                     return (
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">
                         {activeScopeCount} scope{activeScopeCount === 1 ? "" : "s"} ·{" "}
                         {key.lastUsedAt ? `last used ${new Date(key.lastUsedAt).toLocaleDateString()}` : "never used"}
                       </p>
@@ -160,7 +160,7 @@ export function ApiKeysCard() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="text-red-600 hover:bg-red-50"
+                  className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40"
                   onClick={() => setRevokeTarget({ id: key.id, name: key.name })}
                 >
                   Revoke
@@ -172,20 +172,20 @@ export function ApiKeysCard() {
 
         {revokedKeys.length > 0 && (
           <div className="border-t pt-3">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">Revoked</p>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">Revoked</p>
             <ul className="divide-y">
               {revokedKeys.map((key) => (
                 <li key={key.id} className="flex items-center justify-between py-2 opacity-60">
                   <div>
-                    <p className="text-sm text-slate-700">{key.name}</p>
-                    <p className="font-mono text-xs text-slate-500">{key.keyPrefix}…</p>
+                    <p className="text-sm text-slate-700 dark:text-neutral-300">{key.name}</p>
+                    <p className="font-mono text-xs text-muted-foreground">{key.keyPrefix}…</p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-slate-400">Revoked</span>
+                    <span className="text-xs text-slate-400 dark:text-neutral-500">Revoked</span>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 px-2 text-xs text-slate-500 hover:text-red-600"
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-red-600 dark:hover:text-red-400"
                       disabled={deleteKey.isPending}
                       onClick={() => deleteKey.mutate(key.id)}
                     >
@@ -225,12 +225,12 @@ export function ApiKeysCard() {
               <div className="max-h-64 space-y-3 overflow-y-auto rounded-md border p-3">
                 {API_SCOPE_RESOURCES.map((resource) => (
                   <div key={resource.key}>
-                    <p className="text-xs font-medium text-slate-700">{resource.label}</p>
+                    <p className="text-xs font-medium text-slate-700 dark:text-neutral-300">{resource.label}</p>
                     <div className="mt-1 flex flex-wrap gap-3">
                       {resource.tiers.map((tier) => {
                         const scope = scopeString(resource.key, tier);
                         return (
-                          <label key={scope} className="flex items-center gap-1.5 text-xs text-slate-600">
+                          <label key={scope} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-neutral-400">
                             <Checkbox
                               checked={selectedScopes.has(scope)}
                               onCheckedChange={() => toggleScope(scope)}
@@ -245,7 +245,7 @@ export function ApiKeysCard() {
               </div>
             </div>
 
-            {error && <p className="text-xs text-red-600">{error}</p>}
+            {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
           </div>
 
           <DialogFooter>
@@ -296,13 +296,13 @@ export function ApiKeysCard() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="absolute right-2 top-2 bg-white"
+                      className="absolute right-2 top-2 bg-card"
                       onClick={() => copyToClipboard(mcpCliCommand)}
                     >
                       Copy
                     </Button>
                   </div>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted-foreground">
                     Registers this key as an MCP server named &quot;landscapt&quot; for the Claude Code CLI. Paste the whole
                     line at your terminal prompt — it&apos;s one command, not a file to edit.
                   </p>
@@ -317,13 +317,13 @@ export function ApiKeysCard() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="absolute right-2 top-2 bg-white"
+                      className="absolute right-2 top-2 bg-card"
                       onClick={() => copyToClipboard(mcpConfigJson)}
                     >
                       Copy
                     </Button>
                   </div>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted-foreground">
                     This is a config-file snippet, not a command — paste it into your MCP client&apos;s own config file
                     (Claude Desktop, ChatGPT, Gemini, or any other MCP-compatible client; exact file location and key
                     names vary by client). Don&apos;t paste it into a terminal. Either way, this key only sees tools for

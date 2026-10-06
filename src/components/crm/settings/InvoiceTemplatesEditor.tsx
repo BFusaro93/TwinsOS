@@ -50,18 +50,18 @@ function LayoutFormatPicker({
             onClick={() => onChange(o.value)}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onChange(o.value); }}
             className={`flex cursor-pointer flex-col gap-1 rounded-md border p-2.5 text-left transition-colors ${
-              selected ? "border-brand-400 bg-brand-50" : "border-slate-200 hover:border-slate-300"
+              selected ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30" : "border-border hover:border-slate-300 dark:hover:border-neutral-700"
             }`}
           >
             <div className="flex items-start gap-2">
               <span
                 className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${
-                  selected ? "border-brand-500 bg-brand-500" : "border-slate-300"
+                  selected ? "border-brand-500 bg-brand-500" : "border-slate-300 dark:border-neutral-700"
                 }`}
               />
               <div className="flex-1">
-                <div className="text-xs font-semibold text-slate-800">{o.label}</div>
-                <p className="mt-0.5 text-[11px] leading-snug text-slate-500">{o.description}</p>
+                <div className="text-xs font-semibold text-slate-800 dark:text-neutral-100">{o.label}</div>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{o.description}</p>
               </div>
             </div>
             <a
@@ -69,7 +69,7 @@ function LayoutFormatPicker({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="ml-6 flex w-fit items-center gap-1 text-[11px] text-brand-600 hover:text-brand-700 hover:underline"
+              className="ml-6 flex w-fit items-center gap-1 text-[11px] text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 hover:underline"
             >
               <Eye className="h-3 w-3" />
               Preview
@@ -109,14 +109,14 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
   }
 
   return (
-    <div className="space-y-3 rounded-md border bg-slate-50 p-3">
+    <div className="space-y-3 rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
       <div>
-        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Layout</label>
+        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Layout</label>
         <LayoutFormatPicker value={layoutKey} onChange={setLayoutKey} />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Accent Color</label>
+          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Accent Color</label>
           <div className="flex items-center gap-2">
             <input
               type="color"
@@ -134,7 +134,7 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
         </div>
       </div>
       <div>
-        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Logo URL</label>
+        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Logo URL</label>
         <Input
           value={logoUrl}
           onChange={(e) => setLogoUrl(e.target.value)}
@@ -142,12 +142,12 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
           className="h-8 text-xs"
         />
       </div>
-      <label className="flex items-center gap-2 text-xs text-slate-600">
+      <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
         <Checkbox checked={showNotes} onCheckedChange={(v) => setShowNotes(v === true)} />
         Show invoice notes section
       </label>
       <div>
-        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Default Notes (used when an invoice has none of its own)
         </label>
         <textarea
@@ -159,7 +159,7 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
         />
       </div>
       <div>
-        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Advertisement / Service Update (shown on every invoice using this template)
         </label>
         <textarea
@@ -179,7 +179,7 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
           href={`/api/crm/invoice-templates/${template.id}/preview`}
           target="_blank"
           rel="noopener noreferrer"
-          className="ml-auto flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 hover:underline"
+          className="ml-auto flex items-center gap-1 text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 hover:underline"
         >
           <Eye className="h-3.5 w-3.5" />
           Preview with saved changes
@@ -233,21 +233,21 @@ export function InvoiceTemplatesEditor() {
 
   return (
     <div className="divide-y">
-      {isLoading && <p className="py-3 text-xs text-slate-400">Loading templates…</p>}
+      {isLoading && <p className="py-3 text-xs text-slate-400 dark:text-neutral-500">Loading templates…</p>}
       {!isLoading && templates.length === 0 && !adding && (
-        <p className="py-3 text-xs text-slate-400">No templates yet — the default PDF layout is used.</p>
+        <p className="py-3 text-xs text-slate-400 dark:text-neutral-500">No templates yet — the default PDF layout is used.</p>
       )}
       {templates.map((t) => (
         <div key={t.id} className="py-2.5">
           <div className="flex items-center gap-3">
-            <span className="flex-1 text-sm text-slate-800">{t.name}</span>
-            <span className="text-xs text-slate-400">{LAYOUT_OPTIONS.find((o) => o.value === t.layoutKey)?.label ?? t.layoutKey}</span>
+            <span className="flex-1 text-sm text-slate-800 dark:text-neutral-100">{t.name}</span>
+            <span className="text-xs text-slate-400 dark:text-neutral-500">{LAYOUT_OPTIONS.find((o) => o.value === t.layoutKey)?.label ?? t.layoutKey}</span>
             <a
               href={`/api/crm/invoice-templates/${t.id}/preview`}
               target="_blank"
               rel="noopener noreferrer"
               title="Preview"
-              className="text-slate-300 hover:text-brand-600"
+              className="text-slate-300 dark:text-neutral-500 hover:text-brand-600 dark:hover:text-brand-400"
             >
               <Eye className="h-4 w-4" />
             </a>
@@ -255,7 +255,7 @@ export function InvoiceTemplatesEditor() {
               type="button"
               title="Edit template"
               onClick={() => setEditingId(editingId === t.id ? null : t.id)}
-              className={editingId === t.id ? "text-brand-600" : "text-slate-300 hover:text-brand-600 transition-colors"}
+              className={editingId === t.id ? "text-brand-600 dark:text-brand-400" : "text-slate-300 dark:text-neutral-500 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"}
             >
               <Pencil className="h-3.5 w-3.5" />
             </button>
@@ -263,14 +263,14 @@ export function InvoiceTemplatesEditor() {
               type="button"
               title={t.isDefault ? "Default template" : "Set as default"}
               onClick={() => !t.isDefault && handleSetDefault(t.id)}
-              className={t.isDefault ? "text-amber-400" : "text-slate-300 hover:text-amber-400 transition-colors"}
+              className={t.isDefault ? "text-amber-400" : "text-slate-300 dark:text-neutral-500 hover:text-amber-400 transition-colors"}
             >
               <Star className="h-4 w-4" fill={t.isDefault ? "currentColor" : "none"} />
             </button>
             <button
               type="button"
               onClick={() => void handleDelete(t.id, t.isDefault)}
-              className="rounded p-1 text-slate-300 hover:text-red-500"
+              className="rounded p-1 text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -292,12 +292,12 @@ export function InvoiceTemplatesEditor() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Escape") { setAdding(false); setName(""); } }}
-              className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
+              className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
             />
             <button onClick={commitAdd} className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600">
               Add
             </button>
-            <button onClick={() => { setAdding(false); setName(""); }} className="rounded p-1 text-slate-400 hover:text-slate-600">
+            <button onClick={() => { setAdding(false); setName(""); }} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -311,7 +311,7 @@ export function InvoiceTemplatesEditor() {
         </div>
       )}
 
-      <p className="pt-3 text-xs text-slate-400">
+      <p className="pt-3 text-xs text-slate-400 dark:text-neutral-500">
         The starred template is used for all invoices by default. Click the pencil on any template
         to override its logo, accent color, and whether notes show — or the eye icon to preview it
         with sample data.

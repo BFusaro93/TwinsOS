@@ -194,11 +194,11 @@ const ROLES: {
 function statusBadgeClass(status: OrgUser["status"]): string {
   switch (status) {
     case "active":
-      return "border-green-200 bg-green-100 text-green-700";
+      return "border-green-200 dark:border-green-800 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400";
     case "invited":
-      return "border-amber-200 bg-amber-100 text-amber-700";
+      return "border-amber-200 dark:border-amber-800 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400";
     case "inactive":
-      return "border-slate-200 bg-slate-100 text-slate-500";
+      return "border-border bg-muted text-muted-foreground";
   }
 }
 
@@ -312,7 +312,7 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false, sh
             </Select>
           </div>
           {inviteError && (
-            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 border border-red-200">
+            <p className="rounded-md bg-red-50 dark:bg-red-950/40 px-3 py-2 text-sm text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800">
               {inviteError}
             </p>
           )}
@@ -400,19 +400,19 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
         {loginEmail ? (
           /* Success state — show credentials */
           <div className="flex flex-col gap-4 pt-2">
-            <div className="rounded-lg border border-brand-200 bg-brand-50 p-4">
-              <p className="mb-2 text-sm font-medium text-brand-900">Crew account created!</p>
-              <div className="rounded-md border border-slate-200 bg-white p-3 font-mono text-sm">
+            <div className="rounded-lg border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 p-4">
+              <p className="mb-2 text-sm font-medium text-brand-900 dark:text-brand-200">Crew account created!</p>
+              <div className="rounded-md border border-border bg-card p-3 font-mono text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-400">Login:</span>
-                  <span className="select-all text-slate-900">{loginEmail}</span>
+                  <span className="text-slate-400 dark:text-neutral-500">Login:</span>
+                  <span className="select-all text-slate-900 dark:text-neutral-100">{loginEmail}</span>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
-                  <span className="text-slate-400">Password:</span>
-                  <span className="select-all text-slate-900">{password}</span>
+                  <span className="text-slate-400 dark:text-neutral-500">Password:</span>
+                  <span className="select-all text-slate-900 dark:text-neutral-100">{password}</span>
                 </div>
               </div>
-              <p className="mt-3 text-xs text-amber-700">
+              <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
                 Save these credentials — the password cannot be retrieved after this dialog is closed.
               </p>
             </div>
@@ -435,7 +435,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="crew-email">
-                Login Email <span className="text-slate-400 font-normal text-xs">(optional — auto-generated if blank)</span>
+                Login Email <span className="text-slate-400 dark:text-neutral-500 font-normal text-xs">(optional — auto-generated if blank)</span>
               </Label>
               <Input
                 id="crew-email"
@@ -468,7 +468,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
               />
             </div>
             {error && (
-              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-sm text-red-700 dark:text-red-400">
                 {error}
               </p>
             )}
@@ -544,19 +544,19 @@ function ResetPasswordDialog({ user, onOpenChange }: ResetPasswordDialogProps) {
 
         {done ? (
           <div className="flex flex-col gap-4 pt-2">
-            <div className="rounded-lg border border-brand-200 bg-brand-50 p-4">
-              <p className="mb-2 text-sm font-medium text-brand-900">Password reset!</p>
-              <div className="rounded-md border border-slate-200 bg-white p-3 font-mono text-sm">
+            <div className="rounded-lg border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 p-4">
+              <p className="mb-2 text-sm font-medium text-brand-900 dark:text-brand-200">Password reset!</p>
+              <div className="rounded-md border border-border bg-card p-3 font-mono text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-400">Login:</span>
-                  <span className="select-all text-slate-900">{user?.email}</span>
+                  <span className="text-slate-400 dark:text-neutral-500">Login:</span>
+                  <span className="select-all text-slate-900 dark:text-neutral-100">{user?.email}</span>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
-                  <span className="text-slate-400">Password:</span>
-                  <span className="select-all text-slate-900">{password}</span>
+                  <span className="text-slate-400 dark:text-neutral-500">Password:</span>
+                  <span className="select-all text-slate-900 dark:text-neutral-100">{password}</span>
                 </div>
               </div>
-              <p className="mt-3 text-xs text-amber-700">
+              <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
                 Save these credentials — the password cannot be retrieved after this dialog is closed.
               </p>
             </div>
@@ -589,7 +589,7 @@ function ResetPasswordDialog({ user, onOpenChange }: ResetPasswordDialogProps) {
               />
             </div>
             {error && (
-              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-sm text-red-700 dark:text-red-400">
                 {error}
               </p>
             )}
@@ -715,7 +715,7 @@ export function UsersPage() {
   }
 
   if (isLoading) {
-    return <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading users…</div>;
+    return <div className="flex items-center justify-center py-16 text-sm text-slate-400 dark:text-neutral-500">Loading users…</div>;
   }
 
   return (
@@ -753,10 +753,10 @@ export function UsersPage() {
             <StatCard title="Pending Invites" value={pendingInvites} />
           </div>
 
-          <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+          <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
             <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50">
+                <TableRow className="bg-slate-50 dark:bg-muted/40">
                   <TableHead>User</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
@@ -776,8 +776,8 @@ export function UsersPage() {
                           {(user as { avatarInitials: string }).avatarInitials}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-slate-900">{user.name}</p>
-                          <p className="truncate text-xs text-slate-500">{user.email}</p>
+                          <p className="truncate text-sm font-medium text-slate-900 dark:text-neutral-100">{user.name}</p>
+                          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                         </div>
                       </div>
                     </TableCell>
@@ -819,9 +819,9 @@ export function UsersPage() {
                     {isAdmin && (
                       <TableCell>
                         {user.role === "admin" || user.role === "crew" ? (
-                          <span className="text-xs text-slate-400">Always on</span>
+                          <span className="text-xs text-slate-400 dark:text-neutral-500">Always on</span>
                         ) : user.role === "requestor" ? (
-                          <span className="text-xs text-slate-500">N/A</span>
+                          <span className="text-xs text-muted-foreground">N/A</span>
                         ) : (
                           <Switch
                             checked={user.photoModuleAccess}
@@ -833,7 +833,7 @@ export function UsersPage() {
                         )}
                       </TableCell>
                     )}
-                    <TableCell className="text-sm text-slate-500">
+                    <TableCell className="text-sm text-muted-foreground">
                       {formatDate((user as { joinedAt: string }).joinedAt)}
                     </TableCell>
 
@@ -843,7 +843,7 @@ export function UsersPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-slate-400 hover:text-brand-600"
+                            className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:text-brand-600 dark:hover:text-brand-400"
                             onClick={() => setResetPasswordUser(user)}
                             aria-label={`Reset password for ${user.name}`}
                             title="Reset password"
@@ -855,7 +855,7 @@ export function UsersPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-slate-400 hover:text-brand-600"
+                            className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:text-brand-600 dark:hover:text-brand-400"
                             onClick={() => handleResendInvite(user)}
                             disabled={resendingId === user.id}
                             aria-label={`Resend invite to ${user.name}`}
@@ -868,7 +868,7 @@ export function UsersPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-slate-400 hover:text-brand-600"
+                            className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:text-brand-600 dark:hover:text-brand-400"
                             onClick={() => handleReactivate(user.id)}
                             aria-label={`Reactivate ${user.name}`}
                             title="Reactivate user"
@@ -879,7 +879,7 @@ export function UsersPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-slate-400 hover:text-red-500"
+                            className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                             onClick={() => void handleDeactivate(user.id)}
                             aria-label={`Deactivate ${user.name}`}
                             title="Deactivate user"
@@ -899,20 +899,20 @@ export function UsersPage() {
         {/* Roles tab */}
         <TabsContent value="roles" className="mt-6">
           <div className="flex flex-col gap-4">
-            <p className="text-sm text-slate-500">System-defined roles control what each team member can access and do in the platform.</p>
+            <p className="text-sm text-muted-foreground">System-defined roles control what each team member can access and do in the platform.</p>
             {visibleRoleDefs.map((role) => (
-              <div key={role.key} className="rounded-lg border bg-white p-5 shadow-sm">
+              <div key={role.key} className="rounded-lg border bg-card p-5 shadow-sm">
                 <div className="flex items-center gap-3 mb-3">
-                  <h3 className="font-semibold text-slate-900">{role.name}</h3>
+                  <h3 className="font-semibold text-slate-900 dark:text-neutral-100">{role.name}</h3>
                   <Badge variant="outline" className="font-mono text-xs">
                     {role.key}
                   </Badge>
                 </div>
-                <p className="text-sm text-slate-600 mb-3">{role.description}</p>
+                <p className="text-sm text-slate-600 dark:text-neutral-400 mb-3">{role.description}</p>
                 <ul className="space-y-1">
                   {role.permissions.map((p) => (
-                    <li key={p.text} className="flex items-start gap-2 text-sm text-slate-600">
-                      <Check className="h-4 w-4 shrink-0 text-brand-500 mt-0.5" />
+                    <li key={p.text} className="flex items-start gap-2 text-sm text-slate-600 dark:text-neutral-400">
+                      <Check className="h-4 w-4 shrink-0 text-brand-500 dark:text-brand-400 mt-0.5" />
                       {p.text}
                     </li>
                   ))}

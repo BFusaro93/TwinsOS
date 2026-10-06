@@ -176,7 +176,7 @@ function ImageBlockContent({
       />
       {url ? (
         <div className="space-y-2">
-          <img src={url} alt="" className="mx-auto max-h-64 rounded-md border border-slate-200 object-contain" />
+          <img src={url} alt="" className="mx-auto max-h-64 rounded-md border border-border object-contain" />
           <div className="flex justify-center gap-2">
             <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
               {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Replace"}
@@ -191,7 +191,7 @@ function ImageBlockContent({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          className="flex w-full flex-col items-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-sm text-slate-400 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+          className="flex w-full flex-col items-center gap-2 rounded-md border border-dashed border-slate-300 dark:border-neutral-700 bg-slate-50 dark:bg-muted/40 px-4 py-10 text-sm text-slate-400 dark:text-neutral-500 hover:border-brand-300 dark:hover:border-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-600 dark:hover:text-brand-400"
         >
           {uploading ? <Loader2 className="h-6 w-6 animate-spin" /> : <ImageIcon className="h-6 w-6" />}
           {uploading ? "Uploading…" : "Click to upload an image"}
@@ -227,43 +227,43 @@ function BlockCanvas({
   return (
     <div
       className={cn(
-        "group relative rounded-lg border-2 bg-white transition-colors",
-        active ? "border-brand-400 shadow-sm" : "border-transparent hover:border-slate-200"
+        "group relative rounded-lg border-2 bg-card transition-colors",
+        active ? "border-brand-400 shadow-sm" : "border-transparent hover:border-border"
       )}
       onClick={onActivate}
     >
       {/* Move / delete controls — kept inside the block's own box (not
           floated outside it) so the hover state stays active while the
           mouse travels from the block to these buttons. */}
-      <div className="absolute right-1 top-1 hidden flex-col items-center gap-0.5 rounded-md border border-slate-100 bg-white/95 p-0.5 shadow-sm group-hover:flex">
+      <div className="absolute right-1 top-1 hidden flex-col items-center gap-0.5 rounded-md border border-slate-100 dark:border-neutral-800 bg-card/95 p-0.5 shadow-sm group-hover:flex">
         {!isFirst && (
-          <button onClick={(e) => { e.stopPropagation(); onMoveUp(); }} className="rounded p-0.5 hover:bg-slate-100" title="Move up">
-            <ChevronDown className="h-3.5 w-3.5 rotate-180 text-slate-400" />
+          <button onClick={(e) => { e.stopPropagation(); onMoveUp(); }} className="rounded p-0.5 hover:bg-muted" title="Move up">
+            <ChevronDown className="h-3.5 w-3.5 rotate-180 text-slate-400 dark:text-neutral-500" />
           </button>
         )}
         {!isLast && (
-          <button onClick={(e) => { e.stopPropagation(); onMoveDown(); }} className="rounded p-0.5 hover:bg-slate-100" title="Move down">
-            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+          <button onClick={(e) => { e.stopPropagation(); onMoveDown(); }} className="rounded p-0.5 hover:bg-muted" title="Move down">
+            <ChevronDown className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
           </button>
         )}
-        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="rounded p-0.5 hover:bg-red-50" title="Delete block">
-          <Trash2 className="h-3.5 w-3.5 text-slate-400 hover:text-red-500" />
+        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="rounded p-0.5 hover:bg-red-50 dark:hover:bg-red-950/40" title="Delete block">
+          <Trash2 className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400" />
         </button>
       </div>
 
       <div className="p-3">
-        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
           {BLOCK_TYPE_LABELS[block.blockType]}
         </p>
 
         {isVisual ? (
           block.blockType === "divider" ? (
-            <hr className="border-slate-300" />
+            <hr className="border-slate-300 dark:border-neutral-700" />
           ) : (
-            <div className="h-4 w-full rounded bg-slate-100" />
+            <div className="h-4 w-full rounded bg-muted" />
           )
         ) : block.blockType === "line_items" ? (
-          <div className="rounded border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-400">
+          <div className="rounded border border-dashed border-slate-300 dark:border-neutral-700 bg-slate-50 dark:bg-muted/40 px-4 py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
             <Rows3 className="mx-auto mb-2 h-6 w-6" />
             Line Items Table — populated automatically from the document
           </div>
@@ -276,7 +276,7 @@ function BlockCanvas({
             onChange={(e) => onChange(e.target.value)}
             onClick={(e) => e.stopPropagation()}
             placeholder="Button label"
-            className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-center text-sm font-medium text-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-400"
+            className="w-full rounded-md border border-border bg-slate-50 dark:bg-muted/40 px-3 py-2 text-center text-sm font-medium text-brand-600 dark:text-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400"
           />
         ) : useRichText ? (
           <div onClick={(e) => e.stopPropagation()}>
@@ -554,7 +554,7 @@ export function DocumentBuilder({ template }: Props) {
         <span className="text-sm font-medium text-white">{template.name}</span>
         <span className={cn(
           "ml-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-          template.status === "active" ? "bg-green-500/20 text-green-300" : "bg-slate-500/20 text-slate-400"
+          template.status === "active" ? "bg-green-500/20 text-green-300" : "bg-slate-500/20 text-slate-400 dark:text-neutral-500"
         )}>
           {template.status === "active" ? "Active" : "Inactive"}
         </span>
@@ -640,20 +640,20 @@ export function DocumentBuilder({ template }: Props) {
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
         {mode === "preview" ? (
-          <div className="flex-1 overflow-y-auto bg-slate-200 px-8 py-8">
-            <div className="mb-3 text-center text-xs text-slate-500">
+          <div className="flex-1 overflow-y-auto bg-slate-200 dark:bg-neutral-700 px-8 py-8">
+            <div className="mb-3 text-center text-xs text-muted-foreground">
               Preview uses sample data — merge tags are not resolved against a real client or record.
             </div>
             <div
               className={cn(
-                "mx-auto rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-all",
+                "mx-auto rounded-xl border border-border bg-card p-6 shadow-sm transition-all",
                 previewWidth === "desktop" ? "max-w-2xl" : "max-w-sm"
               )}
             >
               {template.subject && (
-                <div className="mb-4 border-b border-slate-100 pb-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Subject Line</p>
-                  <p className="text-sm text-slate-700">
+                <div className="mb-4 border-b border-slate-100 dark:border-neutral-800 pb-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">Subject Line</p>
+                  <p className="text-sm text-slate-700 dark:text-neutral-300">
                     {(() => {
                       // Lightweight inline resolve for the subject preview only
                       return template.subject!.replace(/\[(\w+)\]/g, (m) => SAMPLE_MERGE_VALUES[m.toLowerCase()] ?? m);
@@ -662,7 +662,7 @@ export function DocumentBuilder({ template }: Props) {
                 </div>
               )}
               {blocks.length === 0 ? (
-                <div className="py-16 text-center text-sm text-slate-400">
+                <div className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   Nothing to preview yet — add blocks in the editor first.
                 </div>
               ) : (
@@ -674,20 +674,20 @@ export function DocumentBuilder({ template }: Props) {
         <>
         {/* Canvas */}
         <div
-          className="flex-1 overflow-y-auto bg-slate-100 px-8 py-8"
+          className="flex-1 overflow-y-auto bg-muted px-8 py-8"
           onClick={() => setActiveKey(null)}
         >
           <div className="mx-auto max-w-2xl">
             {template.subject && (
-              <div className="mb-4 rounded-lg border border-slate-200 bg-white px-4 py-2.5">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Subject Line</p>
-                <p className="text-sm text-slate-700">{template.subject}</p>
+              <div className="mb-4 rounded-lg border border-border bg-card px-4 py-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">Subject Line</p>
+                <p className="text-sm text-slate-700 dark:text-neutral-300">{template.subject}</p>
               </div>
             )}
 
-            <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-6 pl-10 pr-10 shadow-sm">
+            <div className="space-y-2 rounded-xl border border-border bg-card p-6 pl-10 pr-10 shadow-sm">
               {blocks.length === 0 ? (
-                <div className="py-16 text-center text-sm text-slate-400">
+                <div className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   Add blocks from the panel on the right to build your email template.
                 </div>
               ) : (
@@ -712,19 +712,19 @@ export function DocumentBuilder({ template }: Props) {
         </div>
 
         {/* Right panel */}
-        <div className="w-64 shrink-0 overflow-y-auto border-l bg-white">
+        <div className="w-64 shrink-0 overflow-y-auto border-l bg-card">
           {/* Block picker */}
           <div className="border-b p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Add Block</p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">Add Block</p>
             <div className="grid grid-cols-2 gap-1.5">
               {availablePalette.map((def) => (
                 <button
                   key={def.type}
                   onClick={() => addBlock(def)}
-                  className="flex flex-col items-center gap-1 rounded-lg border border-slate-200 p-2.5 text-center transition-colors hover:border-brand-300 hover:bg-brand-50"
+                  className="flex flex-col items-center gap-1 rounded-lg border border-border p-2.5 text-center transition-colors hover:border-brand-300 dark:hover:border-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/30"
                 >
-                  <span className="text-slate-500">{def.icon}</span>
-                  <span className="text-[10px] font-medium text-slate-600">{BLOCK_TYPE_LABELS[def.type]}</span>
+                  <span className="text-muted-foreground">{def.icon}</span>
+                  <span className="text-[10px] font-medium text-slate-600 dark:text-neutral-400">{BLOCK_TYPE_LABELS[def.type]}</span>
                 </button>
               ))}
             </div>
@@ -732,7 +732,7 @@ export function DocumentBuilder({ template }: Props) {
 
           {/* Merge tags */}
           <div className="p-4">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Merge Tags</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">Merge Tags</p>
             <SearchInput
               value={mergeSearch}
               onChange={setMergeSearch}
@@ -740,13 +740,13 @@ export function DocumentBuilder({ template }: Props) {
               className="mb-2"
               inputClassName="h-7 text-xs"
             />
-            <p className="mb-3 text-[10px] text-slate-400">
+            <p className="mb-3 text-[10px] text-slate-400 dark:text-neutral-500">
               {activeKey ? "Click a tag to insert it at your cursor." : "Click a block first, then click a tag to insert it."}
             </p>
             <div className="space-y-3">
               {Object.entries(mergeGroups).map(([group, tags]) => (
                 <div key={group}>
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">{group}</p>
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">{group}</p>
                   <div className="flex flex-wrap gap-1">
                     {tags.map((mt) => (
                       <button
@@ -756,8 +756,8 @@ export function DocumentBuilder({ template }: Props) {
                         className={cn(
                           "rounded border px-1.5 py-0.5 text-[10px] font-mono transition-colors",
                           activeKey
-                            ? "border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100"
-                            : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                            ? "border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/40"
+                            : "border-border bg-slate-50 dark:bg-muted/40 text-slate-600 dark:text-neutral-400 hover:bg-muted"
                         )}
                       >
                         {mt.tag}

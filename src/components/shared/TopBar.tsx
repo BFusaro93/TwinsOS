@@ -304,7 +304,7 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
       <nav className="hidden items-center gap-1 text-sm text-muted-foreground sm:flex lowercase">
         {breadcrumbs.map((crumb, i) => (
           <span key={i} className="flex items-center gap-1">
-            {i > 0 && <span className="text-slate-300 dark:text-neutral-600">/</span>}
+            {i > 0 && <span className="text-slate-300 dark:text-neutral-500">/</span>}
             <span
               className={cn(
                 i === breadcrumbs.length - 1

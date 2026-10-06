@@ -825,7 +825,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
               <div className="flex items-center gap-2 rounded-md border bg-slate-50 dark:bg-muted/40 px-3 py-2 text-sm">
                 <span className="text-muted-foreground">Monthly</span>
                 <span className="font-semibold text-slate-800 dark:text-neutral-100">{formatCurrency(packageMonthlyCents)}</span>
-                <span className="text-slate-300 dark:text-neutral-600">·</span>
+                <span className="text-slate-300 dark:text-neutral-500">·</span>
                 <span className="text-muted-foreground">Total</span>
                 <span className="font-semibold text-slate-800 dark:text-neutral-100">{formatCurrency(serviceTotalCents)}</span>
                 <span className="text-xs text-slate-400 dark:text-neutral-500">({packageMonths} month{packageMonths === 1 ? "" : "s"}, {services.length} step{services.length === 1 ? "" : "s"})</span>

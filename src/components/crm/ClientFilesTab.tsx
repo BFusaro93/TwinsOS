@@ -193,7 +193,7 @@ export function ClientFilesTab({ clientId }: Props) {
           onDrop={onDrop}
           onClick={() => inputRef.current?.click()}
         >
-          <Upload className={cn("h-6 w-6", dragging ? "text-brand-500 dark:text-brand-400" : "text-slate-300 dark:text-neutral-600")} />
+          <Upload className={cn("h-6 w-6", dragging ? "text-brand-500 dark:text-brand-400" : "text-slate-300 dark:text-neutral-500")} />
           <p className="text-sm font-medium">
             {dragging ? "Drop to upload" : "Drag & drop files here"}
           </p>

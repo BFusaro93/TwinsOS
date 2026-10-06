@@ -253,18 +253,18 @@ export function KPICard({
   href?: string;
 }) {
   const accentClass = {
-    green: "bg-green-50 text-green-600",
-    amber: "bg-amber-50 text-amber-600",
-    red: "bg-red-50 text-red-600",
-    blue: "bg-blue-50 text-blue-600",
-  }[accent ?? "blue"] ?? "bg-blue-50 text-blue-600";
+    green: "bg-green-50 dark:bg-green-950/40 text-green-600 dark:text-green-400",
+    amber: "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400",
+    red: "bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400",
+    blue: "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400",
+  }[accent ?? "blue"] ?? "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400";
 
   const body = (
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
-          {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-neutral-100">{value}</p>
+          {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
         </div>
         <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", accentClass)}>
           <Icon className="h-5 w-5" />
@@ -272,9 +272,9 @@ export function KPICard({
       </div>
   );
 
-  const cardClass = "rounded-xl border bg-white p-5 shadow-sm";
+  const cardClass = "rounded-xl border bg-card p-5 shadow-sm";
   return href ? (
-    <Link href={href} className={cn(cardClass, "block transition-shadow hover:shadow-md hover:border-slate-300")}>
+    <Link href={href} className={cn(cardClass, "block transition-shadow hover:shadow-md hover:border-slate-300 dark:hover:border-neutral-700")}>
       {body}
     </Link>
   ) : (
@@ -320,7 +320,7 @@ export function RevenueSnapshot() {
 
   return (
     <section>
-      <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
         Revenue
       </h2>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">

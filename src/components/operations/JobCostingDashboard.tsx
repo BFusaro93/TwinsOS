@@ -45,7 +45,7 @@ const fmtNum = (n: number) => new Intl.NumberFormat("en-US").format(Math.round(n
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+    <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
       {children}
     </p>
   );
@@ -67,15 +67,15 @@ interface NumInputProps {
 function NumInput({ label, value, onChange, prefix, suffix, step = 1, min = 0, max, hint, compact }: NumInputProps) {
   return (
     <div>
-      <label className={`mb-1 flex items-center gap-1 font-medium text-slate-600 ${compact ? "text-[11px]" : "text-xs"}`}>
+      <label className={`mb-1 flex items-center gap-1 font-medium text-slate-600 dark:text-neutral-400 ${compact ? "text-[11px]" : "text-xs"}`}>
         {label}
         {hint && (
           // Focusable so a tap reveals the hint on touch (hover never fires there).
           // On a phone the bubble is pinned to the screen edges instead of
           // hanging off the icon, where it ran past the right edge.
           <span className="group relative cursor-help" tabIndex={0}>
-            <Info className="h-3 w-3 text-slate-400" />
-            <span className="pointer-events-none invisible absolute left-4 top-0 z-10 w-44 rounded-md border border-slate-200 bg-white p-2 text-[10px] text-slate-600 opacity-0 shadow-md transition-opacity group-hover:visible group-hover:opacity-100 group-focus:visible group-focus:opacity-100 max-sm:fixed max-sm:inset-x-4 max-sm:left-4 max-sm:top-auto max-sm:w-auto">
+            <Info className="h-3 w-3 text-slate-400 dark:text-neutral-500" />
+            <span className="pointer-events-none invisible absolute left-4 top-0 z-10 w-44 rounded-md border border-border bg-card p-2 text-[10px] text-slate-600 dark:text-neutral-400 opacity-0 shadow-md transition-opacity group-hover:visible group-hover:opacity-100 group-focus:visible group-focus:opacity-100 max-sm:fixed max-sm:inset-x-4 max-sm:left-4 max-sm:top-auto max-sm:w-auto">
               {hint}
             </span>
           </span>
@@ -83,7 +83,7 @@ function NumInput({ label, value, onChange, prefix, suffix, step = 1, min = 0, m
       </label>
       <div className="relative flex items-center">
         {prefix && (
-          <span className="pointer-events-none absolute left-2.5 text-sm text-slate-400">{prefix}</span>
+          <span className="pointer-events-none absolute left-2.5 text-sm text-slate-400 dark:text-neutral-500">{prefix}</span>
         )}
         <input
           type="number"
@@ -95,12 +95,12 @@ function NumInput({ label, value, onChange, prefix, suffix, step = 1, min = 0, m
             const v = parseFloat(e.target.value);
             if (!isNaN(v)) onChange(v);
           }}
-          className={`w-full rounded-md border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-400
+          className={`w-full rounded-md border border-slate-300 dark:border-neutral-700 bg-card text-slate-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-400
             ${compact ? "py-1.5 text-xs" : "py-2 text-sm"}
             ${prefix ? "pl-6 pr-2" : suffix ? "pl-2.5 pr-7" : "px-2.5"}`}
         />
         {suffix && (
-          <span className="pointer-events-none absolute right-2.5 text-sm text-slate-400">{suffix}</span>
+          <span className="pointer-events-none absolute right-2.5 text-sm text-slate-400 dark:text-neutral-500">{suffix}</span>
         )}
       </div>
     </div>
@@ -117,11 +117,11 @@ interface ResultRowProps {
 
 function ResultRow({ label, value, muted, bold, highlight }: ResultRowProps) {
   return (
-    <div className={`flex items-center justify-between rounded-md px-3 py-2 ${highlight ? "bg-brand-500" : muted ? "" : "bg-slate-50"}`}>
-      <span className={`text-sm ${bold || highlight ? "font-semibold" : "font-medium"} ${highlight ? "text-white" : muted ? "text-slate-500" : "text-slate-700"}`}>
+    <div className={`flex items-center justify-between rounded-md px-3 py-2 ${highlight ? "bg-brand-500" : muted ? "" : "bg-slate-50 dark:bg-muted/40"}`}>
+      <span className={`text-sm ${bold || highlight ? "font-semibold" : "font-medium"} ${highlight ? "text-white" : muted ? "text-muted-foreground" : "text-slate-700 dark:text-neutral-300"}`}>
         {label}
       </span>
-      <span className={`text-sm ${bold || highlight ? "font-bold" : ""} ${highlight ? "text-white" : muted ? "text-slate-500" : "text-slate-800"}`}>
+      <span className={`text-sm ${bold || highlight ? "font-bold" : ""} ${highlight ? "text-white" : muted ? "text-muted-foreground" : "text-slate-800 dark:text-neutral-100"}`}>
         {value}
       </span>
     </div>
@@ -135,13 +135,13 @@ function RateTooltip({ active, payload, label }: {
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-md text-xs">
-      <p className="mb-1.5 font-semibold text-slate-700">{label}</p>
+    <div className="rounded-lg border border-border bg-card p-3 shadow-md text-xs">
+      <p className="mb-1.5 font-semibold text-slate-700 dark:text-neutral-300">{label}</p>
       {payload.map((p) => (
         <div key={p.name} className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full" style={{ background: p.fill }} />
-          <span className="text-slate-500">{p.name}:</span>
-          <span className="font-medium text-slate-800">{fmtDollar(p.value)}/hr</span>
+          <span className="text-muted-foreground">{p.name}:</span>
+          <span className="font-medium text-slate-800 dark:text-neutral-100">{fmtDollar(p.value)}/hr</span>
         </div>
       ))}
     </div>
@@ -182,7 +182,7 @@ function InputsForm({ inputs, setInputs, compact }: InputsFormProps) {
           className="mb-2 flex w-full items-center justify-between"
         >
           <SectionLabel>Payroll Burden — {fmtPct(burdenTotal)} total</SectionLabel>
-          {showBurden ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+          {showBurden ? <ChevronUp className="h-4 w-4 text-slate-400 dark:text-neutral-500" /> : <ChevronDown className="h-4 w-4 text-slate-400 dark:text-neutral-500" />}
         </button>
         {showBurden && (
           <div className="grid grid-cols-2 gap-3">
@@ -194,7 +194,7 @@ function InputsForm({ inputs, setInputs, compact }: InputsFormProps) {
             <NumInput compact={compact} label="FUI wage base ($/employee)" value={inputs.fuiWageBase} onChange={set("fuiWageBase")} prefix="$" step={500} hint="Federal: first $7,000 per employee per year. 0 = no cap." />
             <NumInput compact={compact} label="PFML %" value={inputs.pfmlPct} onChange={set("pfmlPct")} suffix="%" step={0.01} hint="Paid Family & Medical Leave — employer portion" />
             {(inputs.suiWageBase > 0 || inputs.fuiWageBase > 0) && (
-              <p className="col-span-2 text-[11px] text-slate-500">
+              <p className="col-span-2 text-[11px] text-muted-foreground">
                 After wage-base caps: SUI {fmtPct(burden.suiEffectivePct)} and FUI {fmtPct(burden.fuiEffectivePct)} of total wages.
               </p>
             )}
@@ -301,26 +301,26 @@ function CalculatorTab({
   return (
     <div className="space-y-6">
       {noScenarios ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-4 text-sm text-slate-600">
-          <p className="font-medium text-slate-800">No scenarios yet</p>
-          <p className="mt-1 text-xs text-slate-500">
+        <div className="rounded-xl border border-dashed border-slate-300 dark:border-neutral-700 bg-slate-50 dark:bg-muted/40 px-5 py-4 text-sm text-slate-600 dark:text-neutral-400">
+          <p className="font-medium text-slate-800 dark:text-neutral-100">No scenarios yet</p>
+          <p className="mt-1 text-xs text-muted-foreground">
             Enter your numbers below and click <strong>Save as Scenario</strong>. Then open the Scenarios tab and set one as
             the default — it will load here every time.
           </p>
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <span className="text-slate-500">
-            {scenarioName ? <>Scenario: <strong className="text-slate-800">{scenarioName}</strong></> : "No default scenario selected — set one on the Scenarios tab"}
+          <span className="text-muted-foreground">
+            {scenarioName ? <>Scenario: <strong className="text-slate-800 dark:text-neutral-100">{scenarioName}</strong></> : "No default scenario selected — set one on the Scenarios tab"}
           </span>
           {scenarioName && dirty && (
             <>
-              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Unsaved changes</span>
+              <span className="rounded-full bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">Unsaved changes</span>
               <button
                 type="button"
                 onClick={onUpdateScenario}
                 disabled={updatingScenario}
-                className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                className="rounded-md border border-slate-300 dark:border-neutral-700 bg-card px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 disabled:opacity-50"
               >
                 {updatingScenario ? "Saving…" : `Update “${scenarioName}”`}
               </button>
@@ -331,112 +331,112 @@ function CalculatorTab({
 
       {/* KPI Row */}
       <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Bid Rate</p>
-              <p className="mt-1 text-2xl font-bold text-brand-600">{fmtDollar(c.bidRate)}<span className="text-sm font-normal text-slate-400">/hr</span></p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Bid Rate</p>
+              <p className="mt-1 text-2xl font-bold text-brand-600 dark:text-brand-400">{fmtDollar(c.bidRate)}<span className="text-sm font-normal text-slate-400 dark:text-neutral-500">/hr</span></p>
             </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50">
-              <DollarSign className="h-5 w-5 text-brand-500" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-900/30">
+              <DollarSign className="h-5 w-5 text-brand-500 dark:text-brand-400" />
             </div>
           </div>
-          <p className="mt-2 text-xs text-slate-500">Break-even + {fmtPct(inputs.profitPct)} margin</p>
+          <p className="mt-2 text-xs text-muted-foreground">Break-even + {fmtPct(inputs.profitPct)} margin</p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Break-Even</p>
-              <p className="mt-1 text-2xl font-bold text-slate-800">{fmtDollar(c.breakEven)}<span className="text-sm font-normal text-slate-400">/hr</span></p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Break-Even</p>
+              <p className="mt-1 text-2xl font-bold text-slate-800 dark:text-neutral-100">{fmtDollar(c.breakEven)}<span className="text-sm font-normal text-slate-400 dark:text-neutral-500">/hr</span></p>
             </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-              <TrendingUp className="h-5 w-5 text-slate-500" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+              <TrendingUp className="h-5 w-5 text-muted-foreground" />
             </div>
           </div>
-          <p className="mt-2 text-xs text-slate-500">Labor {fmtDollar(c.laborPerHour)} + OH {fmtDollar(c.ohPerHour)}</p>
-          <p className="mt-1 text-xs text-slate-500">LLR {fmtDollar(c.loadedLaborRate)} (labor only, no overhead)</p>
+          <p className="mt-2 text-xs text-muted-foreground">Labor {fmtDollar(c.laborPerHour)} + OH {fmtDollar(c.ohPerHour)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">LLR {fmtDollar(c.loadedLaborRate)} (labor only, no overhead)</p>
           <button
             type="button"
             onClick={handleSaveRates}
             disabled={!hasRates}
-            className="mt-2 text-xs font-medium text-brand-600 hover:text-brand-700 disabled:cursor-not-allowed disabled:text-slate-300"
+            className="mt-2 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 disabled:cursor-not-allowed disabled:text-slate-300 dark:disabled:text-neutral-600"
           >
             {savedRates ? "✓ Saved as project rates" : alreadyUsing ? "Using these rates" : "Set as project rates"}
           </button>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Billable Hours</p>
-              <p className="mt-1 text-2xl font-bold text-slate-800">{fmtNum(c.billableHours)}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Billable Hours</p>
+              <p className="mt-1 text-2xl font-bold text-slate-800 dark:text-neutral-100">{fmtNum(c.billableHours)}</p>
             </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-              <Clock className="h-5 w-5 text-slate-500" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+              <Clock className="h-5 w-5 text-muted-foreground" />
             </div>
           </div>
-          <p className="mt-2 text-xs text-slate-500">{fmtPct(inputs.nonBillablePct)} non-billable of {fmtNum(c.totalHours)} total</p>
+          <p className="mt-2 text-xs text-muted-foreground">{fmtPct(inputs.nonBillablePct)} non-billable of {fmtNum(c.totalHours)} total</p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Season Revenue</p>
-              <p className="mt-1 text-2xl font-bold text-slate-800">{fmtDollarWhole(c.bidRate * c.billableHours)}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Season Revenue</p>
+              <p className="mt-1 text-2xl font-bold text-slate-800 dark:text-neutral-100">{fmtDollarWhole(c.bidRate * c.billableHours)}</p>
             </div>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100">
-              <Users className="h-5 w-5 text-slate-500" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+              <Users className="h-5 w-5 text-muted-foreground" />
             </div>
           </div>
-          <p className="mt-2 text-xs text-slate-500">At full utilization — {inputs.numFieldEmp} employees</p>
+          <p className="mt-2 text-xs text-muted-foreground">At full utilization — {inputs.numFieldEmp} employees</p>
         </div>
       </div>
 
       {/* Two-column: inputs + results */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-5 text-sm font-semibold text-slate-800">Inputs</h3>
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h3 className="mb-5 text-sm font-semibold text-slate-800 dark:text-neutral-100">Inputs</h3>
           <InputsForm inputs={inputs} setInputs={setInputs} />
         </div>
 
         <div className="flex flex-col gap-4">
           {/* Rate breakdown card */}
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="mb-4 text-sm font-semibold text-slate-800">Rate Calculation</h3>
+          <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+            <h3 className="mb-4 text-sm font-semibold text-slate-800 dark:text-neutral-100">Rate Calculation</h3>
             <div className="space-y-1.5">
               <ResultRow label="Direct Labor/hr" value={fmtDollar(c.totalHours > 0 ? c.totalDirectLabor / c.totalHours : 0)} muted />
               <ResultRow label={`Payroll Burden/hr (${fmtPct(c.burdenPct)})`} value={fmtDollar(c.totalHours > 0 ? c.burdenAmount / c.totalHours : 0)} muted />
-              <div className="my-1 border-t border-slate-100" />
+              <div className="my-1 border-t border-slate-100 dark:border-neutral-800" />
               <ResultRow label="Burdened Labor/hr" value={fmtDollar(c.laborPerHour)} bold />
-              <div className="my-1 border-t border-slate-100" />
+              <div className="my-1 border-t border-slate-100 dark:border-neutral-800" />
               <ResultRow label="OH Payroll/hr" value={fmtDollar(c.ohPayrollPerHour)} muted />
               <ResultRow label="Other Overhead/hr" value={fmtDollar(c.otherOHPerHour)} muted />
               <ResultRow label="Liabilities/hr" value={fmtDollar(c.liabilitiesPerHour)} muted />
-              <div className="my-1 border-t border-slate-100" />
+              <div className="my-1 border-t border-slate-100 dark:border-neutral-800" />
               <ResultRow label="Fixed OH / Reg Hr" value={fmtDollar(c.ohPerHour)} bold />
-              <div className="my-1 border-t border-slate-100" />
+              <div className="my-1 border-t border-slate-100 dark:border-neutral-800" />
               <ResultRow label="Base Cost (if 100% billable)" value={fmtDollar(c.baseBreakEven)} muted />
               <ResultRow label={`Non-billable uplift (${fmtPct(inputs.nonBillablePct)} of hrs)`} value={`+${fmtDollar(c.nonBillablePerHour)}`} muted />
-              <div className="my-1 border-t border-slate-100" />
+              <div className="my-1 border-t border-slate-100 dark:border-neutral-800" />
               <ResultRow label="Break-Even Rate" value={fmtDollar(c.breakEven)} bold />
               <ResultRow label="Loaded Labor Rate (LLR) — labor only, no overhead" value={fmtDollar(c.loadedLaborRate)} muted />
               <ResultRow label={`Profit (${fmtPct(inputs.profitPct)} of revenue)`} value={`+${fmtDollar(c.profitPerHour)}`} muted />
-              <div className="my-2 border-t-2 border-slate-200" />
+              <div className="my-2 border-t-2 border-border" />
               <ResultRow label="Bid Rate" value={fmtDollar(c.bidRate)} highlight bold />
             </div>
           </div>
 
           {/* Season summary */}
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h3 className="mb-4 text-sm font-semibold text-slate-800">Season Summary</h3>
+          <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+            <h3 className="mb-4 text-sm font-semibold text-slate-800 dark:text-neutral-100">Season Summary</h3>
             <div className="space-y-1.5">
               <ResultRow label="Total Direct Labor" value={fmtDollarWhole(c.totalDirectLabor)} muted />
               <ResultRow label="Payroll Burden" value={fmtDollarWhole(c.burdenAmount)} muted />
               <ResultRow label="Total Labor Cost" value={fmtDollarWhole(c.totalLaborCost)} bold />
-              <div className="my-1 border-t border-slate-100" />
+              <div className="my-1 border-t border-slate-100 dark:border-neutral-800" />
               <ResultRow label="Total Overhead" value={fmtDollarWhole(c.totalOverhead)} bold />
-              <div className="my-1 border-t border-slate-100" />
+              <div className="my-1 border-t border-slate-100 dark:border-neutral-800" />
               <ResultRow label="Total Season Revenue" value={fmtDollarWhole(c.bidRate * c.billableHours)} bold />
               <ResultRow label="Total Season Profit" value={fmtDollarWhole(c.profitPerHour * c.billableHours)} muted />
             </div>
@@ -446,9 +446,9 @@ function CalculatorTab({
 
       {/* Charts */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-1 text-sm font-semibold text-slate-800">Rate Breakdown</h3>
-          <p className="mb-4 text-xs text-slate-500">Components of the bid rate per billable hour</p>
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h3 className="mb-1 text-sm font-semibold text-slate-800 dark:text-neutral-100">Rate Breakdown</h3>
+          <p className="mb-4 text-xs text-muted-foreground">Components of the bid rate per billable hour</p>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={breakdownData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -466,9 +466,9 @@ function CalculatorTab({
           </ResponsiveContainer>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-1 text-sm font-semibold text-slate-800">Cost Composition</h3>
-          <p className="mb-4 text-xs text-slate-500">Share of each cost category in the bid rate</p>
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h3 className="mb-1 text-sm font-semibold text-slate-800 dark:text-neutral-100">Cost Composition</h3>
+          <p className="mb-4 text-xs text-muted-foreground">Share of each cost category in the bid rate</p>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value"
@@ -480,7 +480,7 @@ function CalculatorTab({
           </ResponsiveContainer>
           <div className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1">
             {pieData.map((d) => (
-              <div key={d.name} className="flex items-center gap-1.5 text-xs text-slate-600">
+              <div key={d.name} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-neutral-400">
                 <span className="h-2.5 w-2.5 rounded-sm" style={{ background: d.color }} />
                 {d.name}
               </div>
@@ -523,7 +523,7 @@ function ScenarioNameInput({ name, onCommit }: { name: string; onCommit: (name: 
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-      className="flex-1 rounded border border-transparent bg-transparent text-sm font-semibold text-slate-800 hover:border-slate-200 focus:border-brand-300 focus:outline-none focus:ring-1 focus:ring-brand-300 px-1 py-0.5"
+      className="flex-1 rounded border border-transparent bg-transparent text-sm font-semibold text-slate-800 dark:text-neutral-100 hover:border-border focus:border-brand-300 dark:focus:border-brand-700 focus:outline-none focus:ring-1 focus:ring-brand-300 dark:focus:ring-brand-700 px-1 py-0.5"
     />
   );
 }
@@ -614,21 +614,21 @@ function ScenariosTab({
   });
 
   if (isLoading) {
-    return <p className="text-sm text-slate-500">Loading scenarios…</p>;
+    return <p className="text-sm text-muted-foreground">Loading scenarios…</p>;
   }
 
   return (
     <div className="space-y-6">
       {scenarios.length === 0 && (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted-foreground">
           No scenarios yet. Create one to save a set of inputs, then use the star to make it the default shown on the Rate Calculator.
         </p>
       )}
 
       {scenarios.length > 1 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h3 className="mb-1 text-sm font-semibold text-slate-800">Scenario Comparison</h3>
-          <p className="mb-4 text-xs text-slate-500">Bid rate breakdown across all scenarios</p>
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h3 className="mb-1 text-sm font-semibold text-slate-800 dark:text-neutral-100">Scenario Comparison</h3>
+          <p className="mb-4 text-xs text-muted-foreground">Bid rate breakdown across all scenarios</p>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 50 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -650,12 +650,12 @@ function ScenariosTab({
           const isEditing = editingId === s.id;
 
           return (
-            <div key={s.id} className={`rounded-xl border bg-white shadow-sm transition-all ${isEditing ? "border-brand-300 ring-1 ring-brand-300" : "border-slate-200"}`}>
+            <div key={s.id} className={`rounded-xl border bg-card shadow-sm transition-all ${isEditing ? "border-brand-300 dark:border-brand-700 ring-1 ring-brand-300 dark:ring-brand-700" : "border-border"}`}>
               {/* Card header */}
-              <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
+              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-neutral-800 px-4 py-3">
                 <ScenarioNameInput name={s.name} onCommit={(name) => renameScenario(s.id, name)} />
                 {s.isDefault && (
-                  <span className="shrink-0 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700">
+                  <span className="shrink-0 rounded-full bg-brand-50 dark:bg-brand-900/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700 dark:text-brand-400">
                     Default
                   </span>
                 )}
@@ -663,11 +663,11 @@ function ScenariosTab({
                   {isEditing ? (
                     <>
                       <button type="button" onClick={() => saveEdit(s.id)} title="Save changes"
-                        className="rounded p-1.5 text-brand-600 hover:bg-brand-50">
+                        className="rounded p-1.5 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30">
                         <Check className="h-3.5 w-3.5" />
                       </button>
                       <button type="button" onClick={() => setEditingId(null)} title="Cancel"
-                        className="rounded p-1.5 text-slate-400 hover:bg-slate-100">
+                        className="rounded p-1.5 text-slate-400 dark:text-neutral-500 hover:bg-muted">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </>
@@ -675,19 +675,19 @@ function ScenariosTab({
                     <>
                       <button type="button" onClick={() => makeDefault(s)} disabled={setDefault.isPending}
                         title={s.isDefault ? "Default scenario — click to clear" : "Set as the default scenario"}
-                        className={`rounded p-1.5 hover:bg-amber-50 ${s.isDefault ? "text-amber-500" : "text-slate-400 hover:text-amber-500"}`}>
+                        className={`rounded p-1.5 hover:bg-amber-50 dark:hover:bg-amber-950/40 ${s.isDefault ? "text-amber-500 dark:text-amber-400" : "text-slate-400 dark:text-neutral-500 hover:text-amber-500 dark:hover:text-amber-400"}`}>
                         <Star className={`h-3.5 w-3.5 ${s.isDefault ? "fill-current" : ""}`} />
                       </button>
                       <button type="button" onClick={() => startEdit(s)} title="Edit inputs"
-                        className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                        className="rounded p-1.5 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-700 dark:hover:text-neutral-300">
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button type="button" onClick={() => onLoad(s)} title="Load into calculator"
-                        className="rounded p-1.5 text-slate-400 hover:bg-brand-50 hover:text-brand-600">
+                        className="rounded p-1.5 text-slate-400 dark:text-neutral-500 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-600 dark:hover:text-brand-400">
                         <Copy className="h-3.5 w-3.5" />
                       </button>
                       <button type="button" onClick={() => deleteScenario(s)} title="Delete"
-                        className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500">
+                        className="rounded p-1.5 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </>
@@ -713,18 +713,18 @@ function ScenariosTab({
               ) : (
                 /* ── Summary view ── */
                 <div className="p-4 space-y-1.5">
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Labor/hr</span><span className="font-medium text-slate-700">{fmtDollar(c.laborPerHour)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Fixed OH/reg hr</span><span className="font-medium text-slate-700">{fmtDollar(c.ohPerHour)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Break-even</span><span className="font-medium text-slate-700">{fmtDollar(c.breakEven)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">LLR</span><span className="font-medium text-slate-700">{fmtDollar(c.loadedLaborRate)}</span></div>
-                  <div className="my-1.5 border-t border-slate-100" />
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Employees</span><span className="font-medium text-slate-700">{s.inputs.numFieldEmp}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Wage</span><span className="font-medium text-slate-700">{fmtDollar(s.inputs.fieldEmpWage)}/hr</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Billable Hrs</span><span className="font-medium text-slate-700">{fmtNum(c.billableHours)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Total OH</span><span className="font-medium text-slate-700">{fmtDollarWhole(c.totalOverhead)}</span></div>
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Burden</span><span className="font-medium text-slate-700">{fmtPct(c.burdenPct)}</span></div>
-                  <div className="my-1.5 border-t border-slate-100" />
-                  <div className="flex justify-between text-xs"><span className="text-slate-500">Season Revenue</span><span className="font-semibold text-slate-800">{fmtDollarWhole(c.bidRate * c.billableHours)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Labor/hr</span><span className="font-medium text-slate-700 dark:text-neutral-300">{fmtDollar(c.laborPerHour)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Fixed OH/reg hr</span><span className="font-medium text-slate-700 dark:text-neutral-300">{fmtDollar(c.ohPerHour)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Break-even</span><span className="font-medium text-slate-700 dark:text-neutral-300">{fmtDollar(c.breakEven)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">LLR</span><span className="font-medium text-slate-700 dark:text-neutral-300">{fmtDollar(c.loadedLaborRate)}</span></div>
+                  <div className="my-1.5 border-t border-slate-100 dark:border-neutral-800" />
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Employees</span><span className="font-medium text-slate-700 dark:text-neutral-300">{s.inputs.numFieldEmp}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Wage</span><span className="font-medium text-slate-700 dark:text-neutral-300">{fmtDollar(s.inputs.fieldEmpWage)}/hr</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Billable Hrs</span><span className="font-medium text-slate-700 dark:text-neutral-300">{fmtNum(c.billableHours)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Total OH</span><span className="font-medium text-slate-700 dark:text-neutral-300">{fmtDollarWhole(c.totalOverhead)}</span></div>
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Burden</span><span className="font-medium text-slate-700 dark:text-neutral-300">{fmtPct(c.burdenPct)}</span></div>
+                  <div className="my-1.5 border-t border-slate-100 dark:border-neutral-800" />
+                  <div className="flex justify-between text-xs"><span className="text-muted-foreground">Season Revenue</span><span className="font-semibold text-slate-800 dark:text-neutral-100">{fmtDollarWhole(c.bidRate * c.billableHours)}</span></div>
                 </div>
               )}
             </div>
@@ -733,7 +733,7 @@ function ScenariosTab({
 
         {/* Add scenario */}
         <button type="button" onClick={addScenario} disabled={create.isPending}
-          className="flex min-h-[200px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 transition-colors hover:border-brand-300 hover:text-brand-500 disabled:opacity-50">
+          className="flex min-h-[200px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-slate-400 dark:text-neutral-500 transition-colors hover:border-brand-300 dark:hover:border-brand-700 hover:text-brand-500 dark:hover:text-brand-400 disabled:opacity-50">
           <Plus className="h-6 w-6" />
           <span className="text-sm font-medium">New Scenario</span>
         </button>
@@ -820,10 +820,10 @@ export function JobCostingDashboard() {
         }
       />
 
-      <div className="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 w-fit">
+      <div className="flex gap-1 rounded-lg border border-border bg-slate-50 dark:bg-muted/40 p-1 w-fit">
         {TABS.map((t) => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${tab === t.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${tab === t.id ? "bg-card text-slate-900 dark:text-neutral-100 shadow-sm" : "text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"}`}>
             {t.label}
           </button>
         ))}

@@ -22,7 +22,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   }, [pathname, setSidebarOpen]);
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-slate-50 print:h-auto print:overflow-visible print:block">
+    <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-background print:h-auto print:overflow-visible print:block">
       <RealtimeSync />
       <SettingsLoader />
 

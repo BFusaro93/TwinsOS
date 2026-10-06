@@ -1358,7 +1358,7 @@ export function ContractsList({ clientId }: Props) {
               className="h-7 bg-[#5a5a5a] border-[#6a6a6a] text-white hover:bg-[#6a6a6a] text-xs px-3"
             >
               Actions {selected.size > 0 && (
-                <span className="ml-1 rounded-full bg-card/20 px-1.5 text-[10px]">{selected.size}</span>
+                <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selected.size}</span>
               )}
               <ChevronDown className="ml-1 h-3 w-3" />
             </Button>
@@ -1402,7 +1402,7 @@ export function ContractsList({ clientId }: Props) {
                 {label}
                 <span className={cn(
                   "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                  filter === f ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-card/20 text-white"
+                  filter === f ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-white/20 text-white"
                 )}>
                   {counts[f]}
                 </span>
@@ -1557,7 +1557,7 @@ export function ContractsList({ clientId }: Props) {
                     {canDelete && (
                       <button
                         onClick={() => void handleDelete(c)}
-                        className="opacity-0 group-hover:opacity-100 text-slate-300 dark:text-neutral-600 hover:text-red-500 dark:hover:text-red-400"
+                        className="opacity-0 group-hover:opacity-100 text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>

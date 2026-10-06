@@ -6,7 +6,7 @@ export function PMSchedulesStub() {
   return (
     <div className="flex h-full flex-col gap-4">
       <PageHeader title="PM Schedules" description="Preventive maintenance schedules" />
-      <div className="flex flex-1 items-center justify-center rounded-lg border bg-white shadow-sm">
+      <div className="flex flex-1 items-center justify-center rounded-lg border bg-card shadow-sm">
         <EmptyState
           icon={Calendar}
           title="PM Schedules coming soon"

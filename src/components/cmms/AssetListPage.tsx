@@ -226,10 +226,10 @@ export function AssetListPage() {
           onVisibleKeysChange={setVisibleKeys}
         />
       </div>
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               {col("icon") && <TableHead className="w-12" />}
               <SortableTableHead label="Name" sortKey="name" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               {col("assetTag") && <SortableTableHead label="Asset Tag" sortKey="assetTag" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
@@ -256,7 +256,7 @@ export function AssetListPage() {
             {!isLoading && filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={visibleKeys.length} className="py-12 text-center">
-                  <p className="text-sm text-slate-400">No assets found</p>
+                  <p className="text-sm text-slate-400 dark:text-neutral-500">No assets found</p>
                 </TableCell>
               </TableRow>
             )}
@@ -264,7 +264,7 @@ export function AssetListPage() {
             {!isLoading && sorted.map((asset) => (
               <TableRow
                 key={asset.id}
-                className="cursor-pointer hover:bg-slate-50"
+                className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
                 onClick={() => setSheetAssetId(asset.id)}
               >
                 {col("icon") && (
@@ -289,30 +289,30 @@ export function AssetListPage() {
                 )}
                 <TableCell className="font-medium">{asset.name}</TableCell>
                 {col("assetTag") && (
-                  <TableCell className="font-mono text-xs text-slate-500">{asset.assetTag}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{asset.assetTag}</TableCell>
                 )}
                 {col("equipmentNumber") && (
-                  <TableCell className="font-mono text-xs text-slate-600">{asset.equipmentNumber ?? "—"}</TableCell>
+                  <TableCell className="font-mono text-xs text-slate-600 dark:text-neutral-400">{asset.equipmentNumber ?? "—"}</TableCell>
                 )}
                 {col("assetType") && (
-                  <TableCell className="text-slate-600 capitalize">
+                  <TableCell className="text-slate-600 dark:text-neutral-400 capitalize">
                     {asset.assetType.replace(/_/g, " ")}
                   </TableCell>
                 )}
                 {col("make") && (
-                  <TableCell className="text-slate-600">{asset.make ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{asset.make ?? "—"}</TableCell>
                 )}
                 {col("model") && (
-                  <TableCell className="text-slate-600">{asset.model ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{asset.model ?? "—"}</TableCell>
                 )}
                 {col("year") && (
-                  <TableCell className="text-slate-600">{asset.year ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{asset.year ?? "—"}</TableCell>
                 )}
                 {col("division") && (
-                  <TableCell className="text-slate-600">{asset.division ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{asset.division ?? "—"}</TableCell>
                 )}
                 {col("location") && (
-                  <TableCell className="text-slate-600">{asset.location ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{asset.location ?? "—"}</TableCell>
                 )}
                 {col("status") && (
                   <TableCell>
@@ -337,11 +337,11 @@ export function AssetListPage() {
         action={
           <div className="flex flex-wrap items-center gap-2">
             {/* View toggles */}
-            <div className="flex items-center rounded-md border bg-white shadow-sm">
+            <div className="flex items-center rounded-md border bg-card shadow-sm">
               <Button
                 variant="ghost"
                 size="sm"
-                className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-slate-100 font-semibold")}
+                className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-muted font-semibold")}
                 onClick={() => setViewMode("list")}
               >
                 <Minimize2 className="mr-1.5 h-3.5 w-3.5" />
@@ -350,7 +350,7 @@ export function AssetListPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                className={cn("rounded-l-none px-3", viewMode === "table" && "bg-slate-100 font-semibold")}
+                className={cn("rounded-l-none px-3", viewMode === "table" && "bg-muted font-semibold")}
                 onClick={() => setViewMode("table")}
               >
                 <Maximize2 className="mr-1.5 h-3.5 w-3.5" />

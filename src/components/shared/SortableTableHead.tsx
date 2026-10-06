@@ -36,7 +36,7 @@ export function SortableTableHead({
             <ChevronDown className="h-3 w-3" />
           )
         ) : (
-          <ChevronsUpDown className="h-3 w-3 text-slate-300 dark:text-neutral-600" />
+          <ChevronsUpDown className="h-3 w-3 text-slate-300 dark:text-neutral-500" />
         )}
       </button>
     </TableHead>

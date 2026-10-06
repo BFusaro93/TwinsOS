@@ -46,11 +46,11 @@ export default function EmployeesPage() {
   }
 
   const viewToggle = (
-    <div className="flex items-center rounded-md border bg-white shadow-sm">
+    <div className="flex items-center rounded-md border bg-card shadow-sm">
       <Button
         variant="ghost"
         size="sm"
-        className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-slate-100 font-semibold")}
+        className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-muted font-semibold")}
         onClick={() => setViewMode("list")}
       >
         <Minimize2 className="mr-1.5 h-3.5 w-3.5" />
@@ -59,7 +59,7 @@ export default function EmployeesPage() {
       <Button
         variant="ghost"
         size="sm"
-        className={cn("rounded-l-none px-3", viewMode === "table" && "bg-slate-100 font-semibold")}
+        className={cn("rounded-l-none px-3", viewMode === "table" && "bg-muted font-semibold")}
         onClick={() => setViewMode("table")}
       >
         <Maximize2 className="mr-1.5 h-3.5 w-3.5" />

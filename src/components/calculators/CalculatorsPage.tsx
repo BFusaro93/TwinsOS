@@ -18,7 +18,7 @@ export function CalculatorsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex overflow-hidden rounded-lg border border-slate-200 w-fit">
+      <div className="flex overflow-hidden rounded-lg border border-border w-fit">
         {MODES.map((m) => (
           <button
             key={m.id}
@@ -27,7 +27,7 @@ export function CalculatorsPage() {
             className={`px-4 py-2 text-sm font-semibold transition-colors ${
               mode === m.id
                 ? "bg-brand-500 text-white"
-                : "bg-white text-slate-500 hover:bg-slate-50"
+                : "bg-card text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
             }`}
           >
             {m.label}

@@ -19,14 +19,14 @@ function ClientViewDefaultsPanel() {
   const { mutateAsync: updateOrgSettings } = useUpdateOrgSettings();
 
   if (isLoading || !orgSettings) {
-    return <p className="text-sm text-slate-400">Loading…</p>;
+    return <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>;
   }
 
   const settings = getOrgDefaultDisplaySettings(orgSettings.customizations);
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-slate-400 dark:text-neutral-500">
         Default display settings for brand-new estimates that don&apos;t use a service bundle. A bundle&apos;s
         own Client View settings always take priority over these when one is selected.
       </p>
@@ -61,8 +61,8 @@ export default function EstimateSettingsPage() {
   return (
     <div className="flex h-full flex-col p-6">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-slate-900">Estimate Settings</h1>
-        <p className="text-sm text-slate-500">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-neutral-100">Estimate Settings</h1>
+        <p className="text-sm text-muted-foreground">
           Manage service bundles and default configurations
         </p>
       </div>
@@ -76,8 +76,8 @@ export default function EstimateSettingsPage() {
 
         <TabsContent value="service-bundles">
           <div className="mb-2">
-            <h2 className="text-sm font-semibold text-slate-700">Service Bundles</h2>
-            <p className="text-xs text-slate-400">
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-neutral-300">Service Bundles</h2>
+            <p className="text-xs text-slate-400 dark:text-neutral-500">
               Pre-built line item sets you can apply when creating estimates
             </p>
           </div>
@@ -86,14 +86,14 @@ export default function EstimateSettingsPage() {
 
         <TabsContent value="email-templates">
           <div className="mb-2">
-            <h2 className="text-sm font-semibold text-slate-700">Email Templates</h2>
-            <p className="text-xs text-slate-400">
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-neutral-300">Email Templates</h2>
+            <p className="text-xs text-slate-400 dark:text-neutral-500">
               Email templates used when sending an estimate now live in Documents, alongside every other
               template type.
             </p>
           </div>
-          <div className="flex flex-col gap-2 rounded-md border border-dashed border-slate-200 p-4">
-            <p className="text-sm text-slate-600">
+          <div className="flex flex-col gap-2 rounded-md border border-dashed border-border p-4">
+            <p className="text-sm text-slate-600 dark:text-neutral-400">
               Build and edit estimate email templates in <span className="font-medium">Documents</span> — create a
               document with type &quot;Estimate&quot;, and it&apos;ll show up in the template picker when
               sending an estimate.

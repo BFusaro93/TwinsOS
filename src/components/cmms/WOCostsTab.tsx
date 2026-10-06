@@ -86,7 +86,7 @@ function SectionHeader({ icon, title, count, onAdd, extraAction }: {
         <span className="text-slate-400 dark:text-neutral-500">{icon}</span>
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           {title}
-          <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-600">({count})</span>
+          <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({count})</span>
         </p>
       </div>
       <div className="flex items-center gap-2">

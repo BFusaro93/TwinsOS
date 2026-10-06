@@ -91,8 +91,8 @@ export function LeadRevenuePotential({ leadId, className, hideEmpty }: { leadId:
   const { data: estimates } = useEstimates(leadId);
   const open = (estimates ?? []).filter((e) => e.stage !== "accepted" && e.stage !== "lost");
   const total = open.reduce((sum, e) => sum + e.totalCents, 0);
-  if (total <= 0) return hideEmpty ? null : <span className="text-slate-300">—</span>;
-  return <span className={cn("font-medium text-green-700", className)}>{formatCurrency(total)}</span>;
+  if (total <= 0) return hideEmpty ? null : <span className="text-slate-300 dark:text-neutral-500">—</span>;
+  return <span className={cn("font-medium text-green-700 dark:text-green-400", className)}>{formatCurrency(total)}</span>;
 }
 
 const CLOSE_REASONS = ["Price", "No response", "Went with competitor", "Not ready", "Out of service area", "Other"];
@@ -136,10 +136,10 @@ export function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>New Lead</DialogTitle></DialogHeader>
-        <p className="text-xs text-slate-500 -mt-1">Enter the basics — add address and jobs after saving.</p>
+        <p className="text-xs text-muted-foreground -mt-1">Enter the basics — add address and jobs after saving.</p>
         <div className="flex flex-col gap-3 py-1">
           <div className="flex flex-col gap-1.5">
-            <Label>Name <span className="text-red-500">*</span></Label>
+            <Label>Name <span className="text-red-500 dark:text-red-400">*</span></Label>
             <Input value={form.displayName} onChange={(e) => patch("displayName", e.target.value)} placeholder="Full name or company" autoFocus onKeyDown={(e) => e.key === "Enter" && void submit()} />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -200,12 +200,12 @@ function ConvertDialog({ lead, open, onOpenChange }: { lead: Client; open: boole
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Convert to Client</DialogTitle></DialogHeader>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-slate-600 dark:text-neutral-400">
           Convert <span className="font-medium">{lead.displayName}</span> to an active client?
           They will appear in the Clients list and can be scheduled for jobs and invoiced.
         </p>
         {lead.revenuePotentialCents > 0 && (
-          <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm text-green-800">
+          <div className="rounded-lg bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 px-3 py-2 text-sm text-green-800 dark:text-green-300">
             Revenue potential: <strong>{formatCurrency(lead.revenuePotentialCents)}/yr</strong>
           </div>
         )}
@@ -242,10 +242,10 @@ function CloseLeadDialog({ lead, open, onOpenChange }: { lead: Client; open: boo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Close Lead — Lost</DialogTitle></DialogHeader>
-        <p className="text-sm text-slate-600">Mark <span className="font-medium">{lead.displayName}</span> as lost. They&rsquo;ll be marked &ldquo;Lost&rdquo; and no longer appear in the active leads list.</p>
+        <p className="text-sm text-slate-600 dark:text-neutral-400">Mark <span className="font-medium">{lead.displayName}</span> as lost. They&rsquo;ll be marked &ldquo;Lost&rdquo; and no longer appear in the active leads list.</p>
         <div className="space-y-3">
           <div>
-            <Label className="text-xs">Reason <span className="text-red-500">*</span></Label>
+            <Label className="text-xs">Reason <span className="text-red-500 dark:text-red-400">*</span></Label>
             <Select value={reason} onValueChange={setReason}>
               <SelectTrigger className="mt-1"><SelectValue placeholder="Why are they lost?" /></SelectTrigger>
               <SelectContent>
@@ -294,12 +294,12 @@ function BulkCloseLeadDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Close {count} Lead{count !== 1 ? "s" : ""} — Lost</DialogTitle></DialogHeader>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-slate-600 dark:text-neutral-400">
           Mark {count} lead{count !== 1 ? "s" : ""} as lost. They&rsquo;ll be marked &ldquo;Lost&rdquo; and no longer appear in the active leads list.
         </p>
         <div className="space-y-3">
           <div>
-            <Label className="text-xs">Reason <span className="text-red-500">*</span></Label>
+            <Label className="text-xs">Reason <span className="text-red-500 dark:text-red-400">*</span></Label>
             <Select value={reason} onValueChange={setReason}>
               <SelectTrigger className="mt-1"><SelectValue placeholder="Why are they lost?" /></SelectTrigger>
               <SelectContent>
@@ -421,11 +421,11 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuLabel className="text-xs text-slate-400 font-normal">{selectedCount} selected</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-xs text-slate-400 dark:text-neutral-500 font-normal">{selectedCount} selected</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {canCloseLead && (
                 <button
-                  className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 rounded text-red-600"
+                  className="flex w-full items-center gap-2 px-2 py-1.5 text-sm hover:bg-slate-50 dark:hover:bg-muted/40 rounded text-red-600 dark:text-red-400"
                   onClick={() => setBulkCloseOpen(true)}
                 >
                   <XCircle className="h-3.5 w-3.5" />
@@ -435,7 +435,7 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
-          <span className="ml-auto text-sm text-slate-500">
+          <span className="ml-auto text-sm text-muted-foreground">
             {isLoading ? "…" : `${filtered.length} lead${filtered.length !== 1 ? "s" : ""}`}
           </span>
         )}
@@ -469,15 +469,15 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
               </Badge>
             );
           })}
-          <button onClick={() => setFilterRows([])} className="text-xs text-slate-400 hover:text-slate-600 underline">Clear</button>
+          <button onClick={() => setFilterRows([])} className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 underline">Clear</button>
         </div>
       )}
 
       {/* Table */}
-      <div className="flex-1 overflow-auto rounded-lg border bg-white shadow-sm">
+      <div className="flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50">
-            <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+            <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="px-3 py-3">
                 <Checkbox
                   checked={allSelected}
@@ -509,7 +509,7 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={visibleColumnCount} className="py-16 text-center text-sm text-slate-400">
+                <td colSpan={visibleColumnCount} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {search || activeFilterCount > 0 ? "No leads match your filters" : "No leads yet — add your first lead"}
                 </td>
               </tr>
@@ -519,7 +519,7 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                 return (
                   <tr
                     key={lead.id}
-                    className={cn("group border-b hover:bg-slate-50", onSelect && "cursor-pointer", isChecked && "bg-brand-50")}
+                    className={cn("group border-b hover:bg-slate-50 dark:hover:bg-muted/40", onSelect && "cursor-pointer", isChecked && "bg-brand-50 dark:bg-brand-900/30")}
                     onClick={() => onSelect?.(lead)}
                   >
                     <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -528,10 +528,10 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-1.5">
                         {lead.accountType === "commercial"
-                          ? <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                          : <Home className="h-3.5 w-3.5 shrink-0 text-slate-400" />}
+                          ? <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
+                          : <Home className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />}
                         <button
-                          className="font-medium text-brand-600 hover:underline text-left"
+                          className="font-medium text-brand-600 dark:text-brand-400 hover:underline text-left"
                           onClick={(e) => { e.stopPropagation(); onSelect?.(lead); }}
                         >
                           {lead.displayName}
@@ -540,31 +540,31 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                     </td>
                     {cols.type && (
                       <td className="px-4 py-2.5">
-                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", ACCOUNT_TYPE_COLOR[lead.accountType] ?? "bg-slate-100 text-slate-500")}>
+                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", ACCOUNT_TYPE_COLOR[lead.accountType] ?? "bg-muted text-muted-foreground")}>
                           {lead.accountType}
                         </span>
                       </td>
                     )}
-                    {cols.phone && <td className="px-4 py-2.5 text-slate-600">{lead.primaryPhone ?? "—"}</td>}
-                    {cols.email && <td className="px-4 py-2.5 text-slate-600">{lead.primaryEmail ?? "—"}</td>}
+                    {cols.phone && <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">{lead.primaryPhone ?? "—"}</td>}
+                    {cols.email && <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">{lead.primaryEmail ?? "—"}</td>}
                     {cols.city && (
-                      <td className="px-4 py-2.5 text-slate-500">
+                      <td className="px-4 py-2.5 text-muted-foreground">
                         {[lead.serviceAddress, lead.serviceCity, lead.serviceState].filter(Boolean).join(", ") || "—"}
                       </td>
                     )}
                     {cols.zip && (
-                      <td className="px-4 py-2.5 text-slate-500">
+                      <td className="px-4 py-2.5 text-muted-foreground">
                         {lead.serviceZip || lead.billingZip || "—"}
                       </td>
                     )}
-                    {cols.source && <td className="px-4 py-2.5 text-slate-500">{lead.source ?? "—"}</td>}
+                    {cols.source && <td className="px-4 py-2.5 text-muted-foreground">{lead.source ?? "—"}</td>}
                     {cols.potential && (
                       <td className="px-4 py-2.5 text-right">
                         <LeadRevenuePotential leadId={lead.id} />
                       </td>
                     )}
                     {cols.dateAdded && (
-                      <td className="px-4 py-2.5 text-xs text-slate-400">
+                      <td className="px-4 py-2.5 text-xs text-slate-400 dark:text-neutral-500">
                         {formatDateAdded(lead)}
                       </td>
                     )}
@@ -576,7 +576,7 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                           </Button>
                         )}
                         {canCloseLead && (
-                          <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-[11px] text-red-500 hover:text-red-700" onClick={(e) => { e.stopPropagation(); setCloseLead(lead); }}>
+                          <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-[11px] text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400" onClick={(e) => { e.stopPropagation(); setCloseLead(lead); }}>
                             <XCircle className="h-3 w-3" /> Close
                           </Button>
                         )}
@@ -585,10 +585,10 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
                             the /crm/clients/:id detail page. */}
                         <button
                           onClick={(e) => { e.stopPropagation(); router.push(`/crm/clients/${lead.id}`); }}
-                          className="rounded p-1 hover:bg-slate-200"
+                          className="rounded p-1 hover:bg-slate-200 dark:hover:bg-neutral-700"
                           title="Open full screen"
                         >
-                          <Maximize2 className="h-3.5 w-3.5 text-slate-400" />
+                          <Maximize2 className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                         </button>
                       </div>
                     </td>

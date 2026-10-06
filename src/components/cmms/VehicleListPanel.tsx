@@ -15,7 +15,7 @@ export function VehicleListPanel({ vehicles, selectedId, onSelect }: VehicleList
   return (
     <div className="flex flex-col overflow-y-auto">
       {vehicles.length === 0 && (
-        <p className="px-4 py-8 text-center text-sm text-slate-400">
+        <p className="px-4 py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
           No vehicles found
         </p>
       )}
@@ -29,8 +29,8 @@ export function VehicleListPanel({ vehicles, selectedId, onSelect }: VehicleList
             key={vehicle.id}
             onClick={() => onSelect(vehicle.id)}
             className={cn(
-              "flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50",
-              isSelected && "border-l-2 border-l-brand-500 bg-brand-50 hover:bg-brand-50"
+              "flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-muted/40",
+              isSelected && "border-l-2 border-l-brand-500 bg-brand-50 dark:bg-brand-900/30 hover:bg-brand-50 dark:hover:bg-brand-900/30"
             )}
           >
             {/* Avatar / thumbnail */}
@@ -54,22 +54,22 @@ export function VehicleListPanel({ vehicles, selectedId, onSelect }: VehicleList
             {/* Content */}
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm font-semibold text-slate-900">
+                <span className="truncate text-sm font-semibold text-slate-900 dark:text-neutral-100">
                   {vehicle.name}
                 </span>
                 <div className="flex shrink-0 items-center gap-1.5">
                   {vehicle.equipmentNumber && (
-                    <span className="font-mono text-xs font-medium text-slate-600">
+                    <span className="font-mono text-xs font-medium text-slate-600 dark:text-neutral-400">
                       {vehicle.equipmentNumber}
                     </span>
                   )}
-                  <span className="font-mono text-xs text-slate-400">
+                  <span className="font-mono text-xs text-slate-400 dark:text-neutral-500">
                     {vehicle.assetTag}
                   </span>
                 </div>
               </div>
               <div className="mt-0.5 flex items-center justify-between gap-2">
-                <span className="truncate text-xs text-slate-500">
+                <span className="truncate text-xs text-muted-foreground">
                   {vehicle.licensePlate ?? "No plate"} · {vehicle.division ?? "—"}
                 </span>
                 <StatusBadge

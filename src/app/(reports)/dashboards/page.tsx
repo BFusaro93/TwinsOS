@@ -9,7 +9,7 @@ import { useModuleAccess } from "@/lib/hooks/use-module-access";
 import { useDashboards } from "@/lib/hooks/use-report-center";
 
 const CARD =
-  "group flex items-start gap-4 rounded-xl border bg-white p-5 shadow-sm transition-all hover:border-brand-400 hover:shadow-md";
+  "group flex items-start gap-4 rounded-xl border bg-card p-5 shadow-sm transition-all hover:border-brand-400 hover:shadow-md";
 
 function DashboardCard({
   href,
@@ -24,12 +24,12 @@ function DashboardCard({
 }) {
   return (
     <Link href={href} className={CARD}>
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-500 transition-colors group-hover:bg-brand-100">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
         <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0">
-        <p className="font-semibold text-slate-900">{title}</p>
-        <p className="mt-0.5 text-sm text-slate-500">{description}</p>
+        <p className="font-semibold text-slate-900 dark:text-neutral-100">{title}</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
       </div>
     </Link>
   );

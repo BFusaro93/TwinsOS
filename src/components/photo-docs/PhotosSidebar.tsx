@@ -72,7 +72,7 @@ export function PhotosSidebar() {
       <nav className="flex-1 overflow-y-auto py-4">
         {/* Photos section */}
         {!sidebarCollapsed && (
-          <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+          <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
             Photos
           </p>
         )}
@@ -103,7 +103,7 @@ export function PhotosSidebar() {
         {/* Field section */}
         <div className="mt-4">
           {!sidebarCollapsed && (
-            <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+            <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
               Field
             </p>
           )}
@@ -154,7 +154,7 @@ export function PhotosSidebar() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-slate-200">{currentUser.name}</p>
-            <p className="truncate text-xs capitalize text-slate-400">{currentUser.role}</p>
+            <p className="truncate text-xs capitalize text-slate-400 dark:text-neutral-500">{currentUser.role}</p>
           </div>
         </div>
       )}

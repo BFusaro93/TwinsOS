@@ -72,7 +72,7 @@ export function OverheadSettingsEditor() {
   }
 
   if (isLoading) {
-    return <p className="text-sm text-slate-400 py-2">Loading…</p>;
+    return <p className="text-sm text-slate-400 dark:text-neutral-500 py-2">Loading…</p>;
   }
 
   function renderField(f: FieldConfig) {
@@ -94,7 +94,7 @@ export function OverheadSettingsEditor() {
             }
             onBlur={() => void handleBlur(f.key)}
           />
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-neutral-500">
             %
           </span>
         </div>
@@ -104,7 +104,7 @@ export function OverheadSettingsEditor() {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-muted-foreground">
         These percentages are applied per cost type when calculating estimate overhead recovery.
         If any of them is above 0%, they take over for every estimate and the flat rate below is ignored.
       </p>
@@ -112,8 +112,8 @@ export function OverheadSettingsEditor() {
         {FIELDS.map(renderField)}
       </div>
 
-      <div className="border-t border-slate-100 pt-4">
-        <p className="mb-3 text-xs text-slate-500">
+      <div className="border-t border-slate-100 dark:border-neutral-800 pt-4">
+        <p className="mb-3 text-xs text-muted-foreground">
           Used only when none of the per-cost-type percentages above are set. Pre-fills new estimates&apos;
           own Overhead Rate % automatically, so it doesn&apos;t have to be typed in on every estimate — still
           editable per estimate afterward.

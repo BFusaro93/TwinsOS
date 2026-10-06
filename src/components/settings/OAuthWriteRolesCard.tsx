@@ -40,22 +40,22 @@ export function OAuthWriteRolesCard() {
   const dirty = savedRoles !== undefined && JSON.stringify([...selected].sort()) !== JSON.stringify([...savedRoles].sort());
 
   return (
-    <div className="rounded-lg border bg-white">
+    <div className="rounded-lg border bg-card">
       <div className="border-b px-6 py-4">
-        <h3 className="text-sm font-semibold text-slate-900">OAuth Write Access</h3>
-        <p className="mt-1 text-sm text-slate-500">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">OAuth Write Access</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
           Admins can always grant write access when connecting via OAuth sign-in. Opt additional roles in here — everyone else stays read-only.
         </p>
       </div>
 
       <div className="px-6 py-5">
         {isLoading ? (
-          <p className="text-sm text-slate-400">Loading…</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>
         ) : (
           <>
             <div className="flex flex-wrap gap-4">
               {CONFIGURABLE_WRITE_ROLES.map((role) => (
-                <label key={role} className="flex items-center gap-1.5 text-sm text-slate-700">
+                <label key={role} className="flex items-center gap-1.5 text-sm text-slate-700 dark:text-neutral-300">
                   <Checkbox checked={selected.has(role)} onCheckedChange={() => toggle(role)} />
                   {ROLE_LABEL[role]}
                 </label>

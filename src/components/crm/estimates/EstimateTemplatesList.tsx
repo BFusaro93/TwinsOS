@@ -549,7 +549,7 @@ export function EstimateTemplatesList() {
                           }
                         }
                       }}
-                      className="text-slate-300 dark:text-neutral-600 opacity-0 group-hover:opacity-100 hover:text-red-500 dark:hover:text-red-400"
+                      className="text-slate-300 dark:text-neutral-500 opacity-0 group-hover:opacity-100 hover:text-red-500 dark:hover:text-red-400"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>

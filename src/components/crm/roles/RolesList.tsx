@@ -45,7 +45,7 @@ function PermSection({
   }
 
   return (
-    <div className="rounded-lg border bg-white p-4 shadow-sm">
+    <div className="rounded-lg border bg-card p-4 shadow-sm">
       {/* Section header with select-all checkbox */}
       <div className="flex items-center gap-2 mb-3 border-b pb-2">
         <Checkbox
@@ -54,7 +54,7 @@ function PermSection({
           onCheckedChange={toggleAll}
           className="h-3.5 w-3.5"
         />
-        <span className="text-sm font-semibold text-slate-700">{section.label}</span>
+        <span className="text-sm font-semibold text-slate-700 dark:text-neutral-300">{section.label}</span>
       </div>
       <div className="space-y-1.5">
         {Object.entries(section.permissions).map(([key, label]) => (
@@ -64,7 +64,7 @@ function PermSection({
               onCheckedChange={(c) => onChange(key, !!c)}
               className="h-3.5 w-3.5 mt-0.5 shrink-0"
             />
-            <span className="text-xs text-slate-600 group-hover:text-slate-900 leading-snug">
+            <span className="text-xs text-slate-600 dark:text-neutral-400 group-hover:text-slate-900 dark:group-hover:text-neutral-100 leading-snug">
               {label}
             </span>
           </label>
@@ -96,7 +96,7 @@ function PermTab({
 
   return (
     <div className="space-y-4">
-      <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-500">
+      <label className="flex items-center gap-2 cursor-pointer text-sm text-muted-foreground">
         <Checkbox
           checked={allChecked}
           onCheckedChange={toggleAll}
@@ -187,13 +187,13 @@ function RoleDialog({
 
         {/* Permission tabs */}
         <Tabs defaultValue={tabKeys[0]} className="flex flex-1 flex-col overflow-hidden">
-          <div className="shrink-0 border-b border-t bg-white px-6">
+          <div className="shrink-0 border-b border-t bg-card px-6">
             <TabsList className="h-auto flex-wrap justify-start gap-0 rounded-none bg-transparent p-0">
               {tabKeys.map((tabKey) => (
                 <TabsTrigger
                   key={tabKey}
                   value={tabKey}
-                  className="rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-slate-600 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+                  className="rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-neutral-400 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none"
                 >
                   {PERMISSION_TABS[tabKey].label}
                 </TabsTrigger>
@@ -211,7 +211,7 @@ function RoleDialog({
         </Tabs>
 
         {/* Footer */}
-        <div className="shrink-0 flex justify-end gap-2 border-t px-6 py-3 bg-white">
+        <div className="shrink-0 flex justify-end gap-2 border-t px-6 py-3 bg-card">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSave} disabled={creating || updating}>
             {creating || updating ? "Saving…" : "Save"}
@@ -274,10 +274,10 @@ export function RolesList() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b bg-white px-6 py-4">
+      <div className="flex items-center justify-between border-b bg-card px-6 py-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Roles</h1>
-          <p className="text-sm text-slate-500">Define permissions for each CRM role</p>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-neutral-100">Roles</h1>
+          <p className="text-sm text-muted-foreground">Define permissions for each CRM role</p>
         </div>
         <PermissionGate permission="allow_roles_access">
           <Button onClick={() => setDialogRole("new")}>
@@ -295,7 +295,7 @@ export function RolesList() {
               onClick={() => setFilter(t.value)}
               className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
                 filter === t.value
-                  ? "bg-white text-slate-800"
+                  ? "bg-card text-slate-800 dark:text-neutral-100"
                   : "text-slate-300 hover:text-white"
               }`}
             >
@@ -306,11 +306,11 @@ export function RolesList() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 border-b bg-slate-50">
-            <tr className="text-left text-xs font-semibold text-slate-500">
-              <th className="w-10 px-4 py-3"><input type="checkbox" className="rounded border-slate-300 accent-brand-500" /></th>
+          <thead className="sticky top-0 border-b bg-slate-50 dark:bg-muted/40">
+            <tr className="text-left text-xs font-semibold text-muted-foreground">
+              <th className="w-10 px-4 py-3"><input type="checkbox" className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500" /></th>
               <th className="px-4 py-3">Role Name</th>
               <th className="px-4 py-3">Description</th>
               <th className="px-4 py-3">Active</th>
@@ -332,7 +332,7 @@ export function RolesList() {
                 <td colSpan={6} className="py-20 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <ShieldCheck className="h-8 w-8 text-slate-200" />
-                    <p className="text-sm text-slate-400">No roles found</p>
+                    <p className="text-sm text-slate-400 dark:text-neutral-500">No roles found</p>
                   </div>
                 </td>
               </tr>
@@ -340,28 +340,28 @@ export function RolesList() {
               filtered.map((role) => (
                 <tr
                   key={role.id}
-                  className={`border-b ${canManageRoles ? "cursor-pointer hover:bg-slate-50" : "cursor-default"}`}
+                  className={`border-b ${canManageRoles ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40" : "cursor-default"}`}
                   onClick={() => canManageRoles && setDialogRole(role)}
                 >
                   <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" className="rounded border-slate-300 accent-brand-500" />
+                    <input type="checkbox" className="rounded border-slate-300 dark:border-neutral-700 accent-brand-500" />
                   </td>
                   <td className="px-4 py-2.5">
-                    <span className="text-brand-600 hover:underline font-medium">{role.name}</span>
+                    <span className="text-brand-600 dark:text-brand-400 hover:underline font-medium">{role.name}</span>
                   </td>
-                  <td className="px-4 py-2.5 text-slate-500">{role.description ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-muted-foreground">{role.description ?? "—"}</td>
                   <td
                     className="px-4 py-2.5"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
-                      className={`text-sm transition-colors ${role.isActive ? "text-slate-700 hover:text-red-500" : "text-slate-400 hover:text-green-600"}`}
+                      className={`text-sm transition-colors ${role.isActive ? "text-slate-700 dark:text-neutral-300 hover:text-red-500 dark:hover:text-red-400" : "text-slate-400 dark:text-neutral-500 hover:text-green-600 dark:hover:text-green-400"}`}
                       onClick={() => handleToggleActive(role)}
                     >
                       {role.isActive ? "Active" : "Inactive"}
                     </button>
                   </td>
-                  <td className="px-4 py-2.5 text-slate-400 text-xs">
+                  <td className="px-4 py-2.5 text-slate-400 dark:text-neutral-500 text-xs">
                     {new Date(role.updatedAt).toLocaleDateString("en-US", {
                       month: "numeric", day: "numeric", year: "numeric",
                     })}
@@ -370,7 +370,7 @@ export function RolesList() {
                     <PermissionGate permission="allow_roles_access">
                       <button
                         onClick={() => void handleDelete(role)}
-                        className="text-slate-300 hover:text-red-500"
+                        className="text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>

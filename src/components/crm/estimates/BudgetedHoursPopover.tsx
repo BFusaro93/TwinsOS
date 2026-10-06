@@ -147,7 +147,7 @@ export function BudgetedHoursPopover({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-5 w-5 items-center justify-center rounded text-slate-300 dark:text-neutral-600 hover:bg-muted hover:text-muted-foreground"
+          className="flex h-5 w-5 items-center justify-center rounded text-slate-300 dark:text-neutral-500 hover:bg-muted hover:text-muted-foreground"
           title="Man-hour rate calculator"
         >
           <Calculator className="h-3 w-3" />

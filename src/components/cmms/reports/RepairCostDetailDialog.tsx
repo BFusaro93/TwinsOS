@@ -51,10 +51,10 @@ export function RepairCostDetailDialog({ kind, workOrders, rangeLabel, onClose }
         </DialogHeader>
         <div className="max-h-[calc(85vh-96px)] overflow-auto px-6 pb-6">
           {rows.length === 0 ? (
-            <p className="py-10 text-center text-sm text-slate-400">No costs recorded in this range</p>
+            <p className="py-10 text-center text-sm text-slate-400 dark:text-neutral-500">No costs recorded in this range</p>
           ) : (
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white text-left text-xs uppercase tracking-wide text-slate-400">
+              <thead className="sticky top-0 bg-card text-left text-xs uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 <tr>
                   <th className="py-2 pr-3 font-semibold">Date</th>
                   <th className="py-2 pr-3 font-semibold">Work order</th>
@@ -65,27 +65,27 @@ export function RepairCostDetailDialog({ kind, workOrders, rangeLabel, onClose }
                   <th className="py-2 text-right font-semibold">Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                 {rows.map((r) => (
                   <tr key={`${r.kind}-${r.id}`}>
-                    <td className="whitespace-nowrap py-2 pr-3 text-slate-500">{formatDate(r.wo.costAt)}</td>
+                    <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">{formatDate(r.wo.costAt)}</td>
                     <td className="py-2 pr-3">
                       <Link
                         href={`/cmms/work-orders?id=${r.wo.id}`}
-                        className="font-medium text-blue-600 hover:underline"
+                        className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
                       >
                         {r.wo.workOrderNumber}
                       </Link>
-                      <span className="block max-w-[14rem] truncate text-xs text-slate-400">{r.wo.title}</span>
+                      <span className="block max-w-[14rem] truncate text-xs text-slate-400 dark:text-neutral-500">{r.wo.title}</span>
                     </td>
-                    <td className="py-2 pr-3 text-slate-600">{r.wo.assetName ?? "No asset"}</td>
-                    {kind === "all" && <td className="py-2 pr-3 text-slate-500">{KIND_LABELS[r.kind]}</td>}
-                    <td className="py-2 pr-3 text-slate-700">
+                    <td className="py-2 pr-3 text-slate-600 dark:text-neutral-400">{r.wo.assetName ?? "No asset"}</td>
+                    {kind === "all" && <td className="py-2 pr-3 text-muted-foreground">{KIND_LABELS[r.kind]}</td>}
+                    <td className="py-2 pr-3 text-slate-700 dark:text-neutral-300">
                       {r.label}
-                      {r.detail && <span className="block max-w-[16rem] truncate text-xs text-slate-400">{r.detail}</span>}
+                      {r.detail && <span className="block max-w-[16rem] truncate text-xs text-slate-400 dark:text-neutral-500">{r.detail}</span>}
                     </td>
-                    <td className="whitespace-nowrap py-2 pr-3 text-right text-slate-500">{r.basis}</td>
-                    <td className="whitespace-nowrap py-2 text-right font-medium text-slate-900">{formatCurrency(r.cents)}</td>
+                    <td className="whitespace-nowrap py-2 pr-3 text-right text-muted-foreground">{r.basis}</td>
+                    <td className="whitespace-nowrap py-2 text-right font-medium text-slate-900 dark:text-neutral-100">{formatCurrency(r.cents)}</td>
                   </tr>
                 ))}
               </tbody>

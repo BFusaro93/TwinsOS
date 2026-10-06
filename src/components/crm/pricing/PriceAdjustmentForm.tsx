@@ -228,11 +228,11 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
   return (
     <div className="flex flex-col gap-5">
       {/* ── the maths ── */}
-      <section className="rounded-lg border bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-semibold text-slate-900">Adjustment</h2>
+      <section className="rounded-lg border bg-card p-4 shadow-sm">
+        <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-neutral-100">Adjustment</h2>
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <Label className="text-xs text-slate-500">Method</Label>
+            <Label className="text-xs text-muted-foreground">Method</Label>
             <Select
               value={method}
               onValueChange={(v) => { setMethod(v as AdjustMethod); invalidatePreview(); }}
@@ -245,7 +245,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
             </Select>
           </div>
           <div>
-            <Label className="text-xs text-slate-500">
+            <Label className="text-xs text-muted-foreground">
               {method === "percent" ? "Percent change" : "Dollar change"}
             </Label>
             <Input
@@ -258,7 +258,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
             />
           </div>
           <div>
-            <Label className="text-xs text-slate-500">Round to</Label>
+            <Label className="text-xs text-muted-foreground">Round to</Label>
             <Select
               value={rounding}
               onValueChange={(v) => { setRounding(v as RoundingRule); invalidatePreview(); }}
@@ -274,10 +274,10 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
         </div>
 
         <div className="mt-4">
-          <Label className="text-xs text-slate-500">Apply to</Label>
+          <Label className="text-xs text-muted-foreground">Apply to</Label>
           <div className="mt-1.5 flex flex-col gap-1.5">
             {ADJUST_TARGETS.map((t) => (
-              <label key={t} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+              <label key={t} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
                 <Checkbox
                   checked={targets.includes(t)}
                   onCheckedChange={() => { toggle(targets, t, setTargets); invalidatePreview(); }}
@@ -286,7 +286,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
               </label>
             ))}
           </div>
-          <p className="mt-2 flex items-start gap-1.5 text-[11px] text-slate-400">
+          <p className="mt-2 flex items-start gap-1.5 text-[11px] text-slate-400 dark:text-neutral-500">
             <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
             Signed contracts, already-issued invoices, and per-visit rate overrides
             are never touched by a run.
@@ -295,14 +295,14 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
       </section>
 
       {/* ── narrowing ── */}
-      <section className="rounded-lg border bg-white p-4 shadow-sm">
-        <h2 className="mb-1 text-sm font-semibold text-slate-900">Limit to</h2>
-        <p className="mb-3 text-xs text-slate-400">
+      <section className="rounded-lg border bg-card p-4 shadow-sm">
+        <h2 className="mb-1 text-sm font-semibold text-slate-900 dark:text-neutral-100">Limit to</h2>
+        <p className="mb-3 text-xs text-slate-400 dark:text-neutral-500">
           Leave both empty to adjust everything the targets above cover.
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label className="text-xs text-slate-500">
+            <Label className="text-xs text-muted-foreground">
               Services {serviceIds.length > 0 && `(${serviceIds.length} selected)`}
             </Label>
             <SearchInput
@@ -314,7 +314,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
             />
             <div className="mt-1.5 max-h-40 overflow-y-auto rounded-md border p-2">
               {filteredServices.map((s) => (
-                <label key={s.id} className="flex cursor-pointer items-center gap-2 py-0.5 text-xs text-slate-700">
+                <label key={s.id} className="flex cursor-pointer items-center gap-2 py-0.5 text-xs text-slate-700 dark:text-neutral-300">
                   <Checkbox
                     checked={serviceIds.includes(s.id)}
                     onCheckedChange={() => { toggle(serviceIds, s.id, setServiceIds); invalidatePreview(); }}
@@ -323,15 +323,15 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                 </label>
               ))}
               {filteredServices.length === 0 && (
-                <p className="py-2 text-center text-xs text-slate-400">No services match.</p>
+                <p className="py-2 text-center text-xs text-slate-400 dark:text-neutral-500">No services match.</p>
               )}
             </div>
           </div>
           <div>
-            <Label className="text-xs text-slate-500">Job types</Label>
+            <Label className="text-xs text-muted-foreground">Job types</Label>
             <div className="mt-1.5 rounded-md border p-2">
               {JOB_TYPES.map((t) => (
-                <label key={t} className="flex cursor-pointer items-center gap-2 py-0.5 text-xs text-slate-700">
+                <label key={t} className="flex cursor-pointer items-center gap-2 py-0.5 text-xs text-slate-700 dark:text-neutral-300">
                   <Checkbox
                     checked={jobTypes.includes(t)}
                     onCheckedChange={() => { toggle(jobTypes, t, setJobTypes); invalidatePreview(); }}
@@ -340,7 +340,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                 </label>
               ))}
             </div>
-            <p className="mt-1.5 text-[11px] text-slate-400">
+            <p className="mt-1.5 text-[11px] text-slate-400 dark:text-neutral-500">
               Applies to job service rates only.
             </p>
           </div>
@@ -357,32 +357,32 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
           )}
         </Button>
         {!canPreview && (
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 dark:text-neutral-500">
             Enter a non-zero amount and pick at least one target.
           </p>
         )}
       </div>
 
       {result && (
-        <section className="rounded-lg border bg-white shadow-sm">
+        <section className="rounded-lg border bg-card shadow-sm">
           <div className="border-b p-4">
             <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
               <div>
-                <p className="text-xs text-slate-500">Lines selected</p>
-                <p className="text-xl font-semibold tabular-nums text-slate-900">
+                <p className="text-xs text-muted-foreground">Lines selected</p>
+                <p className="text-xl font-semibold tabular-nums text-slate-900 dark:text-neutral-100">
                   {selectedRows.length}
                   {excluded.size > 0 && (
-                    <span className="ml-1 text-sm font-normal text-slate-400">
+                    <span className="ml-1 text-sm font-normal text-slate-400 dark:text-neutral-500">
                       of {changedRows.length}
                     </span>
                   )}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-slate-500">Total change</p>
+                <p className="text-xs text-muted-foreground">Total change</p>
                 <p
                   className={`text-xl font-semibold tabular-nums ${
-                    selectedDelta > 0 ? "text-emerald-600" : selectedDelta < 0 ? "text-red-600" : "text-slate-900"
+                    selectedDelta > 0 ? "text-emerald-600 dark:text-emerald-400" : selectedDelta < 0 ? "text-red-600 dark:text-red-400" : "text-slate-900 dark:text-neutral-100"
                   }`}
                 >
                   {signedCurrency(selectedDelta)}
@@ -390,16 +390,16 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
               </div>
               {excluded.size > 0 && (
                 <div>
-                  <p className="text-xs text-slate-500">Excluded by you</p>
-                  <p className="text-xl font-semibold tabular-nums text-amber-600">
+                  <p className="text-xs text-muted-foreground">Excluded by you</p>
+                  <p className="text-xl font-semibold tabular-nums text-amber-600 dark:text-amber-400">
                     {excluded.size}
                   </p>
                 </div>
               )}
               {result.unchangedCount > 0 && (
                 <div>
-                  <p className="text-xs text-slate-500">Matched but unchanged</p>
-                  <p className="text-xl font-semibold tabular-nums text-slate-400">
+                  <p className="text-xs text-muted-foreground">Matched but unchanged</p>
+                  <p className="text-xl font-semibold tabular-nums text-slate-400 dark:text-neutral-500">
                     {result.unchangedCount}
                   </p>
                 </div>
@@ -409,22 +409,22 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                 period and a package amount is per month — summing them into
                 one figure would be apples and oranges. */}
             {selectedRows.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
                 {ADJUST_TARGETS.filter((t) => selectedByTarget.counts[t] > 0).map((t) => (
                   <span key={t}>
-                    {TARGET_LABELS[t]}: <strong className="text-slate-700">{selectedByTarget.counts[t]}</strong>{" "}
+                    {TARGET_LABELS[t]}: <strong className="text-slate-700 dark:text-neutral-300">{selectedByTarget.counts[t]}</strong>{" "}
                     ({signedCurrency(selectedByTarget.deltas[t])})
                   </span>
                 ))}
               </div>
             )}
             {result.changedCount > 0 && selectedRows.length === 0 && (
-              <p className="mt-3 text-sm text-amber-600">
+              <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
                 Every line is unticked — nothing would change. Tick at least one to apply.
               </p>
             )}
             {result.changedCount === 0 && (
-              <p className="mt-3 text-sm text-amber-600">
+              <p className="mt-3 text-sm text-amber-600 dark:text-amber-400">
                 Nothing would change. Check the filters, or try a flat adjustment if the
                 matched rows are all unpriced.
               </p>
@@ -465,8 +465,8 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
               </div>
               <div className="max-h-[420px] overflow-y-auto">
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-slate-50">
-                    <tr className="border-b text-left text-xs text-slate-500">
+                  <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+                    <tr className="border-b text-left text-xs text-muted-foreground">
                       <th className="w-10 px-4 py-2 font-medium">
                         <Checkbox
                           aria-label="Include or exclude every line shown"
@@ -494,7 +494,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                         <tr
                           key={`${c.entityType}-${c.entityId}`}
                           className={`border-b last:border-0 ${
-                            delta === 0 ? "text-slate-400" : isOut ? "bg-slate-50 text-slate-400" : ""
+                            delta === 0 ? "text-slate-400 dark:text-neutral-500" : isOut ? "bg-slate-50 dark:bg-muted/40 text-slate-400 dark:text-neutral-500" : ""
                           }`}
                         >
                           <td className="px-4 py-2">
@@ -509,7 +509,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                           <td className="px-4 py-2">
                             {c.label}
                             {isOut && (
-                              <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                              <span className="ml-2 rounded bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
                                 excluded
                               </span>
                             )}
@@ -529,9 +529,9 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                               isOut
                                 ? ""
                                 : delta > 0
-                                ? "text-emerald-600"
+                                ? "text-emerald-600 dark:text-emerald-400"
                                 : delta < 0
-                                ? "text-red-600"
+                                ? "text-red-600 dark:text-red-400"
                                 : ""
                             }`}
                           >
@@ -542,7 +542,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                     })}
                     {visibleRows.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400 dark:text-neutral-500">
                           No lines match your search.
                         </td>
                       </tr>
@@ -554,9 +554,9 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
           )}
 
           {result.changedCount > 0 && (
-            <div className="flex flex-wrap items-end gap-3 border-t bg-slate-50 p-4">
+            <div className="flex flex-wrap items-end gap-3 border-t bg-slate-50 dark:bg-muted/40 p-4">
               <div className="flex-1 min-w-[220px]">
-                <Label className="text-xs text-slate-500">Name this run *</Label>
+                <Label className="text-xs text-muted-foreground">Name this run *</Label>
                 <Input
                   placeholder="e.g. 2027 season increase"
                   value={name}
@@ -565,7 +565,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                 />
               </div>
               <div className="flex-1 min-w-[220px]">
-                <Label className="text-xs text-slate-500">Notes (optional)</Label>
+                <Label className="text-xs text-muted-foreground">Notes (optional)</Label>
                 <Textarea
                   placeholder="Why this increase…"
                   value={notes}

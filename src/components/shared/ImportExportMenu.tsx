@@ -480,7 +480,7 @@ export function ImportExportMenu({
                     <tr key={i} className="border-b last:border-0">
                       {previewCols.map((col) => (
                         <td key={col} className="px-3 py-1.5 text-slate-700 dark:text-neutral-300">
-                          {row[col] || <span className="text-slate-300 dark:text-neutral-600">—</span>}
+                          {row[col] || <span className="text-slate-300 dark:text-neutral-500">—</span>}
                         </td>
                       ))}
                     </tr>

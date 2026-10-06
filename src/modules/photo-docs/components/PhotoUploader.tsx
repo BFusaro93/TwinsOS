@@ -172,8 +172,8 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
   if (allDone) {
     return (
       <div className="flex flex-col items-center gap-4 py-12">
-        <CheckCircle2 className="h-12 w-12 text-brand-500" />
-        <p className="text-lg font-semibold text-slate-900">
+        <CheckCircle2 className="h-12 w-12 text-brand-500 dark:text-brand-400" />
+        <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">
           {progress.length} file{progress.length > 1 ? "s" : ""} uploaded
         </p>
         <div className="flex gap-3">
@@ -190,35 +190,35 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <button
           onClick={() => cameraInputRef.current?.click()}
-          className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-5 text-center transition-colors hover:border-brand-400 hover:bg-brand-50"
+          className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border py-5 text-center transition-colors hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30"
         >
-          <Camera className="h-7 w-7 text-brand-500" />
-          <span className="text-xs font-medium text-slate-700">Camera</span>
-          <span className="text-[10px] text-slate-400">Take a photo</span>
+          <Camera className="h-7 w-7 text-brand-500 dark:text-brand-400" />
+          <span className="text-xs font-medium text-slate-700 dark:text-neutral-300">Camera</span>
+          <span className="text-[10px] text-slate-400 dark:text-neutral-500">Take a photo</span>
         </button>
         <button
           onClick={() => photoInputRef.current?.click()}
-          className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-5 text-center transition-colors hover:border-brand-400 hover:bg-brand-50"
+          className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border py-5 text-center transition-colors hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30"
         >
-          <Images className="h-7 w-7 text-brand-500" />
-          <span className="text-xs font-medium text-slate-700">Library</span>
-          <span className="text-[10px] text-slate-400">Saved photos</span>
+          <Images className="h-7 w-7 text-brand-500 dark:text-brand-400" />
+          <span className="text-xs font-medium text-slate-700 dark:text-neutral-300">Library</span>
+          <span className="text-[10px] text-slate-400 dark:text-neutral-500">Saved photos</span>
         </button>
         <button
           onClick={() => videoInputRef.current?.click()}
-          className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-5 text-center transition-colors hover:border-brand-400 hover:bg-brand-50"
+          className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border py-5 text-center transition-colors hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30"
         >
-          <Video className="h-7 w-7 text-slate-500" />
-          <span className="text-xs font-medium text-slate-700">Videos</span>
-          <span className="text-[10px] text-slate-400">MP4, MOV, etc.</span>
+          <Video className="h-7 w-7 text-muted-foreground" />
+          <span className="text-xs font-medium text-slate-700 dark:text-neutral-300">Videos</span>
+          <span className="text-[10px] text-slate-400 dark:text-neutral-500">MP4, MOV, etc.</span>
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 py-5 text-center transition-colors hover:border-brand-400 hover:bg-brand-50"
+          className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border py-5 text-center transition-colors hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30"
         >
-          <FileUp className="h-7 w-7 text-slate-500" />
-          <span className="text-xs font-medium text-slate-700">Files</span>
-          <span className="text-[10px] text-slate-400">PDF, DOCX, etc.</span>
+          <FileUp className="h-7 w-7 text-muted-foreground" />
+          <span className="text-xs font-medium text-slate-700 dark:text-neutral-300">Files</span>
+          <span className="text-[10px] text-slate-400 dark:text-neutral-500">PDF, DOCX, etc.</span>
         </button>
       </div>
 
@@ -231,7 +231,7 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
       <input ref={fileInputRef}   type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" multiple className="hidden" onChange={handleInput(fileInputRef, "file")} />
 
       {rejectedFiles.length > 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 p-3 text-xs text-red-700 dark:text-red-400">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <p className="font-medium">Some files couldn&apos;t be added:</p>
@@ -244,11 +244,11 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
 
       {/* Global defaults (images only) */}
       {pending.length === 0 && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Default tags</p>
+        <div className="rounded-lg border border-border bg-slate-50 dark:bg-muted/40 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Default tags</p>
           <BeforeAfterPicker value={globalBeforeAfter} onChange={setGlobalBeforeAfter} />
           <div className="mt-3">
-            <Label className="mb-1.5 block text-xs text-slate-500">Tags</Label>
+            <Label className="mb-1.5 block text-xs text-muted-foreground">Tags</Label>
             <TagPicker selected={globalTags} onToggle={(tag) => setGlobalTags((prev) => prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag])} />
           </div>
         </div>
@@ -261,27 +261,27 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
             const prog = progress[i];
             const isImage = p.fileType === "image";
             return (
-              <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div key={i} className="rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex gap-3">
                   {/* Preview / icon */}
-                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-muted">
                     {isImage && p.preview ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={p.preview} alt="" className="h-full w-full object-cover" />
                     ) : isImage && p.isHeic ? (
                       <div className="flex h-full w-full flex-col items-center justify-center gap-1" title="HEIC preview isn't available in this browser — it will be converted to JPEG on upload">
-                        <Images className="h-7 w-7 text-slate-400" />
-                        <span className="text-[10px] text-slate-400">HEIC</span>
+                        <Images className="h-7 w-7 text-slate-400 dark:text-neutral-500" />
+                        <span className="text-[10px] text-slate-400 dark:text-neutral-500">HEIC</span>
                       </div>
                     ) : p.fileType === "video" ? (
                       <div className="flex h-full w-full flex-col items-center justify-center gap-1">
-                        <Film className="h-7 w-7 text-slate-400" />
-                        <span className="text-[10px] text-slate-400">Video</span>
+                        <Film className="h-7 w-7 text-slate-400 dark:text-neutral-500" />
+                        <span className="text-[10px] text-slate-400 dark:text-neutral-500">Video</span>
                       </div>
                     ) : (
                       <div className="flex h-full w-full flex-col items-center justify-center gap-1">
-                        <FileText className="h-7 w-7 text-slate-400" />
-                        <span className="text-[10px] text-slate-400">{p.file.name.split(".").pop()?.toUpperCase()}</span>
+                        <FileText className="h-7 w-7 text-slate-400 dark:text-neutral-500" />
+                        <span className="text-[10px] text-slate-400 dark:text-neutral-500">{p.file.name.split(".").pop()?.toUpperCase()}</span>
                       </div>
                     )}
                     {!prog && (
@@ -300,20 +300,20 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
 
                   {/* Fields */}
                   <div className="flex-1 space-y-2">
-                    <p className="truncate text-[10px] text-slate-400">{p.file.name}</p>
-                    <p className="text-[10px] text-slate-400">
+                    <p className="truncate text-[10px] text-slate-400 dark:text-neutral-500">{p.file.name}</p>
+                    <p className="text-[10px] text-slate-400 dark:text-neutral-500">
                       {p.fileType === "image" ? "Photo" : p.fileType === "video" ? "Video" : "File"} ·{" "}
                       {(p.file.size / 1024).toFixed(0)} KB
                     </p>
                     {p.isHeic && (
-                      <p className="text-[10px] text-slate-500">
+                      <p className="text-[10px] text-muted-foreground">
                         HEIC — will be converted to JPEG on upload (preview not available in this browser).
                       </p>
                     )}
                     {/* Warn if iOS gave us an iCloud proxy: only for genuinely tiny files or an
                         implausibly low bytes-per-pixel ratio (see looksLikeICloudPlaceholder). */}
                     {p.suspectPlaceholder && (
-                      <p className="text-[10px] font-medium text-amber-600">
+                      <p className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
                         ⚠️ This photo may not be fully downloaded from iCloud. Open it in your Photos app first, then re-add it.
                       </p>
                     )}
@@ -322,7 +322,7 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
                       <input
                         type="text"
                         placeholder="Display name (optional)"
-                        className="w-full rounded border border-slate-200 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-400"
+                        className="w-full rounded border border-border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-400"
                         value={p.displayName}
                         onChange={(e) => updatePending(i, { displayName: e.target.value })}
                       />
@@ -339,14 +339,14 @@ export function PhotoUploader({ projectId }: PhotoUploaderProps) {
                       <Textarea
                         placeholder="Optional note…"
                         rows={1}
-                        className="resize-none border-slate-200 text-xs"
+                        className="resize-none border-border text-xs"
                         value={p.notes}
                         onChange={(e) => updatePending(i, { notes: e.target.value })}
                       />
                     )}
 
                     {prog && prog.status !== "done" && (
-                      <p className="text-xs capitalize text-slate-400">
+                      <p className="text-xs capitalize text-slate-400 dark:text-neutral-500">
                         {prog.status === "error" ? `Error: ${prog.errorMessage}` : prog.status}…
                       </p>
                     )}
@@ -390,7 +390,7 @@ function BeforeAfterPicker({ value, onChange }: { value: BeforeAfterFlag; onChan
                 : o.value === "during" ? "bg-slate-500 text-white"
                 : o.value === "after" ? "bg-brand-500 text-white"
                 : "bg-slate-600 text-white"
-              : "bg-slate-100 text-slate-500 hover:text-slate-700")}>
+              : "bg-muted text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300")}>
           {o.label}
         </button>
       ))}
@@ -405,8 +405,8 @@ function TagPicker({ selected, onToggle }: { selected: string[]; onToggle: (tag:
         <button key={tag} onClick={() => onToggle(tag)}
           className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors",
             selected.includes(tag)
-              ? "bg-brand-500/20 text-brand-700 ring-1 ring-brand-400"
-              : "bg-slate-100 text-slate-500 hover:text-slate-700")}>
+              ? "bg-brand-500/20 text-brand-700 dark:text-brand-400 ring-1 ring-brand-400"
+              : "bg-muted text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300")}>
           {tag}
         </button>
       ))}

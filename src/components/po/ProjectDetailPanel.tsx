@@ -770,7 +770,7 @@ function SubcontractsTab({ project }: { project: Project }) {
         <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>
       ) : costs.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-10 text-center">
-          <Building2 className="h-8 w-8 text-slate-300 dark:text-neutral-600" />
+          <Building2 className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
           <p className="text-sm text-slate-400 dark:text-neutral-500">No other costs yet.</p>
           <Button size="sm" variant="outline" onClick={openAdd} className="mt-1 gap-1 text-xs">
             <Plus className="h-3 w-3" /> Add First Cost
@@ -1016,7 +1016,7 @@ function HoursField({
       title={`Click to edit ${label}`}
     >
       {value != null ? `${value} hrs` : <span className="italic text-slate-400 dark:text-neutral-500">— click to add</span>}
-      <Pencil className="h-3 w-3 text-slate-300 dark:text-neutral-600 opacity-0 transition-opacity group-hover:opacity-100" />
+      <Pencil className="h-3 w-3 text-slate-300 dark:text-neutral-500 opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
   );
 }
@@ -1074,7 +1074,7 @@ function RateField({
         title={`${label} is locked because this project is complete. Reopen the project to change it.`}
       >
         {formatCurrency(valueCents)}/hr
-        <Lock className="h-3 w-3 text-slate-300 dark:text-neutral-600" />
+        <Lock className="h-3 w-3 text-slate-300 dark:text-neutral-500" />
       </span>
     );
   }
@@ -1087,7 +1087,7 @@ function RateField({
       title={`Click to edit ${label}`}
     >
       {formatCurrency(valueCents)}/hr
-      <Pencil className="h-3 w-3 text-slate-300 dark:text-neutral-600 opacity-0 transition-opacity group-hover:opacity-100" />
+      <Pencil className="h-3 w-3 text-slate-300 dark:text-neutral-500 opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
   );
 }
@@ -1341,7 +1341,7 @@ function TicketsTab({ project }: { project: Project }) {
         <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>
       ) : tickets.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-10 text-center">
-          <TicketIcon className="h-8 w-8 text-slate-300 dark:text-neutral-600" />
+          <TicketIcon className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
           <p className="text-sm text-slate-400 dark:text-neutral-500">No tickets linked to this project yet.</p>
           <p className="text-xs text-slate-400 dark:text-neutral-500">Link a ticket to this project from the ticket&apos;s detail view.</p>
         </div>

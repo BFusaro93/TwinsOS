@@ -58,7 +58,7 @@ export function EstimatePhotosTab({ estimateId }: Props) {
             : "border-border bg-card hover:border-slate-300 dark:hover:border-neutral-700"
         )}
       >
-        <Camera className={cn("mx-auto h-8 w-8 mb-3", dragging ? "text-brand-400" : "text-slate-300 dark:text-neutral-600")} />
+        <Camera className={cn("mx-auto h-8 w-8 mb-3", dragging ? "text-brand-400" : "text-slate-300 dark:text-neutral-500")} />
         <p className="text-sm font-medium text-slate-600 dark:text-neutral-400 mb-1">
           {dragging ? "Drop photos here" : "Drag & drop photos here"}
         </p>
@@ -107,7 +107,7 @@ export function EstimatePhotosTab({ estimateId }: Props) {
                     className="h-full w-full object-cover transition-transform group-hover:scale-105"
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-slate-300 dark:text-neutral-600">
+                  <div className="flex h-full items-center justify-center text-slate-300 dark:text-neutral-500">
                     <Camera className="h-8 w-8" />
                   </div>
                 )}
@@ -131,7 +131,7 @@ export function EstimatePhotosTab({ estimateId }: Props) {
                     "rounded p-1 transition-colors",
                     photo.customerFacing
                       ? "text-brand-500 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30"
-                      : "text-slate-300 dark:text-neutral-600 hover:bg-muted hover:text-muted-foreground"
+                      : "text-slate-300 dark:text-neutral-500 hover:bg-muted hover:text-muted-foreground"
                   )}
                   title={photo.customerFacing ? "Customer facing — shown on estimate document" : "Internal only — click to show on estimate document"}
                 >
@@ -143,7 +143,7 @@ export function EstimatePhotosTab({ estimateId }: Props) {
                     await remove.mutateAsync(photo.id);
                     toast.success("Photo removed");
                   }}
-                  className="rounded p-1 text-slate-300 dark:text-neutral-600 opacity-0 transition-opacity hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400 group-hover:opacity-100"
+                  className="rounded p-1 text-slate-300 dark:text-neutral-500 opacity-0 transition-opacity hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400 group-hover:opacity-100"
                   title="Delete"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

@@ -273,28 +273,28 @@ export function EmailActivityList() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {[
-          { label: "Requests",  value: total.toLocaleString(),   color: "text-slate-900" },
-          { label: "Delivered", value: fmtPct(deliveredCount, total), color: "text-green-600", sub: deliveredCount.toLocaleString() },
-          { label: "Opened",    value: fmtPct(openedCount, total),    color: "text-sky-600",    sub: openedCount.toLocaleString() },
-          { label: "Bounced",   value: fmtPct(bouncedCount, total),   color: "text-orange-500", sub: bouncedCount.toLocaleString() },
+          { label: "Requests",  value: total.toLocaleString(),   color: "text-slate-900 dark:text-neutral-100" },
+          { label: "Delivered", value: fmtPct(deliveredCount, total), color: "text-green-600 dark:text-green-400", sub: deliveredCount.toLocaleString() },
+          { label: "Opened",    value: fmtPct(openedCount, total),    color: "text-sky-600 dark:text-sky-400",    sub: openedCount.toLocaleString() },
+          { label: "Bounced",   value: fmtPct(bouncedCount, total),   color: "text-orange-500 dark:text-orange-400", sub: bouncedCount.toLocaleString() },
           // Resend has no "complained" (spam-report) event — confirmed against
           // the dashboard's own webhook event picker — so there's no data
           // source for a Spam stat. Show Clicked instead, which the webhook
           // does track, rather than leaving the card permanently blank.
-          { label: "Clicked",   value: fmtPct(clickedCount, total),   color: "text-violet-600", sub: clickedCount.toLocaleString() },
-          { label: "Failed",    value: fmtPct(failedCount, total),    color: "text-red-600",   sub: failedCount.toLocaleString() },
+          { label: "Clicked",   value: fmtPct(clickedCount, total),   color: "text-violet-600 dark:text-violet-400", sub: clickedCount.toLocaleString() },
+          { label: "Failed",    value: fmtPct(failedCount, total),    color: "text-red-600 dark:text-red-400",   sub: failedCount.toLocaleString() },
         ].map((s) => (
-          <div key={s.label} className="rounded-lg border bg-white p-4 shadow-sm text-center">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{s.label}</p>
+          <div key={s.label} className="rounded-lg border bg-card p-4 shadow-sm text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">{s.label}</p>
             <p className={`mt-1 text-2xl font-bold ${s.color}`}>{s.value}</p>
-            {"sub" in s && s.sub && <p className="text-xs text-slate-400">{s.sub}</p>}
+            {"sub" in s && s.sub && <p className="text-xs text-slate-400 dark:text-neutral-500">{s.sub}</p>}
           </div>
         ))}
       </div>
 
       {/* White column filter bar */}
-      <div className="flex items-center gap-1.5 border-b bg-white px-4 py-2">
-        <span className="shrink-0 text-xs font-medium text-slate-500 mr-1">Select a Filter:</span>
+      <div className="flex items-center gap-1.5 border-b bg-card px-4 py-2">
+        <span className="shrink-0 text-xs font-medium text-muted-foreground mr-1">Select a Filter:</span>
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {COLUMN_FILTERS.map(({ key, label }) => (
             <button
@@ -306,8 +306,8 @@ export function EmailActivityList() {
               className={cn(
                 "rounded px-2 py-0.5 text-xs transition-colors whitespace-nowrap",
                 activeColumnFilter === key
-                  ? "bg-brand-100 text-brand-700 font-medium"
-                  : "hover:bg-slate-100 text-slate-600"
+                  ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 font-medium"
+                  : "hover:bg-muted text-slate-600 dark:text-neutral-400"
               )}
             >
               {label}
@@ -328,7 +328,7 @@ export function EmailActivityList() {
               )}
               <button
                 onClick={() => { setActiveColumnFilter(null); setFilterValue(""); }}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -386,7 +386,7 @@ export function EmailActivityList() {
                 className={cn(
                   "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
                   quickFilter === key
-                    ? "bg-white text-slate-800"
+                    ? "bg-card text-slate-800 dark:text-neutral-100"
                     : "text-slate-300 hover:text-white"
                 )}
               >
@@ -395,7 +395,7 @@ export function EmailActivityList() {
                   <span className={cn(
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
                     quickFilter === key
-                      ? "bg-slate-200 text-slate-700"
+                      ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300"
                       : "bg-white/20 text-white"
                   )}>
                     {counts[key]}
@@ -424,16 +424,16 @@ export function EmailActivityList() {
           description="Emails sent to clients from invoices and automations will appear here."
         />
       ) : (
-        <div className="flex-1 overflow-auto bg-white">
+        <div className="flex-1 overflow-auto bg-card">
           <Table>
             <TableHeader>
-              <TableRow className="bg-slate-50">
+              <TableRow className="bg-slate-50 dark:bg-muted/40">
                 <TableHead className="w-10">
                   <input
                     type="checkbox"
                     checked={allSelected}
                     onChange={toggleAll}
-                    className="rounded border-slate-300"
+                    className="rounded border-slate-300 dark:border-neutral-700"
                   />
                 </TableHead>
                 <TableHead className="whitespace-nowrap">Date Sent</TableHead>
@@ -448,7 +448,7 @@ export function EmailActivityList() {
               {filtered.map((e: EmailActivity) => (
                 <TableRow
                   key={e.id}
-                  className={cn("hover:bg-slate-50", selectedIds.has(e.id) && "bg-brand-50")}
+                  className={cn("hover:bg-slate-50 dark:hover:bg-muted/40", selectedIds.has(e.id) && "bg-brand-50 dark:bg-brand-900/30")}
                   onClick={() => toggleOne(e.id)}
                 >
                   <TableCell onClick={(ev) => ev.stopPropagation()}>
@@ -456,29 +456,29 @@ export function EmailActivityList() {
                       type="checkbox"
                       checked={selectedIds.has(e.id)}
                       onChange={() => toggleOne(e.id)}
-                      className="rounded border-slate-300"
+                      className="rounded border-slate-300 dark:border-neutral-700"
                     />
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-slate-500">
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                     {fmtDate(e.occurredAt)}
                   </TableCell>
-                  <TableCell className="max-w-xs truncate font-medium text-slate-800">
+                  <TableCell className="max-w-xs truncate font-medium text-slate-800 dark:text-neutral-100">
                     {e.subject ?? "—"}
                   </TableCell>
-                  <TableCell className="text-sm text-slate-600">{e.clientName}</TableCell>
-                  <TableCell className="text-sm text-slate-500">{e.sentTo ?? "—"}</TableCell>
+                  <TableCell className="text-sm text-slate-600 dark:text-neutral-400">{e.clientName}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{e.sentTo ?? "—"}</TableCell>
                   <TableCell className="text-sm">
                     {e.deliveredAt ? (
-                      <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 ring-1 ring-green-200">
+                      <span className="inline-flex items-center rounded-full bg-green-50 dark:bg-green-950/40 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400 ring-1 ring-green-200 dark:ring-green-800">
                         Yes
                       </span>
                     ) : (
-                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                      <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                         —
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm text-slate-500">
+                  <TableCell className="text-sm text-muted-foreground">
                     {e.createdByName ?? "—"}
                   </TableCell>
                 </TableRow>

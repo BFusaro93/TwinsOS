@@ -133,7 +133,7 @@ function ReportPanelView({
       )}
       <Link
         href={`/crm/admin/reports/r/${reportKey}`}
-        className="self-start text-xs text-blue-600 hover:underline"
+        className="self-start text-xs text-blue-600 dark:text-blue-400 hover:underline"
       >
         Open full report →
       </Link>
@@ -196,7 +196,7 @@ function DashboardVisualPanelView({
 
   if (denied) {
     return (
-      <div className="flex h-40 items-center justify-center text-center text-xs text-slate-400">
+      <div className="flex h-40 items-center justify-center text-center text-xs text-slate-400 dark:text-neutral-500">
         You don&apos;t have permission to view this panel.
       </div>
     );
@@ -350,12 +350,12 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
         </Button>
       </div>
       {tab.useDateFilter && (
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-3 rounded-lg border bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-3 rounded-lg border bg-card p-3 shadow-sm">
           <span className="pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Filter By
           </span>
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-600">From</span>
+            <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">From</span>
             <input
               type="date"
               className="h-8 w-36 rounded-md border border-input bg-transparent px-2 text-sm shadow-sm"
@@ -366,7 +366,7 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
             />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-600">To</span>
+            <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">To</span>
             <input
               type="date"
               className="h-8 w-36 rounded-md border border-input bg-transparent px-2 text-sm shadow-sm"
@@ -380,7 +380,7 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
       )}
 
       {tab.useRepFilter && (
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-3 rounded-lg border bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-3 rounded-lg border bg-card p-3 shadow-sm">
           <span className="pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Sales Rep
           </span>
@@ -443,16 +443,16 @@ export function DashboardViewer({ dashboardId }: { dashboardId: string }) {
 
   if (isError || !dashboard) {
     return (
-      <div className="rounded-lg border bg-white p-6 shadow-sm">
-        <h1 className="text-base font-semibold text-slate-900">
+      <div className="rounded-lg border bg-card p-6 shadow-sm">
+        <h1 className="text-base font-semibold text-slate-900 dark:text-neutral-100">
           Dashboard not found
         </h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           This dashboard may have been deleted.
         </p>
         <Link
           href={HUB_HREF}
-          className="mt-3 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+          className="mt-3 inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Dashboards
@@ -488,11 +488,11 @@ export function DashboardViewer({ dashboardId }: { dashboardId: string }) {
       />
 
       {tabs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-white py-16 text-center">
-          <p className="text-sm font-medium text-slate-700">
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-card py-16 text-center">
+          <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">
             This dashboard has no tabs yet
           </p>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             Edit this dashboard to add tabs and panels.
           </p>
         </div>

@@ -155,10 +155,10 @@ export function RequestListPage() {
           onVisibleKeysChange={setVisibleKeys}
         />
       </div>
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               <SortableTableHead label="Request #" sortKey="requestNumber" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               <SortableTableHead label="Title" sortKey="title" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />
               {col("status") && <SortableTableHead label="Status" sortKey="status" activeSortKey={sortKey} sortDir={sortDir} onToggle={toggle} />}
@@ -182,7 +182,7 @@ export function RequestListPage() {
             {!isLoading && filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={visibleKeys.length} className="py-12 text-center">
-                  <p className="text-sm text-slate-400">No requests found</p>
+                  <p className="text-sm text-slate-400 dark:text-neutral-500">No requests found</p>
                 </TableCell>
               </TableRow>
             )}
@@ -190,10 +190,10 @@ export function RequestListPage() {
             {!isLoading && sorted.map((req) => (
               <TableRow
                 key={req.id}
-                className="cursor-pointer hover:bg-slate-50"
+                className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
                 onClick={() => setSheetRequestId(req.id)}
               >
-                <TableCell className="font-mono text-xs text-slate-500">{req.requestNumber}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{req.requestNumber}</TableCell>
                 <TableCell className="font-medium">{req.title}</TableCell>
                 {col("status") && (
                   <TableCell>
@@ -212,20 +212,20 @@ export function RequestListPage() {
                   </TableCell>
                 )}
                 {col("requestedByName") && (
-                  <TableCell className="text-slate-600">{req.requestedByName}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{req.requestedByName}</TableCell>
                 )}
                 {col("assetName") && (
-                  <TableCell className="text-slate-600">{req.assetName ?? "—"}</TableCell>
+                  <TableCell className="text-slate-600 dark:text-neutral-400">{req.assetName ?? "—"}</TableCell>
                 )}
                 {col("createdAt") && (
-                  <TableCell className="text-slate-500">{formatDate(req.createdAt)}</TableCell>
+                  <TableCell className="text-muted-foreground">{formatDate(req.createdAt)}</TableCell>
                 )}
                 {col("linkedWorkOrderNumber") && (
                   <TableCell>
                     {req.linkedWorkOrderNumber ? (
-                      <span className="font-mono text-xs text-brand-600">{req.linkedWorkOrderNumber}</span>
+                      <span className="font-mono text-xs text-brand-600 dark:text-brand-400">{req.linkedWorkOrderNumber}</span>
                     ) : (
-                      <span className="text-slate-400">—</span>
+                      <span className="text-slate-400 dark:text-neutral-500">—</span>
                     )}
                   </TableCell>
                 )}
@@ -243,11 +243,11 @@ export function RequestListPage() {
         title="Maintenance Requests"
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center rounded-md border bg-white shadow-sm">
-              <Button variant="ghost" size="sm" className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-slate-100 font-semibold")} onClick={() => setViewMode("list")}>
+            <div className="flex items-center rounded-md border bg-card shadow-sm">
+              <Button variant="ghost" size="sm" className={cn("rounded-r-none border-r px-3", viewMode === "list" && "bg-muted font-semibold")} onClick={() => setViewMode("list")}>
                 <Minimize2 className="mr-1.5 h-3.5 w-3.5" />List
               </Button>
-              <Button variant="ghost" size="sm" className={cn("rounded-l-none px-3", viewMode === "table" && "bg-slate-100 font-semibold")} onClick={() => setViewMode("table")}>
+              <Button variant="ghost" size="sm" className={cn("rounded-l-none px-3", viewMode === "table" && "bg-muted font-semibold")} onClick={() => setViewMode("table")}>
                 <Maximize2 className="mr-1.5 h-3.5 w-3.5" />Table
               </Button>
             </div>

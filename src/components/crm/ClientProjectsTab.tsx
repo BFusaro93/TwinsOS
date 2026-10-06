@@ -42,7 +42,7 @@ export function ClientProjectsTab({ clientId, clientName }: Props) {
     return (
       <>
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-card py-12 text-center">
-          <FolderKanban className="h-8 w-8 text-slate-300 dark:text-neutral-600" />
+          <FolderKanban className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
           <p className="text-sm font-medium text-slate-600 dark:text-neutral-400">No projects yet</p>
           <p className="text-xs text-slate-400 dark:text-neutral-500">
             Projects matching this client&apos;s name will appear here.

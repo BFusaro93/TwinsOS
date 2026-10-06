@@ -104,7 +104,7 @@ function NewDocumentDialog({
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label>Name <span className="text-red-500">*</span></Label>
+            <Label>Name <span className="text-red-500 dark:text-red-400">*</span></Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Estimate - General Email" autoFocus />
           </div>
           <div className="space-y-1.5">
@@ -196,7 +196,7 @@ export function DocumentsList() {
               key={t}
               onClick={() => setTab(t)}
               className={`px-3 py-1.5 capitalize transition-colors ${
-                tab === t ? "bg-brand-600 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
+                tab === t ? "bg-brand-600 text-white" : "bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
               }`}
             >
               {t}
@@ -225,10 +225,10 @@ export function DocumentsList() {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr className="border-b bg-slate-50 dark:bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <th className="px-4 py-3 text-left">Title</th>
               <th className="px-4 py-3 text-left">Type</th>
               <th className="px-4 py-3 text-left">Description</th>
@@ -247,7 +247,7 @@ export function DocumentsList() {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
+                <td colSpan={5} className="px-4 py-12 text-center text-slate-400 dark:text-neutral-500">
                   {search || typeFilter !== "all"
                     ? "No documents match your filters."
                     : "No documents yet — click Add Document to get started."}
@@ -301,25 +301,25 @@ function DocumentRow({
 
   return (
     <tr
-      className={cn("border-b hover:bg-slate-50", canEdit && "cursor-pointer")}
+      className={cn("border-b hover:bg-slate-50 dark:hover:bg-muted/40", canEdit && "cursor-pointer")}
       onClick={canEdit ? onEdit : undefined}
     >
       <td className="px-4 py-2.5">
-        <span className="font-medium text-brand-600 hover:underline">{doc.name}</span>
+        <span className="font-medium text-brand-600 dark:text-brand-400 hover:underline">{doc.name}</span>
         {doc.isDefault && (
-          <span className="ml-2 rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+          <span className="ml-2 rounded-full bg-green-100 dark:bg-green-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-green-700 dark:text-green-400">
             Default
           </span>
         )}
       </td>
-      <td className="px-4 py-2.5 text-slate-600">{DOC_TYPE_LABELS[doc.docType]}</td>
-      <td className="max-w-xs truncate px-4 py-2.5 text-slate-500">{doc.description ?? "—"}</td>
-      <td className="px-4 py-2.5 text-slate-500">{fmtDate(doc.updatedAt)}</td>
+      <td className="px-4 py-2.5 text-slate-600 dark:text-neutral-400">{DOC_TYPE_LABELS[doc.docType]}</td>
+      <td className="max-w-xs truncate px-4 py-2.5 text-muted-foreground">{doc.description ?? "—"}</td>
+      <td className="px-4 py-2.5 text-muted-foreground">{fmtDate(doc.updatedAt)}</td>
       <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="rounded p-1 hover:bg-slate-100">
-              <MoreHorizontal className="h-4 w-4 text-slate-400" />
+            <button className="rounded p-1 hover:bg-muted">
+              <MoreHorizontal className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -335,7 +335,7 @@ function DocumentRow({
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  className="text-red-600 focus:text-red-600"
+                  className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
                   onClick={async () => {
                     if (await confirm({ title: "Delete this document template?", confirmLabel: "Delete Template", destructive: true })) onDelete();
                   }}

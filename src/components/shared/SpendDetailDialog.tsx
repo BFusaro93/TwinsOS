@@ -41,10 +41,10 @@ export function SpendDetailDialog({ detail, onClose }: { detail: SpendDetail | n
         </DialogHeader>
         <div className="max-h-[calc(85vh-96px)] overflow-auto px-6 pb-6">
           {rows.length === 0 ? (
-            <p className="py-10 text-center text-sm text-slate-400">Nothing recorded in this range</p>
+            <p className="py-10 text-center text-sm text-slate-400 dark:text-neutral-500">Nothing recorded in this range</p>
           ) : (
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white text-left text-xs uppercase tracking-wide text-slate-400">
+              <thead className="sticky top-0 bg-card text-left text-xs uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 <tr>
                   <th className="py-2 pr-3 font-semibold">Date</th>
                   <th className="py-2 pr-3 font-semibold">PO</th>
@@ -55,25 +55,25 @@ export function SpendDetailDialog({ detail, onClose }: { detail: SpendDetail | n
                   <th className="py-2 text-right font-semibold">Amount</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                 {rows.map((r) => (
                   <tr key={r.key}>
-                    <td className="whitespace-nowrap py-2 pr-3 text-slate-500">{formatDate(r.date)}</td>
+                    <td className="whitespace-nowrap py-2 pr-3 text-muted-foreground">{formatDate(r.date)}</td>
                     <td className="py-2 pr-3">
-                      <Link href={`/po/orders?id=${r.poId}`} className="font-medium text-blue-600 hover:underline">
+                      <Link href={`/po/orders?id=${r.poId}`} className="font-medium text-blue-600 dark:text-blue-400 hover:underline">
                         {r.poNumber}
                       </Link>
                     </td>
-                    <td className="py-2 pr-3 text-slate-600">{r.vendor}</td>
-                    {hasStatus && <td className="py-2 pr-3 capitalize text-slate-500">{r.status?.replace(/_/g, " ")}</td>}
+                    <td className="py-2 pr-3 text-slate-600 dark:text-neutral-400">{r.vendor}</td>
+                    {hasStatus && <td className="py-2 pr-3 capitalize text-muted-foreground">{r.status?.replace(/_/g, " ")}</td>}
                     {hasItems && (
-                      <td className="py-2 pr-3 text-slate-700">
+                      <td className="py-2 pr-3 text-slate-700 dark:text-neutral-300">
                         {r.item}
-                        {r.partNumber && <span className="block text-xs text-slate-400">{r.partNumber}</span>}
+                        {r.partNumber && <span className="block text-xs text-slate-400 dark:text-neutral-500">{r.partNumber}</span>}
                       </td>
                     )}
-                    {hasItems && <td className="whitespace-nowrap py-2 pr-3 text-right text-slate-500">{r.basis}</td>}
-                    <td className="whitespace-nowrap py-2 text-right font-medium text-slate-900">{formatCurrency(r.cents)}</td>
+                    {hasItems && <td className="whitespace-nowrap py-2 pr-3 text-right text-muted-foreground">{r.basis}</td>}
+                    <td className="whitespace-nowrap py-2 text-right font-medium text-slate-900 dark:text-neutral-100">{formatCurrency(r.cents)}</td>
                   </tr>
                 ))}
               </tbody>

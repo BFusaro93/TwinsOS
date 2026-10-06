@@ -16,8 +16,8 @@ export default function GlobalError({ error, reset }: Props) {
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-4 p-8 text-center">
-      <h2 className="text-lg font-semibold text-slate-800">Something went wrong</h2>
-      <p className="text-sm text-slate-500 max-w-sm">
+      <h2 className="text-lg font-semibold text-slate-800 dark:text-neutral-100">Something went wrong</h2>
+      <p className="text-sm text-muted-foreground max-w-sm">
         {error.message || "An unexpected error occurred. Please try again."}
       </p>
       <Button onClick={reset} variant="outline" size="sm">

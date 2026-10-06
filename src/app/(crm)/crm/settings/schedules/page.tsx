@@ -263,7 +263,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
         </DialogHeader>
 
         <Tabs defaultValue="details" className="flex flex-1 flex-col overflow-hidden">
-          <TabsList className="shrink-0 border-b bg-white rounded-none justify-start px-4 py-0 h-10 gap-0">
+          <TabsList className="shrink-0 border-b bg-card rounded-none justify-start px-4 py-0 h-10 gap-0">
             {[
               { value: 'details', label: 'Schedule' },
               // Nothing to show until the schedule exists.
@@ -323,7 +323,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
                           ))}
                         </SelectContent>
                       </Select>
-                      <p className="text-xs text-slate-500">E.g. &ldquo;1st Monday&rdquo; of every month.</p>
+                      <p className="text-xs text-muted-foreground">E.g. &ldquo;1st Monday&rdquo; of every month.</p>
                     </div>
                   )}
 
@@ -343,20 +343,20 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
 
                   {showAnchor && (
                     <div className="space-y-1.5">
-                      <Label>Anchor Date <span className="text-slate-400 font-normal">(optional)</span></Label>
+                      <Label>Anchor Date <span className="text-slate-400 dark:text-neutral-500 font-normal">(optional)</span></Label>
                       <Input type="date" value={form.anchorDate} onChange={(e) => setField('anchorDate', e.target.value)} />
-                      <p className="text-xs text-slate-500">A known service date used to determine even/odd week alignment.</p>
+                      <p className="text-xs text-muted-foreground">A known service date used to determine even/odd week alignment.</p>
                     </div>
                   )}
 
                   {/* Season window */}
                   <div className="rounded-lg border p-3 space-y-3">
-                    <p className="text-xs font-semibold text-slate-600">Season Window <span className="font-normal text-slate-400">(optional)</span></p>
+                    <p className="text-xs font-semibold text-slate-600 dark:text-neutral-400">Season Window <span className="font-normal text-slate-400 dark:text-neutral-500">(optional)</span></p>
                     <div className="grid grid-cols-2 gap-3">
                       <MonthDayPicker label="Season Start" value={form.seasonStart} onChange={(v) => setField('seasonStart', v)} />
                       <MonthDayPicker label="Season End" value={form.seasonEnd} onChange={(v) => setField('seasonEnd', v)} />
                     </div>
-                    <p className="text-xs text-slate-400">E.g. April 1 – November 30 for mowing season. Leave blank for year-round.</p>
+                    <p className="text-xs text-slate-400 dark:text-neutral-500">E.g. April 1 – November 30 for mowing season. Leave blank for year-round.</p>
                   </div>
 
                   <DialogFooter className="pt-2">
@@ -374,14 +374,14 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
                   </div>
                   <div className="divide-y text-xs max-h-80 overflow-y-auto">
                     {previewDates.length === 0 ? (
-                      <p className="px-3 py-4 text-slate-400 text-center">No dates in season</p>
+                      <p className="px-3 py-4 text-slate-400 dark:text-neutral-500 text-center">No dates in season</p>
                     ) : (
                       previewDates.map((d, i) => (
-                        <div key={i} className="px-3 py-1.5 text-slate-700">{formatDate(d)}</div>
+                        <div key={i} className="px-3 py-1.5 text-slate-700 dark:text-neutral-300">{formatDate(d)}</div>
                       ))
                     )}
                   </div>
-                  <div className="border-t bg-slate-50 px-3 py-1.5 text-[10px] text-slate-400">
+                  <div className="border-t bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[10px] text-slate-400 dark:text-neutral-500">
                     Next {previewDates.length} occurrences
                   </div>
                 </div>
@@ -407,7 +407,7 @@ function SchedulePreviewPopover({ schedule }: { schedule: CRMSchedule }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-500 hover:text-brand-600">
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-brand-600 dark:hover:text-brand-400">
           <CalendarDays className="h-3.5 w-3.5" />
         </Button>
       </PopoverTrigger>
@@ -417,10 +417,10 @@ function SchedulePreviewPopover({ schedule }: { schedule: CRMSchedule }) {
         </div>
         <div className="divide-y max-h-64 overflow-y-auto">
           {dates.length === 0 ? (
-            <p className="px-3 py-4 text-slate-400 text-center text-xs">No dates in season</p>
+            <p className="px-3 py-4 text-slate-400 dark:text-neutral-500 text-center text-xs">No dates in season</p>
           ) : (
             dates.map((d, i) => (
-              <div key={i} className="px-3 py-1.5 text-xs text-slate-700">{formatDate(d)}</div>
+              <div key={i} className="px-3 py-1.5 text-xs text-slate-700 dark:text-neutral-300">{formatDate(d)}</div>
             ))
           )}
         </div>
@@ -464,14 +464,14 @@ export default function SchedulesPage() {
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Schedules</h1>
-        <p className="text-slate-500 text-sm mt-1">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-neutral-100">Schedules</h1>
+        <p className="text-muted-foreground text-sm mt-1">
           Configure recurring service schedule templates — frequency, day, week pattern, and season window.
         </p>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-y-2 mb-4">
-        <span className="text-sm text-slate-500">{schedules.length} schedule{schedules.length !== 1 ? 's' : ''}</span>
+        <span className="text-sm text-muted-foreground">{schedules.length} schedule{schedules.length !== 1 ? 's' : ''}</span>
         <div className="flex flex-wrap items-center gap-2">
           <ImportExportMenu
             entityLabel="Schedules"
@@ -508,40 +508,40 @@ export default function SchedulesPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-slate-200 overflow-x-auto">
+      <div className="rounded-lg border border-border overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200">
+          <thead className="bg-slate-50 dark:bg-muted/40 border-b border-border">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Name</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Frequency</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Day</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Season</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Active</th>
-              <th className="text-right px-4 py-3 font-medium text-slate-600">Actions</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-neutral-400">Name</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-neutral-400">Frequency</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-neutral-400">Day</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-neutral-400">Season</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-neutral-400">Active</th>
+              <th className="text-right px-4 py-3 font-medium text-slate-600 dark:text-neutral-400">Actions</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Loading…</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400 dark:text-neutral-500">Loading…</td></tr>
             )}
             {!isLoading && schedules.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No schedules yet. Click {`"Add Schedule"`} to create one.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400 dark:text-neutral-500">No schedules yet. Click {`"Add Schedule"`} to create one.</td></tr>
             )}
             {schedules.map((s) => (
-              <tr key={s.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                <td className="px-4 py-3 font-medium text-slate-900">{s.name}</td>
-                <td className="px-4 py-3 text-slate-600">{FREQUENCY_LABELS[s.frequency]}</td>
-                <td className="px-4 py-3 text-slate-600">
+              <tr key={s.id} className="border-b border-slate-100 dark:border-neutral-800 last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
+                <td className="px-4 py-3 font-medium text-slate-900 dark:text-neutral-100">{s.name}</td>
+                <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">{FREQUENCY_LABELS[s.frequency]}</td>
+                <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">
                   {s.frequency === 'monthly' && s.weekOfMonth
                     ? `${WEEK_OF_MONTH_LABELS[s.weekOfMonth]} ${s.dayOfWeek}`
                     : s.dayOfWeek}
                 </td>
-                <td className="px-4 py-3 text-slate-600 text-xs">
+                <td className="px-4 py-3 text-slate-600 dark:text-neutral-400 text-xs">
                   {s.seasonStart && s.seasonEnd
                     ? `${s.seasonStart} – ${s.seasonEnd}`
                     : s.seasonStart ? `From ${s.seasonStart}`
                     : s.seasonEnd ? `Until ${s.seasonEnd}`
-                    : <span className="text-slate-400">Year-round</span>}
+                    : <span className="text-slate-400 dark:text-neutral-500">Year-round</span>}
                 </td>
                 <td className="px-4 py-3">
                   <Switch checked={s.isActive} onCheckedChange={() => handleToggleActive(s)} />
@@ -552,7 +552,7 @@ export default function SchedulesPage() {
                     <Button variant="ghost" size="sm" onClick={() => openEdit(s)} className="h-8 w-8 p-0">
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(s)} className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50">
+                    <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(s)} className="h-8 w-8 p-0 text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40">
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>

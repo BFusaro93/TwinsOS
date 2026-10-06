@@ -39,7 +39,7 @@ function getVehicleBucket(v: Vehicle, timeZone: string, currentMiles?: number | 
 }
 
 function dateCell(dateStr: string | null, timeZone: string, dueMileage?: number | null, currentMiles?: number | null): React.ReactNode {
-  if (!dateStr && dueMileage == null) return <span className="text-slate-300 dark:text-neutral-600">—</span>;
+  if (!dateStr && dueMileage == null) return <span className="text-slate-300 dark:text-neutral-500">—</span>;
 
   const todayStr = todayInZone(timeZone);
   const monthOut = shiftYmd(todayStr, 30);
@@ -176,12 +176,12 @@ export function ServiceRemindersView({
         <TableCell>
           {v.nextOilChangeDue || v.nextOilChangeMileage != null
             ? dateCell(v.nextOilChangeDue, orgTimeZone, v.nextOilChangeMileage, currentMiles)
-            : <span className="text-slate-300 dark:text-neutral-600">—</span>}
+            : <span className="text-slate-300 dark:text-neutral-500">—</span>}
         </TableCell>
         <TableCell>
           {v.nextInspectionStickerDue
             ? dateCell(v.nextInspectionStickerDue, orgTimeZone)
-            : <span className="text-slate-300 dark:text-neutral-600">—</span>}
+            : <span className="text-slate-300 dark:text-neutral-500">—</span>}
         </TableCell>
         <TableCell>
           <StatusBadge

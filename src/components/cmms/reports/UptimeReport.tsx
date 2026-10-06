@@ -25,10 +25,10 @@ const KINDS: { value: Kind; label: string }[] = [
 ];
 
 function uptimeClass(v: number | null): string {
-  if (v === null) return "text-slate-400";
-  if (v >= 97) return "text-green-700";
-  if (v >= 90) return "text-amber-600";
-  return "text-red-600";
+  if (v === null) return "text-slate-400 dark:text-neutral-500";
+  if (v >= 97) return "text-green-700 dark:text-green-400";
+  if (v >= 90) return "text-amber-600 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
 }
 
 function hours(h: number): string {
@@ -84,7 +84,7 @@ export function UptimeReport() {
 
   const header = (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-muted-foreground">
         Uptime = time active ÷ time in service. Down = In Shop or Out of Service; Inactive and Disposed time is left out.
       </p>
       <div className="flex flex-wrap gap-2">
@@ -101,7 +101,7 @@ export function UptimeReport() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {[1, 2, 3, 4].map((i) => <ReportSkeletonCard key={i} />)}
         </div>
-        <div className="h-64 animate-pulse rounded-lg border bg-slate-100" />
+        <div className="h-64 animate-pulse rounded-lg border bg-muted" />
       </div>
     );
   }
@@ -110,7 +110,7 @@ export function UptimeReport() {
     return (
       <div className="flex flex-col gap-6">
         {header}
-        <p className="rounded-lg border border-dashed py-10 text-center text-sm text-slate-400">Uptime couldn&apos;t be loaded.</p>
+        <p className="rounded-lg border border-dashed py-10 text-center text-sm text-slate-400 dark:text-neutral-500">Uptime couldn&apos;t be loaded.</p>
       </div>
     );
   }
@@ -131,16 +131,16 @@ export function UptimeReport() {
         <ReportStatCard
           label="Down Right Now"
           value={fleet.currentlyDown}
-          valueClassName={fleet.currentlyDown > 0 ? "text-red-600" : "text-slate-900"}
+          valueClassName={fleet.currentlyDown > 0 ? "text-red-600 dark:text-red-400" : "text-slate-900 dark:text-neutral-100"}
           sub="In shop or out of service"
         />
       </div>
 
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="rounded-lg border bg-card shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
             Uptime by Asset
-            <span className="ml-1.5 font-normal normal-case text-slate-300">({visible.length})</span>
+            <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({visible.length})</span>
           </p>
           <SegmentedControl
             ariaLabel="Rows shown"
@@ -154,7 +154,7 @@ export function UptimeReport() {
           />
         </div>
         {visible.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-slate-400">
+          <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-neutral-500">
             {rows.length === 0 ? "No assets were in service in this window." : "No downtime recorded in this window."}
           </p>
         ) : (
@@ -175,15 +175,15 @@ export function UptimeReport() {
                 {visible.map((m) => (
                   <TableRow key={`${m.entityType}-${m.assetId}`} className="cursor-pointer" onClick={() => openRecord(m.entityType, m.assetId)}>
                     <TableCell>
-                      <p className="font-medium text-slate-900">{m.name}</p>
-                      <p className="font-mono text-xs text-slate-400">{m.assetTag}</p>
+                      <p className="font-medium text-slate-900 dark:text-neutral-100">{m.name}</p>
+                      <p className="font-mono text-xs text-slate-400 dark:text-neutral-500">{m.assetTag}</p>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       <StatusBadge
                         variant={m.status as Parameters<typeof StatusBadge>[0]["variant"]}
                         label={ASSET_STATUS_LABELS[m.status] ?? m.status}
                       />
-                      {m.downSince && <p className="mt-0.5 text-xs text-red-600">since {formatDate(m.downSince)}</p>}
+                      {m.downSince && <p className="mt-0.5 text-xs text-red-600 dark:text-red-400">since {formatDate(m.downSince)}</p>}
                     </TableCell>
                     <TableCell className={`text-right font-medium tabular-nums ${uptimeClass(m.uptimePct)}`}>
                       {m.uptimePct === null ? "—" : `${m.uptimePct}%`}

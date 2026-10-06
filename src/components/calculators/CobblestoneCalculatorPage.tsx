@@ -59,11 +59,11 @@ export function CobblestoneCalculatorPage() {
             onClick={() => setSizeId(s.id)}
             className={`flex items-center gap-2.5 rounded-xl border-2 px-4 py-3 text-left text-sm font-semibold transition-all ${
               sizeId === s.id
-                ? "border-brand-500 bg-brand-50 text-brand-700 shadow-sm"
-                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 shadow-sm"
+                : "border-border bg-card text-slate-600 dark:text-neutral-400 hover:border-slate-300 dark:hover:border-neutral-700 hover:bg-slate-50 dark:hover:bg-muted/40"
             }`}
           >
-            <Blocks className={`h-5 w-5 shrink-0 ${sizeId === s.id ? "text-brand-500" : "text-slate-400"}`} />
+            <Blocks className={`h-5 w-5 shrink-0 ${sizeId === s.id ? "text-brand-500 dark:text-brand-400" : "text-slate-400 dark:text-neutral-500"}`} />
             {s.label}
           </button>
         ))}
@@ -80,7 +80,7 @@ export function CobblestoneCalculatorPage() {
 
         <div className="grid md:grid-cols-2">
           {/* Inputs */}
-          <div className="space-y-5 bg-slate-50 p-6">
+          <div className="space-y-5 bg-slate-50 dark:bg-muted/40 p-6">
             <DimensionInput
               label="Border Length"
               value={length}
@@ -89,17 +89,17 @@ export function CobblestoneCalculatorPage() {
               onUnit={setLengthUnit}
             />
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-600">Extra Cobbles (buffer)</label>
+              <label className="text-sm font-medium text-slate-600 dark:text-neutral-400">Extra Cobbles (buffer)</label>
               <input
                 type="number"
                 min="0"
                 step="1"
                 value={buffer}
                 onChange={(e) => setBuffer(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 shadow-sm focus:outline-none"
+                className="w-full rounded-lg border border-slate-300 dark:border-neutral-700 bg-card px-3 py-2.5 text-sm text-slate-700 dark:text-neutral-300 shadow-sm focus:outline-none"
                 aria-label="Extra cobbles buffer"
               />
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 dark:text-neutral-500">
                 Add 3–4 extra cobblestones to account for smaller sizing variance.
               </p>
             </div>
@@ -116,7 +116,7 @@ export function CobblestoneCalculatorPage() {
       </div>
 
       {/* Reference table */}
-      <div className="rounded-xl border bg-white p-5 space-y-3">
+      <div className="rounded-xl border bg-card p-5 space-y-3">
         <h3 className="text-sm font-semibold">Pricing & Formula Reference</h3>
         <table className="w-full text-sm">
           <thead>

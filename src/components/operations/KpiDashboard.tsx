@@ -170,8 +170,8 @@ function EditableCell({
       onClick={startEdit}
       className={`w-full text-right text-sm ${
         value !== null
-          ? "font-medium text-slate-800"
-          : "text-slate-400 hover:text-blue-500"
+          ? "font-medium text-slate-800 dark:text-neutral-100"
+          : "text-slate-400 dark:text-neutral-500 hover:text-blue-500 dark:hover:text-blue-400"
       }`}
       title="Click to edit"
     >
@@ -184,13 +184,13 @@ function EditableCell({
 
 function ProgressBar({ pct }: { pct: number }) {
   const color =
-    pct >= 90 ? "bg-green-500" : pct >= 60 ? "bg-blue-500" : pct >= 30 ? "bg-amber-400" : "bg-slate-300";
+    pct >= 90 ? "bg-green-500" : pct >= 60 ? "bg-blue-500" : pct >= 30 ? "bg-amber-400" : "bg-slate-300 dark:bg-neutral-600";
   return (
     <div className="flex items-center gap-2">
-      <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-200">
+      <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-200 dark:bg-neutral-700">
         <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="w-8 text-right text-xs font-medium text-slate-600">{pct}%</span>
+      <span className="w-8 text-right text-xs font-medium text-slate-600 dark:text-neutral-400">{pct}%</span>
     </div>
   );
 }
@@ -215,10 +215,10 @@ function CategoryCard({
     score >= 90 ? "bg-green-500" : score >= 60 ? "bg-blue-500" : score >= 30 ? "bg-amber-400" : "bg-slate-400";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
-        <h2 className="text-xl font-bold text-slate-800">{category.label}</h2>
+      <div className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 px-6 py-4">
+        <h2 className="text-xl font-bold text-slate-800 dark:text-neutral-100">{category.label}</h2>
         <div className={`flex h-10 w-16 items-center justify-center rounded-full ${scoreColor} text-sm font-bold text-white shadow-sm`}>
           {score}%
         </div>
@@ -228,12 +228,12 @@ function CategoryCard({
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-100 bg-slate-50/60 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50/60 dark:bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <th className="px-5 py-3 text-left">Metric</th>
-              <th className="border-l border-slate-200 px-4 py-3 text-right">Target</th>
-              <th className="border-l border-slate-200 px-4 py-3 text-right">Actual</th>
-              <th className="border-l border-slate-200 px-4 py-3 text-right">Progress</th>
-              <th className="border-l border-slate-200 px-4 py-3 text-right">Weight</th>
+              <th className="border-l border-border px-4 py-3 text-right">Target</th>
+              <th className="border-l border-border px-4 py-3 text-right">Actual</th>
+              <th className="border-l border-border px-4 py-3 text-right">Progress</th>
+              <th className="border-l border-border px-4 py-3 text-right">Weight</th>
             </tr>
           </thead>
           <tbody>
@@ -246,14 +246,14 @@ function CategoryCard({
               return (
                 <tr
                   key={metric.key}
-                  className={`border-b border-slate-100 last:border-0 ${
-                    idx % 2 === 1 ? "bg-slate-50/50" : "bg-white"
+                  className={`border-b border-slate-100 dark:border-neutral-800 last:border-0 ${
+                    idx % 2 === 1 ? "bg-slate-50/50 dark:bg-muted/40" : "bg-card"
                   }`}
                 >
-                  <td className="px-5 py-3 font-medium text-slate-700">{metric.label}</td>
+                  <td className="px-5 py-3 font-medium text-slate-700 dark:text-neutral-300">{metric.label}</td>
 
                   {/* Target */}
-                  <td className="border-l border-slate-100 px-4 py-3">
+                  <td className="border-l border-slate-100 dark:border-neutral-800 px-4 py-3">
                     <EditableCell
                       value={target}
                       unit={metric.unit}
@@ -264,13 +264,13 @@ function CategoryCard({
                   </td>
 
                   {/* Actual */}
-                  <td className="border-l border-slate-100 px-4 py-3">
+                  <td className="border-l border-slate-100 dark:border-neutral-800 px-4 py-3">
                     {derivedKeys?.has(metric.key) ? (
                       <div className="flex items-center justify-end gap-1.5">
-                        <span className={`text-sm font-medium ${actual !== null ? "text-slate-800" : "text-slate-400"}`}>
+                        <span className={`text-sm font-medium ${actual !== null ? "text-slate-800 dark:text-neutral-100" : "text-slate-400 dark:text-neutral-500"}`}>
                           {actual !== null ? formatValue(actual, metric.unit) : "—"}
                         </span>
-                        <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-500">auto</span>
+                        <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-500 dark:text-blue-400">auto</span>
                       </div>
                     ) : (
                       <EditableCell
@@ -284,12 +284,12 @@ function CategoryCard({
                   </td>
 
                   {/* Progress */}
-                  <td className="border-l border-slate-100 px-4 py-3">
+                  <td className="border-l border-slate-100 dark:border-neutral-800 px-4 py-3">
                     <ProgressBar pct={pct} />
                   </td>
 
                   {/* Weight */}
-                  <td className="border-l border-slate-100 px-4 py-3 text-right font-medium text-slate-600">
+                  <td className="border-l border-slate-100 dark:border-neutral-800 px-4 py-3 text-right font-medium text-slate-600 dark:text-neutral-400">
                     {metric.weight}%
                   </td>
                 </tr>
@@ -453,11 +453,11 @@ export function KpiDashboard() {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Twins KPI Scorecard</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-neutral-100">Twins KPI Scorecard</h1>
+          <p className="text-sm text-muted-foreground">
             Track progress toward your annual goals
             {lastUpdated && (
-              <span className="ml-2 text-slate-400">
+              <span className="ml-2 text-slate-400 dark:text-neutral-500">
                 · Last updated {new Date(lastUpdated).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
               </span>
             )}
@@ -468,7 +468,7 @@ export function KpiDashboard() {
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium text-slate-700 dark:text-neutral-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {years.map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -493,7 +493,7 @@ export function KpiDashboard() {
         />
       ))}
 
-      <p className="text-center text-xs text-slate-400">
+      <p className="text-center text-xs text-slate-400 dark:text-neutral-500">
         Click any Target or Actual value to edit. Progress is auto-calculated. Changes are saved automatically.
       </p>
     </div>

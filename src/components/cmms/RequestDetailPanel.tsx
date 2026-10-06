@@ -43,8 +43,8 @@ interface RequestDetailPanelProps {
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1.5">
-      <dt className="text-sm text-slate-500">{label}</dt>
-      <dd className="text-sm font-medium text-slate-900">{value ?? "—"}</dd>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-slate-900 dark:text-neutral-100">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -85,7 +85,7 @@ function DetailsTab({
   return (
     <div className="flex flex-col gap-5 p-6">
       <div>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Status
         </p>
         <StatusFlowIndicator
@@ -100,20 +100,20 @@ function DetailsTab({
           )}
           {status === "in_review" && (<>
             <Button size="sm" onClick={() => onStatusChange("approved")}>Approve</Button>
-            <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700 border-red-200 hover:border-red-300" onClick={() => onStatusChange("rejected")}>Reject</Button>
+            <Button size="sm" variant="outline" className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400 border-red-200 dark:border-red-800 hover:border-red-300 dark:hover:border-red-700" onClick={() => onStatusChange("rejected")}>Reject</Button>
           </>)}
           {status === "approved" && (<>
             <Button size="sm" onClick={onConvertToWO} disabled={converting}>
               {converting ? "Creating…" : "Convert to Work Order"}
             </Button>
-            <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700 border-red-200 hover:border-red-300" onClick={() => onStatusChange("rejected")}>Reject</Button>
+            <Button size="sm" variant="outline" className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400 border-red-200 dark:border-red-800 hover:border-red-300 dark:hover:border-red-700" onClick={() => onStatusChange("rejected")}>Reject</Button>
           </>)}
           {status === "rejected" && (
             <Button size="sm" variant="outline" onClick={() => onStatusChange("open")}>Reopen</Button>
           )}
           </>)}
           {status === "converted" && (
-            <p className="text-xs text-slate-400 mt-1">This request has been converted to a work order.</p>
+            <p className="text-xs text-slate-400 dark:text-neutral-500 mt-1">This request has been converted to a work order.</p>
           )}
         </div>
       </div>
@@ -154,7 +154,7 @@ function DetailsTab({
               <button
                 type="button"
                 onClick={() => onOpenWoSheet()}
-                className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 hover:bg-brand-100 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-md border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-2 py-0.5 text-xs font-medium text-brand-700 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors"
               >
                 <ExternalLink className="h-3 w-3" />
                 {request.linkedWorkOrderNumber}
@@ -168,10 +168,10 @@ function DetailsTab({
         <>
           <Separator />
           <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Description
             </p>
-            <p className="whitespace-pre-wrap text-sm text-slate-700">{request.description}</p>
+            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-neutral-300">{request.description}</p>
           </div>
         </>
       )}
@@ -290,10 +290,10 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b px-6 py-4 pr-12">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">
+          <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">
             {request.requestNumber}
           </h2>
-          <p className="text-sm text-slate-500">{request.title}</p>
+          <p className="text-sm text-muted-foreground">{request.title}</p>
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge
@@ -305,7 +305,7 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
             onClick={() => setDeleteConfirmOpen(true)}
           >
             <Trash2 className="h-4 w-4" />

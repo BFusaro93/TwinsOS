@@ -188,7 +188,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
           </button>
           {canResize && (
             <div className="flex flex-1 items-center">
-              <GripVertical className="h-4 w-4 text-slate-300 dark:text-neutral-600" />
+              <GripVertical className="h-4 w-4 text-slate-300 dark:text-neutral-500" />
             </div>
           )}
         </div>
@@ -229,7 +229,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
                 </div>
 
                 <div className="rounded-lg border border-dashed border-border bg-slate-50 dark:bg-muted/40 p-4 flex items-center justify-center">
-                  <p className="text-xs text-slate-300 dark:text-neutral-600">Invoice details will appear after selecting a client</p>
+                  <p className="text-xs text-slate-300 dark:text-neutral-500">Invoice details will appear after selecting a client</p>
                 </div>
               </div>
             </div>

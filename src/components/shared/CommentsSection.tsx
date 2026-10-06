@@ -14,7 +14,7 @@ import type { CommentRecordType } from "@/types";
 function CommentBody({ body, dark }: { body: string; dark: boolean }) {
   const segments = parseMentionSegments(body);
   return (
-    <p className={`mt-0.5 whitespace-pre-wrap text-sm ${dark ? "text-slate-300" : "text-slate-700 dark:text-neutral-300"}`}>
+    <p className={`mt-0.5 whitespace-pre-wrap text-sm ${dark ? "text-slate-300 dark:text-neutral-500" : "text-slate-700 dark:text-neutral-300"}`}>
       {segments.map((seg, i) =>
         seg.type === "mention" ? (
           <span

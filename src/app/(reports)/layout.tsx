@@ -47,9 +47,9 @@ function CrewBlockedGuard({ children }: { children: React.ReactNode }) {
   if (!blocked) return <>{children}</>;
   return (
     <div className="flex h-full items-center justify-center p-6">
-      <div className="max-w-md rounded-lg border bg-white p-6 text-center shadow-sm">
-        <h1 className="text-lg font-semibold text-slate-900">Not available</h1>
-        <p className="mt-2 text-sm text-slate-500">This dashboard isn&apos;t available to crew logins.</p>
+      <div className="max-w-md rounded-lg border bg-card p-6 text-center shadow-sm">
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Not available</h1>
+        <p className="mt-2 text-sm text-muted-foreground">This dashboard isn&apos;t available to crew logins.</p>
       </div>
     </div>
   );
@@ -67,9 +67,9 @@ function DashboardPermissionGuard({ children }: { children: React.ReactNode }) {
   if (canViewDashboard(gate.permission)) return <>{children}</>;
   return (
     <div className="flex h-full items-center justify-center p-6">
-      <div className="max-w-md rounded-lg border bg-white p-6 text-center shadow-sm">
-        <h1 className="text-lg font-semibold text-slate-900">Not available</h1>
-        <p className="mt-2 text-sm text-slate-500">Your role doesn&apos;t include this dashboard. Ask an admin if you need access.</p>
+      <div className="max-w-md rounded-lg border bg-card p-6 text-center shadow-sm">
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Not available</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Your role doesn&apos;t include this dashboard. Ask an admin if you need access.</p>
       </div>
     </div>
   );
@@ -92,7 +92,7 @@ export default function ReportsLayout({
   }, [pathname, setSidebarOpen]);
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-slate-50">
+    <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-background">
       <RealtimeSync />
       <SettingsLoader />
 

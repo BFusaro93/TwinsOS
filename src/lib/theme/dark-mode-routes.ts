@@ -10,12 +10,16 @@
 export const DARK_MODE_ROUTE_PREFIXES: readonly string[] = [
   "/crm/crew",
   "/crm/scheduling/dispatch",
+  "/crm/scheduling/jobs",
   "/crm/accounting/invoices",
   "/crm/estimates",
   "/crm/clients",
   "/crm/accounting/purchase-orders",
   "/cmms/work-orders",
   "/po/orders",
+  "/po/requisitions",
+  "/po/receiving",
+  "/vendors",
 ];
 
 export function isDarkModeReady(pathname: string | null): boolean {

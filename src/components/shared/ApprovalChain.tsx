@@ -100,7 +100,7 @@ function bubbleClass(status: ApprovalRequestStatus) {
     case "approved":   return "border-emerald-500 bg-emerald-500 text-white";
     case "rejected":   return "border-red-400 bg-red-400 text-white";
     case "skipped":    return "border-border bg-muted text-slate-400 dark:text-neutral-500";
-    case "superseded": return "border-border bg-card text-slate-300 dark:text-neutral-600";
+    case "superseded": return "border-border bg-card text-slate-300 dark:text-neutral-500";
     default:           return "border-amber-400 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400";
   }
 }
@@ -119,7 +119,7 @@ function statusTextClass(status: ApprovalRequestStatus) {
   switch (status) {
     case "approved":   return "text-emerald-600 dark:text-emerald-400";
     case "rejected":   return "text-red-500 dark:text-red-400";
-    case "superseded": return "text-slate-300 dark:text-neutral-600";
+    case "superseded": return "text-slate-300 dark:text-neutral-500";
     case "skipped":    return "text-slate-400 dark:text-neutral-500";
     default:           return "text-amber-600 dark:text-amber-400";
   }

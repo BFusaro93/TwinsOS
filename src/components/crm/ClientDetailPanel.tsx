@@ -500,7 +500,7 @@ function PaymentDetailDialog({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400 dark:text-neutral-500">Reference / Check #</span>
-                <span>{payment.reference || <span className="text-slate-300 dark:text-neutral-600">—</span>}</span>
+                <span>{payment.reference || <span className="text-slate-300 dark:text-neutral-500">—</span>}</span>
               </div>
               {paidInvoices.length > 0 && (
                 <div className="flex justify-between items-start">
@@ -1048,7 +1048,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                         title={p.isPrimary ? "Primary" : "Set as primary"}
                         onClick={() => patchClientPhone(idx, "isPrimary", true)}
                         className={`shrink-0 rounded p-1 text-sm font-medium transition-colors ${
-                          p.isPrimary ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400" : "text-slate-300 dark:text-neutral-600 hover:text-brand-600 dark:hover:text-brand-400"
+                          p.isPrimary ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400" : "text-slate-300 dark:text-neutral-500 hover:text-brand-600 dark:hover:text-brand-400"
                         }`}
                       >
                         ★
@@ -2105,7 +2105,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
         <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="font-semibold text-sm text-white">Jobs</span>
-            <span className="rounded-full bg-card/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(allJobs ?? []).length}</span>
+            <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(allJobs ?? []).length}</span>
             <span className="text-white/30 text-xs">|</span>
             <button
               onClick={() => setClientVisitsModal("upcoming")}
@@ -2119,7 +2119,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-card/10">
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10">
                 <Plus className="mr-0.5 h-3 w-3" /> Add a Job
               </Button>
             </DropdownMenuTrigger>
@@ -2289,7 +2289,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-card/10">
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10">
                 <Plus className="mr-0.5 h-3 w-3" /> Add a Transaction
               </Button>
             </DropdownMenuTrigger>
@@ -2367,7 +2367,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
             <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <span className="font-semibold text-sm text-white">Open Estimates</span>
-                <span className="rounded-full bg-card/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{openEstimates.length}</span>
+                <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{openEstimates.length}</span>
                 <button
                   className="text-[11px] text-white/70 hover:text-white"
                   onClick={() => setAllEstimatesOpen(true)}
@@ -2377,7 +2377,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                   All ({(estimates ?? []).length})
                 </button>
               </div>
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-card/10"
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
                 onClick={() => setNewEstimateOpen(true)}>
                 <Plus className="mr-0.5 h-3 w-3" /> Add an Estimate
               </Button>
@@ -2419,11 +2419,11 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
             <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                 <span className="font-semibold text-sm text-white">Contracts</span>
-                <span className="rounded-full bg-card/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(contracts ?? []).length}</span>
+                <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white">{(contracts ?? []).length}</span>
                 <button className="text-[11px] text-white/70 hover:text-white" onClick={() => onSwitchTab?.("contracts")}>All</button>
               </div>
               <PermissionGate permission="client_add_contract">
-                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-card/10"
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10"
                   onClick={() => setAddingContract(true)}>
                   <Plus className="mr-0.5 h-3 w-3" /> Add a Contract
                 </Button>
@@ -2644,7 +2644,7 @@ function JobVisitsModal({
         {/* Header — neutral gray, no blue */}
         <div className="flex items-center justify-between border-b bg-neutral-700 px-6 py-3 rounded-t-lg">
           <h2 className="text-base font-semibold text-white">{title}</h2>
-          <button onClick={onClose} className="text-neutral-300 dark:text-neutral-600 hover:text-white">
+          <button onClick={onClose} className="text-neutral-300 hover:text-white">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -3677,7 +3677,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                       {t.subject || "(no subject)"}
                     </span>
                   </div>
-                  <ChevronRight className="h-3 w-3 shrink-0 text-slate-300 dark:text-neutral-600" />
+                  <ChevronRight className="h-3 w-3 shrink-0 text-slate-300 dark:text-neutral-500" />
                 </button>
               ))}
               {openTickets.length > 3 && (
@@ -3738,7 +3738,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     )}
                   </div>
                   {(c.phones?.length > 0 ? c.phones : c.phone ? [{ phone: c.phone, type: c.phoneType ?? "cell", isPrimary: true }] : []).map((p, i) => (
-                    <span key={i} className="text-slate-400 dark:text-neutral-500 mr-2">{p.phone} <span className="text-[9px] text-slate-300 dark:text-neutral-600 capitalize">({p.type})</span></span>
+                    <span key={i} className="text-slate-400 dark:text-neutral-500 mr-2">{p.phone} <span className="text-[9px] text-slate-300 dark:text-neutral-500 capitalize">({p.type})</span></span>
                   ))}
                   {c.email && <span className="block text-slate-400 dark:text-neutral-500">{c.email}</span>}
                 </div>

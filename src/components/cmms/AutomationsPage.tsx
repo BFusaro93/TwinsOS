@@ -178,8 +178,8 @@ export function AutomationsPage() {
   const templateSection = (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-amber-500" />
-        <p className="text-sm font-semibold text-slate-700">Start from a template</p>
+        <Sparkles className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+        <p className="text-sm font-semibold text-slate-700 dark:text-neutral-300">Start from a template</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {AUTOMATION_TEMPLATES.map((t) => {
@@ -187,11 +187,11 @@ export function AutomationsPage() {
           return (
             <div
               key={t.name}
-              className="flex flex-col justify-between gap-3 rounded-lg border bg-white p-4 shadow-sm"
+              className="flex flex-col justify-between gap-3 rounded-lg border bg-card p-4 shadow-sm"
             >
               <div>
-                <p className="text-sm font-semibold text-slate-800">{t.name}</p>
-                <p className="mt-1 text-xs text-slate-500">{t.description}</p>
+                <p className="text-sm font-semibold text-slate-800 dark:text-neutral-100">{t.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{t.description}</p>
               </div>
               <Button
                 size="sm"
@@ -240,18 +240,18 @@ export function AutomationsPage() {
         action={newAutomationButton}
       />
 
-      <div className="flex items-center gap-2 text-sm text-slate-500">
-        <Zap className="h-4 w-4 text-brand-500" />
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Zap className="h-4 w-4 text-brand-500 dark:text-brand-400" />
         <span>
-          <span className="font-medium text-slate-900">{enabledCount}</span> of{" "}
+          <span className="font-medium text-slate-900 dark:text-neutral-100">{enabledCount}</span> of{" "}
           {rules.length} automations enabled
         </span>
       </div>
 
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               <TableHead>Name</TableHead>
               <TableHead>Trigger</TableHead>
               <TableHead>Action</TableHead>
@@ -264,9 +264,9 @@ export function AutomationsPage() {
             {rules.map((rule) => (
               <TableRow key={rule.id}>
                 <TableCell className="font-medium">{rule.name}</TableCell>
-                <TableCell className="text-slate-600">{formatTrigger(rule.trigger)}</TableCell>
-                <TableCell className="text-slate-600">{formatAction(rule.action)}</TableCell>
-                <TableCell className="text-slate-500 text-sm">{formatDate(rule.lastFiredAt)}</TableCell>
+                <TableCell className="text-slate-600 dark:text-neutral-400">{formatTrigger(rule.trigger)}</TableCell>
+                <TableCell className="text-slate-600 dark:text-neutral-400">{formatAction(rule.action)}</TableCell>
+                <TableCell className="text-muted-foreground text-sm">{formatDate(rule.lastFiredAt)}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <Switch
@@ -278,14 +278,14 @@ export function AutomationsPage() {
                     {rule.isEnabled ? (
                       <Badge
                         variant="outline"
-                        className="border-green-200 bg-green-50 text-green-700"
+                        className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400"
                       >
                         Enabled
                       </Badge>
                     ) : (
                       <Badge
                         variant="outline"
-                        className="border-slate-200 bg-slate-100 text-slate-500"
+                        className="border-border bg-muted text-muted-foreground"
                       >
                         Disabled
                       </Badge>
@@ -298,7 +298,7 @@ export function AutomationsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-slate-400 hover:text-red-600"
+                      className="text-slate-400 dark:text-neutral-500 hover:text-red-600 dark:hover:text-red-400"
                       onClick={() => void handleDelete(rule.id)}
                       aria-label={`Delete ${rule.name}`}
                     >

@@ -67,12 +67,12 @@ function LinkOutCard({ def }: { def: PrebuiltReportDef }) {
   }, [def.href, router]);
 
   return (
-    <div className="rounded-lg border bg-white p-6 shadow-sm">
-      <p className="text-sm text-slate-600">
+    <div className="rounded-lg border bg-card p-6 shadow-sm">
+      <p className="text-sm text-slate-600 dark:text-neutral-400">
         Opening <span className="font-medium">{def.name}</span>…
       </p>
       {def.href && (
-        <Link href={def.href} className="mt-2 inline-block text-sm text-blue-600 hover:underline">
+        <Link href={def.href} className="mt-2 inline-block text-sm text-blue-600 dark:text-blue-400 hover:underline">
           Continue to the report
         </Link>
       )}
@@ -224,7 +224,7 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
       )}
 
       {isFetching ? (
-        <div className="rounded-lg border bg-white p-4 shadow-sm">
+        <div className="rounded-lg border bg-card p-4 shadow-sm">
           <div className="space-y-2">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-7 w-full" />
@@ -249,16 +249,16 @@ export function ReportViewer({ reportKey }: { reportKey: string }) {
 
   if (!def) {
     return (
-      <div className="rounded-lg border bg-white p-6 shadow-sm">
-        <h1 className="text-base font-semibold text-slate-900">
+      <div className="rounded-lg border bg-card p-6 shadow-sm">
+        <h1 className="text-base font-semibold text-slate-900 dark:text-neutral-100">
           Report not found
         </h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           No report exists with the key &quot;{reportKey}&quot;.
         </p>
         <Link
           href={HUB_HREF}
-          className="mt-3 inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+          className="mt-3 inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to Report Center

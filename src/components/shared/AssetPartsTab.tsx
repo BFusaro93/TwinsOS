@@ -169,7 +169,7 @@ export function AssetPartsTab({ assetId, recordLabel = "asset" }: AssetPartsTabP
                     <td className="px-2 py-2">
                       {canWriteEquipt && (
                         <button
-                          className="rounded p-1 text-slate-300 dark:text-neutral-600 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                          className="rounded p-1 text-slate-300 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                           title="Unlink part"
                           onClick={() => removeAssetPart({ id: ap.id, assetId })}
                         >

@@ -65,18 +65,18 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
 function ResponseDetailPanel({ response, onClose }: { response: CRMFormResponse; onClose: () => void }) {
   const router = useRouter();
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-[420px] md:w-[420px] border-l bg-white shadow-xl flex flex-col">
+    <div className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-[420px] md:w-[420px] border-l bg-card shadow-xl flex flex-col">
       <div className="flex items-center justify-between border-b px-5 py-4">
         <div>
-          <p className="font-semibold text-slate-800">{response.submittedByName ?? "Anonymous"}</p>
-          <p className="text-xs text-slate-400">{response.formName} — {fmtDate(response.createdAt)}</p>
+          <p className="font-semibold text-slate-800 dark:text-neutral-100">{response.submittedByName ?? "Anonymous"}</p>
+          <p className="text-xs text-slate-400 dark:text-neutral-500">{response.formName} — {fmtDate(response.createdAt)}</p>
         </div>
-        <button onClick={onClose} className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100">
+        <button onClick={onClose} className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted">
           Close
         </button>
       </div>
       {(response.relatedTicketId || response.relatedClientId) && (
-        <div className="flex items-center gap-2 border-b bg-slate-50 px-5 py-2.5">
+        <div className="flex items-center gap-2 border-b bg-slate-50 dark:bg-muted/40 px-5 py-2.5">
           {response.relatedTicketId && (
             <Button
               size="sm"
@@ -106,46 +106,46 @@ function ResponseDetailPanel({ response, onClose }: { response: CRMFormResponse;
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
         <div className="grid grid-cols-2 gap-3 text-xs">
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-400 mb-0.5">Email</p>
-            <p className="text-slate-700">{response.submittedByEmail ?? "—"}</p>
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-neutral-500 mb-0.5">Email</p>
+            <p className="text-slate-700 dark:text-neutral-300">{response.submittedByEmail ?? "—"}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-400 mb-0.5">Result</p>
-            <p className="text-slate-700">{response.result ?? "—"}</p>
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-neutral-500 mb-0.5">Result</p>
+            <p className="text-slate-700 dark:text-neutral-300">{response.result ?? "—"}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-400 mb-0.5">Status</p>
-            <p className="capitalize text-slate-700">{response.status}</p>
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-neutral-500 mb-0.5">Status</p>
+            <p className="capitalize text-slate-700 dark:text-neutral-300">{response.status}</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-400 mb-0.5">Source</p>
-            <p className="text-slate-700">{response.formLocation ?? "—"}</p>
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-neutral-500 mb-0.5">Source</p>
+            <p className="text-slate-700 dark:text-neutral-300">{response.formLocation ?? "—"}</p>
           </div>
         </div>
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-slate-400 mb-2">Submitted Data</p>
+          <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-neutral-500 mb-2">Submitted Data</p>
           <div className="rounded-lg border divide-y text-xs">
             {Object.entries(response.data).map(([k, v]) => (
               <div key={k} className="px-3 py-2 flex gap-3">
-                <span className="w-32 shrink-0 font-medium text-slate-600">{k}</span>
+                <span className="w-32 shrink-0 font-medium text-slate-600 dark:text-neutral-400">{k}</span>
                 {isAttachmentValue(v) ? (
                   <button
                     type="button"
                     onClick={() => downloadAttachment(v.path)}
-                    className="flex items-center gap-1 text-brand-600 hover:underline"
+                    className="flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline"
                   >
                     <Paperclip className="h-3 w-3 shrink-0" />
                     {v.name} ({Math.round(v.size / 1024)} KB)
                   </button>
                 ) : v == null ? (
-                  <span className="text-slate-400">—</span>
+                  <span className="text-slate-400 dark:text-neutral-500">—</span>
                 ) : (
-                  <span className="text-slate-800 break-all">{String(v)}</span>
+                  <span className="text-slate-800 dark:text-neutral-100 break-all">{String(v)}</span>
                 )}
               </div>
             ))}
             {Object.keys(response.data).length === 0 && (
-              <div className="px-3 py-4 text-center text-slate-400">No data</div>
+              <div className="px-3 py-4 text-center text-slate-400 dark:text-neutral-500">No data</div>
             )}
           </div>
         </div>
@@ -206,13 +206,13 @@ export function FormResponses({ formId }: Props) {
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Total",     value: stats.total,     color: "text-slate-900" },
-          { label: "On Hold",   value: stats.on_hold,   color: "text-sky-600" },
-          { label: "Completed", value: stats.completed, color: "text-green-600" },
-          { label: "Unread",    value: stats.unread,    color: "text-orange-500" },
+          { label: "Total",     value: stats.total,     color: "text-slate-900 dark:text-neutral-100" },
+          { label: "On Hold",   value: stats.on_hold,   color: "text-sky-600 dark:text-sky-400" },
+          { label: "Completed", value: stats.completed, color: "text-green-600 dark:text-green-400" },
+          { label: "Unread",    value: stats.unread,    color: "text-orange-500 dark:text-orange-400" },
         ].map((s) => (
-          <div key={s.label} className="rounded-lg border bg-white p-4 shadow-sm text-center">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{s.label}</p>
+          <div key={s.label} className="rounded-lg border bg-card p-4 shadow-sm text-center">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">{s.label}</p>
             <p className={`mt-1 text-2xl font-bold ${s.color}`}>{s.value}</p>
           </div>
         ))}
@@ -247,14 +247,14 @@ export function FormResponses({ formId }: Props) {
                 onClick={() => setQuickFilter(key)}
                 className={cn(
                   "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
-                  quickFilter === key ? "bg-white text-slate-800" : "text-slate-300 hover:text-white"
+                  quickFilter === key ? "bg-card text-slate-800 dark:text-neutral-100" : "text-slate-300 hover:text-white"
                 )}
               >
                 {label}
                 {quickCounts[key] > 0 && (
                   <span className={cn(
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                    quickFilter === key ? "bg-slate-200 text-slate-700" : "bg-white/20 text-white"
+                    quickFilter === key ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-white/20 text-white"
                   )}>
                     {quickCounts[key]}
                   </span>
@@ -274,10 +274,10 @@ export function FormResponses({ formId }: Props) {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      <div className="flex-1 overflow-auto bg-card">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-slate-50 border-b z-10">
-            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b z-10">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               <th className="w-4 px-4 py-3" />
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Submitted By</th>
@@ -298,7 +298,7 @@ export function FormResponses({ formId }: Props) {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-16 text-center text-sm text-slate-400">
+                <td colSpan={7} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
                   {responses.length === 0 ? "No responses yet" : "No responses match your filter"}
                 </td>
               </tr>
@@ -306,7 +306,7 @@ export function FormResponses({ formId }: Props) {
               filtered.map((r) => (
                 <tr
                   key={r.id}
-                  className="border-b hover:bg-slate-50 cursor-pointer"
+                  className="border-b hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer"
                   onClick={() => openResponse(r)}
                 >
                   <td className="px-4 py-3">
@@ -318,19 +318,19 @@ export function FormResponses({ formId }: Props) {
                     <span className={cn(
                       "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase border",
                       r.status === "completed"
-                        ? "bg-green-50 text-green-700 border-green-200"
+                        ? "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
                         : r.status === "spam"
-                        ? "bg-red-50 text-red-600 border-red-200"
-                        : "bg-sky-50 text-sky-700 border-sky-200"
+                        ? "bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800"
+                        : "bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-800"
                     )}>
                       {r.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-800">{r.submittedByName ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{fmtDate(r.createdAt)}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{r.submittedByEmail ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{r.formLocation ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-600 text-xs">{r.result ?? "—"}</td>
+                  <td className="px-4 py-3 font-medium text-slate-800 dark:text-neutral-100">{r.submittedByName ?? "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{fmtDate(r.createdAt)}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{r.submittedByEmail ?? "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{r.formLocation ?? "—"}</td>
+                  <td className="px-4 py-3 text-slate-600 dark:text-neutral-400 text-xs">{r.result ?? "—"}</td>
                 </tr>
               ))
             )}

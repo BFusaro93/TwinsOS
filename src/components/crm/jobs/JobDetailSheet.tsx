@@ -79,7 +79,7 @@ export function JobDetailSheet({ jobId, onOpenChange, initialEditing, initialTab
             <X className="h-4 w-4" />
           </button>
           <div className="flex flex-1 items-center">
-            <GripVertical className="h-4 w-4 text-slate-300 dark:text-neutral-600" />
+            <GripVertical className="h-4 w-4 text-slate-300 dark:text-neutral-500" />
           </div>
         </div>
         <div className="flex-1 overflow-y-auto bg-card">

@@ -52,7 +52,7 @@ export function WarrantyFields({ idPrefix, value, onChange, purchaseDate, resolv
             onChange={(e) => set({ startDate: e.target.value })}
           />
           {value.mode === "term" && !value.startDate && (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               {purchaseDate ? `Blank uses the purchase date (${formatDate(purchaseDate)}).` : "Blank uses the purchase date."}
             </p>
           )}
@@ -93,7 +93,7 @@ export function WarrantyFields({ idPrefix, value, onChange, purchaseDate, resolv
               </Select>
             </div>
             {derivedEnd && (
-              <p className="text-xs text-slate-500">Covered through {formatDate(derivedEnd)}</p>
+              <p className="text-xs text-muted-foreground">Covered through {formatDate(derivedEnd)}</p>
             )}
           </div>
         )}
@@ -109,7 +109,7 @@ export function WarrantyFields({ idPrefix, value, onChange, purchaseDate, resolv
         />
       </div>
 
-      {resolved.error && <p className="text-xs text-red-500">{resolved.error}</p>}
+      {resolved.error && <p className="text-xs text-red-500 dark:text-red-400">{resolved.error}</p>}
     </div>
   );
 }

@@ -80,18 +80,18 @@ export function OrganizationTab() {
   return (
     <div className="flex flex-col gap-6">
       {/* Organization */}
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="rounded-lg border bg-card shadow-sm">
         <div className="px-6 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Organization</h2>
-          <p className="mt-0.5 text-xs text-slate-500">General settings for {orgName}</p>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Organization</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">General settings for {orgName}</p>
         </div>
         <Separator />
         <div className="px-6">
           {/* Organization name */}
           <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
             <div className="flex-1">
-              <p className="text-sm font-medium text-slate-900">Organization Name</p>
-              <p className="mt-0.5 text-xs text-slate-500">Your company name as it appears across the platform</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">Organization Name</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Your company name as it appears across the platform</p>
             </div>
             <div className="flex w-full gap-2 md:w-80 md:shrink-0">
               <Input
@@ -117,8 +117,8 @@ export function OrganizationTab() {
               and not From. */}
           <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-slate-900">Reply-To Email</p>
-              <p className="mt-0.5 text-xs text-slate-500">
+              <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">Reply-To Email</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Where a client&rsquo;s reply goes when they answer an invoice, estimate or
                 automated email. Emails still send from your company name on our sending
                 domain; only the reply address changes. Leave blank and replies go nowhere.
@@ -147,7 +147,7 @@ export function OrganizationTab() {
                 </Button>
               </div>
               {!!replyToDraft.trim() && !replyToValid && (
-                <p className="text-[11px] text-red-600">Enter a valid email address.</p>
+                <p className="text-[11px] text-red-600 dark:text-red-400">Enter a valid email address.</p>
               )}
             </div>
           </div>
@@ -155,8 +155,8 @@ export function OrganizationTab() {
           {/* Company address */}
           <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
             <div className="flex-1">
-              <p className="text-sm font-medium text-slate-900">Company Address</p>
-              <p className="mt-0.5 text-xs text-slate-500">Printed in the header of purchase orders</p>
+              <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">Company Address</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Printed in the header of purchase orders</p>
             </div>
             <div className="flex w-full flex-col gap-2 md:w-80 md:shrink-0">
               <Input
@@ -218,10 +218,10 @@ export function OrganizationTab() {
       </div>
 
       {/* Finance */}
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="rounded-lg border bg-card shadow-sm">
         <div className="px-6 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Finance</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Finance</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Tax and currency defaults applied to new requisitions and purchase orders
           </p>
         </div>
@@ -235,7 +235,7 @@ export function OrganizationTab() {
               <select
                 value={tzDraft}
                 onChange={(e) => setTzDraft(e.target.value)}
-                className="min-w-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="min-w-0 rounded-md border border-slate-300 dark:border-neutral-700 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               >
                 {SELECTABLE_TIME_ZONES.map((tz) => (
                   <option key={tz.value} value={tz.value}>{tz.label}</option>
@@ -247,7 +247,7 @@ export function OrganizationTab() {
                   <option value={tzDraft}>{tzDraft}</option>
                 )}
               </select>
-              <span className="whitespace-nowrap text-xs text-slate-500">
+              <span className="whitespace-nowrap text-xs text-muted-foreground">
                 Now {new Date().toLocaleTimeString("en-US", {
                   timeZone: tzDraft,
                   hour: "numeric",
@@ -276,9 +276,9 @@ export function OrganizationTab() {
                 step={0.1}
                 value={taxDraft}
                 onChange={(e) => setTaxDraft(parseFloat(e.target.value) || 0)}
-                className="w-20 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="w-20 rounded-md border border-slate-300 dark:border-neutral-700 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
-              <span className="text-sm text-slate-500">%</span>
+              <span className="text-sm text-muted-foreground">%</span>
               <Button
                 size="sm"
                 className="h-8"
@@ -297,16 +297,16 @@ export function OrganizationTab() {
             description="Fully-loaded cost per labor hour — wages + burden + non-billable uplift + fixed overhead recovery (LLR + Overhead). Used in Job Costing and Project net profit (break-even)."
           >
             <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500">$</span>
+              <span className="text-sm text-muted-foreground">$</span>
               <input
                 type="number"
                 min={0}
                 step={0.01}
                 value={breakevenDraft}
                 onChange={(e) => setBreakevenDraft(e.target.value)}
-                className="w-24 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="w-24 rounded-md border border-slate-300 dark:border-neutral-700 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
-              <span className="text-sm text-slate-500">/hr</span>
+              <span className="text-sm text-muted-foreground">/hr</span>
               <Button
                 size="sm"
                 className="h-8"
@@ -329,16 +329,16 @@ export function OrganizationTab() {
             description="Wages + burden + non-billable uplift only — no fixed overhead recovery. Shows project net profit before overhead absorption."
           >
             <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500">$</span>
+              <span className="text-sm text-muted-foreground">$</span>
               <input
                 type="number"
                 min={0}
                 step={0.01}
                 value={burdenedDraft}
                 onChange={(e) => setBurdenedDraft(e.target.value)}
-                className="w-24 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="w-24 rounded-md border border-slate-300 dark:border-neutral-700 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
-              <span className="text-sm text-slate-500">/hr</span>
+              <span className="text-sm text-muted-foreground">/hr</span>
               <Button
                 size="sm"
                 className="h-8"
@@ -361,10 +361,10 @@ export function OrganizationTab() {
 
       {/* Change history — every edit to these settings (who, when, old → new). */}
       {remoteSettings?.id && (
-        <div className="rounded-lg border bg-white shadow-sm">
+        <div className="rounded-lg border bg-card shadow-sm">
           <div className="px-6 py-4">
-            <h3 className="text-sm font-semibold text-slate-900">Change history</h3>
-            <p className="text-xs text-slate-500">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Change history</h3>
+            <p className="text-xs text-muted-foreground">
               Every change to these organization settings, including labor rates. Visible to admins and managers.
             </p>
           </div>

@@ -117,7 +117,7 @@ export function SubscriptionTab() {
 
   if (billingLoading || plansLoading) {
     return (
-      <div className="flex items-center justify-center py-16 text-slate-400">
+      <div className="flex items-center justify-center py-16 text-slate-400 dark:text-neutral-500">
         <Loader2 className="h-5 w-5 animate-spin" />
       </div>
     );
@@ -125,12 +125,12 @@ export function SubscriptionTab() {
 
   if (!plansData?.stripeEnabled) {
     return (
-      <div className="rounded-lg border border-brand-100 bg-brand-50 p-5">
+      <div className="rounded-lg border border-brand-100 dark:border-brand-900 bg-brand-50 dark:bg-brand-900/30 p-5">
         <div className="flex items-start gap-3">
-          <CreditCard className="mt-0.5 h-5 w-5 shrink-0 text-brand-500" />
+          <CreditCard className="mt-0.5 h-5 w-5 shrink-0 text-brand-500 dark:text-brand-400" />
           <div>
-            <p className="text-sm font-semibold text-brand-800">Billing isn&apos;t connected yet</p>
-            <p className="mt-0.5 text-xs text-brand-600">
+            <p className="text-sm font-semibold text-brand-800 dark:text-brand-300">Billing isn&apos;t connected yet</p>
+            <p className="mt-0.5 text-xs text-brand-600 dark:text-brand-400">
               Add STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, and
               the STRIPE_PRICE_* variables to enable subscriptions. See .env.local.example.
             </p>
@@ -146,27 +146,27 @@ export function SubscriptionTab() {
   return (
     <div className="flex flex-col gap-4">
       {/* Current plan */}
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="rounded-lg border bg-card shadow-sm">
         <div className="flex flex-col gap-4 p-6 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Current Plan
             </p>
-            <h2 className="text-2xl font-bold capitalize text-slate-900">{billing?.plan ?? "trial"}</h2>
+            <h2 className="text-2xl font-bold capitalize text-slate-900 dark:text-neutral-100">{billing?.plan ?? "trial"}</h2>
             {billing?.stripeSubscriptionStatus && (
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Status:{" "}
-                <span className="font-semibold capitalize text-slate-700">
+                <span className="font-semibold capitalize text-slate-700 dark:text-neutral-300">
                   {billing.stripeSubscriptionStatus.replace("_", " ")}
                 </span>
               </p>
             )}
             {billing && (
-              <p className="mt-1 text-sm text-slate-500">
-                Seats: <span className="font-semibold text-slate-700">{billing.seatsUsed}</span> of{" "}
+              <p className="mt-1 text-sm text-muted-foreground">
+                Seats: <span className="font-semibold text-slate-700 dark:text-neutral-300">{billing.seatsUsed}</span> of{" "}
                 {billing.seatsIncluded} included
                 {billing.seatsUsed > billing.seatsIncluded && (
-                  <span className="ml-1 text-amber-600">
+                  <span className="ml-1 text-amber-600 dark:text-amber-400">
                     (+{billing.seatsUsed - billing.seatsIncluded} over — billed at{" "}
                     {(billing.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}
                     /seat next cycle)
@@ -175,8 +175,8 @@ export function SubscriptionTab() {
               </p>
             )}
             {billing?.plan === "trial" && billing.trialEndsAt && (
-              <p className="mt-1 text-sm text-slate-500">
-                Trial ends <span className="font-semibold text-slate-700">{new Date(billing.trialEndsAt).toLocaleDateString()}</span>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Trial ends <span className="font-semibold text-slate-700 dark:text-neutral-300">{new Date(billing.trialEndsAt).toLocaleDateString()}</span>
               </p>
             )}
           </div>
@@ -188,7 +188,7 @@ export function SubscriptionTab() {
           )}
         </div>
         {createPortalSession.isError && (
-          <p className="px-6 pb-4 text-sm text-red-600">{createPortalSession.error.message}</p>
+          <p className="px-6 pb-4 text-sm text-red-600 dark:text-red-400">{createPortalSession.error.message}</p>
         )}
       </div>
 
@@ -198,18 +198,18 @@ export function SubscriptionTab() {
           const priceLabel = p.configured ? formatPrice(p.amountCents, p.currency, p.interval) ?? "Contact us" : "Not configured";
           const isCurrent = billing?.plan === p.plan && isActiveSubscriber;
           return (
-            <div key={p.plan} className="flex flex-col rounded-lg border bg-white p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{p.label}</p>
-              <p className="mt-1 text-xl font-bold text-slate-900">{priceLabel}</p>
+            <div key={p.plan} className="flex flex-col rounded-lg border bg-card p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">{p.label}</p>
+              <p className="mt-1 text-xl font-bold text-slate-900 dark:text-neutral-100">{priceLabel}</p>
               <ul className="mt-3 flex flex-col gap-1.5">
                 {getHighlightsForPlan(p.plan as BillablePlan).map((h) => (
-                  <li key={h} className="flex items-start gap-1.5 text-xs text-slate-600">
-                    <Check className="mt-0.5 h-3 w-3 shrink-0 text-brand-600" />
+                  <li key={h} className="flex items-start gap-1.5 text-xs text-slate-600 dark:text-neutral-400">
+                    <Check className="mt-0.5 h-3 w-3 shrink-0 text-brand-600 dark:text-brand-400" />
                     {h}
                   </li>
                 ))}
               </ul>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-slate-400 dark:text-neutral-500">
                 +{(p.seatOverageCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })}/seat after included seats
               </p>
               <div className="mt-4 flex-1" />
@@ -234,13 +234,13 @@ export function SubscriptionTab() {
         })}
       </div>
 
-      {checkoutError && <p className="text-sm text-red-600">{checkoutError}</p>}
+      {checkoutError && <p className="text-sm text-red-600 dark:text-red-400">{checkoutError}</p>}
 
       <div>
         <button
           type="button"
           onClick={() => setShowComparison((v) => !v)}
-          className="text-sm font-medium text-brand-600 hover:text-brand-700"
+          className="text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400"
         >
           {showComparison ? "Hide full plan comparison" : "Compare all plans in detail →"}
         </button>
@@ -252,9 +252,9 @@ export function SubscriptionTab() {
       </div>
 
       {/* Add-ons */}
-      <div className="rounded-lg border bg-white p-5 shadow-sm">
-        <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400">Add-ons</p>
-        <div className="flex flex-col divide-y divide-slate-100">
+      <div className="rounded-lg border bg-card p-5 shadow-sm">
+        <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Add-ons</p>
+        <div className="flex flex-col divide-y divide-slate-100 dark:divide-neutral-800">
           {plansData.addons
             .filter((a) => addonAppliesToModules(a.key as AddonKey, currentPlanModules))
             .map((a) => {
@@ -265,13 +265,13 @@ export function SubscriptionTab() {
             return (
               <div key={a.key} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">{a.label}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-neutral-100">{a.label}</p>
+                  <p className="text-xs text-muted-foreground">
                     {bundled ? "Included in your plan" : priceLabel}
                     {a.metered && !bundled && " (500 messages included, then $10 per 250 over)"}
                   </p>
                   {a.key === "sms" && enabled && smsUsage && (
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">
                       {smsUsage.count.toLocaleString()} sent this period
                       {smsUsage.overageBilledCents > 0 &&
                         ` · ${(smsUsage.overageBilledCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" })} overage billed`}
@@ -300,7 +300,7 @@ export function SubscriptionTab() {
             );
           })}
         </div>
-        {addonError && <p className="mt-3 text-sm text-red-600">{addonError}</p>}
+        {addonError && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{addonError}</p>}
       </div>
 
       <Dialog open={checkoutClientSecret != null} onOpenChange={(open) => !open && setCheckoutClientSecret(null)}>

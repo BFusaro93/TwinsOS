@@ -142,7 +142,7 @@ export function BulkPriceUpdateDialog({
           <DialogDescription>
             Edit unit costs and sale prices for multiple products at once.
             {costMethod !== "manual" && (
-              <span className="ml-1 text-amber-600">
+              <span className="ml-1 text-amber-600 dark:text-amber-400">
                 Note: WAC/FIFO costing is active — unit cost here is the manual
                 fallback only; received-goods costs take precedence.
               </span>
@@ -151,8 +151,8 @@ export function BulkPriceUpdateDialog({
         </DialogHeader>
 
         {/* Quick adjust tool */}
-        <div className="rounded-md border bg-slate-50 p-3">
-          <p className="mb-2 text-xs font-semibold text-slate-500">
+        <div className="rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
+          <p className="mb-2 text-xs font-semibold text-muted-foreground">
             Quick % Adjust (applies to all visible rows)
           </p>
           <div className="flex items-center gap-2">
@@ -204,8 +204,8 @@ export function BulkPriceUpdateDialog({
         {/* Table */}
         <div className="max-h-[45vh] overflow-y-auto rounded-md border">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-slate-50">
-              <tr className="border-b text-left text-xs text-slate-500">
+            <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+              <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="px-3 py-2 font-medium">Product</th>
                 <th className="px-3 py-2 font-medium">Vendor</th>
                 <th className="w-36 px-3 py-2 font-medium">Unit Cost ($)</th>
@@ -219,9 +219,9 @@ export function BulkPriceUpdateDialog({
                 const priceChanged =
                   Math.round((parseFloat(r.price) || 0) * 100) !== r.origPrice;
                 return (
-                  <tr key={r.id} className="border-b last:border-0 hover:bg-slate-50">
-                    <td className="px-3 py-2 font-medium text-slate-900">{r.name}</td>
-                    <td className="px-3 py-2 text-slate-500">{r.vendorName || "—"}</td>
+                  <tr key={r.id} className="border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40">
+                    <td className="px-3 py-2 font-medium text-slate-900 dark:text-neutral-100">{r.name}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.vendorName || "—"}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1">
                         <Input
@@ -230,10 +230,10 @@ export function BulkPriceUpdateDialog({
                           min={0}
                           value={r.unitCost}
                           onChange={(e) => setRowField(r.id, "unitCost", e.target.value)}
-                          className={`h-7 w-28 text-xs ${costChanged ? "border-brand-400 bg-brand-50" : ""}`}
+                          className={`h-7 w-28 text-xs ${costChanged ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30" : ""}`}
                         />
                         {costChanged && (
-                          <span className="text-[10px] text-slate-400">
+                          <span className="text-[10px] text-slate-400 dark:text-neutral-500">
                             was {formatCurrency(r.origUnitCost)}
                           </span>
                         )}
@@ -247,10 +247,10 @@ export function BulkPriceUpdateDialog({
                           min={0}
                           value={r.price}
                           onChange={(e) => setRowField(r.id, "price", e.target.value)}
-                          className={`h-7 w-28 text-xs ${priceChanged ? "border-brand-400 bg-brand-50" : ""}`}
+                          className={`h-7 w-28 text-xs ${priceChanged ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30" : ""}`}
                         />
                         {priceChanged && (
-                          <span className="text-[10px] text-slate-400">
+                          <span className="text-[10px] text-slate-400 dark:text-neutral-500">
                             was {formatCurrency(r.origPrice)}
                           </span>
                         )}
@@ -261,7 +261,7 @@ export function BulkPriceUpdateDialog({
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-400">
+                  <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
                     No products match your search.
                   </td>
                 </tr>
@@ -272,7 +272,7 @@ export function BulkPriceUpdateDialog({
 
         <DialogFooter className="items-center">
           {dirtyCount > 0 && (
-            <p className="mr-auto text-xs text-slate-500">
+            <p className="mr-auto text-xs text-muted-foreground">
               {dirtyCount} product{dirtyCount !== 1 ? "s" : ""} modified
             </p>
           )}

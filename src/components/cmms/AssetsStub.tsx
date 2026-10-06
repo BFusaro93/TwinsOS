@@ -16,10 +16,10 @@ export function AssetsStub() {
         title="Assets"
         description="Equipment and asset tracking"
       />
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               <TableHead>Asset</TableHead>
               <TableHead>Model</TableHead>
               <TableHead>Serial #</TableHead>
@@ -41,7 +41,7 @@ export function AssetsStub() {
           </TableBody>
         </Table>
       </div>
-      <p className="text-center text-xs text-slate-400">
+      <p className="text-center text-xs text-slate-400 dark:text-neutral-500">
         Asset data is loaded — full table view coming in the next phase
       </p>
     </div>

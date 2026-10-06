@@ -42,14 +42,14 @@ export function CrewPhotoView({
     <div className="flex flex-col gap-5 pb-24">
       {/* Filters */}
       <div className="flex items-center gap-2">
-        <div className="flex items-center rounded-md border border-slate-200 bg-slate-100 p-0.5">
+        <div className="flex items-center rounded-md border border-border bg-muted p-0.5">
           {TABS.map((t) => (
             <button
               key={t.value}
               onClick={() => setTab(t.value)}
               className={cn(
                 "rounded px-3 py-1.5 text-xs font-medium transition-colors",
-                tab === t.value ? "bg-slate-800 text-white" : "text-slate-500 hover:text-slate-700",
+                tab === t.value ? "bg-slate-800 text-white" : "text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300",
               )}
             >
               {t.label}
@@ -61,7 +61,7 @@ export function CrewPhotoView({
       {/* Annotated photos — primary crew reference */}
       {tab === "all" && annotatedPhotos.length > 0 && (
         <section>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Instructions / Marked Photos ({annotatedPhotos.length})
           </p>
           <div className="grid grid-cols-2 gap-3">
@@ -78,19 +78,19 @@ export function CrewPhotoView({
 
       {/* All photos */}
       <section>
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {tab === "all" ? `All Photos (${photos.length})` : tab === "before" ? `Before Photos (${photos.length})` : `After Photos (${photos.length})`}
         </p>
         {isLoading ? (
           <div className="grid grid-cols-2 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="aspect-square rounded-lg bg-slate-200" />
+              <Skeleton key={i} className="aspect-square rounded-lg bg-slate-200 dark:bg-neutral-700" />
             ))}
           </div>
         ) : photos.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-200 py-10">
-            <Images className="h-8 w-8 text-slate-300" />
-            <p className="text-sm text-slate-400">No photos yet for this job</p>
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border py-10">
+            <Images className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
+            <p className="text-sm text-slate-400 dark:text-neutral-500">No photos yet for this job</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
@@ -106,7 +106,7 @@ export function CrewPhotoView({
       </section>
 
       {/* Fixed upload button — sticky at bottom for quick field use */}
-      <div className="fixed bottom-0 left-0 right-0 z-10 border-t border-slate-200 bg-white p-4 md:left-[260px]">
+      <div className="fixed bottom-0 left-0 right-0 z-10 border-t border-border bg-card p-4 md:left-[260px]">
         <Button
           className="w-full gap-2 bg-brand-500 text-white hover:bg-brand-600"
           size="lg"
@@ -155,7 +155,7 @@ function CrewPhotoCard({
           className="h-full w-full object-cover transition-transform group-active:scale-95"
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center text-slate-600">
+        <div className="flex h-full w-full items-center justify-center text-slate-600 dark:text-neutral-400">
           <Camera className="h-8 w-8" />
         </div>
       )}
@@ -180,19 +180,19 @@ function CrewPhotoCard({
           )}
           {photo.tags.length > 0 && (
             <div className="flex items-center gap-1">
-              <Tag className="h-2.5 w-2.5 text-slate-400" />
-              <span className="truncate text-[10px] text-slate-300">
+              <Tag className="h-2.5 w-2.5 text-slate-400 dark:text-neutral-500" />
+              <span className="truncate text-[10px] text-slate-300 dark:text-neutral-500">
                 {photo.tags.join(", ")}
               </span>
             </div>
           )}
           {photo.notes && (
             <div className="flex items-center gap-1">
-              <MessageSquare className="h-2.5 w-2.5 text-slate-400" />
-              <span className="truncate text-[10px] text-slate-300">{photo.notes}</span>
+              <MessageSquare className="h-2.5 w-2.5 text-slate-400 dark:text-neutral-500" />
+              <span className="truncate text-[10px] text-slate-300 dark:text-neutral-500">{photo.notes}</span>
             </div>
           )}
-          <span className="text-[9px] text-slate-500">{formatDate(photo.createdAt)}</span>
+          <span className="text-[9px] text-muted-foreground">{formatDate(photo.createdAt)}</span>
         </div>
       </div>
 

@@ -44,7 +44,7 @@ export function ClientPhotosTab({ clientId, clientName }: Props) {
     return (
       <>
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed bg-card py-12 text-center">
-          <Camera className="h-8 w-8 text-slate-300 dark:text-neutral-600" />
+          <Camera className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
           <p className="text-sm font-medium text-slate-600 dark:text-neutral-400">No photo jobs yet</p>
           <p className="text-xs text-slate-400 dark:text-neutral-500">
             Photo jobs matching this client&apos;s name will appear here.
@@ -68,7 +68,7 @@ export function ClientPhotosTab({ clientId, clientName }: Props) {
             onClick={() => router.push(`/photos/jobs/${job.id}`)}
             className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-muted/40"
           >
-            <Camera className="h-4 w-4 shrink-0 text-slate-300 dark:text-neutral-600" />
+            <Camera className="h-4 w-4 shrink-0 text-slate-300 dark:text-neutral-500" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p className="truncate text-sm font-medium text-slate-800 dark:text-neutral-100">{job.name}</p>

@@ -787,7 +787,7 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
                               </span>
                             ))}
                           </div>
-                        ) : <span className="text-slate-300 dark:text-neutral-600">—</span>}
+                        ) : <span className="text-slate-300 dark:text-neutral-500">—</span>}
                       </td>
                     )}
                     {cols.type && (

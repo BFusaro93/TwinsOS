@@ -198,7 +198,7 @@ export function PartsPage() {
         <StatCard
           title="Low Stock Items"
           value={lowStockCount}
-          className={lowStockCount > 0 ? "border-red-200 bg-red-50" : ""}
+          className={lowStockCount > 0 ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40" : ""}
         />
       </div>
 
@@ -226,10 +226,10 @@ export function PartsPage() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
+            <TableRow className="bg-slate-50 dark:bg-muted/40">
               <TableHead className="w-12" />
               <TableHead>Name</TableHead>
               {col("partNumber") && <TableHead>Part #</TableHead>}
@@ -256,7 +256,7 @@ export function PartsPage() {
             {!isLoading && filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={visibleKeys.length} className="py-12 text-center">
-                  <p className="text-sm text-slate-400">No parts found</p>
+                  <p className="text-sm text-slate-400 dark:text-neutral-500">No parts found</p>
                 </TableCell>
               </TableRow>
             )}
@@ -270,7 +270,7 @@ export function PartsPage() {
                 return (
                   <TableRow
                     key={part.id}
-                    className="cursor-pointer hover:bg-slate-50"
+                    className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
                     onClick={() => handleRowClick(part)}
                   >
                     <TableCell className="w-12 py-2 pl-4 pr-0">
@@ -281,8 +281,8 @@ export function PartsPage() {
                           className="h-9 w-9 rounded-md object-cover"
                         />
                       ) : (
-                        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100">
-                          <Cog className="h-4 w-4 text-slate-400" />
+                        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted">
+                          <Cog className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
                         </div>
                       )}
                     </TableCell>
@@ -298,17 +298,17 @@ export function PartsPage() {
                       </div>
                     </TableCell>
                     {col("partNumber") && (
-                      <TableCell className="font-mono text-xs text-slate-500">
+                      <TableCell className="font-mono text-xs text-muted-foreground">
                         {part.partNumber}
                       </TableCell>
                     )}
                     {col("category") && (
-                      <TableCell className="text-slate-600">
+                      <TableCell className="text-slate-600 dark:text-neutral-400">
                         {(part.categories?.length ? part.categories : part.category ? [part.category] : []).join(", ") || "—"}
                       </TableCell>
                     )}
                     {col("vendor") && (
-                      <TableCell className="text-slate-600">{part.vendorName}</TableCell>
+                      <TableCell className="text-slate-600 dark:text-neutral-400">{part.vendorName}</TableCell>
                     )}
                     {col("unitCost") && (
                       <TableCell className="text-right">
@@ -319,17 +319,17 @@ export function PartsPage() {
                       <TableCell
                         className={`text-right font-medium ${
                           !part.isInventory
-                            ? "text-slate-400"
+                            ? "text-slate-400 dark:text-neutral-500"
                             : isLowStock
-                            ? "text-red-700"
-                            : "text-slate-900"
+                            ? "text-red-700 dark:text-red-400"
+                            : "text-slate-900 dark:text-neutral-100"
                         }`}
                       >
                         {part.isInventory ? part.quantityOnHand : "—"}
                       </TableCell>
                     )}
                     {col("minStock") && (
-                      <TableCell className="text-right text-slate-500">
+                      <TableCell className="text-right text-muted-foreground">
                         {part.isInventory ? part.minimumStock : "—"}
                       </TableCell>
                     )}
@@ -338,35 +338,35 @@ export function PartsPage() {
                         {!part.isInventory ? (
                           <Badge
                             variant="outline"
-                            className="border-slate-200 bg-slate-50 text-slate-500"
+                            className="border-border bg-slate-50 dark:bg-muted/40 text-muted-foreground"
                           >
                             Not Tracked
                           </Badge>
                         ) : isOOSCritical ? (
                           <Badge
                             variant="outline"
-                            className="border-red-200 bg-red-50 text-red-700"
+                            className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400"
                           >
                             OOS
                           </Badge>
                         ) : isOOSNoMin ? (
                           <Badge
                             variant="outline"
-                            className="border-orange-200 bg-orange-50 text-orange-700"
+                            className="border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400"
                           >
                             OOS
                           </Badge>
                         ) : isLowStock ? (
                           <Badge
                             variant="outline"
-                            className="border-red-200 bg-red-50 text-red-700"
+                            className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400"
                           >
                             Low Stock
                           </Badge>
                         ) : (
                           <Badge
                             variant="outline"
-                            className="border-green-200 bg-green-50 text-green-700"
+                            className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400"
                           >
                             In Stock
                           </Badge>

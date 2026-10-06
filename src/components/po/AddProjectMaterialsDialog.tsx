@@ -154,7 +154,7 @@ export function AddProjectMaterialsDialog({
 
   const optionClass = (active: boolean) =>
     `flex cursor-pointer flex-col gap-2 overflow-hidden rounded-lg border p-3 transition-colors ${
-      active ? "border-brand-500 bg-brand-50" : "hover:border-slate-300"
+      active ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30" : "hover:border-slate-300 dark:hover:border-neutral-700"
     }`;
 
   return (
@@ -174,9 +174,9 @@ export function AddProjectMaterialsDialog({
             <div className="max-h-72 overflow-y-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-xs text-slate-500">
+                  <tr className="border-b text-left text-xs text-muted-foreground">
                     <th className="pb-1.5 pr-2 font-medium">
-                      Item <span className="text-red-500">*</span>
+                      Item <span className="text-red-500 dark:text-red-400">*</span>
                     </th>
                     <th className="w-24 pb-1.5 pr-2 font-medium">Qty</th>
                     <th className="w-24 pb-1.5 pr-2 font-medium">Unit Cost ($)</th>
@@ -227,7 +227,7 @@ export function AddProjectMaterialsDialog({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-red-500"
+                          className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                           onClick={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
                           disabled={items.length === 1}
                         >
@@ -241,7 +241,7 @@ export function AddProjectMaterialsDialog({
             </div>
 
             {totalCents > 0 && (
-              <div className="flex justify-end text-xs text-slate-500">
+              <div className="flex justify-end text-xs text-muted-foreground">
                 Total: {formatCurrency(totalCents)}
               </div>
             )}
@@ -392,7 +392,7 @@ export function AddProjectMaterialsDialog({
                   />
                   <div>
                     <span className="text-sm font-medium">Add directly to project</span>
-                    <p className="text-xs text-slate-500">No PO or requisition will be created</p>
+                    <p className="text-xs text-muted-foreground">No PO or requisition will be created</p>
                   </div>
                 </div>
               </label>

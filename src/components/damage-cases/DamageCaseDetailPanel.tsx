@@ -31,15 +31,15 @@ import { printDamageCase } from "@/lib/print";
 import type { DamageCaseStatus } from "@/types";
 
 const STATUS_COLORS: Record<string, string> = {
-  open: "bg-yellow-100 text-yellow-800",
-  in_progress: "bg-blue-100 text-blue-800",
-  resolved: "bg-green-100 text-green-800",
-  closed: "bg-slate-100 text-slate-600",
+  open: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300",
+  in_progress: "bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300",
+  resolved: "bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300",
+  closed: "bg-muted text-slate-600 dark:text-neutral-400",
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  damage: "bg-red-100 text-red-800",
-  warranty: "bg-purple-100 text-purple-800",
+  damage: "bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300",
+  warranty: "bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300",
 };
 
 interface Props {
@@ -86,9 +86,9 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
       <div className="flex items-center justify-between border-b px-6 py-4 pr-12">
         <div>
           <p className="text-xs font-mono text-muted-foreground">{data.caseNumber}</p>
-          <h2 className="text-base font-semibold text-slate-900">{data.customerName}</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">{data.customerName}</h2>
           {data.propertyAddress && (
-            <p className="text-sm text-slate-500">{data.propertyAddress}</p>
+            <p className="text-sm text-muted-foreground">{data.propertyAddress}</p>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -97,7 +97,7 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
             <DropdownMenuTrigger asChild>
               <button type="button" className="inline-flex items-center gap-1 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
                 <Badge className={`${STATUS_COLORS[data.status]} text-xs`}>{DAMAGE_CASE_STATUS_LABELS[data.status]}</Badge>
-                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
@@ -119,7 +119,7 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
                       { onError: () => toast.error("Failed to update status") },
                     );
                   }}
-                  className={value === data.status ? "font-medium text-brand-600" : ""}
+                  className={value === data.status ? "font-medium text-brand-600 dark:text-brand-400" : ""}
                 >
                   {label}
                 </DropdownMenuItem>
@@ -148,7 +148,7 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
             disabled={isClosed}
             title={isClosed ? lockTitle : "Delete case"}
             onClick={async () => {
@@ -207,7 +207,7 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
         {data.linkedPoId ? (
           <>
             {linkedPoDangling ? (
-              <span className="text-sm italic text-amber-600">
+              <span className="text-sm italic text-amber-600 dark:text-amber-400">
                 Linked PO no longer exists (it may have been deleted)
               </span>
             ) : (
@@ -279,7 +279,7 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
               <TabsTrigger
                 key={v}
                 value={v === "audit trail" ? "audit" : v}
-                className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-slate-500 md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 data-[state=active]:shadow-none capitalize"
+                className="h-10 whitespace-nowrap rounded-none border-b-2 border-transparent px-2.5 pb-0 pt-0 text-xs font-medium text-muted-foreground md:px-4 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none capitalize"
               >
                 {v}
               </TabsTrigger>

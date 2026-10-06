@@ -90,10 +90,10 @@ function CostingTab() {
   const { mutate: updateOrgSettings } = useUpdateOrgSettings();
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <div className="px-6 py-4">
-        <h2 className="text-sm font-semibold text-slate-900">Inventory Costing Method</h2>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Inventory Costing Method</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
           Controls how unit costs are pre-filled when adding items to Requisitions, Purchase Orders,
           and Work Orders. Historical line items are never affected by this setting.
         </p>
@@ -107,20 +107,20 @@ function CostingTab() {
               key={opt.value}
               type="button"
               onClick={() => { setCostMethod(opt.value); updateOrgSettings({ costMethod: opt.value }); }}
-              className={`flex w-full items-start gap-4 py-4 text-left transition-colors hover:bg-slate-50 ${active ? "bg-brand-50 hover:bg-brand-50" : ""}`}
+              className={`flex w-full items-start gap-4 py-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-muted/40 ${active ? "bg-brand-50 dark:bg-brand-900/30 hover:bg-brand-50 dark:hover:bg-brand-900/30" : ""}`}
             >
               <span
                 className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                  active ? "border-brand-500 bg-brand-500" : "border-slate-300 bg-white"
+                  active ? "border-brand-500 bg-brand-500" : "border-slate-300 dark:border-neutral-700 bg-card"
                 }`}
               >
-                {active && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                {active && <span className="h-1.5 w-1.5 rounded-full bg-card" />}
               </span>
               <div className="flex-1">
-                <p className={`text-sm font-medium ${active ? "text-brand-700" : "text-slate-900"}`}>
+                <p className={`text-sm font-medium ${active ? "text-brand-700 dark:text-brand-400" : "text-slate-900 dark:text-neutral-100"}`}>
                   {opt.label}
                 </p>
-                <p className="mt-0.5 text-xs text-slate-500">{opt.description}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{opt.description}</p>
               </div>
             </button>
           );
@@ -128,8 +128,8 @@ function CostingTab() {
       </div>
       <Separator />
       <div className="px-6 py-4">
-        <p className="text-xs text-slate-400">
-          <strong className="font-medium text-slate-500">Note:</strong> Changing the costing method
+        <p className="text-xs text-slate-400 dark:text-neutral-500">
+          <strong className="font-medium text-muted-foreground">Note:</strong> Changing the costing method
           takes effect immediately for new line items. Existing Requisitions, Purchase Orders, and
           Work Orders are not modified.
         </p>
@@ -147,10 +147,10 @@ function RequestPortalTab() {
   const [copied, setCopied] = useState(false);
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       <div className="px-6 py-4">
-        <h2 className="text-sm font-semibold text-slate-900">Maintenance Request Portal</h2>
-        <p className="mt-0.5 text-xs text-slate-500">
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Maintenance Request Portal</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
           A public link where anyone — employees, contractors, or guests — can submit a
           maintenance request without logging in.
         </p>
@@ -159,8 +159,8 @@ function RequestPortalTab() {
       <div className="px-6">
         <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
           <div className="flex-1">
-            <p className="text-sm font-medium text-slate-900">Accept Submissions</p>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">Accept Submissions</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               When disabled, the portal shows a closed message and no submissions are accepted.
             </p>
           </div>
@@ -173,14 +173,14 @@ function RequestPortalTab() {
         </div>
         <div className="flex flex-col gap-2 py-4 md:flex-row md:items-start md:justify-between md:gap-8">
           <div className="flex-1">
-            <p className="text-sm font-medium text-slate-900">Portal Link</p>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">Portal Link</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Share this URL with anyone who should be able to submit requests.
             </p>
           </div>
           <div className="flex w-full items-center gap-2 md:w-80 md:shrink-0">
-            <div className="flex h-8 flex-1 min-w-0 items-center rounded-md border bg-slate-50 px-3">
-              <span className="truncate text-xs text-slate-600 font-mono">
+            <div className="flex h-8 flex-1 min-w-0 items-center rounded-md border bg-slate-50 dark:bg-muted/40 px-3">
+              <span className="truncate text-xs text-slate-600 dark:text-neutral-400 font-mono">
                 {typeof window !== "undefined" ? window.location.origin : "https://yourapp.com"}/request/{remoteSettings?.slug ?? ""}
               </span>
             </div>
@@ -198,7 +198,7 @@ function RequestPortalTab() {
             >
               {copied ? (
                 <>
-                  <Check className="h-3 w-3 text-emerald-600" />
+                  <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                   Copied
                 </>
               ) : (
@@ -242,18 +242,18 @@ function AccordionSection({
     <div className="border-b last:border-0">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-slate-50"
+        className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-slate-50 dark:hover:bg-muted/40"
       >
         <div>
-          <span className="text-sm font-semibold text-slate-900">{title}</span>
-          <span className="ml-2 text-xs text-slate-400">
+          <span className="text-sm font-semibold text-slate-900 dark:text-neutral-100">{title}</span>
+          <span className="ml-2 text-xs text-slate-400 dark:text-neutral-500">
             {count} item{count !== 1 ? "s" : ""}
           </span>
         </div>
         {open ? (
-          <ChevronUp className="h-4 w-4 text-slate-400" />
+          <ChevronUp className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
         ) : (
-          <ChevronDown className="h-4 w-4 text-slate-400" />
+          <ChevronDown className="h-4 w-4 text-slate-400 dark:text-neutral-500" />
         )}
       </button>
       {open && <div className="px-6 pb-4">{children}</div>}
@@ -313,7 +313,7 @@ function CategoryListEditor({
             {editingId === item.id ? (
               <input
                 autoFocus
-                className="rounded-md border border-brand-400 px-2 py-1 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                className="rounded-md border border-brand-400 px-2 py-1 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
                 value={labelDraft}
                 onChange={(e) => setLabelDraft(e.target.value)}
                 onBlur={() => commitRename(item.id)}
@@ -324,7 +324,7 @@ function CategoryListEditor({
               />
             ) : (
               <button
-                className="text-left text-sm font-medium text-slate-800 hover:text-brand-600"
+                className="text-left text-sm font-medium text-slate-800 dark:text-neutral-100 hover:text-brand-600 dark:hover:text-brand-400"
                 onClick={() => {
                   setEditingId(item.id);
                   setLabelDraft(item.label);
@@ -334,7 +334,7 @@ function CategoryListEditor({
                 {item.label}
               </button>
             )}
-            <p className="mt-0.5 text-xs text-slate-400">{item.isBuiltIn ? "Built-in" : "Custom"}</p>
+            <p className="mt-0.5 text-xs text-slate-400 dark:text-neutral-500">{item.isBuiltIn ? "Built-in" : "Custom"}</p>
           </div>
 
           <Toggle
@@ -345,7 +345,7 @@ function CategoryListEditor({
           {!item.isBuiltIn ? (
             <button
               onClick={() => onRemove(item.id)}
-              className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500"
+              className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
               title="Remove"
             >
               <X className="h-4 w-4" />
@@ -370,7 +370,7 @@ function CategoryListEditor({
                 setNewItemLabel("");
               }
             }}
-            className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            className="flex-1 rounded-md border border-brand-400 px-3 py-1.5 text-sm text-slate-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-brand-400"
           />
           <button
             onClick={commitAdd}
@@ -383,7 +383,7 @@ function CategoryListEditor({
               setAddingItem(false);
               setNewItemLabel("");
             }}
-            className="rounded p-1 text-slate-400 hover:text-slate-600"
+            className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
           >
             <X className="h-4 w-4" />
           </button>
@@ -392,7 +392,7 @@ function CategoryListEditor({
         <div className="py-3">
           <button
             onClick={() => setAddingItem(true)}
-            className="flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:text-brand-700"
+            className="flex items-center gap-1.5 text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400"
           >
             <Plus className="h-4 w-4" />
             Add Item
@@ -436,25 +436,25 @@ function CustomPartCategoriesCleanup({
   if (customLabels.length === 0) return null;
 
   return (
-    <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-3">
-      <p className="text-xs font-semibold text-amber-800">
+    <div className="mt-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-3">
+      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
         Custom categories in use ({customLabels.length})
       </p>
-      <p className="mt-0.5 text-xs text-amber-700">
+      <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
         These part categories aren&apos;t in the saved list above. Merge each into an
         existing category, or save it as a new one.
       </p>
-      <div className="mt-2 divide-y divide-amber-200/60">
+      <div className="mt-2 divide-y divide-amber-200/60 dark:divide-amber-800/60">
         {customLabels.map(([label, count]) => (
           <div key={label} className="flex items-center gap-2 py-2">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-800">{label}</p>
-              <p className="text-xs text-slate-500">
+              <p className="truncate text-sm font-medium text-slate-800 dark:text-neutral-100">{label}</p>
+              <p className="text-xs text-muted-foreground">
                 {count} part{count !== 1 ? "s" : ""}
               </p>
             </div>
             <select
-              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+              className="rounded-md border border-border bg-card px-2 py-1 text-xs text-slate-700 dark:text-neutral-300"
               value={targets[label] ?? ""}
               onChange={(e) => setTargets((t) => ({ ...t, [label]: e.target.value }))}
             >
@@ -475,7 +475,7 @@ function CustomPartCategoriesCleanup({
             <button
               disabled={isMerging}
               onClick={() => onPromote(label)}
-              className="whitespace-nowrap rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              className="whitespace-nowrap rounded-md border border-border px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40 disabled:opacity-40"
             >
               Save as category
             </button>
@@ -595,27 +595,27 @@ function CustomizationsTab({ hasEquipt }: { hasEquipt: boolean }) {
   }
 
   return (
-    <div className="rounded-lg border bg-white shadow-sm">
+    <div className="rounded-lg border bg-card shadow-sm">
       {/* Auto-save status bar */}
       <div className="flex items-center justify-end gap-2 border-b px-6 py-3 text-xs">
         {savingCustomizations && (
-          <span className="flex items-center gap-1.5 text-slate-400">
+          <span className="flex items-center gap-1.5 text-slate-400 dark:text-neutral-500">
             <Loader2 className="h-3 w-3 animate-spin" />
             Saving…
           </span>
         )}
         {!savingCustomizations && saveStatus === "saved" && (
-          <span className="flex items-center gap-1 text-emerald-600">
+          <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
             <Check className="h-3 w-3" /> Saved
           </span>
         )}
         {!savingCustomizations && saveStatus === "error" && (
-          <span className="text-red-500">
+          <span className="text-red-500 dark:text-red-400">
             {saveError ?? "Save failed — please retry"}
           </span>
         )}
         {!savingCustomizations && saveStatus === "idle" && (
-          <span className="text-slate-400">Changes save automatically</span>
+          <span className="text-slate-400 dark:text-neutral-500">Changes save automatically</span>
         )}
       </div>
 
@@ -737,19 +737,19 @@ function RequiredFieldsTab({ hasEquipt }: { hasEquipt: boolean }) {
       {entities.map(({ key, name }) => {
         const fields = requiredFields[key] ?? [];
         return (
-          <div key={key} className="rounded-lg border bg-white shadow-sm">
+          <div key={key} className="rounded-lg border bg-card shadow-sm">
             <div className="px-6 py-4">
-              <h2 className="text-sm font-semibold text-slate-900">{name}</h2>
-              <p className="mt-0.5 text-xs text-slate-500">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">{name}</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Set which fields are required, optional, or hidden
               </p>
             </div>
             <Separator />
             <table className="w-full">
               <thead>
-                <tr className="border-b bg-slate-50">
-                  <th className="px-6 py-2 text-left text-xs font-medium text-slate-500">Field</th>
-                  <th className="px-6 py-2 text-right text-xs font-medium text-slate-500">
+                <tr className="border-b bg-slate-50 dark:bg-muted/40">
+                  <th className="px-6 py-2 text-left text-xs font-medium text-muted-foreground">Field</th>
+                  <th className="px-6 py-2 text-right text-xs font-medium text-muted-foreground">
                     Requirement
                   </th>
                 </tr>
@@ -757,7 +757,7 @@ function RequiredFieldsTab({ hasEquipt }: { hasEquipt: boolean }) {
               <tbody className="divide-y">
                 {fields.map((f) => (
                   <tr key={f.field}>
-                    <td className="px-6 py-3 text-sm text-slate-800">{f.label}</td>
+                    <td className="px-6 py-3 text-sm text-slate-800 dark:text-neutral-100">{f.label}</td>
                     <td className="px-6 py-3 text-right">
                       <Select
                         value={f.requirement}
@@ -876,7 +876,7 @@ function ImportTile({
     <>
       <button
         onClick={() => fileRef.current?.click()}
-        className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+        className="flex flex-col items-center gap-2 rounded-lg border border-border p-5 text-muted-foreground transition-colors hover:border-brand-300 dark:hover:border-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-600 dark:hover:text-brand-400"
       >
         {icon}
         <span className="text-sm">{label}</span>
@@ -894,14 +894,14 @@ function ImportTile({
             <div className="flex flex-col gap-3">
               {templateColumns.map((field) => (
                 <div key={field} className="grid grid-cols-2 items-center gap-3">
-                  <label className="text-sm font-medium text-slate-700">
+                  <label className="text-sm font-medium text-slate-700 dark:text-neutral-300">
                     {fieldLabel(field)}
-                    {requiredColumns.includes(field) && <span className="text-red-500"> *</span>}
+                    {requiredColumns.includes(field) && <span className="text-red-500 dark:text-red-400"> *</span>}
                   </label>
                   <Select value={columnMapping[field] || "__skip__"} onValueChange={(v) => setColumnMapping((prev) => ({ ...prev, [field]: v === "__skip__" ? "" : v }))}>
                     <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Skip" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__skip__"><span className="text-slate-400">— Skip —</span></SelectItem>
+                      <SelectItem value="__skip__"><span className="text-slate-400 dark:text-neutral-500">— Skip —</span></SelectItem>
                       {csvColumns.map((col) => (<SelectItem key={col} value={col}>{col}</SelectItem>))}
                     </SelectContent>
                   </Select>
@@ -926,16 +926,16 @@ function ImportTile({
           {!importError && parsedRows.length > 0 && (
             <div className="max-h-64 overflow-auto rounded-md border text-xs">
               <table className="w-full">
-                <thead className="sticky top-0 bg-slate-50">
-                  <tr>{Object.keys(parsedRows[0]).map((col) => (<th key={col} className="border-b px-3 py-2 text-left font-semibold text-slate-600">{fieldLabel(col)}</th>))}</tr>
+                <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
+                  <tr>{Object.keys(parsedRows[0]).map((col) => (<th key={col} className="border-b px-3 py-2 text-left font-semibold text-slate-600 dark:text-neutral-400">{fieldLabel(col)}</th>))}</tr>
                 </thead>
                 <tbody>
-                  {parsedRows.slice(0, 5).map((row, i) => (<tr key={i} className="border-b last:border-0">{Object.keys(parsedRows[0]).map((col) => (<td key={col} className="px-3 py-1.5 text-slate-700">{row[col] || "—"}</td>))}</tr>))}
+                  {parsedRows.slice(0, 5).map((row, i) => (<tr key={i} className="border-b last:border-0">{Object.keys(parsedRows[0]).map((col) => (<td key={col} className="px-3 py-1.5 text-slate-700 dark:text-neutral-300">{row[col] || "—"}</td>))}</tr>))}
                 </tbody>
               </table>
             </div>
           )}
-          {importError && <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{importError}</div>}
+          {importError && <div className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-700 dark:text-red-400">{importError}</div>}
           <DialogFooter>
             <Button variant="outline" onClick={resetAll}>Cancel</Button>
             {!importError && <Button onClick={handleConfirm} disabled={importing}>{importing ? "Importing..." : `Import ${parsedRows.length} Rows`}</Button>}
@@ -1044,8 +1044,8 @@ function ImportExportTab({ hasEquipt }: { hasEquipt: boolean }) {
       {importStatus && (
         <div className={`rounded-md border px-4 py-3 text-sm ${
           importStatus.type === "success"
-            ? "border-green-200 bg-green-50 text-green-700"
-            : "border-red-200 bg-red-50 text-red-700"
+            ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400"
+            : "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400"
         }`}>
           {importStatus.message}
           <button className="ml-2 font-medium underline" onClick={() => setImportStatus(null)}>
@@ -1055,10 +1055,10 @@ function ImportExportTab({ hasEquipt }: { hasEquipt: boolean }) {
       )}
 
       {/* Export */}
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="rounded-lg border bg-card shadow-sm">
         <div className="px-6 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Export Data</h2>
-          <p className="mt-0.5 text-xs text-slate-500">Download your data as a CSV file</p>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Export Data</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">Download your data as a CSV file</p>
         </div>
         <Separator />
         <div className="p-6">
@@ -1067,7 +1067,7 @@ function ImportExportTab({ hasEquipt }: { hasEquipt: boolean }) {
               <button
                 key={label}
                 onClick={() => handleExport(label)}
-                className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 p-5 text-slate-500 transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600"
+                className="flex flex-col items-center gap-2 rounded-lg border border-border p-5 text-muted-foreground transition-colors hover:border-brand-300 dark:hover:border-brand-700 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-600 dark:hover:text-brand-400"
               >
                 {icon}
                 <span className="text-sm">{label}</span>
@@ -1078,10 +1078,10 @@ function ImportExportTab({ hasEquipt }: { hasEquipt: boolean }) {
       </div>
 
       {/* Import */}
-      <div className="rounded-lg border bg-white shadow-sm">
+      <div className="rounded-lg border bg-card shadow-sm">
         <div className="px-6 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Import Data</h2>
-          <p className="mt-0.5 text-xs text-slate-500">Upload a CSV to bulk-import records</p>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Import Data</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">Upload a CSV to bulk-import records</p>
         </div>
         <Separator />
         <div className="p-6">
@@ -1211,7 +1211,7 @@ function IntegrationsTab() {
 
   if (currentUserLoaded && !isAdmin) {
     return (
-      <div className="max-w-2xl rounded-xl border bg-white p-6 text-sm text-slate-500 shadow-sm">
+      <div className="max-w-2xl rounded-xl border bg-card p-6 text-sm text-muted-foreground shadow-sm">
         The Samsara integration (API key & vehicle sync) is limited to admins.
         Ask an admin if you need something changed here.
       </div>
@@ -1221,7 +1221,7 @@ function IntegrationsTab() {
   return (
     <div className="max-w-2xl space-y-8">
       {/* Samsara */}
-      <div className="rounded-xl border bg-white shadow-sm">
+      <div className="rounded-xl border bg-card shadow-sm">
         <div className="flex items-center gap-3 border-b px-6 py-4">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#f5a623]/10">
             {/* Samsara brand icon placeholder */}
@@ -1230,15 +1230,15 @@ function IntegrationsTab() {
             </svg>
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-900">Samsara</p>
-            <p className="text-xs text-slate-500">Automatically sync vehicle odometer readings daily at 6 AM ET</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Samsara</p>
+            <p className="text-xs text-muted-foreground">Automatically sync vehicle odometer readings daily at 6 AM ET</p>
           </div>
           {lastStatus && (
             <span className={cn(
               "ml-auto rounded-full px-2.5 py-0.5 text-xs font-medium",
-              lastStatus === "ok"      && "bg-green-100 text-green-700",
-              lastStatus === "partial" && "bg-amber-100 text-amber-700",
-              lastStatus === "error"   && "bg-red-100 text-red-700",
+              lastStatus === "ok"      && "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+              lastStatus === "partial" && "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400",
+              lastStatus === "error"   && "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400",
             )}>
               {lastStatus === "ok" ? "Connected" : lastStatus === "partial" ? "Partial" : "Error"}
             </span>
@@ -1262,7 +1262,7 @@ function IntegrationsTab() {
                 <button
                   type="button"
                   onClick={() => setShowKey((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
                 >
                   {showKey ? (
                     <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2">
@@ -1286,15 +1286,15 @@ function IntegrationsTab() {
                 {keySaved ? "Saved ✓" : saving ? "Saving…" : "Save"}
               </Button>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-400 dark:text-neutral-500">
               Generate a read-only API key in your Samsara dashboard under Settings → API Tokens.
             </p>
           </div>
 
           {/* Vehicle matching note */}
-          <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            <p className="font-medium text-slate-700">How vehicle matching works</p>
-            <p className="mt-1 text-xs text-slate-500">
+          <div className="rounded-lg bg-slate-50 dark:bg-muted/40 px-4 py-3 text-sm text-slate-600 dark:text-neutral-400">
+            <p className="font-medium text-slate-700 dark:text-neutral-300">How vehicle matching works</p>
+            <p className="mt-1 text-xs text-muted-foreground">
               Samsara vehicles are matched to Equipt vehicles by <strong>Samsara Vehicle ID</strong> first,
               then by <strong>exact name</strong>. Set the Samsara Vehicle ID on a vehicle&apos;s detail page
               for the most reliable match. A reading is only written if the new odometer value is greater
@@ -1305,8 +1305,8 @@ function IntegrationsTab() {
           {/* Driver Safety Scores toggle */}
           <div className="flex items-center justify-between gap-4 border-t pt-4">
             <div>
-              <p className="text-sm font-medium text-slate-700">Driver Safety Scores dashboard</p>
-              <p className="text-xs text-slate-400">
+              <p className="text-sm font-medium text-slate-700 dark:text-neutral-300">Driver Safety Scores dashboard</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">
                 Turn this on to upload your weekly Samsara Vehicle Safety Excel export and see fleet
                 safety scores, rankings, and trends under Dashboards.
               </p>
@@ -1316,14 +1316,14 @@ function IntegrationsTab() {
 
           {/* Last sync status */}
           {lastSync && (
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-muted-foreground">
               Last synced: {new Date(lastSync).toLocaleString()}
               {lastStatus && (
                 <span className={cn(
                   "ml-2 font-medium",
-                  lastStatus === "ok"      && "text-green-600",
-                  lastStatus === "partial" && "text-amber-600",
-                  lastStatus === "error"   && "text-red-600",
+                  lastStatus === "ok"      && "text-green-600 dark:text-green-400",
+                  lastStatus === "partial" && "text-amber-600 dark:text-amber-400",
+                  lastStatus === "error"   && "text-red-600 dark:text-red-400",
                 )}>
                   ({lastStatus})
                 </span>
@@ -1348,7 +1348,7 @@ function IntegrationsTab() {
             {syncResult && (
               <pre className={cn(
                 "max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md border p-3 text-xs leading-relaxed",
-                syncResult.startsWith("Error") ? "border-red-200 bg-red-50 text-red-600" : "border-slate-200 bg-slate-50 text-slate-700"
+                syncResult.startsWith("Error") ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400" : "border-border bg-slate-50 dark:bg-muted/40 text-slate-700 dark:text-neutral-300"
               )}>
                 {syncResult}
               </pre>
@@ -1413,10 +1413,10 @@ export function EquiptSettingsTabs() {
   return (
     <div className="flex flex-col gap-0">
       <div className="px-4 pt-4 pb-0 md:px-6 md:pt-6">
-        <h1 className="text-xl font-semibold text-slate-900">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-neutral-100">
           {hasEquipt ? "Equipt Settings" : "Purchasing Settings"}
         </h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           {hasEquipt
             ? "CMMS & purchasing configuration"
             : "Vendors, requisition & PO approval flows, and inventory costing"}
@@ -1429,7 +1429,7 @@ export function EquiptSettingsTabs() {
               <TabsTrigger
                 key={tab}
                 value={tab}
-                className="rounded-none border-b-2 border-transparent px-3 py-2.5 text-xs font-medium text-slate-600 md:px-4 md:py-3 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+                className="rounded-none border-b-2 border-transparent px-3 py-2.5 text-xs font-medium text-slate-600 dark:text-neutral-400 md:px-4 md:py-3 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none"
               >
                 {tabLabel(tab)}
               </TabsTrigger>

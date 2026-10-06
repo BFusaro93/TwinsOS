@@ -47,36 +47,36 @@ export function PendingApprovalsButton() {
 
           <ScrollArea className="mt-4 h-[calc(100dvh-8rem)] pr-3">
             {count === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-400">Nothing waiting on approval.</p>
+              <p className="py-8 text-center text-sm text-slate-400 dark:text-neutral-500">Nothing waiting on approval.</p>
             ) : (
               <div className="flex flex-col gap-3">
                 {approvals!.map((a) => (
-                  <div key={a.id} className="rounded-md border border-slate-200 p-3">
+                  <div key={a.id} className="rounded-md border border-border p-3">
                     <div className="mb-1 flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                         {a.sequenceName}
                       </span>
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-[11px] text-slate-400 dark:text-neutral-500">
                         {new Date(a.createdAt).toLocaleString()}
                       </span>
                     </div>
                     {a.channel === "sms" ? (
                       <>
-                        <p className="text-sm font-medium text-slate-800">Text message</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">Text message</p>
+                        <p className="text-xs text-muted-foreground">
                           To: {a.toName ? `${a.toName} <${a.toPhone}>` : a.toPhone}
                         </p>
-                        <div className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap rounded border border-slate-100 bg-slate-50 p-2 text-xs text-slate-600">
+                        <div className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap rounded border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 p-2 text-xs text-slate-600 dark:text-neutral-400">
                           {a.bodyText || "(empty message)"}
                         </div>
                       </>
                     ) : (
                       <>
-                        <p className="text-sm font-medium text-slate-800">{a.subject}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{a.subject}</p>
+                        <p className="text-xs text-muted-foreground">
                           To: {a.toName ? `${a.toName} <${a.toEmail}>` : a.toEmail}
                         </p>
-                        <div className="mt-2 rounded border border-slate-100 bg-slate-50 p-2 text-xs text-slate-600">
+                        <div className="mt-2 rounded border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 p-2 text-xs text-slate-600 dark:text-neutral-400">
                           <SandboxedHtmlPreview
                             html={a.bodyHtml || "<em>(empty body)</em>"}
                             minHeight={24}
@@ -89,7 +89,7 @@ export function PendingApprovalsButton() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="gap-1 text-red-600 hover:text-red-700"
+                        className="gap-1 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400"
                         disabled={decide.isPending}
                         onClick={() => handleDecide(a.id, "reject")}
                       >

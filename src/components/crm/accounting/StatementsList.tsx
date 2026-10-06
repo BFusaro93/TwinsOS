@@ -133,14 +133,14 @@ export function StatementsList() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="border-b bg-white px-4 py-3">
-        <h1 className="text-sm font-semibold text-slate-800">Account Statements</h1>
-        <p className="text-xs text-slate-400">
+      <div className="border-b bg-card px-4 py-3">
+        <h1 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Account Statements</h1>
+        <p className="text-xs text-slate-400 dark:text-neutral-500">
           Run and email account statements for clients with an outstanding balance.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 border-b bg-slate-50 px-4 py-3 md:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 border-b bg-slate-50 dark:bg-muted/40 px-4 py-3 md:grid-cols-5">
         <div>
           <Label className="text-xs">Statement Date</Label>
           <Input type="date" value={statementDate} onChange={(e) => setStatementDate(e.target.value)} className="h-8 text-xs" />
@@ -158,7 +158,7 @@ export function StatementsList() {
           <Input type="number" step="0.01" value={minBalance} onChange={(e) => setMinBalance(e.target.value)} className="h-8 text-xs" />
         </div>
         <div className="flex items-end">
-          <label className="flex items-center gap-2 text-xs text-slate-600">
+          <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
             <Checkbox checked={showLineItemDetails} onCheckedChange={(v) => setShowLineItemDetails(v === true)} />
             Show activity detail
           </label>
@@ -175,8 +175,8 @@ export function StatementsList() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between border-b bg-white px-4 py-2">
-        <label className="flex items-center gap-2 text-xs text-slate-600">
+      <div className="flex items-center justify-between border-b bg-card px-4 py-2">
+        <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
           <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
           Select all ({clientsWithBalance.length} with a balance)
         </label>
@@ -189,37 +189,37 @@ export function StatementsList() {
       </div>
 
       <div className="flex-1 overflow-auto">
-        {isLoading && <p className="p-4 text-xs text-slate-400">Loading clients…</p>}
+        {isLoading && <p className="p-4 text-xs text-slate-400 dark:text-neutral-500">Loading clients…</p>}
         {!isLoading && clientsWithBalance.length === 0 && (
-          <p className="p-4 text-xs text-slate-400">No clients currently have an outstanding balance.</p>
+          <p className="p-4 text-xs text-slate-400 dark:text-neutral-500">No clients currently have an outstanding balance.</p>
         )}
         <table className="w-full text-xs">
           <tbody className="divide-y">
             {clientsWithBalance.map((c) => {
               const status = results[c.id];
               return (
-                <tr key={c.id} className="hover:bg-slate-50">
+                <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-muted/40">
                   <td className="w-8 px-4 py-2">
                     <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => toggleOne(c.id)} />
                   </td>
-                  <td className="px-2 py-2 font-medium text-slate-800">{c.displayName}</td>
-                  <td className="px-2 py-2 text-slate-500">
-                    {c.primaryEmail ?? <span className="text-red-500">No email on file</span>}
+                  <td className="px-2 py-2 font-medium text-slate-800 dark:text-neutral-100">{c.displayName}</td>
+                  <td className="px-2 py-2 text-muted-foreground">
+                    {c.primaryEmail ?? <span className="text-red-500 dark:text-red-400">No email on file</span>}
                   </td>
-                  <td className="px-2 py-2 text-right font-semibold text-slate-800">
+                  <td className="px-2 py-2 text-right font-semibold text-slate-800 dark:text-neutral-100">
                     {formatCurrency(c.balanceOutstandingCents)}
                   </td>
                   <td className="px-2 py-2 text-right">
-                    {status === "sent" && <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Sent</Badge>}
+                    {status === "sent" && <Badge className="bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40">Sent</Badge>}
                     {status === "skipped" && <Badge variant="outline">Skipped</Badge>}
-                    {status === "failed" && <Badge className="bg-red-100 text-red-700 hover:bg-red-100">Failed</Badge>}
+                    {status === "failed" && <Badge className="bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40">Failed</Badge>}
                   </td>
                   <td className="px-4 py-2 text-right">
                     <a
                       href={previewUrl(c.id)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-brand-600 hover:underline"
+                      className="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline"
                     >
                       <Eye className="h-3.5 w-3.5" />
                       Preview

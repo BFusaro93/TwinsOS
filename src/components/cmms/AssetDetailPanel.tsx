@@ -266,7 +266,7 @@ function SubAssetsTab({ asset, onAddSubAsset }: { asset: Asset; onAddSubAsset: (
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
           Sub-assets
-          <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-600">({subAssets.length})</span>
+          <span className="ml-1.5 font-normal normal-case text-slate-300 dark:text-neutral-500">({subAssets.length})</span>
         </p>
         {canWriteEquipt && <div className="flex items-center gap-2">
           {/* Link existing asset */}
@@ -354,7 +354,7 @@ function SubAssetsTab({ asset, onAddSubAsset }: { asset: Asset; onAddSubAsset: (
                   type="button"
                   title="Unlink this sub-asset"
                   onClick={() => handleUnlink(sub.id)}
-                  className="ml-1 rounded p-1 text-slate-300 dark:text-neutral-600 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
+                  className="ml-1 rounded p-1 text-slate-300 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
                 >
                   <Unlink className="h-3.5 w-3.5" />
                 </button>

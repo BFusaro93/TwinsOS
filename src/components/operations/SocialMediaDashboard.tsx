@@ -64,7 +64,7 @@ const NO_STATS: SocialWeekStat[] = [];
 
 function Th({ children, right }: { children: React.ReactNode; right?: boolean }) {
   return (
-    <th className={`whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 ${right ? "text-right" : "text-left"}`}>
+    <th className={`whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground ${right ? "text-right" : "text-left"}`}>
       {children}
     </th>
   );
@@ -74,9 +74,9 @@ function Td({ children, right, cls }: { children: React.ReactNode; right?: boole
 }
 function Card({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-lg border bg-white p-5 shadow-sm">
+    <div className="min-w-0 rounded-lg border bg-card p-5 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-slate-700">{title}</p>
+        <p className="text-sm font-semibold text-slate-700 dark:text-neutral-300">{title}</p>
         {action}
       </div>
       {children}
@@ -92,21 +92,21 @@ function Delta({ cur, prev, pct }: { cur: number | null; prev: number | null; pc
   const diff = cur - prev;
   if (pct) {
     const pts = diff * 100;
-    if (Math.abs(pts) < 0.05) return <span className="text-slate-400">no change</span>;
-    return <span className={pts > 0 ? "text-green-600" : "text-red-600"}>{pts > 0 ? "▲" : "▼"} {Math.abs(pts).toFixed(1)} pts</span>;
+    if (Math.abs(pts) < 0.05) return <span className="text-slate-400 dark:text-neutral-500">no change</span>;
+    return <span className={pts > 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>{pts > 0 ? "▲" : "▼"} {Math.abs(pts).toFixed(1)} pts</span>;
   }
-  if (prev === 0) return diff === 0 ? <span className="text-slate-400">no change</span> : null;
+  if (prev === 0) return diff === 0 ? <span className="text-slate-400 dark:text-neutral-500">no change</span> : null;
   const rel = diff / prev;
-  if (Math.abs(rel) < 0.005) return <span className="text-slate-400">no change</span>;
-  return <span className={rel > 0 ? "text-green-600" : "text-red-600"}>{rel > 0 ? "▲" : "▼"} {Math.abs(rel * 100).toFixed(0)}%</span>;
+  if (Math.abs(rel) < 0.005) return <span className="text-slate-400 dark:text-neutral-500">no change</span>;
+  return <span className={rel > 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>{rel > 0 ? "▲" : "▼"} {Math.abs(rel * 100).toFixed(0)}%</span>;
 }
 
 function KpiCard({ label, value, delta, sub }: { label: string; value: string; delta?: React.ReactNode; sub?: string }) {
   return (
-    <div className="min-w-0 rounded-lg border bg-white p-4 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">{label}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{value}</p>
-      <p className="mt-1 text-xs text-slate-500">
+    <div className="min-w-0 rounded-lg border bg-card p-4 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">{label}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 dark:text-neutral-100">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">
         {delta ?? sub ?? " "}
       </p>
     </div>
@@ -121,16 +121,16 @@ function GoalRow({ label, actual, display, min, max, target }: { label: string; 
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2 text-sm">
-        <span className="text-slate-700">{label}</span>
-        <span className="tabular-nums font-semibold text-slate-900">{display}</span>
+        <span className="text-slate-700 dark:text-neutral-300">{label}</span>
+        <span className="tabular-nums font-semibold text-slate-900 dark:text-neutral-100">{display}</span>
       </div>
-      <div className="relative mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className="relative mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
         <div className={`h-full rounded-full ${onTrack ? "bg-brand-500" : "bg-amber-400"}`} style={{ width: `${pct * 100}%` }} />
         <div className="absolute inset-y-0 w-px bg-slate-400" style={{ left: `${markerPct}%` }} />
       </div>
       <div className="mt-1 flex justify-between text-xs">
-        <span className="text-slate-400">Target {target}</span>
-        <span className={onTrack ? "font-medium text-green-600" : "font-medium text-amber-600"}>{onTrack ? "On track" : "Behind"}</span>
+        <span className="text-slate-400 dark:text-neutral-500">Target {target}</span>
+        <span className={onTrack ? "font-medium text-green-600 dark:text-green-400" : "font-medium text-amber-600 dark:text-amber-400"}>{onTrack ? "On track" : "Behind"}</span>
       </div>
     </div>
   );
@@ -264,7 +264,7 @@ function GoalsDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-[1fr_88px_88px] items-end gap-x-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="grid grid-cols-[1fr_88px_88px] items-end gap-x-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-neutral-500">
             <span />
             <span>Minimum</span>
             <span>Stretch</span>
@@ -272,8 +272,8 @@ function GoalsDialog({
           {GOAL_FIELDS.map((f) => (
             <div key={f.min} className="grid grid-cols-[1fr_88px_88px] items-center gap-x-3">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-slate-800">{f.label}</p>
-                <p className="text-xs text-slate-400">{f.unit}</p>
+                <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{f.label}</p>
+                <p className="text-xs text-slate-400 dark:text-neutral-500">{f.unit}</p>
               </div>
               {[f.min, f.max].map((k) => (
                 <div key={k} className="relative">
@@ -281,25 +281,25 @@ function GoalsDialog({
                     inputMode="decimal"
                     value={form[k]}
                     onChange={(e) => { setForm((cur) => ({ ...cur, [k]: e.target.value })); setError(null); }}
-                    className={`w-full rounded-md border border-slate-200 py-1.5 text-right text-sm tabular-nums focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 ${f.percent ? "pl-2 pr-6" : "px-2"}`}
+                    className={`w-full rounded-md border border-border py-1.5 text-right text-sm tabular-nums focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400 ${f.percent ? "pl-2 pr-6" : "px-2"}`}
                     aria-label={`${f.label} ${k === f.min ? "minimum" : "stretch goal"}`}
                   />
-                  {f.percent && <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">%</span>}
+                  {f.percent && <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 dark:text-neutral-500">%</span>}
                 </div>
               ))}
             </div>
           ))}
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
           <button
             type="button"
             onClick={() => setForm(formFrom(DEFAULT_SOCIAL_GOALS))}
-            className="mr-auto text-sm text-slate-500 hover:text-slate-700"
+            className="mr-auto text-sm text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
           >
             Reset to defaults
           </button>
-          <button type="button" onClick={() => onOpenChange(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+          <button type="button" onClick={() => onOpenChange(false)} className="rounded-md border border-border px-4 py-2 text-sm font-medium text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40">
             Cancel
           </button>
           <button
@@ -402,23 +402,23 @@ function PlatformsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex max-h-[50vh] flex-col divide-y divide-slate-100 overflow-y-auto rounded-md border">
+        <div className="flex max-h-[50vh] flex-col divide-y divide-slate-100 dark:divide-neutral-800 overflow-y-auto rounded-md border">
           {draft.map((p, i) => {
             const rows = weeksByPlatform.get(p.name) ?? 0;
             return (
-              <div key={p.name} className={`flex items-center gap-3 px-3 py-2 ${p.hidden ? "bg-slate-50" : ""}`}>
+              <div key={p.name} className={`flex items-center gap-3 px-3 py-2 ${p.hidden ? "bg-slate-50 dark:bg-muted/40" : ""}`}>
                 <div className="flex flex-col">
-                  <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-slate-400 hover:text-slate-700 disabled:opacity-25" aria-label={`Move ${p.name} up`}>
+                  <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300 disabled:opacity-25" aria-label={`Move ${p.name} up`}>
                     <ArrowUp className="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" onClick={() => move(i, 1)} disabled={i === draft.length - 1} className="text-slate-400 hover:text-slate-700 disabled:opacity-25" aria-label={`Move ${p.name} down`}>
+                  <button type="button" onClick={() => move(i, 1)} disabled={i === draft.length - 1} className="text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300 disabled:opacity-25" aria-label={`Move ${p.name} down`}>
                     <ArrowDown className="h-3.5 w-3.5" />
                   </button>
                 </div>
                 <span className={p.hidden ? "opacity-30" : ""}><PlatformDot color={p.color} /></span>
                 <div className="min-w-0 flex-1">
-                  <p className={`truncate text-sm font-medium ${p.hidden ? "text-slate-400" : "text-slate-800"}`}>{p.name}</p>
-                  <p className="text-xs text-slate-400">
+                  <p className={`truncate text-sm font-medium ${p.hidden ? "text-slate-400 dark:text-neutral-500" : "text-slate-800 dark:text-neutral-100"}`}>{p.name}</p>
+                  <p className="text-xs text-slate-400 dark:text-neutral-500">
                     {p.hidden ? "Hidden · " : ""}
                     {rows ? `${rows} ${rows === 1 ? "week" : "weeks"} logged` : "No data yet"}
                   </p>
@@ -426,13 +426,13 @@ function PlatformsDialog({
                 <button
                   type="button"
                   onClick={() => toggle(i)}
-                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100"
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted"
                   aria-label={p.hidden ? `Show ${p.name}` : `Hide ${p.name}`}
                 >
                   {p.hidden ? <><Eye className="h-3.5 w-3.5" /> Show</> : <><EyeOff className="h-3.5 w-3.5" /> Hide</>}
                 </button>
                 {rows === 0 ? (
-                  <button type="button" onClick={() => remove(i)} className="text-red-400 hover:text-red-600" aria-label={`Remove ${p.name}`}>
+                  <button type="button" onClick={() => remove(i)} className="text-red-400 hover:text-red-600 dark:hover:text-red-400" aria-label={`Remove ${p.name}`}>
                     <Trash2 className="h-4 w-4" />
                   </button>
                 ) : (
@@ -452,18 +452,18 @@ function PlatformsDialog({
             onChange={(e) => { setNewName(e.target.value); setError(null); }}
             placeholder="Add a platform, e.g. Google Business, Nextdoor"
             maxLength={PLATFORM_NAME_MAX + 10}
-            className="min-w-0 flex-1 rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+            className="min-w-0 flex-1 rounded-md border border-border px-3 py-2 text-sm focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
             aria-label="New platform name"
           />
-          <button type="submit" disabled={!normalizePlatformName(newName)} className="flex items-center gap-1 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+          <button type="submit" disabled={!normalizePlatformName(newName)} className="flex items-center gap-1 rounded-md border border-border px-3 py-2 text-sm font-medium text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40 disabled:opacity-40">
             <Plus className="h-4 w-4" /> Add
           </button>
         </form>
-        <p className="-mt-2 text-xs text-slate-400">Only platforms with no data can be removed; hide the others instead. Names can&apos;t be changed after data is logged, since past weeks are stored under that name.</p>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        <p className="-mt-2 text-xs text-slate-400 dark:text-neutral-500">Only platforms with no data can be removed; hide the others instead. Names can&apos;t be changed after data is logged, since past weeks are stored under that name.</p>
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <button type="button" onClick={() => onOpenChange(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+          <button type="button" onClick={() => onOpenChange(false)} className="rounded-md border border-border px-4 py-2 text-sm font-medium text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40">
             Cancel
           </button>
           <button
@@ -672,7 +672,7 @@ export function SocialMediaDashboard() {
               key={p}
               type="button"
               onClick={() => setChipOff((h) => { const n = new Set(h); if (n.has(p)) n.delete(p); else n.add(p); return n; })}
-              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${on ? "border-slate-300 bg-white text-slate-700" : "border-dashed border-slate-200 bg-slate-50 text-slate-400"}`}
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${on ? "border-slate-300 dark:border-neutral-700 bg-card text-slate-700 dark:text-neutral-300" : "border-dashed border-border bg-slate-50 dark:bg-muted/40 text-slate-400 dark:text-neutral-500"}`}
               aria-pressed={on}
             >
               <span className={on ? "" : "opacity-30"}><PlatformDot color={colorOf(p)} /></span>
@@ -684,7 +684,7 @@ export function SocialMediaDashboard() {
       <select
         value={range}
         onChange={(e) => setRange(e.target.value as RangeKey)}
-        className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+        className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-slate-700 dark:text-neutral-300"
         aria-label="Date range"
       >
         {RANGE_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
@@ -694,10 +694,10 @@ export function SocialMediaDashboard() {
 
   function Empty() {
     return (
-      <div className="flex flex-col items-center rounded-lg border border-dashed bg-white py-16 text-center">
-        <Share2 className="mb-3 h-8 w-8 text-slate-300" />
-        <p className="text-sm font-medium text-slate-600">No weeks logged yet</p>
-        <p className="mt-1 text-xs text-slate-400">Log your first week of numbers to start the dashboard.</p>
+      <div className="flex flex-col items-center rounded-lg border border-dashed bg-card py-16 text-center">
+        <Share2 className="mb-3 h-8 w-8 text-slate-300 dark:text-neutral-500" />
+        <p className="text-sm font-medium text-slate-600 dark:text-neutral-400">No weeks logged yet</p>
+        <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">Log your first week of numbers to start the dashboard.</p>
         {canEdit && (
           <button onClick={() => openEntry(mondayOf(today))} className="mt-4 rounded-md bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600">
             Log a Week
@@ -722,7 +722,7 @@ export function SocialMediaDashboard() {
           <KpiCard label="Net New Followers" value={fmtSigned(current.netNewFollowers)} delta={previous && <Delta cur={current.netNewFollowers} prev={previous.netNewFollowers} />} />
           <KpiCard label="Leads" value={fmtNum(current.leads)} delta={previous && <Delta cur={current.leads} prev={previous.leads} />} />
         </div>
-        {previous && <p className="-mt-3 text-xs text-slate-400">Change vs. the previous {RANGE_OPTIONS.find((o) => o.key === range)?.label.toLowerCase().replace("last ", "")} · {current.weeks} {current.weeks === 1 ? "week" : "weeks"} logged in range</p>}
+        {previous && <p className="-mt-3 text-xs text-slate-400 dark:text-neutral-500">Change vs. the previous {RANGE_OPTIONS.find((o) => o.key === range)?.label.toLowerCase().replace("last ", "")} · {current.weeks} {current.weeks === 1 ? "week" : "weeks"} logged in range</p>}
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
           <div className="lg:col-span-2">
@@ -730,7 +730,7 @@ export function SocialMediaDashboard() {
               title={`This Month vs. Goals — ${fmtMonth(monthStart(today))}`}
               action={
                 canEdit ? (
-                  <button onClick={() => setGoalsOpen(true)} className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline">
+                  <button onClick={() => setGoalsOpen(true)} className="flex items-center gap-1.5 text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline">
                     <Target className="h-3.5 w-3.5" /> Edit goals
                   </button>
                 ) : undefined
@@ -776,20 +776,20 @@ export function SocialMediaDashboard() {
             <Card title="Follower Snapshot">
               <div className="-mx-5 overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-slate-50">
+                  <thead className="bg-slate-50 dark:bg-muted/40">
                     <tr><Th>Platform</Th><Th right>Current</Th><Th right>Start of Month</Th><Th right>Growth</Th><Th right>Rate</Th></tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                     {snapshot.map((r) => (
                       <tr key={r.platform}>
                         <Td><span className="flex items-center gap-2"><PlatformDot color={colorOf(r.platform)} />{r.platform}</span></Td>
-                        <Td right cls="font-semibold text-slate-900">{fmtNum(r.current)}</Td>
-                        <Td right cls="text-slate-500">{fmtNum(r.startOfMonth)}</Td>
-                        <Td right cls={r.growth != null && r.growth < 0 ? "text-red-600" : "text-slate-700"}>{fmtSigned(r.growth)}</Td>
-                        <Td right cls="text-slate-500">{fmtPct(r.growthRate)}</Td>
+                        <Td right cls="font-semibold text-slate-900 dark:text-neutral-100">{fmtNum(r.current)}</Td>
+                        <Td right cls="text-muted-foreground">{fmtNum(r.startOfMonth)}</Td>
+                        <Td right cls={r.growth != null && r.growth < 0 ? "text-red-600 dark:text-red-400" : "text-slate-700 dark:text-neutral-300"}>{fmtSigned(r.growth)}</Td>
+                        <Td right cls="text-muted-foreground">{fmtPct(r.growthRate)}</Td>
                       </tr>
                     ))}
-                    <tr className="bg-slate-50 font-semibold">
+                    <tr className="bg-slate-50 dark:bg-muted/40 font-semibold">
                       <Td>Total</Td>
                       <Td right>{snapCurrent ? fmtNum(snapCurrent) : "—"}</Td>
                       <Td right>{snapStart ? fmtNum(snapStart) : "—"}</Td>
@@ -800,14 +800,14 @@ export function SocialMediaDashboard() {
                 </table>
               </div>
               {snapshot.every((r) => r.current == null) && (
-                <p className="mt-3 text-xs text-slate-400">No follower counts logged yet — growth is from net-new followers. Enter each platform&apos;s follower count in &ldquo;Log a Week&rdquo; to track totals.</p>
+                <p className="mt-3 text-xs text-slate-400 dark:text-neutral-500">No follower counts logged yet — growth is from net-new followers. Enter each platform&apos;s follower count in &ldquo;Log a Week&rdquo; to track totals.</p>
               )}
             </Card>
           </div>
         </div>
 
         {weeklySeries.length === 0 ? (
-          <p className="rounded-lg border border-dashed bg-white py-10 text-center text-sm text-slate-400">No weeks logged in this date range.</p>
+          <p className="rounded-lg border border-dashed bg-card py-10 text-center text-sm text-slate-400 dark:text-neutral-500">No weeks logged in this date range.</p>
         ) : (
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <Card title="Views / Reach by Week">
@@ -888,24 +888,24 @@ export function SocialMediaDashboard() {
         <Card title={`Platform Comparison — ${RANGE_OPTIONS.find((o) => o.key === range)?.label}`}>
           <div className="-mx-5 overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-slate-50">
+              <thead className="bg-slate-50 dark:bg-muted/40">
                 <tr><Th>Platform</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Views / Post</Th><Th right>Profile Views</Th><Th right>Profile View Rate</Th><Th right>Engagements</Th><Th right>Eng. Rate</Th><Th right>Net New Followers</Th><Th right>Leads</Th></tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                 {platformRows.length === 0 && (
-                  <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-400">No weeks logged in this date range.</td></tr>
+                  <tr><td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-400 dark:text-neutral-500">No weeks logged in this date range.</td></tr>
                 )}
                 {platformRows.map((r) => (
                   <tr key={r.platform}>
                     <Td><span className="flex items-center gap-2"><PlatformDot color={colorOf(r.platform)} />{r.platform}</span></Td>
                     <Td right>{fmtNum(r.posts)}</Td>
                     <Td right>{fmtNum(r.views)}</Td>
-                    <Td right cls="text-slate-500">{r.viewsPerPost != null ? fmtNum(Math.round(r.viewsPerPost)) : "—"}</Td>
+                    <Td right cls="text-muted-foreground">{r.viewsPerPost != null ? fmtNum(Math.round(r.viewsPerPost)) : "—"}</Td>
                     <Td right>{fmtNum(r.profileViews)}</Td>
                     <Td right>{fmtPct(r.profileViewRate, 2)}</Td>
                     <Td right>{fmtNum(r.engagements)}</Td>
                     <Td right>
-                      <span className={r.engagementRate != null && r.engagementRate === bestEr ? "rounded bg-green-100 px-1.5 py-0.5 font-semibold text-green-700" : ""}>
+                      <span className={r.engagementRate != null && r.engagementRate === bestEr ? "rounded bg-green-100 dark:bg-green-900/40 px-1.5 py-0.5 font-semibold text-green-700 dark:text-green-400" : ""}>
                         {fmtPct(r.engagementRate, 2)}
                       </span>
                     </Td>
@@ -914,7 +914,7 @@ export function SocialMediaDashboard() {
                   </tr>
                 ))}
                 {platformRows.length > 1 && (
-                  <tr className="bg-slate-50 font-semibold">
+                  <tr className="bg-slate-50 dark:bg-muted/40 font-semibold">
                     <Td>Total</Td>
                     <Td right>{fmtNum(current.posts)}</Td>
                     <Td right>{fmtNum(current.views)}</Td>
@@ -935,10 +935,10 @@ export function SocialMediaDashboard() {
         <Card title="Monthly Summary">
           <div className="-mx-5 overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-slate-50">
+              <thead className="bg-slate-50 dark:bg-muted/40">
                 <tr><Th>Month</Th><Th>Platform</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Profile Views</Th><Th right>Profile View Rate</Th><Th right>Engagements</Th><Th right>Eng. Rate</Th><Th right>Net New Followers</Th><Th right>Leads</Th></tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                 {months.map((m) => {
                   const rows = inRange(filtered, m, addMonths(m, 1));
                   const byPlatform = activePlatforms
@@ -948,7 +948,7 @@ export function SocialMediaDashboard() {
                   return [
                     ...byPlatform.map(({ p, t }, i) => (
                       <tr key={`${m}-${p}`}>
-                        <Td cls="font-medium text-slate-700">{i === 0 ? fmtMonth(m) : ""}</Td>
+                        <Td cls="font-medium text-slate-700 dark:text-neutral-300">{i === 0 ? fmtMonth(m) : ""}</Td>
                         <Td><span className="flex items-center gap-2"><PlatformDot color={colorOf(p)} />{p}</span></Td>
                         <Td right>{fmtNum(t.posts)}</Td>
                         <Td right>{fmtNum(t.views)}</Td>
@@ -960,7 +960,7 @@ export function SocialMediaDashboard() {
                         <Td right>{fmtNum(t.leads)}</Td>
                       </tr>
                     )),
-                    <tr key={`${m}-total`} className="bg-slate-50 font-semibold">
+                    <tr key={`${m}-total`} className="bg-slate-50 dark:bg-muted/40 font-semibold">
                       <Td>{byPlatform.length === 0 ? fmtMonth(m) : ""}</Td>
                       <Td>All platforms</Td>
                       <Td right>{fmtNum(all.posts)}</Td>
@@ -985,24 +985,24 @@ export function SocialMediaDashboard() {
   function WeeklyLog() {
     if (stats.length === 0) return <Empty />;
     return (
-      <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-slate-50">
+            <thead className="bg-slate-50 dark:bg-muted/40">
               <tr><Th>Week</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Profile Views</Th><Th right>Profile View Rate</Th><Th right>Engagements</Th><Th right>Eng. Rate</Th><Th right>Net New Followers</Th><Th right>Leads</Th><Th right>{""}</Th></tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
               {allWeeks.map((w) => {
                 const rows = stats.filter((s) => s.weekStart === w);
                 const t = totalsOf(rows, netNew);
                 const open = expandedWeek === w;
                 return [
-                  <tr key={w} className="cursor-pointer hover:bg-slate-50" onClick={() => setExpandedWeek(open ? null : w)}>
+                  <tr key={w} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40" onClick={() => setExpandedWeek(open ? null : w)}>
                     <Td>
-                      <span className="flex items-center gap-2 font-medium text-slate-800">
-                        <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} />
+                      <span className="flex items-center gap-2 font-medium text-slate-800 dark:text-neutral-100">
+                        <ChevronDown className={`h-4 w-4 text-slate-400 dark:text-neutral-500 transition-transform ${open ? "" : "-rotate-90"}`} />
                         {fmtWeekRange(w)}
-                        <span className="text-xs font-normal text-slate-400">{rows.length} {rows.length === 1 ? "platform" : "platforms"}</span>
+                        <span className="text-xs font-normal text-slate-400 dark:text-neutral-500">{rows.length} {rows.length === 1 ? "platform" : "platforms"}</span>
                       </span>
                     </Td>
                     <Td right>{fmtNum(t.posts)}</Td>
@@ -1016,21 +1016,21 @@ export function SocialMediaDashboard() {
                     <td className="whitespace-nowrap px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       {canEdit && (
                         <span className="inline-flex gap-3">
-                          <button onClick={() => openEntry(w)} className="text-slate-400 hover:text-brand-600" aria-label={`Edit week of ${fmtShortDate(w)}`}><Pencil className="h-4 w-4" /></button>
-                          <button onClick={() => handleDeleteWeek(w)} className="text-red-400 hover:text-red-600" aria-label={`Delete week of ${fmtShortDate(w)}`}><Trash2 className="h-4 w-4" /></button>
+                          <button onClick={() => openEntry(w)} className="text-slate-400 dark:text-neutral-500 hover:text-brand-600 dark:hover:text-brand-400" aria-label={`Edit week of ${fmtShortDate(w)}`}><Pencil className="h-4 w-4" /></button>
+                          <button onClick={() => handleDeleteWeek(w)} className="text-red-400 hover:text-red-600 dark:hover:text-red-400" aria-label={`Delete week of ${fmtShortDate(w)}`}><Trash2 className="h-4 w-4" /></button>
                         </span>
                       )}
                     </td>
                   </tr>,
                   open && (
-                    <tr key={`${w}-detail`} className="bg-slate-50/60">
+                    <tr key={`${w}-detail`} className="bg-slate-50/60 dark:bg-muted/40">
                       <td colSpan={10} className="px-4 pb-4 pt-1">
-                        <div className="overflow-x-auto rounded-md border bg-white">
+                        <div className="overflow-x-auto rounded-md border bg-card">
                           <table className="w-full">
-                            <thead className="bg-slate-50">
+                            <thead className="bg-slate-50 dark:bg-muted/40">
                               <tr><Th>Platform</Th><Th right>Posts</Th><Th right>Views</Th><Th right>Profile Views</Th><Th right>Profile View Rate</Th><Th right>Likes</Th><Th right>Comments</Th><Th right>Shares</Th><Th right>Saves</Th><Th right>Eng. Rate</Th><Th right>Followers</Th><Th right>Net New</Th><Th right>Leads</Th><Th>Notes</Th></tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
+                            <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                               {platforms.filter((p) => rows.some((r) => r.platform === p)).map((p) => {
                                 const s = rows.find((r) => r.platform === p)!;
                                 const eng = engagementsOf(s);
@@ -1049,7 +1049,7 @@ export function SocialMediaDashboard() {
                                     <Td right>{fmtNum(s.followers)}</Td>
                                     <Td right>{fmtSigned(netNew.get(s.id))}</Td>
                                     <Td right>{fmtNum(s.leads)}</Td>
-                                    <Td cls="max-w-[240px] truncate text-slate-500">{s.notes ?? ""}</Td>
+                                    <Td cls="max-w-[240px] truncate text-muted-foreground">{s.notes ?? ""}</Td>
                                   </tr>
                                 );
                               })}
@@ -1072,34 +1072,34 @@ export function SocialMediaDashboard() {
     const weekExists = stats.some((s) => s.weekStart === entryWeek);
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 rounded-lg border bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <button onClick={() => setEntryWeek(addDays(entryWeek, -7))} className="rounded-md border p-1.5 text-slate-500 hover:bg-slate-50" aria-label="Previous week"><ChevronLeft className="h-4 w-4" /></button>
+            <button onClick={() => setEntryWeek(addDays(entryWeek, -7))} className="rounded-md border p-1.5 text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40" aria-label="Previous week"><ChevronLeft className="h-4 w-4" /></button>
             <div className="text-center">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Week of</p>
-              <p className="text-sm font-semibold text-slate-900">{fmtWeekRange(entryWeek)}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-neutral-500">Week of</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-neutral-100">{fmtWeekRange(entryWeek)}</p>
             </div>
-            <button onClick={() => setEntryWeek(addDays(entryWeek, 7))} className="rounded-md border p-1.5 text-slate-500 hover:bg-slate-50" aria-label="Next week"><ChevronRight className="h-4 w-4" /></button>
+            <button onClick={() => setEntryWeek(addDays(entryWeek, 7))} className="rounded-md border p-1.5 text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40" aria-label="Next week"><ChevronRight className="h-4 w-4" /></button>
             <input
               type="date"
               value={entryWeek}
               onChange={(e) => e.target.value && setEntryWeek(mondayOf(e.target.value))}
-              className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-600"
+              className="ml-2 rounded-md border border-border px-2 py-1 text-sm text-slate-600 dark:text-neutral-400"
               aria-label="Pick week"
             />
           </div>
           <div className="flex items-center gap-4">
-            <span className={`text-xs font-medium ${weekExists ? "text-amber-600" : "text-slate-400"}`}>
+            <span className={`text-xs font-medium ${weekExists ? "text-amber-600 dark:text-amber-400" : "text-slate-400 dark:text-neutral-500"}`}>
               {weekExists ? "Editing a week that's already logged" : "New week"}
             </span>
-            <button onClick={() => setPlatformsOpen(true)} className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline">
+            <button onClick={() => setPlatformsOpen(true)} className="flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline">
               <Plus className="h-3.5 w-3.5" /> Add / hide platforms
             </button>
           </div>
         </div>
 
-        <div className="rounded-lg border border-brand-200 bg-brand-50/60 p-4 text-sm text-slate-700">
-          <p className="font-semibold text-slate-900">How to fill this in</p>
+        <div className="rounded-lg border border-brand-200 dark:border-brand-800 bg-brand-50/60 dark:bg-brand-900/30 p-4 text-sm text-slate-700 dark:text-neutral-300">
+          <p className="font-semibold text-slate-900 dark:text-neutral-100">How to fill this in</p>
           <ol className="mt-2 list-decimal space-y-1 pl-5">
             <li>Pick the week above (Monday–Sunday). Log it once the week is over, or update it as the numbers come in.</li>
             <li>For each platform, open its <strong>Insights / Analytics</strong>, set it to that week (or &ldquo;last 7 days&rdquo;), and copy the numbers into that platform&apos;s column.</li>
@@ -1108,25 +1108,25 @@ export function SocialMediaDashboard() {
           </ol>
         </div>
 
-        <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px]">
-              <thead className="bg-slate-50">
+              <thead className="bg-slate-50 dark:bg-muted/40">
                 <tr>
                   <Th>Metric</Th>
                   {platforms.map((p) => (
-                    <th key={p} className="px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th key={p} className="px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       <span className="flex items-center gap-1.5"><PlatformDot color={colorOf(p)} />{p}</span>
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                 {ENTRY_FIELDS.map((f) => (
                   <tr key={f.key}>
                     <td className="px-4 py-2 align-top">
-                      <p className="whitespace-nowrap text-sm text-slate-700">{f.label}</p>
-                      <p className="mt-0.5 max-w-[220px] text-[11px] leading-snug text-slate-400">{f.hint}</p>
+                      <p className="whitespace-nowrap text-sm text-slate-700 dark:text-neutral-300">{f.label}</p>
+                      <p className="mt-0.5 max-w-[220px] text-[11px] leading-snug text-slate-400 dark:text-neutral-500">{f.hint}</p>
                     </td>
                     {platforms.map((p) => {
                       const c = cells[p] ?? emptyCell();
@@ -1147,7 +1147,7 @@ export function SocialMediaDashboard() {
                             value={c[f.key]}
                             placeholder={placeholder}
                             onChange={(e) => setCell(p, f.key, e.target.value)}
-                            className="w-full min-w-[96px] rounded-md border border-slate-200 px-2 py-1.5 text-right text-sm tabular-nums focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                            className="w-full min-w-[96px] rounded-md border border-border px-2 py-1.5 text-right text-sm tabular-nums focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
                             aria-label={`${p} ${f.label}`}
                           />
                         </td>
@@ -1155,40 +1155,40 @@ export function SocialMediaDashboard() {
                     })}
                   </tr>
                 ))}
-                <tr className="bg-slate-50/70">
-                  <td className="whitespace-nowrap px-4 py-2 text-sm font-medium text-slate-600">Engagement rate</td>
+                <tr className="bg-slate-50/70 dark:bg-muted/40">
+                  <td className="whitespace-nowrap px-4 py-2 text-sm font-medium text-slate-600 dark:text-neutral-400">Engagement rate</td>
                   {platforms.map((p) => {
                     const c = cells[p] ?? emptyCell();
                     const eng = engagementsOf({ likes: toInt(c.likes), comments: toInt(c.comments), shares: toInt(c.shares), saves: toInt(c.saves) });
                     const views = toInt(c.views);
                     return (
-                      <td key={p} className="px-3 py-2 text-right text-sm tabular-nums text-slate-700">
-                        {eng != null && views ? <>{fmtPct(eng / views, 2)} <span className="text-xs text-slate-400">({fmtNum(eng)})</span></> : "—"}
+                      <td key={p} className="px-3 py-2 text-right text-sm tabular-nums text-slate-700 dark:text-neutral-300">
+                        {eng != null && views ? <>{fmtPct(eng / views, 2)} <span className="text-xs text-slate-400 dark:text-neutral-500">({fmtNum(eng)})</span></> : "—"}
                       </td>
                     );
                   })}
                 </tr>
-                <tr className="bg-slate-50/70">
-                  <td className="whitespace-nowrap px-4 py-2 text-sm font-medium text-slate-600">Profile view rate</td>
+                <tr className="bg-slate-50/70 dark:bg-muted/40">
+                  <td className="whitespace-nowrap px-4 py-2 text-sm font-medium text-slate-600 dark:text-neutral-400">Profile view rate</td>
                   {platforms.map((p) => {
                     const c = cells[p] ?? emptyCell();
                     const pv = toInt(c.profileViews);
                     const views = toInt(c.views);
                     return (
-                      <td key={p} className="px-3 py-2 text-right text-sm tabular-nums text-slate-700">
+                      <td key={p} className="px-3 py-2 text-right text-sm tabular-nums text-slate-700 dark:text-neutral-300">
                         {pv != null && views ? fmtPct(pv / views, 2) : "—"}
                       </td>
                     );
                   })}
                 </tr>
                 <tr>
-                  <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-600">Notes</td>
+                  <td className="whitespace-nowrap px-4 py-2 text-sm text-slate-600 dark:text-neutral-400">Notes</td>
                   {platforms.map((p) => (
                     <td key={p} className="px-2 py-1.5">
                       <input
                         value={(cells[p] ?? emptyCell()).notes}
                         onChange={(e) => setCell(p, "notes", e.target.value)}
-                        className="w-full min-w-[96px] rounded-md border border-slate-200 px-2 py-1.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                        className="w-full min-w-[96px] rounded-md border border-border px-2 py-1.5 text-sm focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
                         aria-label={`${p} notes`}
                       />
                     </td>
@@ -1207,8 +1207,8 @@ export function SocialMediaDashboard() {
           >
             {saveWeek.isPending ? "Saving…" : "Save Week"}
           </button>
-          {savedAt && <span className="text-sm text-green-600">Saved at {savedAt}</span>}
-          {entryError && <span className="text-sm text-red-600">{entryError}</span>}
+          {savedAt && <span className="text-sm text-green-600 dark:text-green-400">Saved at {savedAt}</span>}
+          {entryError && <span className="text-sm text-red-600 dark:text-red-400">{entryError}</span>}
         </div>
       </div>
     );
@@ -1224,7 +1224,7 @@ export function SocialMediaDashboard() {
             <>
             <button
               onClick={() => setPlatformsOpen(true)}
-              className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm font-medium text-slate-700 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40"
             >
               <Layers className="h-4 w-4" /> Platforms
             </button>
@@ -1239,12 +1239,12 @@ export function SocialMediaDashboard() {
         }
       />
 
-      <div className="flex gap-0 overflow-x-auto border-b border-slate-200">
+      <div className="flex gap-0 overflow-x-auto border-b border-border">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${tab === t.key ? "border-brand-500 text-brand-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${tab === t.key ? "border-brand-500 text-brand-600 dark:text-brand-400" : "border-transparent text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"}`}
           >
             {t.label}
           </button>
@@ -1252,7 +1252,7 @@ export function SocialMediaDashboard() {
       </div>
 
       {isLoading ? (
-        <div className="py-16 text-center text-sm text-slate-400">Loading…</div>
+        <div className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">Loading…</div>
       ) : (
         <>
           {tab === "overview" && Overview()}

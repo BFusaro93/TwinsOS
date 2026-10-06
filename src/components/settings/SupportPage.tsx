@@ -78,7 +78,7 @@ function Sidebar({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-slate-100 p-4">
+      <div className="border-b border-slate-100 dark:border-neutral-800 p-4">
         <SearchInput
           value={search}
           onChange={onSearchChange}
@@ -95,14 +95,14 @@ function Sidebar({
             <div key={section.id} className="mb-1">
               <button
                 onClick={() => toggleSection(section.id)}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 transition-colors"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted transition-colors"
               >
                 <SectionIcon className="h-3.5 w-3.5 shrink-0" />
                 <span className="flex-1 text-left">{section.label}</span>
                 <ChevronDown className={cn("h-3 w-3 shrink-0 transition-transform", open ? "rotate-0" : "-rotate-90")} />
               </button>
               {open && (
-                <div className="ml-2 mt-0.5 flex flex-col gap-0.5 border-l border-slate-100 pl-3">
+                <div className="ml-2 mt-0.5 flex flex-col gap-0.5 border-l border-slate-100 dark:border-neutral-800 pl-3">
                   {section.articles.map((article) => {
                     const ArticleIcon = article.icon;
                     return (
@@ -112,7 +112,7 @@ function Sidebar({
                           onSelectArticle(section.id, article.id);
                           onClose?.();
                         }}
-                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800 w-full"
+                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-600 dark:text-neutral-400 transition-colors hover:bg-muted hover:text-slate-800 dark:hover:text-neutral-100 w-full"
                       >
                         <ArticleIcon className="h-3.5 w-3.5 shrink-0 opacity-60" />
                         <span className="truncate">{article.title}</span>
@@ -131,7 +131,7 @@ function Sidebar({
               onSelectFaq();
               onClose?.();
             }}
-            className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-600 transition-colors hover:bg-slate-100"
+            className="mt-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-600 dark:text-neutral-400 transition-colors hover:bg-muted"
           >
             <Search className="h-3.5 w-3.5 shrink-0 opacity-60" />
             <span>FAQ</span>
@@ -163,7 +163,7 @@ function GuideCard({
   // shell (Equipt, Landscapt, Settings) this Support page is rendering in.
   const pathname = usePathname();
   return (
-    <div ref={cardRef} className="scroll-mt-4 rounded-lg border border-[#e6e6e0] bg-white shadow-sm">
+    <div ref={cardRef} className="scroll-mt-4 rounded-lg border border-[#e6e6e0] bg-card shadow-sm">
       <button
         onClick={onToggle}
         className="flex w-full cursor-pointer list-none items-start gap-3 rounded-lg p-4 text-left hover:bg-[#fbfbf8]"
@@ -176,7 +176,7 @@ function GuideCard({
           <p className="text-xs text-[#5a5a56] mt-0.5">{guide.summary}</p>
         </div>
         <ChevronDown
-          className={cn("h-4 w-4 shrink-0 text-slate-400 mt-1 transition-transform duration-200", isOpen && "rotate-180")}
+          className={cn("h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500 mt-1 transition-transform duration-200", isOpen && "rotate-180")}
         />
       </button>
       {isOpen && (
@@ -188,7 +188,7 @@ function GuideCard({
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#60ab45] text-xs font-bold text-white">
                     {i + 1}
                   </span>
-                  {i < guide.steps.length - 1 && <div className="mt-2 w-px flex-1 bg-slate-200" />}
+                  {i < guide.steps.length - 1 && <div className="mt-2 w-px flex-1 bg-slate-200 dark:bg-neutral-700" />}
                 </div>
                 <div className="flex-1 pb-1">
                   <p className="text-sm font-semibold text-[#0a0a0a]">{s.step}</p>
@@ -217,7 +217,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
     <details className="group border-b border-[#eceae3] last:border-0">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-medium text-[#0a0a0a] hover:text-[#60ab45]">
         {q}
-        <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-180" />
+        <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500 transition-transform duration-200 group-open:rotate-180" />
       </summary>
       <p className="pb-4 text-sm leading-relaxed text-[#5a5a56]">{a}</p>
     </details>
@@ -286,9 +286,9 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
   const noResults = query && filteredSections.length === 0 && filteredFAQs.length === 0;
 
   return (
-    <div className="flex h-[75vh] max-h-[900px] min-h-[560px] overflow-hidden rounded-lg border border-[#e6e6e0] bg-white shadow-sm">
+    <div className="flex h-[75vh] max-h-[900px] min-h-[560px] overflow-hidden rounded-lg border border-[#e6e6e0] bg-card shadow-sm">
       {/* Desktop sidebar */}
-      <aside className="hidden w-80 shrink-0 border-r border-slate-100 lg:flex lg:flex-col">
+      <aside className="hidden w-80 shrink-0 border-r border-slate-100 dark:border-neutral-800 lg:flex lg:flex-col">
         <Sidebar
           search={search}
           onSearchChange={setSearch}
@@ -301,11 +301,11 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
       {mobileNavOpen && (
         <div className="fixed inset-0 z-50 flex lg:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileNavOpen(false)} />
-          <aside className="relative z-10 flex w-72 flex-col bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <span className="text-sm font-semibold text-slate-700">Support</span>
+          <aside className="relative z-10 flex w-72 flex-col bg-card shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-neutral-800 px-4 py-3">
+              <span className="text-sm font-semibold text-slate-700 dark:text-neutral-300">Support</span>
               <button onClick={() => setMobileNavOpen(false)}>
-                <X className="h-4 w-4 text-slate-500" />
+                <X className="h-4 w-4 text-muted-foreground" />
               </button>
             </div>
             <Sidebar
@@ -322,25 +322,25 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
       {/* Content area */}
       <main className="flex flex-1 flex-col overflow-hidden">
         {/* Mobile top bar */}
-        <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3 lg:hidden">
+        <div className="flex items-center gap-3 border-b border-slate-100 dark:border-neutral-800 px-4 py-3 lg:hidden">
           <button
             onClick={() => setMobileNavOpen(true)}
-            className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-800"
+            className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-neutral-400 hover:text-slate-800 dark:hover:text-neutral-100"
           >
             <Menu className="h-4 w-4" />
             <span>Menu</span>
           </button>
-          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <span className="text-sm text-slate-500 truncate">Support</span>
+          <ChevronRight className="h-3.5 w-3.5 text-slate-300 dark:text-neutral-500" />
+          <span className="text-sm text-muted-foreground truncate">Support</span>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-8 md:px-8">
           <div className="mx-auto flex max-w-3xl flex-col gap-10 pb-4">
             {noResults ? (
               <div className="flex flex-col items-center gap-2 py-16 text-center">
-                <Search className="h-8 w-8 text-slate-300" />
-                <p className="text-sm font-medium text-slate-600">No results for &ldquo;{search}&rdquo;</p>
-                <p className="text-xs text-slate-400">Try a different term or browse the sidebar.</p>
+                <Search className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
+                <p className="text-sm font-medium text-slate-600 dark:text-neutral-400">No results for &ldquo;{search}&rdquo;</p>
+                <p className="text-xs text-slate-400 dark:text-neutral-500">Try a different term or browse the sidebar.</p>
               </div>
             ) : (
               <>
@@ -378,7 +378,7 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                           <p className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-[#5a5a56]">
                             {cat.label}
                           </p>
-                          <div className="rounded-lg border border-[#e6e6e0] bg-white px-6 shadow-sm">
+                          <div className="rounded-lg border border-[#e6e6e0] bg-card px-6 shadow-sm">
                             {cat.items.map((faq) => (
                               <FAQItem key={faq.q} q={faq.q} a={faq.a} />
                             ))}
@@ -395,7 +395,7 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                     <div className="mt-4 grid gap-4 sm:grid-cols-2">
                       <a
                         href="mailto:support@landscapt.com"
-                        className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+                        className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
                       >
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef4e2]">
                           <Mail className="h-5 w-5 text-[#60ab45]" />
@@ -408,7 +408,7 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                       </a>
                       <a
                         href={docsHref}
-                        className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+                        className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
                       >
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef4e2]">
                           <BookOpen className="h-5 w-5 text-[#60ab45]" />

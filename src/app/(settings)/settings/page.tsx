@@ -36,8 +36,8 @@ function MasterAccountSettings() {
   return (
     <div className="flex flex-col gap-0">
       <div className="px-4 pt-4 pb-0 md:px-6 md:pt-6">
-        <h1 className="text-xl font-semibold text-slate-900">Master Account Settings</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-neutral-100">Master Account Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Users, organization info, branding, and subscriptions for your whole account
         </p>
       </div>
@@ -52,7 +52,7 @@ function MasterAccountSettings() {
               <TabsTrigger
                 key={tab}
                 value={tab}
-                className="rounded-none border-b-2 border-transparent px-3 py-2.5 text-xs font-medium text-slate-600 md:px-4 md:py-3 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 data-[state=active]:shadow-none"
+                className="rounded-none border-b-2 border-transparent px-3 py-2.5 text-xs font-medium text-slate-600 dark:text-neutral-400 md:px-4 md:py-3 md:text-sm data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:text-brand-600 dark:data-[state=active]:text-brand-400 data-[state=active]:shadow-none"
               >
                 {tabLabel(tab)}
               </TabsTrigger>
@@ -122,8 +122,8 @@ function NonAdminConnectedApps() {
   return (
     <div className="flex flex-col gap-0">
       <div className="px-4 pt-4 pb-0 md:px-6 md:pt-6">
-        <h1 className="text-xl font-semibold text-slate-900">Connected Apps</h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-neutral-100">Connected Apps</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Apps you&apos;ve signed in and granted access to. The rest of Master Account Settings —
           organization info, users, branding, billing — is only available to admins.
         </p>

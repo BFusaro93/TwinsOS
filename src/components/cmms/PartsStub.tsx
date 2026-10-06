@@ -9,7 +9,7 @@ export function PartsStub() {
         title="Parts Inventory"
         description="Maintenance parts and inventory levels"
       />
-      <div className="flex flex-1 items-center justify-center rounded-lg border bg-white shadow-sm">
+      <div className="flex flex-1 items-center justify-center rounded-lg border bg-card shadow-sm">
         <EmptyState
           icon={Package}
           title="Parts Inventory coming soon"

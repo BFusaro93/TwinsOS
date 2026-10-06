@@ -91,7 +91,7 @@ export function EmbedDialog({ formName, slug, publicUrl, open, onOpenChange }: P
         </DialogHeader>
 
         {/* Tab strip */}
-        <div className="flex gap-1 rounded-lg border bg-slate-50 p-1">
+        <div className="flex gap-1 rounded-lg border bg-slate-50 dark:bg-muted/40 p-1">
           {TABS.map((t) => (
             <button
               key={t.key}
@@ -99,8 +99,8 @@ export function EmbedDialog({ formName, slug, publicUrl, open, onOpenChange }: P
               className={cn(
                 "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                 tab === t.key
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? "bg-card text-slate-900 dark:text-neutral-100 shadow-sm"
+                  : "text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
               )}
             >
               {t.label}
@@ -109,7 +109,7 @@ export function EmbedDialog({ formName, slug, publicUrl, open, onOpenChange }: P
         </div>
 
         {/* Description */}
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           {TABS.find((t) => t.key === tab)?.description}
         </p>
 
@@ -136,15 +136,15 @@ export function EmbedDialog({ formName, slug, publicUrl, open, onOpenChange }: P
         </div>
 
         {/* Preview hint */}
-        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div className="shrink-0 text-slate-400">
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-slate-50 dark:bg-muted/40 px-4 py-3">
+          <div className="shrink-0 text-slate-400 dark:text-neutral-500">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <div className="text-xs text-slate-600">
+          <div className="text-xs text-slate-600 dark:text-neutral-400">
             <span className="font-medium">Tip:</span> The form must be{" "}
-            <span className="font-semibold text-green-700">Published</span> before it will load on your website.
+            <span className="font-semibold text-green-700 dark:text-green-400">Published</span> before it will load on your website.
             Responses appear in the <span className="font-medium">Responses</span> tab.
           </div>
         </div>

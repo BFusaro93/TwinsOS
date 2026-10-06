@@ -41,16 +41,16 @@ function scoreColor(s: number): string {
   return "#dc2626";
 }
 function scoreTextClass(s: number): string {
-  if (s >= 90) return "text-green-600";
-  if (s >= 75) return "text-lime-600";
-  if (s >= 60) return "text-amber-600";
-  return "text-red-600";
+  if (s >= 90) return "text-green-600 dark:text-green-400";
+  if (s >= 75) return "text-lime-600 dark:text-lime-400";
+  if (s >= 60) return "text-amber-600 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
 }
 function scoreBadgeClass(s: number): string {
-  if (s >= 90) return "bg-green-100 text-green-700";
-  if (s >= 75) return "bg-lime-100 text-lime-700";
-  if (s >= 60) return "bg-amber-100 text-amber-700";
-  return "bg-red-100 text-red-700";
+  if (s >= 90) return "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400";
+  if (s >= 75) return "bg-lime-100 dark:bg-lime-900/40 text-lime-700 dark:text-lime-400";
+  if (s >= 60) return "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400";
+  return "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400";
 }
 function fmtDate(iso: string): string {
   if (!iso) return "";
@@ -145,7 +145,7 @@ async function parseSamsaraXlsx(file: File, excludeVehicles: Set<string>): Promi
 // ── Shared small components ───────────────────────────────────────────────────
 function Th({ children, right }: { children: React.ReactNode; right?: boolean }) {
   return (
-    <th className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 ${right ? "text-right" : "text-left"}`}>
+    <th className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground ${right ? "text-right" : "text-left"}`}>
       {children}
     </th>
   );
@@ -161,10 +161,10 @@ function KpiCard({
   label, value, sub, cls,
 }: { label: string; value: string; sub?: string; cls?: string }) {
   return (
-    <div className="rounded-lg border bg-white p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{label}</p>
-      <p className={`mt-1 text-3xl font-bold tabular-nums ${cls ?? "text-slate-900"}`}>{value}</p>
-      {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
+    <div className="rounded-lg border bg-card p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">{label}</p>
+      <p className={`mt-1 text-3xl font-bold tabular-nums ${cls ?? "text-slate-900 dark:text-neutral-100"}`}>{value}</p>
+      {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
     </div>
   );
 }
@@ -266,10 +266,10 @@ export function SafetyDashboard() {
   // ── OVERVIEW ───────────────────────────────────────────────────────────────
   function Overview() {
     if (!weeks.length) return (
-      <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-200 py-16 text-center">
-        <ShieldCheck className="mb-3 h-8 w-8 text-slate-300" />
-        <p className="text-sm font-medium text-slate-500">No safety data yet</p>
-        <p className="mt-1 text-xs text-slate-400">
+      <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-border py-16 text-center">
+        <ShieldCheck className="mb-3 h-8 w-8 text-slate-300 dark:text-neutral-500" />
+        <p className="text-sm font-medium text-muted-foreground">No safety data yet</p>
+        <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">
           {canManageWeeks ? "Import a week to get started" : "An admin or manager needs to import a week first"}
         </p>
         {canManageWeeks && (
@@ -305,7 +305,7 @@ export function SafetyDashboard() {
       <div className="flex flex-col gap-6">
         {/* Week selector */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Week:</span>
+          <span className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">Week:</span>
           {(() => {
             const PAGE = 6;
             const wEnd = weekWindowEnd ?? weeks.length - 1;
@@ -321,14 +321,14 @@ export function SafetyDashboard() {
                   setWeekWindowEnd(newEnd);
                   if (curIdx > newEnd) setViewWeekEnd(weeks[newEnd].weekEnd);
                 }}
-                className="rounded p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+                className="rounded p-1.5 text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300 disabled:opacity-30"
                 title="Previous weeks"
               >&#8592;</button>
               {visible.map(w => (
                 <button
                   key={w.weekEnd}
                   onClick={() => setViewWeekEnd(w.weekEnd)}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${w.weekEnd === curWeek?.weekEnd ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${w.weekEnd === curWeek?.weekEnd ? "bg-brand-500 text-white" : "border border-border bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"}`}
                 >
                   {w.data.label || fmtDate(w.weekEnd)}
                 </button>
@@ -340,7 +340,7 @@ export function SafetyDashboard() {
                   setWeekWindowEnd(newEnd);
                   if (curIdx < newEnd - PAGE + 1) setViewWeekEnd(weeks[newEnd - PAGE + 1].weekEnd);
                 }}
-                className="rounded p-1.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+                className="rounded p-1.5 text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300 disabled:opacity-30"
                 title="Next weeks"
               >&#8594;</button>
             </>);
@@ -356,7 +356,7 @@ export function SafetyDashboard() {
                   setImportMode("manual");
                   setTab("import");
                 }}
-                className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline"
+                className="flex items-center gap-1.5 text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline"
               >
                 <Pencil className="h-3 w-3" /> Edit Week
               </button>
@@ -370,19 +370,19 @@ export function SafetyDashboard() {
             label="Fleet Avg Score"
             value={avg > 0 ? String(avg) : "—"}
             sub={avgDelta !== null ? `${avgDelta >= 0 ? "▲" : "▼"} ${Math.abs(avgDelta)} pts vs last week` : undefined}
-            cls={avg > 0 ? scoreTextClass(avg) : "text-slate-400"}
+            cls={avg > 0 ? scoreTextClass(avg) : "text-slate-400 dark:text-neutral-500"}
           />
           <KpiCard
             label="Perfect 100s"
             value={String(perfect)}
             sub={`of ${drivers.length} vehicles`}
-            cls={perfect > 0 ? "text-green-600" : "text-slate-400"}
+            cls={perfect > 0 ? "text-green-600 dark:text-green-400" : "text-slate-400 dark:text-neutral-500"}
           />
           <KpiCard
             label="Needs Attention"
             value={String(attn.length)}
             sub={attn.length > 0 ? attn.map(d => shortName(d.name)).join(", ") : "All vehicles on track"}
-            cls={attn.length > 0 ? "text-red-600" : "text-green-600"}
+            cls={attn.length > 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}
           />
           <KpiCard
             label="Total Miles"
@@ -393,10 +393,10 @@ export function SafetyDashboard() {
 
         {/* Driver Rankings table */}
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Driver Rankings</p>
-          <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">Driver Rankings</p>
+          <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50">
+              <thead className="bg-slate-50 dark:bg-muted/40">
                 <tr>
                   <Th>Vehicle</Th>
                   <Th>Safety Score</Th>
@@ -406,15 +406,15 @@ export function SafetyDashboard() {
                   <Th right>Events</Th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                 {drivers.map((d, i) => {
                   const prev = prevDrivers.find(p => p.name === d.name);
                   const delta = prev !== undefined ? d.score - prev.score : null;
                   return (
-                    <tr key={d.name} className="hover:bg-slate-50">
+                    <tr key={d.name} className="hover:bg-slate-50 dark:hover:bg-muted/40">
                       <Td>
                         <div className="flex items-center gap-2 font-medium">
-                          <span className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${i === 0 ? "bg-amber-100 text-amber-700" : i === 1 ? "bg-slate-200 text-slate-600" : i === 2 ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-500"}`}>
+                          <span className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${i === 0 ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400" : i === 1 ? "bg-slate-200 dark:bg-neutral-700 text-slate-600 dark:text-neutral-400" : i === 2 ? "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400" : "bg-muted text-muted-foreground"}`}>
                             {i + 1}
                           </span>
                           {d.name}
@@ -422,7 +422,7 @@ export function SafetyDashboard() {
                       </Td>
                       <Td>
                         <div className="flex items-center gap-3">
-                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                             <div
                               className="h-2 rounded-full"
                               style={{ width: `${d.score}%`, backgroundColor: scoreColor(d.score) }}
@@ -435,27 +435,27 @@ export function SafetyDashboard() {
                       </Td>
                       <Td right>
                         {delta === null ? (
-                          <span className="text-slate-300">—</span>
+                          <span className="text-slate-300 dark:text-neutral-500">—</span>
                         ) : delta === 0 ? (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">same</span>
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">same</span>
                         ) : (
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${delta > 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${delta > 0 ? "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400" : "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400"}`}>
                             {delta > 0 ? "▲" : "▼"} {Math.abs(delta)}
                           </span>
                         )}
                       </Td>
-                      <Td right cls="text-slate-500">{d.drive}</Td>
-                      <Td right cls="text-slate-500">{d.miles ? d.miles.toLocaleString() : "—"}</Td>
+                      <Td right cls="text-muted-foreground">{d.drive}</Td>
+                      <Td right cls="text-muted-foreground">{d.miles ? d.miles.toLocaleString() : "—"}</Td>
                       <Td right>
                         {d.events > 0 ? (
                           <span className="flex items-center justify-end gap-1">
                             {Array.from({ length: Math.min(d.events, 5) }).map((_, j) => (
                               <span key={j} className="inline-block h-2 w-2 rounded-full bg-red-500" />
                             ))}
-                            <span className="ml-1 text-xs font-semibold text-red-600">{d.events}</span>
+                            <span className="ml-1 text-xs font-semibold text-red-600 dark:text-red-400">{d.events}</span>
                           </span>
                         ) : (
-                          <span className="text-slate-300">—</span>
+                          <span className="text-slate-300 dark:text-neutral-500">—</span>
                         )}
                       </Td>
                     </tr>
@@ -469,23 +469,23 @@ export function SafetyDashboard() {
         {/* Charts row */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* Score comparison - this week vs last */}
-          <div className="rounded-lg border bg-white p-5 shadow-sm">
-            <p className="mb-1 text-sm font-semibold text-slate-700">Score Comparison — This Week vs Last</p>
+          <div className="rounded-lg border bg-card p-5 shadow-sm">
+            <p className="mb-1 text-sm font-semibold text-slate-700 dark:text-neutral-300">Score Comparison — This Week vs Last</p>
             <div className="mb-4 flex gap-4">
-              <div className="flex items-center gap-1.5 text-xs text-slate-500"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-blue-400" />Last Week</div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-500"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-brand-500" />This Week</div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-blue-400" />Last Week</div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-brand-500" />This Week</div>
             </div>
             <div className="flex flex-col gap-3">
               {compareData.map(d => (
                 <div key={d.name} className="flex items-center gap-2">
-                  <span className="w-8 text-right text-xs text-slate-500">{d.name}</span>
+                  <span className="w-8 text-right text-xs text-muted-foreground">{d.name}</span>
                   <div className="flex flex-1 flex-col gap-1">
                     {d.previous !== null && (
-                      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-2 overflow-hidden rounded-full bg-muted">
                         <div className="h-2 rounded-full bg-blue-400 opacity-70" style={{ width: `${d.previous}%` }} />
                       </div>
                     )}
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
                       <div className="h-2 rounded-full bg-brand-500" style={{ width: `${d.current}%` }} />
                     </div>
                   </div>
@@ -496,8 +496,8 @@ export function SafetyDashboard() {
           </div>
 
           {/* Current week scores bar chart */}
-          <div className="rounded-lg border bg-white p-5 shadow-sm">
-            <p className="mb-4 text-sm font-semibold text-slate-700">Current Week Scores</p>
+          <div className="rounded-lg border bg-card p-5 shadow-sm">
+            <p className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Current Week Scores</p>
             <ResponsiveContainer width="100%" height={Math.max(180, drivers.length * 28)}>
               <BarChart data={scoreBarData} layout="vertical" margin={{ left: 8, right: 32, top: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
@@ -521,7 +521,7 @@ export function SafetyDashboard() {
   // ── HISTORY ─────────────────────────────────────────────────────────────────
   function History() {
     if (weeks.length < 2) return (
-      <div className="py-16 text-center text-sm text-slate-400">
+      <div className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
         Import at least 2 weeks to see trends.
       </div>
     );
@@ -547,8 +547,8 @@ export function SafetyDashboard() {
     return (
       <div className="flex flex-col gap-6">
         {/* Fleet avg trend */}
-        <div className="rounded-lg border bg-white p-5 shadow-sm">
-          <p className="mb-4 text-sm font-semibold text-slate-700">Fleet Average Safety Score — Trend</p>
+        <div className="rounded-lg border bg-card p-5 shadow-sm">
+          <p className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Fleet Average Safety Score — Trend</p>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={trendData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -562,8 +562,8 @@ export function SafetyDashboard() {
         </div>
 
         {/* Per-truck trend */}
-        <div className="rounded-lg border bg-white p-5 shadow-sm">
-          <p className="mb-4 text-sm font-semibold text-slate-700">Score by Vehicle — All Weeks</p>
+        <div className="rounded-lg border bg-card p-5 shadow-sm">
+          <p className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Score by Vehicle — All Weeks</p>
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={truckTrendData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -580,28 +580,28 @@ export function SafetyDashboard() {
 
         {/* Weekly log table */}
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Weekly Log</p>
-          <div className="overflow-hidden rounded-lg border bg-white shadow-sm">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">Weekly Log</p>
+          <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50">
+              <thead className="bg-slate-50 dark:bg-muted/40">
                 <tr>
                   <Th>Week</Th><Th right>Fleet Avg</Th><Th right>Perfect 100s</Th><Th right>Needs Attention</Th><Th>{""}</Th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                 {[...weeks].reverse().map(w => {
                   const drivers = (w.data.drivers ?? []).filter(d => !excludeVehicles.has(d.name));
                   const avg = drivers.length ? Math.round(drivers.reduce((s, d) => s + d.score, 0) / drivers.length) : 0;
                   const perfect = drivers.filter(d => d.score === 100).length;
                   const attn = drivers.filter(d => d.score < 75).length;
                   return (
-                    <tr key={w.weekEnd} className="hover:bg-slate-50">
+                    <tr key={w.weekEnd} className="hover:bg-slate-50 dark:hover:bg-muted/40">
                       <td className="py-3 pl-4 font-medium">{w.data.label || fmtDate(w.weekEnd)}</td>
                       <Td right>
                         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${scoreBadgeClass(avg)}`}>{avg}</span>
                       </Td>
-                      <Td right cls="text-green-600 font-semibold">{perfect}</Td>
-                      <Td right cls={attn > 0 ? "text-red-600 font-semibold" : "text-slate-400"}>{attn > 0 ? attn : "—"}</Td>
+                      <Td right cls="text-green-600 dark:text-green-400 font-semibold">{perfect}</Td>
+                      <Td right cls={attn > 0 ? "text-red-600 dark:text-red-400 font-semibold" : "text-slate-400 dark:text-neutral-500"}>{attn > 0 ? attn : "—"}</Td>
                       <td className="px-4 py-3 pr-4 text-right">
                         {canManageWeeks && (
                           <div className="flex items-center justify-end gap-3">
@@ -613,14 +613,14 @@ export function SafetyDashboard() {
                                 setImportMode("manual");
                                 setTab("import");
                               }}
-                              className="text-slate-400 hover:text-brand-600"
+                              className="text-slate-400 dark:text-neutral-500 hover:text-brand-600 dark:hover:text-brand-400"
                               title="Edit week"
                             ><Pencil className="h-4 w-4" /></button>
                             <button
                               onClick={async () => {
                                 if (await confirm({ title: "Delete " + (w.data.label || fmtDate(w.weekEnd)) + "?", confirmLabel: "Delete", destructive: true })) del.mutate(w.weekEnd);
                               }}
-                              className="text-red-400 hover:text-red-600"
+                              className="text-red-400 hover:text-red-600 dark:hover:text-red-400"
                             ><Trash2 className="h-4 w-4" /></button>
                           </div>
                         )}
@@ -641,27 +641,27 @@ export function SafetyDashboard() {
     return (
       <div className="flex flex-col gap-5">
         {/* Week metadata */}
-        <div className="rounded-lg border bg-white p-5 shadow-sm">
-          <p className="mb-1 text-sm font-semibold text-slate-700">Week Info</p>
-          <p className="mb-4 text-xs text-slate-400">Give this week a label (shown on charts) and set the end date (used for sorting).</p>
+        <div className="rounded-lg border bg-card p-5 shadow-sm">
+          <p className="mb-1 text-sm font-semibold text-slate-700 dark:text-neutral-300">Week Info</p>
+          <p className="mb-4 text-xs text-slate-400 dark:text-neutral-500">Give this week a label (shown on charts) and set the end date (used for sorting).</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Week Label</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Week Label</label>
               <input
                 type="text"
                 placeholder="e.g. Mar 29 – Apr 5  (auto-detected if left blank)"
                 value={importLabel}
                 onChange={e => setImportLabel(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Week End Date</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Week End Date</label>
               <input
                 type="date"
                 value={importWeekEnd}
                 onChange={e => setImportWeekEnd(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
           </div>
@@ -669,29 +669,29 @@ export function SafetyDashboard() {
 
         {/* Mode toggle */}
         <div className="flex gap-2">
-          <button onClick={() => setImportMode("upload")} className={`rounded-md px-4 py-2 text-sm font-medium ${importMode === "upload" ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+          <button onClick={() => setImportMode("upload")} className={`rounded-md px-4 py-2 text-sm font-medium ${importMode === "upload" ? "bg-brand-500 text-white" : "border border-border bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"}`}>
             📂 Upload Samsara Excel
           </button>
-          <button onClick={() => setImportMode("manual")} className={`rounded-md px-4 py-2 text-sm font-medium ${importMode === "manual" ? "bg-brand-500 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+          <button onClick={() => setImportMode("manual")} className={`rounded-md px-4 py-2 text-sm font-medium ${importMode === "manual" ? "bg-brand-500 text-white" : "border border-border bg-card text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"}`}>
             ✏️ Manual Entry
           </button>
         </div>
 
         {/* Upload panel */}
         {importMode === "upload" && (
-          <div className="rounded-lg border bg-white p-5 shadow-sm">
-            <p className="mb-1 text-sm font-semibold text-slate-700">Upload Samsara Weekly Vehicle Safety Report</p>
-            <p className="mb-4 text-xs text-slate-400">Samsara → Reports → Vehicle Safety → Weekly → Export Excel (.xlsx)</p>
+          <div className="rounded-lg border bg-card p-5 shadow-sm">
+            <p className="mb-1 text-sm font-semibold text-slate-700 dark:text-neutral-300">Upload Samsara Weekly Vehicle Safety Report</p>
+            <p className="mb-4 text-xs text-slate-400 dark:text-neutral-500">Samsara → Reports → Vehicle Safety → Weekly → Export Excel (.xlsx)</p>
             <div
               onClick={() => fileRef.current?.click()}
               onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={e => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f); }}
-              className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-6 py-10 transition-colors ${isDragging ? "border-brand-400 bg-brand-50 text-brand-600" : "border-slate-200 bg-slate-50 text-slate-500 hover:border-brand-400 hover:bg-brand-50 hover:text-brand-600"}`}
+              className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed px-6 py-10 transition-colors ${isDragging ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400" : "border-border bg-slate-50 dark:bg-muted/40 text-muted-foreground hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30 hover:text-brand-600 dark:hover:text-brand-400"}`}
             >
               <FileSpreadsheet className="h-10 w-10 opacity-60" />
               <span className="text-sm font-medium">Drop your Samsara Excel file here</span>
-              <span className="text-xs text-slate-400">or click to browse — accepts the weekly Vehicle Safety Report .xlsx</span>
+              <span className="text-xs text-slate-400 dark:text-neutral-500">or click to browse — accepts the weekly Vehicle Safety Report .xlsx</span>
             </div>
             <input
               ref={fileRef}
@@ -701,24 +701,24 @@ export function SafetyDashboard() {
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
             />
             {xlsxSt && (
-              <p className={`mt-2 text-xs font-medium ${xlsxSt.startsWith("✓") ? "text-green-600" : "text-red-500"}`}>{xlsxSt}</p>
+              <p className={`mt-2 text-xs font-medium ${xlsxSt.startsWith("✓") ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}`}>{xlsxSt}</p>
             )}
 
             {/* Preview */}
             {uploadedDrivers.length > 0 && (
               <div className="mt-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Preview — {uploadedDrivers.length} drivers</p>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">Preview — {uploadedDrivers.length} drivers</p>
                 <div className="overflow-hidden rounded-lg border">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50"><tr><Th>Vehicle</Th><Th right>Score</Th><Th right>Drive Time</Th><Th right>Miles</Th><Th right>Events</Th></tr></thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <thead className="bg-slate-50 dark:bg-muted/40"><tr><Th>Vehicle</Th><Th right>Score</Th><Th right>Drive Time</Th><Th right>Miles</Th><Th right>Events</Th></tr></thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                       {uploadedDrivers.map(d => (
-                        <tr key={d.name} className="hover:bg-slate-50">
+                        <tr key={d.name} className="hover:bg-slate-50 dark:hover:bg-muted/40">
                           <Td cls="font-medium">{d.name}</Td>
                           <Td right cls={`font-bold ${scoreTextClass(d.score)}`}>{d.score}</Td>
-                          <Td right cls="text-slate-500">{d.drive}</Td>
-                          <Td right cls="text-slate-500">{d.miles || "—"}</Td>
-                          <Td right cls={d.events > 0 ? "text-red-600 font-semibold" : "text-slate-400"}>{d.events || "—"}</Td>
+                          <Td right cls="text-muted-foreground">{d.drive}</Td>
+                          <Td right cls="text-muted-foreground">{d.miles || "—"}</Td>
+                          <Td right cls={d.events > 0 ? "text-red-600 dark:text-red-400 font-semibold" : "text-slate-400 dark:text-neutral-500"}>{d.events || "—"}</Td>
                         </tr>
                       ))}
                     </tbody>
@@ -734,7 +734,7 @@ export function SafetyDashboard() {
                   </button>
                   <button
                     onClick={() => { setUploadedDrivers([]); setXlsxSt(""); }}
-                    className="rounded-md border border-slate-200 px-5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                    className="rounded-md border border-border px-5 py-2 text-sm font-medium text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                   >
                     Clear
                   </button>
@@ -746,18 +746,18 @@ export function SafetyDashboard() {
 
         {/* Manual entry panel */}
         {importMode === "manual" && (
-          <div className="rounded-lg border bg-white p-5 shadow-sm">
-            <p className="mb-4 text-sm font-semibold text-slate-700">Add Entries Manually</p>
+          <div className="rounded-lg border bg-card p-5 shadow-sm">
+            <p className="mb-4 text-sm font-semibold text-slate-700 dark:text-neutral-300">Add Entries Manually</p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div className="col-span-2 sm:col-span-1">
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Vehicle</label>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vehicle</label>
                 <input
                   type="text"
                   list="safety-vehicle-suggestions"
                   placeholder="e.g. Truck #12"
                   value={manVehicle}
                   onChange={e => setManVehicle(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+                  className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
                 />
                 {isInternalOrg && (
                   <datalist id="safety-vehicle-suggestions">
@@ -766,25 +766,25 @@ export function SafetyDashboard() {
                 )}
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Safety Score</label>
-                <input type="number" min="0" max="100" placeholder="0–100" value={manScore} onChange={e => setManScore(e.target.value)} className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none" />
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Safety Score</label>
+                <input type="number" min="0" max="100" placeholder="0–100" value={manScore} onChange={e => setManScore(e.target.value)} className="w-full rounded-md border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Drive Time</label>
-                <input type="text" placeholder="hh:mm:ss" value={manDrive} onChange={e => setManDrive(e.target.value)} className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none" />
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Drive Time</label>
+                <input type="text" placeholder="hh:mm:ss" value={manDrive} onChange={e => setManDrive(e.target.value)} className="w-full rounded-md border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Miles</label>
-                <input type="number" step="0.1" placeholder="0.0" value={manMiles} onChange={e => setManMiles(e.target.value)} className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none" />
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Miles</label>
+                <input type="number" step="0.1" placeholder="0.0" value={manMiles} onChange={e => setManMiles(e.target.value)} className="w-full rounded-md border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none" />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">Events</label>
-                <input type="number" min="0" placeholder="0" value={manEvents} onChange={e => setManEvents(e.target.value)} className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none" />
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Events</label>
+                <input type="number" min="0" placeholder="0" value={manEvents} onChange={e => setManEvents(e.target.value)} className="w-full rounded-md border border-border px-3 py-2 text-sm focus:border-brand-500 focus:outline-none" />
               </div>
             </div>
             <button
               onClick={addManualEntry}
-              className="mt-4 rounded-md bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+              className="mt-4 rounded-md bg-muted px-4 py-2 text-sm font-semibold text-slate-700 dark:text-neutral-300 hover:bg-slate-200 dark:hover:bg-neutral-700"
             >
               + Add Entry
             </button>
@@ -792,19 +792,19 @@ export function SafetyDashboard() {
             {/* Pending entries */}
             {pendingDrivers.length > 0 && (
               <div className="mt-4">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Pending — {pendingDrivers.length} entries</p>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">Pending — {pendingDrivers.length} entries</p>
                 <div className="overflow-hidden rounded-lg border">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50"><tr><Th>Vehicle</Th><Th right>Score</Th><Th right>Miles</Th><Th right>Events</Th><Th>{""}</Th></tr></thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <thead className="bg-slate-50 dark:bg-muted/40"><tr><Th>Vehicle</Th><Th right>Score</Th><Th right>Miles</Th><Th right>Events</Th><Th>{""}</Th></tr></thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-neutral-800">
                       {pendingDrivers.map((d, i) => (
-                        <tr key={i} className="hover:bg-slate-50">
+                        <tr key={i} className="hover:bg-slate-50 dark:hover:bg-muted/40">
                           <Td cls="font-medium">{d.name}</Td>
                           <Td right cls={`font-bold ${scoreTextClass(d.score)}`}>{d.score}</Td>
-                          <Td right cls="text-slate-500">{d.miles || "—"}</Td>
-                          <Td right cls={d.events > 0 ? "text-red-600 font-semibold" : "text-slate-400"}>{d.events || "—"}</Td>
+                          <Td right cls="text-muted-foreground">{d.miles || "—"}</Td>
+                          <Td right cls={d.events > 0 ? "text-red-600 dark:text-red-400 font-semibold" : "text-slate-400 dark:text-neutral-500"}>{d.events || "—"}</Td>
                           <td className="px-4 py-3 text-right">
-                            <button onClick={() => setPendingDrivers(p => p.filter((_, j) => j !== i))} className="text-xs text-red-400 hover:text-red-600">✕</button>
+                            <button onClick={() => setPendingDrivers(p => p.filter((_, j) => j !== i))} className="text-xs text-red-400 hover:text-red-600 dark:hover:text-red-400">✕</button>
                           </td>
                         </tr>
                       ))}
@@ -821,7 +821,7 @@ export function SafetyDashboard() {
                   </button>
                   <button
                     onClick={() => { setPendingDrivers([]); }}
-                    className="rounded-md border border-slate-200 px-5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                    className="rounded-md border border-border px-5 py-2 text-sm font-medium text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40"
                   >
                     Clear
                   </button>
@@ -830,7 +830,7 @@ export function SafetyDashboard() {
             )}
 
             {pendingDrivers.length === 0 && (
-              <div className="mt-6 flex items-center gap-2 rounded-md bg-amber-50 px-4 py-3 text-xs text-amber-700">
+              <div className="mt-6 flex items-center gap-2 rounded-md bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-xs text-amber-700 dark:text-amber-400">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 Add at least one entry, then click Save Week.
               </div>
@@ -840,7 +840,7 @@ export function SafetyDashboard() {
 
         {/* Cancel */}
         <div>
-          <button onClick={() => setTab("overview")} className="rounded-md border border-slate-200 px-5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+          <button onClick={() => setTab("overview")} className="rounded-md border border-border px-5 py-2 text-sm font-medium text-slate-600 dark:text-neutral-400 hover:bg-slate-50 dark:hover:bg-muted/40">
             Cancel
           </button>
         </div>
@@ -872,12 +872,12 @@ export function SafetyDashboard() {
         }
       />
 
-      <div className="flex gap-0 border-b border-slate-200">
+      <div className="flex gap-0 border-b border-border">
         {TABS.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${tab === t.key ? "border-brand-500 text-brand-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${tab === t.key ? "border-brand-500 text-brand-600 dark:text-brand-400" : "border-transparent text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"}`}
           >
             {t.label}
           </button>
@@ -885,7 +885,7 @@ export function SafetyDashboard() {
       </div>
 
       {isLoading ? (
-        <div className="py-16 text-center text-sm text-slate-400">Loading…</div>
+        <div className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">Loading…</div>
       ) : (
         <>
           {tab === "overview" && Overview()}

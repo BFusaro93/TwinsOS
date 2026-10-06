@@ -802,7 +802,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               >
                 Actions
                 {someSelected && (
-                  <span className="ml-1 rounded-full bg-card/20 px-1.5 text-[10px]">{selectedIds.size}</span>
+                  <span className="ml-1 rounded-full bg-white/20 px-1.5 text-[10px]">{selectedIds.size}</span>
                 )}
                 <ChevronDown className="ml-1 h-3 w-3" />
               </Button>
@@ -878,7 +878,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                 {quickCounts[key] > 0 && (
                   <span className={cn(
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                    statusFilter === key ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-card/20 text-white"
+                    statusFilter === key ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-white/20 text-white"
                   )}>
                     {quickCounts[key]}
                   </span>

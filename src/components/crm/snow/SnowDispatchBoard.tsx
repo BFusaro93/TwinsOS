@@ -80,13 +80,13 @@ const STATUS_CYCLE: VisitStatus[] = ["scheduled", "dispatched", "in_progress", "
 
 function StatusIcon({ status }: { status: VisitStatus }) {
   switch (status) {
-    case "scheduled":   return <Calendar className="h-4 w-4 text-slate-400" />;
+    case "scheduled":   return <Calendar className="h-4 w-4 text-slate-400 dark:text-neutral-500" />;
     case "dispatched":  return <Smartphone className="h-4 w-4 text-orange-400" />;
-    case "in_progress": return <CalendarCheck className="h-4 w-4 text-yellow-500" />;
-    case "completed":   return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+    case "in_progress": return <CalendarCheck className="h-4 w-4 text-yellow-500 dark:text-yellow-400" />;
+    case "completed":   return <CheckCircle2 className="h-4 w-4 text-green-500 dark:text-green-400" />;
     case "cancelled":   return <XCircle className="h-4 w-4 text-red-400" />;
     case "skipped":     return <CornerDownRight className="h-4 w-4 text-blue-400" />;
-    default:            return <Calendar className="h-4 w-4 text-slate-300" />;
+    default:            return <Calendar className="h-4 w-4 text-slate-300 dark:text-neutral-500" />;
   }
 }
 
@@ -264,9 +264,9 @@ function AddJobsDialog({
           <DialogTitle className="text-sm font-semibold">Add Jobs to Dispatch</DialogTitle>
         </DialogHeader>
 
-        <div className="shrink-0 border-b bg-slate-50 px-5 py-3 grid grid-cols-2 gap-3">
+        <div className="shrink-0 border-b bg-slate-50 dark:bg-muted/40 px-5 py-3 grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500">Master Route (optional)</Label>
+            <Label className="text-[10px] uppercase text-muted-foreground">Master Route (optional)</Label>
             <Select value={routeId || "adhoc"} onValueChange={(v) => setRouteId(v === "adhoc" ? "" : v)}>
               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -276,23 +276,23 @@ function AddJobsDialog({
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500">Dispatch Date</Label>
+            <Label className="text-[10px] uppercase text-muted-foreground">Dispatch Date</Label>
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-8 text-xs" />
           </div>
           <div className="space-y-1">
-            <Label className="flex items-center gap-1 text-[10px] uppercase text-slate-500">
+            <Label className="flex items-center gap-1 text-[10px] uppercase text-muted-foreground">
               Max Trigger Inches
               <span
                 title="This storm's expected/forecasted depth. Any snow job whose own trigger depth (the depth needed before their contract kicks in) is higher than this number is excluded below by default — this storm isn't deep enough to trigger their service. This value isn't saved; it only filters this dialog's candidate list."
                 className="cursor-help"
               >
-                <HelpCircle className="h-3 w-3 shrink-0 text-slate-400" />
+                <HelpCircle className="h-3 w-3 shrink-0 text-slate-400 dark:text-neutral-500" />
               </span>
             </Label>
             <Input type="number" step="0.1" value={maxTriggerInches} onChange={(e) => setMaxTriggerInches(e.target.value)} placeholder="No limit" className="h-8 text-xs" />
           </div>
           <div className="space-y-1">
-            <Label className="text-[10px] uppercase text-slate-500">Min Priority</Label>
+            <Label className="text-[10px] uppercase text-muted-foreground">Min Priority</Label>
             <Select value={minPriority || "any"} onValueChange={(v) => setMinPriority(v === "any" ? "" : v)}>
               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -304,7 +304,7 @@ function AddJobsDialog({
             </Select>
           </div>
           <div className="space-y-1 col-span-2">
-            <Label className="text-[10px] uppercase text-slate-500">Default Crew (used when a job has none assigned)</Label>
+            <Label className="text-[10px] uppercase text-muted-foreground">Default Crew (used when a job has none assigned)</Label>
             <Select value={defaultCrewId || "none"} onValueChange={(v) => setDefaultCrewId(v === "none" ? "" : v)}>
               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -321,11 +321,11 @@ function AddJobsDialog({
               {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
             </div>
           ) : candidates.length === 0 ? (
-            <p className="text-center text-sm text-slate-400 py-12">No snow jobs found{routeId ? " on this route" : ""}.</p>
+            <p className="text-center text-sm text-slate-400 dark:text-neutral-500 py-12">No snow jobs found{routeId ? " on this route" : ""}.</p>
           ) : (
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-slate-50 border-b">
-                <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
+                <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                   <th className="w-8 px-3 py-2" />
                   <th className="px-3 py-2">Client</th>
                   <th className="px-3 py-2">Trigger</th>
@@ -337,7 +337,7 @@ function AddJobsDialog({
                 {candidates.map(({ job, excluded }) => (
                   <tr
                     key={job.id}
-                    className={cn("border-b cursor-pointer", excluded ? "bg-red-50 text-red-700" : "hover:bg-slate-50")}
+                    className={cn("border-b cursor-pointer", excluded ? "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400" : "hover:bg-slate-50 dark:hover:bg-muted/40")}
                     onClick={() => toggle(job.id)}
                   >
                     <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
@@ -345,7 +345,7 @@ function AddJobsDialog({
                     </td>
                     <td className="px-3 py-2 font-medium">
                       {job.clientName ?? "—"}
-                      {job.serviceAddress && <p className="text-[10px] text-slate-400 font-normal">{job.serviceAddress}</p>}
+                      {job.serviceAddress && <p className="text-[10px] text-slate-400 dark:text-neutral-500 font-normal">{job.serviceAddress}</p>}
                     </td>
                     <td className="px-3 py-2">{job.inchTrigger != null ? `${job.inchTrigger}"` : "—"}</td>
                     <td className="px-3 py-2">{job.clientPriority ?? "—"}</td>
@@ -357,8 +357,8 @@ function AddJobsDialog({
           )}
         </div>
 
-        <div className="shrink-0 flex items-center justify-between border-t bg-white px-5 py-3">
-          <p className="text-xs text-slate-500">{selectedIds.size} of {candidates.length} selected</p>
+        <div className="shrink-0 flex items-center justify-between border-t bg-card px-5 py-3">
+          <p className="text-xs text-muted-foreground">{selectedIds.size} of {candidates.length} selected</p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button size="sm" className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleAdd} disabled={addJobs.isPending}>
@@ -460,37 +460,37 @@ function SnowCrewAssignDialog({
           <DialogTitle className="text-sm font-semibold">Team Assignment</DialogTitle>
         </DialogHeader>
         {heldVisit ? (
-          <div className="shrink-0 flex items-center justify-between gap-3 border-b border-brand-200 bg-brand-50 px-5 py-2">
-            <p className="text-xs text-brand-800">
+          <div className="shrink-0 flex items-center justify-between gap-3 border-b border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-5 py-2">
+            <p className="text-xs text-brand-800 dark:text-brand-300">
               Moving <span className="font-semibold">{heldVisit.clientName ?? "Visit"}</span> — tap a
               crew, or Unassigned, to place it.
             </p>
             <button
               onClick={() => setHeldVisitId(null)}
-              className="shrink-0 rounded border border-brand-300 bg-white px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-100"
+              className="shrink-0 rounded border border-brand-300 dark:border-brand-700 bg-card px-2 py-1 text-[11px] font-medium text-brand-700 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/40"
             >
               Cancel
             </button>
           </div>
         ) : (
-          <p className="shrink-0 border-b bg-slate-50 px-5 py-1.5 text-[11px] text-slate-400">
+          <p className="shrink-0 border-b bg-slate-50 dark:bg-muted/40 px-5 py-1.5 text-[11px] text-slate-400 dark:text-neutral-500">
             Drag a visit, or tap one to pick it up and tap where it should go.
           </p>
         )}
         <div className="flex flex-1 overflow-hidden">
           <div
             className={cn(
-              "w-52 shrink-0 border-r bg-green-50 p-4",
+              "w-52 shrink-0 border-r bg-green-50 dark:bg-green-950/40 p-4",
               heldVisit && "cursor-pointer ring-2 ring-inset ring-brand-400"
             )}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => { if (dragVisitId) { const jId = visits.find((v) => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, null, jId); setDragVisitId(null); } }}
             onClick={() => void place(null)}
           >
-            <p className="text-[10px] font-semibold uppercase text-green-700 tracking-wide mb-3">Unassigned ({unassigned.length})</p>
+            <p className="text-[10px] font-semibold uppercase text-green-700 dark:text-green-400 tracking-wide mb-3">Unassigned ({unassigned.length})</p>
             <div className="space-y-1.5">
               {unassigned.length === 0 ? (
-                <p className="text-xs text-green-600 italic">
+                <p className="text-xs text-green-600 dark:text-green-400 italic">
                   {heldVisit ? "Tap to unassign" : "All visits assigned"}
                 </p>
               ) : unassigned.map((v) => (
@@ -507,14 +507,14 @@ function SnowCrewAssignDialog({
                     setHeldVisitId(v.id);
                   }}
                   className={cn(
-                    "rounded bg-white border border-green-200 px-2 py-1.5 cursor-grab active:cursor-grabbing",
-                    heldVisitId === v.id && "ring-2 ring-brand-500 border-brand-300"
+                    "rounded bg-card border border-green-200 dark:border-green-800 px-2 py-1.5 cursor-grab active:cursor-grabbing",
+                    heldVisitId === v.id && "ring-2 ring-brand-500 border-brand-300 dark:border-brand-700"
                   )}
                 >
-                  <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
+                  <p className="text-xs font-medium text-slate-700 dark:text-neutral-300 truncate">{v.clientName ?? "—"}</p>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {crews.map((c) => (
-                      <button key={c.id} onClick={(e) => { e.stopPropagation(); setHeldVisitId(null); void reassign(v.id, c.id, v.jobId); }} className="text-[9px] bg-slate-100 hover:bg-brand-100 hover:text-brand-700 text-slate-500 rounded px-1.5 py-0.5">
+                      <button key={c.id} onClick={(e) => { e.stopPropagation(); setHeldVisitId(null); void reassign(v.id, c.id, v.jobId); }} className="text-[9px] bg-muted hover:bg-brand-100 dark:hover:bg-brand-900/40 hover:text-brand-700 dark:hover:text-brand-400 text-muted-foreground rounded px-1.5 py-0.5">
                         → {c.name}
                       </button>
                     ))}
@@ -538,7 +538,7 @@ function SnowCrewAssignDialog({
                     onDrop={() => { if (dragVisitId) { const jId = visits.find((v) => v.id === dragVisitId)?.jobId; void reassign(dragVisitId, crew.id, jId); setDragVisitId(null); } }}
                     onClick={() => void place(crew.id)}
                   >
-                    <p className="text-[10px] font-semibold uppercase text-slate-600 tracking-wide truncate mb-2">{crew.name} ({crewVisits.length})</p>
+                    <p className="text-[10px] font-semibold uppercase text-slate-600 dark:text-neutral-400 tracking-wide truncate mb-2">{crew.name} ({crewVisits.length})</p>
                     <div className="space-y-1.5 min-h-[40px]">
                       {crewVisits.map((v) => (
                         <div
@@ -554,28 +554,28 @@ function SnowCrewAssignDialog({
                           className={cn(
                             // pr-7 keeps the client name clear of the ✕, which
                             // sits in the corner permanently on touch screens.
-                            "rounded bg-slate-50 border px-2 pr-7 py-1.5 group relative cursor-grab active:cursor-grabbing",
+                            "rounded bg-slate-50 dark:bg-muted/40 border px-2 pr-7 py-1.5 group relative cursor-grab active:cursor-grabbing",
                             heldVisitId === v.id && "ring-2 ring-brand-500"
                           )}
                         >
-                          <p className="text-xs font-medium text-slate-700 truncate">{v.clientName ?? "—"}</p>
-                          <button onClick={(e) => { e.stopPropagation(); setHeldVisitId(null); void reassign(v.id, null, v.jobId); }} className="absolute top-0 right-0 hidden group-hover:flex items-center justify-center h-6 w-6 text-[9px] text-slate-400 hover:text-red-500" title="Unassign">✕</button>
+                          <p className="text-xs font-medium text-slate-700 dark:text-neutral-300 truncate">{v.clientName ?? "—"}</p>
+                          <button onClick={(e) => { e.stopPropagation(); setHeldVisitId(null); void reassign(v.id, null, v.jobId); }} className="absolute top-0 right-0 hidden group-hover:flex items-center justify-center h-6 w-6 text-[9px] text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400" title="Unassign">✕</button>
                         </div>
                       ))}
                       {crewVisits.length === 0 && heldVisit && (
-                        <p className="text-[10px] text-slate-300 italic">Tap to place here</p>
+                        <p className="text-[10px] text-slate-300 dark:text-neutral-500 italic">Tap to place here</p>
                       )}
                     </div>
                   </div>
                 );
               })}
               {crews.length === 0 && (
-                <div className="flex-1 flex items-center justify-center"><p className="text-sm text-slate-400">No crews configured</p></div>
+                <div className="flex-1 flex items-center justify-center"><p className="text-sm text-slate-400 dark:text-neutral-500">No crews configured</p></div>
               )}
             </div>
           </div>
         </div>
-        <div className="shrink-0 flex items-center justify-end gap-2 border-t bg-white px-5 py-3">
+        <div className="shrink-0 flex items-center justify-end gap-2 border-t bg-card px-5 py-3">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>Close</Button>
           <Button
             size="sm"
@@ -609,14 +609,14 @@ function SnowPrintDialog({
     return (
       <table className="w-full text-xs border-collapse mt-2">
         <thead>
-          <tr className="bg-slate-100">
-            <th className="border border-slate-300 px-2 py-1 text-left">#</th>
-            <th className="border border-slate-300 px-2 py-1 text-left">Client</th>
-            <th className="border border-slate-300 px-2 py-1 text-left">Address</th>
-            <th className="border border-slate-300 px-2 py-1 text-left">Weather Conditions</th>
-            <th className="border border-slate-300 px-2 py-1 text-left">Site Conditions</th>
-            <th className="border border-slate-300 px-2 py-1 text-center">Full Plow</th>
-            <th className="border border-slate-300 px-2 py-1 text-center">Salt (bags)</th>
+          <tr className="bg-muted">
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-left">#</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-left">Client</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-left">Address</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-left">Weather Conditions</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-left">Site Conditions</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-center">Full Plow</th>
+            <th className="border border-slate-300 dark:border-neutral-700 px-2 py-1 text-center">Salt (bags)</th>
           </tr>
         </thead>
         <tbody>
@@ -624,14 +624,14 @@ function SnowPrintDialog({
             const job = v.job;
             const addr = [job?.serviceAddress, job?.serviceCity].filter(Boolean).join(", ");
             return (
-              <tr key={v.id} className="border-b border-slate-200">
-                <td className="border border-slate-200 px-2 py-1 font-mono text-center">{i + 1}</td>
-                <td className="border border-slate-200 px-2 py-1 font-medium">{v.clientName ?? "—"}</td>
-                <td className="border border-slate-200 px-2 py-1">{addr || "—"}</td>
-                <td className="border border-slate-200 px-2 py-1 text-slate-400">☐ Snowing ☐ Freezing Rain ☐ Clear</td>
-                <td className="border border-slate-200 px-2 py-1 text-slate-400">☐ Ice ☐ Slush ☐ Dry</td>
-                <td className="border border-slate-200 px-2 py-1 text-center">☐</td>
-                <td className="border border-slate-200 px-2 py-1 text-center"></td>
+              <tr key={v.id} className="border-b border-border">
+                <td className="border border-border px-2 py-1 font-mono text-center">{i + 1}</td>
+                <td className="border border-border px-2 py-1 font-medium">{v.clientName ?? "—"}</td>
+                <td className="border border-border px-2 py-1">{addr || "—"}</td>
+                <td className="border border-border px-2 py-1 text-slate-400 dark:text-neutral-500">☐ Snowing ☐ Freezing Rain ☐ Clear</td>
+                <td className="border border-border px-2 py-1 text-slate-400 dark:text-neutral-500">☐ Ice ☐ Slush ☐ Dry</td>
+                <td className="border border-border px-2 py-1 text-center">☐</td>
+                <td className="border border-border px-2 py-1 text-center"></td>
               </tr>
             );
           })}
@@ -647,12 +647,12 @@ function SnowPrintDialog({
           <DialogTitle className="text-sm font-semibold">Print Route Sheets — {event?.name ?? ""} ({event?.eventDate ?? ""})</DialogTitle>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto p-5 space-y-8">
-          {byCrew.length === 0 && unassigned.length === 0 && <p className="text-sm text-slate-400 text-center py-8">No visits to print.</p>}
+          {byCrew.length === 0 && unassigned.length === 0 && <p className="text-sm text-slate-400 dark:text-neutral-500 text-center py-8">No visits to print.</p>}
           {byCrew.map(({ crew, visits: cv }) => (
             <div key={crew.id}>
               <div className="border-b-2 border-slate-800 pb-1 mb-2 flex items-baseline justify-between">
                 <h2 className="text-sm font-bold">{crew.name}</h2>
-                <span className="text-xs text-slate-500">{cv.length} stop{cv.length !== 1 ? "s" : ""}</span>
+                <span className="text-xs text-muted-foreground">{cv.length} stop{cv.length !== 1 ? "s" : ""}</span>
               </div>
               {table(cv)}
             </div>
@@ -660,15 +660,15 @@ function SnowPrintDialog({
           {unassigned.length > 0 && (
             <div>
               <div className="border-b-2 border-amber-600 pb-1 mb-2 flex items-baseline justify-between">
-                <h2 className="text-sm font-bold text-amber-700">Unassigned</h2>
-                <span className="text-xs text-amber-600">{unassigned.length} stop{unassigned.length !== 1 ? "s" : ""}</span>
+                <h2 className="text-sm font-bold text-amber-700 dark:text-amber-400">Unassigned</h2>
+                <span className="text-xs text-amber-600 dark:text-amber-400">{unassigned.length} stop{unassigned.length !== 1 ? "s" : ""}</span>
               </div>
               {table(unassigned)}
             </div>
           )}
         </div>
-        <div className="shrink-0 border-t bg-white px-5 py-3 flex items-center justify-between">
-          <p className="text-[11px] text-slate-400">Opens your browser&apos;s print dialog in a new window</p>
+        <div className="shrink-0 border-t bg-card px-5 py-3 flex items-center justify-between">
+          <p className="text-[11px] text-slate-400 dark:text-neutral-500">Opens your browser&apos;s print dialog in a new window</p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>Close</Button>
             <Button
@@ -809,7 +809,7 @@ function CloseOutDialog({
           </div>
           {hasHourlyJob && (
             <div className="space-y-1.5">
-              <Label>Actual Hours <span className="text-slate-400">(billed hourly)</span></Label>
+              <Label>Actual Hours <span className="text-slate-400 dark:text-neutral-500">(billed hourly)</span></Label>
               <Input type="number" step="0.25" value={actualHours} onChange={(e) => setActualHours(e.target.value)} placeholder="e.g. 2.5" className="h-9 text-sm" />
             </div>
           )}
@@ -844,9 +844,9 @@ function CloseOutDialog({
 // ── main board ────────────────────────────────────────────────────────────────
 
 const STATUS_PILL: Record<StormEventStatus, string> = {
-  pending: "bg-slate-100 text-slate-600",
-  working: "bg-orange-100 text-orange-700",
-  complete: "bg-green-100 text-green-700",
+  pending: "bg-muted text-slate-600 dark:text-neutral-400",
+  working: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400",
+  complete: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
 };
 
 export function SnowDispatchBoard() {
@@ -957,7 +957,7 @@ export function SnowDispatchBoard() {
       {/* Storm event bar — wraps so the action group drops to its own line
           rather than running off the edge on a tablet. */}
       <div className="flex flex-wrap items-center gap-3 px-4 shrink-0">
-        <Snowflake className="h-4 w-4 text-brand-500" />
+        <Snowflake className="h-4 w-4 text-brand-500 dark:text-brand-400" />
         <Select value={effectiveEventId} onValueChange={setSelectedEventId}>
           <SelectTrigger className="h-9 max-lg:h-11 w-64 max-w-full text-sm"><SelectValue placeholder="Select a storm event…" /></SelectTrigger>
           <SelectContent>
@@ -1002,7 +1002,7 @@ export function SnowDispatchBoard() {
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <button
             onClick={() => { void refetchEvents(); void refetchVisits(); }}
-            className="h-9 w-9 max-lg:h-11 max-lg:w-11 flex items-center justify-center rounded border border-slate-200 text-slate-500 hover:text-slate-800"
+            className="h-9 w-9 max-lg:h-11 max-lg:w-11 flex items-center justify-center rounded border border-border text-muted-foreground hover:text-slate-800 dark:hover:text-neutral-100"
             title="Refresh"
           >
             <RefreshCw className="h-4 w-4" />
@@ -1025,31 +1025,31 @@ export function SnowDispatchBoard() {
 
       {/* Selected-visit actions */}
       {selectedVisitIds.size > 0 && (
-        <div className="mx-4 flex flex-wrap items-center gap-2 rounded border bg-brand-50 px-3 py-2 shrink-0">
-          <ListChecks className="h-4 w-4 text-brand-600" />
-          <span className="text-xs font-medium text-brand-700">{selectedVisitIds.size} selected</span>
+        <div className="mx-4 flex flex-wrap items-center gap-2 rounded border bg-brand-50 dark:bg-brand-900/30 px-3 py-2 shrink-0">
+          <ListChecks className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+          <span className="text-xs font-medium text-brand-700 dark:text-brand-400">{selectedVisitIds.size} selected</span>
           {canManage && (
             <Button size="sm" className="h-7 text-xs ml-2" onClick={() => setCloseOutIds(new Set(selectedVisitIds))}>
               Close Out…
             </Button>
           )}
-          <button className="ml-auto text-xs text-slate-400 hover:text-slate-600" onClick={() => setSelectedVisitIds(new Set())}>Clear</button>
+          <button className="ml-auto text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => setSelectedVisitIds(new Set())}>Clear</button>
         </div>
       )}
 
       {/* Visit table */}
-      <div className="flex-1 overflow-auto overscroll-x-contain bg-white mx-4 rounded-lg border shadow-sm max-lg:min-h-[60dvh]">
+      <div className="flex-1 overflow-auto overscroll-x-contain bg-card mx-4 rounded-lg border shadow-sm max-lg:min-h-[60dvh]">
         {!activeEvent ? (
-          <p className="py-20 text-center text-sm text-slate-400">
+          <p className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
             {eventsLoading ? "Loading…" : "No storm events yet — create one to start dispatching."}
           </p>
         ) : (
           <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-slate-50 border-b">
-              <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
+              <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 <th className="w-8 px-2 py-2.5" />
                 <th className="w-8 px-2 py-2.5">St</th>
-                <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
+                <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
                 <th className="px-2 py-2.5">Address</th>
                 <th className="px-2 py-2.5">Trigger</th>
                 <th className="px-2 py-2.5">Crew</th>
@@ -1066,17 +1066,17 @@ export function SnowDispatchBoard() {
                   </tr>
                 ))
               ) : visits.length === 0 ? (
-                <tr><td colSpan={9} className="py-20 text-center text-sm text-slate-400">No jobs dispatched to this storm event yet.</td></tr>
+                <tr><td colSpan={9} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">No jobs dispatched to this storm event yet.</td></tr>
               ) : (
                 <>
-                  <tr className="bg-slate-100 text-[10px] font-semibold text-slate-700">
-                    <td colSpan={8} className="px-2 py-1.5 text-right text-slate-500">Totals</td>
+                  <tr className="bg-muted text-[10px] font-semibold text-slate-700 dark:text-neutral-300">
+                    <td colSpan={8} className="px-2 py-1.5 text-right text-muted-foreground">Totals</td>
                     <td className="px-2 py-1.5 text-right">{totalAmt > 0 ? formatCurrency(totalAmt) : "—"}</td>
                   </tr>
                   {visits.map((v) => (
                     <tr
                       key={v.id}
-                      className="border-b border-slate-100 bg-white hover:bg-slate-50 cursor-pointer"
+                      className="border-b border-slate-100 dark:border-neutral-800 bg-card hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer"
                       onClick={() => setSelectedJobId(v.jobId)}
                     >
                       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
@@ -1087,16 +1087,16 @@ export function SnowDispatchBoard() {
                       </td>
                       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}><StatusCycleButton visit={v} /></td>
                       <td className="px-2 py-2 max-lg:sticky max-lg:left-0 max-lg:z-[1] max-lg:bg-inherit max-lg:shadow-[1px_0_0_rgb(226_232_240)]" onClick={(e) => e.stopPropagation()}>
-                        <Link href={`/crm/clients/${v.clientId}`} className="font-medium text-brand-600 hover:underline">{v.clientName ?? "—"}</Link>
+                        <Link href={`/crm/clients/${v.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">{v.clientName ?? "—"}</Link>
                       </td>
-                      <td className="px-2 py-2 text-slate-500">{v.job?.serviceAddress ?? "—"}</td>
-                      <td className="px-2 py-2 text-slate-500">{v.job?.inchTrigger != null ? `${v.job.inchTrigger}"` : "—"}</td>
+                      <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceAddress ?? "—"}</td>
+                      <td className="px-2 py-2 text-muted-foreground">{v.job?.inchTrigger != null ? `${v.job.inchTrigger}"` : "—"}</td>
                       <td className="px-2 py-2">
-                        {v.crewName ? <Badge variant="secondary" className="text-[10px]">{v.crewName}</Badge> : <span className="text-slate-300 italic">—</span>}
+                        {v.crewName ? <Badge variant="secondary" className="text-[10px]">{v.crewName}</Badge> : <span className="text-slate-300 dark:text-neutral-500 italic">—</span>}
                       </td>
-                      <td className="px-2 py-2 text-right text-slate-500">{v.snowDepthInches != null ? `${v.snowDepthInches}"` : "—"}</td>
-                      <td className="px-2 py-2 text-right text-slate-500">{v.temperature != null ? `${v.temperature}°` : "—"}</td>
-                      <td className="px-2 py-2 text-right font-medium text-slate-700">
+                      <td className="px-2 py-2 text-right text-muted-foreground">{v.snowDepthInches != null ? `${v.snowDepthInches}"` : "—"}</td>
+                      <td className="px-2 py-2 text-right text-muted-foreground">{v.temperature != null ? `${v.temperature}°` : "—"}</td>
+                      <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">
                         {amountByVisitId.has(v.id) ? formatCurrency(amountByVisitId.get(v.id) ?? 0) : "—"}
                       </td>
                     </tr>

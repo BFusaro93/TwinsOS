@@ -169,7 +169,7 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
                 <img
                   src={screenshotPreview}
                   alt="Screenshot preview"
-                  className="max-h-40 rounded-md border border-slate-200"
+                  className="max-h-40 rounded-md border border-border"
                 />
                 <button
                   type="button"

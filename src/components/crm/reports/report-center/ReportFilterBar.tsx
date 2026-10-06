@@ -105,7 +105,7 @@ export function defaultFilterValues(
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium text-slate-600">{label}</span>
+      <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">{label}</span>
       {children}
     </div>
   );
@@ -231,7 +231,7 @@ export function ReportFilterBar({
   extraActions,
 }: ReportFilterBarProps) {
   return (
-    <div className="rounded-lg border bg-white p-3 shadow-sm">
+    <div className="rounded-lg border bg-card p-3 shadow-sm">
       <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
         <span className="pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Filter By
@@ -280,7 +280,7 @@ export function ReportFilterBar({
                   />
                   <label
                     htmlFor={`report-filter-${def.key}`}
-                    className="text-xs font-medium text-slate-600"
+                    className="text-xs font-medium text-slate-600 dark:text-neutral-400"
                   >
                     {def.label}
                   </label>

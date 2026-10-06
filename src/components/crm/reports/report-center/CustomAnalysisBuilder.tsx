@@ -412,7 +412,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
             {effectiveReportId && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="text-red-600">
+                  <Button variant="outline" size="sm" className="text-red-600 dark:text-red-400">
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </AlertDialogTrigger>
@@ -456,7 +456,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
               <CardTitle className="text-sm">7. Visualization</CardTitle>
             </CardHeader>
             <CardContent className="flex items-center gap-3">
-              <span className="w-32 text-xs font-medium text-slate-600">Display As</span>
+              <span className="w-32 text-xs font-medium text-slate-600 dark:text-neutral-400">Display As</span>
               <Select value={visualType} onValueChange={(v) => setVisualType(v as VisualType)}>
                 <SelectTrigger className="h-9 w-40 text-sm">
                   <SelectValue />
@@ -477,7 +477,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="w-32 text-xs font-medium text-slate-600">Label Column</span>
+                  <span className="w-32 text-xs font-medium text-slate-600 dark:text-neutral-400">Label Column</span>
                   <Select value={labelColumn} onValueChange={setLabelColumn}>
                     <SelectTrigger className="h-8 w-64 text-sm">
                       <SelectValue placeholder="Choose a label column…" />
@@ -490,7 +490,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
                   </Select>
                 </div>
                 <div>
-                  <p className="mb-1.5 text-xs font-medium text-slate-600">Value Column(s)</p>
+                  <p className="mb-1.5 text-xs font-medium text-slate-600 dark:text-neutral-400">Value Column(s)</p>
                   {visualType === "pie" ? (
                     <Select value={valueColumns[0] ?? ""} onValueChange={(v) => setValueColumns([v])}>
                       <SelectTrigger className="h-8 w-64 text-sm">
@@ -505,7 +505,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
                   ) : (
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
                       {valueOptions.map((o) => (
-                        <label key={o.value} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                        <label key={o.value} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
                           <Checkbox
                             checked={valueColumns.includes(o.value)}
                             onCheckedChange={(checked) =>
@@ -530,7 +530,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
                 <CardTitle className="text-sm">8. Chart Fields</CardTitle>
               </CardHeader>
               <CardContent className="flex items-center gap-3">
-                <span className="w-32 text-xs font-medium text-slate-600">KPI Value</span>
+                <span className="w-32 text-xs font-medium text-slate-600 dark:text-neutral-400">KPI Value</span>
                 <Select value={kpiColumn} onValueChange={setKpiColumn}>
                   <SelectTrigger className="h-8 w-64 text-sm">
                     <SelectValue placeholder="Choose a value…" />
@@ -633,12 +633,12 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
               </div>
               {valueOptions.length > 0 && (
                 <div className="border-t pt-3">
-                  <p className="mb-1.5 text-xs font-medium text-slate-600">
+                  <p className="mb-1.5 text-xs font-medium text-slate-600 dark:text-neutral-400">
                     Color Spectrum — shade a column light-to-dark by magnitude
                   </p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
                     {valueOptions.map((o) => (
-                      <label key={o.value} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+                      <label key={o.value} className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
                         <Checkbox
                           checked={colorSpectrumColumns.includes(o.value)}
                           onCheckedChange={(checked) =>
@@ -668,7 +668,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
                 pick one from the Graphics Library.
               </p>
               {headerVisual ? (
-                <div className="flex items-center justify-between gap-3 rounded-md border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-800">
+                <div className="flex items-center justify-between gap-3 rounded-md border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-3 py-2 text-xs text-brand-800 dark:text-brand-300">
                   <span className="flex items-center gap-2">
                     {headerVisualTitle || "Untitled graphic"}
                     <Badge variant="secondary" className="text-[10px] capitalize">

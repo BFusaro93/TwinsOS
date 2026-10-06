@@ -234,7 +234,7 @@ export function AttachmentsSection({ recordType, recordId, canWrite }: Attachmen
                   </button>
                   {canUpload && (!equiptRecord || canWriteEquipt || isOwn(att)) && (
                     <button
-                      className="text-slate-300 dark:text-neutral-600 transition-colors hover:text-red-500 dark:hover:text-red-400"
+                      className="text-slate-300 dark:text-neutral-500 transition-colors hover:text-red-500 dark:hover:text-red-400"
                       title="Delete file"
                       onClick={() => setConfirmDeleteId(att.id)}
                     >

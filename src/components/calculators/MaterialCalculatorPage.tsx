@@ -76,11 +76,11 @@ export function MaterialCalculatorPage() {
               onClick={() => setMaterialId(m.id)}
               className={`flex items-center gap-2.5 rounded-xl border-2 px-4 py-3 text-left text-sm font-semibold transition-all ${
                 materialId === m.id
-                  ? "border-brand-500 bg-brand-50 text-brand-700 shadow-sm"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                  ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 shadow-sm"
+                  : "border-border bg-card text-slate-600 dark:text-neutral-400 hover:border-slate-300 dark:hover:border-neutral-700 hover:bg-slate-50 dark:hover:bg-muted/40"
               }`}
             >
-              <Icon className={`h-5 w-5 shrink-0 ${materialId === m.id ? "text-brand-500" : "text-slate-400"}`} />
+              <Icon className={`h-5 w-5 shrink-0 ${materialId === m.id ? "text-brand-500 dark:text-brand-400" : "text-slate-400 dark:text-neutral-500"}`} />
               {m.label}
             </button>
           );
@@ -98,7 +98,7 @@ export function MaterialCalculatorPage() {
 
         <div className="grid md:grid-cols-2">
           {/* Inputs */}
-          <div className="space-y-5 bg-slate-50 p-6">
+          <div className="space-y-5 bg-slate-50 dark:bg-muted/40 p-6">
             <DimensionInput
               label="Length"
               value={length}
@@ -141,7 +141,7 @@ export function MaterialCalculatorPage() {
       </div>
 
       {/* Reference table */}
-      <div className="rounded-xl border bg-white p-5 space-y-3">
+      <div className="rounded-xl border bg-card p-5 space-y-3">
         <h3 className="text-sm font-semibold">Coverage Reference</h3>
         <table className="w-full text-sm">
           <thead>

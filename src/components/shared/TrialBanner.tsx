@@ -56,7 +56,7 @@ export function TrialBanner() {
           localStorage.setItem(todayKey(), "1");
           setDismissed(true);
         }}
-        className="shrink-0 rounded p-0.5 hover:bg-card/20"
+        className="shrink-0 rounded p-0.5 hover:bg-white/20"
       >
         <X className="h-3.5 w-3.5" />
       </button>
