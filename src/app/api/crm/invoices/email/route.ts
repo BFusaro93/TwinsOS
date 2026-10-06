@@ -101,6 +101,12 @@ export async function POST(req: NextRequest) {
 
   if (invErr || !inv) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
+  // A voided invoice must never be emailed to the client (soft-deleted ones
+  // are already excluded by the deleted_at filter above → 404).
+  if (inv.status === "void" || inv.deleted_at) {
+    return NextResponse.json({ error: "This invoice has been voided and can't be emailed" }, { status: 409 });
+  }
+
   // A draft goes out as "sent" below — it must not go out numberless. The
   // manual save flow assigns the number (useAssignInvoiceNumber), but an
   // invoice emailed straight from draft never passed through it. Assign
@@ -437,7 +443,15 @@ export async function POST(req: NextRequest) {
   // emailed — correctly progresses instead of staying stuck at "printed" forever.
   if (inv.status === "draft" || inv.status === "printed") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from("crm_invoices").update({ status: "sent" }).eq("id", invoiceId);
+    const { error: statusErr } = await (supabase as any).from("crm_invoices").update({ status: "sent" }).eq("id", invoiceId);
+    if (statusErr) {
+      // The email already went out; surface the failed status flip rather than
+      // silently leaving the invoice in draft/printed.
+      return NextResponse.json(
+        { error: `Invoice emailed, but its status could not be updated to sent: ${statusErr.message}`, emailed: true },
+        { status: 500 }
+      );
+    }
   }
 
   // Push to QuickBooks now that the invoice has gone out — never throws, so

@@ -396,6 +396,36 @@ export function useCreateInvoiceFromEstimate() {
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+
+      // Duplicate guard: an estimate that already has a live invoice, or has
+      // been converted to a job (which bills through its own invoices), must not
+      // be invoiced a second time — a retry after a partial failure, or a second
+      // click, would otherwise double-bill the client.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingInvoices, error: existingInvErr } = await (supabase as any)
+        .from("crm_invoices")
+        .select("invoice_number")
+        .eq("estimate_id", estimateId)
+        .is("deleted_at", null)
+        .neq("status", "void")
+        .limit(1);
+      if (existingInvErr) throw existingInvErr;
+      if (existingInvoices?.length) {
+        throw new Error(`Invoice #${existingInvoices[0].invoice_number} already exists for this estimate`);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingJobs, error: existingJobErr } = await (supabase as any)
+        .from("crm_jobs")
+        .select("id")
+        .eq("estimate_id", estimateId)
+        .is("deleted_at", null)
+        .neq("status", "cancelled")
+        .limit(1);
+      if (existingJobErr) throw existingJobErr;
+      if (existingJobs?.length) {
+        throw new Error("This estimate has already been converted to a job — invoice from the job instead");
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: client } = await (supabase as any)
         .from("clients")
@@ -450,7 +480,17 @@ export function useCreateInvoiceFromEstimate() {
             sort_order: i,
           }))
         );
-        if (liErr) throw liErr;
+        if (liErr) {
+          // Header and lines are two writes: don't leave a header whose lines
+          // never landed (it would show as a real invoice and block a retry via
+          // the duplicate guard above). Soft delete, per the no-hard-delete rule.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from("crm_invoices")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", inv.id);
+          throw liErr;
+        }
       }
 
       return mapInvoice(inv);
@@ -1121,6 +1161,38 @@ async function resetJobProductsForLines(supabase: any, lineItemIds: string[]) {
   }
 }
 
+/**
+ * The one place an invoice's header totals are derived from its lines.
+ *
+ * Subtotal is net of each line's own discount. The document-level discount is
+ * re-derived from discount_type/discount_value when it is a percent (bps of the
+ * CURRENT subtotal — the stored discount_cents is only a snapshot and goes
+ * stale as lines change), then clamped to [0, subtotal] so it can never push
+ * the invoice negative. Tax applies to taxable lines net of the document
+ * discount (never negative). Mirrors increment_invoice_totals in SQL.
+ */
+export function computeInvoiceTotals(input: {
+  lines: { totalCents: number; discountCents: number; isTaxable: boolean }[];
+  discountCents: number;
+  discountType?: "percent" | "flat" | null;
+  discountValue?: number | null;
+  taxRateBps: number;
+}) {
+  const netLineCents = (li: { totalCents: number; discountCents: number }) => li.totalCents - li.discountCents;
+  const subtotalCents = input.lines.reduce((s, li) => s + netLineCents(li), 0);
+  const rawDiscountCents =
+    input.discountType === "percent"
+      ? Math.round(Math.max(0, subtotalCents) * ((input.discountValue ?? 0) / 10000))
+      : input.discountCents;
+  const discountCents = Math.min(Math.max(0, rawDiscountCents), Math.max(0, subtotalCents));
+  const taxRateBps = Math.min(Math.max(0, input.taxRateBps), 10000);
+  const taxableSubtotal = input.lines.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
+  const taxableBase = Math.max(0, taxableSubtotal - discountCents);
+  const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
+  const totalCents = subtotalCents - discountCents + taxCents;
+  return { subtotalCents, discountCents, taxRateBps, taxCents, totalCents };
+}
+
 // Shared by useDeleteInvoiceLineItem and useSetJobProductStatus (removing a
 // job product from an invoice deletes its line item the same way).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1142,7 +1214,7 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
   // from zero line items and write a $0 total over the real one.
   const { data: inv, error: invReadErr } = await supabase
     .from("crm_invoices")
-    .select("amount_paid_cents, tax_rate_bps, discount_cents, client_id")
+    .select("amount_paid_cents, tax_rate_bps, discount_cents, discount_type, discount_value, client_id")
     .eq("id", invoiceId)
     .single();
   if (invReadErr) throw invReadErr;
@@ -1152,30 +1224,28 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
     .eq("invoice_id", invoiceId);
   if (itemsReadErr) throw itemsReadErr;
 
-  // Net of each line's own discount — matches useUpdateInvoiceFinancials'
-  // netLineCents so a delete recomputes the same way an edit would.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const netLineCents = (li: any) => li.total_cents - (li.discount_cents ?? 0);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const subtotalCents = (items ?? []).reduce((s: number, li: any) => s + netLineCents(li), 0);
-  const discountCents = inv?.discount_cents ?? 0;
-  const taxRateBps = inv?.tax_rate_bps ?? 0;
-  const afterDiscount = subtotalCents - discountCents;
-  // Tax only applies to taxable line items, net of the document-level
-  // discount (matches the PO module's taxableAfterDiscount pattern) — the
-  // discount must reduce the taxable base before tax is computed, not just
-  // the post-tax total, or the customer is overcharged tax on the
-  // discounted-away amount.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const taxableSubtotal = (items ?? []).filter((li: any) => li.is_taxable).reduce((s: number, li: any) => s + netLineCents(li), 0);
-  const taxableBase = Math.max(0, taxableSubtotal - discountCents);
-  const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
-  const totalCents = afterDiscount + taxCents;
+  // Same arithmetic as an edit (useUpdateInvoiceFinancials): percent discounts
+  // are re-derived from the new subtotal and every discount is clamped to it,
+  // so deleting lines can't leave a stale/oversized discount that drives the
+  // total negative.
+  const { subtotalCents, discountCents, taxCents, totalCents } = computeInvoiceTotals({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    lines: (items ?? []).map((li: any) => ({
+      totalCents: li.total_cents,
+      discountCents: li.discount_cents ?? 0,
+      isTaxable: !!li.is_taxable,
+    })),
+    discountCents: inv?.discount_cents ?? 0,
+    discountType: inv?.discount_type ?? null,
+    discountValue: inv?.discount_value ?? null,
+    taxRateBps: inv?.tax_rate_bps ?? 0,
+  });
   const paid = inv?.amount_paid_cents ?? 0;
   const balanceCents = Math.max(0, totalCents - paid);
 
   const { error: updateErr } = await supabase.from("crm_invoices").update({
     subtotal_cents: subtotalCents,
+    discount_cents: discountCents,
     tax_cents: taxCents,
     total_cents: totalCents,
     balance_cents: balanceCents,
@@ -1230,21 +1300,23 @@ export function useUpdateInvoiceFinancials() {
       terms?: string | null;
     }) => {
       // Subtotal is net of each line's own discount; the document-level
-      // discount is a separate reduction stacked on top of that.
-      const netLineCents = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
-      const subtotalCents = lineItems.reduce((s, li) => s + netLineCents(li), 0);
-      // A discount can't be negative (that would add to the bill) or exceed
-      // the subtotal (negative invoice), and a tax rate can't leave 0–100%.
-      discountCents = Math.min(Math.max(0, discountCents), Math.max(0, subtotalCents));
-      taxRateBps = Math.min(Math.max(0, taxRateBps), 10000);
-      const afterDiscount = subtotalCents - discountCents;
-      // Tax only applies to taxable line items, net of the document-level
-      // discount (matches the PO module's taxableAfterDiscount pattern) —
-      // see deleteInvoiceLineItemAndRecalc above for why.
-      const taxableSubtotal = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
-      const taxableBase = Math.max(0, taxableSubtotal - discountCents);
-      const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
-      const totalCents = afterDiscount + taxCents;
+      // discount is a separate reduction stacked on top of that. One shared
+      // helper (see computeInvoiceTotals) keeps this identical to a line
+      // delete's recompute.
+      const computed = computeInvoiceTotals({
+        lines: lineItems.map((li) => ({
+          totalCents: li.totalCents,
+          discountCents: li.discountCents,
+          isTaxable: !!li.isTaxable,
+        })),
+        discountCents,
+        discountType,
+        discountValue,
+        taxRateBps,
+      });
+      const { subtotalCents, taxCents, totalCents } = computed;
+      discountCents = computed.discountCents;
+      taxRateBps = computed.taxRateBps;
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: inv, error: invReadErr } = await (supabase as any)
