@@ -330,6 +330,8 @@ export interface CRMJobVisit {
   pausedAt: string | null
   /** Accumulated break minutes across every pause/resume cycle on this visit, subtracted from actual hours at final clock-out. */
   breakMinutes: number
+  /** Office override: are breakMinutes paid labor? null = follow the org setting (default unpaid). Office-only. */
+  breakPaid: boolean | null
   acknowledgedNotesAt: string | null
   skipReason: string | null
   createdAt: string

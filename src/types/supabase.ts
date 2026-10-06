@@ -5331,6 +5331,7 @@ export type Database = {
           asset_type: string | null
           assigned_employee_id: string | null
           break_minutes: number
+          break_paid: boolean | null
           budgeted_hours: number | null
           client_id: string
           clocked_in_at: string | null
@@ -5379,6 +5380,7 @@ export type Database = {
           asset_type?: string | null
           assigned_employee_id?: string | null
           break_minutes?: number
+          break_paid?: boolean | null
           budgeted_hours?: number | null
           client_id: string
           clocked_in_at?: string | null
@@ -5427,6 +5429,7 @@ export type Database = {
           asset_type?: string | null
           assigned_employee_id?: string | null
           break_minutes?: number
+          break_paid?: boolean | null
           budgeted_hours?: number | null
           client_id?: string
           clocked_in_at?: string | null

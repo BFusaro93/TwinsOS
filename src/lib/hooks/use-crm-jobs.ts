@@ -784,6 +784,7 @@ export function mapVisit(row: any): CRMJobVisit {
     clockedOutAt:        row.clocked_out_at ?? null,
     pausedAt:            row.paused_at ?? null,
     breakMinutes:        row.break_minutes ?? 0,
+    breakPaid:           row.break_paid ?? null,
     acknowledgedNotesAt: row.acknowledged_notes_at ?? null,
     skipReason:          row.skip_reason ?? null,
     createdAt:           row.created_at,
