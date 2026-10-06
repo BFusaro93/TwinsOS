@@ -120,7 +120,7 @@ export function ProductsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <ImportExportMenu
               entityLabel="Products"
-              templateColumns={["name", "partNumber", "description", "category", "unitCost", "salePrice", "isInventory", "quantityOnHand", "vendorName"]}
+              templateColumns={["name", "partNumber", "description", "category", "unitCost", "salePrice", "isInventory", "taxable", "quantityOnHand", "vendorName"]}
               templateFilename="products-template.csv"
               requiredColumns={["name", "category"]}
               onExport={() =>
@@ -132,6 +132,7 @@ export function ProductsPage() {
                     category: p.category,
                     unitCost: (p.unitCost / 100).toFixed(2),
                     isInventory: p.isInventory ? "yes" : "no",
+                    taxable: p.isTaxable ? "yes" : "no",
                     quantityOnHand: p.quantityOnHand ?? "",
                     vendorName: p.vendorName,
                   })),

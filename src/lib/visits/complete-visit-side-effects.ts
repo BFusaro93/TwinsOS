@@ -398,6 +398,20 @@ export async function applyVisitCompletionSideEffects(
           invoice_qty: number | null;
           unit_price_cents: number;
         };
+        // Selling-tax flag lives on the catalog product (product_items.is_taxable).
+        // Free-text job products with no catalog link stay non-taxable. A zero
+        // tax rate (tax-exempt / no rate) still yields zero tax downstream.
+        const productIds = [...new Set(((pendingProductRows ?? []) as PendingProductRow[]).map((p) => p.product_id).filter((id): id is string => !!id))];
+        const productTaxable = new Map<string, boolean>();
+        if (productIds.length > 0) {
+          const { data: taxRows } = await supabase
+            .from("product_items")
+            .select("id, is_taxable")
+            .in("id", productIds);
+          for (const t of (taxRows ?? []) as { id: string; is_taxable: boolean | null }[]) {
+            productTaxable.set(t.id, t.is_taxable ?? false);
+          }
+        }
         const productLines: AutoInvoiceLine[] = ((pendingProductRows ?? []) as PendingProductRow[]).map((p) => {
           const billedQty = p.invoice_qty ?? p.qty;
           return {
@@ -407,7 +421,7 @@ export async function applyVisitCompletionSideEffects(
             rate_cents: p.unit_price_cents,
             total_cents: lineTotalCents(p.unit_price_cents, billedQty),
             service_date: visitDate,
-            is_taxable: false,
+            is_taxable: p.product_id ? (productTaxable.get(p.product_id) ?? false) : false,
             jobProductId: p.id,
             productId: p.product_id,
           };

@@ -114,6 +114,7 @@ export async function POST(request: Request) {
       vendor_id: body.vendorId ?? null,
       vendor_name: vendorName,
       is_inventory: body.isInventory ?? false,
+      is_taxable: body.isTaxable ?? true,
       // Opening balance, written to BOTH tables — same as the app's own
       // useCreateProduct (src/lib/hooks/use-products.ts). It used to land on
       // `parts` only, so create_products {quantityOnHand: 50} showed 50 in

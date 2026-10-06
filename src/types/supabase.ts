@@ -12288,6 +12288,7 @@ export type Database = {
           epa_url: string | null
           id: string
           is_inventory: boolean
+          is_taxable: boolean
           label_instructions: string | null
           minimum_stock: number
           name: string
@@ -12320,6 +12321,7 @@ export type Database = {
           epa_url?: string | null
           id?: string
           is_inventory?: boolean
+          is_taxable?: boolean
           label_instructions?: string | null
           minimum_stock?: number
           name: string
@@ -12352,6 +12354,7 @@ export type Database = {
           epa_url?: string | null
           id?: string
           is_inventory?: boolean
+          is_taxable?: boolean
           label_instructions?: string | null
           minimum_stock?: number
           name?: string

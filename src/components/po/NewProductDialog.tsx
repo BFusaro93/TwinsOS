@@ -54,6 +54,8 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [isInventory, setIsInventory] = useState(false);
+  // New products default to taxable (matches the column default).
+  const [isTaxable, setIsTaxable] = useState(true);
   const [quantityOnHand, setQuantityOnHand] = useState("");
   const [minimumStock, setMinimumStock] = useState("0");
   const [partCategory, setPartCategory] = useState("none");
@@ -86,6 +88,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
       setPrice((initialData.price / 100).toFixed(2));
       setDescription(initialData.description);
       setIsInventory(initialData.isInventory);
+      setIsTaxable(initialData.isTaxable ?? false);
       setQuantityOnHand(String(initialData.quantityOnHand));
       setMinimumStock(String(initialData.minimumStock ?? 0));
       setPartCategory(initialData.partCategory ?? "none");
@@ -119,6 +122,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
     setPrice("");
     setDescription("");
     setIsInventory(false);
+    setIsTaxable(true);
     setQuantityOnHand("");
     setMinimumStock("0");
     setPartCategory("none");
@@ -165,6 +169,7 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
       // pictureUrl or alternateVendors with blank/null on a plain description/cost edit.
       alternateVendors: isEditing && initialData ? initialData.alternateVendors : [],
       isInventory,
+      isTaxable,
       quantityOnHand: parseInt(quantityOnHand) || 0,
       pictureUrl: isEditing && initialData ? initialData.pictureUrl : null,
       costLayers: isEditing && initialData ? initialData.costLayers : [],
@@ -413,6 +418,23 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
                   Track inventory quantity
                 </Label>
               </div>
+            </div>
+
+            {/* Taxable — full width */}
+            <div className="col-span-2 grid gap-1">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="product-taxable"
+                  checked={isTaxable}
+                  onCheckedChange={(checked) => setIsTaxable(checked === true)}
+                />
+                <Label htmlFor="product-taxable" className="cursor-pointer font-normal">
+                  Taxable
+                </Label>
+              </div>
+              <p className="pl-6 text-xs text-muted-foreground">
+                Sales tax is charged on client invoices for this product (unless the client is tax exempt). You can still change it per invoice line.
+              </p>
             </div>
 
             {/* Quantity on hand — half width, shown only when isInventory */}
