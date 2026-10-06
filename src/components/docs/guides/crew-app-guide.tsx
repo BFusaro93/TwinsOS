@@ -37,8 +37,8 @@ export function CrewAppGuide() {
         description="What a crew sees on their phone — the day's stops, clocking on and off, breaks, photos, and sending work back to the office."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -159,7 +159,7 @@ export function CrewAppGuide() {
           </thead>
           <tbody>
             {STOP_ACTIONS.map(([label, what]) => (
-              <tr key={label} className="border-t border-[#e6e6e0]">
+              <tr key={label} className="border-t border-[#e6e6e0] dark:border-border">
                 <td className="px-4 py-2 align-top font-semibold whitespace-nowrap">{label}</td>
                 <td className="px-4 py-2 align-top">{what}</td>
               </tr>
@@ -185,7 +185,7 @@ export function CrewAppGuide() {
         <p>
           When a crew taps Stop Job, the hours for that stop are:
         </p>
-        <p className="rounded-md border border-[#e6e6e0] bg-[#f7f7f4] px-4 py-3 font-mono text-sm">
+        <p className="rounded-md border border-[#e6e6e0] dark:border-border bg-[#f7f7f4] dark:bg-card px-4 py-3 font-mono text-sm">
           (clock out − clock in − break minutes) × number of crew members
         </p>
         <p>

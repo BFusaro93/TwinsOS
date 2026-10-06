@@ -163,24 +163,24 @@ function GuideCard({
   // shell (Equipt, Landscapt, Settings) this Support page is rendering in.
   const pathname = usePathname();
   return (
-    <div ref={cardRef} className="scroll-mt-4 rounded-lg border border-[#e6e6e0] bg-card shadow-sm">
+    <div ref={cardRef} className="scroll-mt-4 rounded-lg border border-[#e6e6e0] dark:border-border bg-card shadow-sm">
       <button
         onClick={onToggle}
-        className="flex w-full cursor-pointer list-none items-start gap-3 rounded-lg p-4 text-left hover:bg-[#fbfbf8]"
+        className="flex w-full cursor-pointer list-none items-start gap-3 rounded-lg p-4 text-left hover:bg-[#fbfbf8] dark:hover:bg-card"
       >
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#eef4e2]">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#eef4e2] dark:bg-muted/50">
           <Icon className="h-4 w-4 text-[#60ab45]" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0a0a0a]">{guide.title}</p>
-          <p className="text-xs text-[#5a5a56] mt-0.5">{guide.summary}</p>
+          <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0a0a0a] dark:text-neutral-100">{guide.title}</p>
+          <p className="text-xs text-[#5a5a56] dark:text-neutral-300 mt-0.5">{guide.summary}</p>
         </div>
         <ChevronDown
           className={cn("h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500 mt-1 transition-transform duration-200", isOpen && "rotate-180")}
         />
       </button>
       {isOpen && (
-        <div className="border-t border-[#eceae3] px-4 pb-6 pt-5 sm:px-6">
+        <div className="border-t border-[#eceae3] dark:border-border px-4 pb-6 pt-5 sm:px-6">
           <ol className="flex flex-col gap-6">
             {guide.steps.map((s, i) => (
               <li key={i} className="flex gap-4">
@@ -191,12 +191,12 @@ function GuideCard({
                   {i < guide.steps.length - 1 && <div className="mt-2 w-px flex-1 bg-slate-200 dark:bg-neutral-700" />}
                 </div>
                 <div className="flex-1 pb-1">
-                  <p className="text-sm font-semibold text-[#0a0a0a]">{s.step}</p>
-                  <p className="mt-1 text-sm leading-relaxed text-[#5a5a56]">{s.detail}</p>
+                  <p className="text-sm font-semibold text-[#0a0a0a] dark:text-neutral-100">{s.step}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-[#5a5a56] dark:text-neutral-300">{s.detail}</p>
                   {s.href && (
                     <Link
                       href={localizeGuideHref(s.href, pathname)}
-                      className="mt-1.5 inline-flex items-center gap-1 text-sm font-medium text-[#60ab45] hover:text-[#4a8a33]"
+                      className="mt-1.5 inline-flex items-center gap-1 text-sm font-medium text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1]"
                     >
                       {s.linkLabel ?? "Learn more"}
                       <ArrowRight className="h-3.5 w-3.5" />
@@ -214,12 +214,12 @@ function GuideCard({
 
 function FAQItem({ q, a }: { q: string; a: string }) {
   return (
-    <details className="group border-b border-[#eceae3] last:border-0">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-medium text-[#0a0a0a] hover:text-[#60ab45]">
+    <details className="group border-b border-[#eceae3] dark:border-border last:border-0">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-sm font-medium text-[#0a0a0a] dark:text-neutral-100 hover:text-[#60ab45]">
         {q}
         <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500 transition-transform duration-200 group-open:rotate-180" />
       </summary>
-      <p className="pb-4 text-sm leading-relaxed text-[#5a5a56]">{a}</p>
+      <p className="pb-4 text-sm leading-relaxed text-[#5a5a56] dark:text-neutral-300">{a}</p>
     </details>
   );
 }
@@ -286,7 +286,7 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
   const noResults = query && filteredSections.length === 0 && filteredFAQs.length === 0;
 
   return (
-    <div className="flex h-[75vh] max-h-[900px] min-h-[560px] overflow-hidden rounded-lg border border-[#e6e6e0] bg-card shadow-sm">
+    <div className="flex h-[75vh] max-h-[900px] min-h-[560px] overflow-hidden rounded-lg border border-[#e6e6e0] dark:border-border bg-card shadow-sm">
       {/* Desktop sidebar */}
       <aside className="hidden w-80 shrink-0 border-r border-slate-100 dark:border-neutral-800 lg:flex lg:flex-col">
         <Sidebar
@@ -375,10 +375,10 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                     <div className="mt-4 flex flex-col gap-6">
                       {filteredFAQs.map((cat) => (
                         <div key={cat.label}>
-                          <p className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-[#5a5a56]">
+                          <p className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-[#5a5a56] dark:text-neutral-300">
                             {cat.label}
                           </p>
-                          <div className="rounded-lg border border-[#e6e6e0] bg-card px-6 shadow-sm">
+                          <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card px-6 shadow-sm">
                             {cat.items.map((faq) => (
                               <FAQItem key={faq.q} q={faq.q} a={faq.a} />
                             ))}
@@ -395,37 +395,37 @@ export function SupportPage({ docsHref = "/docs" }: { docsHref?: string } = {}) 
                     <div className="mt-4 grid gap-4 sm:grid-cols-2">
                       <a
                         href="mailto:support@landscapt.com"
-                        className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
+                        className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef4e2]">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef4e2] dark:bg-muted/50">
                           <Mail className="h-5 w-5 text-[#60ab45]" />
                         </div>
                         <div>
-                          <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0a0a0a]">Email Support</p>
+                          <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0a0a0a] dark:text-neutral-100">Email Support</p>
                           <p className="mt-0.5 text-sm font-medium text-[#60ab45]">support@landscapt.com</p>
-                          <p className="mt-1 text-xs text-[#5a5a56]">We typically respond within one business day.</p>
+                          <p className="mt-1 text-xs text-[#5a5a56] dark:text-neutral-300">We typically respond within one business day.</p>
                         </div>
                       </a>
                       <a
                         href={docsHref}
-                        className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
+                        className="flex items-start gap-4 rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef4e2]">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#eef4e2] dark:bg-muted/50">
                           <BookOpen className="h-5 w-5 text-[#60ab45]" />
                         </div>
                         <div>
-                          <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0a0a0a]">Advanced Guides</p>
+                          <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0a0a0a] dark:text-neutral-100">Advanced Guides</p>
                           <p className="mt-0.5 text-sm font-medium text-[#60ab45]">Browse Docs</p>
-                          <p className="mt-1 text-xs text-[#5a5a56]">In-depth, step-by-step guides for every part of the platform.</p>
+                          <p className="mt-1 text-xs text-[#5a5a56] dark:text-neutral-300">In-depth, step-by-step guides for every part of the platform.</p>
                         </div>
                       </a>
                     </div>
                   </section>
                 )}
 
-                <div className="flex items-center gap-3 rounded-lg border border-[#d8e8c4] bg-[#eef4e2] px-5 py-4">
+                <div className="flex items-center gap-3 rounded-lg border border-[#d8e8c4] dark:border-[#454a3f] bg-[#eef4e2] dark:bg-muted/50 px-5 py-4">
                   <LifeBuoy className="h-5 w-5 shrink-0 text-[#60ab45]" />
-                  <p className="text-sm text-[#3a5a1a]">
+                  <p className="text-sm text-[#3a5a1a] dark:text-[#b4c0a8]">
                     Can&rsquo;t find what you&rsquo;re looking for?{" "}
                     <a href="mailto:support@landscapt.com" className="font-semibold underline">
                       Send us a message

@@ -53,8 +53,8 @@ export function ReportCenterGuide() {
         description="Where the ~75 pre-built reports live, how a report actually runs, and how the curated dashboards differ from the ones you build yourself."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -121,10 +121,10 @@ export function ReportCenterGuide() {
           </thead>
           <tbody>
             {SECTIONS.map(([label, count, examples]) => (
-              <tr key={label} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{label}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{count}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{examples}</td>
+              <tr key={label} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{label}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{count}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{examples}</td>
               </tr>
             ))}
           </tbody>
@@ -186,7 +186,7 @@ export function ReportCenterGuide() {
           flat, pre-joined view over the underlying tables (columns, types, and — for
           enum-like text columns — a fixed option list). The full set:
         </p>
-        <p className="text-xs text-[#6a6a66]">{DATASETS.join(" · ")}</p>
+        <p className="text-xs text-[#6a6a66] dark:text-neutral-400">{DATASETS.join(" · ")}</p>
       </Section>
 
       <Section id="worked-example" title="Worked example: Production Rate Accuracy">
@@ -377,10 +377,10 @@ export function ReportCenterGuide() {
           </thead>
           <tbody>
             {CURATED_DASHBOARDS.map(([name, href, gate]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-[#4a4a46]"><code>{href}</code></td>
-                <td className="px-3 py-2 text-[#4a4a46]">{gate}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-[#4a4a46] dark:text-neutral-300"><code>{href}</code></td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{gate}</td>
               </tr>
             ))}
           </tbody>

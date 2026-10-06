@@ -11,7 +11,7 @@ export default function CRMDocumentationPage() {
         description="Every full-length guide, organized by module. Pick one from the sidebar or browse below."
         hideDownload
       />
-      <div className="flex h-[75vh] max-h-[900px] min-h-[560px] overflow-hidden rounded-lg border border-[#e6e6e0] bg-card shadow-sm">
+      <div className="flex h-[75vh] max-h-[900px] min-h-[560px] overflow-hidden rounded-lg border border-[#e6e6e0] dark:border-border bg-card shadow-sm">
         <aside className="hidden w-80 shrink-0 border-r border-slate-100 dark:border-neutral-800 lg:flex lg:flex-col">
           <GuideSidebar />
         </aside>

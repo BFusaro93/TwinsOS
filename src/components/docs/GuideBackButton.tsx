@@ -9,7 +9,7 @@ export function GuideBackButton() {
   return (
     <button
       onClick={() => router.back()}
-      className="flex shrink-0 items-center gap-1.5 border-b border-slate-100 px-4 py-2.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800 print:hidden"
+      className="flex shrink-0 items-center gap-1.5 border-b border-slate-100 dark:border-neutral-800 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-slate-50 dark:hover:bg-muted/40 hover:text-slate-800 dark:hover:text-neutral-100 print:hidden"
     >
       <ArrowLeft className="h-3.5 w-3.5" />
       Back

@@ -37,8 +37,8 @@ export function PMSchedulesGuide() {
         description="Calendar-based recurring service, from one schedule covering a whole fleet down to per-asset parts."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -120,10 +120,10 @@ export function PMSchedulesGuide() {
           </thead>
           <tbody>
             {WORKED_EXAMPLE_ASSETS.map(([asset, part, cost]) => (
-              <tr key={asset} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{asset}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{part}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{cost}</td>
+              <tr key={asset} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{asset}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{part}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{cost}</td>
               </tr>
             ))}
           </tbody>
@@ -151,9 +151,9 @@ export function PMSchedulesGuide() {
           </thead>
           <tbody>
             {FREQUENCIES.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -299,18 +299,18 @@ export function PMSchedulesGuide() {
             </TableHeadRow>
           </thead>
           <tbody>
-            <tr className="border-b border-[#eceae3]">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">Schedule-level</td>
-              <td className="px-3 py-2 text-[#4a4a46]">Parts tab on the schedule itself</td>
-              <td className="px-3 py-2 text-[#4a4a46]">
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Schedule-level</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Parts tab on the schedule itself</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 Parts expected for the routine in general, shared across every asset on the
                 schedule.
               </td>
             </tr>
             <tr>
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">Per-asset</td>
-              <td className="px-3 py-2 text-[#4a4a46]">Assets tab, expand a specific asset row</td>
-              <td className="px-3 py-2 text-[#4a4a46]">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Per-asset</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Assets tab, expand a specific asset row</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 A parts template scoped to just that one asset — quantity and unit cost included.
                 This is what gets copied onto that asset&apos;s work order (or sub-work order) when
                 the schedule generates.

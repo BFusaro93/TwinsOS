@@ -82,8 +82,8 @@ export function AutomationsGuide() {
         description="How sequences, triggers, and events work — and how Automations differ from Sales Campaigns."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -135,9 +135,9 @@ export function AutomationsGuide() {
           </thead>
           <tbody>
             {TRIGGER_GROUPS.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 align-top font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 align-top font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -164,10 +164,10 @@ export function AutomationsGuide() {
           </thead>
           <tbody>
             {STOP_VS_TRIGGER.map(([name, scope, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 align-top font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 align-top text-[#4a4a46]">{scope}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 align-top font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 align-top text-[#4a4a46] dark:text-neutral-300">{scope}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -193,9 +193,9 @@ export function AutomationsGuide() {
           </thead>
           <tbody>
             {EVENT_TYPES.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 align-top font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 align-top font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -275,25 +275,25 @@ export function AutomationsGuide() {
             </TableHeadRow>
           </thead>
           <tbody>
-            <tr className="border-b border-[#eceae3]">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">Trigger</td>
-              <td className="px-3 py-2 text-[#4a4a46]">An event on an individual client/job/estimate/ticket record</td>
-              <td className="px-3 py-2 text-[#4a4a46]">You send it manually to a segment, once (or scheduled)</td>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Trigger</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">An event on an individual client/job/estimate/ticket record</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">You send it manually to a segment, once (or scheduled)</td>
             </tr>
-            <tr className="border-b border-[#eceae3]">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">Audience</td>
-              <td className="px-3 py-2 text-[#4a4a46]">One client at a time, as they hit the trigger</td>
-              <td className="px-3 py-2 text-[#4a4a46]">A segment: All Clients, Active Clients, Leads, Past Clients, or a custom list</td>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Audience</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">One client at a time, as they hit the trigger</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">A segment: All Clients, Active Clients, Leads, Past Clients, or a custom list</td>
             </tr>
-            <tr className="border-b border-[#eceae3]">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">Channel</td>
-              <td className="px-3 py-2 text-[#4a4a46]">Email, text, alerts, tickets, notes, field updates, tags</td>
-              <td className="px-3 py-2 text-[#4a4a46]">Email, SMS, or postcard blast</td>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Channel</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Email, text, alerts, tickets, notes, field updates, tags</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Email, SMS, or postcard blast</td>
             </tr>
             <tr>
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">Status / tracking</td>
-              <td className="px-3 py-2 text-[#4a4a46]">Ongoing, evaluated continuously as records change</td>
-              <td className="px-3 py-2 text-[#4a4a46]">Draft, Scheduled, Sending, Active, Paused, Completed, Cancelled — tracks delivered, opened, clicked, unsubscribed</td>
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Status / tracking</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Ongoing, evaluated continuously as records change</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Draft, Scheduled, Sending, Active, Paused, Completed, Cancelled — tracks delivered, opened, clicked, unsubscribed</td>
             </tr>
           </tbody>
         </Table>

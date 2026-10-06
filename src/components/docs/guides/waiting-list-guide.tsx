@@ -17,8 +17,8 @@ export function WaitingListGuide() {
         description="Jobs with a date range instead of a date, held for opportunistic scheduling — and how to actually get them dispatched."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -99,9 +99,9 @@ export function WaitingListGuide() {
               ["Crew", "Pre-assigned crew, if any, or \"Unassigned.\""],
               ["Rate", "The job's flat rate, or the service's own rate for a package visit row."],
             ].map(([col, desc]) => (
-              <tr key={col} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{col}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={col} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{col}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>

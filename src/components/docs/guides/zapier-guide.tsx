@@ -58,8 +58,8 @@ export function ZapierGuide() {
         description="Every trigger, every action, and exactly what fires each one."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -104,16 +104,16 @@ export function ZapierGuide() {
         <p>Two delivery methods. You don&apos;t choose — Zapier handles it automatically.</p>
         <Table>
           <tbody>
-            <tr className="border-b border-[#eceae3]">
+            <tr className="border-b border-[#eceae3] dark:border-border">
               <td className="w-32 px-3 py-2 align-top"><Chip instant /></td>
-              <td className="px-3 py-2 text-[#4a4a46]">
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 The moment the event happens inside Equipt or Landscapt, we push it straight to
                 Zapier&apos;s webhook URL. Most triggers work this way.
               </td>
             </tr>
             <tr>
               <td className="w-32 px-3 py-2 align-top"><Chip instant={false} /></td>
-              <td className="px-3 py-2 text-[#4a4a46]">
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 Zapier calls our API every few minutes to check for new matching records. This also
                 powers the &quot;Test&quot; step when setting up any Zap, and is the <em>only</em>{" "}
                 method for a few triggers with no natural &quot;moment it happened&quot; to hook into.
@@ -137,9 +137,9 @@ export function ZapierGuide() {
           </thead>
           <tbody>
             {CRM_TRIGGERS.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -163,9 +163,9 @@ export function ZapierGuide() {
           </thead>
           <tbody>
             {CMMS_TRIGGERS.map(([name, desc, instant]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
                 <td className="px-3 py-2"><Chip instant={instant} /></td>
               </tr>
             ))}
@@ -220,11 +220,11 @@ export function ZapierGuide() {
           </thead>
           <tbody>
             {ACTIONS.map(([name, creates, required, optional]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{creates}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{required}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{optional}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{creates}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{required}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{optional}</td>
               </tr>
             ))}
           </tbody>

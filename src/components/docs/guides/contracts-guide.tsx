@@ -36,8 +36,8 @@ export function ContractsGuide() {
         description="Ongoing billing agreements — monthly amounts, seasonal overrides, sub-properties, and how signing and invoicing actually work."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -100,9 +100,9 @@ export function ContractsGuide() {
           </thead>
           <tbody>
             {STATUS_FLOW.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -186,9 +186,9 @@ export function ContractsGuide() {
           </thead>
           <tbody>
             {BILLING_FREQUENCIES.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>

@@ -22,6 +22,11 @@
  * A string containing the no-op class `dm-fixed-dark` gets no text/border
  * dark: pairs (for text on a surface that is dark in both themes).
  *
+ * With `--hex`, low-saturation arbitrary hex colors (`text-[#0a0a0a]`,
+ * `border-[#e6e6e0]`) are mapped by lightness too. Use it only on surfaces
+ * that are light in light mode (the docs); elsewhere hex text often sits on a
+ * fixed dark bar.
+ *
  * Idempotent: a class that already has a dark counterpart is skipped, so it
  * is safe to re-run. Anything the codemod can't decide (gradients, svg
  * fill/stroke, hex literals, inline style colors) is listed for manual review.
@@ -36,6 +41,7 @@ const ts = require("typescript");
 const args = process.argv.slice(2);
 const DRY = args.includes("--dry-run");
 const VERBOSE = args.includes("--verbose");
+const HEX = args.includes("--hex");
 const targets = args.filter((a) => !a.startsWith("--"));
 if (targets.length === 0) {
   console.error("usage: dark-mode-codemod.mjs [--dry-run] [--verbose] <file|dir>...");
@@ -131,6 +137,39 @@ function isFixedDarkBg(tok) {
   return lum < 0.4;
 }
 
+const HEX_RE = /^(bg|text|border|divide|ring)-\[(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6})\](?:\/(\d{1,3}))?$/;
+function hexDark(kind, hex) {
+  let h = hex.slice(1);
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  const y = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  const hx = (v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, "0");
+  if (Math.max(r, g, b) - Math.min(r, g, b) > 28) {
+    // Chromatic: keep the hue. Lighten dark text; darken light fills/borders.
+    const mix = (t, k) => "#" + [r, g, b].map((c) => hx(c + (t - c) * k)).join("");
+    if (kind === "text" && y < 0.45) return `text-[${mix(255, 0.62)}]`;
+    if (kind === "bg" && y > 0.75) return `bg-[${mix(0, 0.82)}]`;
+    if ((kind === "border" || kind === "divide" || kind === "ring") && y > 0.7) return `${kind}-[${mix(0, 0.68)}]`;
+    return null;
+  }
+  if (kind === "bg") {
+    if (y >= 0.96) return "bg-card";
+    if (y >= 0.88) return "bg-muted/50";
+    if (y >= 0.75) return "bg-muted";
+    return null;
+  }
+  if (kind === "text") {
+    if (y <= 0.18) return "text-neutral-100";
+    if (y <= 0.4) return "text-neutral-300";
+    if (y <= 0.62) return "text-neutral-400";
+    if (y <= 0.8) return "text-neutral-500";
+    return null;
+  }
+  if (y >= 0.75) return `${kind}-border`;
+  if (y >= 0.45) return `${kind}-neutral-700`;
+  return null;
+}
+
 const stats = { files: 0, filesChanged: 0, swapped: 0, paired: 0, manual: [] };
 
 /** Split `hover:md:bg-x` into prefix `hover:md:` and util `bg-x`. */
@@ -185,6 +224,16 @@ function transformClassText(text, { startsTouch, endsTouch }, file, lineOf) {
       stats.manual.push(`${file}:${lineOf(m.index)}  ${tok}`);
       out += tok;
       return;
+    }
+    if (HEX) {
+      const hm = HEX_RE.exec(util);
+      if (hm && !fixedDark) {
+        const key = kindKey(prefix, util);
+        if (hasDark.has(key)) { out += tok; return; }
+        const d = hexDark(hm[1], hm[2]);
+        if (d) { stats.paired++; out += `${tok} dark:${prefix}${d}`; } else out += tok;
+        return;
+      }
     }
     if (util.includes("[") && !/\/\[/.test(util)) { out += tok; return; }
     const cm = COLOR_RE.exec(util);

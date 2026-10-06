@@ -42,8 +42,8 @@ export function ApiMcpGuide() {
         description="How scoped API keys work, and how to hand the same key to an AI agent over MCP."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -62,7 +62,7 @@ export function ApiMcpGuide() {
         <p>
           A <strong>Public API Key</strong> is a scoped credential your org issues itself, separate
           from the single all-or-nothing key used for the Zapier connection (see{" "}
-          <GuideLink href="/settings/support/zapier-guide" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">
+          <GuideLink href="/settings/support/zapier-guide" className="text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1] hover:underline">
             the Zapier guide
           </GuideLink>{" "}
           for that one). You can issue as many of these as you need — one per integration, one per
@@ -78,7 +78,7 @@ export function ApiMcpGuide() {
           This page explains the concepts and walks through a real setup. For the exhaustive,
           endpoint-by-endpoint reference — every route, request/response shape, required scope, and
           the exact MCP tool name it maps to — see{" "}
-          <GuideLink href="/settings/support/api-docs" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">
+          <GuideLink href="/settings/support/api-docs" className="text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1] hover:underline">
             the full endpoint reference
           </GuideLink>
           .
@@ -88,7 +88,7 @@ export function ApiMcpGuide() {
       <Section id="creating-a-key" title="Creating a key">
         <Callout>
           <strong>Requires the API Access entitlement.</strong> The public API/MCP server is gated
-          behind the <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">api_access</code>{" "}
+          behind the <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">api_access</code>{" "}
           add-on — bundled on Enterprise, purchasable standalone on Starter/Equipt/Growth from{" "}
           <strong>Settings → Subscription</strong>. Without it, <strong>Create Key</strong> returns a 403
           (&quot;API access isn&apos;t included on your plan&quot;) and no key is created. This is
@@ -114,7 +114,7 @@ export function ApiMcpGuide() {
           </li>
           <li>
             The same dialog also shows a ready-to-paste MCP client config block — see{" "}
-            <a href="#mcp" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">
+            <a href="#mcp" className="text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1] hover:underline">
               Using the key with MCP
             </a>{" "}
             below.
@@ -130,9 +130,9 @@ export function ApiMcpGuide() {
       <Section id="scopes" title="Resources & scopes">
         <p>
           Every request — REST or MCP — is checked against the connecting key&apos;s scopes before it
-          touches the database. A scope is written as <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">resource:tier</code>,
-          e.g. <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">clients:read</code> or{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">requisitions:write:safe</code>.
+          touches the database. A scope is written as <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">resource:tier</code>,
+          e.g. <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">clients:read</code> or{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">requisitions:write:safe</code>.
           There are 14 resources spanning both products, each offering <strong>Read</strong> and, where
           a create/update endpoint actually exists, <strong>Write</strong>.
         </p>
@@ -145,9 +145,9 @@ export function ApiMcpGuide() {
           </thead>
           <tbody>
             {RESOURCES.map(([name, tiers]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{tiers}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{tiers}</td>
               </tr>
             ))}
           </tbody>
@@ -161,8 +161,8 @@ export function ApiMcpGuide() {
           <li>
             <strong>Requisitions</strong> and <strong>Purchase Orders</strong> can only be{" "}
             <em>created</em> — there is no update endpoint for either. A created requisition lands in{" "}
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">draft</code>; a
-            created PO always lands at <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">requested</code>{" "}
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">draft</code>; a
+            created PO always lands at <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">requested</code>{" "}
             — the same starting point the app&apos;s own &quot;New PO&quot; dialog produces. Neither can
             be advanced, approved, or rejected via the API under any scope: the DB itself blocks setting
             a PO to approved/rejected without a resolved approval chain, so approval only ever happens
@@ -171,11 +171,11 @@ export function ApiMcpGuide() {
           <li>
             <strong>Contracts</strong> can also only be <em>created</em>, no update. This one exists to
             record an agreement already executed outside the app (e.g. signed via DocuSign) — it accepts
-            a historical <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">signedAt</code>/
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">signedBy</code>, unlike
-            the app&apos;s own contract UI. It defaults to status <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">draft</code>,
-            which does not bill anyone — a caller has to pass an explicit <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">signed</code>/
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">active</code> status to
+            a historical <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">signedAt</code>/
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">signedBy</code>, unlike
+            the app&apos;s own contract UI. It defaults to status <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">draft</code>,
+            which does not bill anyone — a caller has to pass an explicit <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">signed</code>/
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">active</code> status to
             start real invoicing on that contract&apos;s billing cadence.
           </li>
           <li>
@@ -188,7 +188,7 @@ export function ApiMcpGuide() {
         </ul>
         <p>
           For the full mapping of REST verb → required scope → MCP tool name, per endpoint, see{" "}
-          <GuideLink href="/settings/support/api-docs" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">
+          <GuideLink href="/settings/support/api-docs" className="text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1] hover:underline">
             the full endpoint reference
           </GuideLink>
           .
@@ -228,8 +228,8 @@ export function ApiMcpGuide() {
             <strong>If you use Claude Desktop (or any other MCP client)</strong> instead, open its
             settings → <strong>Developer → Edit Config</strong>, and paste the JSON block from the same
             dialog into{" "}
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">claude_desktop_config.json</code>{" "}
-            under <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">mcpServers</code> (merge
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">claude_desktop_config.json</code>{" "}
+            under <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">mcpServers</code> (merge
             it in if other servers are already configured there) — this is a config-file snippet, not a
             command, so it goes in that file, never into a terminal. It looks like this:
           </li>
@@ -250,13 +250,13 @@ export function ApiMcpGuide() {
           <li>Restart Claude Desktop (or Claude Code). It connects to the MCP server and negotiates available tools.</li>
           <li>
             Because this key only has three <em>read</em> scopes, the agent sees exactly six tools:{" "}
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">whoami</code>,{" "}
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">list_clients</code> /{" "}
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">get_clients</code>,{" "}
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">list_jobs</code> /{" "}
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">get_jobs</code>, and{" "}
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">list_invoices</code> /{" "}
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">get_invoices</code>.
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">whoami</code>,{" "}
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">list_clients</code> /{" "}
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">get_clients</code>,{" "}
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">list_jobs</code> /{" "}
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">get_jobs</code>, and{" "}
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">list_invoices</code> /{" "}
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">get_invoices</code>.
             No create or update tool exists for it at all — not because it was denied at call time, but
             because those tools were never registered for this key in the first place.
           </li>
@@ -273,7 +273,7 @@ export function ApiMcpGuide() {
 
       <Section id="mcp" title="Using the key with MCP">
         <p>
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">/api/mcp</code> is the
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">/api/mcp</code> is the
           same API you&apos;d call over REST, exposed as an MCP server instead. There is no separate
           MCP credential to generate — any Public API Key you&apos;ve already created works immediately
           as an MCP connection, with the same scopes it was granted for REST.
@@ -288,14 +288,14 @@ export function ApiMcpGuide() {
         <Callout>
           <strong>The command vs. JSON block trips people up:</strong> the key-creation dialog shows
           two different snippets — a <strong>command</strong> (for Claude Code, starts with{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">claude mcp add</code>) and
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">claude mcp add</code>) and
           a <strong>JSON config block</strong> (for every other MCP client). The command is meant to be
           pasted at a terminal prompt; the JSON is meant to be pasted into a config <em>file</em>.
           Pasting the JSON directly into a terminal will fail with a shell parse error — it isn&apos;t a
           command.
         </Callout>
 
-        <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642]">
+        <h3 className="mt-6 font-[family-name:var(--font-heading)] text-base font-bold text-[#005642] dark:text-[#9ebfb7]">
           Sign in instead — Claude.ai&apos;s connector (OAuth)
         </h3>
         <p>
@@ -305,7 +305,7 @@ export function ApiMcpGuide() {
         <ol className="list-decimal space-y-2 pl-5">
           <li>In Claude.ai, go to Settings → Connectors → <strong>Add custom connector</strong>.</li>
           <li>
-            Name it (e.g. &quot;Landscapt&quot;) and enter the same <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">https://your-domain/api/mcp</code>{" "}
+            Name it (e.g. &quot;Landscapt&quot;) and enter the same <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">https://your-domain/api/mcp</code>{" "}
             URL as above. Leave authentication on <strong>&quot;Always required&quot;</strong> (Claude
             detects this automatically) with no request header — this is a different auth path from the
             bearer-token one above.
@@ -343,19 +343,19 @@ export function ApiMcpGuide() {
           </thead>
           <tbody>
             {TOOL_PATTERN.map(([verb, shape, tool]) => (
-              <tr key={tool} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{verb}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{shape}</td>
-                <td className="px-3 py-2 font-mono text-xs text-[#4a4a46]">{tool}</td>
+              <tr key={tool} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{verb}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{shape}</td>
+                <td className="px-3 py-2 font-mono text-xs text-[#4a4a46] dark:text-neutral-300">{tool}</td>
               </tr>
             ))}
           </tbody>
         </Table>
         <p>
           A key with <em>zero</em> resource scopes still connects successfully and gets three tools —{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">whoami</code>,{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">search_docs</code>, and{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">get_guide</code> — so an
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">whoami</code>,{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">search_docs</code>, and{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">get_guide</code> — so an
           agent can at least confirm which org and scopes it&apos;s connected as, and answer &quot;how
           do I&hellip;&quot; questions from the help docs, before deciding what else to do — it never
           sees an empty, broken-looking connection.
@@ -372,10 +372,10 @@ export function ApiMcpGuide() {
         <p>
           Two tools are always available, regardless of the key&apos;s scopes, because they only read
           the same non-sensitive help content already visible at Support and Docs — no org data:{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">search_docs</code>{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">search_docs</code>{" "}
           (full-text search across every short Support article and every long-form Docs guide, e.g.
           Purchase Orders, Work Orders, Estimating) and{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">get_guide</code> (the
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">get_guide</code> (the
           full text of one guide, by the slug a search result points at).
         </p>
         <p>
@@ -387,10 +387,10 @@ export function ApiMcpGuide() {
         <Callout>
           <strong>Guide content is a generated index, not live.</strong> The long-form guides are
           ordinary app pages (JSX, not structured data), so their searchable text is pre-extracted into{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">
             src/lib/docs-guides-content.json
           </code>{" "}
-          by <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">npm run docs:index</code>{" "}
+          by <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">npm run docs:index</code>{" "}
           rather than rendered on every search call. If you&apos;re maintaining this app: re-run that
           script after adding or editing a guide, or search_docs and get_guide will keep returning the
           old text.
@@ -421,12 +421,12 @@ export function ApiMcpGuide() {
       <Section id="managing-keys" title="Rate limits, errors & revoking">
         <p>
           Keys are rate-limited per minute. A request — REST or MCP — that exceeds the limit gets back
-          a <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">429</code>. A request
+          a <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">429</code>. A request
           for a scope the key wasn&apos;t granted is rejected before it reaches any business logic,
           rather than returning partial or filtered data. Every request also re-checks the org&apos;s{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">api_access</code>{" "}
-          entitlement first (see <a href="#creating-a-key" className="text-[#60ab45] hover:text-[#4a8a33] hover:underline">Creating a key</a>{" "}
-          above) — a <code className="rounded bg-[#f4f6f0] px-1 py-0.5 font-mono text-xs">403</code> from
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">api_access</code>{" "}
+          entitlement first (see <a href="#creating-a-key" className="text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1] hover:underline">Creating a key</a>{" "}
+          above) — a <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">403</code> from
           a key that used to work almost always means the add-on lapsed, not a scope or credential
           problem.
         </p>

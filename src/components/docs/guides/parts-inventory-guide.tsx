@@ -38,8 +38,8 @@ export function PartsInventoryGuide() {
         description="Adding parts, linking them to assets, keeping stock and cost in sync, and when to split a part number into two."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -67,9 +67,9 @@ export function PartsInventoryGuide() {
           </thead>
           <tbody>
             {NEW_PART_FIELDS.map(([name, desc]) => (
-              <tr key={name} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{name}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
@@ -131,11 +131,11 @@ export function PartsInventoryGuide() {
         <Table>
           <tbody>
             {LIFECYCLE_STEPS.map(([step, desc]) => (
-              <tr key={step} className="border-b border-[#eceae3] last:border-0">
-                <td className="w-48 whitespace-nowrap px-3 py-2 align-top font-medium text-[#0a0a0a]">
+              <tr key={step} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="w-48 whitespace-nowrap px-3 py-2 align-top font-medium text-[#0a0a0a] dark:text-neutral-100">
                   {step}
                 </td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>

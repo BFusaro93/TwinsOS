@@ -18,8 +18,8 @@ export function SamsaraGuide() {
         description="What actually syncs, how vehicles get matched, and where to look when a reading doesn't show up."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -37,9 +37,9 @@ export function SamsaraGuide() {
         <p>
           The Samsara integration pulls one thing from Samsara&apos;s Fleet API: distance data for
           each vehicle. Specifically, it requests two stat types —{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">obdOdometerMeters</code> (the
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">obdOdometerMeters</code> (the
           vehicle&apos;s OBD-reported odometer) and{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">gpsDistanceMeters</code> (GPS-derived
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">gpsDistanceMeters</code> (GPS-derived
           cumulative distance, used as a fallback when a vehicle doesn&apos;t report OBD odometer
           data) — and converts whichever value is present into miles.
         </p>
@@ -47,7 +47,7 @@ export function SamsaraGuide() {
           That&apos;s the entire scope today. Engine hours, fuel level, driver behavior/safety
           events, fault codes, and live GPS location are all things Samsara&apos;s API exposes, but
           this integration doesn&apos;t request or store any of them — the sync route only calls the{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">
             /fleet/vehicles/stats?types=obdOdometerMeters,gpsDistanceMeters
           </code>{" "}
           endpoint.
@@ -85,7 +85,7 @@ export function SamsaraGuide() {
         <ol className="list-decimal space-y-2 pl-5">
           <li>
             <strong>By Samsara Vehicle ID first</strong> — if the vehicle&apos;s{" "}
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">samsara_vehicle_id</code>{" "}
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">samsara_vehicle_id</code>{" "}
             field matches the ID on the incoming record, that&apos;s the match.
           </li>
           <li>
@@ -109,7 +109,7 @@ export function SamsaraGuide() {
       <Section id="sync-mechanics" title="Sync mechanics">
         <p>
           Sync is triggered two ways, both hitting the same route (
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">
             /api/integrations/samsara/sync
           </code>
           ):
@@ -122,9 +122,9 @@ export function SamsaraGuide() {
             </TableHeadRow>
           </thead>
           <tbody>
-            <tr className="border-b border-[#eceae3]">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">Scheduled</td>
-              <td className="px-3 py-2 text-[#4a4a46]">
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Scheduled</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 A Vercel Cron job hits the route once a day at <strong>10:00 UTC (6:00 AM
                 ET)</strong>, authenticated with a cron secret. This run syncs{" "}
                 <em>every</em> org that has Samsara enabled with a saved API key — not just one
@@ -132,8 +132,8 @@ export function SamsaraGuide() {
               </td>
             </tr>
             <tr>
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">Manual</td>
-              <td className="px-3 py-2 text-[#4a4a46]">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Manual</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 Clicking <strong>Sync Now</strong> on Settings → Integrations sends an authenticated
                 POST as the logged-in user. This requires an <strong>admin</strong> role — the
                 route checks the caller&apos;s profile and rejects non-admins — and only syncs the
@@ -165,10 +165,10 @@ export function SamsaraGuide() {
           </li>
           <li>
             <strong>The incoming mileage is greater than or equal to the current value</strong> — a
-            new row is inserted into <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">meter_readings</code>{" "}
-            with <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">source: &quot;samsara&quot;</code> and
+            new row is inserted into <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">meter_readings</code>{" "}
+            with <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">source: &quot;samsara&quot;</code> and
             a note of whether the value came from OBD or GPS. The meter&apos;s{" "}
-            <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">current_value</code> is only
+            <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">current_value</code> is only
             advanced when the new mileage is strictly greater than what&apos;s currently stored —
             equal readings are still logged (so you have a daily record even with no vehicle
             movement) but don&apos;t re-trigger the meter update.
@@ -184,7 +184,7 @@ export function SamsaraGuide() {
 
       <Section id="status-and-errors" title="Sync status and errors">
         <p>
-          After every run, each org&apos;s <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">integrations</code>{" "}
+          After every run, each org&apos;s <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">integrations</code>{" "}
           row is stamped with a timestamp and a status, both shown on Settings → Integrations:
         </p>
         <Table>
@@ -195,20 +195,20 @@ export function SamsaraGuide() {
             </TableHeadRow>
           </thead>
           <tbody>
-            <tr className="border-b border-[#eceae3]">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">Connected (ok)</td>
-              <td className="px-3 py-2 text-[#4a4a46]">No errors this run.</td>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Connected (ok)</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">No errors this run.</td>
             </tr>
-            <tr className="border-b border-[#eceae3]">
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">Partial</td>
-              <td className="px-3 py-2 text-[#4a4a46]">
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Partial</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 At least one vehicle matched and got a reading, but at least one error also occurred
                 (e.g. a meter failed to create, a reading failed to insert).
               </td>
             </tr>
             <tr>
-              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">Error</td>
-              <td className="px-3 py-2 text-[#4a4a46]">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Error</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 No vehicles matched at all, or the call to Samsara&apos;s API failed outright — most
                 commonly an invalid or expired API key, which surfaces here as a failed fetch rather
                 than a distinct &quot;bad key&quot; message.
@@ -240,22 +240,22 @@ export function SamsaraGuide() {
         <p>
           A Samsara-written reading is not a special case for anything downstream — it updates the
           vehicle&apos;s meter through the exact same{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">meter_readings</code> +{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">meters.current_value</code>{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">meter_readings</code> +{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">meters.current_value</code>{" "}
           path a manually logged reading would use, just tagged with{" "}
-          <code className="rounded bg-[#f4f6f0] px-1 py-0.5 text-xs">source: &quot;samsara&quot;</code>{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 text-xs">source: &quot;samsara&quot;</code>{" "}
           instead of a person&apos;s name. That means any meter-threshold automation configured on
           that meter fires exactly the same way it would from a manual entry — see{" "}
           <GuideLink
             href="/settings/support/meters-guide#building-an-automation"
-            className="text-[#60ab45] hover:text-[#4a8a33] hover:underline"
+            className="text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1] hover:underline"
           >
             Building a meter-threshold automation
           </GuideLink>{" "}
           and{" "}
           <GuideLink
             href="/settings/support/meters-guide#pending-reset"
-            className="text-[#60ab45] hover:text-[#4a8a33] hover:underline"
+            className="text-[#60ab45] hover:text-[#4a8a33] dark:hover:text-[#bad3b1] hover:underline"
           >
             Pending Reset, explained
           </GuideLink>{" "}

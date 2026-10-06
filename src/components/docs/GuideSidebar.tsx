@@ -46,9 +46,9 @@ export function GuideSidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-slate-100 p-4">
+      <div className="border-b border-slate-100 dark:border-neutral-800 p-4">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
           <Input
             placeholder="Search guides…"
             value={search}
@@ -58,7 +58,7 @@ export function GuideSidebar({ onNavigate }: { onNavigate?: () => void }) {
           {search && (
             <button
               onClick={() => setSearch("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -74,14 +74,14 @@ export function GuideSidebar({ onNavigate }: { onNavigate?: () => void }) {
             <div key={group.kicker} className="mb-1">
               <button
                 onClick={() => toggleGroup(group.kicker)}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 hover:bg-slate-100 transition-colors"
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted transition-colors"
               >
                 {GroupIcon && <GroupIcon className="h-3.5 w-3.5 shrink-0" />}
                 <span className="flex-1 text-left">{group.kicker}</span>
                 <ChevronDown className={cn("h-3 w-3 shrink-0 transition-transform", open ? "rotate-0" : "-rotate-90")} />
               </button>
               {open && (
-                <div className="ml-2 mt-0.5 flex flex-col gap-0.5 border-l border-slate-100 pl-3">
+                <div className="ml-2 mt-0.5 flex flex-col gap-0.5 border-l border-slate-100 dark:border-neutral-800 pl-3">
                   {group.guides.map((guide) => {
                     const GuideIcon = guide.icon;
                     const href = `${basePath}/${guide.slug}`;
@@ -94,8 +94,8 @@ export function GuideSidebar({ onNavigate }: { onNavigate?: () => void }) {
                         className={cn(
                           "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
                           active
-                            ? "bg-[#eef4e2] text-[#396927] font-medium"
-                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-800"
+                            ? "bg-[#eef4e2] dark:bg-muted/50 text-[#396927] dark:text-[#b4c6ad] font-medium"
+                            : "text-slate-600 dark:text-neutral-400 hover:bg-muted hover:text-slate-800 dark:hover:text-neutral-100"
                         )}
                       >
                         <GuideIcon className="h-3.5 w-3.5 shrink-0 opacity-60" />
@@ -109,7 +109,7 @@ export function GuideSidebar({ onNavigate }: { onNavigate?: () => void }) {
           );
         })}
         {filtered.length === 0 && (
-          <p className="px-2 py-4 text-sm text-slate-400">No guides match &ldquo;{search}&rdquo;.</p>
+          <p className="px-2 py-4 text-sm text-slate-400 dark:text-neutral-500">No guides match &ldquo;{search}&rdquo;.</p>
         )}
       </nav>
     </div>

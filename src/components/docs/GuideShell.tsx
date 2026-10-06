@@ -9,8 +9,8 @@ import { GuideBackButton } from "@/components/docs/GuideBackButton";
  */
 export function GuideShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full min-h-[520px] overflow-hidden rounded-lg border border-[#e6e6e0] bg-white shadow-sm print:block print:h-auto print:min-h-0 print:overflow-visible print:rounded-none print:border-none print:shadow-none">
-      <aside className="hidden w-80 shrink-0 border-r border-slate-100 lg:flex lg:flex-col print:hidden">
+    <div className="flex h-full min-h-[520px] overflow-hidden rounded-lg border border-[#e6e6e0] dark:border-border bg-card shadow-sm print:block print:h-auto print:min-h-0 print:overflow-visible print:rounded-none print:border-none print:shadow-none">
+      <aside className="hidden w-80 shrink-0 border-r border-slate-100 dark:border-neutral-800 lg:flex lg:flex-col print:hidden">
         <GuideSidebar />
       </aside>
       <div className="flex flex-1 flex-col overflow-hidden print:block print:h-auto print:overflow-visible">

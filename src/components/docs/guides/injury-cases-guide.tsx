@@ -47,8 +47,8 @@ export function InjuryCasesGuide() {
         description="Reporting injuries, illnesses and near misses from the field, following them up in the office, tracking self-paid costs, and feeding the Accident Free Workdays KPI."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -92,9 +92,9 @@ export function InjuryCasesGuide() {
           </thead>
           <tbody>
             {REPORT_TYPES.map(([t, d]) => (
-              <tr key={t} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{t}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{d}</td>
+              <tr key={t} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{t}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{d}</td>
               </tr>
             ))}
           </tbody>
@@ -122,9 +122,9 @@ export function InjuryCasesGuide() {
           </thead>
           <tbody>
             {INTAKE_FIELDS.map(([s, d]) => (
-              <tr key={s} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{s}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{d}</td>
+              <tr key={s} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{s}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{d}</td>
               </tr>
             ))}
           </tbody>
@@ -152,9 +152,9 @@ export function InjuryCasesGuide() {
           </thead>
           <tbody>
             {OFFICE_FIELDS.map(([f, d]) => (
-              <tr key={f} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{f}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{d}</td>
+              <tr key={f} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{f}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{d}</td>
               </tr>
             ))}
           </tbody>
@@ -168,9 +168,9 @@ export function InjuryCasesGuide() {
           </thead>
           <tbody>
             {STATUS_ROWS.map(([s, d]) => (
-              <tr key={s} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{s}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{d}</td>
+              <tr key={s} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{s}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{d}</td>
               </tr>
             ))}
           </tbody>

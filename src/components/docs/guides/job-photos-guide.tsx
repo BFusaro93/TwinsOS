@@ -36,8 +36,8 @@ export function JobPhotosGuide() {
         description="Field photo documentation, annotation, and before/after comparisons — attached to a job site, not a person."
       />
 
-      <div className="rounded-lg border border-[#e6e6e0] bg-white p-6 shadow-sm">
-        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642]">
+      <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-3 font-[family-name:var(--font-heading)] text-lg font-bold text-[#005642] dark:text-[#9ebfb7]">
           On this page
         </h2>
         <div className="flex flex-col gap-1">
@@ -107,12 +107,12 @@ export function JobPhotosGuide() {
           </thead>
           <tbody>
             {ROLE_PERMISSIONS.map(([role, access, upload, annotate, del]) => (
-              <tr key={role} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{role}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{access}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{upload}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{annotate}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{del}</td>
+              <tr key={role} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{role}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{access}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{upload}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{annotate}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{del}</td>
               </tr>
             ))}
           </tbody>
@@ -212,7 +212,7 @@ export function JobPhotosGuide() {
         </p>
         <p className="flex flex-wrap gap-1.5">
           {TAGS.map((t) => (
-            <span key={t} className="rounded-full bg-[#f4f6f0] px-2.5 py-1 text-xs font-medium text-[#396927]">{t}</span>
+            <span key={t} className="rounded-full bg-[#f4f6f0] dark:bg-muted/50 px-2.5 py-1 text-xs font-medium text-[#396927] dark:text-[#b4c6ad]">{t}</span>
           ))}
         </p>
         <p>
@@ -248,9 +248,9 @@ export function JobPhotosGuide() {
           </thead>
           <tbody>
             {DRAW_TOOLS.map(([tool, desc]) => (
-              <tr key={tool} className="border-b border-[#eceae3] last:border-0">
-                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a]">{tool}</td>
-                <td className="px-3 py-2 text-[#4a4a46]">{desc}</td>
+              <tr key={tool} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{tool}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
               </tr>
             ))}
           </tbody>
