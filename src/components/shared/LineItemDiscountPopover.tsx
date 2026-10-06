@@ -103,24 +103,24 @@ export function LineItemDiscountPopover({
         <button
           type="button"
           disabled={disabled}
-          className="relative flex h-6 w-6 items-center justify-center rounded hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+          className="relative flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           title={discountCents > 0 ? `Discount applied: $${(discountCents / 100).toFixed(2)}` : "Add a discount to this line"}
         >
-          <DollarSign className={cn("h-3.5 w-3.5", discountCents > 0 ? "text-green-600" : "text-slate-400")} />
+          <DollarSign className={cn("h-3.5 w-3.5", discountCents > 0 ? "text-green-600 dark:text-green-400" : "text-slate-400 dark:text-neutral-500")} />
           {discountCents > 0 && (
             <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-green-500" />
           )}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-56 p-3" side="bottom" align="end">
-        <p className="mb-2 text-xs font-semibold text-slate-600">Line item discount</p>
+        <p className="mb-2 text-xs font-semibold text-slate-600 dark:text-neutral-400">Line item discount</p>
         <div className="flex gap-1 mb-2">
           <button
             type="button"
             onClick={() => setMode("flat")}
             className={cn(
               "flex-1 rounded px-2 py-1 text-xs font-medium border transition-colors",
-              mode === "flat" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-500 hover:border-slate-300"
+              mode === "flat" ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400" : "border-border text-muted-foreground hover:border-slate-300 dark:hover:border-neutral-700"
             )}
           >
             $ Flat
@@ -130,7 +130,7 @@ export function LineItemDiscountPopover({
             onClick={() => setMode("percent")}
             className={cn(
               "flex-1 rounded px-2 py-1 text-xs font-medium border transition-colors",
-              mode === "percent" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-500 hover:border-slate-300"
+              mode === "percent" ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400" : "border-border text-muted-foreground hover:border-slate-300 dark:hover:border-neutral-700"
             )}
           >
             % Percent
@@ -138,7 +138,7 @@ export function LineItemDiscountPopover({
         </div>
         <div className="flex items-center gap-1.5 mb-1">
           <Label className="sr-only">Discount value</Label>
-          <span className="text-xs text-slate-400">{mode === "flat" ? "$" : "%"}</span>
+          <span className="text-xs text-slate-400 dark:text-neutral-500">{mode === "flat" ? "$" : "%"}</span>
           <input
             autoFocus
             type="number"
@@ -147,10 +147,10 @@ export function LineItemDiscountPopover({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleApply(); }}
-            className="w-full rounded border border-slate-200 px-1.5 py-1 text-right text-xs focus:border-brand-400 focus:outline-none"
+            className="w-full rounded border border-border px-1.5 py-1 text-right text-xs focus:border-brand-400 focus:outline-none"
           />
         </div>
-        <p className="mb-2 text-[10px] text-slate-400">
+        <p className="mb-2 text-[10px] text-slate-400 dark:text-neutral-500">
           on this line&rsquo;s ${(lineTotalCents / 100).toFixed(2)}
         </p>
         {discounts.length > 0 && (

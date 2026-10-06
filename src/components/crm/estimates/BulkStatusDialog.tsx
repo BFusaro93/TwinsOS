@@ -15,10 +15,10 @@ import { cn } from "@/lib/utils";
 import type { LineItemStatus } from "@/types/crm-estimates";
 
 const STATUS_OPTIONS: { value: LineItemStatus; label: string; color: string }[] = [
-  { value: "draft", label: "Draft", color: "bg-slate-100 text-slate-600" },
-  { value: "quote", label: "Quote", color: "bg-blue-100 text-blue-700" },
-  { value: "won",   label: "Won",   color: "bg-green-100 text-green-700" },
-  { value: "lost",  label: "Lost",  color: "bg-red-100 text-red-600" },
+  { value: "draft", label: "Draft", color: "bg-muted text-slate-600 dark:text-neutral-400" },
+  { value: "quote", label: "Quote", color: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400" },
+  { value: "won",   label: "Won",   color: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400" },
+  { value: "lost",  label: "Lost",  color: "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400" },
 ];
 
 interface Props {
@@ -67,7 +67,7 @@ export function BulkStatusDialog({ selectedCount, open, onApply, onCancel }: Pro
               </SelectContent>
             </Select>
           </div>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted-foreground">
             Applies to {selectedCount} selected line item{selectedCount !== 1 ? "s" : ""}.
           </p>
         </div>

@@ -43,10 +43,10 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="relative flex h-6 w-6 items-center justify-center rounded hover:bg-slate-100"
+          className="relative flex h-6 w-6 items-center justify-center rounded hover:bg-muted"
           title="Line item notes"
         >
-          <FileText className="h-3.5 w-3.5 text-slate-400" />
+          <FileText className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
           {hasNotes(notes) && (
             <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-brand-500" />
           )}
@@ -73,7 +73,7 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
 
           <div className="h-[200px] overflow-y-auto p-3">
             <TabsContent value="estimate_desc" className="mt-0">
-              <p className="mb-1.5 text-xs text-slate-500">Shown on the client-facing estimate document.</p>
+              <p className="mb-1.5 text-xs text-muted-foreground">Shown on the client-facing estimate document.</p>
               <RichTextEditor
                 value={draft.estimateDesc ?? ""}
                 onChange={(v) => setDraft((d) => ({ ...d, estimateDesc: v || null }))}
@@ -83,7 +83,7 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
             </TabsContent>
 
             <TabsContent value="job_note" className="mt-0">
-              <p className="mb-1.5 text-xs text-slate-500">Carries to Job Notes for field crew when converting to a job.</p>
+              <p className="mb-1.5 text-xs text-muted-foreground">Carries to Job Notes for field crew when converting to a job.</p>
               <Textarea
                 rows={6}
                 value={draft.jobNote ?? ""}
@@ -93,7 +93,7 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
             </TabsContent>
 
             <TabsContent value="invoice_desc" className="mt-0">
-              <p className="mb-1.5 text-xs text-slate-500">Carries to the invoice line item description.</p>
+              <p className="mb-1.5 text-xs text-muted-foreground">Carries to the invoice line item description.</p>
               <Textarea
                 rows={6}
                 value={draft.invoiceDesc ?? ""}
@@ -103,7 +103,7 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
             </TabsContent>
 
             <TabsContent value="line_item" className="mt-0">
-              <p className="mb-1.5 text-xs text-slate-500">Internal only — your client will not see this note.</p>
+              <p className="mb-1.5 text-xs text-muted-foreground">Internal only — your client will not see this note.</p>
               <Textarea
                 rows={6}
                 value={draft.internalNote ?? ""}

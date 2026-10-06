@@ -66,12 +66,12 @@ export function RateIncreaseDialog({ selectedCount, open, onApply, onCancel }: P
               autoFocus
               onKeyDown={(e) => { if (e.key === "Enter") handleApply(); }}
             />
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               End with <code className="font-mono">%</code> for percentage, or enter a dollar amount (positive or negative).
             </p>
           </div>
           {preview && (
-            <p className="rounded bg-slate-50 px-3 py-1.5 text-sm text-slate-700">
+            <p className="rounded bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-sm text-slate-700 dark:text-neutral-300">
               Applying: <strong>{preview}</strong>
             </p>
           )}

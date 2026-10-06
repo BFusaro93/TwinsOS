@@ -65,7 +65,7 @@ export function AIDraftDialog({ estimateId, open, onOpenChange, onAddItems }: Pr
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-brand-500" />
+            <Sparkles className="h-4 w-4 text-brand-500 dark:text-brand-400" />
             Draft with AI
           </DialogTitle>
         </DialogHeader>
@@ -98,7 +98,7 @@ export function AIDraftDialog({ estimateId, open, onOpenChange, onAddItems }: Pr
           </Button>
 
           {error && (
-            <p className="text-sm text-red-500">{error}</p>
+            <p className="text-sm text-red-500 dark:text-red-400">{error}</p>
           )}
 
           {suggestions.length > 0 && (
@@ -107,7 +107,7 @@ export function AIDraftDialog({ estimateId, open, onOpenChange, onAddItems }: Pr
                 {suggestions.map((item, idx) => (
                   <div
                     key={idx}
-                    className="flex items-start gap-3 rounded-lg border bg-white p-3 shadow-sm"
+                    className="flex items-start gap-3 rounded-lg border bg-card p-3 shadow-sm"
                   >
                     <Checkbox
                       checked={checked[idx] ?? false}
@@ -115,18 +115,18 @@ export function AIDraftDialog({ estimateId, open, onOpenChange, onAddItems }: Pr
                       className="mt-0.5"
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-800">{item.serviceName}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-neutral-100">{item.serviceName}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {item.qty} {item.unitType}
                         {item.visits > 1 ? ` × ${item.visits} visits` : ""}
                         {" · "}
                         {formatCurrency(item.rateCents)} / {item.unitType}
                       </p>
                       {item.estimateDesc && (
-                        <p className="text-xs text-slate-400 mt-1 italic">{item.estimateDesc}</p>
+                        <p className="text-xs text-slate-400 dark:text-neutral-500 mt-1 italic">{item.estimateDesc}</p>
                       )}
                     </div>
-                    <div className="shrink-0 text-sm font-semibold text-slate-700">
+                    <div className="shrink-0 text-sm font-semibold text-slate-700 dark:text-neutral-300">
                       {formatCurrency(Math.round(item.qty * item.rateCents * item.visits))}
                     </div>
                   </div>

@@ -92,7 +92,7 @@ function MilestoneRow({
       : amountFor(type, toMilestoneValue(valueStr), totalCents);
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2.5">
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 p-2.5">
       <Input
         value={name}
         onChange={(e) => setName(e.target.value)}
@@ -138,19 +138,19 @@ function MilestoneRow({
         disabled={locked}
         className="h-8 w-24 text-sm"
       />
-      <span className="w-24 shrink-0 text-right text-sm font-medium text-slate-700">
+      <span className="w-24 shrink-0 text-right text-sm font-medium text-slate-700 dark:text-neutral-300">
         {formatCurrency(amountCents)}
       </span>
       {milestone.status === "invoiced" ? (
         <>
-          <Badge variant="outline" className="shrink-0 border-teal-200 bg-teal-50 text-[10px] text-teal-700">
+          <Badge variant="outline" className="shrink-0 border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/40 text-[10px] text-teal-700 dark:text-teal-400">
             Invoiced
           </Badge>
           {milestone.invoiceId && (
             <Button
               size="icon"
               variant="ghost"
-              className="h-8 w-8 shrink-0 text-slate-400 hover:text-slate-700"
+              className="h-8 w-8 shrink-0 text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300"
               title="Open invoice"
               onClick={() => router.push(`/crm/accounting/invoices/${milestone.invoiceId}`)}
             >
@@ -187,13 +187,13 @@ function MilestoneRow({
               }
             }}
           >
-            <Receipt className="h-3.5 w-3.5 text-teal-500" />
+            <Receipt className="h-3.5 w-3.5 text-teal-500 dark:text-teal-400" />
             {creatingInvoice ? "Creating…" : "Invoice"}
           </Button>
           <Button
             size="icon"
             variant="ghost"
-            className="h-8 w-8 shrink-0 text-slate-400 hover:text-red-500"
+            className="h-8 w-8 shrink-0 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
             title="Delete milestone"
             onClick={() => del.mutate({ id: milestone.id, ...ids }, { onError: () => toast.error("Failed to delete milestone") })}
           >
@@ -269,7 +269,7 @@ export function MilestoneScheduleEditor({
     }, { onError: () => toast.error("Failed to add milestone") });
   }
 
-  if (isLoading) return <p className="text-xs text-slate-400">Loading milestones…</p>;
+  if (isLoading) return <p className="text-xs text-slate-400 dark:text-neutral-500">Loading milestones…</p>;
 
   return (
     <div className="flex flex-col gap-2">
@@ -286,7 +286,7 @@ export function MilestoneScheduleEditor({
         />
       ))}
       {milestones.length === 0 && (
-        <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50 py-4 text-center text-xs text-slate-400">
+        <p className="rounded-lg border border-dashed border-border bg-slate-50 dark:bg-muted/40 py-4 text-center text-xs text-slate-400 dark:text-neutral-500">
           No milestones yet — add one below (e.g. Deposit, Rough-in, Completion).
         </p>
       )}
@@ -305,11 +305,11 @@ export function MilestoneScheduleEditor({
       {milestones.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]">
           {diffCents !== 0 && (
-            <span className={cn(diffCents > 0 ? "text-amber-600" : "text-red-500")}>
+            <span className={cn(diffCents > 0 ? "text-amber-600 dark:text-amber-400" : "text-red-500 dark:text-red-400")}>
               Milestones {diffCents > 0 ? "total less than" : "total more than"} the {basisLabel} by {formatCurrency(Math.abs(diffCents))}.
             </span>
           )}
-          <span className="text-slate-500">
+          <span className="text-muted-foreground">
             Invoiced {formatCurrency(invoicedCents)} of {formatCurrency(totalAllocatedCents)} scheduled
           </span>
         </div>

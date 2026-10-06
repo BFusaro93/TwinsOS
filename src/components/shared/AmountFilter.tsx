@@ -14,7 +14,7 @@ interface AmountFilterProps {
 export function AmountFilter({ value, onChange, label = "Amount", autoFocus = true }: AmountFilterProps) {
   const { op, dollars } = parseAmountFilter(value);
   return (
-    <div className="ml-2 flex items-center gap-1 text-xs text-slate-500">
+    <div className="ml-2 flex items-center gap-1 text-xs text-muted-foreground">
       <select
         value={op}
         onChange={(e) => onChange(encodeAmountFilter(e.target.value as AmountOp, dollars))}

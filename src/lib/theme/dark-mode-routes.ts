@@ -10,6 +10,8 @@
 export const DARK_MODE_ROUTE_PREFIXES: readonly string[] = [
   "/crm/crew",
   "/crm/scheduling/dispatch",
+  "/crm/accounting/invoices",
+  "/crm/estimates",
   "/crm/clients",
   "/crm/accounting/purchase-orders",
   "/cmms/work-orders",

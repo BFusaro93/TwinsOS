@@ -94,13 +94,13 @@ export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreate
                 clients={invoiceableClients}
                 noneLabel="Select client..."
               />
-              {errors.clientId && <p className="text-xs text-red-500">{errors.clientId.message}</p>}
+              {errors.clientId && <p className="text-xs text-red-500 dark:text-red-400">{errors.clientId.message}</p>}
             </div>
           )}
           <div className="flex flex-col gap-1.5">
             <Label>Description *</Label>
             <Input {...register("description")} placeholder="e.g. Spring Cleanup Services" className={errors.description ? "border-red-400" : ""} />
-            {errors.description && <p className="text-xs text-red-500">{errors.description.message}</p>}
+            {errors.description && <p className="text-xs text-red-500 dark:text-red-400">{errors.description.message}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">

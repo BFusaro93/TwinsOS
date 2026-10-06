@@ -242,7 +242,7 @@ export function SendEstimateDialog({
                     type="button"
                     title={mt.label}
                     onClick={() => richTextRef.current?.insertContent(mt.tag)}
-                    className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 hover:bg-brand-100 hover:text-brand-700"
+                    className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-slate-600 dark:text-neutral-400 hover:bg-brand-100 dark:hover:bg-brand-900/40 hover:text-brand-700 dark:hover:text-brand-400"
                   >
                     {mt.tag}
                   </button>
@@ -251,21 +251,21 @@ export function SendEstimateDialog({
             </TabsContent>
 
             <TabsContent value="preview" className="mt-2">
-              <div className="min-h-[240px] rounded border bg-white p-4 text-sm overflow-auto">
+              <div className="min-h-[240px] rounded border bg-card p-4 text-sm overflow-auto">
                 <SandboxedHtmlPreview html={previewResolve(bodyHtml)} minHeight={208} />
               </div>
             </TabsContent>
           </Tabs>
 
-          <label className="flex items-center gap-2 text-xs text-slate-500">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <Checkbox checked={includePdf} onCheckedChange={(v) => setIncludePdf(!!v)} />
             <Paperclip className="h-3.5 w-3.5" />
             Attach the estimate PDF to this email
           </label>
 
           {zeroTotalLineCount > 0 && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
               <span>
                 {zeroTotalLineCount === 1
                   ? "1 line item totals $0.00 — the client will see it priced at $0.00."

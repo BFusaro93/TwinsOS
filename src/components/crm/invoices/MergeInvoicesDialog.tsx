@@ -86,23 +86,23 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
         </DialogHeader>
 
         {!sameClient ? (
-          <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
             Selected invoices belong to different clients. Merging is only allowed for invoices from the same client.
           </div>
         ) : hasLocked ? (
-          <div className="rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
             Invoice{lockedInvoices.length > 1 ? "s" : ""} #{lockedInvoices.map((i) => i.invoiceNumber).join(", #")} {lockedInvoices.length > 1 ? "are" : "is"} locked.
             Unlock {lockedInvoices.length > 1 ? "them" : "it"} before merging — a locked invoice can&apos;t have its totals rewritten or be voided out.
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 dark:text-neutral-400">
               Select which invoice to keep as the parent. It will retain its invoice number and date.
               The other invoice{children.length > 1 ? "s" : ""} will be voided after their line items are moved.
             </p>
 
             {/* Client name */}
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
               Client: {invoices[0]?.clientName}
             </div>
 
@@ -114,38 +114,38 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
                   onClick={() => setParentId(inv.id)}
                   className={`w-full rounded-lg border px-4 py-3 text-left transition-colors ${
                     parentId === inv.id
-                      ? "border-green-500 bg-green-50 ring-1 ring-green-500"
-                      : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                      ? "border-green-500 bg-green-50 dark:bg-green-950/40 ring-1 ring-green-500"
+                      : "border-border hover:border-slate-300 dark:hover:border-neutral-700 hover:bg-slate-50 dark:hover:bg-muted/40"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${
-                        parentId === inv.id ? "border-green-500" : "border-slate-300"
+                        parentId === inv.id ? "border-green-500" : "border-slate-300 dark:border-neutral-700"
                       }`}>
                         {parentId === inv.id && (
                           <div className="h-2 w-2 rounded-full bg-green-500" />
                         )}
                       </div>
                       <div>
-                        <span className="text-sm font-semibold text-slate-800">
+                        <span className="text-sm font-semibold text-slate-800 dark:text-neutral-100">
                           Invoice #{inv.invoiceNumber}
                         </span>
                         {parentId === inv.id && (
-                          <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                          <span className="ml-2 rounded bg-green-100 dark:bg-green-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-green-700 dark:text-green-400">
                             PARENT
                           </span>
                         )}
                       </div>
                     </div>
-                    <span className="text-sm font-medium text-slate-700">
+                    <span className="text-sm font-medium text-slate-700 dark:text-neutral-300">
                       {formatCurrency(inv.totalCents)}
                     </span>
                   </div>
-                  <div className="mt-1 pl-7 text-xs text-slate-500">
+                  <div className="mt-1 pl-7 text-xs text-muted-foreground">
                     {formatDate(inv.invoiceDate)} · {(inv.lineItems ?? []).length} line item{(inv.lineItems ?? []).length !== 1 ? "s" : ""}
                     {(inv.lineItems ?? []).length > 0 && (
-                      <span className="ml-1 text-slate-400">
+                      <span className="ml-1 text-slate-400 dark:text-neutral-500">
                         ({(inv.lineItems ?? []).map((li) => li.description).join(", ")})
                       </span>
                     )}
@@ -156,12 +156,12 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
 
             {/* Summary */}
             {parent && (
-              <div className="rounded-md bg-slate-50 border border-slate-200 px-4 py-3 text-sm space-y-1">
-                <div className="flex justify-between text-slate-600">
+              <div className="rounded-md bg-slate-50 dark:bg-muted/40 border border-border px-4 py-3 text-sm space-y-1">
+                <div className="flex justify-between text-slate-600 dark:text-neutral-400">
                   <span>Merged into Invoice #{parent.invoiceNumber}</span>
-                  <span className="font-semibold text-slate-800">{formatCurrency(mergedTotal)}</span>
+                  <span className="font-semibold text-slate-800 dark:text-neutral-100">{formatCurrency(mergedTotal)}</span>
                 </div>
-                <div className="text-xs text-slate-400">
+                <div className="text-xs text-slate-400 dark:text-neutral-500">
                   {invoices.reduce((s, i) => s + (i.lineItems ?? []).length, 0)} total line items ·{" "}
                   Invoice date: {formatDate(parent.invoiceDate)}
                 </div>

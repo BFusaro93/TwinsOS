@@ -56,10 +56,10 @@ export function LineItemComplexityPopover({ complexityBps, onSave }: Props) {
           // doesn't exist on the tablets this board is used on. Unadjusted
           // lines still fade in on hover, so the row is no busier than before.
           className={cn(
-            "relative flex h-6 items-center justify-center gap-0.5 rounded px-0.5 transition-opacity hover:bg-slate-100",
+            "relative flex h-6 items-center justify-center gap-0.5 rounded px-0.5 transition-opacity hover:bg-muted",
             isAdjusted
-              ? "text-brand-600"
-              : "w-6 text-slate-400 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+              ? "text-brand-600 dark:text-brand-400"
+              : "w-6 text-slate-400 dark:text-neutral-500 opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
           )}
           title={isAdjusted ? `Complexity ${(complexityBps / 100).toFixed(0)}% — scales this line's price and cost` : "Complexity adjustment"}
         >
@@ -70,7 +70,7 @@ export function LineItemComplexityPopover({ complexityBps, onSave }: Props) {
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-3" side="bottom" align="end">
-        <p className="mb-2 text-xs text-slate-500">
+        <p className="mb-2 text-xs text-muted-foreground">
           Scales this line&apos;s price and cost together — margin % stays the same.
         </p>
         <div className="flex items-center gap-3">
@@ -85,7 +85,7 @@ export function LineItemComplexityPopover({ complexityBps, onSave }: Props) {
           />
           <span className="w-12 text-right text-sm font-medium tabular-nums">{draftPct}%</span>
         </div>
-        <div className="mt-1 flex justify-between text-[10px] text-slate-400">
+        <div className="mt-1 flex justify-between text-[10px] text-slate-400 dark:text-neutral-500">
           <span>Easier</span>
           <span>Standard</span>
           <span>Harder</span>
