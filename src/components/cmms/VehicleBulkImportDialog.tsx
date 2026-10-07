@@ -268,7 +268,7 @@ export function VehicleBulkImportDialog({
         <DialogHeader>
           <DialogTitle>Bulk Import Vehicle Files</DialogTitle>
           <DialogDescription>
-            Select your OneDrive vehicles folder. Each subfolder is matched to a
+            Select a folder containing one subfolder per vehicle. Each subfolder is matched to a
             vehicle by name — review the matches before uploading.
           </DialogDescription>
         </DialogHeader>
