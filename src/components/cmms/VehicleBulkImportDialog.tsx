@@ -12,6 +12,12 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { sanitizeStorageFileName } from "@/lib/hooks/use-attachments";
+import {
+  convertHeicToJpeg,
+  getEffectiveMimeType,
+  isHeicMimeType,
+  replaceFileExtension,
+} from "@/modules/photo-docs/lib/fileType";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -94,7 +100,17 @@ async function uploadFilesToVehicle(
     .is("deleted_at", null);
   const fingerprint = (name: string, size: number | null) => `${name.trim().toLowerCase()}|${size ?? ""}`;
   const have = new Set((existing ?? []).map((a) => fingerprint(a.file_name, a.file_size)));
+  const haveNames = new Set((existing ?? []).map((a) => a.file_name.trim().toLowerCase()));
+  // The attachments bucket rejects HEIC, so those are converted to JPEG on
+  // upload. Match them by their converted name (the JPEG's size differs).
+  const isHeicFile = (f: File) => isHeicMimeType(getEffectiveMimeType(f));
   const toUpload = files.filter((f) => {
+    if (isHeicFile(f)) {
+      const jpgName = replaceFileExtension(f.name, "jpg").trim().toLowerCase();
+      if (haveNames.has(jpgName)) return false;
+      haveNames.add(jpgName);
+      return true;
+    }
     const key = fingerprint(f.name, f.size);
     if (have.has(key)) return false;
     have.add(key); // also drops duplicates within the selected folder itself
@@ -110,8 +126,9 @@ async function uploadFilesToVehicle(
       await uploadOne(file);
     }
   };
-  const uploadOne = async (file: File) => {
+  const uploadOne = async (original: File) => {
       try {
+        const file = isHeicFile(original) ? await convertHeicToJpeg(original) : original;
         // org_id must be the first path segment (attachments bucket INSERT
         // policy) and the key must be storage-safe; file_name keeps the
         // original for display.
@@ -160,7 +177,7 @@ async function uploadFilesToVehicle(
       } catch (e) {
         failed++;
         failures.push({
-          name: file.name,
+          name: original.name,
           reason: e instanceof Error ? e.message : (e as { message?: string } | null)?.message ?? "Upload failed",
         });
       }
