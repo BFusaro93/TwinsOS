@@ -77,9 +77,11 @@ export function BulkEmailInvoicesDialog({ invoiceIds, open, onClose, onSent }: P
   async function handleSend() {
     setSending(true);
     try {
-      const results = await Promise.allSettled(
-        invoiceIds.map((invoiceId) =>
-          fetch("/api/crm/invoices/email", {
+      // Sent one at a time, retrying a 429: firing them all at once trips the
+      // mail provider's per-second rate limit and fails most of the batch.
+      const sendOne = async (invoiceId: string) => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const res = await fetch("/api/crm/invoices/email", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -89,14 +91,25 @@ export function BulkEmailInvoicesDialog({ invoiceIds, open, onClose, onSent }: P
               includePdf,
               templateId: pdfTemplateId || undefined,
             }),
-          }).then(async (res) => {
-            if (!res.ok) {
-              const data = await res.json().catch(() => ({}));
-              throw new Error(data.error ?? "Failed to email invoice");
-            }
-          })
-        )
-      );
+          });
+          if (res.ok) return;
+          if (res.status === 429 && attempt < 2) {
+            await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+            continue;
+          }
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error ?? "Failed to email invoice");
+        }
+      };
+      const results: PromiseSettledResult<void>[] = [];
+      for (const invoiceId of invoiceIds) {
+        try {
+          await sendOne(invoiceId);
+          results.push({ status: "fulfilled", value: undefined });
+        } catch (reason) {
+          results.push({ status: "rejected", reason });
+        }
+      }
       const succeeded = results.filter((r) => r.status === "fulfilled").length;
       const failed = results.length - succeeded;
       if (succeeded > 0) toast.success(`Emailed ${succeeded} invoice${succeeded !== 1 ? "s" : ""}`);

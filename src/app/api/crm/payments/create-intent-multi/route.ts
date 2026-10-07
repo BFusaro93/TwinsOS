@@ -45,6 +45,17 @@ export async function POST(request: Request) {
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
 
+  // This creates a charge against the client's card/bank — same permission as
+  // create-intent and autopay/charge (admins always pass inside
+  // has_settings_permission). It also covers waiveFee / overrideFeeCents.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canCharge } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "acct_add_modify_payments",
+  });
+  if (!canCharge) {
+    return NextResponse.json({ error: "You don't have permission to take payments" }, { status: 403 });
+  }
+
   const body = await request.json();
   const parsed = CreateIntentSchema.safeParse(body);
   if (!parsed.success) {
@@ -143,6 +154,19 @@ export async function POST(request: Request) {
   }
 
   const balanceCents = allocations.reduce((sum, a) => sum + a.amountCents, 0);
+  // An override may only lower the fee: cap it at the standard fee so a
+  // client-supplied value can never inflate the charge.
+  const standardFeeCents = computeProcessingFee(
+    {
+      ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
+      ccProcessingFeeBps: org.cc_processing_fee_bps,
+      ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+    },
+    balanceCents,
+    false
+  ).feeCents;
+  const cappedOverrideFeeCents =
+    overrideFeeCents === undefined ? undefined : Math.min(overrideFeeCents, standardFeeCents);
   const { feeCents, totalChargeCents } =
     paymentMethod === "card"
       ? computeProcessingFee(
@@ -153,7 +177,7 @@ export async function POST(request: Request) {
           },
           balanceCents,
           waiveFee ?? false,
-          overrideFeeCents
+          cappedOverrideFeeCents
         )
       : { feeCents: 0, totalChargeCents: balanceCents };
 

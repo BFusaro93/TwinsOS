@@ -110,7 +110,9 @@ export async function POST(
       deposit_failed_reason: null,
       // reset financial aggregates so they recalculate fresh
       subtotal_cents: 0,
-      discount_cents: 0,
+      // A flat discount's amount IS discount_cents (the recalc reads it as the
+      // source of truth); percent discounts re-derive from discount_value.
+      discount_cents: src.discount_type === "flat" ? src.discount_cents ?? 0 : 0,
       tax_cents: 0,
       total_cents: 0,
       revenue_cents: 0,

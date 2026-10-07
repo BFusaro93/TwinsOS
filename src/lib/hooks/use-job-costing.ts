@@ -255,7 +255,7 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: lineItems } = await (supabase as any)
           .from("estimate_line_items")
-          .select("service_name, budgeted_hours, cost_cents, total_cents, row_type")
+          .select("service_name, budgeted_hours, cost_cents, total_cost_cents, total_cents, row_type")
           .eq("estimate_id", estimateId)
           .is("deleted_at", null)
           .eq("row_type", "item")

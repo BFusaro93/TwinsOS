@@ -1,4 +1,5 @@
 import type { CompanyReportData, CompanyReportFlag } from "@/types/company-report";
+import { daysBetweenYmd, ymd, zoneDateParts } from "@/lib/time/zone";
 
 // ============================================================
 // Company Report — rule-based flags.
@@ -32,7 +33,9 @@ function money(cents: number): string {
 }
 
 export function generateCompanyReportFlags(
-  data: Pick<CompanyReportData, "collections" | "operations" | "kpis">
+  data: Pick<CompanyReportData, "collections" | "operations" | "kpis">,
+  timeZone = "UTC",
+  now = new Date()
 ): CompanyReportFlag[] {
   const flags: CompanyReportFlag[] = [];
   const { buckets, topBalances } = data.collections;
@@ -104,11 +107,12 @@ export function generateCompanyReportFlags(
   // Revenue pace vs annual target (only if a target is set on the KPI Scorecard)
   const { invoicedRevenueYtd } = data.kpis;
   if (invoicedRevenueYtd.valueCents !== null && invoicedRevenueYtd.targetDollars) {
-    const now = new Date();
-    const jan1 = new Date(now.getFullYear(), 0, 1);
-    const dec31 = new Date(now.getFullYear(), 11, 31);
-    const daysElapsed = Math.floor((now.getTime() - jan1.getTime()) / 86_400_000) + 1;
-    const daysInYear = Math.round((dec31.getTime() - jan1.getTime()) / 86_400_000) + 1;
+    // Org calendar, not the server's UTC one — UTC rolls into the new year at
+    // 7/8pm ET on Dec 31.
+    const { year, month, day } = zoneDateParts(now, timeZone);
+    const jan1 = `${year}-01-01`;
+    const daysElapsed = daysBetweenYmd(jan1, ymd(year, month, day)) + 1;
+    const daysInYear = daysBetweenYmd(jan1, `${year}-12-31`) + 1;
     const paceTargetCents = invoicedRevenueYtd.targetDollars * 100 * (daysElapsed / daysInYear);
     const paceBehindPct = paceTargetCents > 0 ? ((paceTargetCents - invoicedRevenueYtd.valueCents) / paceTargetCents) * 100 : 0;
     if (paceBehindPct >= THRESHOLDS.revenuePaceBehindPct) {

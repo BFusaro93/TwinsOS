@@ -73,7 +73,7 @@ export async function GET() {
         newLeadsYtd: { value: kpiActuals.values.new_leads_ytd, target: targets.new_leads_ytd ?? null },
       },
     };
-    data.flags = generateCompanyReportFlags(data);
+    data.flags = generateCompanyReportFlags(data, timeZone, now);
 
     return NextResponse.json(data);
   } catch (err) {

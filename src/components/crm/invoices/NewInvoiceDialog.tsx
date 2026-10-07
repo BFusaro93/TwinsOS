@@ -17,6 +17,8 @@ import { useClients } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { toast } from "sonner";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 
 const schema = z.object({
   clientId:    z.string().min(1, "Client required"),
@@ -27,14 +29,6 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
-function thirtyOut() {
-  const d = new Date(Date.now() + 30*24*60*60*1000);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
 
 interface Props {
   open: boolean;
@@ -44,6 +38,8 @@ interface Props {
 }
 
 export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreated }: Props) {
+  // Defaults are the ORG's calendar day, not the browser's.
+  const orgToday = todayInZone(useOrgTimeZone());
   const { data: clients } = useClients();
   const invoiceableClients = (clients ?? []).filter((c) => c.status !== "lead");
   const { data: employees } = useSelectableEmployees();
@@ -54,8 +50,8 @@ export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreate
     defaultValues: {
       clientId: defaultClientId ?? "",
       description: "",
-      invoiceDate: todayStr(),
-      dueDate: thirtyOut(),
+      invoiceDate: orgToday,
+      dueDate: shiftYmd(orgToday, 30),
       salesRepId: "",
     },
   });

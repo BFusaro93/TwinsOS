@@ -5,6 +5,7 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { alreadyBilledReason, billedInPeriod, planContractBilling, termSkipReason } from "@/lib/contract-billing";
+import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import type {
@@ -411,7 +412,7 @@ export function useGenerateContractInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: contract, error: fetchErr } = await (supabase as any)
           .from("crm_contracts")
-          .select("id, org_id, client_id, title, status, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, clients!inner(deleted_at)")
+          .select("id, org_id, client_id, title, status, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, clients!inner(deleted_at, default_terms)")
           .eq("id", contractId)
           .is("clients.deleted_at", null)
           .is("deleted_at", null)
@@ -489,6 +490,19 @@ export function useGenerateContractInvoices() {
         // (Taxable products are billed through job/visit invoices.)
         const totalCents = monthAmount;
 
+        // Terms: client default, else org default — same as the cron. Without
+        // a due_date the invoice-past-due cron skips the invoice forever.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: orgTermsRow } = await (supabase as any)
+          .from("organizations")
+          .select("default_billing_terms")
+          .eq("id", contract.org_id)
+          .maybeSingle();
+        const invoiceTerms = resolveInvoiceTerms(
+          contract.clients?.default_terms,
+          orgTermsRow?.default_billing_terms,
+        );
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: invoice, error: invErr } = await (supabase as any)
           .from("crm_invoices")
@@ -498,6 +512,8 @@ export function useGenerateContractInvoices() {
             sales_rep_id: contract.sales_rep_id ?? null,
             description,
             invoice_date: plan.invoiceDate,
+            terms: invoiceTerms,
+            due_date: computeDueDate(plan.invoiceDate, invoiceTerms),
             status: "draft",
             subtotal_cents: monthAmount,
             total_cents: totalCents,
@@ -577,11 +593,15 @@ export function useDeleteContract() {
     mutationFn: async (id: string) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
+      const { data: row, error } = await (supabase as any)
         .from("crm_contracts")
         .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
+        .eq("id", id)
+        .select("org_id")
+        .single();
       if (error) throw error;
+      // Deleting must stop the crew schedule too, same as cancelling.
+      if (row?.org_id) await cancelFutureContractVisits(supabase, id, row.org_id);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contracts"] }),
   });
