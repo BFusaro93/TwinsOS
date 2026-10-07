@@ -65,6 +65,8 @@ interface FolderGroup {
   status: GroupStatus;
   succeeded: number;
   failed: number;
+  /** Files left out because the vehicle already has one with the same name and size. */
+  skipped: number;
 }
 
 // ── Upload helper (mirrors useUploadAttachment logic) ─────────────────────────
@@ -74,13 +76,31 @@ async function uploadFilesToVehicle(
   files: File[],
   uploaderName: string,
   orgId: string,
-): Promise<{ succeeded: number; failed: number }> {
+): Promise<{ succeeded: number; failed: number; skipped: number }> {
   const supabase = createClient();
   let succeeded = 0;
   let failed = 0;
 
+  // Re-running an import over the same folder must not attach everything
+  // again: skip files the vehicle already has (same name and size).
+  const { data: existing } = await supabase
+    .from("attachments")
+    .select("file_name, file_size")
+    .eq("record_type", "vehicle")
+    .eq("record_id", vehicleId)
+    .is("deleted_at", null);
+  const fingerprint = (name: string, size: number | null) => `${name.trim().toLowerCase()}|${size ?? ""}`;
+  const have = new Set((existing ?? []).map((a) => fingerprint(a.file_name, a.file_size)));
+  const toUpload = files.filter((f) => {
+    const key = fingerprint(f.name, f.size);
+    if (have.has(key)) return false;
+    have.add(key); // also drops duplicates within the selected folder itself
+    return true;
+  });
+  const skipped = files.length - toUpload.length;
+
   await Promise.all(
-    files.map(async (file) => {
+    toUpload.map(async (file) => {
       try {
         // org_id must be the first path segment (attachments bucket INSERT
         // policy) and the key must be storage-safe; file_name keeps the
@@ -133,7 +153,7 @@ async function uploadFilesToVehicle(
     })
   );
 
-  return { succeeded, failed };
+  return { succeeded, failed, skipped };
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -182,6 +202,7 @@ export function VehicleBulkImportDialog({
           vehicleId: matchVehicle(folderName, vehicles),
           status: "pending",
           succeeded: 0,
+          skipped: 0,
           failed: 0,
         })
       );
@@ -216,7 +237,7 @@ export function VehicleBulkImportDialog({
         )
       );
 
-      const { succeeded, failed } = await uploadFilesToVehicle(
+      const { succeeded, failed, skipped } = await uploadFilesToVehicle(
         group.vehicleId!,
         group.files,
         uploaderName,
@@ -231,6 +252,7 @@ export function VehicleBulkImportDialog({
                 status: failed > 0 && succeeded === 0 ? "error" : "done",
                 succeeded,
                 failed,
+                skipped,
               }
             : g
         )
@@ -337,7 +359,7 @@ export function VehicleBulkImportDialog({
                   </p>
                   <p className="text-xs text-slate-400 dark:text-neutral-500">
                     {group.status === "done"
-                      ? `${group.succeeded} uploaded${group.failed > 0 ? `, ${group.failed} failed` : ""}`
+                      ? `${group.succeeded} uploaded${group.skipped > 0 ? `, ${group.skipped} already attached` : ""}${group.failed > 0 ? `, ${group.failed} failed` : ""}`
                       : group.status === "error"
                       ? `${group.failed} failed`
                       : `${group.files.length} file${group.files.length !== 1 ? "s" : ""}`}
