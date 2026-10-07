@@ -65,6 +65,8 @@ interface FolderGroup {
   status: GroupStatus;
   succeeded: number;
   failed: number;
+  /** Which files failed and why, so they can be retried or fixed. */
+  failures: { name: string; reason: string }[];
   /** Files left out because the vehicle already has one with the same name and size. */
   skipped: number;
 }
@@ -76,10 +78,11 @@ async function uploadFilesToVehicle(
   files: File[],
   uploaderName: string,
   orgId: string,
-): Promise<{ succeeded: number; failed: number; skipped: number }> {
+): Promise<{ succeeded: number; failed: number; skipped: number; failures: { name: string; reason: string }[] }> {
   const supabase = createClient();
   let succeeded = 0;
   let failed = 0;
+  const failures: { name: string; reason: string }[] = [];
 
   // Re-running an import over the same folder must not attach everything
   // again: skip files the vehicle already has (same name and size).
@@ -99,8 +102,15 @@ async function uploadFilesToVehicle(
   });
   const skipped = files.length - toUpload.length;
 
-  await Promise.all(
-    toUpload.map(async (file) => {
+  // A few at a time: firing every file at once (some are 25MB+) made uploads
+  // time out or get dropped.
+  const queue = [...toUpload];
+  const worker = async () => {
+    for (let file = queue.shift(); file; file = queue.shift()) {
+      await uploadOne(file);
+    }
+  };
+  const uploadOne = async (file: File) => {
       try {
         // org_id must be the first path segment (attachments bucket INSERT
         // policy) and the key must be storage-safe; file_name keeps the
@@ -147,13 +157,17 @@ async function uploadFilesToVehicle(
         }
 
         succeeded++;
-      } catch {
+      } catch (e) {
         failed++;
+        failures.push({
+          name: file.name,
+          reason: e instanceof Error ? e.message : (e as { message?: string } | null)?.message ?? "Upload failed",
+        });
       }
-    })
-  );
+  };
+  await Promise.all(Array.from({ length: Math.min(3, queue.length) }, worker));
 
-  return { succeeded, failed, skipped };
+  return { succeeded, failed, skipped, failures };
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -203,6 +217,7 @@ export function VehicleBulkImportDialog({
           status: "pending",
           succeeded: 0,
           skipped: 0,
+          failures: [],
           failed: 0,
         })
       );
@@ -237,7 +252,7 @@ export function VehicleBulkImportDialog({
         )
       );
 
-      const { succeeded, failed, skipped } = await uploadFilesToVehicle(
+      const { succeeded, failed, skipped, failures } = await uploadFilesToVehicle(
         group.vehicleId!,
         group.files,
         uploaderName,
@@ -253,6 +268,7 @@ export function VehicleBulkImportDialog({
                 succeeded,
                 failed,
                 skipped,
+                failures,
               }
             : g
         )
@@ -364,6 +380,15 @@ export function VehicleBulkImportDialog({
                       ? `${group.failed} failed`
                       : `${group.files.length} file${group.files.length !== 1 ? "s" : ""}`}
                   </p>
+                  {group.failures.length > 0 && (
+                    <ul className="mt-1 space-y-0.5 text-xs text-red-600 dark:text-red-400">
+                      {group.failures.map((f) => (
+                        <li key={f.name} className="break-words">
+                          {f.name} — {f.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
 
                 <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-300 dark:text-neutral-500" />
