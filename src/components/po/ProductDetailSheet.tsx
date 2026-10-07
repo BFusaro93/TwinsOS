@@ -663,6 +663,11 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
                   variant={product.category}
                   label={PRODUCT_CATEGORY_LABELS[product.category]}
                 />
+                {product.isTaxable && (
+                  <span className="rounded-full border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                    Taxable
+                  </span>
+                )}
                 {product.isInventory && (
                   <span className="rounded-full border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/40 px-2 py-0.5 text-xs font-medium text-teal-700 dark:text-teal-400">
                     Inventory

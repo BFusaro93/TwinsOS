@@ -116,6 +116,7 @@ export function mapProductItem(row: ProductItemRow): ProductItem {
     vendorName: row.vendor_name,
     alternateVendors: (row.alternate_vendors as unknown as PartVendor[]) ?? [],
     isInventory: row.is_inventory,
+    isTaxable: (row as unknown as { is_taxable?: boolean }).is_taxable ?? false,
     quantityOnHand: row.quantity_on_hand,
     pictureUrl: row.picture_url,
     costLayers: (row.cost_layers as unknown as CostLayer[]) ?? [],

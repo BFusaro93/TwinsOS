@@ -169,6 +169,7 @@ export function useCreateProduct() {
           vendor_name: input.vendorName,
           alternate_vendors: input.alternateVendors as unknown as import("@/types/supabase").Json,
           is_inventory: input.isInventory,
+          is_taxable: input.isTaxable ?? true,
           quantity_on_hand: input.quantityOnHand,
           picture_url: input.pictureUrl,
           cost_layers: input.costLayers as unknown as import("@/types/supabase").Json,
@@ -243,6 +244,7 @@ export function useUpdateProduct() {
           ...(input.vendorId !== undefined && { vendor_id: input.vendorId || null }),
           ...(input.vendorName !== undefined && { vendor_name: input.vendorName }),
           ...(input.isInventory !== undefined && { is_inventory: input.isInventory }),
+          ...(input.isTaxable !== undefined && { is_taxable: input.isTaxable }),
           ...(input.pictureUrl !== undefined && { picture_url: input.pictureUrl }),
           ...(input.minimumStock !== undefined && { minimum_stock: input.minimumStock }),
           ...(input.partCategory !== undefined && { part_category: input.partCategory }),
@@ -375,6 +377,13 @@ function parseCentsOrNaN(raw: string | undefined): number | null {
   return Math.round(parseFloat(raw) * 100);
 }
 
+/** CSV "taxable" cell: yes/true/1 -> true, no/false/0 -> false, blank -> true (new-product default). */
+function parseTaxableCell(raw: string | undefined): boolean {
+  const v = raw?.trim().toLowerCase();
+  if (!v) return true;
+  return !["no", "false", "0", "n"].includes(v);
+}
+
 export function useBulkImportProducts() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -419,6 +428,8 @@ export function useBulkImportProducts() {
             price: salePriceCents ?? unitCostCents ?? 0,
             vendor_name: r.vendorName?.trim() || undefined,
             is_inventory: isInventory,
+            // Blank/omitted column -> catalog default (taxable). Only an explicit "no" opts out.
+            is_taxable: parseTaxableCell(r.taxable),
             quantity_on_hand: qoh,
             cost_layers: [] as unknown as import("@/types/supabase").Json,
             alternate_vendors: [] as unknown as import("@/types/supabase").Json,
@@ -441,6 +452,8 @@ export function useBulkImportProducts() {
               price: row.price,
               vendor_name: row.vendor_name,
               is_inventory: row.is_inventory,
+              // Only overwrite the flag on a re-import when the CSV actually carries the column.
+              ...(r.taxable?.trim() ? { is_taxable: row.is_taxable } : {}),
               quantity_on_hand: row.quantity_on_hand,
             }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null)
               .select()
