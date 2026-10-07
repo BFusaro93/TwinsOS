@@ -4,6 +4,30 @@ import { createServiceClient } from "@/lib/supabase/server";
 type AnySupabase = any;
 
 /**
+ * Org default for crew pauses: unpaid unless the org explicitly turned
+ * `customizations.crewBreaksUnpaid` off. Falls back to unpaid on a failed
+ * read — the documented default — rather than throwing.
+ */
+export async function getCrewBreaksUnpaid(supabase: AnySupabase, orgId: string | null | undefined): Promise<boolean> {
+  if (!orgId) return true;
+  try {
+    const { data } = await supabase.from("organizations").select("customizations").eq("id", orgId).maybeSingle();
+    const v = (data?.customizations as Record<string, unknown> | null | undefined)?.crewBreaksUnpaid;
+    return v !== false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Resolves whether a visit's break_minutes are UNPAID: the per-visit
+ * break_paid override wins (true = paid, false = unpaid); NULL follows the org.
+ */
+export function isBreakUnpaid(breakPaid: boolean | null | undefined, orgBreaksUnpaid: boolean): boolean {
+  return breakPaid == null ? orgBreaksUnpaid : !breakPaid;
+}
+
+/**
  * Burdened labor cost (cents) of the CLOSED crew-member punches recorded
  * against `visitId`: Σ hours (net of break + lunch) × the member's
  * labor_burden_cents_per_hour. Shared by the visit and stop clock-out routes
@@ -11,6 +35,14 @@ type AnySupabase = any;
  *
  * Punches are only ever recorded against a stop's anchor visit (the crew
  * clocks in once for the stop).
+ *
+ * Pause time (the visit's break_minutes, written by Pause/Resume on every
+ * visit in the stop, so the anchor's value is the stop's) is deducted from each
+ * member's span when the break is UNPAID (org default, or the visit's
+ * break_paid override); when PAID the full span is costed. Hours elsewhere
+ * (computeActualHours, crm_recompute_job_actual_hours, rpt_job_visits) are net
+ * of break either way: hours measure productivity on site, pay is a separate
+ * question. A member's cost never goes below 0.
  */
 export async function sumPunchLaborCents(supabase: AnySupabase, visitId: string): Promise<number> {
   const { data: memberTimes } = await supabase
@@ -28,6 +60,16 @@ export async function sumPunchLaborCents(supabase: AnySupabase, visitId: string)
   }[];
   if (punches.length === 0) return 0;
 
+  const { data: visitRow } = await supabase
+    .from("crm_job_visits")
+    .select("org_id, break_minutes, break_paid")
+    .eq("id", visitId)
+    .maybeSingle();
+  const orgBreaksUnpaid = await getCrewBreaksUnpaid(supabase, visitRow?.org_id as string | undefined);
+  const unpaidBreakMins = visitRow && isBreakUnpaid(visitRow.break_paid as boolean | null, orgBreaksUnpaid)
+    ? Math.max(0, Number(visitRow.break_minutes ?? 0))
+    : 0;
+
   const memberIds = [...new Set(punches.map((p) => p.crew_member_id))];
   const { data: members } = await supabase
     .from("crm_crew_members")
@@ -43,7 +85,7 @@ export async function sumPunchLaborCents(supabase: AnySupabase, visitId: string)
     if (!p.clocked_in_at) continue;
     const inMs = new Date(p.clocked_in_at).getTime();
     const outMs = new Date(p.clocked_out_at).getTime();
-    const deductMins = Number(p.break_minutes ?? 0) + Number(p.lunch_minutes ?? 0);
+    const deductMins = Number(p.break_minutes ?? 0) + Number(p.lunch_minutes ?? 0) + unpaidBreakMins;
     const hours = Math.max(0, (outMs - inMs) / 3_600_000 - deductMins / 60);
     total += Math.round(hours * (rateById.get(p.crew_member_id) ?? 0));
   }

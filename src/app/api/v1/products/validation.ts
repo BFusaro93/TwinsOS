@@ -19,6 +19,7 @@ export const createProductSchema = z.object({
   priceCents: z.number().int().nonnegative().optional().describe("What you CHARGE per unit, in CENTS (integer)."),
   vendorId: z.string().uuid().optional().describe("Preferred vendor. Must belong to the calling key's organization."),
   isInventory: z.boolean().optional().describe("Whether stock on hand is tracked for this item."),
+  isTaxable: z.boolean().optional().describe("Whether this item is taxable when sold on a client invoice. Defaults to true."),
   // Written to BOTH product_items and parts (for a maintenance_part), the
   // same as the app's own useCreateProduct — it used to land on parts only,
   // leaving the catalog permanently reading 0.
@@ -46,6 +47,7 @@ export const updateProductSchema = z.object({
   // Nullable: product_items.vendor_id is nullable, so null clears the vendor.
   vendorId: z.string().uuid().nullable().optional(),
   isInventory: z.boolean().optional(),
+  isTaxable: z.boolean().optional().describe("Whether this item is taxable when sold on a client invoice."),
   // quantityOnHand is deliberately absent — stock changes only via goods
   // receipt (CLAUDE.md), never a direct catalog write.
 });

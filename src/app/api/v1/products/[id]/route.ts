@@ -74,6 +74,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.priceCents !== undefined && { price: body.priceCents }),
       ...(body.vendorId !== undefined && { vendor_id: body.vendorId, vendor_name: vendorName }),
       ...(body.isInventory !== undefined && { is_inventory: body.isInventory }),
+      ...(body.isTaxable !== undefined && { is_taxable: body.isTaxable }),
     })
     .eq("org_id", auth.orgId)
     .eq("id", id)

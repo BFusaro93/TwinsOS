@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { SettingRow } from "@/components/settings/settings-ui";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
@@ -355,6 +356,17 @@ export function OrganizationTab() {
                 Save
               </Button>
             </div>
+          </SettingRow>
+          <SettingRow
+            label="Crew pauses are unpaid"
+            description="When a crew pauses a stop (lunch, a break), that time is deducted from their paid labor cost. Turn off to pay for pauses. Hours worked are always net of pauses. The office can override this per visit on the dispatch board."
+          >
+            <Switch
+              checked={remoteCustomizations.crewBreaksUnpaid !== false}
+              disabled={savingSettings}
+              onCheckedChange={(checked) => updateOrgSettings({ customizations: { crewBreaksUnpaid: checked } })}
+              aria-label="Crew pauses are unpaid"
+            />
           </SettingRow>
         </div>
       </div>

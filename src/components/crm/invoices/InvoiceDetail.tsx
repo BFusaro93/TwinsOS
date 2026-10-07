@@ -285,7 +285,8 @@ function LineItemRow({
     const next = { ...row, isTaxable: !row.isTaxable };
     setRow(next);
     try {
-      await upsert({ invoiceId, item: buildUpsertPayload(next) });
+      // recalc: persist the header's tax/total from the lines right away.
+      await upsert({ invoiceId, item: buildUpsertPayload(next), recalc: true });
     } catch {
       setRow(row);
       toast.error("Failed to update taxable setting");

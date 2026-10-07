@@ -1091,10 +1091,13 @@ export function useUpsertInvoiceLineItem() {
     mutationFn: async ({
       invoiceId,
       item,
+      recalc = false,
     }: {
       invoiceId: string;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       item: Record<string, any>;
+      /** After updating an existing line, re-derive and persist the invoice's header totals. */
+      recalc?: boolean;
     }) => {
       const supabase = createClient();
       // A blind .upsert() with a partial payload fails NOT NULL validation
@@ -1111,6 +1114,9 @@ export function useUpsertInvoiceLineItem() {
           .update(patch)
           .eq("id", id);
         if (error) throwIfLockedInvoiceError(error);
+        // A tax-affecting edit (taxable toggle) must not leave the stored
+        // header's tax_cents/total_cents stale until the next Save.
+        if (recalc) await recalcInvoiceTotalsFromLines(supabase, invoiceId);
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any)
@@ -1119,8 +1125,13 @@ export function useUpsertInvoiceLineItem() {
         if (error) throwIfLockedInvoiceError(error);
       }
     },
-    onSuccess: (_d, vars) =>
-      qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.invoiceId] }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.invoiceId] });
+      if (vars.recalc) {
+        qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+        qc.invalidateQueries({ queryKey: ["clients"] });
+      }
+    },
   });
 }
 
@@ -1209,6 +1220,17 @@ export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, 
     .eq("id", id);
   if (error) throwIfLockedInvoiceError(error);
 
+  return recalcInvoiceTotalsFromLines(supabase, invoiceId);
+}
+
+/**
+ * Re-derives an invoice's stored header totals (subtotal/discount/tax/total/
+ * balance) from its persisted line items via computeInvoiceTotals, then
+ * reconciles payments. Used after any line change that must not leave stale
+ * tax_cents/total_cents (line delete, taxable toggle).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function recalcInvoiceTotalsFromLines(supabase: any, invoiceId: string) {
   // Recalculate invoice totals from remaining line items
   // Both reads must succeed: a swallowed failure would recompute the invoice
   // from zero line items and write a $0 total over the real one.
@@ -1984,12 +2006,29 @@ export function useCreateInvoiceFromJob() {
       }
       const taxRateBps = resolveAutoInvoiceTaxRateBps(estimateTaxRateBps, jobRow.clients?.default_tax_rate_bps);
       const svcById = new Map((jobRow.crm_job_services ?? []).map((s) => [s.id, s]));
+      // Product lines take the catalog product's selling-tax flag
+      // (product_items.is_taxable); a zero tax rate still yields zero tax.
+      const productIds = [...new Set(lineItems.map((li) => li.productId).filter((id): id is string => !!id))];
+      const productTaxable = new Map<string, boolean>();
+      if (productIds.length > 0) {
+        const { data: taxRows, error: taxErr } = await supabase
+          .from("product_items")
+          .select("id, is_taxable")
+          .in("id", productIds);
+        if (taxErr) throw taxErr;
+        for (const t of taxRows ?? []) productTaxable.set(t.id, t.is_taxable ?? false);
+      }
       const lines = lineItems.map((li) => {
         const svc = li.jobServiceId ? svcById.get(li.jobServiceId) : undefined;
+        const isTaxable = svc
+          ? resolveJobServiceTaxable(svc.is_taxable, svc.crm_services?.is_taxable)
+          : li.productId
+            ? (productTaxable.get(li.productId) ?? false)
+            : false;
         return {
           ...li,
           totalCents: Math.round(li.totalCents),
-          isTaxable: svc ? resolveJobServiceTaxable(svc.is_taxable, svc.crm_services?.is_taxable) : false,
+          isTaxable,
         };
       });
       const { subtotalCents, taxCents, totalCents } = computeAutoInvoiceTotals(lines, taxRateBps);

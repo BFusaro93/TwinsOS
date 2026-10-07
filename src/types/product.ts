@@ -23,6 +23,8 @@ export interface ProductItem extends BaseRecord {
   vendorName: string;
   alternateVendors: PartVendor[];
   isInventory: boolean;
+  /** Selling tax: copied to is_taxable on client invoice lines billing this product. Unrelated to the PO line `taxable` purchasing flag. */
+  isTaxable: boolean;
   quantityOnHand: number;
   pictureUrl: string | null;
   /** Receipt history used for WAC and FIFO cost calculations. */
