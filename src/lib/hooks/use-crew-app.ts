@@ -256,6 +256,8 @@ function mapVisit(row: Record<string, unknown>): VisitWithNotesStamp {
     clockedOutAt:         row.clocked_out_at as string | null,
     pausedAt:             row.paused_at as string | null,
     breakMinutes:         (row.break_minutes as number) ?? 0,
+    // Office-only override; deliberately not selected into the crew app.
+    breakPaid:            null,
     acknowledgedNotesAt:  row.acknowledged_notes_at as string | null,
     notesToCrewUpdatedAt: (row.notes_to_crew_updated_at as string) ?? null,
     skipReason:           row.skip_reason as string | null,
@@ -997,6 +999,31 @@ export function useUpsertCrewMemberTime() {
       qc.invalidateQueries({ queryKey: ["crew-member-times"] });
     },
     onError: () => toast.error("Failed to save crew member time"),
+  });
+}
+
+/**
+ * Office-only: sets whether a stop's crew pause time is paid (true), unpaid
+ * (false) or follows the org setting (null). The route rejects crew logins and
+ * recomputes the stop's stored labor cost. No crew-app screen uses this.
+ */
+export function useSetVisitBreakPaid() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ visitId, breakPaid }: { visitId: string; breakPaid: boolean | null }) => {
+      const res = await fetch(`/api/crm/crew/visits/${visitId}/break-paid`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ breakPaid }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+    },
+    onError: () => toast.error("Failed to update break pay"),
   });
 }
 

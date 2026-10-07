@@ -1647,7 +1647,8 @@ function JobDetailSheet({
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Trash2 } from "lucide-react";
-import { useCrewMemberTimes, useCrewMemberTimesForDate, useUpsertCrewMemberTime, useDeleteCrewMemberTime } from "@/lib/hooks/use-crew-app";
+import { useCrewMemberTimes, useCrewMemberTimesForDate, useUpsertCrewMemberTime, useDeleteCrewMemberTime, useSetVisitBreakPaid } from "@/lib/hooks/use-crew-app";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useCrewRouteOrder, useSaveRouteOrder, routeOrderKey, weekdayOfDate } from "@/lib/hooks/use-route-order";
 import { SearchInput } from "@/components/shared/SearchInput";
 
@@ -2545,6 +2546,10 @@ function EditJobTimesDialog({
   const del = useDeleteCrewMemberTime();
   const updateVisit = useUpdateVisit();
   const addCrewMember = useAddCrewMember();
+  const setBreakPaid = useSetVisitBreakPaid();
+  // Org default shown in the "Follow company setting" option label.
+  const { data: orgSettings } = useOrgSettings();
+  const orgBreaksUnpaid = orgSettings?.customizations?.crewBreaksUnpaid !== false;
 
   const crew = crewsWithMembers?.find((c) => c.id === crewId);
   const allMembers = crew?.members ?? [];
@@ -2690,6 +2695,32 @@ function EditJobTimesDialog({
         <DialogHeader>
           <DialogTitle>Edit Job Times</DialogTitle>
         </DialogHeader>
+
+        {/* Pause time. Hours are net of it either way; this only decides
+            whether the crew is PAID for it (labor cost). Office only. */}
+        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-slate-50 dark:bg-neutral-900 px-3 py-2">
+          <span className="text-xs text-slate-700 dark:text-neutral-300">
+            Pause time: <strong>{visit.breakMinutes ?? 0} min</strong>
+          </span>
+          <span className="text-xs text-muted-foreground">Break paid</span>
+          <Select
+            value={visit.breakPaid == null ? "follow" : visit.breakPaid ? "paid" : "unpaid"}
+            onValueChange={(v) =>
+              setBreakPaid.mutate({ visitId: anchorVisitId, breakPaid: v === "follow" ? null : v === "paid" })
+            }
+          >
+            <SelectTrigger className="h-8 w-56 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="follow" className="text-xs">
+                Follow company setting ({orgBreaksUnpaid ? "unpaid" : "paid"})
+              </SelectItem>
+              <SelectItem value="paid" className="text-xs">Paid</SelectItem>
+              <SelectItem value="unpaid" className="text-xs">Unpaid</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         <div className="divide-y">
           {memberTimes.map((t) => (
