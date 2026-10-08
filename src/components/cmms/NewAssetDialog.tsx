@@ -83,6 +83,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
   const [purchaseDate, setPurchaseDate] = useState("");
   const [purchasePrice, setPurchasePrice] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
+  const [financeInstitution, setFinanceInstitution] = useState("");
 
   // Warranty
   const [warranty, setWarranty] = useState<WarrantyFormValue>(EMPTY_WARRANTY_FORM);
@@ -118,6 +119,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
       setPurchaseDate(isDuplicate ? "" : (initialData.purchaseDate ?? ""));
       setPurchasePrice(isDuplicate ? "" : (initialData.purchasePrice ? (initialData.purchasePrice / 100).toFixed(2) : ""));
       setPaymentMethod(isDuplicate ? "" : (initialData.paymentMethod ?? ""));
+      setFinanceInstitution(isDuplicate ? "" : (initialData.financeInstitution ?? ""));
       // A copy is a different unit with its own purchase, so its own warranty.
       setWarranty(isDuplicate ? EMPTY_WARRANTY_FORM : warrantyFormFromRecord(initialData));
       setNotes(initialData.notes ?? "");
@@ -174,6 +176,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
     setPurchaseDate("");
     setPurchasePrice("");
     setPaymentMethod("");
+    setFinanceInstitution("");
     setWarranty(EMPTY_WARRANTY_FORM);
     setNotes("");
   }
@@ -211,7 +214,7 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
       purchaseDate: purchaseDate || null,
       purchasePrice: purchasePrice ? Math.round(parseFloat(purchasePrice) * 100) : null,
       paymentMethod: (paymentMethod as import("@/types/cmms").PaymentMethod) || null,
-      financeInstitution: null,
+      financeInstitution: financeInstitution.trim() || null,
       photoUrl: isEditing ? (initialData?.photoUrl ?? null) : null,
       notes: notes || null,
       ...resolvedWarranty.fields,
@@ -543,6 +546,16 @@ export function NewAssetDialog({ open, onOpenChange, initialData, mode = "edit",
                     <SelectItem value="rental">Rental</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="asset-finance-institution">Finance Institution</Label>
+                <Input
+                  id="asset-finance-institution"
+                  value={financeInstitution}
+                  onChange={(e) => setFinanceInstitution(e.target.value)}
+                  placeholder="e.g. John Deere Financial"
+                />
               </div>
             </div>
 
