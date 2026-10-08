@@ -38,11 +38,11 @@ export function HelpMenu() {
           <Button
             variant="outline"
             size="sm"
-            className="h-9 shrink-0 gap-1.5 rounded-full border-border px-3 text-slate-600 dark:text-neutral-400 hover:text-slate-900 dark:hover:text-neutral-100"
+            className="h-9 shrink-0 gap-1.5 rounded-full border-border px-2.5 sm:px-3 text-slate-600 dark:text-neutral-400 hover:text-slate-900 dark:hover:text-neutral-100"
             title="Help"
           >
             <HelpCircle className="h-4 w-4" />
-            Help
+            <span className="hidden sm:inline">Help</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">

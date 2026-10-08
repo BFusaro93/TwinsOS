@@ -70,7 +70,7 @@ export function VehicleListPanel({ vehicles, selectedId, onSelect }: VehicleList
               </div>
               <div className="mt-0.5 flex items-center justify-between gap-2">
                 <span className="truncate text-xs text-muted-foreground">
-                  {vehicle.licensePlate ?? "No plate"} · {vehicle.division ?? "—"}
+                  {[vehicle.licensePlate ?? "No plate", vehicle.assignedCrew || vehicle.division].filter(Boolean).join(" · ")}
                 </span>
                 <StatusBadge
                   variant={vehicle.status as Parameters<typeof StatusBadge>[0]["variant"]}

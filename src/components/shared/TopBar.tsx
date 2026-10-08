@@ -274,7 +274,7 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
     <>
     <EditProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
     <ImpersonationBanner />
-    <header className="flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-4 border-b bg-card px-4 pt-[env(safe-area-inset-top)]">
+    <header className="flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-2 border-b bg-card px-4 sm:gap-4 pt-[env(safe-area-inset-top)]">
       <StandaloneBackButton />
       {sidebarToggle && (
         <>
@@ -328,6 +328,17 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
           className="h-8 cursor-pointer bg-slate-50 dark:bg-muted/40 pl-8 text-sm"
         />
       </div>
+
+      {/* Search — icon button on phones, where the full field is hidden */}
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Search"
+        onClick={() => setSearchOpen(true)}
+        className="ml-auto shrink-0 text-muted-foreground sm:hidden"
+      >
+        <Search className="h-5 w-5" />
+      </Button>
 
       <GlobalSearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
 
