@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EditButton } from "@/components/shared/EditButton";
 import { ASSET_STATUS_LABELS } from "@/lib/constants";
+import { SubAssetsTab } from "@/components/shared/SubAssetsTab";
+import { NewAssetDialog } from "@/components/cmms/NewAssetDialog";
 import { AssetPartsTab } from "@/components/shared/AssetPartsTab";
 import { WOHistoryTab } from "@/components/shared/WOHistoryTab";
 import { AssetMetersTab } from "@/components/shared/AssetMetersTab";
@@ -495,6 +497,7 @@ const ASSET_STATUS_OPTIONS = Object.entries(ASSET_STATUS_LABELS) as [AssetStatus
 
 export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
   const [editOpen, setEditOpen] = useState(false);
+  const [subAssetOpen, setSubAssetOpen] = useState(false);
   const [status, setStatus] = useState<AssetStatus>(vehicle.status as AssetStatus);
   const { mutate: updateVehicleStatus } = useUpdateVehicleStatus();
   const { canWriteEquipt } = useRoleCapabilities();
@@ -579,6 +582,11 @@ export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
             content: <AssetMetersTab assetId={vehicle.id} recordLabel="vehicle" />,
           },
           {
+            value: "sub-assets",
+            label: "Sub-assets",
+            content: <SubAssetsTab parent={{ kind: "vehicle", id: vehicle.id }} onAddSubAsset={() => setSubAssetOpen(true)} />,
+          },
+          {
             value: "files",
             label: "Files",
             content: <FilesTab vehicle={vehicle} />,
@@ -591,6 +599,8 @@ export function VehicleDetailPanel({ vehicle }: VehicleDetailPanelProps) {
         ]}
       />
       <NewVehicleDialog open={editOpen} onOpenChange={setEditOpen} initialData={vehicle} />
+      {/* Sub-asset dialog: blank create form with this vehicle pre-selected as parent */}
+      <NewAssetDialog open={subAssetOpen} onOpenChange={setSubAssetOpen} presetParentVehicleId={vehicle.id} />
     </div>
   );
 }
