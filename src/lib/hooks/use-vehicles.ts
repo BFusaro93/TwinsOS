@@ -268,8 +268,10 @@ export function useBulkImportVehicles() {
               purchase_vendor_name: row.purchase_vendor_name,
               purchase_date: row.purchase_date,
               purchase_price: row.purchase_price,
-              payment_method: row.payment_method,
-              finance_institution: row.finance_institution,
+              // A blank financing cell must not wipe saved financing details when a
+              // CSV is re-imported to update other fields (e.g. mileage/VIN).
+              ...(row.payment_method ? { payment_method: row.payment_method } : {}),
+              ...(row.finance_institution ? { finance_institution: row.finance_institution } : {}),
             }).eq("asset_tag", row.asset_tag).eq("org_id", profile!.org_id).is("deleted_at", null);
             if (updateErr) {
               failed.push({ row: rowNum, error: `"${name}": ${updateErr.message}` });

@@ -215,6 +215,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
       assignedCrew: assignedCrew || null,
       barcode: null,
       parentAssetId: null,
+      parentVehicleId: null,
       location: location !== "none" ? location : null,
       purchaseVendorId: purchaseVendorId || null,
       // A vendor typed/imported as text has a name but no linked vendor row —

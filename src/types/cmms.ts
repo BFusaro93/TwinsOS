@@ -73,6 +73,8 @@ export interface Asset extends BaseRecord {
   assignedCrew: string | null;
   barcode: string | null;
   parentAssetId: string | null;
+  /** Set when the asset is a sub-asset (plow, salter…) attached to a vehicle. */
+  parentVehicleId: string | null;
   purchaseVendorId: string | null;
   purchaseVendorName: string | null;
   purchaseDate: string | null;

@@ -64,6 +64,7 @@ export function useCreateAsset() {
         assigned_crew: input.assignedCrew,
         barcode: input.barcode,
         parent_asset_id: input.parentAssetId,
+        parent_vehicle_id: input.parentVehicleId,
         purchase_vendor_id: input.purchaseVendorId,
         purchase_vendor_name: input.purchaseVendorName,
         purchase_date: input.purchaseDate,
@@ -116,6 +117,7 @@ export function useUpdateAsset() {
         ...(input.photoUrl !== undefined && { photo_url: input.photoUrl }),
         ...(input.barcode !== undefined && { barcode: input.barcode }),
         ...(input.parentAssetId !== undefined && { parent_asset_id: input.parentAssetId }),
+        ...(input.parentVehicleId !== undefined && { parent_vehicle_id: input.parentVehicleId }),
         ...(input.licensePlate !== undefined && { license_plate: input.licensePlate }),
         ...(input.warrantyStartDate !== undefined && { warranty_start_date: input.warrantyStartDate }),
         ...(input.warrantyTermMonths !== undefined && { warranty_term_months: input.warrantyTermMonths }),
@@ -235,8 +237,10 @@ export function useBulkImportAssets() {
             purchase_vendor_name: row.purchase_vendor_name,
             purchase_date: row.purchase_date,
             purchase_price: row.purchase_price,
-            payment_method: row.payment_method,
-            finance_institution: row.finance_institution,
+            // A blank financing cell must not wipe saved financing details when a
+            // CSV is re-imported to update other fields (e.g. mileage/VIN).
+            ...(row.payment_method ? { payment_method: row.payment_method } : {}),
+            ...(row.finance_institution ? { finance_institution: row.finance_institution } : {}),
           }).eq("asset_tag", row.asset_tag).eq("org_id", profile!.org_id).is("deleted_at", null);
           if (updateErr) throw updateErr;
         } else if (error) {

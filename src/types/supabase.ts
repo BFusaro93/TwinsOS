@@ -465,6 +465,7 @@ export type Database = {
           oil_filter_part_number: string | null
           org_id: string
           parent_asset_id: string | null
+          parent_vehicle_id: string | null
           payment_method: string | null
           photo_url: string | null
           purchase_date: string | null
@@ -506,6 +507,7 @@ export type Database = {
           oil_filter_part_number?: string | null
           org_id?: string
           parent_asset_id?: string | null
+          parent_vehicle_id?: string | null
           payment_method?: string | null
           photo_url?: string | null
           purchase_date?: string | null
@@ -547,6 +549,7 @@ export type Database = {
           oil_filter_part_number?: string | null
           org_id?: string
           parent_asset_id?: string | null
+          parent_vehicle_id?: string | null
           payment_method?: string | null
           photo_url?: string | null
           purchase_date?: string | null
@@ -583,6 +586,13 @@ export type Database = {
             columns: ["parent_asset_id"]
             isOneToOne: false
             referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_parent_vehicle_id_fkey"
+            columns: ["parent_vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
           {
