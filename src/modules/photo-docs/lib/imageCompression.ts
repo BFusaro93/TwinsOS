@@ -19,7 +19,12 @@ export async function compressPhoto(file: File): Promise<File> {
   };
 
   try {
-    return await imageCompression(file, options);
+    const out = await imageCompression(file, options);
+    // browser-image-compression can hand back a nameless Blob (e.g. when the
+    // worker path can't construct a File); downstream code reads `.name`.
+    if (out instanceof File && out.name) return out;
+    const name = file.name || "photo.jpg";
+    return new File([out], name, { type: out.type || file.type, lastModified: Date.now() });
   } catch {
     // If compression fails, return original rather than blocking upload
     return file;

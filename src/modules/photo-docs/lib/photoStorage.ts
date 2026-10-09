@@ -10,14 +10,14 @@ const ANNOTATED_BUCKET = "job-photos-annotated";
 export function buildPhotoPath(
   orgId: string,
   projectId: string,
-  fileName: string,
+  fileName: string | undefined,
 ): string {
   // fileName is a browser File.name, which a crafted client can set to
   // anything (including "/" and ".." segments) — restrict the extracted
   // extension to a safe charset before it lands in a storage path, or a
   // crafted name could traverse out of this org/project's prefix in the
   // shared bucket (same class of bug fixed in the crew-app photos route).
-  const rawExt = fileName.split(".").pop() ?? "jpg";
+  const rawExt = (fileName ?? "").split(".").pop() ?? "jpg";
   const ext = /^[a-zA-Z0-9]{1,10}$/.test(rawExt) ? rawExt : "jpg";
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 8);
