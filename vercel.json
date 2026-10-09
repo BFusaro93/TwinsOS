@@ -3,6 +3,7 @@
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
+  "ignoreCommand": "bash scripts/vercel-ignore-build.sh",
   "outputDirectory": ".next",
   "crons": [
     {
