@@ -209,7 +209,7 @@ export function SnowPricingCalculatorPage() {
   // Totals
   const subtotal = saltSeasonTotal + iceSeasonTotal + machineTotal + plowTotal + shovelTotal + storageTotal;
   const totalWithMarkup = subtotal + subtotal * (num(markupPct) / 100);
-  const perInchCost = (subtotal - saltSeasonTotal) / SEASON_INCHES_ASSUMED;
+  const perInchCost = (subtotal - saltSeasonTotal - iceSeasonTotal) / SEASON_INCHES_ASSUMED;
 
   // Base rate for 1-3" defaults to 3x the per-inch cost, unless the user has typed their own value
   useEffect(() => {
