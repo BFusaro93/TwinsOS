@@ -265,7 +265,7 @@ export function useUpdateGoodsReceipt() {
 
         const { data: products } = await supabase
           .from("product_items")
-          .select("id, name, part_number, quantity_on_hand")
+          .select("id, name, part_number, quantity_on_hand, category, is_inventory")
           .is("deleted_at", null);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: parts } = await (supabase as any)
@@ -288,6 +288,8 @@ export function useUpdateGoodsReceipt() {
           if (!matchedProduct) {
             throw new Error(`Could not find a catalog product for "${chg.name}" — inventory was not adjusted, receipt not saved.`);
           }
+          // Untracked non-maintenance products never held stock for receipts.
+          if (matchedProduct.category !== "maintenance_part" && !matchedProduct.is_inventory) return [];
           return [{ chg, matchedProduct }];
         });
 
