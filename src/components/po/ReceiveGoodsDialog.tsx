@@ -294,6 +294,11 @@ export function ReceiveGoodsDialog({
         const poLineItem = po.lineItems.find((li) => li.id === line.lineItemId);
         const matchedProduct = poLineItem ? matchProductForLine(poLineItem) : null;
 
+        // A line assigned to a project was bought for that job and used
+        // directly, so it never enters on-hand stock. The receipt row (and
+        // the project's cost, which reads the PO line) still stands.
+        if (poLineItem?.projectId) continue;
+
         if (!matchedProduct) {
           throw new Error(`No catalog product found for "${line.productItemName}" — cannot update inventory for this line.`);
         }

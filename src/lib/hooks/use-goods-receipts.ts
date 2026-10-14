@@ -260,8 +260,8 @@ export function useUpdateGoodsReceipt() {
       if (qtyChanges.length > 0 && currentReceipt) {
         const poLineItemIds = qtyChanges.map((c) => c.poLineItemId).filter((v): v is string => !!v);
         const { data: poLineItems } = poLineItemIds.length > 0
-          ? await supabase.from("po_line_items").select("id, product_item_id").in("id", poLineItemIds)
-          : { data: [] as { id: string; product_item_id: string | null }[] };
+          ? await supabase.from("po_line_items").select("id, product_item_id, project_id").in("id", poLineItemIds)
+          : { data: [] as { id: string; product_item_id: string | null; project_id: string | null }[] };
 
         const { data: products } = await supabase
           .from("product_items")
@@ -276,8 +276,11 @@ export function useUpdateGoodsReceipt() {
         // Resolve EVERY line's catalog product before moving any stock, so a
         // missing match on a later line can't leave earlier lines' inventory
         // already adjusted with the receipt unsaved.
-        const resolved = qtyChanges.map((chg) => {
+        const resolved = qtyChanges.flatMap((chg) => {
           const poLineItem = poLineItems?.find((pli) => pli.id === chg.poLineItemId);
+          // Project-assigned lines were received straight to the job and
+          // never entered stock, so correcting their quantity moves nothing.
+          if (poLineItem?.project_id) return [];
           const matchedProduct =
             (poLineItem?.product_item_id ? products?.find((p) => p.id === poLineItem.product_item_id) : null) ??
             (chg.partNumber ? products?.find((p) => p.part_number === chg.partNumber) : null) ??
@@ -285,7 +288,7 @@ export function useUpdateGoodsReceipt() {
           if (!matchedProduct) {
             throw new Error(`Could not find a catalog product for "${chg.name}" — inventory was not adjusted, receipt not saved.`);
           }
-          return { chg, matchedProduct };
+          return [{ chg, matchedProduct }];
         });
 
         for (const { chg, matchedProduct } of resolved) {
