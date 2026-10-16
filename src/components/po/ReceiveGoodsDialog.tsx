@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { syncPartQtyToProduct } from "@/lib/hooks/use-wo-costs";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useProducts, useReceiveProductCostLayer } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
@@ -293,6 +294,7 @@ export function ReceiveGoodsDialog({
         // Find the PO line item to look up the productItemId
         const poLineItem = po.lineItems.find((li) => li.id === line.lineItemId);
         const matchedProduct = poLineItem ? matchProductForLine(poLineItem) : null;
+        let receivedPartId: string | null = null;
 
         if (!matchedProduct) {
           throw new Error(`No catalog product found for "${line.productItemName}" — cannot update inventory for this line.`);
@@ -312,6 +314,7 @@ export function ReceiveGoodsDialog({
               poLineItemId: line.lineItemId,
             });
             applied.push({ kind: "part", partId: linkedPart.id, quantity: line.quantityReceived, unitCost: line.unitCost });
+            receivedPartId = linkedPart.id;
           }
         }
         // One RPC: cost layer + quantity_on_hand (20260930150000).
@@ -324,6 +327,10 @@ export function ReceiveGoodsDialog({
           poLineItemId: line.lineItemId,
         });
         applied.push({ kind: "product", productId: matchedProduct.id, quantity: line.quantityReceived, unitCost: line.unitCost });
+        // The part RPC nets any work-order usage recorded before this receipt
+        // (units already used) off the incoming stock, so the part can end up
+        // below on-hand + received. Mirror its final quantity onto the product.
+        if (receivedPartId) await syncPartQtyToProduct(createClient(), receivedPartId);
       }
     } catch (err) {
       // Undo the applied steps newest-first before rolling back the receipt,

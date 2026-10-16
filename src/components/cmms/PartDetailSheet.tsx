@@ -32,6 +32,8 @@ import { PODetailPanel } from "@/components/po/PODetailPanel";
 
 import { useParts, useUpdatePart, useAdjustPartQuantityManual } from "@/lib/hooks/use-parts";
 import { usePartOpenWOQty } from "@/lib/hooks/use-wo-costs";
+import { useWOPartShortfalls } from "@/lib/hooks/use-wo-part-shortfalls";
+import { PartShortfallBadge, PartShortfallNotice } from "@/components/cmms/PartShortfallBadge";
 import { useRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useProducts } from "@/lib/hooks/use-products";
@@ -708,6 +710,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
   }, [open]);
 
   const { data: woAssignedQty = 0 } = usePartOpenWOQty(part?.id ?? "");
+  const { byPart: shortfallsByPart } = useWOPartShortfalls();
 
   const activePoStatusesForReceipts = new Set(["requested", "pending", "approved", "ordered", "partially_fulfilled"]);
   const activePoLineItemsForPart = (purchaseOrders ?? [])
@@ -839,6 +842,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
                   <h2 className="min-w-0 flex-1 truncate text-lg font-semibold text-foreground">
                     {livePart.name}
                   </h2>
+                  <PartShortfallBadge rows={shortfallsByPart.get(livePart.id)} />
                   {canManageInventory && <EditButton onClick={() => setEditOpen(true)} />}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -878,6 +882,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
               </TabsList>
             </div>
             <TabsContent value="details" className="mt-0 min-h-0 flex-1 overflow-y-auto">
+              <PartShortfallNotice rows={shortfallsByPart.get(livePart.id)} />
               <DetailsTab
                 part={livePart}
                 allParts={allParts ?? []}
