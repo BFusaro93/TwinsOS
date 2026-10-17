@@ -208,6 +208,7 @@ export function useUpdatePart() {
         if (input.unitCost !== undefined) productSync.unit_cost = input.unitCost;
         if (input.quantityOnHand !== undefined) productSync.quantity_on_hand = input.quantityOnHand;
         if (input.minimumStock !== undefined) productSync.minimum_stock = input.minimumStock;
+        if (input.isInventory !== undefined) productSync.is_inventory = input.isInventory;
         if (input.pictureUrl !== undefined) productSync.picture_url = input.pictureUrl;
         if (input.vendorId !== undefined) productSync.vendor_id = input.vendorId || null;
         // product_items.vendor_name is NOT NULL (parts.vendor_name is nullable), so a cleared vendor syncs as "".
