@@ -104,6 +104,8 @@ interface InvoiceAllocation {
 
 import type { CRMPayment } from "@/types/crm-invoices";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { shiftYmd, todayInZone } from "@/lib/time/zone";
 import { SearchInput } from "@/components/shared/SearchInput";
 
 // ── multi-invoice charge form (fresh card/bank entry) ───────────────────────
@@ -386,7 +388,9 @@ export function AddPaymentDialog({
     }
     try {
       const result = await chargeMultiSaved.mutateAsync({ clientId, allocations: chargeAllocations });
-      if (result.status === "succeeded" && result.recorded === false) {
+      if (result.paidFromCredit) {
+        toast.success("Paid from the client's existing credit — no card was charged");
+      } else if (result.status === "succeeded" && result.recorded === false) {
         // Charged at Stripe but the ledger write failed — never let this read
         // as "nothing happened".
         toast.error(
@@ -959,15 +963,15 @@ export function PaymentsList({ clientId }: Props) {
   const [visibleKeys, setVisibleKeys] = useState<string[]>(PAYMENT_COLUMNS.map((c) => c.key));
   const [viewPayment, setViewPayment] = useState<CRMPayment | null>(null);
 
-  const today = new Date();
-  const thirtyDaysAgo = new Date(today);
-  thirtyDaysAgo.setDate(today.getDate() - 30);
+  // paymentDate is a calendar date — compare calendar dates on the org's clock.
+  const orgTimeZone = useOrgTimeZone();
+  const thirtyDaysAgo = shiftYmd(todayInZone(orgTimeZone), -30);
 
   const filtered = useMemo(() => {
     let list = payments ?? [];
 
     if (activeTab === "last30") {
-      list = list.filter((p) => new Date(p.paymentDate) >= thirtyDaysAgo);
+      list = list.filter((p) => p.paymentDate >= thirtyDaysAgo);
     } else {
       list = list.filter((p) => p.deletedAt != null);
     }
@@ -996,7 +1000,7 @@ export function PaymentsList({ clientId }: Props) {
     }
 
     return list;
-  }, [payments, activeTab, activeFilter, filterValue, search]);
+  }, [payments, activeTab, activeFilter, filterValue, search, thirtyDaysAgo]);
 
   if (!permissionsLoading && !can("acct_view_payment_list")) {
     return (

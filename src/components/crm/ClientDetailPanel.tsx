@@ -2073,7 +2073,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-xs font-medium text-slate-700 dark:text-neutral-300">{formatCurrency(est.totalCents)}</p>
-                    <p className="text-[10px] text-slate-400 dark:text-neutral-500">{new Date(est.estimateDate).toLocaleDateString()}</p>
+                    <p className="text-[10px] text-slate-400 dark:text-neutral-500">{formatDate(est.estimateDate)}</p>
                   </div>
                 </div>
               </button>
@@ -2402,7 +2402,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                           {formatCurrency(est.totalCents)}
                         </p>
                         <p className="text-[10px] text-slate-400 dark:text-neutral-500 mt-0.5">
-                          {new Date(est.estimateDate).toLocaleDateString()}
+                          {formatDate(est.estimateDate)}
                         </p>
                       </div>
                     </div>
@@ -2448,9 +2448,9 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                     </div>
                     {(contract.startDate || contract.endDate) && (
                       <p className="text-[10px] text-slate-400 dark:text-neutral-500">
-                        {contract.startDate ? new Date(contract.startDate).toLocaleDateString() : "—"}
+                        {formatDate(contract.startDate)}
                         {" – "}
-                        {contract.endDate ? new Date(contract.endDate).toLocaleDateString() : "ongoing"}
+                        {contract.endDate ? formatDate(contract.endDate) : "ongoing"}
                       </p>
                     )}
                   </div>
@@ -3042,7 +3042,7 @@ function AllEstimatesModal({
                     onClick={() => onOpenEstimate(e.id)}
                   >
                     <td className="px-4 py-2.5 text-neutral-700 dark:text-neutral-300">
-                      {new Date(e.estimateDate).toLocaleDateString()}
+                      {formatDate(e.estimateDate)}
                     </td>
                     <td className="px-4 py-2.5">
                       <Badge variant="outline" className="text-[10px] capitalize">{e.stage}</Badge>

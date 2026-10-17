@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 
 export interface CreatePaymentIntentResult {
@@ -47,6 +47,7 @@ export function useStartConnectOnboarding() {
 }
 
 export function useCreateCrmPaymentIntent() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({
       invoiceId,
@@ -67,6 +68,13 @@ export function useCreateCrmPaymentIntent() {
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to start payment");
       return body as CreatePaymentIntentResult;
+    },
+    // The route applies the client's existing credit BEFORE it can fail or
+    // return "nothing to charge", so invoices may have changed either way.
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
     },
   });
 }

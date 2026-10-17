@@ -227,7 +227,7 @@ export async function POST(
         // Notes belong to the anchor when it's part of this clock-out; when the
         // anchor was already completed, the crew typed them for the visits
         // being closed now — don't drop them.
-        completion_notes: (row.id === anchor.id || !anchorIsOpen) ? (notes ?? null) : undefined,
+        completion_notes: (row.id === anchor.id || !anchorIsOpen) ? (notes ?? undefined) : undefined,
         updated_at: now,
       })
       .eq("id", row.id)
