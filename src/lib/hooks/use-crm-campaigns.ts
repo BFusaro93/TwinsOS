@@ -3,6 +3,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { zoneWallClockToInstant } from "@/lib/time/zone";
 import type {
   CRMCampaign,
   CampaignStatus,
@@ -57,7 +59,22 @@ export function useCampaigns(statusFilter?: CampaignStatus | "all") {
   });
 }
 
+/**
+ * The Schedule Send field is a datetime-local ("2026-10-20T09:00") — a wall
+ * clock with no zone. Saved as-is, Postgres read it as UTC, so a 9:00 AM send
+ * went out at 5:00 AM Eastern (and the list showed 5:00 AM). Read it on the
+ * ORG's clock, like the sales-meeting reminders do, and store the real instant.
+ */
+function scheduledWallToInstantIso(value: string | null | undefined, timeZone: string): string | null {
+  if (!value) return null;
+  // Already an instant (has a zone designator after the time) — leave it.
+  if (/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(value.slice(10))) return value;
+  const [date, time] = value.split("T");
+  return zoneWallClockToInstant(date, time ?? "00:00", timeZone)?.toISOString() ?? null;
+}
+
 export function useCreateCampaign() {
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (values: NewCampaignFormValues) => {
@@ -71,7 +88,7 @@ export function useCreateCampaign() {
           target_segment: values.targetSegment,
           subject: values.subject || null,
           body: values.body || null,
-          scheduled_at: values.scheduledAt || null,
+          scheduled_at: scheduledWallToInstantIso(values.scheduledAt, orgTimeZone),
           audience_client_ids: values.audienceClientIds ?? [],
           status: "draft",
         })
@@ -85,6 +102,7 @@ export function useCreateCampaign() {
 }
 
 export function useUpdateCampaign() {
+  const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({
@@ -101,7 +119,7 @@ export function useUpdateCampaign() {
       if (updates.targetSegment !== undefined) patch.target_segment = updates.targetSegment;
       if (updates.subject !== undefined) patch.subject = updates.subject || null;
       if (updates.body !== undefined) patch.body = updates.body || null;
-      if (updates.scheduledAt !== undefined) patch.scheduled_at = updates.scheduledAt || null;
+      if (updates.scheduledAt !== undefined) patch.scheduled_at = scheduledWallToInstantIso(updates.scheduledAt, orgTimeZone);
       if (updates.audienceClientIds !== undefined) patch.audience_client_ids = updates.audienceClientIds;
       if (updates.status !== undefined) patch.status = updates.status;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
