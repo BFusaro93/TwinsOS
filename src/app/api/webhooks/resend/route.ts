@@ -3,10 +3,11 @@ import { Webhook } from "svix";
 import { createServiceClient } from "@/lib/supabase/server";
 
 // Maps a Resend event type to the client_activity column recording its
-// first occurrence. Resend's actual event catalog is: sent, delivered,
-// delivery_delayed, bounced, opened, clicked, failed, scheduled (confirmed
-// against the dashboard's own webhook event picker — no "complained" event
-// exists, despite that being a common convention on other providers).
+// first occurrence. Resend's event catalog (resend.com/docs/webhooks/event-types):
+// sent, delivered, delivery_delayed, bounced, opened, clicked, complained,
+// failed, scheduled, suppressed, received. "email.complained" (the recipient
+// hit "Report spam") has no timestamp column here — it is handled separately
+// below: it opts the client out of marketing instead.
 // Only events with a clear, single-column "did X happen and when" meaning
 // are tracked; email.sent/scheduled/delivery_delayed aren't (no column, low
 // value) — an unmapped event just falls through as a no-op.
@@ -31,7 +32,7 @@ const EVENT_COLUMN: Record<string, string> = {
  *   1. In the Resend dashboard, add a webhook pointed at this route's full URL.
  *   2. Copy the signing secret Resend shows you and set it as
  *      RESEND_WEBHOOK_SECRET in the environment.
- *   3. Subscribe the webhook to email.delivered/opened/clicked/bounced/failed.
+ *   3. Subscribe the webhook to email.delivered/opened/clicked/bounced/failed/complained.
  *
  * Every send call-site now stores the outbound message's Resend id as
  * client_activity.resend_message_id, which is how an incoming event here
@@ -66,6 +67,48 @@ export async function POST(request: Request) {
 
   const messageId = event.data.email_id;
   if (!messageId) {
+    return NextResponse.json({ received: true });
+  }
+
+  // A spam report. There is no activity column for it (an earlier migration
+  // removed complained_at), but ignoring it left the address receiving
+  // campaigns and kept hurting the sending domain's reputation. Treat it as a
+  // marketing opt-out: do_not_market stops campaigns/automation marketing mail,
+  // while service mail (invoices, estimates) still goes — a genuine bounce is
+  // the only thing that blocks those (email_bounced_at). Needs the Resend
+  // webhook to be subscribed to email.complained.
+  if (event.type === "email.complained") {
+    const supabase = createServiceClient();
+    const { data: row, error: lookupErr } = await supabase
+      .from("client_activity")
+      .select("client_id, org_id")
+      .eq("resend_message_id", messageId)
+      .maybeSingle();
+    if (lookupErr) {
+      console.error("[resend webhook] complaint lookup failed:", lookupErr);
+      return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+    }
+    if (row?.client_id) {
+      const { data: flipped, error: optOutErr } = await supabase
+        .from("clients")
+        .update({ do_not_market: true })
+        .eq("id", row.client_id)
+        .eq("do_not_market", false)
+        .select("id");
+      if (optOutErr) {
+        console.error("[resend webhook] failed to opt complained client out:", optOutErr);
+        return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+      }
+      // Leave a timeline note once (only when this delivery actually flipped it).
+      if (flipped?.length) {
+        await supabase.from("client_activity").insert({
+          org_id: row.org_id,
+          client_id: row.client_id,
+          activity_type: "note",
+          subject: "Reported an email as spam — removed from marketing",
+        });
+      }
+    }
     return NextResponse.json({ received: true });
   }
 

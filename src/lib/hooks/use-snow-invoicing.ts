@@ -95,9 +95,10 @@ export function useUninvoicedSnowVisits(filters: {
 
       if (visits.length === 0) return [];
 
-      // Exclude visits that already have a line item on a non-deleted invoice
-      // (visit_id), so generating invoices is idempotent. Line items have no
-      // deleted_at of their own — deletion happens via the parent invoice.
+      // Exclude visits that already have a line item on a live (non-deleted,
+      // non-void) invoice (visit_id), so generating invoices is idempotent. Line
+      // items have no deleted_at of their own — deletion happens via the parent
+      // invoice.
       // Chunked — one .in() over thousands of visit ids overflows the URL.
       const invoicedVisitIds = new Set<string>();
       for (const ids of chunkIds(visits.map((v) => v.id))) {
@@ -108,6 +109,10 @@ export function useUninvoicedSnowVisits(filters: {
             .select("id, visit_id, crm_invoices!inner(deleted_at)")
             .in("visit_id", ids)
             .is("crm_invoices.deleted_at", null)
+            // A voided invoice is a correction, not a decision that the work is
+            // unbillable — its visits go back in the queue (and the DB trigger
+            // frees their visit_id tag so the new invoice line can take it).
+            .neq("crm_invoices.status", "void")
             .order("id", { ascending: true })
         );
         for (const l of lines) if (l.visit_id) invoicedVisitIds.add(l.visit_id);
