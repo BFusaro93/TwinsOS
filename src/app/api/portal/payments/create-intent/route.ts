@@ -64,18 +64,6 @@ export async function POST(request: Request) {
   if (invoice.open_dispute_payment_id) {
     return NextResponse.json({ error: "This invoice can't be paid online right now. Please contact us." }, { status: 409 });
   }
-  // Settle with any credit/deposit already on the account first so the card
-  // only pays what is still owed. Service role: portal customers have no
-  // profile, so the user-session RPC guard would reject them.
-  try {
-    invoice.balance_cents = await applyCreditBeforeCharge(createServiceClient(), invoice);
-  } catch {
-    return NextResponse.json({ error: "We couldn't apply your account credit. Please try again or contact us." }, { status: 500 });
-  }
-  if (invoice.balance_cents <= 0) {
-    return NextResponse.json({ error: "Your account credit has paid this invoice in full — no card payment needed. Refresh to see it." }, { status: 409 });
-  }
-
   // stripe_connect_livemode isn't in the generated Supabase types yet (added
   // by a migration this session wrote but did not apply/regenerate types for).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,28 +76,6 @@ export async function POST(request: Request) {
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   if (!org.stripe_connect_account_id || !org.stripe_connect_charges_enabled) {
     return NextResponse.json({ error: "Online payments aren't available yet." }, { status: 400 });
-  }
-
-  // The processing fee only ever applies to card — ACH is the fee-free
-  // alternative by design, so it must never be computed for that path.
-  const { feeCents, totalChargeCents } =
-    paymentMethod === "card"
-      ? computeProcessingFee(
-          {
-            ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
-            ccProcessingFeeBps: org.cc_processing_fee_bps,
-            ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
-          },
-          invoice.balance_cents,
-          false
-        )
-      : { feeCents: 0, totalChargeCents: invoice.balance_cents };
-
-  if (totalChargeCents < STRIPE_MIN_CHARGE_CENTS) {
-    return NextResponse.json(
-      { error: "The remaining balance is below the $0.50 minimum for online payments. Please contact us to settle it." },
-      { status: 400 }
-    );
   }
 
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
@@ -142,6 +108,43 @@ export async function POST(request: Request) {
     isAch: paymentMethod === "us_bank_account",
   });
   if (refusal) return NextResponse.json({ error: refusal.body.error, code: refusal.body.code }, { status: refusal.status });
+
+  // Every check above can refuse; only now consume the account credit, so a refused
+  // attempt never leaves the invoice quietly changed.
+  // Settle with any credit/deposit already on the account first so the card
+  // only pays what is still owed. Service role: portal customers have no
+  // profile, so the user-session RPC guard would reject them.
+  try {
+    invoice.balance_cents = await applyCreditBeforeCharge(createServiceClient(), invoice);
+  } catch {
+    return NextResponse.json({ error: "We couldn't apply your account credit. Please try again or contact us." }, { status: 500 });
+  }
+  if (invoice.balance_cents <= 0) {
+    return NextResponse.json({ error: "Your account credit has paid this invoice in full — no card payment needed. Refresh to see it." }, { status: 409 });
+  }
+
+  // The processing fee only ever applies to card — ACH is the fee-free
+  // alternative by design, so it must never be computed for that path.
+  const { feeCents, totalChargeCents } =
+    paymentMethod === "card"
+      ? computeProcessingFee(
+          {
+            ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
+            ccProcessingFeeBps: org.cc_processing_fee_bps,
+            ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+          },
+          invoice.balance_cents,
+          false
+        )
+      : { feeCents: 0, totalChargeCents: invoice.balance_cents };
+
+  if (totalChargeCents < STRIPE_MIN_CHARGE_CENTS) {
+    return NextResponse.json(
+      { error: "The remaining balance is below the $0.50 minimum for online payments. Please contact us to settle it." },
+      { status: 400 }
+    );
+  }
+
 
   // Direct charge on the org's connected account — see create-intent/route.ts
   // (CRM staff-facing version) for the same pattern.
