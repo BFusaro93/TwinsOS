@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { getOrgReplyTo } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
-import { resolveMergeTags } from "@/lib/utils/document-template-renderer";
+import { resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 
 export async function POST(
   req: NextRequest,
@@ -150,7 +150,7 @@ export async function POST(
     "[companyphonenumber]": orgPhone,
   };
 
-  const resolvedSubject = resolveMergeTags(body.subject, mergeVars);
+  const resolvedSubject = resolveSubjectMergeTags(body.subject, mergeVars);
   const resolvedBody    = resolveMergeTags(body.bodyHtml, mergeVars);
 
   // Send via Resend

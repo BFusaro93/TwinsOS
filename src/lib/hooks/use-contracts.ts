@@ -412,7 +412,7 @@ export function useGenerateContractInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: contract, error: fetchErr } = await (supabase as any)
           .from("crm_contracts")
-          .select("id, org_id, client_id, title, status, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, clients!inner(deleted_at, default_terms)")
+          .select("id, org_id, client_id, title, status, po_number, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, clients!inner(deleted_at, default_terms)")
           .eq("id", contractId)
           .is("clients.deleted_at", null)
           .is("deleted_at", null)
@@ -511,6 +511,7 @@ export function useGenerateContractInvoices() {
             contract_id: contract.id,
             sales_rep_id: contract.sales_rep_id ?? null,
             description,
+            po_number: contract.po_number ?? null,
             invoice_date: plan.invoiceDate,
             terms: invoiceTerms,
             due_date: computeDueDate(plan.invoiceDate, invoiceTerms),

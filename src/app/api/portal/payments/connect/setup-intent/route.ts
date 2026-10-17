@@ -5,6 +5,8 @@ import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { getOrCreateStripeCustomer, summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
+import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
+import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe saved payment method (portal)");
@@ -22,6 +24,12 @@ export async function POST(request: Request) {
 
   const ctx = await getPortalContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Same limiter as portal create-intent: each call mints a Stripe SetupIntent.
+  // Fails open if the limiter errors.
+  if (!(await checkAuthRateLimit(`portal-setup-intent:${ctx.clientId}`, 20, 600))) {
+    return NextResponse.json({ error: "Too many attempts. Please wait a few minutes and try again." }, { status: 429 });
+  }
 
   const body = await request.json();
   const parsed = CreateSchema.safeParse(body);
@@ -55,40 +63,44 @@ export async function POST(request: Request) {
 
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
 
-  if (paymentMethod === "us_bank_account") {
-    if (!org.ach_payments_enabled || !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
-      return NextResponse.json({ error: "Bank transfer isn't available yet — please pay by card." }, { status: 400 });
+  try {
+    if (paymentMethod === "us_bank_account") {
+      if (!org.ach_payments_enabled || !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
+        return NextResponse.json({ error: "Bank transfer isn't available yet — please pay by card." }, { status: 400 });
+      }
     }
+
+    const customerId = await getOrCreateStripeCustomer(
+      stripe,
+      org.stripe_connect_account_id,
+      client.stripe_customer_id,
+      client
+    );
+
+    if (customerId !== client.stripe_customer_id) {
+      const serviceClient = createServiceClient();
+      const { error } = await serviceClient.from("clients").update({ stripe_customer_id: customerId }).eq("id", client.id).eq("org_id", ctx.orgId);
+      if (error) log.error("failed to save stripe customer id", { error, clientId: client.id });
+    }
+
+    const setupIntent = await stripe.setupIntents.create(
+      {
+        customer: customerId,
+        payment_method_types: [paymentMethod],
+        usage: "off_session",
+        metadata: { client_id: client.id, org_id: ctx.orgId },
+      },
+      { stripeAccount: org.stripe_connect_account_id }
+    );
+
+    return NextResponse.json({
+      clientSecret: setupIntent.client_secret,
+      connectedAccountId: org.stripe_connect_account_id,
+      livemode: org.stripe_connect_livemode ?? true,
+    });
+  } catch (err) {
+    return stripeErrorResponse(err, log, { clientId: client.id, connectedAccountId: org.stripe_connect_account_id });
   }
-
-  const customerId = await getOrCreateStripeCustomer(
-    stripe,
-    org.stripe_connect_account_id,
-    client.stripe_customer_id,
-    client
-  );
-
-  if (customerId !== client.stripe_customer_id) {
-    const serviceClient = createServiceClient();
-    const { error } = await serviceClient.from("clients").update({ stripe_customer_id: customerId }).eq("id", client.id).eq("org_id", ctx.orgId);
-    if (error) log.error("failed to save stripe customer id", { error, clientId: client.id });
-  }
-
-  const setupIntent = await stripe.setupIntents.create(
-    {
-      customer: customerId,
-      payment_method_types: [paymentMethod],
-      usage: "off_session",
-      metadata: { client_id: client.id, org_id: ctx.orgId },
-    },
-    { stripeAccount: org.stripe_connect_account_id }
-  );
-
-  return NextResponse.json({
-    clientSecret: setupIntent.client_secret,
-    connectedAccountId: org.stripe_connect_account_id,
-    livemode: org.stripe_connect_livemode ?? true,
-  });
 }
 
 const SaveSchema = z.object({ setupIntentId: z.string(), enableAutopay: z.boolean().default(true) });
@@ -131,11 +143,16 @@ export async function PUT(request: Request) {
   }
 
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
-  const setupIntent = await stripe.setupIntents.retrieve(
-    setupIntentId,
-    { expand: ["payment_method"] },
-    { stripeAccount: org.stripe_connect_account_id }
-  );
+  let setupIntent: Awaited<ReturnType<typeof stripe.setupIntents.retrieve>>;
+  try {
+    setupIntent = await stripe.setupIntents.retrieve(
+      setupIntentId,
+      { expand: ["payment_method"] },
+      { stripeAccount: org.stripe_connect_account_id }
+    );
+  } catch (err) {
+    return stripeErrorResponse(err, log, { clientId: client.id, connectedAccountId: org.stripe_connect_account_id });
+  }
 
   if (setupIntent.status !== "succeeded" || !setupIntent.payment_method || typeof setupIntent.payment_method === "string") {
     return NextResponse.json({ error: "Payment method setup did not complete" }, { status: 400 });
