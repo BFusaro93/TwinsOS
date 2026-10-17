@@ -40,7 +40,7 @@ import { useCreateGoodsReceipt, useDeleteGoodsReceipt, useGoodsReceipts } from "
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder, LineItem } from "@/types";
 import { computeReceiptTotals } from "@/lib/utils/receipt-totals";
-import { correctPartReceipt, correctProductReceipt } from "@/lib/inventory/part-stock";
+import { correctPartReceipt, correctProductReceipt, logReceiptWithoutStock } from "@/lib/inventory/part-stock";
 
 function errMsg(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -293,6 +293,31 @@ export function ReceiveGoodsDialog({
         // Find the PO line item to look up the productItemId
         const poLineItem = po.lineItems.find((li) => li.id === line.lineItemId);
         const matchedProduct = poLineItem ? matchProductForLine(poLineItem) : null;
+
+        // A line assigned to a project was bought for that job and used
+        // directly, and a product with Track inventory off keeps no stock
+        // (maintenance parts excepted: the Parts table mirrors theirs). Both
+        // skip inventory; the receipt row and project cost still stand, and
+        // an audit row on the product and project records where it went.
+        const untracked =
+          !!matchedProduct && matchedProduct.category !== "maintenance_part" && !matchedProduct.isInventory;
+        if (poLineItem?.projectId || untracked) {
+          if (matchedProduct) {
+            try {
+              await logReceiptWithoutStock(createClient(), {
+                orgId: po.orgId,
+                productId: matchedProduct.id,
+                projectId: poLineItem?.projectId ?? null,
+                poNumber: po.poNumber,
+                quantity: line.quantityReceived,
+                reason: poLineItem?.projectId ? "project" : "untracked",
+              });
+            } catch (auditErr) {
+              toast.warning(`Receipt saved, but the audit entry for "${line.productItemName}" failed: ${errMsg(auditErr)}`);
+            }
+          }
+          continue;
+        }
 
         if (!matchedProduct) {
           throw new Error(`No catalog product found for "${line.productItemName}" — cannot update inventory for this line.`);
