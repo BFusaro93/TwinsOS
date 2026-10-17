@@ -221,6 +221,9 @@ export async function GET(request: Request) {
         contract_id: contract.id,
         sales_rep_id: contract.sales_rep_id ?? null,
         description,
+        // The contract's PO number (selected above, previously dropped) belongs on
+        // the invoice the client's AP department matches against.
+        po_number: contract.po_number ?? null,
         invoice_date: plan.invoiceDate,
         terms: invoiceTerms,
         due_date: computeDueDate(plan.invoiceDate, invoiceTerms),
@@ -262,8 +265,11 @@ export async function GET(request: Request) {
     const { error: liErr } = await (sb as any).from("crm_invoice_line_items").insert({
       org_id: contract.org_id,
       invoice_id: invoice.id,
-      name: contract.title,
-      description: contract.title,
+      // Same as the manual "Create Invoices" path (use-contracts.ts): the line
+      // names the contract's configured service(s), not the contract's own
+      // title — matching the invoice header description above.
+      name: lineItems.length > 0 ? lineItems.join(", ") : contract.title,
+      description,
       qty: 1,
       rate_cents: monthAmount,
       total_cents: monthAmount,

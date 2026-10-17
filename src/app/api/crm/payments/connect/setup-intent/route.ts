@@ -176,11 +176,16 @@ export async function PUT(request: Request) {
   }
 
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
-  const setupIntent = await stripe.setupIntents.retrieve(
-    setupIntentId,
-    { expand: ["payment_method"] },
-    { stripeAccount: org.stripe_connect_account_id }
-  );
+  let setupIntent: Awaited<ReturnType<typeof stripe.setupIntents.retrieve>>;
+  try {
+    setupIntent = await stripe.setupIntents.retrieve(
+      setupIntentId,
+      { expand: ["payment_method"] },
+      { stripeAccount: org.stripe_connect_account_id }
+    );
+  } catch (err) {
+    return stripeErrorResponse(err, log, { clientId, connectedAccountId: org.stripe_connect_account_id });
+  }
 
   if (setupIntent.status !== "succeeded" || !setupIntent.payment_method || typeof setupIntent.payment_method === "string") {
     return NextResponse.json({ error: "Payment method setup did not complete" }, { status: 400 });
