@@ -69,7 +69,8 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { formatInZone, instantToZoneWallClock } from "@/lib/time/zone";
 import { SearchInput } from "@/components/shared/SearchInput";
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -136,6 +137,7 @@ function CampaignDialog({
 }) {
   const { mutateAsync: create, isPending: creating } = useCreateCampaign();
   const { mutateAsync: update, isPending: updating } = useUpdateCampaign();
+  const orgTimeZone = useOrgTimeZone();
   const saving = creating || updating;
 
   const { data: allClients = [] } = useClients();
@@ -155,7 +157,14 @@ function CampaignDialog({
     targetSegment: c.targetSegment,
     subject: c.subject ?? "",
     body: c.body ?? "",
-    scheduledAt: c.scheduledAt ? c.scheduledAt.slice(0, 16) : null,
+    scheduledAt: c.scheduledAt
+      ? (() => {
+          // Show the saved instant on the org's clock — the same clock the
+          // hook reads the field back on when saving.
+          const w = instantToZoneWallClock(new Date(c.scheduledAt), orgTimeZone);
+          return `${w.date}T${w.time}`;
+        })()
+      : null,
     audienceClientIds: c.audienceClientIds,
   });
 
@@ -428,6 +437,7 @@ function CampaignRow({
   onStatusChange: (id: string, status: CampaignStatus, campaign: CRMCampaign) => void;
   onSend: (c: CRMCampaign) => void;
 }) {
+  const orgTimeZone = useOrgTimeZone();
   const { can } = usePermissions();
   const canEdit = can("campaign_edit");
   const canDelete = can("campaign_delete");
@@ -498,9 +508,9 @@ function CampaignRow({
       </td>
       <td className="px-3 py-3 text-xs text-muted-foreground">
         {campaign.scheduledAt
-          ? format(new Date(campaign.scheduledAt), "MMM d, yyyy h:mm a")
+          ? formatInZone(campaign.scheduledAt, orgTimeZone, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
           : campaign.sentAt
-          ? format(new Date(campaign.sentAt), "MMM d, yyyy")
+          ? formatInZone(campaign.sentAt, orgTimeZone, { month: "short", day: "numeric", year: "numeric" })
           : "—"}
       </td>
       <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>

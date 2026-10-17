@@ -36,6 +36,7 @@ export function JobsPackagesGuide() {
           <TOCLink href="#job-value">Where a job&apos;s value comes from</TOCLink>
           <TOCLink href="#jobs-list">Finding jobs on the Jobs list</TOCLink>
           <TOCLink href="#job-vs-visit-status">Job status vs. visit status</TOCLink>
+          <TOCLink href="#equipment">Equipment to bring</TOCLink>
           <TOCLink href="#packages">Packages, in detail</TOCLink>
           <TOCLink href="#projects">Projects (Landscapt vs. Equipt/PO)</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
@@ -201,6 +202,27 @@ export function JobsPackagesGuide() {
         </p>
       </Section>
 
+      <Section id="equipment" title="Equipment to bring">
+        <p>
+          Open a job (from the Jobs list, or from a visit on the Dispatch Board) and scroll to{" "}
+          <strong>Equipment to bring</strong> to list what the crew needs on this job — the truck,
+          the trailer, the mower, an aerator. Click <strong>Add equipment…</strong> and search by
+          name, asset tag, type, make, or model; results are grouped as trucks and vehicles, trailers,
+          and other equipment, with each item&apos;s photo. The list stays open so you can add several
+          items in a row, and the × on a chip removes one.
+        </p>
+        <p>
+          The items come straight from Equipt — vehicles from the Vehicles registry and everything else
+          from Assets — so the truck a crew is told to bring is the same record maintenance tracks.
+          Retired (disposed) equipment isn&apos;t offered.
+        </p>
+        <Callout>
+          The list rolls up on the Dispatch Board&apos;s <strong>Crew Board</strong>: if a crew is
+          running jobs that need equipment that isn&apos;t loaded on it for the day, the board flags it
+          and lets you load it in one click.
+        </Callout>
+      </Section>
+
       <Section id="packages" title="Packages, in detail">
         <p>
           CRM &gt; Settings &gt; Packages bundles a set of recurring services under one named program —
@@ -275,7 +297,7 @@ export function JobsPackagesGuide() {
 
       <Section id="see-also" title="See also">
         <ul className="list-disc space-y-2 pl-5">
-          <li>Dispatch Board — the daily scheduling view where visits get assigned to crews</li>
+          <li>Dispatch Board — the daily scheduling view (list and calendar) where visits get assigned to crews, plus the Crew Board for crew, equipment, and job assignments</li>
           <li>Waiting List — the opportunistic-dispatch queue for <code>waiting_list</code> jobs (and unscheduled <code>package</code> jobs)</li>
           <li>Snow Jobs — storm-based scheduling for the <code>snow</code> job type</li>
         </ul>

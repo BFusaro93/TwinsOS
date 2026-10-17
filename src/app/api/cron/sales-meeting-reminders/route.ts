@@ -107,6 +107,20 @@ export async function GET(request: Request) {
     // to, which is the wrong one for anything scheduled just after midnight.
     const meetingUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com"}/crm/sales-meetings?open=${meeting.id as string}`;
 
+    // The claim above is taken before anything goes out. If the rep's only
+    // channel fails (the email), give it back so the next 15-min tick retries
+    // — but never once the in-app notification landed, or the rep would get it
+    // twice.
+    let inAppSent = false;
+    const releaseClaim = async () => {
+      if (inAppSent) return;
+      await supabase
+        .from("crm_sales_meetings")
+        .update({ reminder_sent_at: null })
+        .eq("id", meeting.id)
+        .eq("reminder_sent_at", now.toISOString());
+    };
+
     if (rep) {
       // crm_employees has no notification_prefs of its own — that lives on
       // profiles, keyed by the employee's linked login (user_id), which has
@@ -125,7 +139,7 @@ export async function GET(request: Request) {
       const repName = `${rep.first_name} ${rep.last_name}`.trim();
 
       if (rep.user_id && prefs.inAppMeetingReminder !== false) {
-        await supabase
+        const { error: notifErr } = await supabase
           .from("notifications")
           .insert({
             org_id: meeting.org_id,
@@ -136,11 +150,12 @@ export async function GET(request: Request) {
             entity_id: meeting.id,
             entity_type: "sales_meeting",
           });
+        if (!notifErr) inAppSent = true;
       }
 
       if (rep.email && prefs.emailMeetingReminder !== false) {
         try {
-          await resend.emails.send({
+          const { error: sendErr } = await resend.emails.send({
             from: EMAIL_FROM,
             to: rep.email as string,
             subject: `Meeting in ${REMINDER_LEAD_MINUTES} minutes — ${clientName}`,
@@ -151,9 +166,14 @@ export async function GET(request: Request) {
               <a href="${meetingUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Calendar</a>
             </div>`,
           });
-          notified++;
+          if (sendErr) {
+            await releaseClaim();
+          } else {
+            notified++;
+          }
         } catch {
           // continue to next meeting if one email fails
+          await releaseClaim();
         }
       }
     }

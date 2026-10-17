@@ -17,6 +17,12 @@ const VISIT_STATUSES: [string, string][] = [
   ["Cancelled", "The visit was called off entirely and won't be rescheduled as-is. Picked from the status menu or the visit detail sheet; asks for a reason the same way Skipped does."],
 ];
 
+const CALENDAR_SETTINGS: [string, string][] = [
+  ["Hours: Man", "Shows hours as man-hours — a 3-person crew working two hours is 6."],
+  ["Hours: Crew", "Divides each visit's hours by its crew size, so the same visit reads as 2."],
+  ["Days", "All 7 days, Mon–Fri, or Mon–Sat. Your choice (and Hours) is remembered on this browser."],
+];
+
 const COLUMNS: [string, string][] = [
   ["Service, Date, City, Zip", "Identify the visit and where it is."],
   ["Assigned", "Which crew (or Unassigned) currently owns the visit."],
@@ -56,6 +62,8 @@ export function DispatchBoardGuide() {
           <TOCLink href="#bulk-actions">Bulk actions on selected visits</TOCLink>
           <TOCLink href="#contact-client">Emailing or texting one client from a visit</TOCLink>
           <TOCLink href="#route-order">Stop order and Optimize Route</TOCLink>
+          <TOCLink href="#calendar-view">Calendar view</TOCLink>
+          <TOCLink href="#crew-board">The Crew Board (shop TV)</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
         </div>
       </div>
@@ -71,6 +79,12 @@ export function DispatchBoardGuide() {
           sideways, the Client column stays pinned while you scroll the visit table, the side panel
           drops below the list, and buttons and checkboxes get larger tap targets. The Snow
           dispatch board is laid out the same way.
+        </p>
+        <p>
+          The <strong>List / Calendar</strong> toggle at the top right switches between this daily
+          table and a week-at-a-glance <a href="#calendar-view" className="underline">calendar</a>;
+          the <strong>Crew Board</strong> button next to it opens the{" "}
+          <a href="#crew-board" className="underline">shop-TV crew assignment board</a>.
         </p>
         <Callout>
           &quot;Today&quot; is the org&apos;s day, not the browser&apos;s. The default date is derived
@@ -564,11 +578,135 @@ export function DispatchBoardGuide() {
         </Callout>
       </Section>
 
+      <Section id="calendar-view" title="Calendar view">
+        <p>
+          Switch the toggle at the top right of the Dispatch Board from <strong>List</strong> to{" "}
+          <strong>Calendar</strong> for a week at a glance: one row per crew, one column per day.
+          The view and the week you&apos;re on are kept in the page address, so refreshing or sharing
+          the link lands on the same week.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Crew rows.</strong> Each row shows the crew name with its headcount, then its
+            default roster underneath (the crew leader is marked). An <strong>Unassigned</strong> row
+            appears whenever a visit that week has no crew.
+          </li>
+          <li>
+            <strong>Cards.</strong> Each visit is a solid block in its crew&apos;s color showing the
+            client and service, with budgeted hours at the bottom right. A recurring job carries a
+            repeat icon and a completed visit carries a check mark.
+          </li>
+          <li>
+            <strong>Budget bar.</strong> The bar inside each card is <em>actual vs. budgeted hours</em>,
+            with the percentage printed on it: green while on budget, amber from 90%, red once over.
+            It stays empty until hours are logged. Cells show their budgeted total, and a{" "}
+            <strong>Totals</strong> row along the bottom adds up each day across every crew showing.
+          </li>
+          <li>
+            <strong>Drag to reschedule or reassign.</strong> Drag a card onto another day, another
+            crew, or both. The move saves immediately (and snaps back if it can&apos;t be saved).
+            Completed, skipped, and cancelled visits can&apos;t be dragged. Drag and drop works with a
+            mouse; on a touch tablet use the List view or the visit&apos;s own sheet to move a visit.
+          </li>
+          <li>
+            <strong>Open a job.</strong> Click a card&apos;s name to open the job. The job page&apos;s
+            Back button returns you to the same week in Calendar view (the same applies to{" "}
+            <strong>View Job</strong> from a visit on the List view, which returns to that day).
+          </li>
+        </ul>
+        <p>
+          The filter bar above the grid narrows what you see: <strong>Crews</strong> (multi-select),{" "}
+          <strong>Status</strong> (All, Open, Completed), a <strong>search</strong> box for client or
+          service, <strong>Hours</strong>, and <strong>Days</strong>. <strong>Full screen</strong> fills
+          the monitor, for a wall display.
+        </p>
+        <Table>
+          <thead>
+            <TableHeadRow>
+              <th className="px-3 py-2">Setting</th>
+              <th className="px-3 py-2">What it does</th>
+            </TableHeadRow>
+          </thead>
+          <tbody>
+            {CALENDAR_SETTINGS.map(([name, desc]) => (
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{desc}</td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+        <Callout>
+          Each crew has its own color — set it under <strong>Team Settings → Team Details → Color</strong> (new crews get one automatically; the same color is used on the Crew Board). The roster under a crew name is its <em>default</em> roster
+          (Team settings) — one-day changes made in Team Assignment or on the Crew Board show on the
+          Crew Board, not on this grid.
+        </Callout>
+      </Section>
+
+      <Section id="crew-board" title="The Crew Board (shop TV)">
+        <p>
+          <strong>CRM → Scheduling → Crew Board</strong> (or the Crew Board button on the Dispatch
+          Board) is a Trello-style view of one day: a colored column per crew showing{" "}
+          <strong>who&apos;s on the crew</strong>, <strong>what equipment is loaded on it</strong>, and{" "}
+          <strong>which jobs it&apos;s running</strong>. It reads and writes the same data as the
+          Dispatch Board, so the two never disagree. It needs the same permission as the Dispatch Board.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Crew header.</strong> Headcount, jobs finished out of jobs scheduled, and{" "}
+            <em>actual hours / budgeted hours</em> for the day. The bar is the share of the day&apos;s
+            budgeted work that&apos;s completed; it turns red if finished work ran over its budget.
+          </li>
+          <li>
+            <strong>Change crews by dragging.</strong> Drag a person to another crew (that move is for
+            this day only and is tagged &quot;today only&quot; — dropping them back on their own crew
+            clears it), or drag a job card to another crew to reassign it. Jobs with no crew sit in an{" "}
+            <strong>Unassigned jobs</strong> column.
+          </li>
+          <li>
+            <strong>Equipment.</strong> The <strong>Equipment yard</strong> on the left lists everything
+            not on a crew today — trucks and vehicles first, then trailers, then other equipment, each
+            with its photo if one is on file. Drag an item onto a crew to load it, or drag a loaded item
+            back to the yard to unload it. Use the search box to find one quickly.
+          </li>
+          <li>
+            <strong>What the crew needs.</strong> Equipment added to a job (see{" "}
+            <strong>Jobs, Packages &amp; Projects</strong> → Equipment to bring) rolls up per crew. If a
+            crew&apos;s jobs need something that isn&apos;t loaded on it, an amber{" "}
+            <strong>Needs …</strong> chip appears — click it to load the item (it also tells you if the
+            item is currently on another crew). Items that a job needs show a green{" "}
+            <strong>Job needs</strong> tag once loaded.
+          </li>
+          <li>
+            <strong>Default equipment.</strong> Click the pin on a loaded item to make it that crew&apos;s{" "}
+            <strong>default</strong> — it then shows up on that crew every day without being assigned
+            again. Moving a default item to another crew, or into the yard, only changes the day you&apos;re
+            looking at; tomorrow it&apos;s back on its default crew. An item can be the default of one
+            crew at a time, and clicking the pin again removes the default.
+          </li>
+        </ul>
+        <p>
+          <strong>TV mode.</strong> Click <strong>TV mode</strong> for a full-screen display with large
+          text and no side panels, meant for a monitor in the shop. It refreshes itself every 30
+          seconds, so changes made at the dispatcher&apos;s desk show up without touching it. Dragging is
+          turned off in TV mode; click <strong>Exit TV</strong> (or the small × in the corner) to edit.
+        </p>
+        <Callout>
+          Columns share the screen width and only scroll sideways once there are more crews than fit at
+          a readable size (roughly five or six on a laptop). On a wall display, filter or stage the
+          board so every crew that matters is visible — nobody is there to scroll it.
+        </Callout>
+      </Section>
+
       <Section id="see-also" title="See also">
         <p>
           The other half of this screen is the crew&apos;s phone: what they see, how clocking on and
           off works, and how the actual hours that land here are produced. See the{" "}
           <strong>Crew App</strong> guide.
+        </p>
+        <p>
+          To tell a crew which truck, trailer, and equipment to bring to a job, see{" "}
+          <strong>Jobs, Packages &amp; Projects</strong> → Equipment to bring.
         </p>
         <p>
           Jobs without a fixed date — waiting for weather, crew capacity, or a client window — don&apos;t

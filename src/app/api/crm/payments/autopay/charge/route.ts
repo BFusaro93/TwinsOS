@@ -85,17 +85,6 @@ export async function POST(request: Request) {
       { status: 409 }
     );
   }
-  // Settle with any deposit/prepayment the client already holds before
-  // touching the card; otherwise they pay twice and the deposit floats.
-  try {
-    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice);
-  } catch {
-    return NextResponse.json({ error: "Couldn't apply the client's existing credit — nothing was charged." }, { status: 500 });
-  }
-  if (invoice.balance_cents <= 0) {
-    return NextResponse.json({ error: "Invoice was fully paid from the client's existing credit — nothing to charge.", paidFromCredit: true, clientId: invoice.client_id }, { status: 200 });
-  }
-
   const { data: client } = await supabase
     .from("clients")
     .select("id, stripe_customer_id, saved_payment_method_id, saved_payment_method_type")
@@ -124,20 +113,7 @@ export async function POST(request: Request) {
   }
 
   const paymentMethod = client.saved_payment_method_type;
-  // The processing fee only ever applies to card — ACH is the fee-free alternative by design.
-  const { feeCents, totalChargeCents } =
-    paymentMethod === "card"
-      ? computeProcessingFee(
-          {
-            ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
-            ccProcessingFeeBps: org.cc_processing_fee_bps,
-            ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
-          },
-          invoice.balance_cents,
-          false
-        )
-      : { feeCents: 0, totalChargeCents: invoice.balance_cents };
-
+  const isAch = paymentMethod === "us_bank_account";
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
 
   // chargeIdempotencyKey only collapses attempts within the same 10-second
@@ -147,7 +123,6 @@ export async function POST(request: Request) {
   // covering this invoice already exists and hasn't definitively failed, and
   // refuse to charge again if so — see findDuplicateChargeIntent for why the
   // ACH window is days rather than minutes.
-  const isAch = paymentMethod === "us_bank_account";
   const refusal = await refuseIfChargeInFlight({
     stripe,
     connectedAccountId: org.stripe_connect_account_id,
@@ -163,6 +138,44 @@ export async function POST(request: Request) {
     // ACH queue legitimately hits it for every debit still settling.
     return NextResponse.json(refusal.body, { status: refusal.status });
   }
+
+  // Every check above can refuse; only now is it safe to consume the client's
+  // credit, so a refused charge never leaves invoices quietly changed.
+  // Settle with any deposit/prepayment the client already holds before
+  // touching the card; otherwise they pay twice and the deposit floats.
+  try {
+    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice);
+  } catch {
+    return NextResponse.json({ error: "Couldn't apply the client's existing credit — nothing was charged." }, { status: 500 });
+  }
+  if (invoice.balance_cents <= 0) {
+    // A success, shaped like one: callers read totalChargeCents/feeCents/status
+    // straight off the body, so leaving them out rendered "Charged … $NaN".
+    return NextResponse.json({
+      status: "paid_from_credit",
+      paidFromCredit: true,
+      balanceCents: 0,
+      feeCents: 0,
+      totalChargeCents: 0,
+      clientId: invoice.client_id,
+      recorded: true,
+      recordingError: null,
+    });
+  }
+
+  // The processing fee only ever applies to card — ACH is the fee-free alternative by design.
+  const { feeCents, totalChargeCents } =
+    paymentMethod === "card"
+      ? computeProcessingFee(
+          {
+            ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
+            ccProcessingFeeBps: org.cc_processing_fee_bps,
+            ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+          },
+          invoice.balance_cents,
+          false
+        )
+      : { feeCents: 0, totalChargeCents: invoice.balance_cents };
 
   try {
     const paymentIntent = await stripe.paymentIntents.create(

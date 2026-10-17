@@ -452,7 +452,7 @@ export async function evaluateConditionSet(
   ] = await Promise.all([
     needsClient && clientId
       ? supabase.from("clients")
-          .select("status, source, account_type, billing_terms, map_code, cancellation_reason, service_zip, client_since, balance_outstanding_cents, ok_to_email, sms_opt_in, payment_method, sales_rep_id")
+          .select("status, source, account_type, billing_terms, default_terms, map_code, cancellation_reason, service_zip, client_since, balance_outstanding_cents, ok_to_email, sms_opt_in, payment_method, sales_rep_id")
           .eq("id", clientId).maybeSingle().then((r: { data: Record<string, unknown> | null }) => r.data)
       : Promise.resolve(null),
     needsEstimate && estimateId
@@ -541,7 +541,10 @@ export async function evaluateConditionSet(
     }
     if (c.field === "billing_term") {
       const vs = csvValues(c.value);
-      const term = client?.billing_terms ? String(client.billing_terms).toLowerCase() : null;
+      // Invoice terms (default_terms) are what the client form edits and invoicing
+      // uses; billing_terms is the legacy display-only column, kept as a fallback.
+      const rawTerm = client?.default_terms ?? client?.billing_terms;
+      const term = rawTerm ? String(rawTerm).toLowerCase() : null;
       return vs.length > 0 && !!term && vs.includes(term);
     }
     if (c.field === "cancellation_reason") {

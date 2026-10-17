@@ -393,13 +393,30 @@ export async function sendCampaignEmails(
     await sendInBatches(failedRecipients, (r) => sendOne(r, true), heartbeat);
   }
 
+  // Total failure (provider outage, bad API key): nothing reached anyone and
+  // nobody had been reached before this run either. Marking that "completed"
+  // made the campaign look sent and, since sent campaigns can't be re-sent,
+  // unrecoverable. Hand it back as a draft so it can be fixed and sent again
+  // (draft, not scheduled, so the hourly cron doesn't hammer a dead provider).
+  if (delivered === 0 && failed > 0 && alreadySent.size === 0) {
+    await db.from("crm_campaigns").update({
+      status: "draft",
+      updated_at: new Date().toISOString(),
+    }).eq("id", campaign.id);
+    return { ok: false, error: `None of the ${failed} emails could be sent — nothing was delivered. The campaign is back in Draft; check your email settings and try again.` };
+  }
+
+  // alreadySent holds everyone reached by this campaign across ALL runs (the
+  // pre-existing activity rows plus this run's sends). On a resumed send,
+  // counting only this run's `delivered` understated the campaign's reach.
+  const deliveredTotal = alreadySent.size;
   await db.from("crm_campaigns").update({
     status: "completed",
     sent_at: new Date().toISOString(),
     total_recipients: recipients.length,
-    delivered_count: delivered,
+    delivered_count: deliveredTotal,
     updated_at: new Date().toISOString(),
   }).eq("id", campaign.id);
 
-  return { ok: true, totalRecipients: recipients.length, delivered, failed };
+  return { ok: true, totalRecipients: recipients.length, delivered: deliveredTotal, failed };
 }

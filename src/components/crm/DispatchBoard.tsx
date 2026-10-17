@@ -1083,7 +1083,7 @@ function JobDetailSheet({
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs px-2"
-                  onClick={() => { onOpenChange(false); router.push(`/crm/scheduling/jobs/${job.id}`); }}
+                  onClick={() => { onOpenChange(false); router.push(`/crm/scheduling/jobs/${job.id}?returnTo=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`); }}
                 >
                   View Job →
                 </Button>

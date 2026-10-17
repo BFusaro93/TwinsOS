@@ -17,6 +17,7 @@ export interface CreateMultiPaymentIntentResult {
 /** Fresh card/bank entry, charged once and split across multiple invoices — the multi-invoice
  * counterpart to useCreateCrmPaymentIntent in use-crm-card-payments.ts. */
 export function useCreateMultiPaymentIntent() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({
       clientId,
@@ -40,6 +41,13 @@ export function useCreateMultiPaymentIntent() {
       if (!res.ok) throw new Error(body.error ?? "Failed to start payment");
       return body as CreateMultiPaymentIntentResult;
     },
+    // The route applies the client's existing credit BEFORE it can fail or
+    // return "nothing to charge", so invoices may have changed either way.
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
   });
 }
 
@@ -48,6 +56,8 @@ export interface ChargeMultiResult {
   balanceCents: number;
   feeCents: number;
   totalChargeCents: number;
+  /** True when client credit settled every invoice and nothing was charged. */
+  paidFromCredit?: boolean;
   paymentIntentId?: string;
   /** See ChargeAutopayInvoiceResult.recorded in use-autopay-invoices.ts. */
   recorded?: boolean;
@@ -69,7 +79,8 @@ export function useChargeMultiSaved() {
       if (!res.ok) throw new Error(body.error ?? "Failed to charge saved payment method");
       return body as ChargeMultiResult;
     },
-    onSuccess: (_data, vars) => {
+    // onSettled: credit is applied before later validation can fail the request.
+    onSettled: (_data, _err, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       // See use-autopay-invoices.ts — payments are their own query.
       qc.invalidateQueries({ queryKey: ["crm-payments"] });

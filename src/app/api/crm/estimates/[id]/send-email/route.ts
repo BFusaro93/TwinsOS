@@ -9,7 +9,7 @@ import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, Estima
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { complexityFactor } from "@/lib/estimate-calc";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
-import { addParagraphSpacing, resolveMergeTags } from "@/lib/utils/document-template-renderer";
+import { addParagraphSpacing, resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
@@ -122,6 +122,18 @@ export async function POST(
   const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
   if (body.to?.some((e) => !isValidEmail(e))) {
     return NextResponse.json({ error: "Invalid recipient email address" }, { status: 400 });
+  }
+  if (body.ccEmails?.some((e) => !isValidEmail(e))) {
+    return NextResponse.json({ error: "Invalid CC email address" }, { status: 400 });
+  }
+  // A non-positive or non-numeric expiry would mint a link that is already
+  // dead (or throw on the date math) and email it to the client.
+  if (
+    body.expiresInDays !== undefined &&
+    body.expiresInDays !== null &&
+    (!Number.isFinite(body.expiresInDays) || body.expiresInDays < 0 || body.expiresInDays > 3650)
+  ) {
+    return NextResponse.json({ error: "expiresInDays must be between 0 and 3650" }, { status: 400 });
   }
 
   // Fetch estimate + client
@@ -350,7 +362,7 @@ export async function POST(
     "[companyphonenumber]": orgPhone,
   };
 
-  const resolvedSubject = resolveMergeTags(body.subject, mergeVars);
+  const resolvedSubject = resolveSubjectMergeTags(body.subject, mergeVars);
   const resolvedBody    = addParagraphSpacing(resolveMergeTags(body.bodyHtml, mergeVars));
 
   // "Include PDF" — the template's setting, forwarded by the send dialog.
@@ -460,7 +472,7 @@ export async function POST(
     subject: resolvedSubject,
     html: resolvedBody,
     ...(replyTo ? { replyTo } : {}),
-    ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails } : {}),
+    ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails.map((e) => e.trim()) } : {}),
     ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
   });
 

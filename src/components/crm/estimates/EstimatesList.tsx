@@ -409,13 +409,35 @@ export function EstimatesList({ clientId }: Props) {
             </>
           )}
         </div>
-        {clientId && canAdd && (
-          <div className="ml-auto">
+        {/* View switch lives here, above the dark bar: inside it, the switch
+            shifted left/right as the Columns button appeared (list) and
+            disappeared (pipeline). Icon + label buttons, like the dispatch
+            board's. */}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <div className="flex items-center gap-1" role="group" aria-label="Estimates view">
+            {([
+              { mode: "list", label: "List", Icon: List },
+              { mode: "pipeline", label: "Pipeline", Icon: Columns },
+            ] as const).map(({ mode, label, Icon }) => (
+              <Button
+                key={mode}
+                size="sm"
+                variant={viewMode === mode ? "default" : "outline"}
+                aria-pressed={viewMode === mode}
+                onClick={() => setViewMode(mode)}
+                className="h-8 gap-1.5 px-2.5 text-xs"
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </Button>
+            ))}
+          </div>
+          {clientId && canAdd && (
             <Button size="sm" className="h-7 text-xs" onClick={() => setDialogOpen(true)}>
               <Plus className="mr-1 h-3 w-3" /> New Estimate
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ── 3. Dark actions bar with stage tabs + search ── */}
@@ -544,33 +566,6 @@ export function EstimatesList({ clientId }: Props) {
             className="ml-2 w-44"
             inputClassName="h-7 text-xs"
           />
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setViewMode("list")}
-            title="List view"
-            className={cn(
-              "flex h-7 w-7 items-center justify-center rounded border transition-colors",
-              viewMode === "list"
-                ? "border-white bg-card text-slate-700 dark:text-neutral-300"
-                : "border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
-            )}
-          >
-            <List className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={() => setViewMode("pipeline")}
-            title="Pipeline view"
-            className={cn(
-              "flex h-7 w-7 items-center justify-center rounded border transition-colors",
-              viewMode === "pipeline"
-                ? "border-white bg-card text-slate-700 dark:text-neutral-300"
-                : "border-[#6a6a6a] bg-[#5a5a5a] text-white hover:bg-[#6a6a6a]"
-            )}
-          >
-            <Columns className="h-3.5 w-3.5" />
-          </button>
         </div>
 
         {viewMode === "list" && (

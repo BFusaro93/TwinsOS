@@ -99,7 +99,9 @@ export function ChargeCardDialog({
   async function handleChargeSaved() {
     try {
       const result = await chargeSaved.mutateAsync({ invoiceId });
-      if (result.status === "succeeded" && result.recorded === false) {
+      if (result.paidFromCredit) {
+        toast.success("Paid from the client's existing credit — no card was charged");
+      } else if (result.status === "succeeded" && result.recorded === false) {
         // The payment method WAS charged — only the ledger write failed.
         toast.error(
           "The charge went through at Stripe but could NOT be recorded on this invoice. Do not retry — reconcile it in Stripe first.",

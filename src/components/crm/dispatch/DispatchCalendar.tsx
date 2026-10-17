@@ -14,13 +14,10 @@ import { useUpdateVisit, useVisitsForDate } from "@/lib/hooks/use-crm-jobs";
 import { useCrews } from "@/lib/hooks/use-employees";
 import type { CRMJobVisit } from "@/types/crm-jobs";
 import { visitBudgetState } from "./budget-progress";
+import { crewColor, textOn } from "./crew-color";
 
 const UNASSIGNED = "unassigned";
 const TERMINAL = new Set(["completed", "skipped", "cancelled"]);
-/** A crew member's planned working day, for the over-capacity highlight. */
-const CAPACITY_HOURS_PER_PERSON = 8;
-/** Used when a crew has no color set, so every crew still reads as distinct. */
-const FALLBACK_COLORS = ["#15803d", "#0e7490", "#1d4ed8", "#a16207", "#7e22ce", "#be123c", "#0f766e", "#c2410c"];
 
 type DayMode = "all" | "mon_fri" | "mon_sat";
 type HoursMode = "man" | "crew";
@@ -54,15 +51,6 @@ function mondayOf(iso: string): Date {
   return d;
 }
 
-/** White or near-black text, whichever reads better on `hex`. */
-function textOn(hex: string): string {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return "#ffffff";
-  const n = parseInt(m[1], 16);
-  const lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-  return lum > 0.62 ? "#111827" : "#ffffff";
-}
-
 function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
     const v = window.localStorage.getItem(key);
@@ -85,7 +73,7 @@ interface Row {
 /**
  * Week calendar modeled on Aspire's schedule: a row per crew (with its roster),
  * a column per day, solid crew-colored cards with an actual-vs-budgeted hours
- * bar, per-cell and per-day totals, and over-capacity days highlighted.
+ * bar, per-cell and per-day totals.
  * Cards drag between cells to reschedule (day) and/or reassign (crew).
  */
 export function DispatchCalendar({
@@ -150,7 +138,7 @@ export function DispatchCalendar({
     const crewRows = crews.map((c, i) => ({
       id: c.id,
       name: c.name,
-      color: c.color || FALLBACK_COLORS[i % FALLBACK_COLORS.length],
+      color: crewColor(c.color, i),
       members: (c.members ?? []).map((m) => ({ id: m.id, name: m.employeeName ?? "Member", isForeman: m.isForeman })),
     }));
     return [...crewRows, { id: UNASSIGNED, name: "Unassigned", color: "#64748b", members: [] }];
@@ -245,6 +233,8 @@ export function DispatchCalendar({
 
   const today = toISODate(new Date());
   const rangeLabel = `${new Date(`${from}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(`${to}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  // Where the job page's Back button should return to: this week, this view.
+  const returnTo = `/crm/scheduling/dispatch?view=calendar&date=${selectedDate}`;
   const gridCols = `190px repeat(${days.length}, minmax(150px, 1fr))`;
 
   return (
@@ -310,7 +300,6 @@ export function DispatchCalendar({
           <span className="flex items-center gap-1"><span className="h-2 w-4 rounded-full bg-emerald-400" /> On budget</span>
           <span className="flex items-center gap-1"><span className="h-2 w-4 rounded-full bg-amber-400" /> 90%+</span>
           <span className="flex items-center gap-1"><span className="h-2 w-4 rounded-full bg-red-600" /> Over budget</span>
-          <span className="flex items-center gap-1"><span className="h-3 w-4 rounded-sm bg-red-500/20 ring-1 ring-red-400/60" /> Over crew capacity</span>
         </div>
       </div>
 
@@ -338,7 +327,6 @@ export function DispatchCalendar({
           })}
 
           {visibleRows.map((row) => {
-            const headcount = row.members.length;
             return (
               <RowCells
                 key={row.id}
@@ -346,8 +334,8 @@ export function DispatchCalendar({
                 days={days}
                 today={today}
                 byCell={byCell}
-                capacityPerDay={headcount > 0 ? (hoursMode === "crew" ? CAPACITY_HOURS_PER_PERSON : headcount * CAPACITY_HOURS_PER_PERSON) : null}
                 hoursOf={hoursOf}
+                returnTo={returnTo}
                 dragId={dragId}
                 overCell={overCell}
                 setDragId={setDragId}
@@ -385,8 +373,8 @@ function RowCells({
   days,
   today,
   byCell,
-  capacityPerDay,
   hoursOf,
+  returnTo,
   dragId,
   overCell,
   setDragId,
@@ -394,10 +382,10 @@ function RowCells({
   onDrop,
 }: {
   row: Row;
+  returnTo: string;
   days: string[];
   today: string;
   byCell: Map<string, CRMJobVisit[]>;
-  capacityPerDay: number | null;
   hoursOf: (v: CRMJobVisit, h: number | null | undefined) => number;
   dragId: string | null;
   overCell: string | null;
@@ -424,7 +412,6 @@ function RowCells({
         const key = `${row.id}|${d}`;
         const items = byCell.get(key) ?? [];
         const budget = items.reduce((s, v) => s + hoursOf(v, v.budgetedHours), 0);
-        const over = capacityPerDay != null && budget > capacityPerDay;
         return (
           <div
             key={key}
@@ -441,7 +428,6 @@ function RowCells({
             className={cn(
               "flex min-h-[110px] flex-col gap-1 border-b border-l p-1",
               d === today && "bg-brand-50/40 dark:bg-brand-900/10",
-              over && "bg-red-500/10 [background-image:repeating-linear-gradient(135deg,transparent_0_6px,rgba(239,68,68,0.12)_6px_8px)]",
               overCell === key && "ring-2 ring-inset ring-brand-400"
             )}
           >
@@ -451,6 +437,7 @@ function RowCells({
                 visit={v}
                 color={row.color}
                 hoursOf={hoursOf}
+                returnTo={returnTo}
                 onDragStart={() => setDragId(v.id)}
                 onDragEnd={() => { setDragId(null); setOverCell(null); }}
               />
@@ -471,9 +458,11 @@ function CalendarCard({
   visit,
   color,
   hoursOf,
+  returnTo,
   onDragStart,
   onDragEnd,
 }: {
+  returnTo: string;
   visit: CRMJobVisit;
   color: string;
   hoursOf: (v: CRMJobVisit, h: number | null | undefined) => number;
@@ -502,7 +491,7 @@ function CalendarCard({
       style={{ backgroundColor: color, color: fg }}
       title={`${visit.clientName ?? ""}${services ? ` — ${services}` : ""}\n${formatHours(actual)} of ${formatHours(budget)} hrs`}
     >
-      <Link href={`/crm/scheduling/jobs/${visit.jobId}`} draggable={false} className="flex items-start gap-1 hover:underline">
+      <Link href={`/crm/scheduling/jobs/${visit.jobId}?returnTo=${encodeURIComponent(returnTo)}`} draggable={false} className="flex items-start gap-1 hover:underline">
         {recurring && <Repeat className="mt-0.5 h-3 w-3 shrink-0 opacity-80" />}
         <span className="line-clamp-2 min-w-0">
           {visit.clientName ?? "Client"}

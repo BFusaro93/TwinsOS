@@ -91,7 +91,7 @@ interface SendFailureContext {
   sequenceId: string;
   clientId: string | null;
   eventId: string;
-  eventType: "email" | "text_message";
+  eventType: "email" | "text_message" | "alert" | "ticket" | "update" | "tags";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   events: any[];
   position: number;
@@ -119,7 +119,7 @@ async function handleSendFailure(
   reason: string,
   permanent: boolean
 ): Promise<ProcessOutcome> {
-  const prefix = ctx.eventType === "email" ? "email" : "sms";
+  const prefix = ctx.eventType === "email" ? "email" : ctx.eventType === "text_message" ? "sms" : ctx.eventType;
   const logBase = {
     orgId: ctx.orgId, enrollmentId: ctx.enrollId, sequenceId: ctx.sequenceId, clientId: ctx.clientId,
     eventId: ctx.eventId, eventType: ctx.eventType,
@@ -542,8 +542,17 @@ async function runClaimedStep(
     const recipientIds: string[] = Array.isArray(eventConfig.recipient_user_ids)
       ? eventConfig.recipient_user_ids
       : [];
+    // Step-failure handling mirrors the email/SMS steps: returning "skipped"
+    // without rescheduling left the enrollment re-claimed every lease period
+    // forever (and the client's active slot occupied). A misconfigured step is
+    // permanent — move past it; a failed write is transient — back off, then
+    // give up after MAX_SEND_ATTEMPTS.
+    const stepFailure: SendFailureContext = {
+      orgId, enrollId, sequenceId: sequence_id, clientId: client_id, eventId: currentEvent.id,
+      eventType: "alert", events: events ?? [], position: next_event_position, nowIso,
+    };
     if (recipientIds.length === 0) {
-      return { skipped: { enrollmentId: enrollId, reason: "no recipient_user_ids configured" } };
+      return handleSendFailure(adminClient, stepFailure, "no recipient_user_ids configured", true);
     }
 
     const message = (eventConfig.message as string) || "Automation alert";
@@ -563,7 +572,7 @@ async function runClaimedStep(
         entity_type: client_id ? "client" : null,
       })));
     if (notifErr) {
-      return { skipped: { enrollmentId: enrollId, reason: `failed to insert notifications: ${notifErr.message}` } };
+      return handleSendFailure(adminClient, stepFailure, `failed to insert notifications: ${notifErr.message}`, false);
     }
 
     const action = await advanceEnrollmentPastStep(adminClient, {
@@ -610,7 +619,10 @@ async function runClaimedStep(
       .single();
 
     if (ticketErr || !ticket) {
-      return { skipped: { enrollmentId: enrollId, reason: `failed to create ticket: ${ticketErr?.message ?? "unknown"}` } };
+      return handleSendFailure(adminClient, {
+        orgId, enrollId, sequenceId: sequence_id, clientId: client_id, eventId: currentEvent.id,
+        eventType: "ticket", events: events ?? [], position: next_event_position, nowIso,
+      }, `failed to create ticket: ${ticketErr?.message ?? "unknown"}`, false);
     }
 
     const notifyBase = { orgId, ticketId: ticket.id, ticketNumber: ticket.ticket_number, subject: title };
@@ -650,8 +662,12 @@ async function runClaimedStep(
       ({ error: updateErr } = await adminClient
         .from("clients").update({ source: value || null }).eq("id", client_id));
     } else if (field === "billing_term") {
+      // default_terms is the field the client's "Invoice terms" and every
+      // invoice creator read; billing_terms is the legacy read-only "Terms"
+      // display. Writing only the legacy one meant this step never changed how
+      // the client was invoiced. Keep both in step.
       ({ error: updateErr } = await adminClient
-        .from("clients").update({ billing_terms: value || null }).eq("id", client_id));
+        .from("clients").update({ default_terms: value || null, billing_terms: value || null }).eq("id", client_id));
     } else if (field === "custom_field" && customFieldId) {
       const { data: def } = await adminClient
         .from("crm_custom_field_defs").select("name, field_type").eq("id", customFieldId).single();
@@ -671,7 +687,10 @@ async function runClaimedStep(
     }
 
     if (updateErr) {
-      return { skipped: { enrollmentId: enrollId, reason: `failed to apply update: ${updateErr.message}` } };
+      return handleSendFailure(adminClient, {
+        orgId, enrollId, sequenceId: sequence_id, clientId: client_id, eventId: currentEvent.id,
+        eventType: "update", events: events ?? [], position: next_event_position, nowIso,
+      }, `failed to apply update: ${updateErr.message}`, typeof updateErr.message === "string" && updateErr.message.startsWith("unsupported update field"));
     }
 
     const action = await advanceEnrollmentPastStep(adminClient, {
@@ -715,7 +734,10 @@ async function runClaimedStep(
           { onConflict: "org_id,client_id,tag", ignoreDuplicates: true }
         );
       if (addErr) {
-        return { skipped: { enrollmentId: enrollId, reason: `failed to add tags: ${addErr.message}` } };
+        return handleSendFailure(adminClient, {
+          orgId, enrollId, sequenceId: sequence_id, clientId: client_id, eventId: currentEvent.id,
+          eventType: "tags", events: events ?? [], position: next_event_position, nowIso,
+        }, `failed to add tags: ${addErr.message}`, false);
       }
     }
     if (removeTags.length > 0) {
@@ -725,7 +747,10 @@ async function runClaimedStep(
         .eq("client_id", client_id)
         .in("tag", removeTags);
       if (removeErr) {
-        return { skipped: { enrollmentId: enrollId, reason: `failed to remove tags: ${removeErr.message}` } };
+        return handleSendFailure(adminClient, {
+          orgId, enrollId, sequenceId: sequence_id, clientId: client_id, eventId: currentEvent.id,
+          eventType: "tags", events: events ?? [], position: next_event_position, nowIso,
+        }, `failed to remove tags: ${removeErr.message}`, false);
       }
     }
 

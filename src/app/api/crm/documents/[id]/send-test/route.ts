@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   renderBlocksToHtml,
   resolveMergeTags,
+  resolveSubjectMergeTags,
   SAMPLE_MERGE_VALUES,
 } from "@/lib/utils/document-template-renderer";
 import { DocumentTemplatePdf } from "@/components/crm/documents/pdf/DocumentTemplatePdf";
@@ -61,7 +62,7 @@ export async function POST(
   };
 
   const rawSubject = body.subject ?? template.subject ?? template.name;
-  const subject = `[TEST] ${resolveMergeTags(rawSubject, mergeVars)}`;
+  const subject = `[TEST] ${resolveSubjectMergeTags(rawSubject, mergeVars)}`;
   const html = renderBlocksToHtml(
     [...body.blocks].sort((a, b) => a.orderIndex - b.orderIndex),
     mergeVars

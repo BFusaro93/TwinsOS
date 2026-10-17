@@ -55,7 +55,7 @@ const EVENT_TYPES: [string, string][] = [
   ["Note", "Adds a note to the client's activity timeline."],
   [
     "Update a field",
-    "Writes a value onto the client record: sales person, client source, billing term (Due on Receipt, Net 10/15/30/45/60/90), or a custom field.",
+    "Writes a value onto the client record: sales person, client source, billing term (Due on Receipt, Net 10/15/30/45/60/90), or a custom field. Billing term sets the client&apos;s Invoice terms, so new invoices for that client use it. A Billing term condition checks the same field.",
   ],
   ["Tags", "Adds and/or removes one or more tags on the client."],
 ];
@@ -323,6 +323,15 @@ export function AutomationsGuide() {
           &quot;Require approval before sending&quot; is off for that email event. Turn it on to hold the
           email for manual approval before it sends — useful when you&apos;re not fully confident in a
           new automation yet.
+        </p>
+        <p>
+          <strong>What happens if a step can&apos;t run?</strong> A step that can&apos;t finish
+          never stalls the sequence silently. If it&apos;s misconfigured (an alert with no
+          recipients, an unsupported field update) it is logged and skipped, and the sequence moves
+          on. If it hits a temporary problem (a database or email-provider error) it retries after
+          15 minutes, then 30 minutes, 1 hour and 2 hours. After 5 attempts the client is dropped
+          from the sequence so they can be enrolled again. Each attempt shows in the execution
+          log.
         </p>
         <Callout>
           CRM Zapier triggers and CRM automation triggers fire off the same underlying internal event

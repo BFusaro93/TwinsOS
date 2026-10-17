@@ -62,6 +62,12 @@ export interface DuplicateChargeLookup {
   invoiceIds: string[];
   /** ACH debits stay in flight for days and need the longer window. */
   isAch: boolean;
+  /** Service-role client. When given, a `succeeded` intent that is already in
+   * the ledger no longer blocks: the invoice balance reflects it, and treating
+   * it as "in flight" refused a legitimate re-charge for the whole window — 10
+   * days for ACH, which is exactly when a returned bank debit reopens an invoice. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db?: any;
 }
 
 /** Returns a still-live PaymentIntent already covering any of `invoiceIds`, or
@@ -74,6 +80,7 @@ export async function findDuplicateChargeIntent({
   customerId,
   invoiceIds,
   isAch,
+  db,
 }: DuplicateChargeLookup): Promise<Stripe.PaymentIntent | null> {
   const recentIntents = await stripe.paymentIntents.list(
     {
@@ -92,13 +99,20 @@ export async function findDuplicateChargeIntent({
   );
 
   const targets = new Set(invoiceIds);
-  return (
-    recentIntents.data.find(
-      (pi) =>
-        BLOCKING_PAYMENT_INTENT_STATUSES.has(pi.status) &&
-        invoicesCoveredBy(pi).some((id) => targets.has(id))
-    ) ?? null
-  );
+  for (const pi of recentIntents.data) {
+    if (!BLOCKING_PAYMENT_INTENT_STATUSES.has(pi.status)) continue;
+    if (!invoicesCoveredBy(pi).some((id) => targets.has(id))) continue;
+    if (pi.status === "succeeded" && db) {
+      const { data: recorded } = await db
+        .from("crm_payments")
+        .select("id")
+        .eq("stripe_payment_intent_id", pi.id)
+        .maybeSingle();
+      if (recorded) continue;
+    }
+    return pi;
+  }
+  return null;
 }
 
 /** The message to hand staff for a blocked duplicate. An in-flight bank debit
@@ -247,7 +261,7 @@ export async function refuseIfChargeInFlight(args: {
 
   if (customerId) {
     try {
-      const duplicate = await findDuplicateChargeIntent({ stripe, connectedAccountId, customerId, invoiceIds, isAch });
+      const duplicate = await findDuplicateChargeIntent({ stripe, connectedAccountId, customerId, invoiceIds, isAch, db });
       if (duplicate) {
         return {
           body: { error: duplicateChargeMessage(duplicate, plural), code: "duplicate_charge", inFlight: duplicate.status === "processing" },
