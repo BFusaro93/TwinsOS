@@ -224,13 +224,27 @@ export function isBillingDueOn(contract: BillingContractRow, today: Date): boole
 
     case "quarterly":
     case "annual": {
-      if (!dayMatches) return false;
       const span = frequency === "quarterly" ? 3 : 12;
       const anchor = billingAnchor(contract, today);
       const monthsSinceAnchor = monthIndex(now.y, now.m) - monthIndex(anchor.y, anchor.m);
       // Negative means the anchor is still in the future (a contract signed
       // with a forward-dated start) — nothing to bill yet.
-      return monthsSinceAnchor >= 0 && monthsSinceAnchor % span === 0;
+      if (monthsSinceAnchor < 0 || monthsSinceAnchor % span !== 0) return false;
+      if (dayMatches) return true;
+      // Same catch-up as monthly, with the same safety rails. Without it a
+      // single missed cron run on the billing day (outage, failed run) skipped
+      // a whole QUARTER or YEAR of billing with no warning, where a monthly
+      // contract recovers the same month. Only days after the clamped billing
+      // day in the billing month qualify, the period must be verifiably
+      // unbilled (last_billed_date), and the contract must have existed on the
+      // billing day; callers still run their live-invoice-in-period query.
+      const dueDay = Math.min(configuredDay, daysInMonth(now.y, now.m));
+      if (now.d <= dueDay) return false;
+      const advance = contract.bill_month_in_advance ? 1 : 0;
+      const billedIdx = monthIndex(now.y, now.m) + advance;
+      const last = parseYmd(contract.last_billed_date);
+      if (last && monthIndex(last.y, last.m) >= billedIdx) return false;
+      return dayDiff(anchor, { y: now.y, m: now.m, d: dueDay }) >= 0;
     }
 
     case "weekly":

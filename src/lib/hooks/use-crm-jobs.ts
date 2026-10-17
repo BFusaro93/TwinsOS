@@ -2771,6 +2771,21 @@ export function useDeleteJobService() {
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
       const supabase = createClient();
+      // crm_job_visits.job_service_id is ON DELETE SET NULL, so deleting a
+      // service silently turned its remaining visits into WHOLE-JOB visits: on
+      // completion they billed every other service on the job again, and the
+      // generator treated them as holding that date for all services. Retire the
+      // service's not-yet-started visits first (completed ones are already
+      // invoiced and stay).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: visitErr } = await (supabase as any)
+        .from('crm_job_visits')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('job_service_id', id)
+        .in('status', ['scheduled', 'dispatched'])
+        .is('clocked_in_at', null)
+        .is('deleted_at', null);
+      if (visitErr) throw visitErr;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from('crm_job_services').delete().eq('id', id);
       if (error) throw error;

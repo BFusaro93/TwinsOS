@@ -915,6 +915,14 @@ export function useUpdateClient() {
           account_number: updates.accountNumber,
           account_type: updates.accountType,
           status: updates.status,
+          // Moving a cancelled/lost client back to active/lead from the Details tab
+          // must clear the cancellation (useActivateClient does) — otherwise the
+          // stale reason and closed_at keep showing in the cancelled-clients
+          // report for a client who is active again.
+          ...(before && (before.status === "cancelled" || before.status === "lost") &&
+            (updates.status === "active" || updates.status === "lead")
+            ? { cancellation_reason: null, closed_at: null }
+            : {}),
           phones: updates.phones as unknown as import("@/types/supabase").Json ?? undefined,
           primary_phone: updates.primaryPhone,
           primary_email: updates.primaryEmail,
@@ -1096,7 +1104,7 @@ export class ClientDeletionBlockedError extends Error {
   }
 }
 
-export async function fetchClientDeletionBlockers(clientId: string): Promise<ClientDeletionBlockers> {
+export async function fetchClientDeletionBlockers(clientId: string, timeZone?: string): Promise<ClientDeletionBlockers> {
   const supabase = createClient();
   // The new blocker tables aren't all in the generated types the same way, so
   // those reads go through an untyped handle.
@@ -1156,7 +1164,9 @@ export async function fetchClientDeletionBlockers(clientId: string): Promise<Cli
   const oneTimeJobs = (oneTimeJobsRes.data ?? []) as { id: string; job_number: number | null }[];
   let scheduledJobs: ClientDeletionBlockers["scheduledJobs"] = [];
   if (oneTimeJobs.length) {
-    const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD, local
+    // The org's calendar day, like the rest of the app — the browser's day let a
+    // visit scheduled for the org's "today" fall outside this window in the evening.
+    const today = timeZone ? todayInZone(timeZone) : new Date().toLocaleDateString("en-CA");
     const { data: visits, error: visitsErr } = await sb
       .from("crm_job_visits")
       .select("job_id")
@@ -1204,11 +1214,12 @@ export async function fetchClientDeletionBlockers(clientId: string): Promise<Cli
  */
 export function useDeleteClient() {
   const qc = useQueryClient();
+  const orgTimeZone = useOrgTimeZone();
   return useMutation({
     mutationFn: async (input: string | { id: string; confirmed?: boolean }) => {
       const { id, confirmed = false } = typeof input === "string" ? { id: input } : input;
       if (!confirmed) {
-        const blockers = await fetchClientDeletionBlockers(id);
+        const blockers = await fetchClientDeletionBlockers(id, orgTimeZone);
         if (hasClientDeletionBlockers(blockers)) {
           throw new ClientDeletionBlockedError(blockers);
         }
@@ -1649,17 +1660,23 @@ export function useAddClientTag() {
   return useMutation({
     mutationFn: async ({ clientId, tag }: { clientId: string; tag: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // ignoreDuplicates returns no row for a tag the client already has, so
+      // .select() tells a real add from a no-op. Re-adding an existing tag used
+      // to log "Tag added" again and re-fire the tag_added automation.
+      const { data, error } = await supabase
         .from("client_tags")
-        .upsert({ client_id: clientId, tag }, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true });
+        .upsert({ client_id: clientId, tag }, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true })
+        .select("tag");
       if (error) throw error;
-      await logClientActivity(supabase, clientId, `Tag added: ${tag}`);
+      const added = (data ?? []).length > 0;
+      if (added) await logClientActivity(supabase, clientId, `Tag added: ${tag}`);
+      return { added };
     },
-    onSuccess: (_d, { clientId, tag }) => {
+    onSuccess: (result, { clientId, tag }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
       qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
-      fireAutomationTrigger({ triggerType: "tag_added", clientId, matchValues: [tag] });
+      if (result?.added) fireAutomationTrigger({ triggerType: "tag_added", clientId, matchValues: [tag] });
     },
     onError: () => {
       toast.error("Failed to add tag");

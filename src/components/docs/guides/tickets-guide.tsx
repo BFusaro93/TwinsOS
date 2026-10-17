@@ -38,7 +38,7 @@ const AUTOMATION_EVENTS: [string, string][] = [
 
 const NOTIFICATIONS: [string, string, string][] = [
   ["New Ticket", "inAppNewTicket / emailNewTicket", "Sent to the org's configured “New Ticket Recipients” plus the resolved assignee (if any), excluding whoever created the ticket. Also fires for anonymous form submissions (no creator to exclude)."],
-  ["Ticket Assigned", "inAppTicketAssigned / emailTicketAssigned", "Sent only to the newly-assigned user — skipped if they assigned it to themselves."],
+  ["Ticket Assigned", "inAppTicketAssigned / emailTicketAssigned", "Sent only to the newly-assigned user when the assignee actually changes (saving other edits doesn't re-send it) — skipped if they assigned it to themselves."],
   ["Ticket Comment", "inAppTicketComment / emailTicketComment", "Sent only to the resolved assignee — skipped if the assignee is the one commenting."],
 ];
 

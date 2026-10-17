@@ -220,6 +220,17 @@ export function useUpdateTicket() {
       // applies if nothing changed it in the meantime; a 0-row result means
       // a race happened and we refetch + retry once.
       let beforeStatus: string | null = null;
+      // The edit sheet always submits the whole form, so `assignedTo` is present
+      // on EVERY save. Notify the assignee only when the assignment actually
+      // changed — otherwise fixing a due date re-sent "You were assigned ticket N".
+      let assigneeChanged = false;
+      if (updates.assignedTo !== undefined || updates.assignedToId !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: prev } = await (supabase as any).from("crm_tickets").select("assigned_to, assigned_to_id").eq("id", id).single();
+        const nextName = updates.assignedTo !== undefined ? (updates.assignedTo || null) : prev?.assigned_to ?? null;
+        const nextId = updates.assignedToId !== undefined ? (updates.assignedToId ?? null) : prev?.assigned_to_id ?? null;
+        assigneeChanged = nextId !== (prev?.assigned_to_id ?? null) || nextName !== (prev?.assigned_to ?? null);
+      }
       // Also read the before-state when closing: a bulk "Mark Closed" goes
       // through this hook, and without it the ticket_closed automation trigger
       // (which useCloseTicket fires) was silently skipped for those tickets.
@@ -295,11 +306,11 @@ export function useUpdateTicket() {
         const { error } = await (supabase as any).from("crm_tickets").update(payload).eq("id", id);
         if (error) throw error;
       }
-      return { wasReopened, wasClosed, clientId, effectiveCategory };
+      return { wasReopened, wasClosed, clientId, effectiveCategory, assigneeChanged };
     },
     onSuccess: (result, { id, updates }) => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
-      if (updates.assignedTo) {
+      if (result?.assigneeChanged && updates.assignedTo) {
         fetch(`/api/crm/tickets/${id}/notify`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -496,14 +507,17 @@ export function useCloseTicket() {
         .from("crm_tickets")
         .update({ status: "closed", closed_at: new Date().toISOString() })
         .eq("id", id)
+        // Already closed: don't re-stamp closed_at or re-fire ticket_closed
+        // (the bulk path through useUpdateTicket is guarded the same way).
+        .neq("status", "closed")
         .select("client_id, category")
-        .single();
+        .maybeSingle();
       if (error) throw error;
-      return { clientId: data?.client_id as string | null, category: data?.category as string | null };
+      return { closedNow: !!data, clientId: (data?.client_id ?? null) as string | null, category: (data?.category ?? null) as string | null };
     },
     onSuccess: (data, id) => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
-      if (data?.clientId) {
+      if (data?.closedNow && data.clientId) {
         fireAutomationTrigger({
           triggerType: "ticket_closed",
           clientId: data.clientId,

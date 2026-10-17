@@ -94,8 +94,13 @@ export async function GET(request: Request) {
 
   const { data: contracts, error: fetchErr } = await sb
     .from("crm_contracts")
-    .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at, default_terms)")
+    .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at, default_terms, status)")
+    // A cancelled client's contract must not keep billing — generate.ts already
+    // treats cancelled clients (and deleted ones) as inactive for visits, but the
+    // invoicing paths only checked deleted_at, so a cancelled client kept getting
+    // draft invoices every period.
     .is("clients.deleted_at", null)
+    .neq("clients.status", "cancelled")
     .eq("is_active", true)
     .eq("auto_generate", true)
     // Only a contract the client has actually agreed to should be auto-billed.

@@ -902,6 +902,25 @@ export function useUpdateInvoiceStatus() {
       if (currentErr) throw currentErr;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const patch: Record<string, any> = { status };
+      // A manual status can't contradict the payments on the invoice. This hook
+      // writes only `status`, so "Mark as Paid" on an unpaid invoice produced
+      // status=paid with the full balance still owed (still in AR and still
+      // chargeable), and moving a paid/partial invoice back to draft/sent left
+      // payments orphaned under a status that ignores them. Paid/partial follow
+      // from RECORDED payments, so point the user there instead.
+      {
+        const total = current?.total_cents ?? 0;
+        const paid = current?.amount_paid_cents ?? 0;
+        if (status === "paid" && paid < total) {
+          throw new Error("its balance is still owed — record a payment to mark it paid");
+        }
+        if (status === "partial" && !(paid > 0 && paid < total)) {
+          throw new Error("Partial is set by recording a payment that doesn't cover the whole invoice");
+        }
+        if (["draft", "sent", "printed", "viewed", "overdue"].includes(status) && paid > 0 && current?.status !== status) {
+          throw new Error("it has payments recorded, so its status follows its payments");
+        }
+      }
       const leavingVoid = current?.status === "void";
       if (leavingVoid) {
         patch.balance_cents = Math.max(0, (current.total_cents ?? 0) - (current.amount_paid_cents ?? 0));

@@ -112,12 +112,15 @@ export function ContractsGuide() {
           </tbody>
         </Table>
         <Callout>
-          <strong>Editing a signed contract un-signs it.</strong> If you change the monthly amount,
-          the monthly-amounts grid, the invoice line items, or the start/end dates on a contract
-          that&apos;s already Signed, the app automatically reverts its status to Sent and clears
-          signed_at / signed_by. The idea: the daily invoicing cron bills off those exact fields,
-          so a client&apos;s signature shouldn&apos;t stay attached to terms they never actually
-          agreed to. Re-confirm (mark Signed again) after making the change.
+          <strong>Changing a signed contract&apos;s terms un-signs it.</strong> If you actually
+          change the monthly amount, the monthly-amounts grid, the invoice line items, the
+          start/end dates, the client, or the billing day / frequency on a contract that&apos;s
+          already Signed, the app automatically reverts its status to Sent and clears signed_at /
+          signed_by. The idea: the daily invoicing cron bills off those exact fields, so a
+          client&apos;s signature shouldn&apos;t stay attached to terms they never actually agreed
+          to. Re-confirm (mark Signed again) after making the change. Saving without changing any of
+          those values &mdash; say, editing only the title, PO number or sales rep &mdash; leaves the
+          contract Signed and billing.
         </Callout>
         <p>
           Because the signed-date is a tracked field, it&apos;s also one of the Zapier/automation
@@ -180,6 +183,13 @@ export function ContractsGuide() {
           <strong>Frequency</strong> column on the Invoices list. There is currently no field in
           the Contract dialog to set it; new contracts default to Monthly, and a different
           frequency is set through the API or MCP connector.
+        </p>
+        <p>
+          If a billing day is missed (an outage, or the cron failing that morning), the contract is
+          billed later in the same month rather than skipped &mdash; for Monthly, Quarterly and
+          Annual contracts alike, as long as that period hasn&apos;t already been invoiced and the
+          contract existed on its billing day. A contract whose client has been{" "}
+          <strong>cancelled</strong> (or deleted) stops billing.
         </p>
         <Table>
           <thead>

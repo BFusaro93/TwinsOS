@@ -313,6 +313,13 @@ export function InvoicingGuide() {
           them. Practically: a completed visit isn&apos;t revenue on the books until you print or
           send its invoice.
         </Callout>
+        <Callout>
+          <strong>Paid and Partial follow recorded payments.</strong> You can&apos;t set an invoice to
+          Paid (from its status menu or the bulk <strong>Mark as Paid</strong> action) while its
+          balance is still owed &mdash; the app tells you to record a payment instead, so the
+          balance, the client&apos;s Account Balance and the charge queues stay correct. Likewise an
+          invoice with payments recorded can&apos;t be moved back to Draft or Sent.
+        </Callout>
       </Section>
 
       <Section id="recording-payments" title="Recording payments">

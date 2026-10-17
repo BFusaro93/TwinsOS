@@ -162,6 +162,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     id: string;
     job_id: string;
     crew_id: string | null;
+    crew_unassigned: boolean | null;
     job_service_id: string | null;
     crm_jobs: {
       id: string;
@@ -184,7 +185,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     supabase
       .from("crm_job_visits")
       .select(
-        "id, job_id, crew_id, job_service_id, crm_jobs!inner(id, crew_id, property_id, status, service_address, clients:client_id(display_name), crm_job_services(id, service_id, included, crm_services:service_id(track_chemicals)))"
+        "id, job_id, crew_id, crew_unassigned, job_service_id, crm_jobs!inner(id, crew_id, property_id, status, service_address, clients:client_id(display_name), crm_job_services(id, service_id, included, crm_services:service_id(track_chemicals)))"
       )
       .eq("scheduled_date", date)
       .in("status", OUTSTANDING_VISIT_STATUSES)
@@ -194,6 +195,9 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
   const liveVisits = visitsRaw.filter((v) => v.crm_jobs && !TERMINAL_JOB_STATUSES.has(v.crm_jobs.status ?? ""));
 
   function effectiveCrewId(v: VisitRow): string | null {
+    // A visit deliberately pinned to NO crew (crew_unassigned) must not fall back
+    // to the job's crew, or its materials get loaded onto that crew's truck.
+    if (v.crew_unassigned) return null;
     return v.crew_id ?? v.crm_jobs?.crew_id ?? null;
   }
 

@@ -144,6 +144,11 @@ export function JobsPackagesGuide() {
           re-pricing a service line on the job updates every one of those places at once, and the
           three can no longer drift apart.
         </p>
+        <p>
+          Removing a service from a job also removes that service&apos;s upcoming visits (scheduled
+          or dispatched, not yet started). Completed visits stay, since they&apos;re already
+          invoiced.
+        </p>
       </Section>
 
       <Section id="jobs-list" title="Finding jobs on the Jobs list">

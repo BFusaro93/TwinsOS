@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
+import { adminClient } from "@/lib/api/auth";
 import { logger } from "@/lib/logger";
 import { validateImageUpload } from "@/lib/utils/image-upload";
 
@@ -220,7 +221,11 @@ export async function POST(
   // already server-side. notifyStaffOfNewTicket excludes the creator, so the
   // crew member isn't notified about their own suggestion.
   try {
-    await notifyStaffOfNewTicket(supabase, {
+    // Service client, not the crew's session: the notifications INSERT policy is
+    // service_role-only (20260824113943), so with the crew client the in-app bell
+    // row silently failed and only emails went out. Ownership of the visit was
+    // proven above; the recipients are resolved from the org.
+    await notifyStaffOfNewTicket(adminClient(), {
       orgId: visit.org_id,
       ticketId: ticket.id,
       ticketNumber: ticket.ticket_number,

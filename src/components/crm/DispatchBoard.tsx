@@ -7,6 +7,7 @@ import Link from "next/link";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   useVisitsForDate,
   useUpdateVisitStatus,
@@ -657,6 +658,13 @@ function JobDetailSheet({
   const [skipReason,  setSkipReason]  = useState(visit.skipReason ?? "");
   useEffect(() => { setSkipReason(visit.skipReason ?? ""); }, [visit.id, visit.skipReason]);
   const [subStatus,   setSubStatus]   = useState(visit.subStatus ?? "");
+  // The sheet stays open while the crew works: without re-syncing, a visit the
+  // crew COMPLETES (or whose men/qty changed) leaves these at their mount-time
+  // values, and the next Save writes them back — a stale status="in_progress"
+  // against a live "completed" took the reopening branch below and reopened the
+  // visit (and its one-time job) just because a dispatcher edited a note.
+  useEffect(() => { setStatus(visit.status); }, [visit.id, visit.status]);
+  useEffect(() => { setSubStatus(visit.subStatus ?? ""); }, [visit.id, visit.subStatus]);
   const [crewId,      setCrewId]      = useState(effectiveCrewId({ ...visit, job }) ?? "");
   const [startTime,   setStartTime]   = useState(visit.startTime ?? "");
   const [endTime,     setEndTime]     = useState(visit.endTime ?? "");
@@ -667,8 +675,10 @@ function JobDetailSheet({
   // row was correctly showing a computed value from real times.
   const [actualHours, setActualHours] = useState(hoursInputValue(computeActualHours(visit)));
   const [menCount,    setMenCount]    = useState(String(visit.menCount));
+  useEffect(() => { setMenCount(String(visit.menCount)); }, [visit.id, visit.menCount]);
   const [budgetedHoursInput, setBudgetedHoursInput] = useState(hoursInputValue(computeBudgetedHours(visit)));
   const [qty,         setQty]         = useState(String(visit.qty ?? ""));
+  useEffect(() => { setQty(String(visit.qty ?? "")); }, [visit.id, visit.qty]);
   // null = inherit the job's High Priority flag (the common case); true/false
   // explicitly overrides it for just this one visit.
   const [highPriorityOverride, setHighPriorityOverride] = useState<boolean | null>(visit.isHighPriority);
@@ -807,6 +817,7 @@ function JobDetailSheet({
   }
 
   // Notes state
+  const qc = useQueryClient();
   const [newComment,    setNewComment]    = useState("");
   const [notesToClient, setNotesToClient] = useState(visit.notesToClient ?? "");
   // Fall back to job-level master invoice description when visit has none
@@ -934,10 +945,20 @@ function JobDetailSheet({
       createdAt: new Date().toISOString(),
     };
     try {
-      await updateVisit({
-        id: visit.id,
-        updates: { job_comments: [...visit.jobComments, comment] },
+      // Append in the database (the crew notes route's fix): rewriting the whole
+      // job_comments array from this sheet's snapshot dropped any crew note that
+      // landed after the board's last refetch.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: appendErr } = await (createSupabaseBrowserClient() as any).rpc("crm_append_visit_job_comment", {
+        p_visit_id: visit.id,
+        p_comment_id: comment.id,
+        p_author_name: comment.authorName,
+        p_author_id: comment.authorId,
+        p_text: comment.text,
+        p_created_at: comment.createdAt,
       });
+      if (appendErr) throw appendErr;
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       setNewComment("");
       toast.success("Comment added");
     } catch {
@@ -2586,7 +2607,17 @@ function EditJobTimesDialog({
   const orgBreaksUnpaid = orgSettings?.customizations?.crewBreaksUnpaid !== false;
 
   const crew = crewsWithMembers?.find((c) => c.id === crewId);
-  const allMembers = crew?.members ?? [];
+  // The roster for THIS visit's day: default members, with same-day swaps
+  // (crm_crew_daily_members) applied. Seeding from crew.members (the permanent
+  // roster) gave a sick, swapped-out member a full punch — paid and
+  // labor-costed — while the member borrowed in for the day got nothing.
+  const { data: dailyOverridesForTimes = [] } = useCrewDailyMembers(visitDate);
+  const effectiveRosterIds = new Set(
+    effectiveCrewMemberIds(crewId ?? null, crewsWithMembers ?? [], dailyOverridesForTimes)
+  );
+  const allMembers = (crewsWithMembers ?? [])
+    .flatMap((c) => c.members ?? [])
+    .filter((m) => effectiveRosterIds.has(m.id));
   const assignedIds = new Set(memberTimes.map((t) => t.crewMemberId));
   const availableMembers = allMembers.filter((m) => !assignedIds.has(m.id));
   // Anyone org-wide who isn't already on this crew's roster — e.g. someone
@@ -4253,6 +4284,21 @@ export function DispatchBoard() {
       crewOrderNumById.set(v.id, next);
     }
   }
+
+  // Selection follows visibility. A check on a row that a filter (or a day change)
+  // has since hidden used to stay in selectedIds, so Change Status / Re-assign
+  // Crew / Move to Day silently ALSO applied to rows the dispatcher could no
+  // longer see — and "Actions (n)" counted them. Prune hidden ids whenever the
+  // visible set changes.
+  const visibleIdsKey = filtered.map((v) => v.id).join(",");
+  useEffect(() => {
+    const visible = new Set(visibleIdsKey ? visibleIdsKey.split(",") : []);
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set([...prev].filter((id) => visible.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [visibleIdsKey]);
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
