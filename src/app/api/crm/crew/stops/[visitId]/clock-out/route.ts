@@ -345,6 +345,10 @@ export async function POST(
       });
       if (!sideEffects.ok) {
         log.error("completion side effects failed", { visitId: row.id, error: sideEffects.error });
+      } else if (sideEffects.invoiceSkipReason === "error") {
+        // Completed but the auto-invoice threw (swallowed inside the side
+        // effects) — leave a trace so an unbilled completed visit can be found.
+        log.error("visit completed but auto-invoice failed", { visitId: row.id });
       }
     } catch (err) {
       log.error("completion side effects threw", { visitId: row.id, error: err instanceof Error ? err.message : String(err) });

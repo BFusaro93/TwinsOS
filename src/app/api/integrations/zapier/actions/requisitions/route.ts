@@ -58,6 +58,7 @@ export async function POST(request: Request) {
       .from("vendors")
       .select("org_id, name")
       .eq("id", body.vendorId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (!vendor || vendor.org_id !== auth.orgId) {
       return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
       .from("work_orders")
       .select("org_id")
       .eq("id", body.workOrderId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (!wo || wo.org_id !== auth.orgId) {
       return NextResponse.json({ error: "Work order not found" }, { status: 404 });
@@ -84,7 +86,8 @@ export async function POST(request: Request) {
     const { data: products } = await db
       .from("product_items")
       .select("id, org_id, name, part_number, unit_cost")
-      .in("id", productIds);
+      .in("id", productIds)
+      .is("deleted_at", null);
     const productMap = new Map((products ?? []).map((p) => [p.id as string, p]));
     for (const id of productIds) {
       const product = productMap.get(id);
@@ -166,7 +169,9 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? "create failed" }, { status: 500 });
+    // Don't hand raw database errors (constraint/column names) to the caller.
+    console.error("[zapier action] create failed:", error?.message);
+    return NextResponse.json({ error: "create failed" }, { status: 500 });
   }
 
   const shaped = shapeRequisition(data);

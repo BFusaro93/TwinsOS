@@ -13,7 +13,8 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
 // intercepts these keywords before they ever reach this webhook and replies
 // with its own confirmation — this list is a defense-in-depth backstop for
 // if that setting is ever off, not the primary compliance mechanism.
-const OPT_OUT_KEYWORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
+// REVOKE/OPTOUT are in Twilio's own standard opt-out list too.
+const OPT_OUT_KEYWORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "REVOKE", "OPTOUT"]);
 // "YES" is deliberately NOT an opt-in keyword: clients reply YES to unrelated
 // texts (e.g. "Reply YES to confirm your visit"), which would silently re-grant
 // SMS consent to someone who texted STOP. START/UNSTOP are Twilio's own
@@ -93,7 +94,8 @@ export async function POST(request: Request) {
   }
 
   const digits = last10Digits(from);
-  const keyword = body.trim().toUpperCase();
+  // Trailing punctuation ("Stop." / "STOP!") is still a STOP.
+  const keyword = body.trim().toUpperCase().replace(/[.!?\s]+$/, "");
 
   // ── Which tenant's clients can this text belong to? ──────────────────────
   // When the MessagingServiceSid resolved to an org above, only that org.
@@ -153,7 +155,12 @@ export async function POST(request: Request) {
     // flag set would let any of them text again. START is deliberately NOT
     // applied: consent must never be granted to a tenant it wasn't given to.
     if (OPT_OUT_KEYWORDS.has(keyword)) {
-      await supabase.from("clients").update({ sms_opt_in: false }).in("id", allMatches.map((c) => c.id));
+      const { error: optOutErr } = await supabase.from("clients").update({ sms_opt_in: false }).in("id", allMatches.map((c) => c.id));
+      if (optOutErr) {
+        // 5xx so Twilio retries — a swallowed failure leaves the number textable.
+        log.error("failed to apply multi-org STOP", { error: optOutErr.message });
+        return NextResponse.json({ error: "Opt-out failed" }, { status: 500 });
+      }
     }
     log.warn("inbound sms matched clients in multiple orgs; not attached to any tenant", {
       orgCount: matchedOrgIds.length,
@@ -175,7 +182,13 @@ export async function POST(request: Request) {
   // as "already handled" and the opt-out would never land. Idempotent, so
   // re-applying on a genuine duplicate is harmless.
   if (OPT_OUT_KEYWORDS.has(keyword)) {
-    await supabase.from("clients").update({ sms_opt_in: false }).eq("org_id", orgId).in("id", matchedIds);
+    const { error: optOutErr } = await supabase.from("clients").update({ sms_opt_in: false }).eq("org_id", orgId).in("id", matchedIds);
+    if (optOutErr) {
+      // 5xx so Twilio retries — acking 200 here would leave the client textable
+      // after they said STOP.
+      log.error("failed to apply STOP", { orgId, error: optOutErr.message });
+      return NextResponse.json({ error: "Opt-out failed" }, { status: 500 });
+    }
   }
 
   // Twilio retries a webhook on timeouts/5xx, so the same MessageSid can arrive
@@ -215,11 +228,12 @@ export async function POST(request: Request) {
   if (activityErr) log.error("failed to log inbound sms", { error: activityErr.message });
 
   if (OPT_IN_KEYWORDS.has(keyword)) {
-    await supabase
+    const { error: optInErr } = await supabase
       .from("clients")
       .update({ sms_opt_in: true, sms_opt_in_at: new Date().toISOString(), sms_opt_in_source: "keyword" })
       .eq("org_id", orgId)
       .in("id", matchedIds);
+    if (optInErr) log.error("failed to apply START", { orgId, error: optInErr.message });
   }
 
   // The ticket goes on one client: the one that already has an open text

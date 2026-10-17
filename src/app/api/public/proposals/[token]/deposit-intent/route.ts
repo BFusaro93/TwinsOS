@@ -63,9 +63,10 @@ export async function POST(
   if (tokenErr || !shareToken) {
     return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
   }
-  if (shareToken.expires_at && new Date(shareToken.expires_at) < new Date()) {
-    return NextResponse.json({ error: "Proposal link has expired" }, { status: 410 });
-  }
+  // Checked below, once we know whether this is a retry of a bounced deposit:
+  // an ACH return can land ~60 days after the debit, well past the link's
+  // 30-day default, and the client who owes it still needs to be able to pay.
+  const tokenExpired = !!shareToken.expires_at && new Date(shareToken.expires_at) < new Date();
 
   const { data: estimate } = await supabase
     .from("estimates")
@@ -109,6 +110,10 @@ export async function POST(
   // new power — only another attempt at the same number. The webhook clears
   // deposit_failed_at the moment a deposit lands, which closes the link again.
   const isRetry = !!estimate.deposit_failed_at && (estimate.deposit_collected_cents ?? 0) === 0;
+
+  if (tokenExpired && !isRetry) {
+    return NextResponse.json({ error: "Proposal link has expired" }, { status: 410 });
+  }
 
   if (!isRetry) {
     if (shareToken.accepted_at) {
@@ -227,7 +232,14 @@ export async function POST(
         existing.status === "requires_payment_method" ||
         existing.status === "requires_confirmation" ||
         existing.status === "requires_action";
-      if (reusable && existing.payment_method_types.includes(paymentMethod)) {
+      // Only hand the outstanding intent back if it is still for THIS amount.
+      // The deposit or fee setting can change between visits (staff raise the
+      // deposit and re-send); reusing a stale intent charged the old amount
+      // while the page quoted the new one.
+      const sameAmount =
+        existing.amount === totalChargeCents &&
+        Number(existing.metadata?.deposit_cents) === depositCents;
+      if (reusable && sameAmount && existing.payment_method_types.includes(paymentMethod)) {
         return NextResponse.json({
           clientSecret: existing.client_secret,
           connectedAccountId: org.stripe_connect_account_id,
@@ -239,9 +251,9 @@ export async function POST(
           reused: true,
         });
       }
-      // Still open but for the other method — the client switched from card to
-      // bank transfer or back. Cancel it so it can never be confirmed later,
-      // then fall through and create the one they actually want.
+      // Still open but for the other method (the client switched card <-> bank
+      // transfer) or a stale amount. Cancel it so it can never be confirmed
+      // later, then fall through and create the one they actually want.
       if (reusable) {
         await stripe.paymentIntents.cancel(
           existing.id,

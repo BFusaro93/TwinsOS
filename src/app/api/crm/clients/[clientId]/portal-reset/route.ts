@@ -84,7 +84,19 @@ export async function DELETE(
       .eq("user_id", portalUser.user_id)
       .is("deleted_at", null)
       .limit(1);
-    if (!otherActiveLinks?.length) {
+    // A portal login can also be a STAFF login (register links an existing
+    // account when its own session matches the invite email — e.g. an owner of
+    // one org who is a customer of another). Deleting the auth user would then
+    // destroy their staff access. The portal link is already revoked above, so
+    // for a staff account that is all the reset needs to do.
+    const [{ data: staffProfile }, { data: staffEmployee }] = await Promise.all([
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (adminClient as any).from("profiles").select("id").eq("id", portalUser.user_id).limit(1),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (adminClient as any).from("crm_employees").select("id").eq("user_id", portalUser.user_id).limit(1),
+    ]);
+    const isStaffLogin = !!staffProfile?.length || !!staffEmployee?.length;
+    if (!otherActiveLinks?.length && !isStaffLogin) {
       // Checked, not fire-and-forget: this delete silently failed for months
       // because the soft-deleted client_portal_users row still referenced the
       // auth user and the FK had no ON DELETE action (fixed in

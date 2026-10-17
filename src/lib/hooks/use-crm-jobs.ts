@@ -1102,7 +1102,13 @@ export function useUpdateVisitStatus() {
           const body = await res.json() as { error?: string };
           throw new Error(body.error ?? 'Failed to complete visit');
         }
-        const body = await res.json() as { clientId?: string };
+        const body = await res.json() as { clientId?: string; invoiceSkipReason?: string | null };
+        // Auto-invoicing can throw and be swallowed so it can't undo the
+        // completion; surface it like the job-complete path does, or the visit
+        // sits completed and unbilled with nobody aware.
+        if (body.invoiceSkipReason === 'error') {
+          toast.warning('Visit completed, but the invoice could not be created. Mark it complete again to retry billing.');
+        }
         return { ...body, status };
       }
 

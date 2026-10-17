@@ -277,10 +277,10 @@ export function EmailActivityList() {
           { label: "Delivered", value: fmtPct(deliveredCount, total), color: "text-green-600 dark:text-green-400", sub: deliveredCount.toLocaleString() },
           { label: "Opened",    value: fmtPct(openedCount, total),    color: "text-sky-600 dark:text-sky-400",    sub: openedCount.toLocaleString() },
           { label: "Bounced",   value: fmtPct(bouncedCount, total),   color: "text-orange-500 dark:text-orange-400", sub: bouncedCount.toLocaleString() },
-          // Resend has no "complained" (spam-report) event — confirmed against
-          // the dashboard's own webhook event picker — so there's no data
-          // source for a Spam stat. Show Clicked instead, which the webhook
-          // does track, rather than leaving the card permanently blank.
+          // Resend does send an email.complained (spam-report) event, but the
+          // webhook acts on it by opting the client out of marketing rather than
+          // timestamping the activity row, so there's no per-email Spam stat.
+          // Show Clicked instead, which the webhook does track.
           { label: "Clicked",   value: fmtPct(clickedCount, total),   color: "text-violet-600 dark:text-violet-400", sub: clickedCount.toLocaleString() },
           { label: "Failed",    value: fmtPct(failedCount, total),    color: "text-red-600 dark:text-red-400",   sub: failedCount.toLocaleString() },
         ].map((s) => (

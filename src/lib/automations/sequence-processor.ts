@@ -91,7 +91,8 @@ interface SendFailureContext {
   sequenceId: string;
   clientId: string | null;
   eventId: string;
-  eventType: "email" | "text_message" | "alert" | "ticket" | "update" | "tags";
+  // Open-ended: the unsupported-step fallback passes whatever type the row has.
+  eventType: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   events: any[];
   position: number;
@@ -808,11 +809,18 @@ async function runClaimedStep(
     return { fired: { enrollmentId: enrollId, action: `if_branch ${conditionsMet ? "true" : "false"} → ${action}` } };
   }
 
+  // A step type this processor doesn't know (a newer builder step on an older
+  // deploy, or bad data) can never succeed by retrying. Returning "skipped"
+  // without moving the enrollment left it re-claimed every lease period
+  // forever, so skip past the step like any other permanent step failure.
   await logSequenceExecution(adminClient, {
     orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
     eventId: currentEvent.id, eventType: currentEvent.event_type, action: "unsupported_event_type",
   });
-  return { skipped: { enrollmentId: enrollId, reason: `unsupported event_type: ${currentEvent.event_type}` } };
+  return handleSendFailure(adminClient, {
+    orgId, enrollId, sequenceId: sequence_id, clientId: client_id, eventId: currentEvent.id,
+    eventType: String(currentEvent.event_type), events: events ?? [], position: next_event_position, nowIso,
+  }, `unsupported event_type: ${currentEvent.event_type}`, true);
 }
 
 /**

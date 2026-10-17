@@ -51,6 +51,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/forms/") || // public form submission pages (iframe-embeddable)
     pathname.startsWith("/portal/login") || // client portal login
     pathname.startsWith("/portal/register") || // client portal registration
+    pathname.startsWith("/portal/forgot-password") || // portal password-reset request (linked from /portal/login)
     pathname.startsWith("/api/") || // all API routes handle their own auth
     pathname.startsWith("/.well-known/") || // OAuth discovery metadata, fetched pre-login
     pathname === "/" ||

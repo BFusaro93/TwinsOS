@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { z } from "zod";
 import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
     .from("clients")
     .select("org_id")
     .eq("id", body.clientId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (!client || client.org_id !== auth.orgId) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
@@ -59,7 +61,9 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? "create failed" }, { status: 500 });
+    // Don't hand raw database errors (constraint/column names) to the caller.
+    console.error("[zapier action] create failed:", error?.message);
+    return NextResponse.json({ error: "create failed" }, { status: 500 });
   }
 
   // Same client-timeline row the in-app New Job dialog writes (see
@@ -72,6 +76,19 @@ export async function POST(request: Request) {
     ref_id: data.id,
     ref_table: "crm_jobs",
   });
+
+  // The in-app New Job dialog fires job_created; without it a job made through
+  // Zapier never enrolled in job_created automations. Best-effort.
+  try {
+    await fireSimpleTrigger(db, {
+      orgId: auth.orgId,
+      clientId: body.clientId,
+      triggerType: "job_created",
+      matchValues: [body.jobType ?? "one_time"],
+    });
+  } catch {
+    // enrollment failure must not fail the create
+  }
 
   return NextResponse.json({
     id: data.id,

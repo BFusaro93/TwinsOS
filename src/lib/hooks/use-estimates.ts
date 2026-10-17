@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import type {
   Estimate,
@@ -316,14 +317,26 @@ export function useBulkImportEstimates() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
-      const { data: clients } = await supabase.from("clients").select("id, display_name").is("deleted_at", null);
-      const byName = new Map((clients ?? []).map((c) => [c.display_name.trim().toLowerCase(), c.id]));
+      // Paged (a bare select stops at PostgREST's 1000-row cap, so past 1000
+      // clients rows failed to match or missed a duplicate name).
+      const clients = await fetchAllRows<{ id: string; display_name: string }>(() =>
+        supabase.from("clients").select("id, display_name").is("deleted_at", null).order("id")
+      );
+      // Two clients can share a display name: a plain Map let the LAST one
+      // silently win, attaching estimates to the wrong client. Track every id
+      // per name and skip ambiguous rows (the invoice/payment importers do).
+      const idsByName = new Map<string, string[]>();
+      for (const c of clients) {
+        const key = c.display_name.trim().toLowerCase();
+        idsByName.set(key, [...(idsByName.get(key) ?? []), c.id]);
+      }
 
       let created = 0;
       let skipped = 0;
 
       for (const r of rows) {
-        const clientId = byName.get(r.clientName?.trim().toLowerCase() ?? "");
+        const matches = idsByName.get(r.clientName?.trim().toLowerCase() ?? "") ?? [];
+        const clientId = matches.length === 1 ? matches[0] : undefined;
         const description = r.description?.trim();
         if (!clientId || !description) { skipped++; continue; }
 
@@ -337,7 +350,10 @@ export function useBulkImportEstimates() {
           po_number: r.poNumber?.trim() || null,
           stage: (r.stage?.trim().toLowerCase() as Estimate['stage']) || "draft",
         });
-        if (error) throw error;
+        // A bad row (unknown stage, unparseable date, ...) is a skipped row. Throwing
+        // here aborted the batch part-way with earlier rows already created and
+        // no summary shown.
+        if (error) { skipped++; continue; }
         created++;
       }
 

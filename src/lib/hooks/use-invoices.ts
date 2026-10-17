@@ -8,6 +8,7 @@ import { fireQuickBooksInvoiceSync, fireQuickBooksPaymentSync } from "@/lib/inte
 import type { CRMInvoice, InvoiceLineItem, CRMPayment } from "@/types/crm-invoices";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import {
   computeAutoInvoiceTotals,
@@ -564,6 +565,25 @@ function parseCsvMoneyCents(raw: string | null | undefined): number {
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
 
+/**
+ * "2026-03-04" / "3/4/2026" / "03/04/26" → "YYYY-MM-DD", or null when it isn't
+ * a real calendar date. Slash dates are read US-style (M/D/Y), matching how the
+ * exports this app and QuickBooks/Excel produce them.
+ */
+function normalizeCsvDate(raw: string | null | undefined): string | null {
+  const s = (raw ?? "").trim();
+  if (!s) return null;
+  let y: number, m: number, d: number;
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(s);
+  if (iso) { y = +iso[1]; m = +iso[2]; d = +iso[3]; }
+  else if (us) { m = +us[1]; d = +us[2]; y = +us[3] < 100 ? 2000 + +us[3] : +us[3]; }
+  else return null;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 export function useBulkImportInvoices() {
   // Imported rows without a date mean "today" on the ORG's calendar, not
   // the importer's laptop or the UTC server.
@@ -574,11 +594,17 @@ export function useBulkImportInvoices() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
+      // Paged: a bare select stops at PostgREST's 1000-row cap, so past 1000
+      // clients rows silently failed to match (or missed a duplicate name).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: clients } = await (supabase as any)
-        .from("clients")
-        .select("id, display_name, default_payment_method, default_terms")
-        .is("deleted_at", null);
+      const clients = await fetchAllRows<any>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("clients")
+          .select("id, display_name, default_payment_method, default_terms")
+          .is("deleted_at", null)
+          .order("id")
+      );
       // Two clients sharing a display name can't be told apart by the CSV's
       // clientName column — flag those rows instead of picking one at random.
       const byName = new Map<string, string>();
@@ -657,11 +683,19 @@ export function useBulkImportInvoices() {
           continue;
         }
 
-        const invoiceDate = r.invoiceDate?.trim() || todayInZone(orgTimeZone);
+        // Normalize (M/D/YYYY -> ISO) and validate before anything is inserted,
+        // so a bad date is a reported row, not a mid-batch crash.
+        const invoiceDate = r.invoiceDate?.trim() ? normalizeCsvDate(r.invoiceDate) : todayInZone(orgTimeZone);
+        const importedDueDate = r.dueDate?.trim() ? normalizeCsvDate(r.dueDate) : null;
+        if (!invoiceDate || (r.dueDate?.trim() && !importedDueDate)) {
+          warnings.push({ row: rowNo, reason: `date "${(!invoiceDate ? r.invoiceDate : r.dueDate)?.trim()}" is not a valid date (use YYYY-MM-DD or M/D/YYYY) — row skipped` });
+          skipped++;
+          continue;
+        }
         // A blank due date derives from the client's/org's terms — a null
         // due_date is skipped by the invoice-past-due automation forever.
         const invoiceTerms = resolveInvoiceTerms(defaultTermsById.get(clientId) as string | null, orgTermsRow?.default_billing_terms);
-        const dueDate = r.dueDate?.trim() || computeDueDate(invoiceDate, invoiceTerms);
+        const dueDate = importedDueDate || computeDueDate(invoiceDate, invoiceTerms);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: invoice, error } = await (supabase as any)
@@ -1471,7 +1505,10 @@ export function useBulkImportPayments() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
-      const { data: clients } = await supabase.from("clients").select("id, display_name, account_number").is("deleted_at", null);
+      // Paged — see the invoice importer.
+      const clients = await fetchAllRows<{ id: string; display_name: string; account_number: string | null }>(() =>
+        supabase.from("clients").select("id, display_name, account_number").is("deleted_at", null).order("id")
+      );
       // Name matching is a fallback only: display names aren't unique, and a
       // plain Map let the LAST duplicate silently win — payments landed on
       // the wrong client. Track every id per name so ambiguous names can be
@@ -1510,7 +1547,11 @@ export function useBulkImportPayments() {
         return { clientId: matches[0] ?? null };
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: invoices } = await (supabase as any).from("crm_invoices").select("id, invoice_number, client_id").is("deleted_at", null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const invoices = await fetchAllRows<any>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any).from("crm_invoices").select("id, invoice_number, client_id").is("deleted_at", null).order("id")
+      );
       const invoiceByNumberAndClient = new Map<string, string>(
         (invoices ?? [])
           .filter((i: { invoice_number: number | null }) => i.invoice_number != null)
@@ -1531,8 +1572,24 @@ export function useBulkImportPayments() {
           failures.push({ row: rowNumber, reason: clientReason });
           continue;
         }
-        const amountCents = Math.round(parseFloat(r.amount || "0") * 100);
-        if (!clientId || !amountCents || amountCents < 0) { skipped++; continue; }
+        // parseFloat("1,234.50") was 1 and parseFloat("$500") was NaN: an Excel /
+        // QuickBooks export recorded $1.00 or dropped the row. Same parser as
+        // the invoice importer ($ and thousands separators stripped).
+        const rawAmount = (r.amount ?? "").trim();
+        const amountCents = parseCsvMoneyCents(rawAmount);
+        if (!clientId || amountCents <= 0) {
+          if (clientId && rawAmount) {
+            failures.push({ row: rowNumber, reason: `Amount "${rawAmount}" is not a positive dollar amount — not imported` });
+          } else {
+            skipped++;
+          }
+          continue;
+        }
+        const paymentDate = r.paymentDate?.trim() ? normalizeCsvDate(r.paymentDate) : todayInZone(orgTimeZone);
+        if (!paymentDate) {
+          failures.push({ row: rowNumber, reason: `Date "${r.paymentDate?.trim()}" is not a valid date (use YYYY-MM-DD or M/D/YYYY) — not imported` });
+          continue;
+        }
 
         const method = PAYMENT_METHODS.find((m) => m.toLowerCase() === r.method?.trim().toLowerCase()) ?? "Check";
         const invoiceNumber = r.invoiceNumber ? parseInt(r.invoiceNumber, 10) : null;
@@ -1557,7 +1614,7 @@ export function useBulkImportPayments() {
           invoice_id: null,
           amount_cents: amountCents,
           unused_amount_cents: amountCents,
-          payment_date: r.paymentDate?.trim() || todayInZone(orgTimeZone),
+          payment_date: paymentDate,
           method,
           reference: r.reference?.trim() || null,
           memo: r.memo?.trim() || null,

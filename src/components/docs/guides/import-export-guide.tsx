@@ -253,6 +253,15 @@ export function ImportExportGuide() {
             committed; rows after the failure are never attempted. There is no all-or-nothing
             transaction wrapping the whole CSV.
           </li>
+          <li>
+            <strong>Estimates, Invoices and Payments</strong> are more forgiving about bad rows:
+            one bad row is reported and skipped instead of stopping the import. Amounts can be typed
+            the way Excel or QuickBooks writes them (<code>$1,234.50</code>), and dates can be{" "}
+            <code>YYYY-MM-DD</code> or <code>M/D/YYYY</code>. A row is skipped, with the reason shown,
+            if its amount or date can&apos;t be read, if no client matches, or if two clients share
+            the name on the row (add an <code>accountNumber</code> column to say which one). Re-importing
+            the same file creates the records again, so import each file once.
+          </li>
         </ul>
         <Table>
           <thead>

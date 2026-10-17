@@ -64,8 +64,14 @@ export async function POST(request: Request) {
   const results = groupResults.flat();
 
   const failed = results.filter((r) => !r.ok);
+  // Visits that completed but whose auto-invoice threw (swallowed inside the
+  // side effects so it can't undo the completion). Without reporting them a
+  // dispatcher bulk-completing 20 visits had no idea one stayed unbilled.
+  // Marking such a visit complete again re-runs the (idempotent) invoice step.
+  const billingErrors = results.filter((r) => r.ok && r.invoiceSkipReason === "error").map((r) => r.id);
   return NextResponse.json({
     completed: results.length - failed.length,
     failed: failed.map((r) => ({ id: r.id, error: "error" in r ? r.error : "Unknown error" })),
+    billingErrors,
   });
 }

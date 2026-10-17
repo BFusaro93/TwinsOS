@@ -241,11 +241,18 @@ async function applySubscriptionToOrg(
     .from("organizations")
     .update(patch)
     .select("id, plan, seats_included_override, seat_overage_cents_override")
-    .single();
+    .maybeSingle();
   const { data: org, error } =
     "id" in lookup ? await query.eq("id", lookup.id) : await query.eq("stripe_customer_id", lookup.stripeCustomerId);
 
   if (error) throw error;
+  if (!org) {
+    // A Stripe customer that no org owns (test customer, deleted org). With
+    // .single() this threw on every delivery and Stripe retried it for days;
+    // there's nothing to apply, so log it and ack.
+    log.warn("subscription event for a customer with no matching org — ignored", { lookup });
+    return;
+  }
 
   // A downgraded/canceled subscription doesn't need its overage item
   // reconciled — the subscription itself is ending or already gone.

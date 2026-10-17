@@ -82,6 +82,11 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({})) as { jobIds?: unknown };
   const jobIds = Array.isArray(body.jobIds) ? body.jobIds.filter((v): v is string => typeof v === "string") : [];
+  // Each uncached job can cost a Google geocode call; an unbounded array let one
+  // request burn through the org's quota.
+  if (jobIds.length > 200) {
+    return NextResponse.json({ error: "Too many jobs in one request (max 200)" }, { status: 400 });
+  }
   if (jobIds.length === 0) {
     return NextResponse.json({ error: "jobIds is required" }, { status: 400 });
   }
