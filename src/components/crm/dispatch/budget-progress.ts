@@ -2,12 +2,6 @@ import type { CRMJobVisit } from "@/types/crm-jobs";
 
 export type BudgetLevel = "ok" | "warn" | "over";
 
-export const BUDGET_BAR_CLASS: Record<BudgetLevel, string> = {
-  ok: "bg-emerald-500",
-  warn: "bg-amber-500",
-  over: "bg-red-500",
-};
-
 /**
  * Hours-based budget health for a visit: actual vs. budgeted hours.
  * Returns null when there is no budget to measure against.

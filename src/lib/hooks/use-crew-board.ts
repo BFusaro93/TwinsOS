@@ -113,7 +113,8 @@ export function useRemoveJobAsset() {
 
 export interface CrewDailyAsset {
   id: string;
-  crewId: string;
+  /** null = deliberately NOT on any crew that day (overrides the asset's default crew). */
+  crewId: string | null;
   assetId: string;
   workDate: string;
 }
@@ -129,7 +130,7 @@ export function useCrewDailyAssets(workDate: string) {
         .select("id, crew_id, asset_id, work_date")
         .eq("work_date", workDate);
       if (error) throw error;
-      return (data ?? []).map((r: { id: string; crew_id: string; asset_id: string; work_date: string }) => ({
+      return (data ?? []).map((r: { id: string; crew_id: string | null; asset_id: string; work_date: string }) => ({
         id: r.id,
         crewId: r.crew_id,
         assetId: r.asset_id,
@@ -140,11 +141,11 @@ export function useCrewDailyAssets(workDate: string) {
   });
 }
 
-/** Put `assetId` on `crewId` for `workDate`, replacing wherever it was that day. */
+/** Put `assetId` on `crewId` for `workDate`, replacing wherever it was that day. `crewId: null` = off every crew that day. */
 export function useSetCrewDailyAsset() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ assetId, crewId, workDate }: { assetId: string; crewId: string; workDate: string }) => {
+    mutationFn: async ({ assetId, crewId, workDate }: { assetId: string; crewId: string | null; workDate: string }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
@@ -171,5 +172,59 @@ export function useClearCrewDailyAsset() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-crew-daily-assets"] }),
+  });
+}
+
+// ── default equipment per crew ────────────────────────────────────────────────
+// An asset has at most one default crew. A day's crm_crew_daily_assets row, if
+// any, overrides it (see the migration for the resolution rule).
+
+export interface CrewDefaultAsset {
+  crewId: string;
+  assetId: string;
+}
+
+export function useCrewDefaultAssets() {
+  return useQuery({
+    queryKey: ["crm-crew-default-assets"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).from("crm_crew_default_assets").select("crew_id, asset_id");
+      if (error) throw error;
+      return (data ?? []).map((r: { crew_id: string; asset_id: string }) => ({
+        crewId: r.crew_id,
+        assetId: r.asset_id,
+      })) as CrewDefaultAsset[];
+    },
+  });
+}
+
+/** Make `crewId` the asset's default crew (moves it if another crew had it). */
+export function useSetCrewDefaultAsset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ assetId, crewId }: { assetId: string; crewId: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_crew_default_assets")
+        .upsert({ asset_id: assetId, crew_id: crewId }, { onConflict: "asset_id" });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-crew-default-assets"] }),
+  });
+}
+
+export function useClearCrewDefaultAsset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ assetId }: { assetId: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("crm_crew_default_assets").delete().eq("asset_id", assetId);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-crew-default-assets"] }),
   });
 }
