@@ -228,6 +228,36 @@ export function WorkOrdersGuide() {
           instead of going negative, with a toast telling you how many you were short. Nothing blocks
           you from doing this; it&apos;s a warning, not a hard stop.
         </Callout>
+        <p>
+          <strong>The shortfall isn&apos;t forgotten.</strong> The work order line remembers how many
+          units it actually took out of stock, so the gap (&ldquo;used 3, only 1 was on hand&rdquo;)
+          is tracked. This is the usual case when a Work Order is built before the Purchase Order
+          for the part has been received. Three things happen:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            The part shows an amber <strong>&ldquo;N used before received&rdquo;</strong> badge in
+            the Parts list and in its detail sheet, where a notice lists which Work Orders are short
+            and by how much. The Parts list also has a{" "}
+            <strong>&ldquo;Used before received&rdquo;</strong> stock filter to see every affected
+            part at once.
+          </li>
+          <li>
+            Admins, managers, and purchasers get an in-app notification{" "}
+            (<strong>Part Used Before Received</strong>) so someone can check the count or chase the
+            open PO. The person who added the part is not notified of their own action.
+          </li>
+          <li>
+            When the part is later received, the short units come straight off the incoming stock
+            (oldest Work Order first), so quantity on hand ends up correct without anyone adjusting
+            it by hand. Each one is recorded in the part&apos;s audit trail as &ldquo;used N on
+            WO-&hellip;&rdquo;, and the badge clears.
+          </li>
+        </ul>
+        <p>
+          Deleting the line, or lowering its quantity, only returns the units that were really taken
+          from stock — never the full quantity.
+        </p>
       </Section>
 
       <Section id="requisitions" title="Requesting parts via a Requisition">

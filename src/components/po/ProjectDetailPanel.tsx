@@ -748,7 +748,7 @@ function SubcontractsTab({ project }: { project: Project }) {
     }
   }
 
-  const isValid = form.vendorName.trim() && form.description.trim() && parseFloat(form.amount) > 0;
+  const isValid = form.vendorName.trim() && form.description.trim() && Number.isFinite(parseFloat(form.amount)) && parseFloat(form.amount) !== 0;
 
   const materialTotal = costs.reduce((s, c) => c.costType === "materials" ? s + c.amount : s, 0);
   const laborTotal = costs.reduce((s, c) => c.costType === "labor" ? s + c.amount : s, 0);
@@ -821,22 +821,22 @@ function SubcontractsTab({ project }: { project: Project }) {
           </div>
 
           <div className="rounded-md bg-slate-50 dark:bg-muted/40 p-3 text-sm">
-            {materialTotal > 0 && (
+            {materialTotal !== 0 && (
               <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
                 <span>Materials</span><span>{formatCurrency(materialTotal)}</span>
               </div>
             )}
-            {laborTotal > 0 && (
+            {laborTotal !== 0 && (
               <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
                 <span>Labor</span><span>{formatCurrency(laborTotal)}</span>
               </div>
             )}
-            {subcontractorTotal > 0 && (
+            {subcontractorTotal !== 0 && (
               <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
                 <span>Subcontractor</span><span>{formatCurrency(subcontractorTotal)}</span>
               </div>
             )}
-            {otherTotal > 0 && (
+            {otherTotal !== 0 && (
               <div className="flex justify-between py-1 text-slate-600 dark:text-neutral-400">
                 <span>Other</span><span>{formatCurrency(otherTotal)}</span>
               </div>
@@ -903,9 +903,8 @@ function SubcontractsTab({ project }: { project: Project }) {
                 <label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Amount ($)</label>
                 <Input
                   type="number"
-                  min={0}
                   step="any"
-                  placeholder="0.00"
+                  placeholder="0.00 (negative for a vendor credit)"
                   value={form.amount}
                   onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
                 />

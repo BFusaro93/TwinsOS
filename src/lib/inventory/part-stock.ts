@@ -119,3 +119,30 @@ export function shortfallMessage(name: string, result: PartStockResult): string 
   const short = result.appliedDelta - result.requestedDelta;
   return `${name}: only ${Math.abs(result.appliedDelta)} of ${Math.abs(result.requestedDelta)} could be removed from stock — ${short} had already been used. Quantity on hand is now 0.`;
 }
+
+/**
+ * Writes the audit rows (product + project) for a receipt line that did not
+ * add to stock — either assigned to a project or for a product with Track
+ * inventory off (see 20261014170000_untracked_receipts_audit_and_stock_cleanup.sql).
+ */
+export async function logReceiptWithoutStock(
+  supabase: AnySupabase,
+  input: {
+    orgId: string;
+    productId: string;
+    projectId: string | null;
+    poNumber: string | null;
+    quantity: number;
+    reason: "project" | "untracked";
+  }
+): Promise<void> {
+  const { error } = await supabase.rpc("log_receipt_without_stock", {
+    p_org_id: input.orgId,
+    p_product_id: input.productId,
+    p_project_id: input.projectId,
+    p_po_number: input.poNumber ?? "",
+    p_quantity: input.quantity,
+    p_reason: input.reason,
+  });
+  if (error) throw error;
+}

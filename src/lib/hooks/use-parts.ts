@@ -210,7 +210,8 @@ export function useUpdatePart() {
         if (input.minimumStock !== undefined) productSync.minimum_stock = input.minimumStock;
         if (input.pictureUrl !== undefined) productSync.picture_url = input.pictureUrl;
         if (input.vendorId !== undefined) productSync.vendor_id = input.vendorId || null;
-        if (input.vendorName !== undefined) productSync.vendor_name = input.vendorName;
+        // product_items.vendor_name is NOT NULL (parts.vendor_name is nullable), so a cleared vendor syncs as "".
+        if (input.vendorName !== undefined) productSync.vendor_name = input.vendorName ?? "";
         if (input.alternateVendors !== undefined) productSync.alternate_vendors = input.alternateVendors;
         if (Object.keys(productSync).length > 0) {
           const { error: productSyncErr } = await supabase
@@ -353,6 +354,8 @@ export function useReceivePartCostLayer() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["parts"] });
+      // Receiving settles work-order usage recorded before the stock arrived.
+      queryClient.invalidateQueries({ queryKey: ["wo-part-shortfalls"] });
     },
   });
 }

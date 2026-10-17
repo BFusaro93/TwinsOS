@@ -68,7 +68,7 @@ export function ProductsPage() {
   const { can, isAdmin, roleId } = usePermissions();
   const { canManageInventory } = useRoleCapabilities();
   const canBulkEditProducts = canManageInventory && (isAdmin || !roleId || can("bulk_edit_products"));
-  const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkPriceOpen, setBulkPriceOpen] = useState(false);
@@ -79,6 +79,8 @@ export function ProductsPage() {
   const col = (key: string) => visibleKeys.includes(key);
 
   const all = products ?? [];
+  // Derive from the live query so edits show immediately (a stored snapshot goes stale after save).
+  const selectedProduct = all.find((p) => p.id === selectedProductId) ?? null;
 
   // Derive vendor options from loaded data
   const vendorOptions = Array.from(new Set(all.map((p) => p.vendorName).filter(Boolean)))
@@ -107,7 +109,7 @@ export function ProductsPage() {
   const nonInventoryCount = all.filter((p) => !p.isInventory).length;
 
   function handleRowClick(product: ProductItem) {
-    setSelectedProduct(product);
+    setSelectedProductId(product.id);
     setSheetOpen(true);
   }
 

@@ -72,7 +72,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.category !== undefined && { category: body.category }),
       ...(body.unitCostCents !== undefined && { unit_cost: body.unitCostCents }),
       ...(body.priceCents !== undefined && { price: body.priceCents }),
-      ...(body.vendorId !== undefined && { vendor_id: body.vendorId, vendor_name: vendorName }),
+      ...(body.vendorId !== undefined && { vendor_id: body.vendorId, vendor_name: vendorName ?? "" }),
       ...(body.isInventory !== undefined && { is_inventory: body.isInventory }),
       ...(body.isTaxable !== undefined && { is_taxable: body.isTaxable }),
     })

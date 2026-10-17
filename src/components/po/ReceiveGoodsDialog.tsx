@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { syncPartQtyToProduct } from "@/lib/hooks/use-wo-costs";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useProducts, useReceiveProductCostLayer } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
@@ -40,7 +41,7 @@ import { useCreateGoodsReceipt, useDeleteGoodsReceipt, useGoodsReceipts } from "
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder, LineItem } from "@/types";
 import { computeReceiptTotals } from "@/lib/utils/receipt-totals";
-import { correctPartReceipt, correctProductReceipt } from "@/lib/inventory/part-stock";
+import { correctPartReceipt, correctProductReceipt, logReceiptWithoutStock } from "@/lib/inventory/part-stock";
 
 function errMsg(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -293,6 +294,32 @@ export function ReceiveGoodsDialog({
         // Find the PO line item to look up the productItemId
         const poLineItem = po.lineItems.find((li) => li.id === line.lineItemId);
         const matchedProduct = poLineItem ? matchProductForLine(poLineItem) : null;
+        let receivedPartId: string | null = null;
+
+        // A line assigned to a project was bought for that job and used
+        // directly, and a product with Track inventory off keeps no stock
+        // (maintenance parts excepted: the Parts table mirrors theirs). Both
+        // skip inventory; the receipt row and project cost still stand, and
+        // an audit row on the product and project records where it went.
+        const untracked =
+          !!matchedProduct && matchedProduct.category !== "maintenance_part" && !matchedProduct.isInventory;
+        if (poLineItem?.projectId || untracked) {
+          if (matchedProduct) {
+            try {
+              await logReceiptWithoutStock(createClient(), {
+                orgId: po.orgId,
+                productId: matchedProduct.id,
+                projectId: poLineItem?.projectId ?? null,
+                poNumber: po.poNumber,
+                quantity: line.quantityReceived,
+                reason: poLineItem?.projectId ? "project" : "untracked",
+              });
+            } catch (auditErr) {
+              toast.warning(`Receipt saved, but the audit entry for "${line.productItemName}" failed: ${errMsg(auditErr)}`);
+            }
+          }
+          continue;
+        }
 
         if (!matchedProduct) {
           throw new Error(`No catalog product found for "${line.productItemName}" — cannot update inventory for this line.`);
@@ -312,6 +339,7 @@ export function ReceiveGoodsDialog({
               poLineItemId: line.lineItemId,
             });
             applied.push({ kind: "part", partId: linkedPart.id, quantity: line.quantityReceived, unitCost: line.unitCost });
+            receivedPartId = linkedPart.id;
           }
         }
         // One RPC: cost layer + quantity_on_hand (20260930150000).
@@ -324,6 +352,10 @@ export function ReceiveGoodsDialog({
           poLineItemId: line.lineItemId,
         });
         applied.push({ kind: "product", productId: matchedProduct.id, quantity: line.quantityReceived, unitCost: line.unitCost });
+        // The part RPC nets any work-order usage recorded before this receipt
+        // (units already used) off the incoming stock, so the part can end up
+        // below on-hand + received. Mirror its final quantity onto the product.
+        if (receivedPartId) await syncPartQtyToProduct(createClient(), receivedPartId);
       }
     } catch (err) {
       // Undo the applied steps newest-first before rolling back the receipt,

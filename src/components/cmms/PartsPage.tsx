@@ -27,6 +27,8 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency, matchesFilter } from "@/lib/utils";
 import { useParts, useBulkImportParts } from "@/lib/hooks/use-parts";
 import { useProducts } from "@/lib/hooks/use-products";
+import { useWOPartShortfalls } from "@/lib/hooks/use-wo-part-shortfalls";
+import { PartShortfallBadge } from "./PartShortfallBadge";
 import type { Part } from "@/types";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
@@ -35,6 +37,7 @@ const STOCK_FILTER_OPTIONS = [
   { value: "oos_no_min",   label: "OOS (no min)" },
   { value: "low_stock",    label: "Low Stock" },
   { value: "in_stock",     label: "In Stock" },
+  { value: "used_no_stock", label: "Used before received" },
 ];
 
 const PARTS_COLUMNS: ColumnDef[] = [
@@ -54,6 +57,7 @@ export function PartsPage() {
   const { mutateAsync: bulkImportParts } = useBulkImportParts();
   const { canManageInventory } = useRoleCapabilities();
   const { data: products } = useProducts();
+  const { byPart: shortfallsByPart } = useWOPartShortfalls();
   const [selectedPart, setSelectedPart] = useState<Part | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const searchParams = useSearchParams();
@@ -118,14 +122,15 @@ export function PartsPage() {
     const isOutOfStock  = isOOSCritical || isOOSNoMin;
     const isLowStock    = p.isInventory && !isOutOfStock && p.minimumStock > 0 && p.quantityOnHand <= p.minimumStock;
     const isInStock     = p.isInventory && !isOutOfStock && !isLowStock;
+    const isUsedNoStock = shortfallsByPart.has(p.id);
     const matchStock = !stockFilter || (
       Array.isArray(stockFilter)
-        ? stockFilter.length === 0 || (p.isInventory && stockFilter.some(s =>
+        ? stockFilter.length === 0 || stockFilter.some(s => s === "used_no_stock" && isUsedNoStock) || (p.isInventory && stockFilter.some(s =>
             (s === "oos_critical" && isOOSCritical) ||
             (s === "oos_no_min"   && isOOSNoMin)    ||
             (s === "low_stock"    && isLowStock)     ||
             (s === "in_stock"     && isInStock)))
-        : stockFilter === "all" || (p.isInventory && (
+        : stockFilter === "all" || (stockFilter === "used_no_stock" && isUsedNoStock) || (p.isInventory && (
             (stockFilter === "oos_critical" && isOOSCritical) ||
             (stockFilter === "oos_no_min"   && isOOSNoMin)    ||
             (stockFilter === "low_stock"    && isLowStock)     ||
@@ -289,6 +294,7 @@ export function PartsPage() {
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-1.5">
                         {part.name}
+                        <PartShortfallBadge rows={shortfallsByPart.get(part.id)} />
                         {catalogPartNumbers.has(part.partNumber) && (
                           <ShoppingCart
                             className="h-3 w-3 shrink-0 text-brand-400"

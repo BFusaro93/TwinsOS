@@ -84,6 +84,7 @@ import {
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
 import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
+import { JobAssetsSection } from "@/components/crm/jobs/JobAssetsSection";
 import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog";
 import { SendClientEmailDialog } from "@/components/crm/SendClientEmailDialog";
 import { SendClientSmsDialog } from "@/components/crm/SendClientSmsDialog";
@@ -1507,6 +1508,12 @@ function JobDetailSheet({
                 <JobProductsSection jobId={job.id} services={services.map((s) => ({ id: s.id, name: s.serviceName }))} />
               </div>
             )}
+            {/* Equipment the crew needs to bring — rolls up onto the Crew Board */}
+            {job && (
+              <div className="border-t px-4 py-3">
+                <JobAssetsSection jobId={job.id} />
+              </div>
+            )}
           </div>
 
           {/* Right: costing panel */}
@@ -1651,6 +1658,8 @@ import { useCrewMemberTimes, useCrewMemberTimesForDate, useUpsertCrewMemberTime,
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useCrewRouteOrder, useSaveRouteOrder, routeOrderKey, weekdayOfDate } from "@/lib/hooks/use-route-order";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { DispatchCalendar } from "@/components/crm/dispatch/DispatchCalendar";
+import { CalendarRange, List as ListIcon, LayoutDashboard } from "lucide-react";
 
 /** Route-sheet blank fill-in field — an underlined space for the crew to write on the printed page. */
 function WriteInBlank({ className = "" }: { className?: string }) {
@@ -4462,6 +4471,60 @@ export function DispatchBoard() {
     );
   }
 
+  // List (the daily route table) vs. Calendar (week grid of crews x days).
+  // Lives in the URL like ?date= so Back / refresh / shared links keep it.
+  const boardView = searchParams.get("view") === "calendar" ? "calendar" : "list";
+  function setBoardView(next: "list" | "calendar") {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "calendar") params.set("view", "calendar"); else params.delete("view");
+    const qs = params.toString();
+    urlRouter.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+  const viewToggle = (
+    <div className="flex items-center gap-1.5">
+      <div className="flex items-center rounded-md border bg-card p-0.5">
+        <Button
+          size="sm"
+          variant={boardView === "list" ? "secondary" : "ghost"}
+          className="h-8 gap-1 px-2.5 text-xs"
+          onClick={() => setBoardView("list")}
+        >
+          <ListIcon className="h-3.5 w-3.5" /> List
+        </Button>
+        <Button
+          size="sm"
+          variant={boardView === "calendar" ? "secondary" : "ghost"}
+          className="h-8 gap-1 px-2.5 text-xs"
+          onClick={() => setBoardView("calendar")}
+        >
+          <CalendarRange className="h-3.5 w-3.5" /> Calendar
+        </Button>
+      </div>
+      <Button asChild size="sm" variant="outline" className="h-9 gap-1 px-2.5 text-xs">
+        <Link href={`/crm/scheduling/crew-board?date=${selectedDate}`}>
+          <LayoutDashboard className="h-3.5 w-3.5" /> Crew Board
+        </Link>
+      </Button>
+    </div>
+  );
+
+  if (boardView === "calendar") {
+    return (
+      <div className="flex h-full flex-col gap-4">
+        {confirmDialog}
+        <PageHeader
+          title="Dispatch Board"
+          description="Drag a job to another day or crew — bars track actual vs. budgeted hours"
+          action={viewToggle}
+        />
+        <DispatchCalendar
+          selectedDate={selectedDate}
+          onDateChange={(d) => { setSelectedDate(d); clearPendingOrder(); }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       {confirmDialog}
@@ -4469,6 +4532,7 @@ export function DispatchBoard() {
       <PageHeader
         title="Dispatch Board"
         description="Schedule and dispatch daily job visits"
+        action={viewToggle}
       />
 
       {/* Week strip + date range + actions. Wraps rather than scrolling: this
