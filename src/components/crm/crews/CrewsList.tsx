@@ -38,6 +38,7 @@ import { PermissionGate, useGate } from "@/components/shared/PermissionGate";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "sonner";
 import type { CRMCrew, CRMCrewMember } from "@/types/crm-employees";
+import { FALLBACK_CREW_COLORS } from "@/components/crm/dispatch/crew-color";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { SearchInput } from "@/components/shared/SearchInput";
 
@@ -305,6 +306,8 @@ function Field({
   );
 }
 
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
 function TeamDetailsTab({
   form,
   onChange,
@@ -367,6 +370,35 @@ function TeamDetailsTab({
                 value={form.name ?? ""}
                 onChange={(e) => onChange("name", e.target.value)}
               />
+            </Field>
+            <Field label="Color">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="color"
+                  value={HEX_COLOR_RE.test(form.color ?? "") ? form.color : "#94a3b8"}
+                  onChange={(e) => onChange("color", e.target.value)}
+                  className="h-8 w-12 cursor-pointer rounded border border-border p-0.5"
+                />
+                {FALLBACK_CREW_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={`Use ${c}`}
+                    onClick={() => onChange("color", c)}
+                    className={`h-5 w-5 rounded-full border ${form.color === c ? "ring-2 ring-offset-1 ring-slate-500" : ""}`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+                <span className="text-xs text-muted-foreground">{form.color || "Automatic"}</span>
+                {form.color && (
+                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => onChange("color", null)}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400 dark:text-neutral-500">
+                Colors this team on the Dispatch Board calendar and the Crew Board.
+              </p>
             </Field>
             <Field label="Team Code" bold>
               <Input
@@ -529,6 +561,7 @@ function CrewDialog({
 }) {
   const { mutateAsync: create, isPending: creating } = useCreateCrew();
   const { mutateAsync: update, isPending: updating } = useUpdateCrew();
+  const { data: allCrews } = useCrews(false);
 
   // After creating a new crew, we store it here so tabs unlock immediately
   const [activeCrew, setActiveCrew] = useState<CRMCrew | undefined>(crew);
@@ -543,10 +576,14 @@ function CrewDialog({
       starting_state: c.startingState, starting_zip: c.startingZip,
       starting_lat: c.startingLat, starting_lng: c.startingLng,
       user_id: c.userId,
+      color: c.color,
     };
   }
 
-  const emptyForm = { name: "", show_in_calendar: true, tags: [] };
+  // New crews get the first palette color no other crew uses, saved so it never shifts.
+  const used = new Set((allCrews ?? []).map((c) => c.color?.toLowerCase()));
+  const nextColor = FALLBACK_CREW_COLORS.find((c) => !used.has(c)) ?? null;
+  const emptyForm = { name: "", show_in_calendar: true, tags: [], color: nextColor };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [form, setForm] = useState<Record<string, any>>(
@@ -572,6 +609,7 @@ function CrewDialog({
 
   async function handleSave() {
     if (!form.name?.trim()) { toast.error("Description is required"); return; }
+    if (form.color && !HEX_COLOR_RE.test(form.color)) { toast.error("Color must be a hex value like #15803d"); return; }
     try {
       if (!activeCrew) {
         const created = await create(form);
