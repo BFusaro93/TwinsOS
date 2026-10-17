@@ -22,6 +22,8 @@ export interface ChargeAutopayInvoiceResult {
   feeCents: number;
   totalChargeCents: number;
   clientId: string;
+  /** True when client credit settled the invoice and no card/bank was charged. */
+  paidFromCredit?: boolean;
   paymentIntentId?: string;
   /** False when the charge succeeded at Stripe but the payment could NOT be
    * written to the ledger (or, harmlessly, when an ACH debit is still
@@ -52,7 +54,10 @@ export function useChargeAutopayInvoice() {
       }
       return body as ChargeAutopayInvoiceResult;
     },
-    onSuccess: (data) => {
+    // onSettled, not onSuccess: the route applies the client's credit before it
+    // validates the saved method / Connect account, so even a failed charge can
+    // leave invoices changed.
+    onSettled: (data) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       // The payment list is a SEPARATE query from the invoice list. Without
       // this, a charge landed in the DB but the client's Accounting box and
@@ -60,7 +65,7 @@ export function useChargeAutopayInvoice() {
       // the invoice's own Payment History (nested in the invoice query, which
       // IS invalidated here) showed it immediately.
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
-      qc.invalidateQueries({ queryKey: ["clients", data.clientId] });
+      if (data?.clientId) qc.invalidateQueries({ queryKey: ["clients", data.clientId] });
       qc.invalidateQueries({ queryKey: ["clients"] });
     },
   });

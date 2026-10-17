@@ -354,6 +354,9 @@ export async function recordEstimateDepositCharge({
   // back: re-stamping "collected" then would resurrect a deposit that was given
   // back. Only clear the pending markers in that case.
   let fullyReversed = false;
+  // What the deposit still holds after any partial refund/chargeback — a replay
+  // must not re-inflate deposit_collected_cents back to the gross.
+  let stampCents = depositCents;
   if (alreadyRecorded) {
     const { data: existingForStamp } = await db
       .from("crm_payments")
@@ -363,6 +366,9 @@ export async function recordEstimateDepositCharge({
       .maybeSingle();
     fullyReversed =
       !!existingForStamp && (existingForStamp.refunded_amount_cents ?? 0) >= (existingForStamp.amount_cents ?? 0);
+    if (existingForStamp && !fullyReversed) {
+      stampCents = Math.max((existingForStamp.amount_cents ?? depositCents) - (existingForStamp.refunded_amount_cents ?? 0), 0);
+    }
   }
   const { error: stampErr } = await db
     .from("estimates")
@@ -370,7 +376,7 @@ export async function recordEstimateDepositCharge({
       ...(fullyReversed
         ? {}
         : {
-      deposit_collected_cents: depositCents,
+      deposit_collected_cents: stampCents,
       deposit_collected_at: new Date().toISOString(),
       deposit_method: paymentIntent.payment_method_types.includes("us_bank_account") ? "ach" : "credit_card",
       deposit_reference: paymentIntent.id,

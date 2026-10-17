@@ -103,34 +103,6 @@ export async function POST(request: Request) {
     }
   }
 
-  // Settle each invoice with any deposit/credit the client already holds, then
-  // charge only what is still owed. Otherwise the card pays money the client has
-  // already paid and the deposit sits unused.
-  try {
-    for (const a of allocations) {
-      a.amountCents = await applyCreditBeforeCharge(supabase, {
-        id: a.invoiceId,
-        client_id: clientId,
-        balance_cents: a.amountCents,
-      });
-    }
-  } catch {
-    return NextResponse.json({ error: "Couldn't apply the client's existing credit — nothing was charged." }, { status: 500 });
-  }
-  const stillOwed = allocations.filter((a) => a.amountCents > 0);
-  if (stillOwed.length === 0) {
-    return NextResponse.json({ error: "Every selected invoice was paid from the client's existing credit — nothing to charge." }, { status: 409 });
-  }
-  allocations.splice(0, allocations.length, ...stillOwed);
-
-  const encoded = encodeAllocations(allocations);
-  if (encoded.length > MAX_ALLOCATION_METADATA_LENGTH) {
-    return NextResponse.json(
-      { error: "Too many invoices selected for a single charge — split into two payments" },
-      { status: 400 }
-    );
-  }
-
   // stripe_connect_livemode isn't in the generated Supabase types yet (added
   // by a migration this session wrote but did not apply/regenerate types for).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -149,20 +121,6 @@ export async function POST(request: Request) {
   }
 
   const paymentMethod = client.saved_payment_method_type;
-  const balanceCents = allocations.reduce((sum, a) => sum + a.amountCents, 0);
-  const { feeCents, totalChargeCents } =
-    paymentMethod === "card"
-      ? computeProcessingFee(
-          {
-            ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
-            ccProcessingFeeBps: org.cc_processing_fee_bps,
-            ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
-          },
-          balanceCents,
-          false
-        )
-      : { feeCents: 0, totalChargeCents: balanceCents };
-
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
 
   // chargeIdempotencyKey only collapses attempts within the same 10-second
@@ -187,6 +145,69 @@ export async function POST(request: Request) {
     // ACH queue legitimately hits it for every debit still settling.
     return NextResponse.json(refusal.body, { status: refusal.status });
   }
+
+  // The credit step below can only shrink the allocation list, so a list that is
+  // already too long is refused here, before any credit is consumed.
+  if (encodeAllocations(allocations).length > MAX_ALLOCATION_METADATA_LENGTH) {
+    return NextResponse.json(
+      { error: "Too many invoices selected for a single charge — split into two payments" },
+      { status: 400 }
+    );
+  }
+
+  // Every check above can refuse; only now is it safe to consume the client's
+  // credit, so a refused charge never leaves invoices quietly changed.
+  // Settle each invoice with any deposit/credit the client already holds, then
+  // charge only what is still owed. Otherwise the card pays money the client has
+  // already paid and the deposit sits unused.
+  try {
+    for (const a of allocations) {
+      a.amountCents = await applyCreditBeforeCharge(supabase, {
+        id: a.invoiceId,
+        client_id: clientId,
+        balance_cents: a.amountCents,
+      });
+    }
+  } catch {
+    return NextResponse.json({ error: "Couldn't apply the client's existing credit — nothing was charged." }, { status: 500 });
+  }
+  const stillOwed = allocations.filter((a) => a.amountCents > 0);
+  if (stillOwed.length === 0) {
+    // Not an error: the invoices ARE paid, so a 409 left the caller showing a
+    // failure (and stale lists) for work that succeeded.
+    return NextResponse.json({
+      status: "paid_from_credit",
+      paidFromCredit: true,
+      balanceCents: 0,
+      feeCents: 0,
+      totalChargeCents: 0,
+      recorded: true,
+      recordingError: null,
+    });
+  }
+  allocations.splice(0, allocations.length, ...stillOwed);
+
+  const encoded = encodeAllocations(allocations);
+  if (encoded.length > MAX_ALLOCATION_METADATA_LENGTH) {
+    return NextResponse.json(
+      { error: "Too many invoices selected for a single charge — split into two payments" },
+      { status: 400 }
+    );
+  }
+
+  const balanceCents = allocations.reduce((sum, a) => sum + a.amountCents, 0);
+  const { feeCents, totalChargeCents } =
+    paymentMethod === "card"
+      ? computeProcessingFee(
+          {
+            ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
+            ccProcessingFeeBps: org.cc_processing_fee_bps,
+            ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+          },
+          balanceCents,
+          false
+        )
+      : { feeCents: 0, totalChargeCents: balanceCents };
 
   try {
     const paymentIntent = await stripe.paymentIntents.create(

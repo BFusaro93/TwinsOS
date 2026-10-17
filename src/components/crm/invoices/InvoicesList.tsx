@@ -570,7 +570,9 @@ export function InvoicesList({ clientId }: Props) {
     setChargingId(inv.id);
     try {
       const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id });
-      if (result.status === "succeeded" && result.recorded === false) {
+      if (result.paidFromCredit) {
+        toast.success(`Invoice #${inv.invoiceNumber} was paid from ${inv.clientName}'s credit — no card was charged`);
+      } else if (result.status === "succeeded" && result.recorded === false) {
         // The card WAS charged — the ledger write is what failed. Never let
         // this read as "nothing happened": staff must reconcile it in Stripe.
         toast.error(
@@ -609,9 +611,14 @@ export function InvoicesList({ clientId }: Props) {
     let unrecorded = 0;
     let submitted = 0;
     let alreadyInFlight = 0;
+    let paidFromCredit = 0;
     for (const inv of chargeableNow) {
       try {
         const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id });
+        if (result.paidFromCredit) {
+          paidFromCredit++;
+          continue;
+        }
         succeeded++;
         // Charged at Stripe but not written to the ledger — see handleCharge.
         if (result.status === "succeeded" && result.recorded === false) unrecorded++;
@@ -628,6 +635,9 @@ export function InvoicesList({ clientId }: Props) {
     setChargingAll(false);
     const charged = succeeded - submitted;
     if (charged > 0) toast.success(`Charged ${charged} invoice${charged !== 1 ? "s" : ""}`);
+    if (paidFromCredit > 0) {
+      toast.success(`${paidFromCredit} invoice${paidFromCredit !== 1 ? "s were" : " was"} paid from client credit — no card charged`);
+    }
     if (submitted > 0) {
       toast.success(
         `Submitted ${submitted} bank debit${submitted !== 1 ? "s" : ""} — these settle in a few business days ` +

@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { getOrCreateStripeCustomer, summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
+import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe saved payment method (crm)");
@@ -27,6 +28,16 @@ export async function POST(request: Request) {
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+
+  // Same gate as PUT: starting a save for someone who can't finish it only
+  // creates orphaned Stripe customers/SetupIntents.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canManagePayments } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "acct_add_modify_payments",
+  });
+  if (!canManagePayments) {
+    return NextResponse.json({ error: "You don't have permission to manage saved payment methods" }, { status: 403 });
+  }
 
   const body = await request.json();
   const parsed = CreateSchema.safeParse(body);
@@ -61,46 +72,50 @@ export async function POST(request: Request) {
 
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
 
-  if (paymentMethod === "us_bank_account") {
-    if (!org.ach_payments_enabled) {
-      return NextResponse.json({ error: "ACH payments aren't enabled — turn them on in Settings first." }, { status: 400 });
+  try {
+    if (paymentMethod === "us_bank_account") {
+      if (!org.ach_payments_enabled) {
+        return NextResponse.json({ error: "ACH payments aren't enabled — turn them on in Settings first." }, { status: 400 });
+      }
+      if (!(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
+        return NextResponse.json(
+          { error: "ACH isn't enabled on this Stripe account yet — enable US bank account payments under Payment methods in the Stripe dashboard first." },
+          { status: 400 }
+        );
+      }
     }
-    if (!(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
-      return NextResponse.json(
-        { error: "ACH isn't enabled on this Stripe account yet — enable US bank account payments under Payment methods in the Stripe dashboard first." },
-        { status: 400 }
-      );
+
+    const customerId = await getOrCreateStripeCustomer(
+      stripe,
+      org.stripe_connect_account_id,
+      client.stripe_customer_id,
+      client
+    );
+
+    if (customerId !== client.stripe_customer_id) {
+      const serviceClient = createServiceClient();
+      const { error } = await serviceClient.from("clients").update({ stripe_customer_id: customerId }).eq("id", clientId);
+      if (error) log.error("failed to save stripe customer id", { error, clientId });
     }
+
+    const setupIntent = await stripe.setupIntents.create(
+      {
+        customer: customerId,
+        payment_method_types: [paymentMethod],
+        usage: "off_session",
+        metadata: { client_id: clientId, org_id: profile.org_id },
+      },
+      { stripeAccount: org.stripe_connect_account_id }
+    );
+
+    return NextResponse.json({
+      clientSecret: setupIntent.client_secret,
+      connectedAccountId: org.stripe_connect_account_id,
+      livemode: org.stripe_connect_livemode ?? true,
+    });
+  } catch (err) {
+    return stripeErrorResponse(err, log, { clientId, connectedAccountId: org.stripe_connect_account_id });
   }
-
-  const customerId = await getOrCreateStripeCustomer(
-    stripe,
-    org.stripe_connect_account_id,
-    client.stripe_customer_id,
-    client
-  );
-
-  if (customerId !== client.stripe_customer_id) {
-    const serviceClient = createServiceClient();
-    const { error } = await serviceClient.from("clients").update({ stripe_customer_id: customerId }).eq("id", clientId);
-    if (error) log.error("failed to save stripe customer id", { error, clientId });
-  }
-
-  const setupIntent = await stripe.setupIntents.create(
-    {
-      customer: customerId,
-      payment_method_types: [paymentMethod],
-      usage: "off_session",
-      metadata: { client_id: clientId, org_id: profile.org_id },
-    },
-    { stripeAccount: org.stripe_connect_account_id }
-  );
-
-  return NextResponse.json({
-    clientSecret: setupIntent.client_secret,
-    connectedAccountId: org.stripe_connect_account_id,
-    livemode: org.stripe_connect_livemode ?? true,
-  });
 }
 
 const SaveSchema = z.object({
