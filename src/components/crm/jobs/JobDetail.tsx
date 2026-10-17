@@ -704,7 +704,13 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             variant="ghost"
             size="sm"
             className="h-8 shrink-0 text-xs text-muted-foreground"
-            onClick={() => onClose ? onClose() : router.push("/crm/scheduling")}
+            onClick={() => {
+              if (onClose) return onClose();
+              // Callers (Dispatch Board list/calendar) pass ?returnTo= so Back
+              // lands where the user came from. Same-app paths only.
+              const back = new URLSearchParams(window.location.search).get("returnTo");
+              router.push(back && back.startsWith("/crm/") && !back.startsWith("//") ? back : "/crm/scheduling");
+            }}
           >
             <ArrowLeft className="mr-1 h-3.5 w-3.5" />
             Back
