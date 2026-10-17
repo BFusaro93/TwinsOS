@@ -1,5 +1,6 @@
 "use client";
 
+import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -114,7 +115,7 @@ function formatSqft(n: number | null | undefined): string {
 function extraColCellText(key: string, job: CRMJob): string {
   switch (key) {
     case "sales_rep":     return job.salesRepName ?? "—";
-    case "notes_to_crew": return job.propertyNotesToCrew ?? job.notesToCrew ?? "—";
+    case "notes_to_crew": return notesToPlainText(job.propertyNotesToCrew ?? job.notesToCrew) || "—";
     case "gate_code":     return job.propertyGateCode ?? "—";
     case "turf_sqft":     return formatSqft(job.propertyTurfSqft);
     case "mulch_sqft":    return formatSqft(job.propertyMulchBedSqft);

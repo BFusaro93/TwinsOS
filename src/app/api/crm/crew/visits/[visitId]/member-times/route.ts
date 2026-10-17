@@ -238,6 +238,27 @@ export async function DELETE(
   return NextResponse.json({ ok: true });
 }
 
+/**
+ * Re-derives the stop's hours and labor from its punches without changing any
+ * punch. The Dispatch Board's Edit Job Times dialog rolls the crew's earliest
+ * in / latest out up onto the visits after a punch edit, which rewrites the
+ * visits' times and hours; this puts hours and labor back on the punches.
+ */
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ visitId: string }> }
+) {
+  const { supabase, user } = await getRouteAuth(request);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { visitId } = await params;
+  const auth = await authorizeVisit(supabase, user.id, visitId);
+  if ("response" in auth) return auth.response;
+
+  await recomputeStopLabor(supabase, auth.visit.id);
+  return NextResponse.json({ ok: true });
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ visitId: string }> }

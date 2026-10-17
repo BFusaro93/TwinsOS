@@ -38,6 +38,8 @@ interface Props {
   onChange: (html: string) => void;
   placeholder?: string;
   minHeight?: number;
+  /** Show the image button + accept images. Off for notes, which are never rendered on a public page. */
+  allowImages?: boolean;
 }
 
 function ToolbarButton({
@@ -65,7 +67,7 @@ function ToolbarButton({
 }
 
 export const RichTextEditor = forwardRef<RichTextEditorHandle, Props>(
-function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }, ref) {
+function RichTextEditor({ value, onChange, placeholder, minHeight = 120, allowImages = true }, ref) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
@@ -73,7 +75,7 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }, ref) 
       StarterKit.configure({ heading: false, codeBlock: false, code: false }),
       Underline,
       TextAlign.configure({ types: ["paragraph"] }),
-      Image,
+      ...(allowImages ? [Image] : []),
     ],
     content: value || "",
     onUpdate({ editor }) {
@@ -213,18 +215,22 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120 }, ref) 
           <AlignRight className="h-3.5 w-3.5" />
         </ToolbarButton>
 
-        <div className="mx-1.5 h-4 w-px bg-slate-200 dark:bg-neutral-700" />
+        {allowImages && (
+          <>
+            <div className="mx-1.5 h-4 w-px bg-slate-200 dark:bg-neutral-700" />
 
-        <ToolbarButton onClick={() => fileInputRef.current?.click()} title="Insert image">
-          <ImageIcon className="h-3.5 w-3.5" />
-        </ToolbarButton>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={IMAGE_ACCEPT}
-          className="hidden"
-          onChange={handleImageFile}
-        />
+            <ToolbarButton onClick={() => fileInputRef.current?.click()} title="Insert image">
+              <ImageIcon className="h-3.5 w-3.5" />
+            </ToolbarButton>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={IMAGE_ACCEPT}
+              className="hidden"
+              onChange={handleImageFile}
+            />
+          </>
+        )}
       </div>
 
       {/* Editor area */}

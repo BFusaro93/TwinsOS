@@ -36,12 +36,24 @@ export interface JobCostingData {
   estimatedTotalCents: number;
   estimatedCostCents: number;
   estimatedBudgetedHours: number;
+  /** Σ the live visits' own budgeted hours (cancelled/skipped excluded) — what
+   *  the dispatch board shows. Differs from estimatedBudgetedHours when the
+   *  schedule was changed after the estimate was written. */
+  scheduledBudgetedHours: number;
   targetRateCentsPerHr: number;
   actualRevPerManHrCents: number;
   targetOverUnderCents: number;
   materials: JobMaterial[];
   /** From the job's (first) service — which budgeting style drove budgetedHours. */
   budgetMethod: "manual" | "production_rate";
+  /** Where actualLaborCostCents came from, per rpt_job_visits.labor_cost_source:
+   *  crew clock-out punches ("actual"), man-hours × the crew's average rate
+   *  ("estimated"), a mix of the two, or no labor rate configured ("none"). */
+  laborCostSource: "actual" | "estimated" | "mixed" | "none";
+  /** "estimate" when estimatedTotalCents/estimatedBudgetedHours come from the
+   *  job's source estimate; "visits" when the job has none (recurring/one-time
+   *  jobs) and they're summed from the worked visits' own budget and revenue. */
+  estimateSource: "estimate" | "visits";
 }
 
 // ── mappers ───────────────────────────────────────────────────────────────────
@@ -143,7 +155,7 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: jobRow, error: jobErr } = await (supabase as any)
         .from("crm_jobs")
-        .select("actual_hours, actual_labor_cost_cents, actual_material_cost_cents")
+        .select("actual_material_cost_cents")
         .eq("id", jobId)
         .single();
       if (jobErr) throw new Error(jobErr.message);
@@ -185,36 +197,77 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
         targetRateCentsPerHr = svc?.target_rate_cents_per_hr ?? 0;
       }
 
+      // Hours, labor cost, budget and revenue all come from rpt_job_visits —
+      // the same view the Job Costing and COGS reports read — over the job's
+      // worked visits (completed or in progress; scheduled visits can carry
+      // planned start/end times that are not work done). Labor there resolves
+      // crew clock-out punches first, else man-hours × the crew's average rate,
+      // so a visit the office completed by hand still carries a labor cost;
+      // crm_jobs.actual_labor_cost_cents only ever holds the punch-based part.
+      //
       // Revenue per man-hour is sum(revenue) / sum(man-hours) over the job's
-      // completed, non-deleted visits — the same basis as rpt_job_visits and
-      // the Job Costing report — not one visit's rate over the job's lifetime
-      // hours (which mixed a single visit's revenue with every visit's hours).
+      // completed visits — not one visit's rate over the job's lifetime hours
+      // (which mixed a single visit's revenue with every visit's hours).
       let completedRevenueCents = 0;
       let completedManHours = 0;
+      let workedManHours = 0;
+      let workedLaborCents = 0;
+      let workedBudgetedHours = 0;
+      let scheduledBudgetedHours = 0;
+      let workedRevenueCents = 0;
+      const laborSources = new Set<string>();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: completedVisits } = await (supabase as any)
+      const { data: workedVisits } = await (supabase as any)
         .from("crm_job_visits")
-        .select("id")
+        .select("id, status")
         .eq("job_id", jobId)
-        .eq("status", "completed")
+        .not("status", "in", "(cancelled,skipped)")
         .is("deleted_at", null);
-      const completedIds: string[] = (completedVisits ?? []).map((v: { id: string }) => v.id);
-      if (completedIds.length > 0) {
+      const visitStatus = new Map<string, string>(
+        (workedVisits ?? []).map((v: { id: string; status: string }) => [v.id, v.status])
+      );
+      const isWorked = (id: string) => {
+        const st = visitStatus.get(id);
+        return st === "completed" || st === "in_progress";
+      };
+      if (visitStatus.size > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: visitCosts } = await (supabase as any)
           .from("rpt_job_visits")
-          .select("revenue_cents, man_hours")
-          .in("id", completedIds);
-        for (const vc of (visitCosts ?? []) as { revenue_cents: number | null; man_hours: number | string | null }[]) {
+          .select("id, revenue_cents, man_hours, budgeted_hours, actual_labor_cost_cents, labor_cost_source")
+          .in("id", [...visitStatus.keys()]);
+        for (const vc of (visitCosts ?? []) as {
+          id: string;
+          revenue_cents: number | null;
+          man_hours: number | string | null;
+          budgeted_hours: number | string | null;
+          actual_labor_cost_cents: number | null;
+          labor_cost_source: string | null;
+        }[]) {
+          scheduledBudgetedHours += Number(vc.budgeted_hours ?? 0);
+          if (!isWorked(vc.id)) continue;
           const hrs = Number(vc.man_hours ?? 0);
+          workedManHours += hrs;
+          workedLaborCents += vc.actual_labor_cost_cents ?? 0;
+          workedBudgetedHours += Number(vc.budgeted_hours ?? 0);
+          workedRevenueCents += vc.revenue_cents ?? 0;
+          if (hrs > 0 && vc.labor_cost_source) laborSources.add(vc.labor_cost_source);
           // A visit with no recorded hours would add its revenue with 0 hours
           // and inflate the rate — leave it out of both sums.
-          if (hrs > 0) {
+          if (hrs > 0 && visitStatus.get(vc.id) === "completed") {
             completedManHours += hrs;
             completedRevenueCents += vc.revenue_cents ?? 0;
           }
         }
       }
+      const laborCostSource: JobCostingData["laborCostSource"] =
+        laborSources.size === 0 || (laborSources.size === 1 && laborSources.has("none"))
+          ? "none"
+          : laborSources.has("actual") && (laborSources.has("estimated") || laborSources.has("none"))
+            ? "mixed"
+            : laborSources.has("actual")
+              ? "actual"
+              : "estimated";
 
       // Fetch materials
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -294,18 +347,27 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
         estimatedCostCents = laborCostCents + directCostCents;
       }
 
-      // crm_jobs.actual_hours is already man-hours (crm_recompute_job_actual_hours
-      // sums each visit's duration × its own men_count) — multiplying by this
-      // job's men_count again here double-counted crew size, halving the
-      // displayed actual revenue-per-man-hour for any multi-person crew.
-      const actualHours = Number(jobRow.actual_hours ?? 0);
+      // Without a source estimate (recurring / one-time jobs), the budget and
+      // revenue to compare against are the worked visits' own — each visit
+      // already carries its budget (visit → service → job) and revenue.
+      const estimateSource: JobCostingData["estimateSource"] = estimateId ? "estimate" : "visits";
+      if (!estimateId) {
+        estimatedTotalCents = workedRevenueCents;
+        estimatedBudgetedHours = workedBudgetedHours;
+      }
+
+      // man_hours is already man-hours (duration × each visit's men_count) —
+      // multiplying by this job's men_count again would double-count crew
+      // size, halving the displayed actual revenue-per-man-hour for any
+      // multi-person crew.
+      const actualHours = Math.round(workedManHours * 100) / 100;
       const menCount = Number(visitRow?.men_count ?? 1);
       const actualStaffHrs = actualHours;
       const actualRevPerManHrCents = completedManHours > 0
         ? Math.round(completedRevenueCents / completedManHours)
         : 0;
       const targetOverUnderCents = actualRevPerManHrCents - targetRateCentsPerHr;
-      const actualLaborCostCents: number = jobRow.actual_labor_cost_cents ?? 0;
+      const actualLaborCostCents: number = workedLaborCents;
       const actualMaterialCostCents: number = jobRow.actual_material_cost_cents ?? 0;
 
       return {
@@ -319,11 +381,14 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
         estimatedTotalCents,
         estimatedCostCents,
         estimatedBudgetedHours,
+        scheduledBudgetedHours: Math.round(scheduledBudgetedHours * 100) / 100,
         targetRateCentsPerHr,
         actualRevPerManHrCents,
         targetOverUnderCents,
         materials,
         budgetMethod,
+        laborCostSource,
+        estimateSource,
       };
     },
     enabled: !!jobId,

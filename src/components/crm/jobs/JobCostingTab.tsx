@@ -252,10 +252,13 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
     estimatedTotalCents,
     estimatedCostCents,
     estimatedBudgetedHours,
+    scheduledBudgetedHours,
     targetRateCentsPerHr,
     actualRevPerManHrCents,
     targetOverUnderCents,
     budgetMethod,
+    laborCostSource,
+    estimateSource,
   } = costing;
 
   // Derived summary values
@@ -279,9 +282,9 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
       {/* ── Summary strip ── */}
       <div className="flex gap-3">
         <SummaryCard
-          label="Estimated Revenue"
+          label={estimateSource === "estimate" ? "Estimated Revenue" : "Revenue"}
           value={estimatedTotalCents > 0 ? formatCurrency(estimatedTotalCents) : "—"}
-          sub="from estimate"
+          sub={estimateSource === "estimate" ? "from estimate" : "from worked visits"}
         />
         <SummaryCard
           label="Actual Cost"
@@ -345,9 +348,48 @@ export function JobCostingTab({ jobId, estimateId }: Props) {
                   : <span className="text-slate-300 dark:text-neutral-500">—</span>}
               </td>
             </tr>
+            {/* Scheduled budget — the dispatch board's hours, which the office
+                sometimes revises after the estimate was written. Only worth a
+                row when it differs from the estimate. */}
+            {estimateSource === "estimate" &&
+              scheduledBudgetedHours > 0 &&
+              Math.abs(scheduledBudgetedHours - estimatedBudgetedHours) >= 0.05 && (
+              <tr className="border-b">
+                <td className="px-4 py-2.5 text-slate-700 dark:text-neutral-300 font-medium">
+                  Labor Hours vs. Schedule
+                  <span
+                    className="ml-1.5 text-[10px] text-slate-400 dark:text-neutral-500 font-normal"
+                    title="Budgeted hours on the job's visits (what the dispatch board shows), revised since the estimate."
+                  >
+                    (revised budget)
+                  </span>
+                </td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-slate-600 dark:text-neutral-400">
+                  {fmtHrs(scheduledBudgetedHours)}
+                </td>
+                <td className="px-4 py-2.5 text-right tabular-nums text-slate-800 dark:text-neutral-100">
+                  {fmtHrs(actualStaffHrs)}
+                </td>
+                <td className="px-4 py-2.5 text-right tabular-nums">
+                  {fmtVarianceHrs(scheduledBudgetedHours, actualStaffHrs)}
+                </td>
+              </tr>
+            )}
             {/* Labor Cost */}
             <tr className="border-b">
-              <td className="px-4 py-2.5 text-slate-700 dark:text-neutral-300 font-medium">Labor Cost</td>
+              <td className="px-4 py-2.5 text-slate-700 dark:text-neutral-300 font-medium">
+                Labor Cost
+                {laborCostSource !== "actual" && (
+                  <span
+                    className="ml-1.5 text-[10px] text-slate-400 dark:text-neutral-500 font-normal"
+                    title="Crew clock-out punches carry the real labor cost. Visits completed without punches are costed as man-hours × the crew's average labor rate."
+                  >
+                    {laborCostSource === "estimated" && "(hours × crew avg rate)"}
+                    {laborCostSource === "mixed" && "(partly hours × crew avg rate)"}
+                    {laborCostSource === "none" && "(no labor rate configured)"}
+                  </span>
+                )}
+              </td>
               <td className="px-4 py-2.5 text-right tabular-nums text-slate-600 dark:text-neutral-400">
                 {estimatedLaborCostCents > 0 ? formatCurrency(estimatedLaborCostCents) : "—"}
               </td>

@@ -258,6 +258,84 @@ function CrosstabVisual({ result, visual }: { result: ReportResult; visual: Visu
   );
 }
 
+// Estimate stages in pipeline order, with the label and bar color each shows
+// under. Any other label (a non-estimate dataset) falls through to the
+// rotating series palette in the order the query returned it.
+const PIPELINE_STAGES: Record<string, { label: string; color: string; order: number }> = {
+  draft: { label: "Draft", color: "#94a3b8", order: 0 },
+  quote: { label: "Quoted", color: "#2563eb", order: 1 },
+  sent: { label: "Proposed", color: "#f59e0b", order: 2 },
+  accepted: { label: "Won", color: "#16a34a", order: 3 },
+  invoiced: { label: "Invoiced", color: "#14b8a6", order: 4 },
+  lost: { label: "Lost", color: "#ef4444", order: 5 },
+};
+
+const PIPELINE_COMPACT_DOLLARS = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  notation: "compact",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+function PipelineVisual({ result, visual }: { result: ReportResult; visual: VisualSpec }) {
+  const labelCol = colFor(result.columns, visual.labelColumn);
+  const valueCol = colFor(result.columns, visual.valueColumns[0]);
+  if (!labelCol || !valueCol) {
+    return (
+      <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+        Choose a label and a value column.
+      </div>
+    );
+  }
+
+  const rows = result.rows
+    .map((row, i) => {
+      const raw = String(row[labelCol.key] ?? "");
+      const stage = PIPELINE_STAGES[raw.toLowerCase()];
+      return {
+        label: stage?.label ?? formatCellValue(row[labelCol.key], labelCol.type),
+        color: stage?.color ?? SERIES_COLORS[i % SERIES_COLORS.length],
+        order: stage?.order ?? 100 + i,
+        value: Number(row[valueCol.key]) || 0,
+      };
+    })
+    .sort((a, b) => a.order - b.order);
+  const max = Math.max(...rows.map((r) => Math.abs(r.value)), 1);
+
+  return (
+    <div className="flex flex-col">
+      {rows.map((r) => (
+        <div
+          key={r.label}
+          className="flex items-center gap-4 border-b border-slate-100 dark:border-neutral-800 py-3 last:border-b-0"
+        >
+          <div className="w-28 shrink-0 sm:w-36">
+            <p className="text-sm text-sky-700 dark:text-sky-400">{r.label}</p>
+            <p className="text-xl font-semibold text-slate-900 dark:text-neutral-100">
+              {valueCol.type === "money"
+                ? PIPELINE_COMPACT_DOLLARS.format(r.value / 100)
+                : formatCellValue(r.value, valueCol.type)}
+            </p>
+          </div>
+          <div className="h-5 flex-1">
+            {r.value !== 0 && (
+              <div
+                className="h-full rounded-sm"
+                style={{
+                  width: `${Math.max(2, (Math.abs(r.value) / max) * 100)}%`,
+                  backgroundColor: r.color,
+                }}
+              />
+            )}
+          </div>
+        </div>
+      ))}
+      <PartialHint result={result} />
+    </div>
+  );
+}
+
 function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualSpec }) {
   const labelCol = colFor(result.columns, visual.labelColumn);
   const valueCols = visual.valueColumns
@@ -272,9 +350,35 @@ function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualS
     );
   }
 
-  let data = result.rows.map((row) => {
+  // Monthly trend off a daily query: sum the value columns per calendar
+  // month, oldest first.
+  const bucketByMonth =
+    visual.dateBucket === "month" &&
+    (visual.type === "bar" || visual.type === "line") &&
+    (labelCol.type === "date" || labelCol.type === "datetime");
+  let sourceRows = result.rows;
+  if (bucketByMonth) {
+    const byMonth = new Map<string, Record<string, unknown>>();
+    for (const row of result.rows) {
+      const ym = String(row[labelCol.key] ?? "").slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(ym)) continue;
+      const acc = byMonth.get(ym) ?? { [labelCol.key]: ym };
+      for (const vc of valueCols) {
+        acc[vc.key] = (Number(acc[vc.key]) || 0) + (Number(row[vc.key]) || 0);
+      }
+      byMonth.set(ym, acc);
+    }
+    sourceRows = [...byMonth.keys()].sort().map((ym) => byMonth.get(ym)!);
+  }
+
+  let data = sourceRows.map((row) => {
     const point: Record<string, unknown> = {
-      __label: formatCellValue(row[labelCol.key], labelCol.type),
+      __label: bucketByMonth
+        ? new Date(`${String(row[labelCol.key])}-01T00:00:00`).toLocaleDateString("en-US", {
+            month: "short",
+            year: "2-digit",
+          })
+        : formatCellValue(row[labelCol.key], labelCol.type),
     };
     for (const vc of valueCols) point[vc.key] = Number(row[vc.key]) || 0;
     return point;
@@ -354,6 +458,8 @@ function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualS
               dataKey={vc.key}
               name={vc.label}
               stroke={SERIES_COLORS[i % SERIES_COLORS.length]}
+              strokeWidth={2}
+              dot={{ r: 3 }}
             />
           ))}
         </LineChart>
@@ -411,6 +517,13 @@ export function VisualRenderer({
     return (
       <div className={className}>
         <GaugeVisual result={result} visual={visual} />
+      </div>
+    );
+  }
+  if (visual.type === "pipeline") {
+    return (
+      <div className={className}>
+        <PipelineVisual result={result} visual={visual} />
       </div>
     );
   }

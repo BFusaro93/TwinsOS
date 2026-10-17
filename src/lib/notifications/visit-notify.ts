@@ -18,7 +18,11 @@
  * a different user than whoever is dispatching.
  */
 
+import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { adminClient } from "@/lib/api/auth";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { isoInZone } from "@/lib/time/zone";
+import { addDaysYmd } from "@/lib/visits/recurrence";
 import { sendPushToUser } from "@/lib/notifications/send-push";
 
 function formatTime(time: string | null | undefined): string {
@@ -85,14 +89,46 @@ export interface NotifyVisitNoteInput {
   note: string;
 }
 
-/** Dispatcher note — crm_job_visits.notes_to_crew was set on an assigned visit. */
+/** A note on a visit further out than this is not pushed (see notifyVisitNote). */
+const NOTE_PUSH_WINDOW_DAYS = 2;
+
+/**
+ * Whether a note on this visit is worth interrupting the crew for now: the
+ * visit is dispatched, or scheduled today or within NOTE_PUSH_WINDOW_DAYS.
+ * Visits already finished or called off never push. Org-local "today" so the
+ * window doesn't shift at 8pm Eastern when UTC rolls over.
+ */
+async function visitNeedsNotePush(visitId: string): Promise<boolean> {
+  const db = adminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: visit } = await (db as any)
+    .from("crm_job_visits")
+    .select("org_id, status, scheduled_date")
+    .eq("id", visitId)
+    .maybeSingle();
+  if (!visit) return false;
+  if (visit.status === "completed" || visit.status === "cancelled" || visit.status === "skipped") return false;
+  if (visit.status === "dispatched" || visit.status === "in_progress") return true;
+  const today = isoInZone(new Date(), await getOrgTimeZone(db, visit.org_id as string));
+  const scheduled = visit.scheduled_date as string | null;
+  return !!scheduled && scheduled <= addDaysYmd(today, NOTE_PUSH_WINDOW_DAYS);
+}
+
+/**
+ * Dispatcher note — crm_job_visits.notes_to_crew was set on an assigned visit.
+ * Notes on visits further out than the push window are skipped: the crew sees
+ * them on the stop and must acknowledge them before clocking in, so a push
+ * weeks ahead would only be noise.
+ */
 export async function notifyVisitNote(input: NotifyVisitNoteInput): Promise<void> {
   try {
+    if (!(await visitNeedsNotePush(input.visitId))) return;
     const userId = await resolveCrewUserId(input.crewId);
     if (!userId) return;
 
     const clientName = await resolveClientName(input.clientId);
-    const preview = input.note.length > 100 ? `${input.note.slice(0, 100)}…` : input.note;
+    const note = notesToPlainText(input.note);
+    const preview = note.length > 100 ? `${note.slice(0, 100)}…` : note;
 
     await sendPushToUser({
       userId,

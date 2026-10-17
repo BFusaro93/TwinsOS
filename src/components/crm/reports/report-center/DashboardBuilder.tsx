@@ -98,6 +98,7 @@ const VISUAL_TYPE_OPTIONS: { value: VisualType; label: string }[] = [
   { value: "pie", label: "Pie Chart" },
   { value: "gauge", label: "Gauge" },
   { value: "crosstab", label: "Crosstab" },
+  { value: "pipeline", label: "Pipeline" },
 ];
 
 const SIZE_SPAN_CLASS: Record<DashboardPanel["size"], string> = {
@@ -1062,7 +1063,8 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
     return [...base, ...formulaOptions];
   }, [grouped, aggregates, numericFields, fields, formulaOptions]);
 
-  const isChart = visualType === "bar" || visualType === "line" || visualType === "pie";
+  const isChart =
+    visualType === "bar" || visualType === "line" || visualType === "pie" || visualType === "pipeline";
 
   const buildVisual = (): VisualSpec | null => {
     const config = builder.buildConfig();
@@ -1091,6 +1093,9 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
           : undefined,
       showOthers: (visualType === "bar" || visualType === "pie") ? showOthers : undefined,
       crosstabHeaderColumn: visualType === "crosstab" ? crosstabHeaderColumn || undefined : undefined,
+      // Not editable in this panel editor — carried through so saving a
+      // template-seeded monthly trend doesn't silently turn it daily.
+      dateBucket: visualType === "bar" || visualType === "line" ? panel.visual.dateBucket : undefined,
       savedReportId,
       formatRules,
       colorSpectrumColumns,
@@ -1247,7 +1252,7 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
             </div>
             <div>
               <p className="mb-1.5 text-xs font-medium text-slate-600 dark:text-neutral-400">Value Column(s)</p>
-              {visualType === "pie" ? (
+              {visualType === "pie" || visualType === "pipeline" ? (
                 <Select
                   value={valueColumns[0] ?? ""}
                   onValueChange={(v) => setValueColumns([v])}

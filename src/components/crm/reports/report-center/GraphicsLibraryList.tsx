@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BarChart3,
+  BarChartHorizontal,
   Gauge,
   Grid3x3,
   Hash,
@@ -70,6 +71,7 @@ const VISUAL_TYPE_ICONS: Record<VisualType, typeof BarChart3> = {
   pie: PieChart,
   gauge: Gauge,
   crosstab: Grid3x3,
+  pipeline: BarChartHorizontal,
 };
 
 function VisualTypeThumbnail({ type }: { type: VisualType }) {
