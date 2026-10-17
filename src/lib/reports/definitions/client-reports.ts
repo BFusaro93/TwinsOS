@@ -9,6 +9,7 @@ import {
   MONTH_KEYS,
   MONTH_LABELS,
   resolveDateRange,
+  orgDayRangeBounds,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { runAnalysis } from "@/lib/reports/engine";
@@ -289,8 +290,10 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         .select("cancellation_reason, source, billing_zip, closed_at, sales_rep_id, sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
         .eq("status", "cancelled")
         .is("deleted_at", null);
-      if (from) query = query.gte("closed_at", from);
-      if (to) query = query.lte("closed_at", `${to} 23:59:59.999`);
+      // closed_at is a timestamptz — bound it by the org's own midnights.
+      const bounds = orgDayRangeBounds(from, to, timeZone);
+      if (bounds.gte) query = query.gte("closed_at", bounds.gte);
+      if (bounds.lt) query = query.lt("closed_at", bounds.lt);
       const { data, error } = await query;
       if (error) throw new Error(error.message);
 

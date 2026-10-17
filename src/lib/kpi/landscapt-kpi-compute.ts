@@ -35,6 +35,10 @@ interface YearWindow {
   to: string; // YYYY-12-31
   fromTs: string;
   toTs: string;
+  /** The year's first and (exclusive) end instants on the org's clock, for
+   *  direct timestamptz queries — fromTs/toTs are zoneless literals. */
+  fromInstant: string;
+  endInstantExclusive: string;
   /** Days of the year elapsed as of today (full year for past years, 0 for future). */
   daysElapsed: number;
   /** Last instant considered "in" the year for snapshot-style logic. */
@@ -77,6 +81,8 @@ function buildWindow(year: number, timeZone: string, now = new Date()): YearWind
     to,
     fromTs: `${from} 00:00:00`,
     toTs: `${to} 23:59:59.999`,
+    fromInstant: jan1.toISOString(),
+    endInstantExclusive: new Date(dec31.getTime() + 1).toISOString(),
     daysElapsed,
     periodEnd,
     jan1,
@@ -631,8 +637,8 @@ async function computeTickets(supabase: Client, w: YearWindow): Promise<Values> 
         .from("crm_tickets")
         .select("created_at, closed_at")
         .is("deleted_at", null)
-        .gte("closed_at", w.fromTs)
-        .lte("closed_at", w.toTs)
+        .gte("closed_at", w.fromInstant)
+        .lt("closed_at", w.endInstantExclusive)
         .order("closed_at", { ascending: true })
         .range(from, to)
     ),
