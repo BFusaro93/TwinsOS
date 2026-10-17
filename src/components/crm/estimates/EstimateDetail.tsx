@@ -1976,7 +1976,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         onClose={() => setSendDialogOpen(false)}
         onSent={() => {
           setSendDialogOpen(false);
-          handleStage("sent");
+          // Only a draft/quote/sent estimate is (re)opened for acceptance by a
+          // send — the same rule as the send route. For an accepted/lost/
+          // invoiced estimate the email is a view-only copy: forcing the stage
+          // back to "sent" here either errored (it has jobs/invoices) or, with
+          // none, silently re-armed the proposal's Accept button.
+          if (["draft", "quote", "sent"].includes(estimate.stage)) handleStage("sent");
         }}
       />
     </div>
