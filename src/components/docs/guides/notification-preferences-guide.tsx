@@ -143,6 +143,16 @@ export function NotificationPreferencesGuide() {
               <td className="px-3 py-2 text-[#7a7a76] dark:text-neutral-400">No email variant</td>
               <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Yes</td>
             </tr>
+            <tr className="border-b border-[#eceae3] dark:border-border align-top">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">
+                Part used before received
+                <div className="mt-0.5 whitespace-normal text-xs font-normal text-[#7a7a76] dark:text-neutral-400">
+                  A work order uses more of a part than is on hand. Sent to admins, managers, and purchasers — not the person who added the part. No personal toggle.
+                </div>
+              </td>
+              <td className="px-3 py-2 text-[#7a7a76] dark:text-neutral-400">No email variant</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Yes</td>
+            </tr>
             <tr>
               <td colSpan={3} className="bg-[#f4f6f0] dark:bg-muted/50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-[#5a5a56] dark:text-neutral-300">
                 Email only — no in-app counterpart
