@@ -114,6 +114,8 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <CalendarClock className={cn(cls, "text-sky-500 dark:text-sky-400")} />;
     case "comment_mention":
       return <AtSign className={cn(cls, "text-brand-500 dark:text-brand-400")} />;
+    case "part_stock_short":
+      return <Package className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "injury_reported":
       return <HeartPulse className={cn(cls, "text-red-500 dark:text-red-400")} />;
     default:
@@ -211,7 +213,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "injury_reported"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "injury_reported", "part_stock_short"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -373,6 +375,7 @@ export function NotificationsBell() {
       contract_expiring:          { href: () => "/crm/accounting/contracts", title: "Contract Expiring Soon" },
       automation_alert:           { href: () => "/crm/communication/automations", title: "Automation Alert" },
       wo_status_changed:          { href: (id) => id ? `/cmms/work-orders?id=${id}` : "/cmms/work-orders", title: "Status Changed" },
+      part_stock_short:           { href: (id) => id ? `/cmms/parts?open=${id}` : "/cmms/parts", title: "Part Used Before Received" },
       injury_reported:            { href: (id) => id ? `/tools/injury-cases?open=${id}` : "/tools/injury-cases", title: "Injury Report" },
       sales_meeting_reminder:     { href: (id) => id ? `/crm/sales-meetings?open=${id}` : "/crm/sales-meetings", title: "Meeting Reminder" },
     };

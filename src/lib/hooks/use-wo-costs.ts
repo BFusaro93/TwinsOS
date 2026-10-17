@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mapWOPart, mapWOLaborEntry, mapWOVendorCharge } from "@/lib/supabase/mappers";
 import type { WOPart, WOLaborEntry, WOVendorCharge } from "@/types/cmms";
 import { setWOPartStock } from "@/lib/inventory/part-stock";
+import { notifyPartStockShort } from "@/lib/part-shortfall-notify";
 
 /**
  * Returns the authenticated user's org_id. Used to cross-check that a
@@ -42,6 +43,8 @@ async function syncWOPartStock(
     toast.warning(
       `Only ${res.oldQty ?? 0} in stock — ${shortBy} short. Quantity on hand set to 0 instead of going negative.`
     );
+    // Best-effort: a failed notification must not fail the WO save.
+    await notifyPartStockShort(supabase, { woPartId, shortBy }).catch(() => {});
   }
 }
 
@@ -269,6 +272,7 @@ export function useAddWOPart() {
     onSuccess: (_, { workOrderId }) => {
       queryClient.invalidateQueries({ queryKey: ["wo-parts", workOrderId] });
       queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["wo-part-shortfalls"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["asset-parts"] });
       queryClient.invalidateQueries({ queryKey: ["part-asset-links"] });
@@ -328,6 +332,7 @@ export function useUpdateWOPart() {
     onSuccess: (_, { workOrderId }) => {
       queryClient.invalidateQueries({ queryKey: ["wo-parts", workOrderId] });
       queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["wo-part-shortfalls"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
     },
   });
@@ -371,6 +376,7 @@ export function useDeleteWOPart() {
     onSuccess: (workOrderId) => {
       queryClient.invalidateQueries({ queryKey: ["wo-parts", workOrderId] });
       queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["wo-part-shortfalls"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
     },
   });

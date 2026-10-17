@@ -35,6 +35,7 @@ export interface AppNotification {
     | "automation_alert"
     | "comment_mention"
     | "injury_reported"
+    | "part_stock_short"
     | "sales_meeting_reminder";
   title: string;
   body: string;
