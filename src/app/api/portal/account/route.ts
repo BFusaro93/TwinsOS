@@ -29,11 +29,21 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
+  // A phone number, not free text: inbound-SMS matching and STOP handling key on
+  // its last 10 digits, so a non-numeric value silently broke both. Blank clears it.
+  const phone = parsed.data.primary_phone?.trim() || null;
+  if (phone) {
+    const digits = phone.replace(/\D/g, "");
+    if (!/^[+\d\s().-]+$/.test(phone) || digits.length < 10 || digits.length > 15) {
+      return NextResponse.json({ error: "Enter a valid phone number" }, { status: 400 });
+    }
+  }
+
   const supabase = createServiceClient();
 
   const { error } = await supabase
     .from("clients")
-    .update({ primary_phone: parsed.data.primary_phone, updated_at: new Date().toISOString() })
+    .update({ primary_phone: phone, updated_at: new Date().toISOString() })
     .eq("id", ctx.clientId)
     .eq("org_id", ctx.orgId);
 

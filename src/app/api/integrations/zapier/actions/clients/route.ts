@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
+import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 
 const createClientSchema = z.object({
   displayName: z.string().min(1),
@@ -59,7 +60,25 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? "create failed" }, { status: 500 });
+    // Don't hand raw database errors (constraint/column names) to the caller.
+    console.error("[zapier action] create failed:", error?.message);
+    return NextResponse.json({ error: "create failed" }, { status: 500 });
+  }
+
+  // Same timeline entry + automation trigger as the v1 API's client create
+  // and the in-app New Client dialog: without them a lead made through Zapier
+  // left no activity and never enrolled in any lead_created automation.
+  // Best-effort — the client already exists.
+  await db.from("client_activity").insert({
+    org_id: auth.orgId,
+    client_id: data.id,
+    activity_type: "note",
+    subject: "Lead created",
+  });
+  try {
+    await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: data.id, triggerType: "lead_created" });
+  } catch {
+    // enrollment failure must not fail the create
   }
 
   return NextResponse.json({

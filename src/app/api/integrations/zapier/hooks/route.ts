@@ -12,6 +12,8 @@ import { assertPublicHttpsUrl } from "@/lib/net/ssrf-guard";
  * fired automatically when a user turns on a Zap using one of our triggers.
  * Body: { event: ZapierTriggerType, targetUrl: string }
  */
+const MAX_ACTIVE_SUBSCRIPTIONS = 100;
+
 export async function POST(request: Request) {
   const db = adminClient();
   const auth = await authenticateZapierRequest(request, db);
@@ -38,6 +40,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: urlSafety.error }, { status: 400 });
   }
 
+  // Every active subscription fans out an outbound request on each matching
+  // event, so an uncapped key could register unlimited targets.
+  const { count: activeCount } = await db
+    .from("zapier_webhook_subscriptions")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", auth.orgId)
+    .is("deleted_at", null);
+  if ((activeCount ?? 0) >= MAX_ACTIVE_SUBSCRIPTIONS) {
+    return NextResponse.json({ error: "Too many active webhook subscriptions — remove unused Zaps first" }, { status: 429 });
+  }
+
   const { data, error } = await db
     .from("zapier_webhook_subscriptions")
     .insert({ org_id: auth.orgId, trigger_type: body.event, target_url: body.targetUrl })
@@ -45,7 +58,8 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? "subscribe failed" }, { status: 500 });
+    console.error("[zapier hooks] subscribe failed:", error?.message);
+    return NextResponse.json({ error: "subscribe failed" }, { status: 500 });
   }
 
   return NextResponse.json({ id: data.id });
@@ -70,7 +84,8 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false });
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[zapier hooks] list failed:", error.message);
+    return NextResponse.json({ error: "list failed" }, { status: 500 });
   }
 
   return NextResponse.json({ subscriptions: data ?? [] });

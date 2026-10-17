@@ -34,6 +34,7 @@ export async function POST(request: Request) {
     .from("clients")
     .select("org_id")
     .eq("id", body.clientId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (!client || client.org_id !== auth.orgId) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
@@ -52,7 +53,9 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? "create failed" }, { status: 500 });
+    // Don't hand raw database errors (constraint/column names) to the caller.
+    console.error("[zapier action] create failed:", error?.message);
+    return NextResponse.json({ error: "create failed" }, { status: 500 });
   }
 
   return NextResponse.json({ id: data.id, occurredAt: data.occurred_at });
