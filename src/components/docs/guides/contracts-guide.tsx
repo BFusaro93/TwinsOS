@@ -64,8 +64,11 @@ export function ContractsGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Invoice line items</strong> — one or more entries pulled from the services
-            catalog (or typed as a custom line) that become the description on every invoice this
-            contract generates.
+            catalog (or typed as a custom line) that set the wording on every invoice this contract
+            generates. Both billing paths use it the same way: the lines become the invoice
+            description, and the invoice&apos;s single line item is named after them (several lines
+            are joined with commas). With no lines, the contract title is used. The wording is set
+            once per contract and is the same on every invoice; only the amount can vary by month.
           </li>
           <li>
             <strong>A monthly amount grid</strong> — twelve fields, one per calendar month
@@ -75,8 +78,9 @@ export function ContractsGuide() {
           </li>
           <li>
             <strong>Billing settings</strong> — billing day of month, whether to bill a month in
-            advance, payment type, PO number, and two switches: Auto Generate (eligible for the
-            automatic invoicing cron) and Active.
+            advance, payment type, PO number (copied onto every invoice the contract generates, so
+            the client&apos;s accounts-payable team can match it), and two switches: Auto Generate
+            (eligible for the automatic invoicing cron) and Active.
           </li>
         </ul>
         <p>

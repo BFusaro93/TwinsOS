@@ -207,7 +207,12 @@ export function FormsGuide() {
           <li>
             <strong>Email notifications</strong> — recipients, from address, subject, and body are
             all configurable, with merge tags available in subject/body and an &quot;Include a
-            copy&quot; toggle for CC&apos;ing the submitter.
+            copy&quot; toggle for CC&apos;ing the submitter. Every field on the form is also
+            available as a tag named after its label with punctuation and spaces removed (a
+            field called &quot;How can we help?&quot; becomes <code>[howcanwehelp]</code>). The
+            built-in tags (<code>[formname]</code>, <code>[companyname]</code>,{" "}
+            <code>[submittedname]</code> and so on) always win, so a field labelled &quot;Company
+            Name&quot; will not replace your own company name.
           </li>
           <li>
             <strong>Account Management</strong> — the auto-manage on/off toggle, an update
