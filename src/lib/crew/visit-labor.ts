@@ -92,6 +92,45 @@ export async function sumPunchLaborCents(supabase: AnySupabase, visitId: string)
   return total;
 }
 
+/**
+ * Man-hours of the CLOSED crew-member punches recorded against `visitId`:
+ * Σ per member of (out − in) − that member's break and lunch − the visit's
+ * pause time. Always net of the pause (paid or not) — hours measure time on
+ * site, pay is a separate question — which is the same netting
+ * computeActualHours / rpt_job_visits / rpt_timesheets apply. Returns null when
+ * nothing has been punched out yet. This is the figure the Timesheet report
+ * totals, so a visit's hours must equal it whenever punches exist.
+ */
+export async function sumPunchManHours(supabase: AnySupabase, visitId: string): Promise<number | null> {
+  const { data: memberTimes } = await supabase
+    .from("crm_crew_member_times")
+    .select("clocked_in_at, clocked_out_at, break_minutes, lunch_minutes")
+    .eq("visit_id", visitId)
+    .is("deleted_at", null)
+    .not("clocked_out_at", "is", null);
+  const punches = ((memberTimes ?? []) as {
+    clocked_in_at: string | null;
+    clocked_out_at: string;
+    break_minutes: number | null;
+    lunch_minutes: number | null;
+  }[]).filter((p) => !!p.clocked_in_at);
+  if (punches.length === 0) return null;
+
+  const { data: visitRow } = await supabase
+    .from("crm_job_visits")
+    .select("break_minutes")
+    .eq("id", visitId)
+    .maybeSingle();
+  const visitBreakHours = Math.max(0, Number(visitRow?.break_minutes ?? 0)) / 60;
+
+  let total = 0;
+  for (const p of punches) {
+    const spanHours = (new Date(p.clocked_out_at).getTime() - new Date(p.clocked_in_at as string).getTime()) / 3_600_000;
+    total += Math.max(0, spanHours - (Number(p.break_minutes ?? 0) + Number(p.lunch_minutes ?? 0)) / 60 - visitBreakHours);
+  }
+  return Math.round(total * 100) / 100;
+}
+
 /** Re-sums crm_jobs.actual_labor_cost_cents from the job's visits (service client — crew RLS can't see every crew's visits). */
 export async function rollupJobLabor(jobIds: string[]): Promise<void> {
   const admin = createServiceClient();
@@ -145,6 +184,26 @@ export async function recomputeStopLabor(supabase: AnySupabase, anchorVisitId: s
     }
     const closed = stop.filter((r) => r.clocked_out_at || r.status === "completed");
     if (closed.length === 0) return;
+
+    // Hours first: a corrected punch (one member late or gone early) changes
+    // the crew's man-hours, but the visit's actual_hours is an override the
+    // clock-out flow wrote as span × crew size, which stays at the old figure —
+    // Job Costing would then show hours the Timesheet report does not. Re-split
+    // the punches' man-hours across the stop's visits in the proportions they
+    // already hold (even split if none has hours). Labor below then weights by
+    // the new hours, so both stay on the same basis.
+    const punchHours = await sumPunchManHours(supabase, anchor.id);
+    if (punchHours != null) {
+      const weights = closed.map((r) => Math.max(0, Number(r.actual_hours ?? 0)));
+      const wSum = weights.reduce((a, b) => a + b, 0);
+      const shares = closed.map((_, i) => Math.round(punchHours * (wSum > 0 ? weights[i] / wSum : 1 / closed.length) * 100) / 100);
+      const diff = Math.round((punchHours - shares.reduce((a, b) => a + b, 0)) * 100) / 100;
+      if (diff !== 0) shares[weights.indexOf(Math.max(...weights))] += diff;
+      for (let i = 0; i < closed.length; i++) {
+        await supabase.from("crm_job_visits").update({ actual_hours: shares[i] }).eq("id", closed[i].id);
+        closed[i].actual_hours = shares[i];
+      }
+    }
 
     const total = await sumPunchLaborCents(supabase, anchor.id);
     const weightSum = closed.reduce((s, r) => s + Math.max(0, Number(r.actual_hours ?? 0)), 0);

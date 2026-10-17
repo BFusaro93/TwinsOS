@@ -1,5 +1,6 @@
 "use client";
 
+import { RichNotes } from "@/components/shared/RichNotes";
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO, differenceInMinutes } from "date-fns";
@@ -505,9 +506,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 <p className={`text-sm font-medium ${acknowledged ? "text-green-800 dark:text-green-300" : "text-amber-800 dark:text-amber-300"}`}>
                   Job Notes
                 </p>
-                <p className="text-sm mt-1 text-slate-700 dark:text-neutral-300 whitespace-pre-wrap">
-                  {stop.notesToCrew}
-                </p>
+                <RichNotes value={stop.notesToCrew ?? ""} className="text-sm mt-1 text-slate-700 dark:text-neutral-300" />
               </div>
             </div>
             {!acknowledged && (

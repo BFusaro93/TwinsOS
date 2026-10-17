@@ -149,7 +149,7 @@ export type FormatRule = z.infer<typeof formatRuleSchema>;
 
 // ---------- Dashboards (visuals built on the analysis engine) ----------
 
-export const visualTypeSchema = z.enum(["kpi", "table", "bar", "line", "pie", "gauge", "crosstab"]);
+export const visualTypeSchema = z.enum(["kpi", "table", "bar", "line", "pie", "gauge", "crosstab", "pipeline"]);
 export type VisualType = z.infer<typeof visualTypeSchema>;
 
 export const visualSpecSchema = z.object({
@@ -207,6 +207,11 @@ export const visualSpecSchema = z.object({
   /** When `topN` is set, bucket the remaining categories into one "Others"
    *  bar/slice (summed) instead of just dropping them. */
   showOthers: z.boolean().optional(),
+  /** "bar"/"line" only — when the label column is a date, sum the value
+   *  columns into one point per calendar month (client-side, so a daily
+   *  query like "group by worked_date" can still draw a monthly trend). Only
+   *  meaningful for additive value columns (hours, dollars, counts). */
+  dateBucket: z.enum(["month"]).optional(),
   /** "crosstab" visual only — the column whose distinct values become
    *  pivoted column headers. Rows come from `labelColumn`, cell values are
    *  `valueColumns[0]` summed per (label, header) pair — a client-side pivot

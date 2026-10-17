@@ -86,6 +86,9 @@ import {
   History,
   FileText,
 } from "lucide-react";
+import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
+import { RichNotes } from "@/components/shared/RichNotes";
+import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { SendClientEmailDialog } from "@/components/crm/SendClientEmailDialog";
 import { SendClientSmsDialog } from "@/components/crm/SendClientSmsDialog";
@@ -1320,7 +1323,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     {job.notesToCrew && (
                       <div className="flex flex-col gap-0.5">
                         <dt className="text-xs text-muted-foreground">Notes to Crew / Job Notes</dt>
-                        <dd className="text-xs text-slate-700 dark:text-neutral-300">{job.notesToCrew}</dd>
+                        <dd className="text-xs text-slate-700 dark:text-neutral-300 line-clamp-3 whitespace-pre-line">{notesToPlainText(job.notesToCrew)}</dd>
                       </div>
                     )}
                   </dl>
@@ -1332,15 +1335,15 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 p-4 shadow-sm col-span-2">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400 mb-1">Notes to Crew / Job Notes</p>
                   {editing ? (
-                    <Textarea
-                      rows={2}
-                      defaultValue={job.notesToCrew ?? ""}
-                      onChange={(e) => patch("notes_to_crew", e.target.value)}
-                      className="text-sm resize-none bg-card"
+                    <RichTextEditor
+                      value={(edits.notes_to_crew as string | undefined) ?? job.notesToCrew ?? ""}
+                      onChange={(html) => patch("notes_to_crew", html)}
                       placeholder="Instructions, gate codes, special conditions…"
+                      minHeight={72}
+                      allowImages={false}
                     />
                   ) : (
-                    <p className="text-sm text-slate-700 dark:text-neutral-300 whitespace-pre-wrap">{job.notesToCrew}</p>
+                    <RichNotes value={job.notesToCrew ?? ""} />
                   )}
                 </div>
               )}
@@ -1350,15 +1353,15 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 p-4 shadow-sm col-span-2">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 mb-1">Internal Note <span className="font-normal normal-case text-amber-600 dark:text-amber-400">(also in Notes tab)</span></p>
                   {editing ? (
-                    <Textarea
-                      rows={3}
-                      defaultValue={job.notes ?? ""}
-                      onChange={(e) => patch("notes", e.target.value)}
-                      className="text-sm resize-none bg-card"
+                    <RichTextEditor
+                      value={(edits.notes as string | undefined) ?? job.notes ?? ""}
+                      onChange={(html) => patch("notes", html)}
                       placeholder="Internal notes visible only to office staff…"
+                      minHeight={72}
+                      allowImages={false}
                     />
                   ) : (
-                    <p className="text-sm text-slate-700 dark:text-neutral-300 whitespace-pre-wrap">{job.notes}</p>
+                    <RichNotes value={job.notes ?? ""} />
                   )}
                 </div>
               )}
@@ -1381,12 +1384,78 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       {formatHours(visits.filter((v) => v.actualHours).reduce((s, v) => s + (v.actualHours ?? 0), 0))}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-400 dark:text-neutral-500">Visits Completed</p>
-                    <p className="text-xl font-bold text-slate-800 dark:text-neutral-100">
-                      {visits.filter((v) => v.status === "completed").length} / {visits.length}
-                    </p>
-                  </div>
+                  {(() => {
+                    // Visit breakdown. Open visits (scheduled/dispatched) split on
+                    // org-today so "upcoming" means still ahead and "overdue"
+                    // means the day passed without the visit being worked.
+                    const today = orgToday();
+                    const count = (pred: (v: (typeof visits)[number]) => boolean) => visits.filter(pred).length;
+                    const completed = count((v) => v.status === "completed");
+                    const inProgress = count((v) => v.status === "in_progress");
+                    const isOpen = (v: (typeof visits)[number]) => v.status === "scheduled" || v.status === "dispatched";
+                    const upcoming = count((v) => isOpen(v) && v.scheduledDate >= today);
+                    const overdue = count((v) => isOpen(v) && v.scheduledDate < today);
+                    const skipped = count((v) => v.status === "skipped");
+                    const cancelled = count((v) => v.status === "cancelled");
+                    const next = visits
+                      .filter((v) => isOpen(v) && v.scheduledDate >= today)
+                      .map((v) => v.scheduledDate)
+                      .sort()[0];
+                    const lastDone = visits
+                      .filter((v) => v.status === "completed")
+                      .map((v) => (v.completedAt ?? v.scheduledDate).slice(0, 10))
+                      .sort()
+                      .pop();
+                    const fmt = (d: string) =>
+                      new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                    const parts = [
+                      { label: "in progress", n: inProgress, cls: "text-blue-700 dark:text-blue-400" },
+                      { label: "upcoming", n: upcoming, cls: "text-slate-700 dark:text-neutral-300" },
+                      { label: "overdue", n: overdue, cls: "text-red-600 dark:text-red-400" },
+                      { label: "skipped", n: skipped, cls: "text-amber-700 dark:text-amber-400" },
+                      { label: "cancelled", n: cancelled, cls: "text-slate-500 dark:text-neutral-500" },
+                    ].filter((p) => p.n > 0);
+                    return (
+                      <div className="min-w-[200px]">
+                        <p className="text-xs text-slate-400 dark:text-neutral-500">Visits Completed</p>
+                        <button
+                          type="button"
+                          onClick={() => setTab("visits")}
+                          className="text-left"
+                          title="View visits"
+                        >
+                          <span className="text-xl font-bold text-slate-800 dark:text-neutral-100 hover:text-brand-600 dark:hover:text-brand-400">
+                            {completed} / {visits.length}
+                          </span>
+                        </button>
+                        {visits.length > 0 && (
+                          <div className="mt-1 h-1.5 w-full max-w-[200px] overflow-hidden rounded-full bg-slate-100 dark:bg-neutral-800">
+                            <div
+                              className="h-full rounded-full bg-green-500"
+                              style={{ width: `${(completed / visits.length) * 100}%` }}
+                            />
+                          </div>
+                        )}
+                        {parts.length > 0 && (
+                          <p className="mt-1 text-xs">
+                            {parts.map((p, i) => (
+                              <span key={p.label}>
+                                {i > 0 && <span className="text-slate-300 dark:text-neutral-600"> · </span>}
+                                <span className={p.cls}>{p.n} {p.label}</span>
+                              </span>
+                            ))}
+                          </p>
+                        )}
+                        {(next || lastDone) && (
+                          <p className="mt-0.5 text-xs text-slate-400 dark:text-neutral-500">
+                            {next && <>Next {fmt(next)}</>}
+                            {next && lastDone && " · "}
+                            {lastDone && <>Last done {fmt(lastDone)}</>}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -1845,22 +1914,22 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             <div className="rounded-lg border bg-card p-4 shadow-sm flex flex-col gap-3">
               <div className="flex flex-col gap-1">
                 <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Notes to Crew / Job Notes</Label>
-                <Textarea
-                  rows={4}
-                  defaultValue={job.notesToCrew ?? ""}
-                  onChange={(e) => patch("notes_to_crew", e.target.value)}
-                  className="text-sm resize-none"
+                <RichTextEditor
+                  value={(edits.notes_to_crew as string | undefined) ?? job.notesToCrew ?? ""}
+                  onChange={(html) => patch("notes_to_crew", html)}
                   placeholder="Instructions, access codes, special conditions…"
+                  minHeight={140}
+                  allowImages={false}
                 />
               </div>
               <div className="flex flex-col gap-1">
                 <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Internal Notes</Label>
-                <Textarea
-                  rows={4}
-                  defaultValue={job.notes ?? ""}
-                  onChange={(e) => patch("notes", e.target.value)}
-                  className="text-sm resize-none"
+                <RichTextEditor
+                  value={(edits.notes as string | undefined) ?? job.notes ?? ""}
+                  onChange={(html) => patch("notes", html)}
                   placeholder="Internal notes visible only to office staff…"
+                  minHeight={140}
+                  allowImages={false}
                 />
               </div>
               <div className="flex justify-end">
@@ -2050,7 +2119,7 @@ function VisitRow({
   const visitBudgetedHours =
     visit.budgetedHours ?? (linkedService ? linkedService.budgetedHours * (linkedService.teamSize || 1) : null);
   const [editingNote, setEditingNote] = useState(false);
-  const [noteVal, setNoteVal] = useState(visit.notesToCrew ?? "");
+  const [noteVal, setNoteVal] = useState(notesToPlainText(visit.notesToCrew));
   const [editingInvoiceDesc, setEditingInvoiceDesc] = useState(false);
   const [invoiceDescVal, setInvoiceDescVal] = useState(visit.invoiceDescription ?? "");
   const [skipping, setSkipping] = useState(false);
@@ -2128,14 +2197,14 @@ function VisitRow({
         <td className="px-4 py-3 text-xs max-w-xs">
           <div className="flex flex-col gap-0.5">
             {jobNotesToCrew && (
-              <div className="truncate max-w-[200px] text-amber-700 dark:text-amber-400" title={jobNotesToCrew}>
-                <span className="font-semibold">Job note:</span> {jobNotesToCrew}
+              <div className="truncate max-w-[200px] text-amber-700 dark:text-amber-400" title={notesToPlainText(jobNotesToCrew)}>
+                <span className="font-semibold">Job note:</span> {notesToPlainText(jobNotesToCrew)}
               </div>
             )}
             {/* generate-visits copies the job note onto each visit — don't show it twice */}
             {visit.notesToCrew && visit.notesToCrew !== jobNotesToCrew ? (
               <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="text-slate-600 dark:text-neutral-400 hover:text-brand-600 dark:hover:text-brand-400 text-left truncate max-w-[200px] block">
-                {visit.notesToCrew}
+                {notesToPlainText(visit.notesToCrew)}
               </button>
             ) : (
               <button onClick={() => { setEditingNote(true); setEditingInvoiceDesc(false); }} className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-brand-500 dark:hover:text-brand-400 italic">
@@ -2300,7 +2369,7 @@ function VisitRow({
                   await onSaveNote(noteVal);
                   setEditingNote(false);
                 }}>Save</Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setNoteVal(visit.notesToCrew ?? ""); setEditingNote(false); }}>Cancel</Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setNoteVal(notesToPlainText(visit.notesToCrew)); setEditingNote(false); }}>Cancel</Button>
               </div>
             </div>
           </td>

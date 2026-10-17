@@ -1,5 +1,6 @@
 "use client";
 
+import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -99,7 +100,7 @@ function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
       {stop.notesToCrew && (
         <div className="mt-2 pt-2 border-t border-slate-100 dark:border-neutral-800">
           <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 rounded px-2 py-1 line-clamp-2">
-            📋 {stop.notesToCrew}
+            📋 {notesToPlainText(stop.notesToCrew)}
           </p>
         </div>
       )}

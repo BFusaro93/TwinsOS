@@ -1,5 +1,7 @@
 "use client";
 
+import { notesToPlainText } from "@/lib/utils/rich-notes";
+import { stopPunchMismatch } from "@/lib/utils/punch-mismatch";
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
@@ -81,6 +83,7 @@ import {
   Tag,
   Mail,
   MoreHorizontal,
+  TriangleAlert,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
 import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
@@ -454,7 +457,7 @@ function formatSqft(n: number | null | undefined): string {
 function extraColCellText(key: ColKey, job: CRMJob | null | undefined): string {
   switch (key) {
     case "sales_rep":     return job?.salesRepName ?? "—";
-    case "notes_to_crew": return job?.propertyNotesToCrew ?? job?.notesToCrew ?? "—";
+    case "notes_to_crew": return notesToPlainText(job?.propertyNotesToCrew ?? job?.notesToCrew) || "—";
     case "gate_code":     return job?.propertyGateCode ?? "—";
     case "turf_sqft":     return formatSqft(job?.propertyTurfSqft);
     case "mulch_sqft":    return formatSqft(job?.propertyMulchBedSqft);
@@ -724,6 +727,11 @@ function JobDetailSheet({
   const endClockTime   = isoToDateAndTime(visit.clockedOutAt, visit.scheduledDate, orgTz).time;
   const startPunchDiffers = startClockTime !== "" && startClockTime !== (startTime || "").slice(0, 5);
   const endPunchDiffers   = endClockTime   !== "" && endClockTime   !== (endTime   || "").slice(0, 5);
+  const sheetPunchMismatch = stopPunchMismatch({
+    stopVisits: stopVisitsFor(visit, allVisits),
+    memberTimes,
+    timeZone: orgTz,
+  });
 
   // Appointment Start/End auto-save on blur (like the row's own inline inputs)
   // instead of requiring the batched Save button below — that button also
@@ -803,10 +811,10 @@ function JobDetailSheet({
   const [notesToClient, setNotesToClient] = useState(visit.notesToClient ?? "");
   // Fall back to job-level master invoice description when visit has none
   const [invoiceDesc,   setInvoiceDesc]   = useState(visit.invoiceDescription ?? job?.invoiceDescription ?? "");
-  const [notesToCrewInput, setNotesToCrewInput] = useState(visit.notesToCrew ?? job?.notesToCrew ?? "");
+  const [notesToCrewInput, setNotesToCrewInput] = useState(notesToPlainText(visit.notesToCrew ?? job?.notesToCrew));
   const [savingNotesToCrew, setSavingNotesToCrew] = useState(false);
   useEffect(() => {
-    setNotesToCrewInput(visit.notesToCrew ?? job?.notesToCrew ?? "");
+    setNotesToCrewInput(notesToPlainText(visit.notesToCrew ?? job?.notesToCrew));
   }, [visit.id, visit.notesToCrew, job?.notesToCrew]);
 
   async function saveNotesToCrew() {
@@ -855,8 +863,6 @@ function JobDetailSheet({
       // deliberate per-visit unassign (crew_id NULL alone would inherit the
       // job's crew again). An explicit crew clears the flag server-side.
       ...(crewChanged && !crewId && seedCrewId ? { crew_unassigned: true } : {}),
-      start_time: startTime || null,
-      end_time: endTime || null,
       ...(actualHours !== seedActual ? { actual_hours: actualHours ? parseFloat(actualHours) : null } : {}),
       ...(budgetedHoursInput !== seedBudgeted ? { budgeted_hours: budgetedHoursInput ? parseFloat(budgetedHoursInput) : null } : {}),
       men_count: parsedMenCount,
@@ -901,6 +907,13 @@ function JobDetailSheet({
         );
         if (!r) return;
       }
+      // Start/End normally save on blur (saveAppointmentTime), which also moves
+      // every crew member's punch and the stop's sibling visits. If one was
+      // typed but never blurred (or that save failed), push it through the same
+      // path now — writing it straight onto the visit would leave the punches,
+      // and so the Timesheet report, on the old time.
+      if ((startTime || "").slice(0, 5) !== (visit.startTime || "").slice(0, 5)) await saveAppointmentTime("start_time", startTime);
+      if ((endTime || "").slice(0, 5) !== (visit.endTime || "").slice(0, 5)) await saveAppointmentTime("end_time", endTime);
       await updateVisit({ id: visit.id, updates, jobId: visit.jobId, jobType: visit.job?.jobType });
       toast.success(dateChanged ? `Saved — moved to ${scheduledDate}` : "Saved");
       onOpenChange(false);
@@ -1101,6 +1114,17 @@ function JobDetailSheet({
 
             {/* Schedule / assign section */}
             <div className="px-5 pt-4 pb-3 border-b space-y-2.5">
+              {sheetPunchMismatch && (
+                <div className="flex items-start gap-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                  <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {sheetPunchMismatch}{" "}
+                    <button type="button" className="font-medium underline" onClick={() => onEditTimes(visit)}>
+                      Open Edit Job Times
+                    </button>
+                  </span>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
                 {/* Schedule Date */}
                 <div>
@@ -1380,7 +1404,7 @@ function JobDetailSheet({
               <TabsContent value="job-notes" className="m-0 p-4 space-y-3">
                 {job?.notesToCrew && (
                   <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900 rounded px-2 py-1.5">
-                    <span className="font-semibold">Job note:</span> {job.notesToCrew}
+                    <span className="font-semibold">Job note:</span> {notesToPlainText(job.notesToCrew)}
                   </p>
                 )}
                 <Textarea
@@ -1667,7 +1691,7 @@ function WriteInBlank({ className = "" }: { className?: string }) {
 }
 
 function crewNotesFor(v: CRMJobVisit): string {
-  return v.notesToCrew ?? v.job?.notesToCrew ?? v.job?.propertyNotesToCrew ?? "";
+  return notesToPlainText(v.notesToCrew ?? v.job?.notesToCrew ?? v.job?.propertyNotesToCrew);
 }
 
 /** "1.5" -> "1 hrs / 30 mins", matching the SA route-sheet Est. format. */
@@ -2554,6 +2578,7 @@ function EditJobTimesDialog({
   const upsert = useUpsertCrewMemberTime();
   const del = useDeleteCrewMemberTime();
   const updateVisit = useUpdateVisit();
+  const qc = useQueryClient();
   const addCrewMember = useAddCrewMember();
   const setBreakPaid = useSetVisitBreakPaid();
   // Org default shown in the "Follow company setting" option label.
@@ -2631,12 +2656,22 @@ function EditJobTimesDialog({
     if (newStart && newStart !== (visit.startTime ?? "").slice(0, 5)) { patch.startTime = newStart; patch.clockedInAt = earliestIn; }
     if (newEnd && newEnd !== (visit.endTime ?? "").slice(0, 5)) { patch.endTime = newEnd; patch.clockedOutAt = latestOut; }
     if (Object.keys(patch).length > 0) {
+      // The patch rewrites the visits' times and re-derives hours as span ×
+      // crew size, which is wrong once one member's punch differs from the
+      // rest (late arrival, early leave). Ask the server to put hours and labor
+      // back on the punches themselves, then refresh — so Job Costing and the
+      // Timesheet report total the same man-hours.
       applyStopTimePatch({
         visit,
         stopVisits,
         patch,
         updateVisit: (args) => updateVisit.mutateAsync(args),
-      }).catch(() => toast.error("Failed to sync visit times"));
+      })
+        .then(async () => {
+          await fetch(`/api/crm/crew/visits/${anchorVisitId}/member-times`, { method: "PATCH" });
+          void qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+        })
+        .catch(() => toast.error("Failed to sync visit times"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberTimes, visitId, visitDate, tz]);
@@ -2829,8 +2864,11 @@ function VisitRow({
   drivingCrewIds,
   customFieldDefs,
   dailyOverrides,
+  punchMismatch,
 }: {
   visit: CRMJobVisit;
+  /** Why this stop's crew punches disagree with its visit times/hours, or null when they agree (see stopPunchMismatch). */
+  punchMismatch: string | null;
   /** 1-based position of this visit within its own crew's stops for the day (not the global row index). */
   orderNum: number;
   selectedDate: string;
@@ -3080,7 +3118,7 @@ function VisitRow({
     + COL_DEFS.filter((c) => isVisible(c.key)).length
     + EXTRA_COL_DEFS.filter((c) => isVisible(c.key)).length
     + customFieldDefs.filter((d) => isVisible(customColKey(d.id))).length;
-  const crewNoteBanner = visit.notesToCrew ?? visit.job?.notesToCrew ?? null;
+  const crewNoteBanner = notesToPlainText(visit.notesToCrew ?? visit.job?.notesToCrew) || null;
 
   return (
     <>
@@ -3432,6 +3470,9 @@ function VisitRow({
             <div className="flex items-center gap-1.5">
               {crewNoteBanner && (
                 <span title={crewNoteBanner} className="shrink-0"><StickyNote className="h-3 w-3 text-amber-400" /></span>
+              )}
+              {punchMismatch && (
+                <span title={punchMismatch} className="shrink-0"><TriangleAlert className="h-3 w-3 text-amber-500 dark:text-amber-400" /></span>
               )}
               {hasLinkedProduct && (
                 <span title="Service has a linked product" className="shrink-0"><Package className="h-3 w-3 text-purple-500 dark:text-purple-400" /></span>
@@ -3827,6 +3868,23 @@ export function DispatchBoard() {
     }
     return m;
   }, [allVisits, anchorVisitIdByVisitId, memberTimesByAnchorId]);
+  // Stops whose crew punches disagree with the visit's own Start/End or hours.
+  // Timesheets read the punches and Job Costing reads the visit, so a gap here
+  // means one of the two is wrong. Keyed by visit id; every visit of a stop
+  // carries the stop's message.
+  const boardTimeZone = useOrgTimeZone();
+  const punchMismatchByVisitId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const stop of groupVisitsIntoStops(allVisits)) {
+      const msg = stopPunchMismatch({
+        stopVisits: stop.visits,
+        memberTimes: memberTimesByAnchorId.get(stop.anchorVisitId) ?? EMPTY_MEMBER_TIMES,
+        timeZone: boardTimeZone,
+      });
+      if (msg) for (const v of stop.visits) m.set(v.id, msg);
+    }
+    return m;
+  }, [allVisits, memberTimesByAnchorId, boardTimeZone]);
   const qc = useQueryClient();
 
   async function applyBulkStatus(status: VisitStatus, reason?: string | null) {
@@ -4419,7 +4477,7 @@ export function DispatchBoard() {
 
     const rows: unknown[][] = displayVisits.map((v, i) => {
       const job = v.job;
-      const jobNotes = v.notesToCrew ?? job?.notesToCrew ?? "";
+      const jobNotes = notesToPlainText(v.notesToCrew ?? job?.notesToCrew);
       const comments = v.jobComments
         .map((c) => `${c.text} — ${c.authorName}, ${new Date(c.createdAt).toLocaleDateString()}`)
         .join("\n");
@@ -5353,6 +5411,7 @@ export function DispatchBoard() {
                   crewCodeById={crewCodeById}
                   manualRouteMode={manualRouteMode}
                   memberTimes={memberTimesByVisitId.get(visit.id) ?? EMPTY_MEMBER_TIMES}
+                  punchMismatch={punchMismatchByVisitId.get(visit.id) ?? null}
                   anchorVisitId={anchorVisitIdByVisitId.get(visit.id) ?? visit.id}
                   allVisits={allVisits}
                   drivingCrewIds={drivingCrewIds}
