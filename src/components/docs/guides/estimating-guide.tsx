@@ -531,7 +531,14 @@ export function EstimatingGuide() {
         <Callout>
           The link closes again the moment a deposit is recorded, so it only ever allows one attempt
           at a time. This is worth knowing before you chase someone: they very likely can just pay it
-          from the same link you already sent, and don&rsquo;t need a new one.
+          from the same link you already sent, and don&rsquo;t need a new one. That holds even after
+          the link&rsquo;s normal 30 days: a bank debit can be returned weeks later, and the retry
+          screen still opens.
+        </Callout>
+        <Callout>
+          If you change the deposit amount (or the card fee setting) while a client has a card
+          payment half-started, their next attempt is for the new amount &mdash; the old pending
+          payment is cancelled rather than reused, so they&rsquo;re never charged the old figure.
         </Callout>
         <Callout>
           Only the card and bank-transfer paths are real money. A client who picks

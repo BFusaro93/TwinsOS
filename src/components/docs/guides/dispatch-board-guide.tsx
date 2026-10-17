@@ -447,6 +447,13 @@ export function DispatchBoardGuide() {
           invoice emails — and a row of merge tags can be inserted into the message at the cursor.
           Sending fires one email per recipient and logs to each client&apos;s Activity timeline.
         </p>
+        <p>
+          <strong>Completing visits in bulk (or one at a time from the status menu)</strong> also
+          creates each visit&apos;s draft invoice. If an invoice can&apos;t be created, the visit
+          still completes, and you see a warning &mdash; &ldquo;N visits were completed but could
+          not be invoiced&rdquo; &mdash; instead of it passing silently. Mark those visits complete
+          again to retry billing; it never double-bills a visit that already has an invoice.
+        </p>
         <Callout>
           Email Selected Clients requires the same permission as any other outbound client email
           (Email Activity&apos;s Send permission) — it isn&apos;t a separate, less-gated path to
