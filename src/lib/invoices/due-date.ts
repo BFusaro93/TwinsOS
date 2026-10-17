@@ -26,6 +26,10 @@ export function resolveInvoiceTerms(
 /** invoiceDate is YYYY-MM-DD; returns YYYY-MM-DD plus the terms' day count. */
 export function computeDueDate(invoiceDate: string, terms: string): string {
   const days = TERMS_DAYS[terms] ?? 0;
+  // Not a YYYY-MM-DD date (e.g. an imported "3/4/2026"): Date.UTC(NaN...) made
+  // toISOString() throw a RangeError and abort callers mid-batch. Fall back to
+  // the date itself — importers normalize and validate dates before this.
+  if (!/^\d{4}-\d{2}-\d{2}/.test(invoiceDate)) return invoiceDate;
   const [y, m, d] = invoiceDate.slice(0, 10).split("-").map(Number);
   const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
   dt.setUTCDate(dt.getUTCDate() + days);

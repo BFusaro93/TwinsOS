@@ -8,6 +8,7 @@ import type { CRMJobVisit } from "@/types/crm-jobs";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 
 /** `.in()` list size per request — keeps the query string well under URL limits. */
 const IN_CHUNK = 200;
@@ -272,6 +273,34 @@ export function useGenerateSnowInvoices() {
         [...new Set(groups.map((g) => g.clientId))]
       );
 
+      // Terms / PO / rep, resolved the same way the visit-completion path does
+      // (complete-visit-side-effects). The snow insert used to set none of them,
+      // so a Net-30 client's snow invoice got due_on_receipt with a NULL
+      // due_date — which the invoice-past-due automation skips forever.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: termRows } = await (supabase as any)
+        .from("clients")
+        .select("id, default_terms")
+        .in("id", [...new Set(groups.map((g) => g.clientId))]);
+      const defaultTermsByClient = new Map<string, string | null>(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ((termRows ?? []) as any[]).map((c): [string, string | null] => [c.id, c.default_terms ?? null])
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: orgTermsRow } = await (supabase as any)
+        .from("organizations")
+        .select("default_billing_terms")
+        .maybeSingle();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: jobMetaRows } = await (supabase as any)
+        .from("crm_jobs")
+        .select("id, po_number, sales_rep_id")
+        .in("id", [...new Set(groups.flatMap((g) => g.visits.map((v) => v.jobId)))]);
+      const jobMetaById = new Map<string, { po_number: string | null; sales_rep_id: string | null }>(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ((jobMetaRows ?? []) as any[]).map((j): [string, { po_number: string | null; sales_rep_id: string | null }] => [j.id, j])
+      );
+
       for (const group of groups) {
         const subtotal = group.visits.reduce((s, v) => s + v.amountCents, 0);
         if (subtotal <= 0) {
@@ -293,6 +322,7 @@ export function useGenerateSnowInvoices() {
         const distinctJobIds = new Set(billableVisits.map((v) => v.jobId));
         const singleJobId = distinctJobIds.size === 1 ? [...distinctJobIds][0] : null;
         const invoiceDate = billableVisits[0]?.serviceDate ?? todayInZone(orgTimeZone);
+        const invoiceTerms = resolveInvoiceTerms(defaultTermsByClient.get(group.clientId), orgTermsRow?.default_billing_terms);
 
         // Same tax rules as every other job → invoice path
         // (complete-visit-side-effects / useCreateInvoiceFromJob): a line is
@@ -313,6 +343,11 @@ export function useGenerateSnowInvoices() {
             crm_job_id: singleJobId,
             description: group.description,
             invoice_date: invoiceDate,
+            terms: invoiceTerms,
+            due_date: computeDueDate(invoiceDate, invoiceTerms),
+            // Only meaningful when the group is a single job.
+            po_number: singleJobId ? jobMetaById.get(singleJobId)?.po_number ?? null : null,
+            sales_rep_id: singleJobId ? jobMetaById.get(singleJobId)?.sales_rep_id ?? null : null,
             status: "draft",
             subtotal_cents: subtotal,
             tax_rate_bps: taxRateBps,
@@ -366,7 +401,7 @@ export function useGenerateSnowInvoices() {
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: invoiceNumber } = await (supabase.rpc as any)(
+        const { data: invoiceNumber, error: numberErr } = await (supabase.rpc as any)(
           "assign_invoice_number",
           { p_invoice_id: (newInvoice as { id: string }).id }
         );
@@ -375,14 +410,20 @@ export function useGenerateSnowInvoices() {
         await (supabase.rpc as any)("sync_client_balance", { p_client_id: group.clientId });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any).from("client_activity").insert({
-          client_id: group.clientId,
-          activity_type: "invoice",
-          subject: `Invoice #${invoiceNumber}`,
-          amount_cents: totalCents,
-          ref_id: (newInvoice as { id: string }).id,
-          ref_table: "crm_invoices",
-        });
+        // Only log the timeline row when a number was actually assigned — a
+        // failed/null RPC wrote "Invoice #undefined" (the visit-completion path
+        // guards the same way).
+        if (!numberErr && invoiceNumber != null) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("client_activity").insert({
+            client_id: group.clientId,
+            activity_type: "invoice",
+            subject: `Invoice #${invoiceNumber}`,
+            amount_cents: totalCents,
+            ref_id: (newInvoice as { id: string }).id,
+            ref_table: "crm_invoices",
+          });
+        }
 
         invoicesCreated += 1;
         invoiceIds.push((newInvoice as { id: string }).id);

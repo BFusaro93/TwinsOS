@@ -87,7 +87,12 @@ export async function POST(request: Request) {
     .is(column, null)
     .select("client_id")
     .maybeSingle();
-  if (error) console.error(`[resend webhook] failed to update ${column}:`, error);
+  if (error) {
+    console.error(`[resend webhook] failed to update ${column}:`, error);
+    // 5xx so Svix retries — for a bounce this is the only thing that suppresses
+    // the address.
+    return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+  }
 
   // A bounce was logged but nothing ever stopped future sends to that address,
   // so the same dead address kept getting re-sent to indefinitely.
@@ -103,13 +108,31 @@ export async function POST(request: Request) {
   // Only a hard bounce means the address is dead — a Transient one (mailbox
   // full, server down) must not permanently block every future send.
   const isSoftBounce = event.data.bounce?.type?.toLowerCase() === "transient";
-  if (event.type === "email.bounced" && updated?.client_id && !isSoftBounce) {
-    const { error: suppressErr } = await supabase
-      .from("clients")
-      .update({ email_bounced_at: event.data.created_at ?? new Date().toISOString() })
-      .eq("id", updated.client_id)
-      .is("email_bounced_at", null);
-    if (suppressErr) console.error("[resend webhook] failed to suppress bounced client:", suppressErr);
+  if (event.type === "email.bounced" && !isSoftBounce) {
+    // Resolve the client from the message id itself, NOT from the first-write
+    // update above: that one only matches while bounced_at is still null, so a
+    // delivery that stamped bounced_at but died before suppressing the client
+    // would make every Svix retry skip suppression forever.
+    const clientId =
+      updated?.client_id ??
+      (
+        await supabase
+          .from("client_activity")
+          .select("client_id")
+          .eq("resend_message_id", messageId)
+          .maybeSingle()
+      ).data?.client_id;
+    if (clientId) {
+      const { error: suppressErr } = await supabase
+        .from("clients")
+        .update({ email_bounced_at: event.data.created_at ?? new Date().toISOString() })
+        .eq("id", clientId)
+        .is("email_bounced_at", null);
+      if (suppressErr) {
+        console.error("[resend webhook] failed to suppress bounced client:", suppressErr);
+        return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+      }
+    }
   }
 
   return NextResponse.json({ received: true });

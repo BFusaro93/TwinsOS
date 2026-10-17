@@ -172,6 +172,8 @@ export async function POST(
       });
       if (!sideEffects.ok) {
         log.error("completion side effects failed", { visitId, error: sideEffects.error });
+      } else if (sideEffects.invoiceSkipReason === "error") {
+        log.error("visit completed but auto-invoice failed", { visitId });
       }
     } catch (err) {
       log.error("completion side effects threw", { visitId, error: err instanceof Error ? err.message : String(err) });

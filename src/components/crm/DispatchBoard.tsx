@@ -3844,8 +3844,13 @@ export function DispatchBoard() {
           body: JSON.stringify({ ids }),
         });
         if (!res.ok) throw new Error("One or more updates failed");
-        const summary = await res.json() as { completed: number; failed: { id: string; error: string }[] };
+        const summary = await res.json() as { completed: number; failed: { id: string; error: string }[]; billingErrors?: string[] };
         if (summary.failed.length > 0) throw new Error("One or more updates failed");
+        if ((summary.billingErrors?.length ?? 0) > 0) {
+          toast.warning(
+            `${summary.billingErrors!.length} visit${summary.billingErrors!.length > 1 ? "s were" : " was"} completed but could not be invoiced. Mark ${summary.billingErrors!.length > 1 ? "them" : "it"} complete again to retry billing.`
+          );
+        }
       } else {
         const updates: Record<string, unknown> = { status };
         if (status === "skipped" || status === "cancelled") updates.skip_reason = reason?.trim() || null;
