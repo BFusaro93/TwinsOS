@@ -136,6 +136,12 @@ export function ClientPortalGuide() {
           the login page instead of clicking through email.
         </p>
         <p>
+          A client who forgets their password uses <strong>Forgot password?</strong> on the portal
+          login page &mdash; it works while signed out and sends a reset email. On the Account page the
+          phone number must be a real number (at least 10 digits); a blank value clears it. Text
+          replies and STOP requests are matched by that number, so a malformed value would break them.
+        </p>
+        <p>
           One real edge case the code explicitly handles: <strong>the same email address can be a client of
           two different Landscapt-using organizations.</strong> If someone accepts a second company&apos;s
           invite using an email that already has a portal account, registration links the new company&apos;s

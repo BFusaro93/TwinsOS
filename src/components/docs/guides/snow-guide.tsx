@@ -210,6 +210,18 @@ export function SnowGuide() {
           you&apos;re asked to confirm &mdash; <strong>Bill anyway</strong> bills it again, or
           cancel and check that invoice first.
         </p>
+        <p>
+          <strong>Voided or deleted invoices release their visits.</strong> If you void (or delete)
+          a snow invoice because the depth or rate was wrong, the storm visits it billed go straight
+          back into the Snow Invoicing queue so you can bill them correctly &mdash; they&apos;re no
+          longer treated as invoiced.
+        </p>
+        <p>
+          <strong>Snow invoices carry the client&apos;s terms.</strong> Each generated invoice takes
+          the client&apos;s Invoice terms (or the company default), gets a matching due date so it
+          ages and appears in past-due reminders, and copies the job&apos;s PO number and sales rep
+          when the invoice covers a single job.
+        </p>
         <Table>
           <thead>
             <TableHeadRow>

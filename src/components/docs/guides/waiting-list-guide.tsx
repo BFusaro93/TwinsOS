@@ -192,6 +192,11 @@ export function WaitingListGuide() {
           different page — see the Dispatch Board guide below — but it&apos;s the closer equivalent
           to true geofencing if City/Zip filtering here isn&apos;t narrowing things down enough.
         </p>
+        <p>
+          Map positions stay current on their own: when a job&apos;s address, its property, or the
+          client&apos;s service or billing address changes, the saved position for the affected jobs
+          is cleared and looked up again the next time you use Nearby Waiting List or the map.
+        </p>
       </Section>
 
       <Section id="see-also" title="See also">

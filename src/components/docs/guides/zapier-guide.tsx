@@ -231,6 +231,14 @@ export function ZapierGuide() {
         </Table>
       </Section>
 
+      <p className="text-sm text-[#4a4a46] dark:text-neutral-300">
+        Zap-created records behave like ones made in the app: a client created by{" "}
+        <strong>Create Client</strong> is a new lead that enrolls in your &ldquo;Lead created&rdquo;
+        automations, and a job from <strong>Create Job</strong> enrolls in &ldquo;Job was
+        created&rdquo; automations. Actions ignore clients, vendors, work orders and products that have
+        been deleted. Each company can keep up to 100 active Zapier webhook subscriptions.
+      </p>
+
       <Section id="open-questions" title="Not yet supported">
         <ul className="list-disc space-y-2 pl-5">
           <li>

@@ -314,6 +314,12 @@ export function AutomationsGuide() {
           Mail show as their own Unsubscribe button.
         </p>
         <p>
+          <strong>What if someone marks one of our emails as spam?</strong> The client is
+          automatically marked Do Not Market and a note is added to their Activity timeline, so
+          campaigns and marketing automations stop reaching them. Invoices, estimates and other
+          service emails still send &mdash; only a bounced (dead) address blocks those.
+        </p>
+        <p>
           <strong>I approved an automation email and it was refused. Why?</strong> The client&apos;s
           status is re-checked at the moment you approve. If they unsubscribed or their email address
           bounced while the step was waiting, the approval is blocked — reject the step instead.
