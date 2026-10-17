@@ -142,7 +142,17 @@ export async function POST(
     "[statementbalance]": formatCents(activity.endingBalanceCents),
   };
 
-  const resolvedSubject = resolveMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, mergeVars);
+  // The subject is plain text — build its values unescaped, or "Smith & Sons"
+  // arrives as "Smith &amp; Sons".
+  const subjectMergeVars = {
+    ...buildClientMergeVars(
+      { displayName: client.display_name as string, balanceOutstandingCents: activity.endingBalanceCents },
+      { name: orgName, addressPhone: orgPhone, timeZone: await getMyTimeZone(supabase) },
+      { escape: false }
+    ),
+    "[statementbalance]": formatCents(activity.endingBalanceCents),
+  };
+  const resolvedSubject = resolveMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, subjectMergeVars);
   const resolvedBodyContent = resolveMergeTags(body.bodyHtml?.trim() || DEFAULT_BODY, mergeVars);
 
   const html = `

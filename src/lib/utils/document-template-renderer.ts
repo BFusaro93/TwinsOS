@@ -61,6 +61,28 @@ export function resolveMergeTags(
   });
 }
 
+/**
+ * resolveMergeTags() for a PLAIN-TEXT field (an email subject). The body
+ * resolver HTML-escapes every value, which is right for HTML but leaks literal
+ * "&amp;" / "&#39;" into a subject line ("Smith &amp; Sons"). Values go in raw
+ * here; the HTML-safe tags (links, grids, logos) are flattened to their text so
+ * markup can never end up in a subject, and line breaks are collapsed.
+ */
+export function resolveSubjectMergeTags(template: string, vars: Record<string, string>): string {
+  const plainVars: Record<string, string> = {};
+  for (const [key, value] of Object.entries(vars)) {
+    plainVars[key] = HTML_SAFE_MERGE_TAG_KEYS.has(key.toLowerCase()) ? stripHtml(value ?? "") : (value ?? "");
+  }
+  return template
+    .replace(/\[(\w+)\]/g, (match) => {
+      const key = match.toLowerCase();
+      if (key in plainVars) return plainVars[key];
+      return KNOWN_MERGE_TAG_KEYS.has(key) ? "" : match;
+    })
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // Sample values used for preview + test emails, where no real client/estimate
 // record is attached yet. Keyed to match the tags defined in crm-documents.ts.
 export const SAMPLE_MERGE_VALUES: Record<string, string> = {

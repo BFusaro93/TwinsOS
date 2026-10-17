@@ -7,7 +7,7 @@ import { InvoiceDocument } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
-import { addParagraphSpacing, resolveMergeTags } from "@/lib/utils/document-template-renderer";
+import { addParagraphSpacing, resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { loadInvoicePhotosForPdf } from "@/lib/invoices/photos";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
@@ -299,7 +299,7 @@ export async function POST(req: NextRequest) {
     "[invoicegrid]":        "",
   };
 
-  const resolvedSubject = resolveMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, mergeVars);
+  const resolvedSubject = resolveSubjectMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, mergeVars);
   const resolvedBodyContent = addParagraphSpacing(resolveMergeTags(body.bodyHtml?.trim() || DEFAULT_BODY, mergeVars));
 
   // "Include PDF" — the template's setting, forwarded by the send dialog.
