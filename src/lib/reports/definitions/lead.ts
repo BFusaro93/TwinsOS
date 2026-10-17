@@ -8,6 +8,7 @@ import {
   MONTH_LABELS,
   netPaymentCents,
   resolveDateRange,
+  orgDayRangeBounds,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { isClientStatus, isLeadStatus } from "@/lib/reports/client-status";
@@ -212,8 +213,12 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
         // A closed lead is status 'lost' (cancelled = a real client who left).
         .eq("status", "lost")
         .is("deleted_at", null);
-      if (from) query = query.gte("closed_at", `${from} 00:00:00`);
-      if (to) query = query.lte("closed_at", `${to} 23:59:59.999`);
+      // closed_at is a timestamptz: a bare "YYYY-MM-DD 00:00:00" literal is read
+      // in the database session's zone (UTC), putting the window 4-5h off the
+      // org's calendar. Bound it by the org's own midnights instead.
+      const bounds = orgDayRangeBounds(from, to, timeZone);
+      if (bounds.gte) query = query.gte("closed_at", bounds.gte);
+      if (bounds.lt) query = query.lt("closed_at", bounds.lt);
       const data = await fetchAllRows<unknown>(() => query.order("id"));
 
       interface Row {
@@ -264,7 +269,9 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
       "Client Total = accounts that had converted (Client Since) by month end, are/were clients, and had not been cancelled by then. Lead Total = accounts created by month end that were still a lead at month end (open, converted later, or lost later).",
     ],
     run: async ({ supabase, params, timeZone }) => {
-      const year = parseInt(params.year || "", 10) || new Date().getFullYear();
+      // Default to the current year on the org's calendar — the server's UTC year
+      // flips at 7-8pm ET on New Year's Eve.
+      const year = parseInt(params.year || "", 10) || zoneDateParts(new Date(), timeZone).year;
 
       interface Row {
         status: string | null;

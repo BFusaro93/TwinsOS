@@ -7,7 +7,7 @@ import type {
 import { computeTotals } from "@/lib/reports/engine";
 import type { ReportParams } from "@/lib/reports/definition-types";
 import { ymd } from "@/lib/time/zone";
-import { isoInZone, zoneDateParts } from "@/lib/time/zone";
+import { isoInZone, shiftYmd, zoneDateParts, zoneWallClockToInstant } from "@/lib/time/zone";
 import type { InvoiceStatus } from "@/types/crm-invoices";
 
 // ============================================================
@@ -94,6 +94,22 @@ export function dateRangeFilters(
 }
 
 /** Equality filter only when the param has a non-empty, non-"all" value. */
+/**
+ * Bounds for filtering a timestamptz column by an inclusive calendar-date range
+ * on the ORG's clock: `gte` the org's midnight of `from`, `lt` the org's
+ * midnight after `to`. A bare "YYYY-MM-DD" / "... 23:59:59" literal is read in
+ * the database session's zone (UTC), which puts the window 4-5 hours off the
+ * org's calendar (a 9pm ET row lands on the next day).
+ */
+export function orgDayRangeBounds(
+  from: string | null,
+  to: string | null,
+  timeZone: string
+): { gte: string | null; lt: string | null } {
+  const startOf = (d: string) => zoneWallClockToInstant(d, "00:00", timeZone)?.toISOString() ?? `${d}T00:00:00Z`;
+  return { gte: from ? startOf(from) : null, lt: to ? startOf(shiftYmd(to, 1)) : null };
+}
+
 export function eqFilter(
   column: string,
   value: string | undefined

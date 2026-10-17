@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
+import { getMyTimeZone } from "@/lib/time/org-timezone";
+import { zoneDateParts } from "@/lib/time/zone";
 import { computeLandscaptKpiActuals } from "@/lib/kpi/landscapt-kpi-compute";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import {
@@ -37,7 +39,8 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const parsed = QuerySchema.safeParse({
-    year: url.searchParams.get("year") ?? new Date().getFullYear(),
+    // Org calendar, not the server's UTC clock (flips at 7-8pm ET on Dec 31).
+    year: url.searchParams.get("year") ?? zoneDateParts(new Date(), await getMyTimeZone(supabase)).year,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid year" }, { status: 400 });

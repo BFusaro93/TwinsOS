@@ -9,6 +9,7 @@ import {
   dateRangeFilters,
   issuedInvoiceFilter,
   resolveDateRange,
+  orgDayRangeBounds,
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -28,16 +29,19 @@ import { daysBetweenYmd, todayInZone } from "@/lib/time/zone";
 async function sumExpenses(
   supabase: SupabaseClient,
   from: string | null,
-  to: string | null
+  to: string | null,
+  timeZone: string
 ): Promise<{ materialsCents: number; laborCents: number }> {
+  // created_at is a timestamptz — bound it by the org's own midnights.
+  const bounds = orgDayRangeBounds(from, to, timeZone);
   type MatRow = { total_cost_cents: number | null };
   const matData = await fetchAllRows<MatRow>(() => {
     let q = supabase
       .from("crm_job_materials")
       .select("total_cost_cents")
       .is("deleted_at", null);
-    if (from) q = q.gte("created_at", from);
-    if (to) q = q.lte("created_at", `${to} 23:59:59.999`);
+    if (bounds.gte) q = q.gte("created_at", bounds.gte);
+    if (bounds.lt) q = q.lt("created_at", bounds.lt);
     return q.order("id");
   });
 
@@ -194,7 +198,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
         .map(([name, amount]) => ({ type: "Income", name, amount_cents: amount }));
       const totalIncome = incomeRows.reduce((sum, r) => sum + r.amount_cents, 0);
 
-      const { materialsCents, laborCents } = await sumExpenses(supabase, from, to);
+      const { materialsCents, laborCents } = await sumExpenses(supabase, from, to, timeZone);
       const totalExpenses = materialsCents + laborCents;
 
       const rows = [
@@ -252,7 +256,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       }
       const totalIncome = appliedCents + unappliedCents + processingFeeCents;
 
-      const { materialsCents, laborCents } = await sumExpenses(supabase, from, to);
+      const { materialsCents, laborCents } = await sumExpenses(supabase, from, to, timeZone);
       const totalExpenses = materialsCents + laborCents;
 
       const rows = [
