@@ -18,8 +18,6 @@ import { crewColor, textOn } from "./crew-color";
 
 const UNASSIGNED = "unassigned";
 const TERMINAL = new Set(["completed", "skipped", "cancelled"]);
-/** A crew member's planned working day, for the over-capacity highlight. */
-const CAPACITY_HOURS_PER_PERSON = 8;
 
 type DayMode = "all" | "mon_fri" | "mon_sat";
 type HoursMode = "man" | "crew";
@@ -75,7 +73,7 @@ interface Row {
 /**
  * Week calendar modeled on Aspire's schedule: a row per crew (with its roster),
  * a column per day, solid crew-colored cards with an actual-vs-budgeted hours
- * bar, per-cell and per-day totals, and over-capacity days highlighted.
+ * bar, per-cell and per-day totals.
  * Cards drag between cells to reschedule (day) and/or reassign (crew).
  */
 export function DispatchCalendar({
@@ -302,7 +300,6 @@ export function DispatchCalendar({
           <span className="flex items-center gap-1"><span className="h-2 w-4 rounded-full bg-emerald-400" /> On budget</span>
           <span className="flex items-center gap-1"><span className="h-2 w-4 rounded-full bg-amber-400" /> 90%+</span>
           <span className="flex items-center gap-1"><span className="h-2 w-4 rounded-full bg-red-600" /> Over budget</span>
-          <span className="flex items-center gap-1"><span className="h-3 w-4 rounded-sm bg-red-500/20 ring-1 ring-red-400/60" /> Over crew capacity</span>
         </div>
       </div>
 
@@ -330,7 +327,6 @@ export function DispatchCalendar({
           })}
 
           {visibleRows.map((row) => {
-            const headcount = row.members.length;
             return (
               <RowCells
                 key={row.id}
@@ -338,7 +334,6 @@ export function DispatchCalendar({
                 days={days}
                 today={today}
                 byCell={byCell}
-                capacityPerDay={headcount > 0 ? (hoursMode === "crew" ? CAPACITY_HOURS_PER_PERSON : headcount * CAPACITY_HOURS_PER_PERSON) : null}
                 hoursOf={hoursOf}
                 returnTo={returnTo}
                 dragId={dragId}
@@ -378,7 +373,6 @@ function RowCells({
   days,
   today,
   byCell,
-  capacityPerDay,
   hoursOf,
   returnTo,
   dragId,
@@ -392,7 +386,6 @@ function RowCells({
   days: string[];
   today: string;
   byCell: Map<string, CRMJobVisit[]>;
-  capacityPerDay: number | null;
   hoursOf: (v: CRMJobVisit, h: number | null | undefined) => number;
   dragId: string | null;
   overCell: string | null;
@@ -419,7 +412,6 @@ function RowCells({
         const key = `${row.id}|${d}`;
         const items = byCell.get(key) ?? [];
         const budget = items.reduce((s, v) => s + hoursOf(v, v.budgetedHours), 0);
-        const over = capacityPerDay != null && budget > capacityPerDay;
         return (
           <div
             key={key}
@@ -436,7 +428,6 @@ function RowCells({
             className={cn(
               "flex min-h-[110px] flex-col gap-1 border-b border-l p-1",
               d === today && "bg-brand-50/40 dark:bg-brand-900/10",
-              over && "bg-red-500/10 [background-image:repeating-linear-gradient(135deg,transparent_0_6px,rgba(239,68,68,0.12)_6px_8px)]",
               overCell === key && "ring-2 ring-inset ring-brand-400"
             )}
           >
