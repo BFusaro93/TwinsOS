@@ -867,8 +867,13 @@ export async function submitFormResponse(
     // Every submitted field is also available by its label, e.g. "How can we
     // help?" → [howcanwehelp] — lets a notification body reference any field
     // on this specific form without the sender needing to know it in advance.
+    // Built-in tags win: a field labelled "Company Name" or "Form Name" would
+    // otherwise silently replace [companyname] / [formname] with the
+    // submitter's answer in the notification.
     for (const [label, value] of Object.entries(formData)) {
-      vars[`[${label.toLowerCase().replace(/[^a-z0-9]/g, "")}]`] = formatFormFieldValue(value);
+      const key = `[${label.toLowerCase().replace(/[^a-z0-9]/g, "")}]`;
+      if (key in vars) continue;
+      vars[key] = formatFormFieldValue(value);
     }
     // Escaped counterpart used only for the HTML body/copy block below —
     // `vars` itself stays raw for the plain-text subject line.
