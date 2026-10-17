@@ -5,21 +5,14 @@ import { Plus, Truck, X } from "lucide-react";
 import { toast } from "sonner";
 import { EquipmentAvatar } from "@/components/crm/dispatch/EquipmentAvatar";
 import {
-  equipKey,
   useAddJobAsset,
   useEquipment,
   useJobAssets,
   useRemoveJobAsset,
 } from "@/lib/hooks/use-crew-board";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const GROUPS = [
   { rank: 0, label: "Trucks & vehicles" },
@@ -37,7 +30,7 @@ export function JobAssetsSection({ jobId }: { jobId: string }) {
   const equipment = useEquipment();
   const addAsset = useAddJobAsset();
   const removeAsset = useRemoveJobAsset();
-  const [picker, setPicker] = useState("");
+  const [open, setOpen] = useState(false);
   const itemByKey = useMemo(() => new Map(equipment.map((e) => [e.key, e])), [equipment]);
 
   const available = useMemo(() => {
@@ -46,7 +39,7 @@ export function JobAssetsSection({ jobId }: { jobId: string }) {
   }, [equipment, jobAssets]);
 
   function handleAdd(key: string) {
-    setPicker("");
+    // Popover stays open so several items can be added in a row.
     const item = itemByKey.get(key);
     if (!item) return;
     addAsset.mutate({ jobId, ref: { kind: item.kind, id: item.id } }, { onError: () => toast.error("Couldn't add equipment") });
@@ -87,33 +80,37 @@ export function JobAssetsSection({ jobId }: { jobId: string }) {
         </ul>
       )}
 
-      <Select value={picker} onValueChange={handleAdd}>
-        <SelectTrigger className="h-8 w-72 text-xs">
-          <Plus className="mr-1 h-3.5 w-3.5" />
-          <SelectValue placeholder="Add equipment…" />
-        </SelectTrigger>
-        <SelectContent>
-          {available.length === 0 ? (
-            <div className="px-2 py-1.5 text-xs text-muted-foreground">No more equipment to add</div>
-          ) : (
-            GROUPS.map((g) => {
-              const items = available.filter((e) => e.rank === g.rank);
-              if (items.length === 0) return null;
-              return (
-                <SelectGroup key={g.rank}>
-                  <SelectLabel className="text-[10px] uppercase">{g.label}</SelectLabel>
-                  {items.map((e) => (
-                    <SelectItem key={e.key} value={equipKey({ kind: e.kind, id: e.id })} className="text-xs">
-                      {e.name}
-                      {e.tag ? ` (#${e.tag})` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              );
-            })
-          )}
-        </SelectContent>
-      </Select>
+      <Popover open={open} onOpenChange={setOpen} modal>
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="sm" className="h-8 w-72 justify-start gap-1 text-xs font-normal text-muted-foreground">
+            <Plus className="h-3.5 w-3.5" />
+            Add equipment…
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="z-[9999] w-80 p-0" align="start">
+          <Command filter={(value, search) => (value.includes(search.trim().toLowerCase()) ? 1 : 0)}>
+            <CommandInput placeholder="Search trucks, trailers, equipment…" />
+            <CommandList className="max-h-72">
+              <CommandEmpty>No equipment found.</CommandEmpty>
+              {GROUPS.map((g) => {
+                const items = available.filter((e) => e.rank === g.rank);
+                if (items.length === 0) return null;
+                return (
+                  <CommandGroup key={g.rank} heading={g.label}>
+                    {items.map((e) => (
+                      <CommandItem key={e.key} value={`${e.search} ${e.key}`} onSelect={() => handleAdd(e.key)} className="gap-2 text-xs">
+                        <EquipmentAvatar item={e} className="h-6 w-6" />
+                        <span className="truncate font-medium">{e.name}</span>
+                        {e.tag && <span className="shrink-0 text-muted-foreground">#{e.tag}</span>}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                );
+              })}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
