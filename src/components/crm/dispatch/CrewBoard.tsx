@@ -26,7 +26,6 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn, formatHours } from "@/lib/utils";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
-import { useAssets } from "@/lib/hooks/use-assets";
 import { useCrews, useCrewDailyMembers, useSetCrewDailyMember, useClearCrewDailyMember } from "@/lib/hooks/use-employees";
 import { useUpdateVisit, useVisitsForDate } from "@/lib/hooks/use-crm-jobs";
 import {
@@ -34,32 +33,30 @@ import {
   useClearCrewDefaultAsset,
   useCrewDailyAssets,
   useCrewDefaultAssets,
+  useEquipment,
   useJobAssetsForJobs,
   useSetCrewDailyAsset,
   useSetCrewDefaultAsset,
+  type EquipmentItem,
 } from "@/lib/hooks/use-crew-board";
 import type { CRMJobVisit } from "@/types/crm-jobs";
-import type { Asset } from "@/types/cmms";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { EquipmentAvatar } from "./EquipmentAvatar";
 import { visitBudgetState } from "./budget-progress";
 import { crewColor, textOn, tint } from "./crew-color";
 
 type DragItem =
   | { kind: "member"; id: string; fromCrewId: string }
-  | { kind: "asset"; id: string; fromCrewId: string | null }
+  | { kind: "equipment"; key: string; fromCrewId: string | null }
   | { kind: "job"; jobId: string; visitIds: string[]; fromCrewId: string | null };
 
 const TV_REFRESH_MS = 30_000;
-const CAPACITY_HOURS_PER_PERSON = 8;
 
 // Same rule the Dispatch Board uses: the visit's own crew, else its job's,
 // and crewUnassigned pins it to no crew.
 function visitCrewId(v: CRMJobVisit): string | null {
   if (v.crewUnassigned) return null;
   return v.crewId ?? v.job?.crewId ?? null;
-}
-
-function isVehicle(a: Pick<Asset, "assetType">): boolean {
-  return /truck|vehicle|van|pickup|trailer/i.test(a.assetType ?? "");
 }
 
 function initials(name: string): string {
@@ -108,7 +105,7 @@ export function CrewBoard() {
   const { data: dailyMembers = [] } = useCrewDailyMembers(date);
   const { data: dailyAssets = [] } = useCrewDailyAssets(date);
   const { data: defaultAssets = [] } = useCrewDefaultAssets();
-  const { data: assets = [] } = useAssets();
+  const equipment = useEquipment();
   const setMember = useSetCrewDailyMember();
   const clearMember = useClearCrewDailyMember();
   const setDailyAsset = useSetCrewDailyAsset();
@@ -137,7 +134,7 @@ export function CrewBoard() {
   const liveVisits = useMemo(() => visits.filter((v) => v.status !== "cancelled"), [visits]);
   const jobIds = useMemo(() => [...new Set(liveVisits.map((v) => v.jobId))], [liveVisits]);
   const { data: jobAssets = [] } = useJobAssetsForJobs(jobIds);
-  const assetById = useMemo(() => new Map(assets.map((a) => [a.id, a])), [assets]);
+  const itemByKey = useMemo(() => new Map(equipment.map((e) => [e.key, e])), [equipment]);
   const crewNameById = useMemo(() => new Map(crews.map((c) => [c.id, c.name])), [crews]);
   const colorByCrew = useMemo(() => new Map(crews.map((c, i) => [c.id, crewColor(c.color, i)])), [crews]);
 
@@ -163,10 +160,10 @@ export function CrewBoard() {
 
   // An asset's crew today: that day's row if there is one (crewId null = pulled
   // off every crew), otherwise its default crew.
-  const defaultCrewByAsset = useMemo(() => new Map(defaultAssets.map((d) => [d.assetId, d.crewId])), [defaultAssets]);
+  const defaultCrewByKey = useMemo(() => new Map(defaultAssets.map((d) => [d.key, d.crewId])), [defaultAssets]);
   const assetCrew = useMemo(() => {
-    const m = new Map<string, string | null>(defaultAssets.map((d) => [d.assetId, d.crewId]));
-    for (const d of dailyAssets) m.set(d.assetId, d.crewId);
+    const m = new Map<string, string | null>(defaultAssets.map((d) => [d.key, d.crewId]));
+    for (const d of dailyAssets) m.set(d.key, d.crewId);
     return m;
   }, [defaultAssets, dailyAssets]);
 
@@ -191,7 +188,7 @@ export function CrewBoard() {
       for (const j of jobs) {
         const client = j.visits[0]?.clientName ?? "job";
         for (const ja of jobAssets.filter((x) => x.jobId === j.jobId)) {
-          need.set(ja.assetId, [...(need.get(ja.assetId) ?? []), client]);
+          need.set(ja.key, [...(need.get(ja.key) ?? []), client]);
         }
       }
       m.set(crewId, need);
@@ -201,43 +198,53 @@ export function CrewBoard() {
 
   const yard = useMemo(() => {
     const q = yardSearch.trim().toLowerCase();
-    return assets
-      .filter((a) => a.status === "active" && !assetCrew.get(a.id))
-      .filter((a) => !q || `${a.name} ${a.assetTag} ${a.assetType}`.toLowerCase().includes(q))
-      .sort((a, b) => Number(isVehicle(b)) - Number(isVehicle(a)) || a.name.localeCompare(b.name));
-  }, [assets, assetCrew, yardSearch]);
+    return equipment
+      .filter((e) => e.status === "active" && !assetCrew.get(e.key))
+      .filter((e) => !q || `${e.name} ${e.tag ?? ""} ${e.type ?? ""}`.toLowerCase().includes(q));
+  }, [equipment, assetCrew, yardSearch]);
 
   const fail = (msg: string) => () => toast.error(msg);
 
-  /** Put an asset on a crew for today. Landing on its own default crew just clears the override. */
-  function loadAssetOnCrew(assetId: string, crewId: string) {
-    if (defaultCrewByAsset.get(assetId) === crewId) {
-      clearDailyAsset.mutate({ assetId, workDate: date }, { onError: fail("Couldn't assign equipment") });
+  const refOf = (key: string) => {
+    const item = itemByKey.get(key);
+    return item ? { kind: item.kind, id: item.id } : null;
+  };
+
+  /** Put equipment on a crew for today. Landing on its own default crew just clears the override. */
+  function loadAssetOnCrew(key: string, crewId: string) {
+    const ref = refOf(key);
+    if (!ref) return;
+    if (defaultCrewByKey.get(key) === crewId) {
+      clearDailyAsset.mutate({ ref, workDate: date }, { onError: fail("Couldn't assign equipment") });
     } else {
-      setDailyAsset.mutate({ assetId, crewId, workDate: date }, { onError: fail("Couldn't assign equipment") });
+      setDailyAsset.mutate({ ref, crewId, workDate: date }, { onError: fail("Couldn't assign equipment") });
     }
   }
 
-  /** Take an asset off its crew for today. A default asset needs an explicit "off" row to stay off. */
-  function unloadAsset(assetId: string) {
-    if (defaultCrewByAsset.has(assetId)) {
-      setDailyAsset.mutate({ assetId, crewId: null, workDate: date }, { onError: fail("Couldn't unload equipment") });
+  /** Take equipment off its crew for today. A default item needs an explicit "off" row to stay off. */
+  function unloadAsset(key: string) {
+    const ref = refOf(key);
+    if (!ref) return;
+    if (defaultCrewByKey.has(key)) {
+      setDailyAsset.mutate({ ref, crewId: null, workDate: date }, { onError: fail("Couldn't unload equipment") });
     } else {
-      clearDailyAsset.mutate({ assetId, workDate: date }, { onError: fail("Couldn't unload equipment") });
+      clearDailyAsset.mutate({ ref, workDate: date }, { onError: fail("Couldn't unload equipment") });
     }
   }
 
-  function toggleDefault(assetId: string, crewId: string) {
-    if (defaultCrewByAsset.get(assetId) === crewId) {
-      clearDefaultAsset.mutate({ assetId }, { onError: fail("Couldn't remove default") });
+  function toggleDefault(key: string, crewId: string) {
+    const ref = refOf(key);
+    if (!ref) return;
+    if (defaultCrewByKey.get(key) === crewId) {
+      clearDefaultAsset.mutate({ ref }, { onError: fail("Couldn't remove default") });
       return;
     }
     // Pinning makes today's override for this crew redundant — drop it.
     setDefaultAsset.mutate(
-      { assetId, crewId },
+      { ref, crewId },
       {
         onSuccess: () => {
-          if (dailyAssets.some((d) => d.assetId === assetId)) clearDailyAsset.mutate({ assetId, workDate: date });
+          if (dailyAssets.some((d) => d.key === key)) clearDailyAsset.mutate({ ref, workDate: date });
         },
         onError: fail("Couldn't set default"),
       }
@@ -256,9 +263,9 @@ export function CrewBoard() {
         ? clearMember.mutateAsync({ memberId: item.id, workDate: date })
         : setMember.mutateAsync({ memberId: item.id, crewId, workDate: date });
       op.catch(fail("Couldn't move that person"));
-    } else if (item.kind === "asset") {
+    } else if (item.kind === "equipment") {
       if (item.fromCrewId === crewId) return;
-      loadAssetOnCrew(item.id, crewId);
+      loadAssetOnCrew(item.key, crewId);
     } else {
       if (item.fromCrewId === crewId) return;
       const key = ["crm-job-visits", "date", date, date];
@@ -282,7 +289,7 @@ export function CrewBoard() {
     const item = drag;
     setDrag(null);
     setOverKey(null);
-    if (item?.kind === "asset" && item.fromCrewId) unloadAsset(item.id);
+    if (item?.kind === "equipment" && item.fromCrewId) unloadAsset(item.key);
   }
 
   if (!permissionsLoading && !can("sched_dispatch_board")) {
@@ -295,59 +302,57 @@ export function CrewBoard() {
   const big = tv; // scale type up for across-the-room reading
   const endDrag = () => { setDrag(null); setOverKey(null); };
 
+  const dateNav = (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-1 rounded-xl border bg-card p-1 shadow-sm">
+        <Button size="sm" variant="ghost" className={cn(big ? "h-11 w-11 p-0" : "h-8 w-8 p-0")} onClick={() => setParams({ date: shiftDate(date, -1) })} aria-label="Previous day">
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className={cn("flex items-center gap-1.5 px-2 font-semibold", big ? "text-2xl" : "text-sm")}>
+          <CalendarDays className={cn("text-brand-600", big ? "h-6 w-6" : "h-4 w-4")} />
+          {dateLabel}
+          {isToday && <span className="rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">Today</span>}
+        </span>
+        <Button size="sm" variant="ghost" className={cn(big ? "h-11 w-11 p-0" : "h-8 w-8 p-0")} onClick={() => setParams({ date: shiftDate(date, 1) })} aria-label="Next day">
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+      {!isToday && (
+        <Button size="sm" variant="outline" className={cn(big ? "h-11 text-base" : "h-8 text-xs")} onClick={() => setParams({ date: null })}>
+          Today
+        </Button>
+      )}
+      {!tv && (
+        <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+          <Link href={`/crm/scheduling/dispatch?date=${date}`}>Dispatch Board</Link>
+        </Button>
+      )}
+      <Button size="sm" variant="outline" className={cn("gap-1", big ? "h-11 text-base" : "h-8 text-xs")} onClick={() => setParams({ tv: tv ? null : "1" })}>
+        {tv ? <><Minimize2 className="h-4 w-4" /> Exit TV</> : <><Maximize2 className="h-3.5 w-3.5" /> TV mode</>}
+      </Button>
+    </div>
+  );
+
   const body = (
     <div className={cn("flex h-full min-h-0 flex-col gap-4", tv && "p-6")}>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white shadow-sm">
-            <Users className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className={cn("font-bold leading-tight text-slate-900 dark:text-neutral-100", big ? "text-4xl" : "text-xl")}>
-              Crew Board
-            </h1>
-            {!tv && (
-              <p className="text-sm text-muted-foreground">
-                Who&apos;s on each crew, what they&apos;re taking, and where they&apos;re going — drag to change
-              </p>
-            )}
-          </div>
+      {tv ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-4xl font-semibold text-slate-900 dark:text-neutral-100">Crew Board</h1>
+          <div className="ml-auto">{dateNav}</div>
         </div>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 rounded-xl border bg-card p-1 shadow-sm">
-            <Button size="sm" variant="ghost" className={cn(big ? "h-11 w-11 p-0" : "h-8 w-8 p-0")} onClick={() => setParams({ date: shiftDate(date, -1) })} aria-label="Previous day">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className={cn("flex items-center gap-1.5 px-2 font-semibold", big ? "text-2xl" : "text-sm")}>
-              <CalendarDays className={cn("text-brand-600", big ? "h-6 w-6" : "h-4 w-4")} />
-              {dateLabel}
-              {isToday && <span className="rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-semibold uppercase text-white">Today</span>}
-            </span>
-            <Button size="sm" variant="ghost" className={cn(big ? "h-11 w-11 p-0" : "h-8 w-8 p-0")} onClick={() => setParams({ date: shiftDate(date, 1) })} aria-label="Next day">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-          {!isToday && (
-            <Button size="sm" variant="outline" className={cn(big ? "h-11 text-base" : "h-8 text-xs")} onClick={() => setParams({ date: null })}>
-              Today
-            </Button>
-          )}
-          {!tv && (
-            <Button asChild size="sm" variant="outline" className="h-8 text-xs">
-              <Link href={`/crm/scheduling/dispatch?date=${date}`}>Dispatch Board</Link>
-            </Button>
-          )}
-          <Button size="sm" variant="outline" className={cn("gap-1", big ? "h-11 text-base" : "h-8 text-xs")} onClick={() => setParams({ tv: tv ? null : "1" })}>
-            {tv ? <><Minimize2 className="h-4 w-4" /> Exit TV</> : <><Maximize2 className="h-3.5 w-3.5" /> TV mode</>}
-          </Button>
-        </div>
-      </div>
+      ) : (
+        <PageHeader
+          title="Crew Board"
+          description="Who's on each crew, what they're taking, and where they're going — drag to change"
+          action={dateNav}
+        />
+      )}
 
       <div className="flex min-h-0 flex-1 gap-4">
         {/* Equipment yard — everything not on a crew today. Hidden on the TV. */}
         {!tv && (
           <aside
-            onDragOver={(e) => { if (drag?.kind === "asset" && drag.fromCrewId) { e.preventDefault(); setOverKey("yard"); } }}
+            onDragOver={(e) => { if (drag?.kind === "equipment" && drag.fromCrewId) { e.preventDefault(); setOverKey("yard"); } }}
             onDragLeave={() => overKey === "yard" && setOverKey(null)}
             onDrop={(e) => { e.preventDefault(); handleDropOnYard(); }}
             className={cn(
@@ -364,14 +369,16 @@ export function CrewBoard() {
             </div>
             <div className="flex-1 space-y-1.5 overflow-y-auto p-2">
               {yard.length === 0 && <p className="p-2 text-xs text-muted-foreground">Everything is out on a crew.</p>}
-              {yard.map((a) => (
-                <AssetCard key={a.id} asset={a} onDragStart={() => setDrag({ kind: "asset", id: a.id, fromCrewId: null })} onDragEnd={endDrag} />
+              {yard.map((e) => (
+                <EquipmentCard key={e.key} item={e} onDragStart={() => setDrag({ kind: "equipment", key: e.key, fromCrewId: null })} onDragEnd={endDrag} />
               ))}
             </div>
             <p className="border-t px-3 py-2 text-[10px] text-muted-foreground">Drag onto a crew. Drop a loaded item here to unload it.</p>
           </aside>
         )}
 
+        {/* Columns share the width when there are few crews and scroll sideways
+            once they would drop below the minimum width. */}
         <div className="flex min-w-0 flex-1 gap-4 overflow-x-auto pb-2">
           {crews.map((crew) => {
             const color = colorByCrew.get(crew.id) ?? "#64748b";
@@ -379,16 +386,24 @@ export function CrewBoard() {
             const members = membersByCrew.get(crew.id) ?? [];
             const loaded = [...assetCrew.entries()]
               .filter(([, c]) => c === crew.id)
-              .map(([id]) => assetById.get(id))
-              .filter((a): a is Asset => !!a)
-              .sort((a, b) => Number(isVehicle(b)) - Number(isVehicle(a)) || a.name.localeCompare(b.name));
+              .map(([key]) => itemByKey.get(key))
+              .filter((e): e is EquipmentItem => !!e)
+              .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
             const jobs = jobsByCrew.get(crew.id) ?? [];
             const need = neededByCrew.get(crew.id) ?? new Map<string, string[]>();
-            const missing = [...need.keys()].filter((id) => assetCrew.get(id) !== crew.id);
-            const budget = jobs.reduce((s, j) => s + j.visits.reduce((t, v) => t + (v.budgetedHours ?? 0), 0), 0);
-            const capacity = members.length * CAPACITY_HOURS_PER_PERSON;
-            const loadPct = capacity > 0 ? Math.min(100, (budget / capacity) * 100) : 0;
-            const overloaded = capacity > 0 && budget > capacity;
+            const missing = [...need.keys()].filter((key) => assetCrew.get(key) !== crew.id);
+
+            // Route progress: actual vs budgeted hours, and how much of the day's
+            // budgeted work is finished.
+            const crewVisits = jobs.flatMap((j) => j.visits);
+            const budget = crewVisits.reduce((t, v) => t + (v.budgetedHours ?? 0), 0);
+            const actual = crewVisits.reduce((t, v) => t + (v.actualHours ?? 0), 0);
+            const doneVisits = crewVisits.filter((v) => v.status === "completed");
+            const doneBudget = doneVisits.reduce((t, v) => t + (v.budgetedHours ?? 0), 0);
+            const doneActual = doneVisits.reduce((t, v) => t + (v.actualHours ?? 0), 0);
+            const donePct = budget > 0 ? Math.min(100, (doneBudget / budget) * 100) : 0;
+            const runningOver = doneActual > doneBudget && doneBudget > 0;
+            const jobsDone = jobs.filter((j) => j.visits.every((v) => ["completed", "skipped"].includes(v.status))).length;
             const key = `crew:${crew.id}`;
             return (
               <section
@@ -397,8 +412,8 @@ export function CrewBoard() {
                 onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverKey(null); }}
                 onDrop={(e) => { e.preventDefault(); handleDropOnCrew(crew.id); }}
                 className={cn(
-                  "flex shrink-0 flex-col overflow-hidden rounded-xl border-2 bg-card shadow-sm transition",
-                  big ? "w-[28rem]" : "w-80",
+                  "flex flex-1 flex-col overflow-hidden rounded-xl border-2 bg-card shadow-sm transition",
+                  big ? "min-w-[24rem] basis-[24rem]" : "min-w-[18rem] max-w-[34rem] basis-[18rem]",
                   overKey === key && "scale-[1.01] shadow-lg"
                 )}
                 style={{ borderColor: overKey === key ? color : tint(color, 45), backgroundColor: tint(color, overKey === key ? 14 : 6) }}
@@ -410,12 +425,14 @@ export function CrewBoard() {
                   </div>
                   <div className={cn("mt-2 flex items-center gap-2 font-medium", big ? "text-base" : "text-xs")}>
                     <span className="flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5"><Users className="h-3 w-3" /> {members.length}</span>
-                    <span className="flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5"><ClipboardList className="h-3 w-3" /> {jobs.length} job{jobs.length === 1 ? "" : "s"}</span>
-                    <span className="ml-auto tabular-nums">{formatHours(budget, 1)}h{capacity > 0 && ` / ${capacity}h`}</span>
+                    <span className="flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5"><ClipboardList className="h-3 w-3" /> {jobsDone}/{jobs.length} done</span>
+                    <span className="ml-auto tabular-nums" title="Actual hours logged vs. budgeted hours for the day">
+                      {formatHours(actual, 1)}h / {formatHours(budget, 1)}h
+                    </span>
                   </div>
-                  {capacity > 0 && (
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/25">
-                      <div className={cn("h-full rounded-full", overloaded ? "bg-red-300" : "bg-white/90")} style={{ width: `${loadPct}%` }} />
+                  {budget > 0 && (
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/25" title={`${Math.round(donePct)}% of budgeted work completed`}>
+                      <div className={cn("h-full rounded-full", runningOver ? "bg-red-300" : "bg-white/90")} style={{ width: `${donePct}%` }} />
                     </div>
                   )}
                 </header>
@@ -450,29 +467,29 @@ export function CrewBoard() {
 
                   <Lane title="Equipment" icon={<Wrench className="h-3.5 w-3.5" />} color={color} big={big}>
                     {loaded.length === 0 && missing.length === 0 && <Empty big={big}>Nothing loaded</Empty>}
-                    {loaded.map((a) => (
-                      <AssetCard
-                        key={a.id}
-                        asset={a}
+                    {loaded.map((e) => (
+                      <EquipmentCard
+                        key={e.key}
+                        item={e}
                         big={big}
                         draggable={!tv}
-                        needed={need.has(a.id)}
-                        isDefault={defaultCrewByAsset.get(a.id) === crew.id}
-                        onToggleDefault={tv ? undefined : () => toggleDefault(a.id, crew.id)}
-                        onDragStart={() => setDrag({ kind: "asset", id: a.id, fromCrewId: crew.id })}
+                        needed={need.has(e.key)}
+                        isDefault={defaultCrewByKey.get(e.key) === crew.id}
+                        onToggleDefault={tv ? undefined : () => toggleDefault(e.key, crew.id)}
+                        onDragStart={() => setDrag({ kind: "equipment", key: e.key, fromCrewId: crew.id })}
                         onDragEnd={endDrag}
                       />
                     ))}
-                    {missing.map((id) => {
-                      const a = assetById.get(id);
-                      const holder = assetCrew.get(id);
+                    {missing.map((mKey) => {
+                      const e = itemByKey.get(mKey);
+                      const holder = assetCrew.get(mKey);
                       return (
                         <button
-                          key={id}
+                          key={mKey}
                           type="button"
                           disabled={tv}
-                          onClick={() => loadAssetOnCrew(id, crew.id)}
-                          title={`Needed for ${[...new Set(need.get(id))].join(", ")} — click to load on ${crew.name}`}
+                          onClick={() => loadAssetOnCrew(mKey, crew.id)}
+                          title={`Needed for ${[...new Set(need.get(mKey))].join(", ")} — click to load on ${crew.name}`}
                           className={cn(
                             "flex w-full items-center gap-1.5 rounded-lg border border-dashed border-amber-500 bg-amber-50 px-2 py-1.5 text-left text-amber-800 dark:bg-amber-900/20 dark:text-amber-300",
                             big ? "text-lg" : "text-xs"
@@ -480,7 +497,7 @@ export function CrewBoard() {
                         >
                           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                           <span className="truncate">
-                            Needs {a?.name ?? "equipment"}
+                            Needs {e?.name ?? "equipment"}
                             {holder ? ` (on ${crewNameById.get(holder) ?? "another crew"})` : ""}
                           </span>
                         </button>
@@ -510,7 +527,7 @@ export function CrewBoard() {
           {crews.length === 0 && <p className="p-6 text-sm text-muted-foreground">No active crews yet — add them under Team.</p>}
 
           {(jobsByCrew.get("unassigned")?.length ?? 0) > 0 && (
-            <section className={cn("flex shrink-0 flex-col overflow-hidden rounded-xl border-2 border-dashed bg-muted/30", big ? "w-[28rem]" : "w-80")}>
+            <section className={cn("flex flex-1 flex-col overflow-hidden rounded-xl border-2 border-dashed bg-muted/30", big ? "min-w-[24rem] basis-[24rem]" : "min-w-[18rem] max-w-[34rem] basis-[18rem]")}>
               <header className="border-b bg-slate-200 px-4 py-3 dark:bg-neutral-800">
                 <span className={cn("font-bold", big ? "text-3xl" : "text-lg")}>Unassigned jobs</span>
                 <p className="text-xs text-muted-foreground">Drag onto a crew to assign</p>
@@ -572,8 +589,8 @@ function Empty({ big, children }: { big: boolean; children: React.ReactNode }) {
   return <p className={cn("px-0.5 italic text-muted-foreground/70", big ? "text-base" : "text-xs")}>{children}</p>;
 }
 
-function AssetCard({
-  asset,
+function EquipmentCard({
+  item,
   big,
   draggable = true,
   needed,
@@ -582,7 +599,7 @@ function AssetCard({
   onDragStart,
   onDragEnd,
 }: {
-  asset: Asset;
+  item: EquipmentItem;
   big?: boolean;
   draggable?: boolean;
   needed?: boolean;
@@ -593,23 +610,28 @@ function AssetCard({
   onDragStart: () => void;
   onDragEnd: () => void;
 }) {
-  const vehicle = isVehicle(asset);
   return (
     <div
       draggable={draggable}
-      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", asset.id); onDragStart(); }}
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", item.key); onDragStart(); }}
       onDragEnd={onDragEnd}
       className={cn(
         "flex items-center gap-2 rounded-lg border bg-background px-2 py-1.5 shadow-sm",
         big ? "text-lg" : "text-xs",
         draggable && "cursor-grab active:cursor-grabbing",
-        vehicle ? "border-slate-400 bg-slate-100 dark:border-neutral-500 dark:bg-neutral-800" : ""
+        item.isVehicle && "border-slate-400 bg-slate-100 dark:border-neutral-500 dark:bg-neutral-800"
       )}
     >
-      {vehicle ? <Truck className={cn("shrink-0", big ? "h-5 w-5" : "h-4 w-4")} /> : <Wrench className={cn("shrink-0 text-muted-foreground", big ? "h-5 w-5" : "h-3.5 w-3.5")} />}
-      <span className="truncate font-semibold">{asset.name}</span>
-      {asset.assetTag && <span className="shrink-0 text-muted-foreground">#{asset.assetTag}</span>}
-      <span className="ml-auto flex shrink-0 items-center gap-1">
+      <EquipmentAvatar item={item} className={big ? "h-10 w-10" : "h-7 w-7"} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-semibold">{item.name}</div>
+        {(item.tag || item.type) && (
+          <div className="truncate text-[10px] text-muted-foreground">
+            {[item.type, item.tag ? `#${item.tag}` : null].filter(Boolean).join(" · ")}
+          </div>
+        )}
+      </div>
+      <span className="flex shrink-0 items-center gap-1">
         {needed && <span className="rounded bg-emerald-100 px-1 text-[10px] font-semibold uppercase text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Job needs</span>}
         {isDefault && !onToggleDefault && <Pin className="h-3 w-3 text-brand-600" />}
         {onToggleDefault && (
