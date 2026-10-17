@@ -193,6 +193,19 @@ export function OnlinePaymentsGuide() {
             proportionally, as before.
           </li>
           <li>
+            <strong>Client credit is used before the card is charged.</strong> Any deposit,
+            prepayment or overpayment the client already holds is applied to the invoice first, and
+            only the remainder goes to the card or bank. If credit covers the whole invoice, no
+            card is charged and you&apos;ll see &ldquo;paid from client credit&rdquo; instead of a
+            charge amount. Credit is applied only after every other check passes, so a charge that
+            is refused (no saved method, a debit still settling) never changes the invoice.
+          </li>
+          <li>
+            <strong>A returned bank debit can be charged again.</strong> If an ACH payment bounces
+            after it was recorded, the invoice reopens and can be charged again right away. The
+            duplicate-charge guard only blocks debits that are still in flight or not yet recorded.
+          </li>
+          <li>
             <strong>Fee waivers and overrides are staff-only.</strong> A client paying through their
             portal or a public link always sees the standard configured fee — they can&apos;t adjust
             or skip it themselves.

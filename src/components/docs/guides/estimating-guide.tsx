@@ -387,6 +387,12 @@ export function EstimatingGuide() {
           accepts through it) the next request creates a new one.
         </p>
         <p>
+          When you email an estimate, the subject line shows names and merge fields as plain text
+          (a client called &ldquo;Smith &amp; Sons&rdquo; reads exactly that). CC addresses are
+          checked before sending, and the link-expiry setting must be a number of days between 0
+          and 3650.
+        </p>
+        <p>
           <strong>The link shows the last version you sent, not your live edits.</strong> Emailing
           the estimate, or using Get link / Copy link / Open, publishes the estimate as it stands
           right then as a numbered version, and that is what the client sees and can accept. You
