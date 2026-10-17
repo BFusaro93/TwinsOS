@@ -31,13 +31,15 @@ export interface EquipmentItem {
   type: string | null;
   photoUrl: string | null;
   status: string;
+  /** Lowercased name / tag / type / make / model — what pickers search against. */
+  search: string;
   /** Truck/van/trailer — the "what pulls or carries the crew" group, listed first. */
   isVehicle: boolean;
   /** 0 trucks, 1 trailers, 2 everything else — display order. */
   rank: number;
 }
 
-function toItem(kind: EquipmentKind, row: { id: string; name: string; assetTag?: string | null; assetType?: string | null; photoUrl?: string | null; status: string }): EquipmentItem {
+function toItem(kind: EquipmentKind, row: { id: string; name: string; assetTag?: string | null; assetType?: string | null; photoUrl?: string | null; status: string; make?: string | null; model?: string | null }): EquipmentItem {
   const type = row.assetType ?? null;
   const trailer = /trailer/i.test(type ?? "");
   const truck = kind === "vehicle" || /truck|\bvan\b|pickup/i.test(type ?? "");
@@ -50,6 +52,7 @@ function toItem(kind: EquipmentKind, row: { id: string; name: string; assetTag?:
     type,
     photoUrl: row.photoUrl ?? null,
     status: row.status,
+    search: [row.name, row.assetTag, type, row.make, row.model].filter(Boolean).join(" ").toLowerCase(),
     isVehicle: truck || trailer,
     rank: truck ? 0 : trailer ? 1 : 2,
   };
