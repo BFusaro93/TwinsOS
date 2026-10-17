@@ -637,7 +637,7 @@ export function DispatchBoardGuide() {
           </tbody>
         </Table>
         <Callout>
-          Crews are colored automatically. The roster under a crew name is its <em>default</em> roster
+          Each crew has its own color — set it under <strong>Team Settings → Team Details → Color</strong> (new crews get one automatically; the same color is used on the Crew Board). The roster under a crew name is its <em>default</em> roster
           (Team settings) — one-day changes made in Team Assignment or on the Crew Board show on the
           Crew Board, not on this grid.
         </Callout>
