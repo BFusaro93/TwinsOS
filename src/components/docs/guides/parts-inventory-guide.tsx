@@ -191,6 +191,14 @@ export function PartsInventoryGuide() {
           product that corresponds to it. Once the resulting PO is received in{" "}
           <strong>Purchasing → Receiving</strong>, quantity on hand increments automatically.
         </p>
+        <p>
+          If a Work Order used the part before the PO was received, the Parts list flags it with an
+          amber <strong>&ldquo;N used before received&rdquo;</strong> badge (filter for them with{" "}
+          <strong>Used before received</strong> under stock levels). Receiving settles it
+          automatically: the units already used come off the incoming quantity, so on hand lands on
+          the true count. Quantity on hand never goes negative — it stays at 0 while the shortfall
+          is open.
+        </p>
         <Callout>
           Never adjust quantity on hand manually outside of receiving. Receiving is the single place
           the count changes — a manual edit will drift out of sync with the actual PO/receipt history

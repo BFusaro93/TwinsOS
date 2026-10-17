@@ -106,6 +106,11 @@ export function InventoryCostingGuide() {
           <li>Increments <code>quantity_on_hand</code> by the received quantity.</li>
           <li>Appends a new cost layer for this receipt.</li>
           <li>
+            Nets off any Work Order usage recorded before the stock arrived: if a Work Order line
+            took less than it used (stock was short), those units are consumed from the new layer
+            FIFO, oldest Work Order first, and never below zero.
+          </li>
+          <li>
             Recomputes the stored <code>unit_cost</code>:
             <ul className="mt-2 list-disc space-y-1 pl-5">
               <li>

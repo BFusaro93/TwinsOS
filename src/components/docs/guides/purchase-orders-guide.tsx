@@ -277,6 +277,13 @@ export function PurchaseOrdersGuide() {
           line can&apos;t be matched to a catalog product, the whole receipt is rejected with an
           error and never saved.
         </p>
+        <p>
+          If a Work Order already used some of that part <em>before</em> the stock was received (so
+          the Work Order could only take what was on hand, and the Parts list shows a &ldquo;used
+          before received&rdquo; badge), recording the receipt settles it: those units come off the
+          incoming quantity automatically. A receipt of 3 for a part that two Work Orders had
+          already used 3 of leaves quantity on hand at 0, not 3.
+        </p>
         <Callout>
           <strong>A partially-failed receipt can still update some inventory.</strong> If a
           multi-line receipt fails to match a catalog product on, say, its third line, the first two
