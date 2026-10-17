@@ -19,7 +19,7 @@ import type {
   TicketBreakdown,
 } from "@/types/company-report";
 import { runAnalysis } from "@/lib/reports/engine";
-import { daysBetweenYmd, isoInZone, todayInZone, ymd, zoneDateParts } from "@/lib/time/zone";
+import { daysBetweenYmd, isoInZone, shiftYmd, todayInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
 
 // ============================================================
@@ -456,7 +456,7 @@ interface TicketRow {
   due_date: string | null;
 }
 
-async function computeTickets(supabase: Client, now: Date): Promise<TicketBreakdown> {
+async function computeTickets(supabase: Client, todayYmd: string): Promise<TicketBreakdown> {
   const rows = await fetchAll<TicketRow>((from, to) =>
     supabase
       .from("crm_tickets")
@@ -474,7 +474,10 @@ async function computeTickets(supabase: Client, now: Date): Promise<TicketBreakd
   const byCategory = new Map<string, number>();
   const byAssignee = new Map<string, number>();
   const dueSoon = new Map<string, number>();
-  const in7Days = new Date(now.getTime() + 7 * 86_400_000);
+  // due_date is a calendar date: compare calendar dates on the org's clock, not
+  // a UTC-midnight instant against "now + 7 days" (which let day +7 slip in or out
+  // depending on the time of day).
+  const in7Days = shiftYmd(todayYmd, 7);
   let unassigned = 0;
 
   for (const r of rows) {
@@ -483,7 +486,7 @@ async function computeTickets(supabase: Client, now: Date): Promise<TicketBreakd
     const assignee = r.assigned_to || "Unassigned";
     byAssignee.set(assignee, (byAssignee.get(assignee) ?? 0) + 1);
     if (!r.assigned_to) unassigned++;
-    if (r.due_date && new Date(r.due_date) <= in7Days && r.assigned_to) {
+    if (r.due_date && r.due_date <= in7Days && r.assigned_to) {
       dueSoon.set(r.assigned_to, (dueSoon.get(r.assigned_to) ?? 0) + 1);
     }
   }
@@ -543,7 +546,7 @@ async function computePaymentPool(
 async function computeOperations(supabase: Client, months: MonthWindow[], now: Date, ytdFrom: string, nowStr: string): Promise<OperationsSection> {
   const [monthlyOps, tickets, unappliedPayments, prePayments] = await Promise.all([
     computeMonthlyOps(supabase, months),
-    computeTickets(supabase, now),
+    computeTickets(supabase, nowStr),
     computePaymentPool(supabase, false, "1970-01-01", nowStr),
     computePaymentPool(supabase, true, ytdFrom, nowStr),
   ]);

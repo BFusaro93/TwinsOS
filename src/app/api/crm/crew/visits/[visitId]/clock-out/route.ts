@@ -87,7 +87,9 @@ export async function POST(
     .update({
       clocked_out_at:   now,
       end_time:         localTime ? `${localTime}:00` : undefined,
-      completion_notes: notes ?? null,
+      // Absent notes leave existing completion notes alone (a retry or a
+      // no-notes clock-out must not blank what the office or crew already wrote).
+      completion_notes: notes ?? undefined,
       paused_at:        null,
       break_minutes:    finalBreakMinutes,
       ...(alreadyCompleted ? {} : { status: "completed", completed_at: now }),
