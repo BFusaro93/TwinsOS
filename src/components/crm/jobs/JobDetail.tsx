@@ -23,6 +23,7 @@ import {
   useCRMJobProducts,
 } from "@/lib/hooks/use-crm-jobs";
 import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
+import { JobAssetsSection } from "@/components/crm/jobs/JobAssetsSection";
 import { useCreateInvoiceFromJob, useInvoiceForJob } from "@/lib/hooks/use-invoices";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -1580,6 +1581,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
               {/* ── Products (materials) ── */}
               <JobProductsSection jobId={job.id} services={services.map((s) => ({ id: s.id, name: s.serviceName }))} />
+
+              {/* ── Equipment the crew brings (feeds the Crew Board) ── */}
+              <JobAssetsSection jobId={job.id} />
             </div>
           )}
 

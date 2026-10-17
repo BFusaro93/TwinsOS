@@ -88,6 +88,7 @@ export const CRM_NAV: NavSection[] = [
     label: "Scheduling",
     items: [
       { label: "Dispatch Board", href: "/crm/scheduling/dispatch",     icon: CalendarDays, permission: "sched_dispatch_board" },
+      { label: "Crew Board",     href: "/crm/scheduling/crew-board",   icon: Users, permission: "sched_dispatch_board" },
       { label: "Waiting List",   href: "/crm/scheduling/waiting-list", icon: ListOrdered, permission: "sched_waiting_list" },
       { label: "Jobs",           href: "/crm/scheduling",              icon: Briefcase },
       { label: "Snow Jobs",      href: "/crm/scheduling/snow",         icon: Snowflake, permission: "snow_dispatch_view" },
