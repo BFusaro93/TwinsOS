@@ -2247,6 +2247,7 @@ export function useCreateJobsFromEstimate() {
         }).catch(() => {});
       }
 
+      let materialsFailed = false;
       if (materials && materials.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: matError } = await (supabase as any)
@@ -2268,7 +2269,11 @@ export function useCreateJobsFromEstimate() {
               status: "used_no_invoice",
             }))
           );
-        if (matError) throw matError;
+        // Not fatal: the job, its services and first visit already exist. Throwing
+        // here skipped the photo copy and the estimate's "accepted" stamp, and a retry
+        // from the error toast created a SECOND job. Flag it so the user can add the
+        // direct costs on the job instead.
+        if (matError) materialsFailed = true;
       }
 
       // Copy the estimate's photos and attachments over to the new job so the
@@ -2387,9 +2392,12 @@ export function useCreateJobsFromEstimate() {
           .is("deleted_at", null);
       }
 
-      return { jobId, clientId, jobType, projectId, estimateId };
+      return { jobId, clientId, jobType, projectId, estimateId, materialsFailed };
     },
     onSuccess: (data) => {
+      if (data.materialsFailed) {
+        toast.warning("Job created, but the estimate's materials couldn't be copied onto it. Add them on the job's Products tab; don't convert again.");
+      }
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
