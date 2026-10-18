@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveOccurredAt } from "@/lib/crew/occurred-at";
 import { z } from "zod";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
@@ -21,6 +22,9 @@ const Body = z.object({
   // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
   // so the actual local time-of-day must come from the client's browser clock.
   localTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  // When the crew actually tapped Clock Out (ISO) — a queued offline tap replays
+  // later; see crew/occurred-at.ts. Bounded server-side.
+  occurredAt: z.string().optional(),
 });
 
 interface VisitRow {
@@ -86,7 +90,7 @@ export async function POST(
   const parsed = Body.safeParse(body);
   const notes = parsed.success ? parsed.data.notes : undefined;
   const localTime = parsed.success ? parsed.data.localTime : undefined;
-  const now = new Date().toISOString();
+  const rawOccurredAt = parsed.success ? parsed.data.occurredAt : undefined;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: anchorRow, error: anchorErr } = await (supabase as any)
@@ -152,6 +156,10 @@ export async function POST(
   // be a sibling that was already completed earlier in the day (the crew home
   // groups every visit for the client/day into one stop and links the first),
   // and using its clock-in credited a fresh one-minute visit with 25 minutes.
+  // The clock-out moment, bounded to after the earliest clock-in. Server time here
+  // credited every hour between an offline tap and its sync as time on site.
+  const earliestClockIn = openRows.map((r) => r.clocked_in_at).filter(Boolean).sort()[0] ?? null;
+  const now = resolveOccurredAt(rawOccurredAt, { notBefore: earliestClockIn }).toISOString();
   const anchorIsOpen = openRows.some((r) => r.id === anchor.id);
   const startedAt = openRows.map((r) => r.clocked_in_at).filter(Boolean).sort()[0]
     ?? (anchorIsOpen ? anchor.clocked_in_at : null)

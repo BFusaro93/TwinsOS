@@ -1,7 +1,8 @@
 import type { InvoicePDFStatementData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { todayInZone } from "@/lib/time/zone";
+import { daysBetweenYmd, todayInZone } from "@/lib/time/zone";
+import { AR_WRITE_OFF_METHOD } from "@/lib/reports/helpers";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
@@ -25,6 +26,7 @@ export async function buildInvoiceStatementData(
   // Excludes drafts (the customer hasn't received them) and anything dated
   // after this invoice (a statement can't owe the customer for something
   // that hasn't happened from their perspective yet).
+  const orgToday = todayInZone(await getOrgTimeZone(supabase, inv.org_id));
   const { data: otherInvoices } = await supabase
     .from("crm_invoices")
     .select("invoice_number, invoice_date, due_date, balance_cents, total_cents")
@@ -34,7 +36,7 @@ export async function buildInvoiceStatementData(
     .neq("status", "void")
     .neq("status", "draft")
     .is("deleted_at", null)
-    .lte("invoice_date", inv.invoice_date ?? todayInZone(await getOrgTimeZone(supabase, inv.org_id)))
+    .lte("invoice_date", inv.invoice_date ?? orgToday)
     .order("invoice_date", { ascending: false });
 
   const previousBalanceCents = (otherInvoices ?? []).reduce(
@@ -51,9 +53,8 @@ export async function buildInvoiceStatementData(
       invoiceNumber: row.invoice_number,
       amountCents: row.balance_cents ?? 0,
       date: row.invoice_date,
-      daysPastDue: row.due_date
-        ? Math.max(0, Math.floor((Date.now() - new Date(row.due_date + "T12:00:00").getTime()) / 86_400_000))
-        : 0,
+      // Whole days on the ORG's calendar — Date.now() is the viewer's/server's clock.
+      daysPastDue: row.due_date ? Math.max(0, daysBetweenYmd(row.due_date.slice(0, 10), orgToday)) : 0,
     }));
 
   const { data: paymentRow } = await supabase
@@ -62,6 +63,9 @@ export async function buildInvoiceStatementData(
     .eq("org_id", inv.org_id)
     .eq("client_id", inv.client_id)
     .is("deleted_at", null)
+    // Cash only: an account credit or an AR write-off isn't a payment the client made.
+    .eq("is_credit", false)
+    .neq("method", AR_WRITE_OFF_METHOD)
     .order("payment_date", { ascending: false })
     .limit(1)
     .maybeSingle();

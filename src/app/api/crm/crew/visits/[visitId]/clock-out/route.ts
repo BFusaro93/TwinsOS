@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveOccurredAt } from "@/lib/crew/occurred-at";
 import { z } from "zod";
 import { recalcNextPackageVisitDate } from "@/lib/package-visit-recalc";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
@@ -16,6 +17,8 @@ const Body = z.object({
   // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
   // so the actual local time-of-day must come from the client's browser clock.
   localTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  // When the crew actually tapped Clock Out (ISO) — see crew/occurred-at.ts.
+  occurredAt: z.string().optional(),
 });
 
 export async function POST(
@@ -32,7 +35,7 @@ export async function POST(
   const parsed = Body.safeParse(body);
   const notes = parsed.success ? parsed.data.notes : undefined;
   const localTime = parsed.success ? parsed.data.localTime : undefined;
-  const now = new Date().toISOString();
+  const rawOccurredAt = parsed.success ? parsed.data.occurredAt : undefined;
 
   // Idempotent/double-tap safe, matching clock-in's guard — a retried request
   // (e.g. the crew-app offline queue retrying after a flaky partial-success,
@@ -43,7 +46,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("clocked_out_at, org_id, crew_id, crew_unassigned, status, paused_at, break_minutes, crm_jobs(crew_id)")
+    .select("clocked_in_at, clocked_out_at, org_id, crew_id, crew_unassigned, status, paused_at, break_minutes, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();
@@ -62,6 +65,10 @@ export async function POST(
       { status: 409 }
     );
   }
+
+  // The clock-out moment (a queued offline tap replays later), bounded to after
+  // this visit's own clock-in. See crew/occurred-at.ts.
+  const now = resolveOccurredAt(rawOccurredAt, { notBefore: existing.clocked_in_at }).toISOString();
 
   // Clocking out straight from a break (no Resume tap) must still net the
   // in-progress pause off the visit's hours, and must not leave paused_at

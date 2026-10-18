@@ -17,6 +17,7 @@ import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
 import { jobActivityLabel } from "@/lib/utils/job-activity-label";
 import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
+import { reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { computeBudgetedHours } from "@/lib/utils/visit-hours";
 
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
@@ -1118,11 +1119,18 @@ export function useUpdateVisitStatus() {
       if (status === 'dispatched') patch.dispatched_at = new Date().toISOString();
       const isOutcome = status === 'skipped' || status === 'cancelled';
       if (isOutcome) patch.skip_reason = reason?.trim() || null;
+      // The prior status, so reverting a COMPLETED visit can reopen its one-time job
+      // (the bulk route and the visit sheet already do; this menu left the job
+      // Completed with an open visit under it).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: prior } = await (supabase as any)
+        .from('crm_job_visits').select('id, job_id, status').eq('id', id).maybeSingle();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits').update(patch).eq('id', id)
         .select('client_id, job_id, job_service_id, scheduled_date').single();
       if (error) throw error;
+      if (prior) await reopenOneTimeJobsForVisits(supabase, [prior as { id: string; job_id: string; status: string }], status);
       // Sending a visit to the crew pre-loads its service's chemicals so the
       // crew's Chemical Mix card isn't empty (best-effort; never blocks dispatch).
       if (status === 'dispatched') await loadServiceChemicalsForVisit(supabase, id).catch(() => 0);
@@ -2248,6 +2256,7 @@ export function useCreateJobsFromEstimate() {
         }).catch(() => {});
       }
 
+      let materialsFailed = false;
       if (materials && materials.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: matError } = await (supabase as any)
@@ -2269,7 +2278,11 @@ export function useCreateJobsFromEstimate() {
               status: "used_no_invoice",
             }))
           );
-        if (matError) throw matError;
+        // Not fatal: the job, its services and first visit already exist. Throwing
+        // here skipped the photo copy and the estimate's "accepted" stamp, and a retry
+        // from the error toast created a SECOND job. Flag it so the user can add the
+        // direct costs on the job instead.
+        if (matError) materialsFailed = true;
       }
 
       // Copy the estimate's photos and attachments over to the new job so the
@@ -2388,9 +2401,12 @@ export function useCreateJobsFromEstimate() {
           .is("deleted_at", null);
       }
 
-      return { jobId, clientId, jobType, projectId, estimateId };
+      return { jobId, clientId, jobType, projectId, estimateId, materialsFailed };
     },
     onSuccess: (data) => {
+      if (data.materialsFailed) {
+        toast.warning("Job created, but the estimate's materials couldn't be copied onto it. Add them on the job's Products tab; don't convert again.");
+      }
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
       qc.invalidateQueries({ queryKey: ["estimates"] });
@@ -2780,6 +2796,21 @@ export function useDeleteJobService() {
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
       const supabase = createClient();
+      // crm_job_visits.job_service_id is ON DELETE SET NULL, so deleting a
+      // service silently turned its remaining visits into WHOLE-JOB visits: on
+      // completion they billed every other service on the job again, and the
+      // generator treated them as holding that date for all services. Retire the
+      // service's not-yet-started visits first (completed ones are already
+      // invoiced and stay).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: visitErr } = await (supabase as any)
+        .from('crm_job_visits')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('job_service_id', id)
+        .in('status', ['scheduled', 'dispatched'])
+        .is('clocked_in_at', null)
+        .is('deleted_at', null);
+      if (visitErr) throw visitErr;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from('crm_job_services').delete().eq('id', id);
       if (error) throw error;

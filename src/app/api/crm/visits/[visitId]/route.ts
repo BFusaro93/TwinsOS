@@ -61,10 +61,10 @@ export async function PATCH(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: before } = await (supabase as any)
     .from("crm_job_visits")
-    .select("client_id, job_id, scheduled_date, status, crew_id")
+    .select("client_id, job_id, scheduled_date, status, crew_id, clocked_in_at, clocked_out_at")
     .eq("id", visitId)
     .maybeSingle();
-  const prev = before as { client_id: string; job_id: string; scheduled_date: string; status: string; crew_id: string | null } | null;
+  const prev = before as { client_id: string; job_id: string; scheduled_date: string; status: string; crew_id: string | null; clocked_in_at: string | null; clocked_out_at: string | null } | null;
   const { override_invoiced: overrideInvoiced, ...patch } = parsed.data;
 
   // Completed + invoiced visits are locked against moves and status changes
@@ -75,6 +75,16 @@ export async function PATCH(
     : false;
   if (needsOverride && !overrideInvoiced) {
     return NextResponse.json({ error: INVOICED_VISIT_LOCKED_MESSAGE, code: INVOICED_VISIT_LOCKED_CODE }, { status: 409 });
+  }
+
+  // A visit the crew is working right now can't be moved to another day: the crew
+  // app only carries over clocked-in visits scheduled BEFORE today, so the stop
+  // would vanish from their list mid-stop and they couldn't clock out.
+  if (patch.scheduled_date && prev && patch.scheduled_date !== prev.scheduled_date && prev.clocked_in_at && !prev.clocked_out_at) {
+    return NextResponse.json(
+      { error: "This visit is in progress (the crew has clocked in), so it can't be moved to another day. Have the crew clock out first." },
+      { status: 409 }
+    );
   }
 
   if (patch.scheduled_date && patch.scheduled_date !== prev?.scheduled_date) {
@@ -170,10 +180,18 @@ export async function PATCH(
       });
     }
   }
-  if (parsed.data.notes_to_crew && data?.crew_id) {
+  // Effective crew: the visit's own, else the job's (most visits inherit it, so the
+  // raw crew_id skipped the push for them).
+  let noteCrewId = (data?.crew_id as string | null | undefined) ?? null;
+  if (parsed.data.notes_to_crew && !noteCrewId && data && !data.crew_unassigned && data.job_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: jobRow } = await (supabase as any).from("crm_jobs").select("crew_id").eq("id", data.job_id).maybeSingle();
+    noteCrewId = (jobRow?.crew_id as string | null | undefined) ?? null;
+  }
+  if (parsed.data.notes_to_crew && noteCrewId) {
     void notifyVisitNote({
       visitId,
-      crewId: data.crew_id as string,
+      crewId: noteCrewId,
       clientId: data?.client_id as string | undefined,
       note: parsed.data.notes_to_crew,
     });

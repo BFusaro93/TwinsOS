@@ -196,6 +196,23 @@ const CONTRACT_FINANCIAL_FIELDS = [
   "billing_frequency",
 ] as const;
 
+/** Stable, null-tolerant equality for contract field values (dates, numbers, jsonb). */
+function sameContractValue(a: unknown, b: unknown): boolean {
+  const norm = (v: unknown): unknown => {
+    if (v === undefined || v === "") return null;
+    if (Array.isArray(v)) return v.map(norm);
+    if (v && typeof v === "object") {
+      return Object.fromEntries(
+        Object.entries(v as Record<string, unknown>)
+          .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
+          .map(([k, val]) => [k, norm(val)])
+      );
+    }
+    return v;
+  };
+  return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
+}
+
 export function useUpdateContract() {
   const qc = useQueryClient();
   return useMutation({
@@ -209,16 +226,24 @@ export function useUpdateContract() {
     }) => {
       const supabase = createClient();
 
+      // Key PRESENCE is not a change: the edit dialog always submits every
+      // financial field, so `f in updates` was true on every save — editing only a
+      // PO number, title or sales rep on a signed contract reverted it to "sent",
+      // cleared the signature, and silently stopped its billing. Compare against
+      // the stored values and only revert when one actually differs.
       const touchesFinancials = CONTRACT_FINANCIAL_FIELDS.some((f) => f in updates);
       let finalUpdates = updates;
       if (touchesFinancials && !("status" in updates)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: current } = await (supabase as any)
           .from("crm_contracts")
-          .select("status")
+          .select(["status", ...CONTRACT_FINANCIAL_FIELDS].join(", "))
           .eq("id", id)
           .single();
-        if (current?.status === "signed" || current?.status === "active") {
+        const financialsChanged = CONTRACT_FINANCIAL_FIELDS.some(
+          (f) => f in updates && !sameContractValue(updates[f], current?.[f])
+        );
+        if (financialsChanged && (current?.status === "signed" || current?.status === "active")) {
           // Revert to "sent" and clear the signature — the daily
           // contract-invoices cron bills off these same fields, and treats
           // "signed" and "active" contracts identically for billing
@@ -412,9 +437,11 @@ export function useGenerateContractInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: contract, error: fetchErr } = await (supabase as any)
           .from("crm_contracts")
-          .select("id, org_id, client_id, title, status, po_number, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, clients!inner(deleted_at, default_terms)")
+          .select("id, org_id, client_id, title, status, po_number, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, clients!inner(deleted_at, default_terms, status)")
           .eq("id", contractId)
+          // A cancelled client's contract must not keep billing (see the cron).
           .is("clients.deleted_at", null)
+          .neq("clients.status", "cancelled")
           .is("deleted_at", null)
           .single();
         if (fetchErr || !contract) {

@@ -70,6 +70,11 @@ export function SalesMeetingsGuide() {
           same setting instead of an empty calendar.
         </p>
         <Callout>
+          <strong>Times use your company time zone.</strong> Meeting times on the calendar and in the
+          dialog follow the company time zone from Settings, not the zone of the computer you are
+          using, so everyone sees the same hour.
+        </Callout>
+        <Callout>
           A rep&apos;s color on the calendar is the same map-icon color assigned to them elsewhere in the
           app (e.g. the Dispatch Board), so a rep who&apos;s already color-coded there will look
           consistent here too.

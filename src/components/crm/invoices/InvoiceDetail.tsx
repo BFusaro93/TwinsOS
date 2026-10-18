@@ -1117,7 +1117,9 @@ export function InvoiceDetail({
                 // Voiding needs to zero the balance and resync the client's total,
                 // so route it through the confirm dialog instead of a bare status write.
                 if (v === "void") { setConfirmVoidOpen(true); return; }
-                updateStatus({ id: invoice.id, status: v });
+                updateStatus({ id: invoice.id, status: v }).catch((err: unknown) => {
+                  toast.error(err instanceof Error ? `Can't change status: ${err.message}` : "Failed to update status");
+                });
               }}
             >
               <SelectTrigger className="h-6 w-28 text-xs bg-brand-700 border-brand-500 text-white ml-auto disabled:opacity-60 disabled:cursor-not-allowed">

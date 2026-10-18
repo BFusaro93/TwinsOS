@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveOccurredAt, readOccurredAt } from "@/lib/crew/occurred-at";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 
@@ -83,11 +84,15 @@ export async function POST(
     return NextResponse.json({ error: "Nothing to resume for this stop" }, { status: 400 });
   }
 
+  // When the crew tapped Resume (a queued offline tap replays later) — bounded to
+  // after the pause itself. See crew/occurred-at.ts.
+  const rawOccurredAt = await readOccurredAt(request);
   const now = new Date().toISOString();
   const updateErrors: string[] = [];
   for (const row of pausedRows) {
+    const resumedAt = resolveOccurredAt(rawOccurredAt, { notBefore: row.paused_at });
     const pauseMinutes = Math.max(0, Math.round(
-      (new Date(now).getTime() - new Date(row.paused_at as string).getTime()) / 60_000
+      (resumedAt.getTime() - new Date(row.paused_at as string).getTime()) / 60_000
     ));
     // Conditional on paused_at still being the exact value this request read
     // (and break_minutes unchanged): a double tap sends two resumes that both

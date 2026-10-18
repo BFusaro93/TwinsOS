@@ -1,4 +1,5 @@
 import type { InvoiceStatus } from "@/types/crm-invoices";
+import { DEFAULT_TIME_ZONE, todayInZone } from "@/lib/time/zone";
 
 interface OverdueCheckFields {
   balanceCents: number;
@@ -11,23 +12,32 @@ interface OverdueCheckFields {
  *  it's purely a point-in-time computation over balance/due date. Shared so
  *  every view (list, detail) agrees on what counts as overdue instead of
  *  reimplementing this comparison separately. */
-export function isInvoiceOverdue(invoice: OverdueCheckFields): boolean {
+export function isInvoiceOverdue(
+  invoice: OverdueCheckFields,
+  // The org's calendar day (YYYY-MM-DD). Defaults to the platform's operating zone
+  // rather than the VIEWER's clock: comparing against `new Date()` in the browser
+  // made an invoice flip to overdue hours early or late for anyone outside the
+  // org's zone, and disagree with the reports (which use the org's day).
+  todayYmd: string = todayInZone(DEFAULT_TIME_ZONE)
+): boolean {
   if (invoice.balanceCents <= 0) return false;
   const effectiveDue = invoice.dueDate ?? (invoice.terms === "due_on_receipt" ? invoice.invoiceDate : null);
   if (!effectiveDue) return false;
-  return new Date(effectiveDue + "T23:59:59") < new Date();
+  // Overdue once the due DAY has fully passed.
+  return effectiveDue.slice(0, 10) < todayYmd;
 }
 
 /** The status to actually display — overrides a stale "sent"/"printed"/etc.
  *  with "overdue" once the invoice qualifies, without touching the stored
  *  value (paid/void/draft are left alone since they're never overdue). */
 export function getDisplayInvoiceStatus(
-  invoice: OverdueCheckFields & { status: InvoiceStatus }
+  invoice: OverdueCheckFields & { status: InvoiceStatus },
+  todayYmd?: string
 ): InvoiceStatus {
   if (invoice.status === "paid" || invoice.status === "void" || invoice.status === "draft") {
     return invoice.status;
   }
-  return isInvoiceOverdue(invoice) ? "overdue" : invoice.status;
+  return isInvoiceOverdue(invoice, todayYmd) ? "overdue" : invoice.status;
 }
 
 /** Pill colors for a (display) invoice status — same palette as the

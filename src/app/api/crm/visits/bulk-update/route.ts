@@ -56,9 +56,29 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: beforeRows } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, client_id, job_id, scheduled_date, status")
+    .select("id, client_id, job_id, scheduled_date, status, clocked_in_at, clocked_out_at")
     .in("id", ids);
-  const before = (beforeRows ?? []) as { id: string; client_id: string; job_id: string; scheduled_date: string; status: string }[];
+  const before = (beforeRows ?? []) as {
+    id: string; client_id: string; job_id: string; scheduled_date: string; status: string;
+    clocked_in_at: string | null; clocked_out_at: string | null;
+  }[];
+
+  // A visit the crew is working right now (clocked in, not out) can't be moved to
+  // another day: the crew app only carries over clocked-in visits scheduled
+  // BEFORE today, so a stop moved to tomorrow vanishes from the crew's list
+  // mid-stop, they can't clock out, and the hours are filed under the wrong day.
+  if (updates.scheduled_date) {
+    const running = before.filter(
+      (r) => r.clocked_in_at && !r.clocked_out_at && r.scheduled_date !== updates.scheduled_date
+    );
+    if (running.length > 0) {
+      return NextResponse.json({
+        error: running.length === 1
+          ? "This visit is in progress (the crew has clocked in), so it can't be moved to another day. Have the crew clock out first."
+          : `${running.length} of the selected visits are in progress (the crew has clocked in), so they can't be moved to another day. Have the crews clock out first.`,
+      }, { status: 409 });
+    }
+  }
 
   // Completed + invoiced visits are locked against moves and status changes
   // (DB trigger trg_crm_job_visits_guard_invoiced is the floor). Block the

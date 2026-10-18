@@ -354,12 +354,17 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
       // Propagate crew change to all future scheduled visits
       if ("crew_id" in edits) {
-        const today = todayLocalDateString();
-        await fetch(`/api/crm/jobs/${job.id}/propagate-crew`, {
+        // The ORG's today (not the browser's), and the response is checked: a failed
+        // propagate used to leave future visits on the old crew under a "Job saved" toast.
+        const today = orgToday();
+        const propagateRes = await fetch(`/api/crm/jobs/${job.id}/propagate-crew`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ crewId: edits.crew_id ?? null, fromDate: today }),
         });
+        if (!propagateRes.ok) {
+          toast.error("Job saved, but the crew change couldn't be applied to its upcoming visits — reassign them from the Dispatch Board.");
+        }
         await qc.invalidateQueries({ queryKey: ['crm-job-visits', 'job', job.id] });
         await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       }

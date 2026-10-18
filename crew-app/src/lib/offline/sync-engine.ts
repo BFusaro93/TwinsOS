@@ -96,29 +96,31 @@ async function processItem(item: QueueItem): Promise<void> {
       case 'clock_in': {
         const payload = item.payload as ClockInPayload;
         // item.visitId is the stop's anchor visit id — see enqueueClockIn().
-        await clockInStop(item.visitId, payload.localTime, item.id);
+        // item.createdAt is when the crew actually tapped — send it so a replay after
+        // a long offline stretch records the real time, not the sync time.
+        await clockInStop(item.visitId, payload.localTime, item.id, item.createdAt);
         break;
       }
       case 'clock_out': {
         const payload = item.payload as ClockOutPayload;
-        await clockOutStop(item.visitId, payload.localTime, item.id, payload.notes);
+        await clockOutStop(item.visitId, payload.localTime, item.id, payload.notes, item.createdAt);
         break;
       }
       case 'pause': {
-        await pauseStop(item.visitId, item.id);
+        await pauseStop(item.visitId, item.id, item.createdAt);
         break;
       }
       case 'resume': {
-        await resumeStop(item.visitId, item.id);
+        await resumeStop(item.visitId, item.id, item.createdAt);
         break;
       }
       case 'drive_start': {
         // Day-level, not tied to item.visitId (which is the DRIVE_QUEUE_VISIT_ID sentinel) — see startDrive().
-        await startDrive(item.id);
+        await startDrive(item.id, item.createdAt);
         break;
       }
       case 'drive_end': {
-        await endDrive(item.id);
+        await endDrive(item.id, item.createdAt);
         break;
       }
       case 'add_photo': {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getRouteAuth } from "@/lib/supabase/route-auth";
+import { getRouteAuth, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { adminClient } from "@/lib/api/auth";
 import { notifyVisitAssigned, notifyVisitNote } from "@/lib/notifications/visit-notify";
 
@@ -45,19 +45,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ vis
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit } = await (db as any)
     .from("crm_job_visits")
-    .select("id, org_id, crew_id, notes_to_crew, client_id, scheduled_date, start_time")
+    .select("id, org_id, crew_id, crew_unassigned, notes_to_crew, client_id, scheduled_date, start_time, crm_jobs(crew_id)")
     .eq("id", visitId)
     .maybeSingle();
 
   if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
   if (visit.org_id !== orgId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  if (!visit.crew_id) return NextResponse.json({ ok: true, skipped: "no crew assigned" });
+  // The EFFECTIVE crew (visit.crew_id, else the job's): most visits inherit their
+  // crew from the job, so the raw visit.crew_id made "Note from Dispatch" and
+  // "assigned" pushes silently skip for the common case.
+  const crewId = effectiveVisitCrewId(visit);
+  if (!crewId) return NextResponse.json({ ok: true, skipped: "no crew assigned" });
 
   if (parsed.data.kind === "assigned") {
     await notifyVisitAssigned({
       visitId,
-      crewId: visit.crew_id,
+      crewId,
       clientId: visit.client_id,
       scheduledDate: visit.scheduled_date,
       startTime: visit.start_time,
@@ -66,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ vis
     if (!visit.notes_to_crew) return NextResponse.json({ ok: true, skipped: "no note set" });
     await notifyVisitNote({
       visitId,
-      crewId: visit.crew_id,
+      crewId,
       clientId: visit.client_id,
       note: visit.notes_to_crew,
     });

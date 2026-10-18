@@ -69,6 +69,12 @@ export function CrewAppGuide() {
           use. Inputs are sized so iPhones don&apos;t zoom in when a field is tapped, and controls
           are larger for gloved or one-handed use.
         </p>
+        <p>
+          If an action is queued without signal (clock in/out, pause, resume, drive start/end), it is
+          recorded at the moment it was tapped, not when the phone reconnects &mdash; so a lunch pause
+          that syncs hours later still subtracts the right minutes. Taps older than 48 hours, or from
+          a clearly wrong phone clock, fall back to the sync time.
+        </p>
         <Callout>
           <strong>The login belongs to the crew, not to a person.</strong> Create a user with the{" "}
           <strong>Crew</strong> role, then attach it under Team → Crews → <strong>Linked Login</strong>{" "}

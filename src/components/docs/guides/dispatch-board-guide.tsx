@@ -227,6 +227,13 @@ export function DispatchBoardGuide() {
           timeline, so the client record shows when a stop was rescheduled without digging through
           the board&apos;s history.
         </p>
+        <p>
+          A visit the crew is working right now (clocked in, not yet out) can&apos;t be moved to
+          another day &mdash; the move is refused until they clock out, because it would disappear
+          from the crew&apos;s list mid-stop. Rows hidden by a filter are dropped from your
+          selection, so bulk actions (Change Status, Re-assign Crew, Move to Day) only touch what you
+          can see.
+        </p>
         <Callout>
           <strong>Package visits have spacing rules.</strong> If the visit belongs to a Package job
           whose steps set a <strong>Min Days</strong> gap, a move that would put a step too close to

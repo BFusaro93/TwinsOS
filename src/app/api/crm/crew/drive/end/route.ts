@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveOccurredAt, readOccurredAt } from "@/lib/crew/occurred-at";
 import { getRouteAuth, resolveCallerCrewId } from "@/lib/supabase/route-auth";
 import { closeOpenDriveSegment } from "@/lib/crew/drive-time";
 
@@ -23,7 +24,8 @@ export async function POST(request: Request) {
   const crewId = await resolveCallerCrewId(supabase, user.id, orgId);
   if (!crewId) return NextResponse.json({ error: "Not a crew account" }, { status: 403 });
 
-  const result = await closeOpenDriveSegment(supabase, crewId, orgId);
+  // The moment of the "Arrived" tap (a queued offline tap replays later).
+  const result = await closeOpenDriveSegment(supabase, crewId, orgId, resolveOccurredAt(await readOccurredAt(request)));
   if (result.error) return NextResponse.json({ error: result.error }, { status: 500 });
 
   return NextResponse.json({ closed: result.closed });
