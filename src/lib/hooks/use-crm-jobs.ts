@@ -17,6 +17,7 @@ import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
 import { jobActivityLabel } from "@/lib/utils/job-activity-label";
 import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
+import { reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { computeBudgetedHours } from "@/lib/utils/visit-hours";
 
 const log = logger.child("use-crm-jobs");
@@ -1116,11 +1117,18 @@ export function useUpdateVisitStatus() {
       if (status === 'dispatched') patch.dispatched_at = new Date().toISOString();
       const isOutcome = status === 'skipped' || status === 'cancelled';
       if (isOutcome) patch.skip_reason = reason?.trim() || null;
+      // The prior status, so reverting a COMPLETED visit can reopen its one-time job
+      // (the bulk route and the visit sheet already do; this menu left the job
+      // Completed with an open visit under it).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: prior } = await (supabase as any)
+        .from('crm_job_visits').select('id, job_id, status').eq('id', id).maybeSingle();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits').update(patch).eq('id', id)
         .select('client_id, job_id, job_service_id, scheduled_date').single();
       if (error) throw error;
+      if (prior) await reopenOneTimeJobsForVisits(supabase, [prior as { id: string; job_id: string; status: string }], status);
       if ((status === 'dispatched' || isOutcome) && data?.client_id) {
         // Same lightweight timeline row useUpdateVisit writes — no notification.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

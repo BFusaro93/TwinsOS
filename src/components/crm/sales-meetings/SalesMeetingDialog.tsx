@@ -36,6 +36,8 @@ import {
 } from "@/lib/hooks/use-sales-meetings";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 
 const schema = z.object({
   salesRepId: z.string().min(1, "Sales rep is required"),
@@ -54,14 +56,17 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-function toLocalDateTimeParts(iso: string): { date: string; time: string } {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return { date: `${y}-${m}-${day}`, time: `${hh}:${mm}` };
+// The date/time inputs are a wall clock with no zone. Read and write them on the
+// ORG's clock (what the reminder cron and the calendar use) — parsing them in the
+// browser's zone stored a 9:00 booking as 9:00 in the VIEWER's zone, so staff in
+// another zone (or travelling) booked meetings an hour or more off.
+function toOrgDateTimeParts(iso: string, timeZone: string): { date: string; time: string } {
+  return instantToZoneWallClock(new Date(iso), timeZone);
+}
+
+/** The instant for a wall-clock date + "HH:mm" on the org's clock. */
+function orgInstant(date: string, time: string, timeZone: string): Date {
+  return zoneWallClockToInstant(date, time, timeZone) ?? new Date(`${date}T${time}:00`);
 }
 
 interface Props {
@@ -82,6 +87,7 @@ export function SalesMeetingDialog({
   defaultTime,
 }: Props) {
   const [confirm, confirmDialog] = useConfirm();
+  const tz = useOrgTimeZone();
   const { data: reps } = useSalesReps();
   const { data: clients } = useClients();
   const createMeeting = useCreateSalesMeeting();
@@ -126,7 +132,7 @@ export function SalesMeetingDialog({
     wasOpenRef.current = open;
     if (!justOpened) return;
     if (meeting) {
-      const { date, time } = toLocalDateTimeParts(meeting.scheduledAt);
+      const { date, time } = toOrgDateTimeParts(meeting.scheduledAt, tz);
       reset({
         salesRepId: meeting.salesRepId,
         clientId: meeting.clientId ?? "",
@@ -172,17 +178,18 @@ export function SalesMeetingDialog({
   const scheduledDate = watch("scheduledDate");
   const scheduledTime = watch("scheduledTime");
   const durationMinutes = watch("durationMinutes");
-  // Local day boundaries, not literal UTC — scheduledAt itself is stored by
-  // parsing `${date}T${time}:00` as browser-local (see onSubmit below), so a
-  // literal `Z`-suffixed UTC window here misses evening meetings in any
-  // timezone west of UTC, silently skipping real double-bookings.
-  const dayStart = scheduledDate ? new Date(`${scheduledDate}T00:00:00`).toISOString() : "";
-  const dayEnd = scheduledDate ? new Date(`${scheduledDate}T23:59:59.999`).toISOString() : "";
+  // The org's day boundaries, matching how scheduledAt is stored (see onSubmit
+  // below) — a literal UTC window would miss evening meetings west of UTC and
+  // silently skip real double-bookings.
+  const dayStart = scheduledDate ? orgInstant(scheduledDate, "00:00", tz).toISOString() : "";
+  const dayEnd = scheduledDate
+    ? new Date(orgInstant(shiftYmd(scheduledDate, 1), "00:00", tz).getTime() - 1).toISOString()
+    : "";
   const { data: dayMeetings } = useSalesMeetings(dayStart, dayEnd);
 
   function findConflict(): SalesMeetingWithClient | null {
     if (!salesRepId || !scheduledDate || !scheduledTime || !durationMinutes) return null;
-    const start = new Date(`${scheduledDate}T${scheduledTime}:00`).getTime();
+    const start = orgInstant(scheduledDate, scheduledTime, tz).getTime();
     const end = start + durationMinutes * 60_000;
     return (
       (dayMeetings ?? []).find((m) => {
@@ -202,7 +209,7 @@ export function SalesMeetingDialog({
   );
 
   async function onSubmit(values: FormValues) {
-    const scheduledAt = new Date(`${values.scheduledDate}T${values.scheduledTime}:00`).toISOString();
+    const scheduledAt = orgInstant(values.scheduledDate, values.scheduledTime, tz).toISOString();
     const payload = {
       salesRepId: values.salesRepId,
       clientId: values.clientId || null,
@@ -218,7 +225,7 @@ export function SalesMeetingDialog({
     };
     const conflict = findConflict();
     if (conflict) {
-      const { time } = toLocalDateTimeParts(conflict.scheduledAt);
+      const { time } = toOrgDateTimeParts(conflict.scheduledAt, tz);
       toast.warning(`This rep already has "${conflict.title}" at ${time} — double-check for a scheduling conflict.`);
     }
 

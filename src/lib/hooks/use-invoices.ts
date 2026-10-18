@@ -1081,6 +1081,21 @@ export function useRecordPayment() {
 
 // ── update payment ────────────────────────────────────────────────────────────
 
+/** Status of a set of invoices, for spotting which ones a payment edit just paid off. */
+async function invoiceStatusById(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  ids: string[]
+): Promise<Map<string, { status: string; clientId: string | null }>> {
+  const out = new Map<string, { status: string; clientId: string | null }>();
+  if (ids.length === 0) return out;
+  const { data } = await supabase.from("crm_invoices").select("id, status, client_id").in("id", ids);
+  for (const r of (data ?? []) as { id: string; status: string; client_id: string | null }[]) {
+    out.set(r.id, { status: r.status, clientId: r.client_id });
+  }
+  return out;
+}
+
 export function useUpdatePayment() {
   const qc = useQueryClient();
   return useMutation({
@@ -1104,6 +1119,11 @@ export function useUpdatePayment() {
       allocations?: { invoiceId: string; amountCents: number }[];
     }) => {
       const supabase = createClient();
+      // crm_update_payment (and crm_apply_credit_to_invoice) return no "newly paid"
+      // flag, so editing a payment — or applying credit — that paid an invoice off
+      // never fired the invoice_paid automation. Compare statuses around the call.
+      const touchedIds = [...new Set((allocations ?? []).map((a) => a.invoiceId))];
+      const statusBefore = await invoiceStatusById(supabase, touchedIds);
       // One transaction in the DB (crm_update_payment): validates + caps the new
       // split, reverses the original allocations, rewrites the payment and split,
       // re-applies to invoices and syncs the client balance — all or nothing.
@@ -1119,8 +1139,17 @@ export function useUpdatePayment() {
         p_allocations: (allocations ?? []).map((a) => ({ invoice_id: a.invoiceId, amount_cents: a.amountCents })),
       });
       if (rpcErr) throw rpcErr;
+      const statusAfter = await invoiceStatusById(supabase, touchedIds);
+      return {
+        newlyPaid: touchedIds
+          .filter((invId) => statusAfter.get(invId)?.status === "paid" && statusBefore.get(invId)?.status !== "paid")
+          .map((invId) => ({ invoiceId: invId, clientId: statusAfter.get(invId)?.clientId ?? null })),
+      };
     },
-    onSuccess: (_d, vars) => {
+    onSuccess: (result, vars) => {
+      for (const n of result?.newlyPaid ?? []) {
+        fireAutomationTrigger({ triggerType: "invoice_paid", clientId: n.clientId ?? vars.clientId, invoiceId: n.invoiceId });
+      }
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
@@ -1754,6 +1783,7 @@ export function useApplyCreditToInvoice() {
       amountCents,
     }: { paymentId: string; invoiceId: string; amountCents: number }) => {
       const supabase = createClient();
+      const before = await invoiceStatusById(supabase, [invoiceId]);
       // One RPC, one transaction. This used to be four separate statements from
       // the browser (insert allocation, decrement unused_amount_cents, apply to
       // the invoice, sync the balance), which had two defects: a failure
@@ -1770,9 +1800,16 @@ export function useApplyCreditToInvoice() {
         p_amount_cents: amountCents,
       });
       if (error) throw new Error(error.message ?? "Couldn't apply the credit");
-      return { appliedCents: (data as number) ?? 0 };
+      // Applying credit can be what pays an invoice off — fire invoice_paid then,
+      // the way recording a payment does.
+      const after = await invoiceStatusById(supabase, [invoiceId]);
+      const newlyPaid = after.get(invoiceId)?.status === "paid" && before.get(invoiceId)?.status !== "paid";
+      return { appliedCents: (data as number) ?? 0, newlyPaid, clientId: after.get(invoiceId)?.clientId ?? null };
     },
-    onSuccess: () => {
+    onSuccess: (result, vars) => {
+      if (result?.newlyPaid && result.clientId) {
+        fireAutomationTrigger({ triggerType: "invoice_paid", clientId: result.clientId, invoiceId: vars.invoiceId });
+      }
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["crm-clients"] });

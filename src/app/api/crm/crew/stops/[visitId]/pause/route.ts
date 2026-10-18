@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveOccurredAt, readOccurredAt } from "@/lib/crew/occurred-at";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 
@@ -81,7 +82,9 @@ export async function POST(
     return NextResponse.json({ error: "Nothing to pause for this stop" }, { status: 400 });
   }
 
-  const now = new Date().toISOString();
+  // When the crew tapped Pause — a queued offline tap replays later, and stamping
+  // server time collapsed the break to ~0 (see crew/occurred-at.ts).
+  const now = resolveOccurredAt(await readOccurredAt(request), { notBefore: anchor.clocked_in_at }).toISOString();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("crm_job_visits")

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveOccurredAt } from "@/lib/crew/occurred-at";
 import { z } from "zod";
 import { stopKeyForVisit, isNotesAcknowledgmentCurrent, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
@@ -14,6 +15,9 @@ const Body = z.object({
   // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
   // so the actual local time-of-day must come from the client's browser clock.
   localTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  // When the crew actually tapped Clock In (ISO) — a queued offline tap replays
+  // later; see crew/occurred-at.ts. Bounded server-side.
+  occurredAt: z.string().optional(),
 });
 
 interface VisitRow {
@@ -164,7 +168,7 @@ export async function POST(
     return NextResponse.json({ error: "Nothing to clock in for this stop" }, { status: 400 });
   }
 
-  const now = new Date().toISOString();
+  const now = resolveOccurredAt(parsed.data.occurredAt).toISOString();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("crm_job_visits")

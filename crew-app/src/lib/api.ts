@@ -95,12 +95,15 @@ export async function fetchCrewVisits(date: string): Promise<CrewVisitsResponse>
 export async function clockInStop(
   anchorVisitId: string,
   localTime: string,
-  idempotencyKey: string
+  idempotencyKey: string,
+  /** ISO time of the tap — a queued offline action replays later, and the server
+   * would otherwise stamp its own (later) time. Bounded server-side. */
+  occurredAt?: string
 ): Promise<unknown> {
   return authedFetch(`/api/crm/crew/stops/${anchorVisitId}/clock-in`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
-    body: JSON.stringify({ localTime }),
+    body: JSON.stringify({ localTime, occurredAt }),
   });
 }
 
@@ -115,12 +118,14 @@ export async function clockOutStop(
   anchorVisitId: string,
   localTime: string,
   idempotencyKey: string,
-  notes?: string
+  notes?: string,
+  /** ISO time of the tap — see clockInStop(). */
+  occurredAt?: string
 ): Promise<unknown> {
   return authedFetch(`/api/crm/crew/stops/${anchorVisitId}/clock-out`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
-    body: JSON.stringify({ notes, localTime }),
+    body: JSON.stringify({ notes, localTime, occurredAt }),
   });
 }
 
@@ -130,18 +135,20 @@ export async function clockOutStop(
  * file: it 400s (non-retryable) if there's nothing open to pause, which the
  * sync engine already treats as a permanent failure for any 4xx.
  */
-export async function pauseStop(anchorVisitId: string, idempotencyKey: string): Promise<unknown> {
+export async function pauseStop(anchorVisitId: string, idempotencyKey: string, occurredAt?: string): Promise<unknown> {
   return authedFetch(`/api/crm/crew/stops/${anchorVisitId}/pause`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ occurredAt }),
   });
 }
 
 /** POST /api/crm/crew/stops/:anchorVisitId/resume — ends the current break, rolling elapsed time into break_minutes. */
-export async function resumeStop(anchorVisitId: string, idempotencyKey: string): Promise<unknown> {
+export async function resumeStop(anchorVisitId: string, idempotencyKey: string, occurredAt?: string): Promise<unknown> {
   return authedFetch(`/api/crm/crew/stops/${anchorVisitId}/resume`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ occurredAt }),
   });
 }
 
@@ -151,18 +158,20 @@ export async function resumeStop(anchorVisitId: string, idempotencyKey: string):
  * (returns the already-open segment on a double-tap/retry rather than
  * erroring).
  */
-export async function startDrive(idempotencyKey: string): Promise<unknown> {
+export async function startDrive(idempotencyKey: string, occurredAt?: string): Promise<unknown> {
   return authedFetch(`/api/crm/crew/drive/start`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ occurredAt }),
   });
 }
 
 /** POST /api/crm/crew/drive/end — "Arrived". No-op (not an error) if there's nothing open. */
-export async function endDrive(idempotencyKey: string): Promise<unknown> {
+export async function endDrive(idempotencyKey: string, occurredAt?: string): Promise<unknown> {
   return authedFetch(`/api/crm/crew/drive/end`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ occurredAt }),
   });
 }
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveOccurredAt, readOccurredAt } from "@/lib/crew/occurred-at";
 import { getRouteAuth, resolveCallerCrewId } from "@/lib/supabase/route-auth";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone } from "@/lib/time/zone";
@@ -35,7 +36,8 @@ export async function POST(request: Request) {
   // fresh segment started — handing it back used to file this morning's drive
   // under yesterday's work_date, and its eventual close credited the whole
   // overnight gap as driving. See closeStaleDriveSegment().
-  const now = new Date();
+  // The moment of the tap (a queued offline "start drive" replays later).
+  const now = resolveOccurredAt(await readOccurredAt(request));
   const stale = await closeStaleDriveSegment(supabase, crewId, orgId, now);
   if (stale.error) return NextResponse.json({ error: stale.error }, { status: 500 });
   if (stale.openToday) return NextResponse.json({ segment: stale.openToday });

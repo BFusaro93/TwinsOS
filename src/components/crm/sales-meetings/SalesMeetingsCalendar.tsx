@@ -11,6 +11,8 @@ import { SalesMeetingDialog } from "./SalesMeetingDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn } from "@/lib/utils";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { instantToZoneWallClock, isoInZone, shiftYmd, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
 
 const DAY_START_HOUR = 7;
 const DAY_END_HOUR = 19;
@@ -23,10 +25,6 @@ function toLocalDateString(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-function todayLocalString(): string {
-  return toLocalDateString(new Date());
 }
 
 function parseLocalDate(dateStr: string): Date {
@@ -62,7 +60,12 @@ export function SalesMeetingsCalendar() {
   const canAdd = can("sales_meeting_add");
   const canEdit = can("sales_meeting_edit");
   const [viewMode, setViewMode] = useState<ViewMode>("day");
-  const [selectedDate, setSelectedDate] = useState(todayLocalString());
+  // Everything here is on the ORG's clock (the reminder cron reads meetings that
+  // way). The browser's zone made a rep's 9:00 booking land at 9:00 in THEIR zone —
+  // an hour or more off the org's — and shifted the day buckets for any viewer
+  // outside the org's zone.
+  const tz = useOrgTimeZone();
+  const [selectedDate, setSelectedDate] = useState(() => todayInZone(tz));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<SalesMeetingWithClient | null>(null);
   const [slotDefaults, setSlotDefaults] = useState<{ repId?: string; date?: string; time?: string }>({});
@@ -76,23 +79,21 @@ export function SalesMeetingsCalendar() {
   // month view displays (including the leading/trailing days from adjacent
   // months that fill out the grid).
   const { rangeStartIso, rangeEndIso } = useMemo(() => {
+    // The org's midnight of a calendar date.
+    const midnight = (ymd: string) => (zoneWallClockToInstant(ymd, "00:00", tz) ?? new Date(`${ymd}T00:00:00`)).toISOString();
     if (viewMode === "day") {
       return {
-        rangeStartIso: new Date(`${selectedDate}T00:00:00`).toISOString(),
-        rangeEndIso: new Date(`${selectedDate}T23:59:59.999`).toISOString(),
+        rangeStartIso: midnight(selectedDate),
+        rangeEndIso: new Date(new Date(midnight(shiftYmd(selectedDate, 1))).getTime() - 1).toISOString(),
       };
     }
     if (viewMode === "week") {
-      const start = startOfWeek(selected);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 7);
-      return { rangeStartIso: start.toISOString(), rangeEndIso: end.toISOString() };
+      const startYmd = toLocalDateString(startOfWeek(selected));
+      return { rangeStartIso: midnight(startYmd), rangeEndIso: midnight(shiftYmd(startYmd, 7)) };
     }
-    const start = startOfMonthGrid(selected);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 42);
-    return { rangeStartIso: start.toISOString(), rangeEndIso: end.toISOString() };
-  }, [viewMode, selectedDate, selected]);
+    const startYmd = toLocalDateString(startOfMonthGrid(selected));
+    return { rangeStartIso: midnight(startYmd), rangeEndIso: midnight(shiftYmd(startYmd, 42)) };
+  }, [viewMode, selectedDate, selected, tz]);
 
   const { data: meetings, isLoading: meetingsLoading } = useSalesMeetings(rangeStartIso, rangeEndIso);
 
@@ -110,12 +111,12 @@ export function SalesMeetingsCalendar() {
     consumedOpenId.current = deepLinkedMeeting.id;
     // Jump to the meeting's day either way; only open the dialog if this user
     // could have opened it by clicking, so the deep link grants no extra access.
-    setSelectedDate(toLocalDateString(new Date(deepLinkedMeeting.scheduledAt)));
+    setSelectedDate(isoInZone(new Date(deepLinkedMeeting.scheduledAt), tz));
     if (!canEdit) return;
     setEditingMeeting(deepLinkedMeeting);
     setSlotDefaults({});
     setDialogOpen(true);
-  }, [deepLinkedMeeting, canEdit]);
+  }, [deepLinkedMeeting, canEdit, tz]);
 
   function openNewMeeting(opts: { repId?: string; date?: string; hour?: number } = {}) {
     if (!canAdd) return;
@@ -233,6 +234,7 @@ function DayView({
   onSlotClick: (repId: string, hour: number) => void;
   onMeetingClick: (meeting: SalesMeetingWithClient) => void;
 }) {
+  const tz = useOrgTimeZone();
   const hours = useMemo(
     () => Array.from({ length: DAY_END_HOUR - DAY_START_HOUR + 1 }, (_, i) => DAY_START_HOUR + i),
     []
@@ -249,8 +251,9 @@ function DayView({
   }, [meetings]);
 
   function positionFor(meeting: SalesMeetingWithClient) {
-    const start = new Date(meeting.scheduledAt);
-    const startHour = start.getHours() + start.getMinutes() / 60;
+    // Wall clock on the org's clock, not the viewer's browser.
+    const [hh, mm] = instantToZoneWallClock(new Date(meeting.scheduledAt), tz).time.split(":").map(Number);
+    const startHour = hh + mm / 60;
     const top = Math.max(0, (startHour - DAY_START_HOUR) * PX_PER_HOUR);
     const height = Math.max(24, (meeting.durationMinutes / 60) * PX_PER_HOUR - 2);
     return { top, height };
@@ -336,12 +339,13 @@ function WeekView({
     }),
     [weekStart]
   );
-  const today = todayLocalString();
+  const tz = useOrgTimeZone();
+  const today = todayInZone(tz);
 
   const meetingsByRepAndDay = useMemo(() => {
     const map = new Map<string, SalesMeetingWithClient[]>();
     for (const m of meetings) {
-      const dateKey = toLocalDateString(new Date(m.scheduledAt));
+      const dateKey = isoInZone(new Date(m.scheduledAt), tz);
       const key = `${m.salesRepId}|${dateKey}`;
       const list = map.get(key) ?? [];
       list.push(m);
@@ -351,7 +355,7 @@ function WeekView({
       list.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
     }
     return map;
-  }, [meetings]);
+  }, [meetings, tz]);
 
   return (
     <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
@@ -399,7 +403,7 @@ function WeekView({
                         STATUS_STYLES[m.status] ?? STATUS_STYLES.scheduled
                       )}
                     >
-                      {new Date(m.scheduledAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · {m.clientName ?? m.leadName ?? m.title}
+                      {new Date(m.scheduledAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz })} · {m.clientName ?? m.leadName ?? m.title}
                     </span>
                   ))}
                 </button>
@@ -434,7 +438,8 @@ function MonthView({
   onMeetingClick: (meeting: SalesMeetingWithClient) => void;
 }) {
   const gridStart = useMemo(() => startOfMonthGrid(monthAnchor), [monthAnchor]);
-  const today = todayLocalString();
+  const tz = useOrgTimeZone();
+  const today = todayInZone(tz);
   const currentMonth = monthAnchor.getMonth();
 
   const days = useMemo(
@@ -449,7 +454,7 @@ function MonthView({
   const meetingsByDay = useMemo(() => {
     const map = new Map<string, SalesMeetingWithClient[]>();
     for (const m of meetings) {
-      const dateKey = toLocalDateString(new Date(m.scheduledAt));
+      const dateKey = isoInZone(new Date(m.scheduledAt), tz);
       const list = map.get(dateKey) ?? [];
       list.push(m);
       map.set(dateKey, list);
@@ -458,7 +463,7 @@ function MonthView({
       list.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
     }
     return map;
-  }, [meetings]);
+  }, [meetings, tz]);
 
   const MAX_VISIBLE = 3;
 
