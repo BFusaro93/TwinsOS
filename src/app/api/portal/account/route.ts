@@ -73,6 +73,9 @@ export async function POST(req: Request) {
       phone: parsed.data.phone ?? null,
       phone_type: parsed.data.phone ? (parsed.data.phoneType ?? "cell") : null,
       contact_type: parsed.data.role ?? null,
+      // Unverified: a portal user can type any address, and automations email every
+      // contact with ok_to_email. Staff opt a contact in after confirming it.
+      ok_to_email: false,
     })
     .select("id, first_name, last_name, email, phone, contact_type")
     .single();

@@ -87,7 +87,7 @@ export async function POST(
       service_address, service_city, service_state, service_zip,
       turf_sqft, gross_sqft, mulch_bed_sqft, yards_of_mulch,
       linear_ft_perimeter, linear_ft_edging, gate_lock_code, notes_to_crew,
-      referred_by, do_not_market, email_bounced_at, unsubscribe_token,
+      referred_by, do_not_market, ok_to_email, email_bounced_at, unsubscribe_token,
       sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name),
       referring_client:referred_by_client_id(display_name)
     `)
@@ -108,6 +108,14 @@ export async function POST(
   if (client.email_bounced_at) {
     return NextResponse.json(
       { error: "Client's email address has hard-bounced" },
+      { status: 422 }
+    );
+  }
+  // "OK to Email = No" is honored by campaigns and automations; bulk marketing
+  // from here used to mail those clients anyway.
+  if (isMarketing && client.ok_to_email === false) {
+    return NextResponse.json(
+      { error: "Client is marked Not OK to Email" },
       { status: 422 }
     );
   }
