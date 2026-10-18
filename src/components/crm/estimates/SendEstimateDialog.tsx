@@ -128,7 +128,7 @@ export function SendEstimateDialog({
       + `<div style="margin-top:6px;font-size:11px;color:#64748b">Link placeholder — the client's unique proposal URL is generated when you send.</div>`;
 
   function previewResolve(text: string) {
-    const estimateDateVal = estimateDate ? new Date(estimateDate) : new Date();
+    const estimateDateVal = estimateDate ? new Date(`${estimateDate.slice(0, 10)}T12:00:00`) : new Date();
     const estimateTotal = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
       .format((totalCents ?? 0) / 100);
     return text

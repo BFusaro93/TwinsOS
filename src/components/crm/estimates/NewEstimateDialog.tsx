@@ -33,6 +33,8 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { getOrgDefaultDisplaySettings } from "@/lib/estimate-display-settings";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { toast } from "sonner";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
+import { shiftYmd } from "@/lib/time/zone";
 import type { Estimate } from "@/types/crm-estimates";
 
 const schema = z.object({
@@ -55,24 +57,17 @@ interface Props {
   onCreated?: (estimate: Estimate) => void;
 }
 
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function defaultDescription() {
-  return new Date().toLocaleDateString("en-US", {
+// Org-clock dates (not the browser's): a device in another zone otherwise stamps
+// the wrong estimate/expiry day, and +30*24h drifts a day across DST.
+function defaultDescription(todayYmd: string) {
+  return new Date(`${todayYmd}T12:00:00`).toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric", year: "numeric",
   });
 }
 
-function thirtyDaysOut() {
-  const d = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreated }: Props) {
   const router = useRouter();
+  const { today: orgToday } = useOrgDates();
   const { data: clients }   = useClients();
   const { data: allTemplates } = useEstimateTemplates();
   // Only bundles marked for estimates (or both) belong in this picker —
@@ -105,9 +100,9 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
     defaultValues: {
       clientId:       defaultClientId ?? "",
       propertyId:     "none",
-      description:    `Estimate - ${defaultDescription()}`,
-      estimateDate:   todayStr(),
-      validUntilDate: thirtyDaysOut(),
+      description:    `Estimate - ${defaultDescription(orgToday())}`,
+      estimateDate:   orgToday(),
+      validUntilDate: shiftYmd(orgToday(), 30),
       stage:          "draft",
       templateId:     "none",
       salesRepId:     "none",
@@ -145,9 +140,9 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   useEffect(() => {
     if (open) {
       descriptionDirty.current = false;
-      setValue("description", `Estimate - ${defaultDescription()}`);
-      setValue("estimateDate", todayStr());
-      setValue("validUntilDate", thirtyDaysOut());
+      setValue("description", `Estimate - ${defaultDescription(orgToday())}`);
+      setValue("estimateDate", orgToday());
+      setValue("validUntilDate", shiftYmd(orgToday(), 30));
       setValue("propertyId", "none");
     }
   }, [open, setValue]);

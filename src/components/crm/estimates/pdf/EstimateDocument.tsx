@@ -68,6 +68,8 @@ export interface EstimatePDFData {
   estimateNumber: number;
   description: string | null;
   createdAt: string;
+  /** The user-editable date on the estimate; falls back to created_at's date. */
+  estimateDate?: string | null;
   validUntil: string | null;
   notes: string | null;
 
@@ -453,7 +455,7 @@ function EstimatePages({ estimate, org }: { estimate: EstimatePDFData; org: OrgP
         estimate.totalCents,
         estimate.depositRequiredCents,
         estimate.numInstallments,
-        estimate.createdAt.slice(0, 10),
+        estimate.estimateDate ?? estimate.createdAt.slice(0, 10),
         estimate.installmentDayOfMonth
       )
     : [];
@@ -515,7 +517,7 @@ function EstimatePages({ estimate, org }: { estimate: EstimatePDFData; org: OrgP
         <View style={S.metaRow}>
           <View style={S.metaCell}>
             <Text style={S.metaLabel}>Estimate Date</Text>
-            <Text style={S.metaValue}>{formatDate(estimate.createdAt)}</Text>
+            <Text style={S.metaValue}>{formatDate(estimate.estimateDate ?? estimate.createdAt)}</Text>
           </View>
           {estimate.validUntil ? (
             <View style={S.metaCell}>

@@ -1694,7 +1694,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           type="number"
                           min={1}
                           value={(headerEdits.num_installments as number) ?? estimate.numInstallments}
-                          onChange={(e) => patchHeader("num_installments", Number(e.target.value))}
+                          onChange={(e) => patchHeader("num_installments", Math.min(60, Math.max(1, Math.trunc(Number(e.target.value)) || 1)))}
                           onBlur={() => saveHeader()}
                           className="h-8 w-20"
                         />

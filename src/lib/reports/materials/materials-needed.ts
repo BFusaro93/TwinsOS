@@ -143,15 +143,21 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
   const { data: serviceChemicals } = chemicalProductIds.size
     ? await supabase
         .from("crm_service_chemicals")
-        .select("service_id, product_id")
+        .select("service_id, product_id, start_date, end_date")
         .in("product_id", [...chemicalProductIds])
-    : { data: [] as { service_id: string; product_id: string }[] };
-  const productIdsByService = new Map<string, string[]>();
+    : { data: [] as { service_id: string; product_id: string; start_date: string | null; end_date: string | null }[] };
+  const seasonByService = new Map<string, { productId: string; start: string | null; end: string | null }[]>();
   for (const sc of serviceChemicals ?? []) {
-    const list = productIdsByService.get(sc.service_id) ?? [];
-    list.push(sc.product_id);
-    productIdsByService.set(sc.service_id, list);
+    const list = seasonByService.get(sc.service_id) ?? [];
+    list.push({ productId: sc.product_id, start: sc.start_date, end: sc.end_date });
+    seasonByService.set(sc.service_id, list);
   }
+  // Honor the service-chemical season window like dispatch preload does. A visit
+  // has a date; a waiting-list job has none, so it keeps every attached product.
+  const productIdsFor = (serviceId: string, day: string | null): string[] =>
+    (seasonByService.get(serviceId) ?? [])
+      .filter((c) => !(day && c.start && day < c.start) && !(day && c.end && day > c.end))
+      .map((c) => c.productId);
 
   interface ChemDemandEntry {
     jobId: string;
@@ -217,7 +223,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       const serviceIds = servicesFor(job.crm_job_services, v.job_service_id);
       const productIdsForVisit = new Set<string>();
       for (const sid of serviceIds) {
-        for (const pid of productIdsByService.get(sid) ?? []) productIdsForVisit.add(pid);
+        for (const pid of productIdsFor(sid, v.scheduled_date ?? null)) productIdsForVisit.add(pid);
       }
       for (const pid of productIdsForVisit) {
         addChemDemand(pid, {
@@ -263,7 +269,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       const serviceIds = servicesFor(job.crm_job_services, null);
       const productIdsForJob = new Set<string>();
       for (const sid of serviceIds) {
-        for (const pid of productIdsByService.get(sid) ?? []) productIdsForJob.add(pid);
+        for (const pid of productIdsFor(sid, null)) productIdsForJob.add(pid);
       }
       for (const pid of productIdsForJob) {
         addChemDemand(pid, {

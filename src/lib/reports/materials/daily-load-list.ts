@@ -252,11 +252,15 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
   const { data: serviceChemicals } = chemicalProductIds.size
     ? await supabase
         .from("crm_service_chemicals")
-        .select("service_id, product_id")
+        .select("service_id, product_id, start_date, end_date")
         .in("product_id", [...chemicalProductIds])
-    : { data: [] as { service_id: string; product_id: string }[] };
+    : { data: [] as { service_id: string; product_id: string; start_date: string | null; end_date: string | null }[] };
   const productIdsByService = new Map<string, string[]>();
   for (const sc of serviceChemicals ?? []) {
+    // Honor the service-chemical season window, same as dispatch preload
+    // (chemical-preload.ts): out-of-season products are never preloaded, so the
+    // load list must not ask the crew to load them.
+    if ((sc.start_date && date < sc.start_date) || (sc.end_date && date > sc.end_date)) continue;
     const list = productIdsByService.get(sc.service_id) ?? [];
     list.push(sc.product_id);
     productIdsByService.set(sc.service_id, list);
