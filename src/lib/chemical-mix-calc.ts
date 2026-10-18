@@ -21,9 +21,33 @@ import type { ChemicalApplicationRate, ChemicalLookupItem, ChemicalUnitClass } f
  * calcChemicalAndSolution signals by returning chemicalUnitOfMeasureId ===
  * rate.unitOfMeasureId.
  */
-export function calcAutoQuantity(rate: ChemicalApplicationRate, areaValue: number): number | null {
+export function calcAutoQuantity(
+  rate: ChemicalApplicationRate,
+  areaValue: number,
+  unitsById?: Map<string, ChemicalLookupItem>
+): number | null {
   if (!rate.areaQty || rate.rateQty == null) return null;
-  return (areaValue / rate.areaQty) * rate.rateQty;
+  const areaUnit = rate.areaUnitId ? unitsById?.get(rate.areaUnitId) : undefined;
+  return (areaValue / (rate.areaQty * areaBasisSqFt(areaUnit))) * rate.rateQty;
+}
+
+/**
+ * Square feet in ONE unit of a rate's area basis. The property's area custom
+ * field is square feet, so a label rate of "1.5 oz per 1,000 sq ft" entered as
+ * qty 1 of the "1,000 Sq Ft" unit must divide the property by 1,000 — treating
+ * it as qty 1 of a square foot overdoses by 1,000x ("per Acre" by 43,560x).
+ * Area units carry no conversion metadata (they're free-text lookup rows), so
+ * the scale is read from the name; an unrecognised or missing unit keeps the
+ * historical behaviour of treating the qty as square feet.
+ */
+export function areaBasisSqFt(unit: ChemicalLookupItem | undefined): number {
+  const name = unit?.name.trim().toLowerCase() ?? "";
+  if (!name) return 1;
+  if (name.includes("acre")) return 43560;
+  if (/(^|[^\d.])1[,\s]?000(\D|$)/.test(name) || name.includes("k sq") || name.includes("msf")) return 1000;
+  if (/(^|[^\d.])100\s*(sq|square|ft)/.test(name)) return 100;
+  if (/sq(uare|\.)?\s*(yd|yard)/.test(name)) return 9;
+  return 1;
 }
 
 /** A lookup row carrying enough metadata to convert within its own class. */
@@ -155,7 +179,7 @@ export function calcChemicalAndSolution(
   areaValue: number,
   unitsById: Map<string, ChemicalLookupItem>
 ): ChemicalCalcResult | null {
-  const appliedAmount = calcAutoQuantity(rate, areaValue);
+  const appliedAmount = calcAutoQuantity(rate, areaValue, unitsById);
   if (appliedAmount == null || !rate.unitOfMeasureId) return null;
 
   const unresolved: ChemicalCalcResult = {

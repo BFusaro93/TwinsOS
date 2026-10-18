@@ -163,6 +163,11 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
 
   return (
     <div className="flex h-full flex-col gap-4">
+      {/* Report tables are wide; print them landscape with slim margins. */}
+      <style media="print">{"@page { size: landscape; margin: 0.4in; }"}</style>
+      <div className="hidden print:block">
+        <h1 className="text-lg font-bold">{def.name}</h1>
+      </div>
       <PageHeader
         title={def.name}
         description={def.description}

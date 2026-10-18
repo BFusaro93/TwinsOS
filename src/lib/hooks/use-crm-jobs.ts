@@ -19,6 +19,8 @@ import { jobActivityLabel } from "@/lib/utils/job-activity-label";
 import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
 import { computeBudgetedHours } from "@/lib/utils/visit-hours";
 
+import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
+
 const log = logger.child("use-crm-jobs");
 
 // ── mappers ───────────────────────────────────────────────────────────────────
@@ -1121,6 +1123,9 @@ export function useUpdateVisitStatus() {
         .from('crm_job_visits').update(patch).eq('id', id)
         .select('client_id, job_id, job_service_id, scheduled_date').single();
       if (error) throw error;
+      // Sending a visit to the crew pre-loads its service's chemicals so the
+      // crew's Chemical Mix card isn't empty (best-effort; never blocks dispatch).
+      if (status === 'dispatched') await loadServiceChemicalsForVisit(supabase, id).catch(() => 0);
       if ((status === 'dispatched' || isOutcome) && data?.client_id) {
         // Same lightweight timeline row useUpdateVisit writes — no notification.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1303,6 +1308,10 @@ export function useUpdateVisit() {
         .update(dbUpdates as any)
         .eq('id', id);
       if (error) throw error;
+
+      if (updates.status === 'dispatched' && before && before.status !== 'dispatched') {
+        await loadServiceChemicalsForVisit(supabase, id).catch(() => 0);
+      }
 
       if (activityRows.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

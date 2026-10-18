@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,6 +17,9 @@ import {
   calcChemicalAndSolution,
   useChemicalApplicationRates,
   useChemicalApplicationsForVisit,
+  useChemicalJobAreaValue,
+  useLoadServiceChemicals,
+  useVisitClockTimes,
   useChemicalLookupItems,
   useChemicalSettings,
   useDeleteChemicalApplication,
@@ -24,7 +27,6 @@ import {
 } from "@/lib/hooks/use-chemical-tracking";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
-import { usePropertyCustomFieldValues } from "@/lib/hooks/use-rate-matrix";
 import { SendApplicationNoticeDialog } from "./SendApplicationNoticeDialog";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ChemicalApplication } from "@/types/chemical-tracking";
@@ -34,7 +36,23 @@ import { useConfirm } from "@/components/shared/useConfirm";
 interface Props {
   jobId: string;
   visitId: string;
+  /** Accepted for caller compatibility; area is resolved from the job (see useChemicalJobAreaValue). */
   propertyId?: string | null;
+}
+
+/** ISO instant -> the "YYYY-MM-DDTHH:mm" a datetime-local input wants, in the viewer's zone. */
+function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromLocalInput(value: string): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 function MultiCheck({
@@ -72,6 +90,8 @@ function ApplicationRow({
   targets,
   areasTreated,
   employees,
+  fallbackStartTime,
+  fallbackEndTime,
 }: {
   application: ChemicalApplication;
   jobId: string;
@@ -82,6 +102,9 @@ function ApplicationRow({
   targets: { id: string; name: string }[];
   areasTreated: { id: string; name: string }[];
   employees: { id: string; name: string; applicatorLicense: string | null }[];
+  /** Crew clock-in/out, offered as the start/end time until one is entered. */
+  fallbackStartTime: string | null;
+  fallbackEndTime: string | null;
 }) {
   const [confirm, confirmDialog] = useConfirm();
   const { can } = usePermissions();
@@ -100,6 +123,15 @@ function ApplicationRow({
   const [used, setUsed] = useState(application.used);
   const [applicatorEmployeeId, setApplicatorEmployeeId] = useState(application.applicatorEmployeeId ?? "");
   const [notes, setNotes] = useState(application.notes ?? "");
+  // null = untouched: show (and save) the crew clock time, which may load after this row mounts.
+  const [startEdit, setStartTime] = useState<string | null>(
+    application.applicationStartTime ? toLocalInput(application.applicationStartTime) : null
+  );
+  const [endEdit, setEndTime] = useState<string | null>(
+    application.applicationEndTime ? toLocalInput(application.applicationEndTime) : null
+  );
+  const startTime = startEdit ?? toLocalInput(fallbackStartTime);
+  const endTime = endEdit ?? toLocalInput(fallbackEndTime);
 
   function toggleTarget(id: string) {
     setTargetIds((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
@@ -132,6 +164,8 @@ function ApplicationRow({
         areasTreatedIds,
         used,
         applicatorEmployeeId: applicatorEmployeeId || null,
+        applicationStartTime: fromLocalInput(startTime),
+        applicationEndTime: fromLocalInput(endTime),
         ...(applicatorChanged && { applicatorLicenseNumber: employee?.applicatorLicense ?? null }),
         notes: notes || null,
       },
@@ -267,6 +301,27 @@ function ApplicationRow({
         </Select>
       </div>
 
+      <div className="grid grid-cols-2 gap-2">
+        <div className="grid gap-1">
+          <label className="text-xs text-muted-foreground">Application Start</label>
+          <Input
+            className="h-8 text-xs"
+            type="datetime-local"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+          />
+        </div>
+        <div className="grid gap-1">
+          <label className="text-xs text-muted-foreground">Application End</label>
+          <Input
+            className="h-8 text-xs"
+            type="datetime-local"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+          />
+        </div>
+      </div>
+
       <div className="grid gap-1">
         <label className="text-xs text-muted-foreground">Notes</label>
         <Textarea rows={2} className="text-xs" value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -285,24 +340,29 @@ function ApplicationRow({
 }
 
 /** Per-visit chemical application logging — the compliance-critical record. */
-export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) {
+export function ChemicalApplicationPanel({ jobId, visitId }: Props) {
   const { can } = usePermissions();
   const canEdit = can("chem_add_edit_usage");
   const canSendNotice = can("chem_send_application_notice");
-  const { data: applications = [] } = useChemicalApplicationsForVisit(visitId);
+  const { data: applications = [], isFetched: applicationsFetched } = useChemicalApplicationsForVisit(visitId);
   const { data: allProducts = [] } = useProducts();
   const { data: methods = [] } = useChemicalLookupItems("application_method");
   const { data: units = [] } = useChemicalLookupItems("volume_unit");
+  // Area units ride along in unitsById so the rate math can scale
+  // "per 1,000 sq ft" / "per acre" bases to the property's square feet.
+  const { data: areaUnits = [] } = useChemicalLookupItems("area_unit");
   const { data: targets = [] } = useChemicalLookupItems("target");
   const { data: areasTreated = [] } = useChemicalLookupItems("areas_treated");
   const { data: employeesRaw = [] } = useSelectableEmployees();
   const { data: settings } = useChemicalSettings();
   const saveApplication = useSaveChemicalApplication();
+  const loadServiceChemicals = useLoadServiceChemicals();
+  const { data: clockTimes } = useVisitClockTimes(visitId);
 
   const [addingProductId, setAddingProductId] = useState("");
   const { data: addingProductRates = [] } = useChemicalApplicationRates(addingProductId || undefined);
-  const { data: propertyFieldValues = [] } = usePropertyCustomFieldValues(propertyId ?? "");
-  const unitsById = new Map(units.map((u) => [u.id, u]));
+  const { data: areaValue = null } = useChemicalJobAreaValue(jobId, settings?.areaCustomFieldId);
+  const unitsById = new Map([...units, ...areaUnits].map((u) => [u.id, u]));
 
   const employees = employeesRaw.map((e) => ({
     id: e.id,
@@ -329,6 +389,21 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applications.length]);
 
+  // A visit with nothing logged yet gets its service's chemicals pre-loaded
+  // (once per visit per mount) so the office confirms rather than re-keys, and
+  // the crew's Chemical Mix card has something to show.
+  const preloadedVisits = useRef(new Set<string>());
+  const loadService = loadServiceChemicals.mutate;
+  useEffect(() => {
+    if (!canEdit || !applicationsFetched || applications.length > 0) return;
+    if (preloadedVisits.current.has(visitId)) return;
+    preloadedVisits.current.add(visitId);
+    loadService(
+      { visitId },
+      { onSuccess: (count) => count > 0 && toast.success(`Loaded ${count} service chemical${count === 1 ? "" : "s"} for this visit`) }
+    );
+  }, [canEdit, applicationsFetched, applications.length, visitId, loadService]);
+
   const showWeather = settings?.conditionsDisplay === "weather" || settings?.conditionsDisplay === "both";
   const showPh = settings?.conditionsDisplay === "ph" || settings?.conditionsDisplay === "both";
 
@@ -350,9 +425,6 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
 
     if (settings?.autoCalcQuantity && settings.areaCustomFieldId) {
       const defaultRate = addingProductRates.find((r) => r.isDefault) ?? addingProductRates[0];
-      const areaValue = propertyFieldValues.find(
-        (v) => v.fieldDefId === settings.areaCustomFieldId
-      )?.valueNumber;
       if (defaultRate && areaValue != null) {
         const computed = calcChemicalAndSolution(defaultRate, areaValue, unitsById);
         if (computed != null) {
@@ -477,6 +549,8 @@ export function ChemicalApplicationPanel({ jobId, visitId, propertyId }: Props) 
           targets={targets}
           areasTreated={areasTreated}
           employees={employees}
+          fallbackStartTime={clockTimes?.clockedInAt ?? null}
+          fallbackEndTime={clockTimes?.clockedOutAt ?? null}
         />
       ))}
 

@@ -1,4 +1,5 @@
-import { Document, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
+import { Document, Font, Page, View, Text, StyleSheet } from "@react-pdf/renderer";
+import type { Style } from "@react-pdf/types";
 
 export interface ReportExportGrouped {
   grandTotal: string[];
@@ -26,6 +27,47 @@ export interface ReportExportData {
   generatedAt: string;
   sections: ReportExportSection[];
   charts?: ReportExportChart[];
+}
+
+// react-pdf hyphenates by default ("Shrews-bury", "Chem-ical"), which chops
+// names, EPA numbers and licence numbers in narrow columns. Whole words only.
+Font.registerHyphenationCallback((word) => [word]);
+
+/** More columns than this and equal-width cells stop working (headers collide,
+ *  long tokens such as licence numbers overflow into the next column). */
+const WIDE_TABLE_COLUMNS = 10;
+const PAGE_TEXT_WIDTH = 841.89 - 2 * 28;
+const CELL_PADDING = 4;
+
+interface ColumnLayout {
+  /** flex-grow weights, proportional to each column's content. */
+  weights: number[];
+  fontSize: number;
+}
+
+/**
+ * Sizes the columns of a wide table from its content: each column's weight
+ * follows its longest unbreakable token and (capped) text length, and the font
+ * shrinks until the longest tokens fit their columns. Narrow tables keep the
+ * original equal-width layout so existing reports print exactly as before.
+ */
+function layoutColumns(columns: string[], bodyRows: string[][]): ColumnLayout | null {
+  if (columns.length <= WIDE_TABLE_COLUMNS) return null;
+  const tokenMax = columns.map((c) => Math.max(1, ...c.split(/\s+/).map((w) => w.length)));
+  const textMax = columns.map(() => 0);
+  bodyRows.forEach((row) =>
+    row.forEach((cell, ci) => {
+      if (ci >= columns.length) return;
+      const text = String(cell ?? "");
+      textMax[ci] = Math.max(textMax[ci], Math.min(text.length, 26));
+      tokenMax[ci] = Math.max(tokenMax[ci], ...text.split(/\s+/).map((w) => w.length));
+    })
+  );
+  const weights = columns.map((_, ci) => Math.max(tokenMax[ci], textMax[ci] * 0.6, 4));
+  const available = PAGE_TEXT_WIDTH - columns.length * CELL_PADDING * 2;
+  const needed = tokenMax.reduce((sum, t) => sum + t, 0) * 0.56;
+  const fontSize = Math.min(8, Math.max(5.5, Math.floor((8 * available) / needed * 2) / 2));
+  return { weights, fontSize };
 }
 
 const CHART_COLORS = ["#0ea5e9", "#22c55e", "#f59e0b", "#a855f7"];
@@ -89,7 +131,14 @@ export function ReportExportDocument({ title, generatedAt, sections, charts }: R
             ))}
           </View>
         )}
-        {sections.map((section, si) => (
+        {sections.map((section, si) => {
+          const bodyRows = section.grouped
+            ? [section.grouped.grandTotal, ...section.grouped.groups.flatMap((g) => [g.subtotal, ...g.rows])]
+            : [...section.rows, ...(section.totals ? [section.totals] : [])];
+          const layout = layoutColumns(section.columns, bodyRows);
+          const cellStyle = (base: Style, ci: number): Style | Style[] =>
+            layout ? [base, { flex: layout.weights[ci] ?? 1, fontSize: layout.fontSize }] : base;
+          return (
           // wrap defaults to true here (unlike a table row) so a section with
           // more rows than fit on one page continues onto the next instead of
           // being silently cut off — only individual rows must stay intact.
@@ -98,27 +147,27 @@ export function ReportExportDocument({ title, generatedAt, sections, charts }: R
             <View style={styles.table}>
               <View style={styles.headerRow}>
                 {section.columns.map((col, ci) => (
-                  <Text key={ci} style={styles.cellHeader}>{col}</Text>
+                  <Text key={ci} style={cellStyle(styles.cellHeader, ci)}>{col}</Text>
                 ))}
               </View>
               {section.grouped ? (
                 <>
                   <View style={styles.grandTotalRow} wrap={false}>
                     {section.grouped.grandTotal.map((cell, ci) => (
-                      <Text key={ci} style={styles.cellBold}>{cell}</Text>
+                      <Text key={ci} style={cellStyle(styles.cellBold, ci)}>{cell}</Text>
                     ))}
                   </View>
                   {section.grouped.groups.map((group, gi) => (
                     <View key={gi}>
                       <View style={styles.subtotalRow} wrap={false}>
                         {group.subtotal.map((cell, ci) => (
-                          <Text key={ci} style={styles.cellBold}>{cell}</Text>
+                          <Text key={ci} style={cellStyle(styles.cellBold, ci)}>{cell}</Text>
                         ))}
                       </View>
                       {group.rows.map((row, ri) => (
                         <View key={ri} style={styles.row} wrap={false}>
                           {row.map((cell, ci) => (
-                            <Text key={ci} style={styles.cell}>{cell}</Text>
+                            <Text key={ci} style={cellStyle(styles.cell, ci)}>{cell}</Text>
                           ))}
                         </View>
                       ))}
@@ -135,7 +184,7 @@ export function ReportExportDocument({ title, generatedAt, sections, charts }: R
                   {section.rows.map((row, ri) => (
                     <View key={ri} style={styles.row} wrap={false}>
                       {row.map((cell, ci) => (
-                        <Text key={ci} style={styles.cell}>{cell}</Text>
+                        <Text key={ci} style={cellStyle(styles.cell, ci)}>{cell}</Text>
                       ))}
                     </View>
                   ))}
@@ -147,7 +196,7 @@ export function ReportExportDocument({ title, generatedAt, sections, charts }: R
                   {section.totals && section.rows.length > 0 && (
                     <View style={styles.grandTotalRow} wrap={false}>
                       {section.totals.map((cell, ci) => (
-                        <Text key={ci} style={styles.cellBold}>{cell}</Text>
+                        <Text key={ci} style={cellStyle(styles.cellBold, ci)}>{cell}</Text>
                       ))}
                     </View>
                   )}
@@ -155,7 +204,8 @@ export function ReportExportDocument({ title, generatedAt, sections, charts }: R
               )}
             </View>
           </View>
-        ))}
+          );
+        })}
       </Page>
     </Document>
   );

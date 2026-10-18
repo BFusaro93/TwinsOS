@@ -83,7 +83,7 @@ export async function POST(
   const { data: applications, error: appsErr } = await (supabase as any)
     .from("crm_chemical_applications")
     .select(
-      "chemical_amount, solution_amount, epa_number_snapshot, applicator_license_number, temperature, wind_speed, wind_direction, application_start_time, application_end_time, used, product:product_id(name, epa_registration_number, route_sheet_instructions), unit:unit_of_measure_id(name), applicator:applicator_employee_id(first_name, last_name)"
+      "chemical_amount, solution_amount, epa_number_snapshot, re_entry_interval_snapshot, applicator_license_number, temperature, wind_speed, wind_direction, application_start_time, application_end_time, used, product:product_id(name, epa_registration_number, re_entry_interval, route_sheet_instructions), unit:unit_of_measure_id(name), applicator:applicator_employee_id(first_name, last_name)"
     )
     .eq("visit_id", visitId)
     .is("deleted_at", null);
@@ -123,7 +123,9 @@ export async function POST(
       // applied to their property.
       const epa = a.epa_number_snapshot ?? a.product?.epa_registration_number;
       const amount = a.chemical_amount != null ? `${a.chemical_amount} ${a.unit?.name ?? ""}`.trim() : "";
-      return `<li>${a.product?.name ?? "Chemical"}${amount ? ` — ${amount}` : ""}${epa ? ` (EPA #${epa})` : ""}</li>`;
+      // Re-entry is what the client actually has to act on — same snapshot rule as the EPA #.
+      const reEntry = a.re_entry_interval_snapshot ?? a.product?.re_entry_interval;
+      return `<li>${a.product?.name ?? "Chemical"}${amount ? ` — ${amount}` : ""}${epa ? ` (EPA #${epa})` : ""}${reEntry ? ` — re-entry: ${reEntry}` : ""}</li>`;
     })
     .join("");
   const products = `<ul>${productsHtml}</ul>`;
