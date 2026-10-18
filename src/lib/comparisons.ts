@@ -15,6 +15,9 @@ export type Competitor = {
   bestFor: string;
   strengths: string[];
   considerations: string[];
+  /** Optional search-result overrides when a page should target specific queries (e.g. "LMN pricing"). */
+  seoTitle?: string;
+  seoDescription?: string;
   /** Soft, hedged pricing note — competitor pricing changes often, so this is framed as a ballpark, not a current quote. */
   pricingNote: string;
   /** Why a team evaluating this competitor might prefer our product instead. */
@@ -117,6 +120,9 @@ export const COMPETITORS: Competitor[] = [
     slug: "lmn",
     name: "LMN",
     product: "Landscapt",
+    seoTitle: "LMN Pricing & Alternative: Landscapt vs. LMN",
+    seoDescription:
+      "Compare LMN pricing (plans from about $297/mo) and features with Landscapt & Equipt: estimating, job costing, snow, and equipment maintenance side by side.",
     category: "Landscape & hardscape business software",
     tagline: "Strong budgeting and job-costing tools for design-build and install-heavy landscape businesses.",
     bestFor: "Small-to-mid landscape and hardscape contractors with significant install/build revenue.",
