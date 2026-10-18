@@ -677,6 +677,14 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "application_end_time", label: "Application End", type: "datetime" },
       { key: "budgeted_concentrate_amount", label: "Budgeted Concentrate", type: "number", totalable: false },
       { key: "notes", label: "Notes", type: "text" },
+      // Pre-combined display columns (see 20261017121000) — the compact layout
+      // the prebuilt Chemical Tracking Report prints.
+      { key: "service_location", label: "Service Location", type: "text" },
+      { key: "chemical_applied", label: "Chemical Applied", type: "text" },
+      { key: "solution_applied", label: "Solution Applied", type: "text" },
+      { key: "conditions", label: "Conditions", type: "text" },
+      { key: "applicator", label: "Applicator (License #)", type: "text" },
+      { key: "application_window", label: "Applied (Time)", type: "text" },
     ],
   },
   {

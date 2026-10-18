@@ -3,6 +3,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
+import { effectivePropertyId, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
 import type {
   ChemicalApplication,
   ChemicalApplicationRate,
@@ -197,7 +199,7 @@ export function useUpdateChemicalLookupItem() {
 const DEFAULT_SETTINGS: Omit<ChemicalSettings, "id" | "orgId" | "updatedAt"> = {
   defaultUnitOfMeasureId: null,
   conditionsDisplay: "weather",
-  autoCalcQuantity: false,
+  autoCalcQuantity: true,
   areaCustomFieldId: null,
 };
 
@@ -550,5 +552,66 @@ export function useDeleteChemicalApplication() {
       qc.invalidateQueries({ queryKey: ["chemical-applications", "visit", visitId] });
       qc.invalidateQueries({ queryKey: ["chemical-applications", "date"] });
     },
+  });
+}
+
+/**
+ * Treatable area for a job's property under the org's Area Custom Field — the
+ * input to the auto-calculated chemical quantity. Resolves the same way the
+ * load-list and materials-needed reports do (built-in takeoff columns, and the
+ * client's only property when the job has none), so the panel and the reports
+ * can't disagree about whether an estimate exists.
+ */
+export function useChemicalJobAreaValue(jobId: string, areaFieldId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["chemical-job-area-value", jobId, areaFieldId],
+    queryFn: async (): Promise<number | null> => {
+      const supabase = createClient();
+      const { data: job } = await supabase
+        .from("crm_jobs")
+        .select("client_id, property_id")
+        .eq("id", jobId)
+        .maybeSingle();
+      if (!job) return null;
+      const single = job.property_id ? new Map<string, string>() : await fetchSinglePropertyByClient(supabase, [job.client_id ?? ""]);
+      const propertyId = effectivePropertyId(job, single);
+      if (!propertyId) return null;
+      const values = await fetchPropertyAreaValues(supabase, areaFieldId ?? null, [propertyId]);
+      return values.get(propertyId) ?? null;
+    },
+    enabled: !!jobId && !!areaFieldId,
+  });
+}
+
+/** Hook wrapper around loadServiceChemicalsForVisit (see src/lib/chemical-preload.ts). */
+export function useLoadServiceChemicals() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ visitId }: { visitId: string }): Promise<number> =>
+      loadServiceChemicalsForVisit(createClient(), visitId),
+    onSuccess: (count, { visitId }) => {
+      if (count > 0) {
+        qc.invalidateQueries({ queryKey: ["chemical-applications", "visit", visitId] });
+        qc.invalidateQueries({ queryKey: ["chemical-applications", "date"] });
+        qc.invalidateQueries({ queryKey: ["crew-app-chemicals"] });
+      }
+    },
+  });
+}
+
+/** Crew clock-in/out of a visit — used to pre-fill a chemical application's start/end time. */
+export function useVisitClockTimes(visitId: string | undefined) {
+  return useQuery({
+    queryKey: ["chemical-visit-clock-times", visitId],
+    queryFn: async (): Promise<{ clockedInAt: string | null; clockedOutAt: string | null }> => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("crm_job_visits")
+        .select("clocked_in_at, clocked_out_at")
+        .eq("id", visitId!)
+        .maybeSingle();
+      return { clockedInAt: data?.clocked_in_at ?? null, clockedOutAt: data?.clocked_out_at ?? null };
+    },
+    enabled: !!visitId,
   });
 }

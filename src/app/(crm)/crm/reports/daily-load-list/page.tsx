@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useQuery } from "@/lib/hooks/use-query";
 import { AlertTriangle, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,8 @@ function CrewCard({ crew }: { crew: DailyLoadListCrewGroup }) {
           <table className="w-full text-xs">
             <tbody>
               {crew.chemicals.map((c) => (
-                <tr key={c.productId} className="border-b border-slate-100 dark:border-neutral-800 last:border-0">
+                <Fragment key={c.productId}>
+                <tr className="border-b border-slate-100 dark:border-neutral-800 last:border-0">
                   <td className="py-1.5 pr-2 font-medium text-slate-800 dark:text-neutral-100 align-top">{c.productName}</td>
                   {/* A bare number with no unit is unusable (and unsafe) on a
                       load sheet — say what's wrong instead. */}
@@ -67,6 +68,29 @@ function CrewCard({ crew }: { crew: DailyLoadListCrewGroup }) {
                     </td>
                   )}
                 </tr>
+                {/* Per-stop breakdown: the truck total says what to load, this says
+                    what to make up at each property. */}
+                {c.visits.length > 0 && (
+                  <tr className="border-b border-slate-100 dark:border-neutral-800 last:border-0">
+                    <td colSpan={3} className="pb-2 pl-3">
+                      <ul className="space-y-0.5 text-[11px] text-muted-foreground">
+                        {c.visits.map((v) => (
+                          <li key={v.visitId ?? v.jobId} className="flex justify-between gap-3">
+                            <span>
+                              {v.clientName}
+                              {v.address ? ` · ${v.address}` : ""}
+                            </span>
+                            <span className="tabular-nums whitespace-nowrap">
+                              {v.qty != null && v.unitName ? `${fmtQty(v.qty)} ${v.unitName}` : "—"}
+                              {v.mixQty != null && v.mixUnitName ? ` · ${fmtQty(v.mixQty)} ${v.mixUnitName} mix` : ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
