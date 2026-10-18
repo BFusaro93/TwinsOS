@@ -269,6 +269,12 @@ export function DispatchBoardGuide() {
           </li>
         </ol>
         <Callout>
+          <strong>Only worked visits count toward a job&apos;s Actual Hours.</strong> A visit that is
+          still scheduled or dispatched can carry a planned Start/End on the board, but those planned
+          hours are not added to the job&apos;s Actual Hours until the visit is in progress or
+          completed. Reopening or cancelling a visit takes its hours back out.
+        </Callout>
+        <Callout>
           <strong>Break time is not billed or costed as worked time.</strong> Minutes recorded with
           the crew app&apos;s <strong>Pause</strong> button are subtracted from the measured duration
           before it is multiplied by crew size, so a one-hour lunch inside a nine-hour day with a
