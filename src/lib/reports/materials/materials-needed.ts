@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { calcChemicalAndSolution, convertQuantity } from "@/lib/chemical-mix-calc";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
+import { fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRateRow(row: any): ChemicalApplicationRate {
@@ -156,6 +157,8 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     jobId: string;
     jobName: string;
     propertyId: string | null;
+    /** Fallback when the job has no property: the client's single property. */
+    clientId: string | null;
     neededBy: string | null;
   }
   const chemDemandByProduct = new Map<string, ChemDemandEntry[]>();
@@ -189,6 +192,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       job_service_id: string | null;
       crm_jobs: {
         id: string;
+        client_id: string | null;
         property_id: string | null;
         status: string | null;
         scheduled_date: string | null;
@@ -200,7 +204,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       supabase
         .from("crm_job_visits")
         .select(
-          "scheduled_date, job_service_id, crm_jobs!inner(id, property_id, status, scheduled_date, clients:client_id(display_name), crm_job_services(id, service_id, included))"
+          "scheduled_date, job_service_id, crm_jobs!inner(id, client_id, property_id, status, scheduled_date, clients:client_id(display_name), crm_job_services(id, service_id, included))"
         )
         .in("status", OUTSTANDING_VISIT_STATUSES)
         .is("deleted_at", null)
@@ -220,6 +224,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
           jobId: job.id,
           jobName: job.clients?.display_name ?? "Job",
           propertyId: job.property_id,
+          clientId: job.client_id,
           neededBy: v.scheduled_date ?? job.scheduled_date,
         });
       }
@@ -230,6 +235,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     // the visit branch above already counted it, so skip it here.
     interface WaitingJobRow {
       id: string;
+      client_id: string | null;
       property_id: string | null;
       waiting_list_start: string | null;
       clients: { display_name: string | null } | null;
@@ -240,7 +246,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       supabase
         .from("crm_jobs")
         .select(
-          "id, property_id, waiting_list_start, clients:client_id(display_name), crm_job_services(id, service_id, included), crm_job_visits(id)"
+          "id, client_id, property_id, waiting_list_start, clients:client_id(display_name), crm_job_services(id, service_id, included), crm_job_visits(id)"
         )
         .eq("job_type", "waiting_list")
         .not("status", "in", '("cancelled","completed","hold")')
@@ -264,26 +270,26 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
           jobId: job.id,
           jobName: job.clients?.display_name ?? "Job",
           propertyId: job.property_id,
+          clientId: job.client_id,
           neededBy: job.waiting_list_start,
         });
       }
     }
   }
 
-  const distinctPropertyIds = [
-    ...new Set([...chemDemandByProduct.values()].flat().map((d) => d.propertyId).filter(Boolean) as string[]),
-  ];
-  const areaValueByProperty = new Map<string, number>();
-  if (areaFieldId && distinctPropertyIds.length > 0) {
-    const { data: fieldValues } = await supabase
-      .from("crm_property_custom_field_values")
-      .select("property_id, value_number")
-      .eq("field_def_id", areaFieldId)
-      .in("property_id", distinctPropertyIds);
-    for (const fv of fieldValues ?? []) {
-      if (fv.value_number != null) areaValueByProperty.set(fv.property_id, Number(fv.value_number));
-    }
+  // Jobs rarely carry a property_id; fall back to the client's only property
+  // (same rule as the job list) so the estimate isn't silently dropped.
+  const allDemand = [...chemDemandByProduct.values()].flat();
+  const singlePropertyByClient = await fetchSinglePropertyByClient(
+    supabase,
+    allDemand.filter((d) => !d.propertyId).map((d) => d.clientId ?? "")
+  );
+  for (const d of allDemand) {
+    if (!d.propertyId && d.clientId) d.propertyId = singlePropertyByClient.get(d.clientId) ?? null;
   }
+  const areaValueByProperty = await fetchPropertyAreaValues(supabase, areaFieldId, [
+    ...new Set(allDemand.map((d) => d.propertyId).filter(Boolean) as string[]),
+  ]);
 
   const defaultRateByProduct = new Map<string, ChemicalApplicationRate>();
   if (chemicalProductIds.size > 0) {

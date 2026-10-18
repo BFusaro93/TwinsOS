@@ -170,7 +170,11 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
       alternateVendors: isEditing && initialData ? initialData.alternateVendors : [],
       isInventory,
       isTaxable,
-      quantityOnHand: parseInt(quantityOnHand) || 0,
+      // Chemicals and bulk materials are stocked in fractional units (12.5 gal);
+      // only maintenance parts are whole-unit (DB guard rejects fractions there).
+      quantityOnHand: isMaintPart
+        ? parseInt(quantityOnHand) || 0
+        : Math.round((parseFloat(quantityOnHand) || 0) * 100) / 100,
       pictureUrl: isEditing && initialData ? initialData.pictureUrl : null,
       costLayers: isEditing && initialData ? initialData.costLayers : [],
       minimumStock: isMaintPart ? parseInt(minimumStock) || 0 : 0,
@@ -444,11 +448,18 @@ export function NewProductDialog({ open, onOpenChange, initialData, onCreated }:
                 <Input
                   id="product-qty"
                   type="number"
-                  step="1"
+                  step={isMaintPart ? "1" : "any"}
+                  min={0}
                   placeholder="0"
                   value={quantityOnHand}
                   onChange={(e) => setQuantityOnHand(e.target.value)}
                 />
+                {trackChemicals && (
+                  <p className="text-xs text-muted-foreground">
+                    Count chemical stock in the unit of the product&apos;s default Application Rate (e.g. fluid
+                    ounces) — that is the unit completed applications are deducted in.
+                  </p>
+                )}
               </div>
             )}
 

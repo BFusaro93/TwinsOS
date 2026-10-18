@@ -281,15 +281,15 @@ export function ReportTable({
             No rows for the selected filters.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+          <div className="overflow-x-auto print:overflow-visible">
+            <table className="w-full text-xs print:text-[8px]">
               <thead>
                 <tr className="border-b bg-slate-50 dark:bg-muted/40 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   {displayColumns.map((col) => (
                     <th
                       key={col.key}
                       className={cn(
-                        "px-3 py-2.5 whitespace-nowrap",
+                        "px-3 py-2.5 whitespace-nowrap print:whitespace-normal print:px-1 print:py-1",
                         NUMERIC_TYPES.includes(col.type)
                           ? "text-right"
                           : "text-left"
@@ -395,7 +395,7 @@ export function ReportTable({
                             <td
                               key={col.key}
                               className={cn(
-                                "px-3 py-2 text-slate-700 dark:text-neutral-300",
+                                "px-3 py-2 text-slate-700 dark:text-neutral-300 print:px-1 print:py-1",
                                 NUMERIC_TYPES.includes(col.type) &&
                                   "text-right tabular-nums"
                               )}

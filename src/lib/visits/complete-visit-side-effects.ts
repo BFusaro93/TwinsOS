@@ -121,6 +121,7 @@ type JobServiceRow = {
 type JobRow = {
   id: string;
   job_type: string;
+  last_service_date: string | null;
   contract_id: string | null;
   client_id: string | null;
   estimate_id: string | null;
@@ -184,7 +185,7 @@ export async function applyVisitCompletionSideEffects(
   // ── 1. Parent-job bookkeeping ─────────────────────────────────────────────
   const { data: jobData } = await supabase
     .from("crm_jobs")
-    .select("id, job_type, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, is_taxable, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms)")
+    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, is_taxable, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms)")
     .eq("id", visit.job_id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -220,11 +221,18 @@ export async function applyVisitCompletionSideEffects(
       return result;
     }
   } else if (j) {
-    // Recurring / package / project / snow — parent job stays as-is; just stamp last service date
-    await supabase
-      .from("crm_jobs")
-      .update({ last_service_date: today })
-      .eq("id", j.id);
+    // Recurring / package / project / snow — parent job stays as-is; just stamp last service date.
+    // The service happened on the visit's scheduled day, not the day someone got
+    // around to marking it complete — a visit done 10/15 and closed 10/17 is a
+    // 10/15 service. A future-dated visit (completed early) falls back to today,
+    // and the stamp never moves backward past a later visit already recorded.
+    const serviceDay = visit.scheduled_date && visit.scheduled_date <= today ? visit.scheduled_date : today;
+    if (!j.last_service_date || serviceDay > j.last_service_date) {
+      await supabase
+        .from("crm_jobs")
+        .update({ last_service_date: serviceDay })
+        .eq("id", j.id);
+    }
   }
 
   // ── 2. Auto-invoice ───────────────────────────────────────────────────────
