@@ -34,6 +34,8 @@ export function JobsPackagesGuide() {
           <TOCLink href="#job-types">The six job types</TOCLink>
           <TOCLink href="#creating-jobs">Creating a job</TOCLink>
           <TOCLink href="#job-value">Where a job&apos;s value comes from</TOCLink>
+          <TOCLink href="#job-notes">Job notes</TOCLink>
+          <TOCLink href="#job-costing-tab">The Job Costing tab</TOCLink>
           <TOCLink href="#jobs-list">Finding jobs on the Jobs list</TOCLink>
           <TOCLink href="#job-vs-visit-status">Job status vs. visit status</TOCLink>
           <TOCLink href="#equipment">Equipment to bring</TOCLink>
@@ -148,6 +150,65 @@ export function JobsPackagesGuide() {
           Removing a service from a job also removes that service&apos;s upcoming visits (scheduled
           or dispatched, not yet started). Completed visits stay, since they&apos;re already
           invoiced.
+        </p>
+      </Section>
+
+      <Section id="job-notes" title="Job notes">
+        <p>
+          A job has two notes, both on the job&apos;s <strong>Notes</strong> tab and on the Overview:{" "}
+          <strong>Notes to Crew / Job Notes</strong> (instructions the crew reads on the stop) and{" "}
+          <strong>Internal Notes</strong> (office only). Both are rich text, so you can use bold,
+          italic, underline, bulleted and numbered lists. Use a list for equipment and a numbered
+          list for steps and the crew sees the same layout on their phone.
+        </p>
+        <p>
+          Formatting shows wherever notes are read in full: the job, the visit sheet banner and the
+          crew app&apos;s Job Notes. Anywhere a note has to fit in one line or in plain text, the
+          formatting is dropped and the words are kept: board cells and exports, the waiting list,
+          printed route sheets, and push notifications. Notes you type directly on a visit (Notes to
+          Crew on the visit sheet) are plain text.
+        </p>
+        <Callout>
+          Changing a job&apos;s crew note resets the crew&apos;s &quot;I&apos;ve read this&quot;
+          acknowledgment, so they have to read it again before they can clock in.
+        </Callout>
+      </Section>
+
+      <Section id="job-costing-tab" title="The Job Costing tab">
+        <p>
+          The <strong>Job Costing</strong> tab compares what a job was expected to take with what it
+          actually took. Its figures come from the same visit data the Job Costing and COGS reports
+          use, so the tab and the reports agree. Only visits that were worked (completed or in
+          progress) count as actuals.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Labor Hours</strong> — man-hours from the worked visits (people × time, net of
+            breaks), compared with the estimate&apos;s budgeted hours.
+          </li>
+          <li>
+            <strong>Labor Cost</strong> — the crew&apos;s real punch cost when they clocked in and
+            out. Visits finished without punches are costed as hours × the crew&apos;s average labor
+            rate, and the row says so (&quot;hours × crew avg rate&quot;). &quot;No labor rate
+            configured&quot; means no rate is set up for the crew, so cost shows as $0 rather than a
+            guess. Add labor rates to see it.
+          </li>
+          <li>
+            <strong>Labor Hours vs. Schedule</strong> — appears when the hours on the job&apos;s
+            visits (what the Dispatch Board shows) differ from the estimate, for example an estimate
+            of 20 hours that was later scheduled as 18. You see both numbers and the variance against
+            each.
+          </li>
+          <li>
+            <strong>Jobs with no estimate</strong> (recurring and one-time jobs created directly) use
+            the worked visits&apos; own budget and revenue as the comparison, and the summary card
+            reads &quot;from worked visits&quot;.
+          </li>
+        </ul>
+        <p>
+          The revenue card on the Overview also summarizes visits: completed out of total with a
+          progress bar, counts for in progress, upcoming, overdue, skipped and cancelled, and the next
+          and last-done dates. Click it to open the Visits tab.
         </p>
       </Section>
 

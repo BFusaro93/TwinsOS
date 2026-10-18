@@ -55,6 +55,7 @@ export function DispatchBoardGuide() {
           <TOCLink href="#status-cycle">Visit status and the status menu</TOCLink>
           <TOCLink href="#crews-and-assignment">Crews and assignment</TOCLink>
           <TOCLink href="#actual-hours">How actual hours are calculated</TOCLink>
+          <TOCLink href="#punches-vs-hours">Crew punches vs. visit hours</TOCLink>
           <TOCLink href="#worked-example">Worked example</TOCLink>
           <TOCLink href="#columns">Board columns</TOCLink>
           <TOCLink href="#products">Products (materials) on a visit</TOCLink>
@@ -292,6 +293,70 @@ export function DispatchBoardGuide() {
           reasonable, non-zero hours estimate by default, so reports stay usable even for crews that
           never touch the time clock. Clocking in/out with real times simply overrides that estimate
           with the truth once it&apos;s available.
+        </Callout>
+      </Section>
+
+      <Section id="punches-vs-hours" title="Crew punches vs. visit hours">
+        <p>
+          A stop keeps two separate records of time. <strong>Crew punches</strong> are one clock-in
+          and clock-out per crew member, and they are what the <strong>Timesheet</strong> reports
+          read. <strong>Visit hours</strong> are the visit&apos;s own Start/End, Actual Hrs and Men,
+          and they are what <strong>Job Costing</strong> reads. The board keeps the two lined up
+          wherever it can, and flags the stops where it can&apos;t.
+        </p>
+        <p>
+          <strong>What stays in sync automatically</strong>
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Start and End.</strong> Changing Start or End on a board row, in the job
+            panel&apos;s appointment fields, or in the visit sheet moves every crew member&apos;s
+            punch to the same time and moves every service visit in the stop together.
+          </li>
+          <li>
+            <strong>Correcting one person in Edit Job Times.</strong> If three people clocked in and
+            out together and you change one of them because they arrived late or left early, the
+            visit&apos;s hours become the <strong>sum of everyone&apos;s punch hours</strong> (each
+            person&apos;s time minus their break, lunch and the stop&apos;s pause time). With several
+            services in the stop, those hours are split across them in the proportions they already
+            held. Labor cost is worked out from the same punches, so Job Costing and the Timesheet
+            report show the same hours. For example, three people for 4 hours is 12 hours; if one
+            leaves an hour early it is 11 on both.
+          </li>
+        </ul>
+        <p>
+          <strong>What changes the visit only</strong>
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Typing a number into <strong>Actual Hrs</strong>, or changing <strong>Men</strong>. Neither
+            can be turned into per-person times, so the crew punches are left alone. Job Costing
+            follows your number and the Timesheet report keeps showing the punches. If you are
+            correcting a clocking mistake, use <strong>Edit Job Times</strong> instead so both agree.
+          </li>
+          <li>
+            When you change a visit&apos;s hours this way on a visit the crew punched, its labor cost
+            switches from the exact punch-based figure to <strong>hours × the crew&apos;s average
+            labor rate</strong>, and the Job Costing tab says so next to Labor Cost. Editing the
+            punches in Edit Job Times restores the exact figure.
+          </li>
+        </ul>
+        <p>
+          <strong>The mismatch warning.</strong> A small amber triangle appears in a row&apos;s icon
+          column, and an amber banner appears at the top of the visit sheet, when a stop that has
+          finished crew punches disagrees with its visit times or hours. Hover the triangle to see
+          why. It appears when either of these is true:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>Start or End differs by more than 10 minutes from the crew&apos;s <strong>first punch in</strong> or <strong>last punch out</strong>.</li>
+          <li>Visit hours differ from the total of the crew&apos;s punch hours by at least 1 hour <strong>and</strong> at least 15%.</li>
+        </ul>
+        <Callout>
+          One person arriving late or leaving early does not trigger the warning on its own, because
+          the first-in and last-out times are unchanged and a short shift is a small share of the
+          total. A person who is a couple of hours short on a long job will trigger the hours check.
+          That is the prompt to confirm the punches are right. The banner links straight to Edit Job
+          Times. The warning only shows for the dates you are viewing on the board.
         </Callout>
       </Section>
 
