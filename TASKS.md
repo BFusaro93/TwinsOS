@@ -159,3 +159,10 @@ What happened: [20260919020000](supabase/migrations/20260919020000_company_timez
   - `org_timezone` and `fix_org_today_default_triggers` renamed from `20260919030000`/`20260919040000` to `20260919070000`/`20260919080000`, matching production and incidentally removing the repo's only two duplicate migration versions
   - `20260920032737_estimate_date_drop_utc_default.sql` **reconstructed** — it was applied straight to production with no committed file. Its content was inferred from the ledger name and verified against the live schema (`estimates.estimate_date` has no default and carries an `org_today` trigger, exactly what the statement produces). Worth a second pair of eyes.
 - [ ] Decide whether migrations should be applied via `supabase db push` (filename = version) rather than the Supabase MCP, which stamps the apply time and is what produced all of this drift. `check-drift` only guards production, so the same divergence is accumulating unchecked on TEST.
+
+## Backlog — Gantt timelines for projects
+Checked 2026-10-19: not built. Projects have `start_date`/`end_date` and billing milestones with `target_date` ([project_billing_milestones](supabase/migrations/20260913191000_project_billing_milestones.sql)), but nothing draws them as a timeline and there is no task/phase data to plot.
+
+- [ ] Decide the data model first: project phases/tasks (name, start, end, assignee/crew, % complete, dependencies) — a project's own start/end dates alone would only give one bar per project.
+- [ ] Gantt/timeline view on the project detail page (phase bars, today marker, billing milestones as diamonds on their `target_date`).
+- [ ] Optional: portfolio view across all open projects at [CRMProjectsList.tsx](src/components/crm/projects/CRMProjectsList.tsx), and link phases to scheduled job visits so progress updates itself.
