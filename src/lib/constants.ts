@@ -214,6 +214,7 @@ export const INJURY_CASE_STATUS_LABELS: Record<string, string> = {
 };
 
 export const INJURY_SEVERITY_LABELS: Record<string, string> = {
+  no_treatment: "No Treatment",
   first_aid: "First Aid",
   medical_treatment: "Medical Treatment",
   lost_time: "Lost Time",

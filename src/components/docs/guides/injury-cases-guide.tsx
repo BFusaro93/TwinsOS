@@ -10,21 +10,21 @@ import {
 import { GuideLink } from "@/components/docs/GuideLink";
 
 const REPORT_TYPES: [string, string][] = [
-  ["Injury", "Someone was hurt at work. Needs a severity (first aid, medical treatment, lost time, or fatality)."],
+  ["Injury", "Someone was hurt at work. Needs a severity (no treatment, first aid, medical treatment, lost time, or fatality)."],
   ["Illness", "A work-related illness (e.g. heat illness). Counted the same way as an injury."],
   ["Near miss", "An event that could have hurt someone but didn't. Tracked, but it has no severity, days away, treatment or claim route, and it never counts as an injury."],
 ];
 
 const INTAKE_FIELDS: [string, string][] = [
   ["What are you reporting?", "Injury, Illness, or Near miss."],
-  ["Who and when", "Employee name, job title, supervisor, whether they've told their supervisor, date and time."],
+  ["Who and when", "Employee name (pick from the list to link the case to their employee profile, where it appears on an Injuries tab), job title, supervisor, whether they've told their supervisor, date and time."],
   ["What happened", "Exact location, what they were doing, step-by-step description, equipment/tools, PPE worn, witnesses."],
   ["The injury", "Nature of injury (the list from the paper investigation form), body parts, whether they saw a doctor (name, phone, date), and whether that body part was injured before. For a near miss: how someone could have been hurt."],
   ["Prevention", "What could have been done to prevent it."],
 ];
 
 const OFFICE_FIELDS: [string, string][] = [
-  ["Severity", "First aid, Medical treatment (a doctor visit), Lost time, or Fatality. Field submissions default to First aid until the office sets it."],
+  ["Severity", "No treatment (hurt, but no first aid or medical care given), First aid, Medical treatment (a doctor visit), Lost time, or Fatality. Field submissions default to First aid until the office sets it."],
   ["Days away from work", "Whole days. Feeds the Days Away stats."],
   ["Treatment given", "Free text."],
   ["Cost handled through", "Workers' comp, Self-pay (company), or Not decided yet. See Expenses below."],

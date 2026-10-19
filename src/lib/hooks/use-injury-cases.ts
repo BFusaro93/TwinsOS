@@ -7,6 +7,7 @@ import type { InjuryCase, InjuryCaseExpense, InjuryCaseStatus, InjuryClaimRoute,
 export interface InjuryCaseInput {
   incidentType: InjuryIncidentType;
   employeeName: string;
+  employeeId?: string | null;
   dateOfIncident: string;
   timeOfIncident?: string | null;
   jobTitle?: string | null;
@@ -57,6 +58,27 @@ export function useInjuryCases() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data as any[]).map((row) => ({ ...mapInjuryCase(row), totalCost: sumExpenses(row.injury_case_expenses) }));
     },
+  });
+}
+
+/** Injury cases linked to one employee — feeds the Injuries tab on their profile. */
+export function useEmployeeInjuryCases(employeeId: string | undefined) {
+  return useQuery({
+    queryKey: ["injury-cases", "employee", employeeId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("injury_cases")
+        .select("*")
+        .eq("employee_id", employeeId)
+        .is("deleted_at", null)
+        .order("date_of_incident", { ascending: false });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data as any[]).map(mapInjuryCase);
+    },
+    enabled: !!employeeId,
   });
 }
 
@@ -111,6 +133,7 @@ export function useCreateInjuryCase() {
             case_number: caseNumber,
             incident_type: input.incidentType,
             employee_name: input.employeeName,
+            employee_id: input.employeeId ?? null,
             date_of_incident: input.dateOfIncident,
             time_of_incident: input.timeOfIncident || null,
             job_title: input.jobTitle || null,
@@ -161,7 +184,7 @@ export function useCreateInjuryCase() {
 // once a case is resolved/closed it's a finished record, so those are locked
 // until it's reopened (mirrors damage cases).
 const SUBSTANTIVE_FIELDS = [
-  "incidentType", "employeeName", "dateOfIncident", "timeOfIncident", "jobTitle",
+  "incidentType", "employeeName", "employeeId", "dateOfIncident", "timeOfIncident", "jobTitle",
   "supervisorName", "toldSupervisor", "witnesses", "activity", "severity", "location",
   "injuryType", "bodyPart", "description", "equipmentInvolved", "ppeUsed", "sawDoctor",
   "doctorName", "doctorPhone", "doctorVisitDate", "previouslyInjured",
@@ -209,6 +232,7 @@ export function useUpdateInjuryCase() {
           ...(input.cause !== undefined && { cause: input.cause }),
           ...(input.correctiveAction !== undefined && { corrective_action: input.correctiveAction }),
           ...(input.employeeName !== undefined && { employee_name: input.employeeName }),
+          ...(input.employeeId !== undefined && { employee_id: input.employeeId }),
           ...(input.dateOfIncident !== undefined && { date_of_incident: input.dateOfIncident }),
           ...((input.severity !== undefined || input.incidentType === "near_miss") && {
             severity: input.incidentType === "near_miss" ? null : input.severity,
