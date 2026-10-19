@@ -13,18 +13,22 @@ import { DispatchBoardMockup } from "@/components/marketing/mockups/DispatchBoar
 const crmFeatures = [
   {
     title: "Estimating",
+    href: "/features/landscapt/estimating",
     body: "Budget-based estimates built from production rates, labor burden, and overhead markup — with AI-drafted line items to start faster.",
   },
   {
     title: "Dispatch & Scheduling",
+    href: "/features/landscapt/scheduling",
     body: "A daily dispatch board plus a geo-tagged waiting list for opportunistic jobs when a crew is already nearby.",
   },
   {
     title: "Snow & Contracts",
+    href: "/features/landscapt/snow",
     body: "Storm-based snow dispatch and recurring contracts for bundled service programs, billed on a fixed monthly schedule.",
   },
   {
     title: "Invoicing & Payments",
+    href: "/features/landscapt/invoicing",
     body: "Draft-to-paid invoicing with online card and ACH payments, saved payment methods, and optional autopay.",
   },
 ];
@@ -32,20 +36,32 @@ const crmFeatures = [
 const cmmsFeatures = [
   {
     title: "Work Orders",
+    href: "/features/equipt/work-orders",
     body: "Track inspection, repair, and maintenance tasks against a full asset registry, with complete maintenance history.",
   },
   {
     title: "Preventive Maintenance",
+    href: "/features/equipt/preventive-maintenance",
     body: "Recurring PM schedules triggered by calendar interval or by meter reading — hours, mileage, or cycle counts.",
   },
   {
     title: "Purchasing & Receiving",
+    href: "/features/equipt/purchasing-inventory",
     body: "Requisitions route through a configurable approval chain, become POs, and receiving updates parts inventory automatically.",
   },
   {
     title: "Parts & Vendors",
+    href: "/features/equipt/vendors",
     body: "Spare parts inventory linked to the assets that use them, and one vendor list shared across purchasing and maintenance.",
   },
+];
+
+const COMPARE_LINKS = [
+  { href: "/compare/lmn", label: "vs. LMN" },
+  { href: "/compare/aspire", label: "vs. Aspire" },
+  { href: "/compare/jobber", label: "vs. Jobber" },
+  { href: "/compare/service-autopilot", label: "vs. Service Autopilot" },
+  { href: "/compare/fleetio", label: "vs. Fleetio" },
 ];
 
 export function LandingPage() {
@@ -119,13 +135,19 @@ export function LandingPage() {
               <div className="flex flex-col gap-7">
                 {crmFeatures.map((f) => (
                   <div key={f.title}>
-                    <div className="font-[family-name:var(--font-heading)] mb-1.5 text-[15px] font-bold text-[#0a0a0a]">
+                    <Link
+                      href={f.href}
+                      className="font-[family-name:var(--font-heading)] mb-1.5 inline-block text-[15px] font-bold text-[#0a0a0a] hover:text-[#005642] hover:underline"
+                    >
                       {f.title}
-                    </div>
+                    </Link>
                     <div className="text-[13.5px] leading-relaxed text-[#4a6b1a]">{f.body}</div>
                   </div>
                 ))}
               </div>
+              <Link href="/features/landscapt" className="mt-8 inline-block text-sm font-semibold text-[#005642] hover:underline">
+                Explore Landscapt &rarr;
+              </Link>
             </div>
             <div className="bg-[#e6f5fb] p-8 sm:p-10">
               <div className="mb-8 flex items-center gap-2.5">
@@ -137,13 +159,19 @@ export function LandingPage() {
               <div className="flex flex-col gap-7">
                 {cmmsFeatures.map((f) => (
                   <div key={f.title}>
-                    <div className="font-[family-name:var(--font-heading)] mb-1.5 text-[15px] font-bold text-[#0a0a0a]">
+                    <Link
+                      href={f.href}
+                      className="font-[family-name:var(--font-heading)] mb-1.5 inline-block text-[15px] font-bold text-[#0a0a0a] hover:text-[#005642] hover:underline"
+                    >
                       {f.title}
-                    </div>
+                    </Link>
                     <div className="text-[13.5px] leading-relaxed text-[#2c6a86]">{f.body}</div>
                   </div>
                 ))}
               </div>
+              <Link href="/features/equipt" className="mt-8 inline-block text-sm font-semibold text-[#005642] hover:underline">
+                Explore Equipt &rarr;
+              </Link>
             </div>
           </div>
         </Reveal>
@@ -182,6 +210,31 @@ export function LandingPage() {
           </Link>
         </div>
       </Reveal>
+
+      {/* SWITCHING */}
+      <div className="mx-auto max-w-[900px] px-6 pb-20 text-center sm:px-12">
+        <Reveal>
+          <div className="mb-3 text-[13px] font-bold uppercase tracking-[0.1em] text-[#60ab45]">
+            Switching from another platform?
+          </div>
+          <h2 className="font-[family-name:var(--font-heading)] mb-4 text-3xl font-extrabold text-[#005642]">
+            See how we compare.
+          </h2>
+          <p className="mx-auto mb-6 max-w-[560px] text-[15px] leading-relaxed text-[#5a5a56]">
+            Side-by-side breakdowns of where Landscapt and Equipt fit next to the tools you may already be using.
+          </p>
+          <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm font-semibold text-[#005642]">
+            {COMPARE_LINKS.map((c) => (
+              <Link key={c.href} href={c.href} className="hover:underline">
+                {c.label}
+              </Link>
+            ))}
+            <Link href="/compare" className="hover:underline">
+              All comparisons &rarr;
+            </Link>
+          </div>
+        </Reveal>
+      </div>
 
       {/* CTA */}
       <div className="bg-[#eef4e2] px-6 py-20 text-center sm:px-12">
