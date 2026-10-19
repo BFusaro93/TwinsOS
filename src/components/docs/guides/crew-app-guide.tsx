@@ -231,6 +231,15 @@ export function CrewAppGuide() {
           side bed, sprinkler running&quot; rather than a text message to somebody&apos;s phone.
         </p>
         <p>
+          <strong>Notes from the office.</strong> The job&apos;s crew note appears under{" "}
+          <strong>Job Notes</strong> with its formatting (bold, bulleted and numbered lists), and you
+          read and acknowledge it before clocking in. A note typed on a single visit is plain text.
+          When the office adds or changes a visit note, your phone gets a &quot;Note from
+          Dispatch&quot; notification only if that visit is dispatched, in progress, or scheduled
+          within the next two days. A note on a visit further out is waiting on the stop when you get
+          there, and you still have to acknowledge it before you can start.
+        </p>
+        <p>
           <strong>Add Photo</strong> takes a picture with the camera and attaches it to the visit.
           Before-and-afters, damage found on arrival, and anything a client might query later all
           belong here — they stay attached to the visit rather than living in someone&apos;s camera roll.

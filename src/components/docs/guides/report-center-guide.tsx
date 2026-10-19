@@ -65,6 +65,7 @@ export function ReportCenterGuide() {
           <TOCLink href="#dates-and-limits">Date ranges, Eastern time, and large results</TOCLink>
           <TOCLink href="#custom-analysis">Custom analyses (&quot;My Reports&quot;)</TOCLink>
           <TOCLink href="#dashboards-vs-reports">Dashboards vs. individual reports</TOCLink>
+          <TOCLink href="#graphics-library">The Graphics Library</TOCLink>
           <TOCLink href="#curated-dashboards">The curated, top-level dashboards</TOCLink>
           <TOCLink href="#kpi-scorecard">The KPI Scorecard</TOCLink>
           <TOCLink href="#company-report">The Company Report</TOCLink>
@@ -357,6 +358,39 @@ export function ReportCenterGuide() {
           A panel whose dataset the signed-in user isn&apos;t allowed to query renders &quot;You
           don&apos;t have permission to view this panel&quot; in place of the chart — see{" "}
           <a href="#permissions" className="font-semibold underline">Permissions and gating</a>.
+        </p>
+      </Section>
+
+      <Section id="graphics-library" title="The Graphics Library">
+        <p>
+          The <strong>Graphics Library</strong> tab holds ready-made panels you can drop into any
+          dashboard with <strong>Add to Dashboard</strong>, plus panels you saved yourself. Panels come
+          in these visual types: KPI, table, bar, line, pie, gauge, crosstab and{" "}
+          <strong>pipeline</strong>.
+        </p>
+        <p>
+          <strong>Pipeline</strong> lists stages top to bottom, each with its total and a bar sized to
+          the largest stage. <strong>Sales Pipeline Insight</strong> uses it for estimate value by
+          stage: Draft, Quoted, Proposed (sent), Won, Invoiced and Lost. Pick Pipeline as the visual
+          type on any panel with a stage-style label column and one value column.
+        </p>
+        <p>
+          <strong>Monthly trends.</strong> Two graphics group a daily query into one point per month:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Labor Efficiency by Month</strong> — a line chart of budgeted vs. actual man-hours
+            on worked visits. Actual under budget means crews beat the estimate.
+          </li>
+          <li>
+            <strong>Drive Time by Month</strong> — total crew drive minutes per month. It reads the
+            separate crew drive-time records, so it is its own chart and not a third line on Labor
+            Efficiency.
+          </li>
+        </ul>
+        <p>
+          Both follow the dashboard tab&apos;s shared date range. They add up the days within each
+          month, so they suit totals like hours and minutes.
         </p>
       </Section>
 
