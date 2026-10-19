@@ -99,6 +99,18 @@ export function InjuryCaseForm({ initial, office = false, submitLabel, pendingLa
   // Suggestions only — typing any name still works. An exact employee name is
   // what lets the supervisor alert find their login.
   const { data: employees = [] } = useSelectableEmployees();
+  // Link the case to an employee profile when the typed name matches exactly
+  // one employee (case-insensitive). An untouched name keeps whatever link the
+  // case already had, so editing an inactive employee's old case doesn't drop it.
+  const nameMatches = employees.filter(
+    (e) => `${e.firstName} ${e.lastName}`.trim().toLowerCase() === employeeName.trim().toLowerCase(),
+  );
+  const employeeId =
+    nameMatches.length === 1
+      ? nameMatches[0].id
+      : employeeName.trim() === (initial?.employeeName ?? "").trim()
+        ? initial?.employeeId ?? null
+        : null;
 
   return (
     <form
@@ -108,6 +120,7 @@ export function InjuryCaseForm({ initial, office = false, submitLabel, pendingLa
         void onSubmit({
           incidentType,
           employeeName: employeeName.trim(),
+          employeeId,
           jobTitle: jobTitle.trim() || null,
           supervisorName: supervisorName.trim() || null,
           toldSupervisor,
@@ -168,7 +181,13 @@ export function InjuryCaseForm({ initial, office = false, submitLabel, pendingLa
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>{nearMiss ? "Your name" : "Injured employee"}</Label>
-            <Input value={employeeName} onChange={(e) => setEmployeeName(e.target.value)} required placeholder="Full name" />
+            <Input value={employeeName} onChange={(e) => setEmployeeName(e.target.value)} required placeholder="Full name" list="injury-employee-options" autoComplete="off" />
+            <datalist id="injury-employee-options">
+              {employees.map((e) => <option key={e.id} value={`${e.firstName} ${e.lastName}`.trim()} />)}
+            </datalist>
+            {employeeId && (
+              <p className="text-xs text-muted-foreground">Linked to their employee profile.</p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label>Job title <span className="text-xs text-muted-foreground">(optional)</span></Label>

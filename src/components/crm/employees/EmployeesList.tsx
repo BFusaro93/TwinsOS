@@ -18,7 +18,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Link from "next/link";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { useEmployeeInjuryCases } from "@/lib/hooks/use-injury-cases";
+import { INJURY_CASE_STATUS_LABELS, INJURY_INCIDENT_TYPE_LABELS, INJURY_SEVERITY_LABELS } from "@/lib/constants";
+import { INJURY_SEVERITY_COLORS, INJURY_STATUS_COLORS } from "@/components/injury-cases/injury-colors";
 import {
   Dialog,
   DialogContent,
@@ -451,6 +455,42 @@ function SalesGoalsTab({
   );
 }
 
+// ── injuries tab ──────────────────────────────────────────────────────────────
+
+function InjuriesTab({ employeeId }: { employeeId: string }) {
+  const { data: cases, isLoading } = useEmployeeInjuryCases(employeeId);
+  if (isLoading) return <Skeleton className="h-24 w-full" />;
+  if (!cases?.length) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No injury, illness or near-miss reports are linked to this employee. Pick them as the employee when
+        filing a report under Tools &gt; Injury Cases to link it here.
+      </p>
+    );
+  }
+  return (
+    <div className="divide-y rounded-lg border">
+      {cases.map((c) => (
+        <Link
+          key={c.id}
+          href={`/tools/injury-cases?open=${encodeURIComponent(c.id)}`}
+          className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm hover:bg-muted/40"
+        >
+          <div>
+            <p className="font-mono text-xs text-muted-foreground">{c.caseNumber} · {c.dateOfIncident}</p>
+            <p className="font-medium">{[c.injuryType, c.bodyPart].filter(Boolean).join(" · ") || c.description}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs">{INJURY_INCIDENT_TYPE_LABELS[c.incidentType]}</Badge>
+            {c.severity && <Badge className={`${INJURY_SEVERITY_COLORS[c.severity]} text-xs`}>{INJURY_SEVERITY_LABELS[c.severity]}</Badge>}
+            <Badge className={`${INJURY_STATUS_COLORS[c.status]} text-xs`}>{INJURY_CASE_STATUS_LABELS[c.status]}</Badge>
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 // ── user settings tab ─────────────────────────────────────────────────────────
 
 const USER_TYPE_OPTIONS: { value: UserType; label: string }[] = [
@@ -807,6 +847,7 @@ function EmployeeDialog({
               ...(form.is_sales_rep ? [{ value: "sales_goals", label: "Sales Goals" }] : []),
               ...(can("emp_view_user_settings") ? [{ value: "user_settings", label: "User Settings" }] : []),
               ...(can("emp_view_resource_notes") ? [{ value: "notes", label: "Notes" }] : []),
+              ...(employee?.id && can("emp_view_resource_notes") ? [{ value: "injuries", label: "Injuries" }] : []),
               ...(employee?.id ? [{ value: "audit", label: "Audit Trail" }] : []),
             ].map((tab) => (
               <TabsTrigger
@@ -852,6 +893,11 @@ function EmployeeDialog({
                   onChange={(e) => onChange("notes", e.target.value)}
                   placeholder="Add notes about this employee…"
                 />
+              </TabsContent>
+            )}
+            {employee?.id && can("emp_view_resource_notes") && (
+              <TabsContent value="injuries" className="mt-0">
+                <InjuriesTab employeeId={employee.id} />
               </TabsContent>
             )}
             {employee?.id && (
