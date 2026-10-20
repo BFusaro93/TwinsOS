@@ -21,6 +21,16 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // The UI hides these controls behind manage_report_center, but that is only a
+  // hint — this is the boundary (view-only roles could otherwise edit/delete).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canManage } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "manage_report_center",
+  });
+  if (!canManage) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -65,6 +75,16 @@ export async function DELETE(
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // The UI hides these controls behind manage_report_center, but that is only a
+  // hint — this is the boundary (view-only roles could otherwise edit/delete).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canManage } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "manage_report_center",
+  });
+  if (!canManage) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { error } = await supabase

@@ -516,7 +516,6 @@ async function computePaymentPool(
       .eq("is_credit", false)
       .neq("method", AR_WRITE_OFF_METHOD)
       .eq("is_prepayment", isPrepayment)
-      .gt("unused_amount_cents", 0)
       .gte("payment_date", from)
       .lte("payment_date", to)
       .order("unused_amount_cents", { ascending: false })
@@ -536,7 +535,7 @@ async function computePaymentPool(
     receivedCents,
     unusedCents,
     appliedCents: receivedCents - unusedCents,
-    topUnused: rows.slice(0, 3).map((r) => ({
+    topUnused: rows.filter((r) => (r.unused_amount_cents ?? 0) > 0).slice(0, 3).map((r) => ({
       clientName: r.clients?.display_name ?? "(unknown)",
       unusedCents: r.unused_amount_cents ?? 0,
     })),

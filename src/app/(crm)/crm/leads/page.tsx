@@ -92,11 +92,12 @@ export default function LeadsPage() {
                 )
               }
               onImport={async (rows) => {
-                const { created, matched, skipped } = await bulkImportLeads(rows);
+                const { created, matched, skipped, failed } = await bulkImportLeads(rows);
                 const parts = [`${created} new lead${created !== 1 ? "s" : ""} created`];
                 if (matched > 0) parts.push(`${matched} matched to existing client${matched !== 1 ? "s" : ""}`);
-                if (skipped > 0) parts.push(`${skipped} row${skipped !== 1 ? "s" : ""} skipped (missing display name)`);
-                toast[skipped > 0 ? "warning" : "success"](parts.join(", ") + ".");
+                if (skipped > 0) parts.push(`${skipped} row${skipped !== 1 ? "s" : ""} skipped (missing name or invalid email)`);
+                if (failed > 0) parts.push(`${failed} row${failed !== 1 ? "s" : ""} failed to save`);
+                toast[skipped > 0 || failed > 0 ? "warning" : "success"](parts.join(", ") + ".");
               }}
               hideImport={!can("lead_bulk_create")}
             />

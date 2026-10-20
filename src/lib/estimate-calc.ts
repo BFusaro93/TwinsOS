@@ -448,7 +448,7 @@ export function tierBasis(
   lines: { tier: string | null; status: string; netCents: number }[],
 ): string | null {
   if (!tiersEnabled) return null;
-  const open = lines.filter((l) => l.tier && l.status !== "lost");
+  const open = lines.filter((l) => l.tier && l.status !== "lost" && l.status !== "draft");
   if (open.length === 0) return null;
   const wonTiers = new Set(open.filter((l) => l.status === "won").map((l) => l.tier as string));
   if (wonTiers.size === 1) return [...wonTiers][0];
@@ -468,7 +468,7 @@ export function tierBasis(
  * marks line items won/lost (tiered proposal acceptance, portal accept) —
  * must call this so the parent row never goes stale.
  *
- * Line items with status 'lost' are excluded from every sum: once a line
+ * Line items with status 'draft' (not yet part of the quote — the proposal hides them too) and 'lost' are excluded from every sum: once a line
  * item is marked lost (a rejected tier, an unchecked item on a partial
  * acceptance, or a manual "lost" mark during quoting), it no longer
  * represents money owed and shouldn't count toward the estimate's total.
@@ -488,7 +488,7 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
     .from("estimate_line_items")
     .select("id, status, tier, total_cents, discount_cents, discount_type, discount_value, total_cost_cents, total_budgeted_hours")
     .eq("estimate_id", estimateId)
-    .neq("status", "lost")
+    .not("status", "in", "(lost,draft)")
     .is("deleted_at", null);
   if (liError) throw liError;
 
@@ -547,7 +547,7 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
     .from("estimate_line_item_subitems")
     .select("line_item_id, total_cents, cost_cents, qty, estimate_line_items!inner(estimate_id, status, deleted_at)")
     .eq("estimate_line_items.estimate_id", estimateId)
-    .neq("estimate_line_items.status", "lost")
+    .not("estimate_line_items.status", "in", "(lost,draft)")
     .is("estimate_line_items.deleted_at", null)
     .is("deleted_at", null);
   if (siError) throw siError;

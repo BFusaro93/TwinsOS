@@ -41,9 +41,31 @@ export async function PATCH(req: Request) {
 
   const supabase = createServiceClient();
 
+  const { data: current } = await supabase
+    .from("clients")
+    .select("primary_phone, phones")
+    .eq("id", ctx.clientId)
+    .eq("org_id", ctx.orgId)
+    .maybeSingle();
+  const phoneChanged = (current?.primary_phone ?? null) !== phone;
+  // Keep any other numbers on file (home/work); only the primary entry changes.
+  const existingPhones = Array.isArray(current?.phones)
+    ? (current.phones as { phone?: string; type?: string; isPrimary?: boolean }[])
+    : [];
+  const others = existingPhones.filter((p) => !p.isPrimary && p.phone);
+  const nextPhones = phone ? [{ phone, type: "cell", isPrimary: true }, ...others] : others;
+
   const { error } = await supabase
     .from("clients")
-    .update({ primary_phone: phone, updated_at: new Date().toISOString() })
+    .update({
+      primary_phone: phone,
+      // phones[] is what the staff Edit dialog seeds from; leaving the old list
+      // there let the next staff save write the old number back over this one.
+      phones: nextPhones,
+      // Text consent was given for the previous number, not this unverified one.
+      ...(phoneChanged ? { sms_opt_in: false } : {}),
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", ctx.clientId)
     .eq("org_id", ctx.orgId);
 
@@ -73,6 +95,9 @@ export async function POST(req: Request) {
       phone: parsed.data.phone ?? null,
       phone_type: parsed.data.phone ? (parsed.data.phoneType ?? "cell") : null,
       contact_type: parsed.data.role ?? null,
+      // Unverified: a portal user can type any address, and automations email every
+      // contact with ok_to_email. Staff opt a contact in after confirming it.
+      ok_to_email: false,
     })
     .select("id, first_name, last_name, email, phone, contact_type")
     .single();

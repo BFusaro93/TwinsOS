@@ -1582,6 +1582,12 @@ export function useBulkImportLeads() {
           billing_city: r.billingCity?.trim() || null,
           billing_state: r.billingState?.trim() || null,
           billing_zip: r.billingZip?.trim() || null,
+          // A lead's address is where the work would happen; without a service
+          // address a converted lead had nothing to schedule or route to.
+          service_address: r.billingAddress?.trim() || null,
+          service_city: r.billingCity?.trim() || null,
+          service_state: r.billingState?.trim() || null,
+          service_zip: r.billingZip?.trim() || null,
           source: r.source?.trim() || null,
           status: "lead",
           // No client_since for leads — set on conversion.

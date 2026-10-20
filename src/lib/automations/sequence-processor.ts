@@ -3,6 +3,7 @@ import { resolveSmsStepContent, sendResolvedSequenceSms } from "./sequence-sms";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
 import { shouldStopSequence, logSequenceExecution, evaluateConditionSet, computeWaitFireAt } from "./sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 import { fetchCardExpiryContext, type CardExpiryContext } from "./card-expiry-context";
 import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
 
@@ -472,6 +473,26 @@ async function runClaimedStep(
     // No phone / no SMS consent — permanent for this step.
     if ("error" in built) {
       return handleSendFailure(adminClient, failureCtx, built.error, true);
+    }
+
+    // TCPA quiet hours: no marketing/automated texts before 8am or from 9pm in the
+    // recipient's local time. The client's own zone isn't stored, so the org's is
+    // used (service area ≈ the org's zone). The step is pushed to the next 8am
+    // window instead of failing, so it still goes out once and in order.
+    {
+      const tz = await getOrgTimeZone(adminClient, orgId);
+      const now = new Date();
+      const wall = instantToZoneWallClock(now, tz);
+      const hour = Number(wall.time.slice(0, 2));
+      if (hour < 8 || hour >= 21) {
+        const sendDate = hour < 8 ? wall.date : shiftYmd(wall.date, 1);
+        const fireAt = zoneWallClockToInstant(sendDate, "08:00", tz) ?? new Date(now.getTime() + 3_600_000);
+        await adminClient
+          .from("crm_sequence_enrollments")
+          .update({ next_fire_at: fireAt.toISOString(), updated_at: nowIso })
+          .eq("id", enrollId);
+        return { skipped: { enrollmentId: enrollId, reason: `text held for quiet hours until ${fireAt.toISOString()}` } };
+      }
     }
 
     // "Requires approval" — same park-in-the-queue pattern as email.

@@ -49,7 +49,10 @@ export async function loadAutomationClient(
     .from("clients")
     .select(CLIENT_COLUMNS)
     .eq("id", params.clientId)
-    .single();
+    // A soft-deleted client (e.g. removed at their request) must not keep
+    // receiving a sequence's later steps.
+    .is("deleted_at", null)
+    .maybeSingle();
   if (!client) return null;
   const { data: orgRow } = await supabase
     .from("organizations")

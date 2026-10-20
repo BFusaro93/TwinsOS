@@ -72,7 +72,23 @@ export async function GET(request: Request) {
 
   const results: { campaignId: string; status: "sent" | "skipped"; reason?: string }[] = [];
 
+  // Canceled orgs are read-only; this service-role cron would otherwise keep
+  // sending their due campaigns on our Resend account.
+  const { data: planRows } = await db
+    .from("organizations")
+    .select("id, plan")
+    .in("id", [...new Set(dueCampaigns.map((c: { org_id: string }) => c.org_id))]);
+  const canceledOrgs = new Set(
+    ((planRows ?? []) as { id: string; plan: string | null }[])
+      .filter((o) => o.plan === "canceled")
+      .map((o) => o.id)
+  );
+
   for (const campaign of dueCampaigns) {
+    if (canceledOrgs.has(campaign.org_id)) {
+      results.push({ campaignId: campaign.id, status: "skipped", reason: "org canceled" });
+      continue;
+    }
     const result = await sendCampaignEmails(db, campaign, campaign.org_id, null);
     if (result.ok) {
       results.push({ campaignId: campaign.id, status: "sent" });

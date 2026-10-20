@@ -178,7 +178,10 @@ function BulkEditDialog({
   const [saving, setSaving] = useState(false);
 
   const FIELDS = [
-    { key: "status",       label: "Status",       options: ["active", "inactive", "lead", "cancelled", "lost"] },
+    // Only "inactive" here: cancel / lost / activate carry side effects (reason,
+    // closed_at, client_since, automations, timeline) that a raw column write
+    // skips — use the dedicated bulk Cancel / Activate / Close-as-lost actions.
+    { key: "status",       label: "Status",       options: ["inactive"] },
     { key: "account_type", label: "Account Type", options: ["residential", "commercial"] },
     { key: "source",       label: "Source",       options: [] },
     { key: "priority",     label: "Priority",     options: ["low", "normal", "high"] },

@@ -170,7 +170,19 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
   });
   if (rows.length === 0) return 0;
 
-  const { error } = await supabase.from("crm_chemical_applications").insert(rows);
-  if (error) throw error;
-  return rows.length;
+  // One insert per row: the unique index on preloaded (visit, product) makes a
+  // concurrent preload lose with 23505 instead of double-loading the product.
+  let inserted = 0;
+  for (const row of rows) {
+    const { error } = await supabase
+      .from("crm_chemical_applications")
+      // `preloaded` is newer than the generated types.
+      .insert({ ...row, preloaded: true } as never);
+    if (error) {
+      if (error.code === "23505") continue;
+      throw error;
+    }
+    inserted += 1;
+  }
+  return inserted;
 }

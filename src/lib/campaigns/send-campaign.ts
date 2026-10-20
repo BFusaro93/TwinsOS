@@ -128,7 +128,7 @@ export async function sendCampaignEmails(
   let query = db
     .from("clients")
     .select(`
-      id, display_name, first_name, last_name, primary_email, phones,
+      id, display_name, first_name, last_name, primary_email, phones, primary_phone,
       account_number, invoice_delivery, balance_outstanding_cents,
       billing_address, billing_city, billing_state, billing_zip,
       service_address, service_city, service_state, service_zip,
@@ -249,6 +249,7 @@ export async function sendCampaignEmails(
     last_name: string | null;
     primary_email: string;
     phones: { phone: string; type: string }[] | null;
+    primary_phone?: string | null;
     account_number: string | null;
     invoice_delivery: string | null;
     balance_outstanding_cents: number | null;
@@ -295,7 +296,12 @@ export async function sendCampaignEmails(
       lastName: recipient.last_name,
       balanceOutstandingCents: recipient.balance_outstanding_cents,
       primaryEmail: recipient.primary_email,
-      phones: recipient.phones,
+      // Clients created by import/portal/new-client only have the legacy column.
+      phones: recipient.phones?.length
+        ? recipient.phones
+        : recipient.primary_phone
+          ? [{ phone: recipient.primary_phone, type: "cell" }]
+          : recipient.phones,
       accountNumber: recipient.account_number,
       invoiceDelivery: recipient.invoice_delivery,
       billingAddress: recipient.billing_address,

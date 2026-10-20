@@ -243,11 +243,34 @@ export function EstimatesList({ clientId }: Props) {
   }
 
   async function bulkSetStage(stage: EstimateStage) {
-    const ids = Array.from(selectedIds);
+    let ids = Array.from(selectedIds);
     if (ids.length === 0) return;
+    if (stage === "sent") {
+      // The approval gate lives in the send flow; Mark as Sent bypasses it, so an
+      // estimate still waiting on (or refused by) approval can't be flipped here.
+      const blocked = new Set(
+        (estimates ?? [])
+          .filter((e) => ids.includes(e.id) && (e.approvalStatus === "pending" || e.approvalStatus === "rejected"))
+          .map((e) => e.id)
+      );
+      if (blocked.size > 0) {
+        toast.warning(`${blocked.size} estimate${blocked.size > 1 ? "s" : ""} skipped: awaiting or denied approval. Open and send from the estimate.`);
+        ids = ids.filter((id) => !blocked.has(id));
+        if (ids.length === 0) return;
+      }
+    }
     try {
-      await Promise.all(ids.map((id) => updateStage({ id, stage })));
-      toast.success(`${ids.length} estimate${ids.length > 1 ? "s" : ""} updated`);
+      // allSettled: one guarded estimate (active jobs/invoices, tier pick) must not
+      // hide that the others already changed.
+      const results = await Promise.allSettled(ids.map((id) => updateStage({ id, stage })));
+      const failed = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+      const okCount = ids.length - failed.length;
+      if (failed.length === 0) {
+        toast.success(`${ids.length} estimate${ids.length > 1 ? "s" : ""} updated`);
+      } else {
+        const reason = failed[0].reason instanceof Error ? failed[0].reason.message : "";
+        toast.error(`${okCount} updated, ${failed.length} couldn't be moved${reason ? `: ${reason}` : ""}`);
+      }
       setSelectedIds(new Set());
       refetch();
     } catch { toast.error("Failed to update estimates"); }
@@ -583,7 +606,13 @@ export function EstimatesList({ clientId }: Props) {
           estimates={filtered}
           stages={estimateStages}
           onEstimateClick={(id) => { if (canEdit) router.push(`/crm/estimates/${id}`); }}
-          onStageChange={(id, stage) => updateStage({ id, stage })}
+          onStageChange={(id, stage) => {
+            // Guard errors (active jobs/invoices, tier pick) used to be an unhandled
+            // rejection: the card just didn't move and nothing said why.
+            updateStage({ id, stage }).catch((err: unknown) =>
+              toast.error(err instanceof Error ? err.message : "Couldn't move that estimate")
+            );
+          }}
         />
       )}
 
