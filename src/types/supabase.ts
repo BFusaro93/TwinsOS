@@ -6936,6 +6936,8 @@ export type Database = {
         Row: {
           anchor_date: string | null
           created_at: string
+          custom_dates: string[]
+          excluded_dates: string[]
           day_of_week: string
           deleted_at: string | null
           frequency: string
@@ -6952,6 +6954,8 @@ export type Database = {
         Insert: {
           anchor_date?: string | null
           created_at?: string
+          custom_dates?: string[]
+          excluded_dates?: string[]
           day_of_week: string
           deleted_at?: string | null
           frequency: string
@@ -6968,6 +6972,8 @@ export type Database = {
         Update: {
           anchor_date?: string | null
           created_at?: string
+          custom_dates?: string[]
+          excluded_dates?: string[]
           day_of_week?: string
           deleted_at?: string | null
           frequency?: string

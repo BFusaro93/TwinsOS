@@ -44,7 +44,11 @@ export function computeGroupAmountCents(groupVisits: CRMJobVisit[], tiersByJobId
     return tiered ?? Math.round((job?.ratePerInchCents ?? 0) * maxDepth);
   }
   if (invoiceType === "per_push_per_inch") {
-    return Math.round((job?.ratePerInchCents ?? 0) * (visit.snowDepthInches ?? 0));
+    // Interval billing: each push is priced by ITS depth against the job's ranges, else flat per inch.
+    const depth = visit.snowDepthInches ?? 0;
+    const tiers = job?.id ? tiersByJobId?.get(job.id) : undefined;
+    const tiered = tiers?.length ? priceWithTiers(depth, tiers) : null;
+    return tiered ?? Math.round((job?.ratePerInchCents ?? 0) * depth);
   }
   if (invoiceType === "hourly") {
     return Math.round((visit.actualHours ?? 0) * (job?.rateCents ?? 0));
@@ -79,6 +83,8 @@ export function describeAmount(visit: CRMJobVisit, groupSize: number, tiersByJob
     return `event max depth × ${formatCurrency(visit.job?.ratePerInchCents ?? 0)}/in${splitSuffix}`;
   }
   if (invoiceType === "per_push_per_inch") {
+    const tiers = visit.job?.id ? tiersByJobId?.get(visit.job.id) : undefined;
+    if (tiers?.length) return `${visit.snowDepthInches ?? 0}" via rate ranges`;
     return `${visit.snowDepthInches ?? 0}" × ${formatCurrency(visit.job?.ratePerInchCents ?? 0)}/in`;
   }
   if (invoiceType === "hourly") {

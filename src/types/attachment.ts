@@ -15,7 +15,8 @@ export type AttachmentRecordType =
   | "damage_case"
   | "injury_case"
   | "contract"
-  | "job";
+  | "job"
+  | "product";
 
 export interface Attachment extends BaseRecord {
   recordType: AttachmentRecordType;

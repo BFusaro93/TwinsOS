@@ -67,6 +67,12 @@ import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search, FileS
 import { toast } from "sonner";
 import type { CRMContract, MonthlyAmounts, ContractStatus } from "@/types/crm-invoices";
 import { useConfirm } from "@/components/shared/useConfirm";
+import {
+  useContractTemplates,
+  useSaveContractTemplate,
+  useDeleteContractTemplate,
+  type ContractTemplate,
+} from "@/lib/hooks/use-contract-templates";
 
 const CONTRACT_STATUSES: ContractStatus[] = ["draft", "sent", "signed", "active", "expired", "cancelled"];
 
@@ -142,6 +148,106 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
 //    from the formatted-cents value never fights an in-progress keystroke
 //    (the previous controlled `(cents/100).toFixed(2)` value reformatted on
 //    every character, which is why e.g. typing "25" could land on "2.01") ──
+
+// ── contract templates ────────────────────────────────────────────────────────
+
+/** Start-from-template picker (new contracts) plus "save this setup as a template" (always). */
+function ContractTemplateBar({
+  details,
+  isNew,
+  onApply,
+}: {
+  details: DetailsState;
+  isNew: boolean;
+  onApply: (t: ContractTemplate) => void;
+}) {
+  const { data: templates = [] } = useContractTemplates();
+  const { mutateAsync: saveTemplate, isPending: saving } = useSaveContractTemplate();
+  const { mutateAsync: deleteTemplate } = useDeleteContractTemplate();
+  const [confirm, confirmDialog] = useConfirm();
+  const [applied, setApplied] = useState<ContractTemplate | null>(null);
+  const [name, setName] = useState("");
+  const [saveOpen, setSaveOpen] = useState(false);
+
+  async function handleSave() {
+    if (!name.trim()) { toast.error("Give the template a name"); return; }
+    try {
+      await saveTemplate({
+        name: name.trim(),
+        title: details.title,
+        defaultService: details.defaultService || null,
+        invoiceLineItems: details.lineItems,
+        monthlyAmounts: details.monthlyAmounts,
+        billingDayOfMonth: details.billingDayOfMonth,
+        billMonthInAdvance: details.billMonthInAdvance,
+        paymentType: details.paymentType || null,
+        autoGenerate: details.autoGenerate,
+        includeSubProperties: details.includeSubProperties,
+      });
+      toast.success("Template saved");
+      setName("");
+      setSaveOpen(false);
+    } catch {
+      toast.error("Failed to save template");
+    }
+  }
+
+  async function handleDelete() {
+    if (!applied) return;
+    if (!(await confirm({ title: `Delete template "${applied.name}"?`, description: "Contracts already created from it are not affected.", confirmLabel: "Delete Template", destructive: true }))) return;
+    try {
+      await deleteTemplate(applied.id);
+      setApplied(null);
+      toast.success("Template deleted");
+    } catch {
+      toast.error("Failed to delete template");
+    }
+  }
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border bg-slate-50 dark:bg-muted/40 px-3 py-2">
+      {confirmDialog}
+      {isNew && (
+        <>
+          <span className="text-xs font-medium text-slate-600 dark:text-neutral-400">Template</span>
+          <Select
+            value={applied?.id ?? ""}
+            onValueChange={(id) => {
+              const t = templates.find((x) => x.id === id);
+              if (t) { setApplied(t); onApply(t); }
+            }}
+          >
+            <SelectTrigger className="h-8 w-64 text-sm">
+              <SelectValue placeholder={templates.length ? "Start from a template…" : "No templates saved yet"} />
+            </SelectTrigger>
+            <SelectContent>
+              {templates.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {applied && (
+            <button type="button" onClick={handleDelete} className="text-xs text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400">
+              Delete template
+            </button>
+          )}
+        </>
+      )}
+      <Popover open={saveOpen} onOpenChange={setSaveOpen}>
+        <PopoverTrigger asChild>
+          <Button type="button" size="sm" variant="outline" className="ml-auto h-8 text-xs">Save as template</Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-72 space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Saves the name, invoice lines, monthly amounts, billing day and terms. Client and dates are not saved.
+          </p>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Template name" className="h-8 text-sm" />
+          <Button type="button" size="sm" className="w-full" onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save Template"}
+          </Button>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
 
 // ── contract details tab ──────────────────────────────────────────────────────
 
@@ -1112,6 +1218,26 @@ export function ContractDialog({
         <div className="flex-1 overflow-auto px-6 py-4">
           {activeTab === "overview" && contract && (
             <ContractOverviewTab contract={contract} />
+          )}
+          {activeTab === "details" && (
+            <ContractTemplateBar
+              details={details}
+              isNew={isNew}
+              onApply={(t) =>
+                patchDetails({
+                  ...(t.title ? { title: t.title } : {}),
+                  defaultService: t.defaultService ?? "",
+                  lineItems: t.invoiceLineItems,
+                  // Every month explicitly set — see the note on the initial monthlyAmounts above.
+                  monthlyAmounts: MONTHS.reduce((acc, { key }) => { acc[key] = t.monthlyAmounts[key] ?? 0; return acc; }, {} as MonthlyAmounts),
+                  billingDayOfMonth: t.billingDayOfMonth,
+                  billMonthInAdvance: t.billMonthInAdvance,
+                  paymentType: t.paymentType ?? "",
+                  autoGenerate: t.autoGenerate,
+                  includeSubProperties: t.includeSubProperties,
+                })
+              }
+            />
           )}
           {activeTab === "details" && (
             <ContractDetailsTab

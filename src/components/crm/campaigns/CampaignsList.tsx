@@ -243,12 +243,12 @@ function CampaignDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="flex h-[85vh] max-w-2xl flex-col">
         <DialogHeader>
           <DialogTitle>{campaign ? "Edit Campaign" : "New Campaign"}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-1">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-1">
           <div className="space-y-1.5">
             <Label>Name</Label>
             <Input

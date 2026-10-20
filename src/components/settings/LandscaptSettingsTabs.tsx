@@ -20,6 +20,7 @@ import {
   Wrench,
   CalendarDays,
   UserCog,
+  FileSignature,
 } from "lucide-react";
 import {
   useCustomFieldDefs,
@@ -92,6 +93,7 @@ import { useEstimates, useBulkImportEstimates } from "@/lib/hooks/use-estimates"
 import { useEstimateStages } from "@/lib/hooks/use-estimate-stages";
 import { useApprovalFlows } from "@/lib/hooks/use-approval-flows";
 import { useInvoices, usePayments, useBulkImportInvoices, useBulkImportPayments } from "@/lib/hooks/use-invoices";
+import { useContracts, useBulkImportContracts, CONTRACT_CSV_COLUMNS, contractToCsvRow } from "@/lib/hooks/use-contracts";
 import {
   useQuickBooksStatus,
   useDisconnectQuickBooks,
@@ -2120,6 +2122,7 @@ function ImportExportTab() {
   const { data: estimates } = useEstimates();
   const { data: invoices } = useInvoices();
   const { data: payments } = usePayments();
+  const { data: contracts } = useContracts();
   const { data: tickets } = useTickets();
   const { data: services } = useAllCRMServices();
   const { data: schedules } = useAllCRMSchedules();
@@ -2131,6 +2134,7 @@ function ImportExportTab() {
   const { mutateAsync: bulkImportEstimates } = useBulkImportEstimates();
   const { mutateAsync: bulkImportInvoices } = useBulkImportInvoices();
   const { mutateAsync: bulkImportPayments } = useBulkImportPayments();
+  const { mutateAsync: bulkImportContracts } = useBulkImportContracts();
   const { mutateAsync: bulkImportTickets } = useBulkImportTickets();
   const { mutateAsync: bulkImportServices } = useBulkImportCRMServices();
   const { mutateAsync: bulkImportSchedules } = useBulkImportCRMSchedules();
@@ -2162,6 +2166,10 @@ function ImportExportTab() {
           ["clientName", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "taxAmount"],
           invoices.map((inv) => [inv.clientName ?? "", inv.description, inv.invoiceDate, inv.dueDate ?? "", inv.poNumber ?? "", inv.status, (inv.subtotalCents / 100).toFixed(2), (inv.taxCents / 100).toFixed(2)]));
         break;
+      case "Contracts":
+        if (!contracts?.length) return;
+        downloadCSV("contracts.csv", [...CONTRACT_CSV_COLUMNS], contracts.map(contractToCsvRow));
+        break;
       case "Payments":
         if (!payments?.length) return;
         downloadCSV("payments.csv",
@@ -2183,8 +2191,8 @@ function ImportExportTab() {
       case "Schedules":
         if (!schedules?.length) return;
         downloadCSV("schedules.csv",
-          ["name", "frequency", "dayOfWeek", "weekPattern", "anchorDate", "seasonStart", "seasonEnd", "weekOfMonth"],
-          schedules.map((s) => [s.name, s.frequency, s.dayOfWeek, s.weekPattern ?? "", s.anchorDate ?? "", s.seasonStart ?? "", s.seasonEnd ?? "", s.weekOfMonth ?? ""]));
+          ["name", "frequency", "dayOfWeek", "weekPattern", "anchorDate", "seasonStart", "seasonEnd", "weekOfMonth", "customDates", "excludedDates"],
+          schedules.map((s) => [s.name, s.frequency, s.dayOfWeek, s.weekPattern ?? "", s.anchorDate ?? "", s.seasonStart ?? "", s.seasonEnd ?? "", s.weekOfMonth ?? "", (s.customDates ?? []).join(" | "), (s.excludedDates ?? []).join(" | ")]));
         break;
       case "Employees":
         if (!employees?.length) return;
@@ -2202,6 +2210,7 @@ function ImportExportTab() {
     { label: "Leads",     icon: <UserPlus className="h-6 w-6" /> },
     { label: "Estimates", icon: <FileText className="h-6 w-6" /> },
     { label: "Invoices",  icon: <Receipt className="h-6 w-6" /> },
+    { label: "Contracts", icon: <FileSignature className="h-6 w-6" /> },
     { label: "Payments",  icon: <DollarSign className="h-6 w-6" /> },
     { label: "Tickets",   icon: <TicketIcon className="h-6 w-6" /> },
     { label: "Services",  icon: <Wrench className="h-6 w-6" /> },
@@ -2262,6 +2271,15 @@ function ImportExportTab() {
               { label: "Leads",     icon: <UserPlus className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportLeads(r),      templateColumns: ["displayName", "accountType", "primaryPhone", "primaryEmail", "billingAddress", "billingCity", "billingState", "billingZip", "source"], required: ["displayName"] },
               { label: "Estimates", icon: <FileText className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportEstimates(r),  templateColumns: ["clientName", "description", "estimateDate", "validUntilDate", "poNumber", "stage"], required: ["clientName", "description"] },
               { label: "Invoices",  icon: <Receipt className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportInvoices(r),   templateColumns: ["clientName", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "taxAmount"], required: ["clientName", "description", "amount"] },
+              { label: "Contracts", icon: <FileSignature className="h-6 w-6" />, onImport: async (r: Record<string, string>[]) => {
+                const { warnings } = await bulkImportContracts(r);
+                if (warnings.length > 0) {
+                  toast.warning(`${warnings.length} contract row${warnings.length !== 1 ? "s" : ""} need attention`, {
+                    description: warnings.slice(0, 5).map((f) => `Row ${f.row}: ${f.reason}`).join("\n") + (warnings.length > 5 ? `\n…and ${warnings.length - 5} more` : ""),
+                    duration: 15000,
+                  });
+                }
+              }, templateColumns: [...CONTRACT_CSV_COLUMNS], required: ["clientName", "title"] },
               { label: "Payments",  icon: <DollarSign className="h-6 w-6" />,  onImport: async (r: Record<string, string>[]) => {
                 const { failures } = await bulkImportPayments(r);
                 if (failures.length > 0) {
@@ -2273,7 +2291,7 @@ function ImportExportTab() {
               },   templateColumns: ["clientName", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"], required: ["clientName", "amount"] },
               { label: "Tickets",   icon: <TicketIcon className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportTickets(r),    templateColumns: ["subject", "clientName", "type", "status", "priority", "category", "body", "dueDate"], required: ["subject"] },
               { label: "Services",  icon: <Wrench className="h-6 w-6" />,      onImport: (r: Record<string, string>[]) => bulkImportServices(r),   templateColumns: ["name", "code", "category", "unit", "defaultRate", "productionRate", "isActive"], required: ["name"] },
-              { label: "Schedules", icon: <CalendarDays className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportSchedules(r), templateColumns: ["name", "frequency", "dayOfWeek", "weekPattern", "anchorDate", "seasonStart", "seasonEnd", "weekOfMonth"], required: ["name", "frequency", "dayOfWeek"] },
+              { label: "Schedules", icon: <CalendarDays className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportSchedules(r), templateColumns: ["name", "frequency", "dayOfWeek", "weekPattern", "anchorDate", "seasonStart", "seasonEnd", "weekOfMonth", "customDates", "excludedDates"], required: ["name", "frequency"] },
               { label: "Employees", icon: <UserCog className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportEmployees(r),  templateColumns: ["firstName", "lastName", "email", "phone", "cellPhone", "address", "city", "state", "zip", "dateHired", "resourceCode", "hourlyRate"], required: ["firstName", "lastName"] },
             ].map((tile) => (
               <ImportTile

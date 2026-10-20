@@ -369,7 +369,7 @@ export interface CRMSchedule {
   id: string;
   orgId: string;
   name: string;
-  frequency: 'weekly' | 'bi_weekly' | 'every_3_weeks' | 'every_4_weeks' | 'monthly';
+  frequency: 'weekly' | 'bi_weekly' | 'every_3_weeks' | 'every_4_weeks' | 'monthly' | 'custom';
   dayOfWeek: 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
   weekPattern: 'even' | 'odd' | 'any' | null;
   anchorDate: string | null;
@@ -377,6 +377,10 @@ export interface CRMSchedule {
   seasonEnd: string | null;   // 'MM-DD', e.g. '11-30'
   /** Only meaningful when frequency === 'monthly' — e.g. "first" + Mon = "1st Monday of every month" */
   weekOfMonth: 'first' | 'second' | 'third' | 'fourth' | 'last' | null;
+  /** Only meaningful when frequency === 'custom' — the exact service dates, 'YYYY-MM-DD'. */
+  customDates?: string[];
+  /** Dates a recurring schedule skips, 'YYYY-MM-DD'. */
+  excludedDates?: string[];
   isActive: boolean;
 }
 
