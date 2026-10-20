@@ -23,6 +23,8 @@ import { AddExpenseDialog } from "./AddExpenseDialog";
 import { NewDamageCaseDialog } from "./NewDamageCaseDialog";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { TicketDetailSheet } from "@/components/crm/tickets/TicketDetailSheet";
+import { useTicketsLinkedTo } from "@/lib/hooks/use-tickets";
 import { DamageCasePhotos } from "@/components/damage-cases/DamageCasePhotos";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -276,7 +278,7 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
       <Tabs defaultValue="expenses" className="flex-1 flex flex-col min-h-0">
         <div className="shrink-0 overflow-x-auto border-b px-4 md:px-6">
           <TabsList className="h-10 bg-transparent p-0">
-            {(["expenses", "files", "comments", "audit trail"] as const).map((v) => (
+            {(["expenses", "files", "tickets", "comments", "audit trail"] as const).map((v) => (
               <TabsTrigger
                 key={v}
                 value={v === "audit trail" ? "audit" : v}
@@ -360,6 +362,10 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
           <AttachmentsSection recordType="damage_case" recordId={data.id} />
         </TabsContent>
 
+        <TabsContent value="tickets" className="flex-1 overflow-y-auto p-6 mt-0">
+          <DamageCaseTickets caseId={data.id} />
+        </TabsContent>
+
         <TabsContent value="comments" className="flex-1 overflow-y-auto p-6 mt-0">
           <CommentsSection recordType="damage_case" recordId={data.id} />
         </TabsContent>
@@ -432,6 +438,34 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
           resolutionNotes: data.resolutionNotes,
         }}
       />
+    </div>
+  );
+}
+
+function DamageCaseTickets({ caseId }: { caseId: string }) {
+  const { data: tickets = [], isLoading } = useTicketsLinkedTo("damage_case", caseId);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = tickets.find((t) => t.id === openId) ?? null;
+  if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  return (
+    <div className="space-y-2">
+      {tickets.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No tickets linked to this case.</p>
+      ) : (
+        tickets.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setOpenId(t.id)}
+            className="flex w-full items-center gap-3 rounded-md border p-3 text-left text-sm hover:bg-slate-50 dark:hover:bg-muted/40"
+          >
+            <span className="font-mono text-xs text-muted-foreground">#{t.ticketNumber}</span>
+            <span className="flex-1 truncate font-medium">{t.subject || "(no subject)"}</span>
+            <span className="text-xs capitalize text-muted-foreground">{t.status.replace("_", " ")}</span>
+          </button>
+        ))
+      )}
+      <TicketDetailSheet ticket={open} onClose={() => setOpenId(null)} />
     </div>
   );
 }

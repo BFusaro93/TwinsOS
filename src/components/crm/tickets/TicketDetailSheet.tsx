@@ -6,6 +6,7 @@ import {
   useCloseTicket,
   useUpdateTicket,
   useTicketLinks,
+  type TicketLinkType,
   useAddTicketLink,
   useRemoveTicketLink,
   useDeleteTicket,
@@ -14,6 +15,7 @@ import {
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { useJobsList } from "@/lib/hooks/use-crm-jobs";
+import { useDamageCases } from "@/lib/hooks/use-damage-cases";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { useCreateEstimateFromUpsell } from "@/lib/hooks/use-upsell-convert";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -343,7 +345,7 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
   const addLink = useAddTicketLink();
   const removeLink = useRemoveTicketLink();
   const { data: links } = useTicketLinks(ticket.id);
-  const [newLinkType, setNewLinkType] = useState<"estimate" | "invoice" | "job" | "project">("estimate");
+  const [newLinkType, setNewLinkType] = useState<TicketLinkType>("estimate");
   const [selectedId, setSelectedId] = useState("");
 
   const clientId = ticket.clientId ?? "";
@@ -351,6 +353,7 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
   const { data: invoices } = useInvoices(clientId || undefined);
   const { data: jobs } = useJobsList(clientId ? { clientId } : undefined);
   const { data: allProjects } = useProjects();
+  const { data: damageCases } = useDamageCases();
   // Projects aren't always tied to a client — narrow to the ticket's client when set,
   // otherwise offer the full active project list.
   const projects = clientId
@@ -364,6 +367,8 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
       ? (invoices ?? []).map((i) => ({ id: i.id, label: `#${i.invoiceNumber} — ${i.description || "(no description)"}` }))
       : newLinkType === "job"
       ? (jobs ?? []).map((j) => ({ id: j.id, label: j.serviceAddress || j.jobType || `Job ${j.id.slice(0, 8)}` }))
+      : newLinkType === "damage_case"
+      ? (damageCases ?? []).map((d) => ({ id: d.id, label: `${d.caseNumber} — ${d.customerName}` }))
       : projects.map((p) => ({ id: p.id, label: p.name }));
 
   async function handleCreateEstimate() {
@@ -443,7 +448,7 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
         <ul className="space-y-1.5 mb-3">
           {(links ?? []).map((link) => (
             <li key={link.id} className="flex items-center gap-2 text-sm">
-              <Badge variant="outline" className="text-[10px] capitalize shrink-0">{link.linkType}</Badge>
+              <Badge variant="outline" className="text-[10px] capitalize shrink-0">{link.linkType.replace("_", " ")}</Badge>
               <span className="flex-1 text-slate-700 dark:text-neutral-300 truncate text-xs">{link.linkedLabel}</span>
               <button type="button" className="text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                 onClick={() => removeLink.mutate({ id: link.id, ticketId: ticket.id })}>
@@ -456,23 +461,24 @@ function LinkedRecordsPicker({ ticket }: { ticket: CRMTicket }) {
       <div className="rounded-md border bg-slate-50 dark:bg-muted/40 p-3 space-y-2">
         <p className="text-xs font-medium text-muted-foreground">Add Link</p>
         <div className="flex gap-2">
-          <Select value={newLinkType} onValueChange={(v) => { setNewLinkType(v as "estimate" | "invoice" | "job" | "project"); setSelectedId(""); }}>
+          <Select value={newLinkType} onValueChange={(v) => { setNewLinkType(v as TicketLinkType); setSelectedId(""); }}>
             <SelectTrigger className="h-8 text-xs w-28"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="estimate">Estimate</SelectItem>
               <SelectItem value="invoice">Invoice</SelectItem>
               <SelectItem value="job">Job</SelectItem>
               <SelectItem value="project">Project</SelectItem>
+              <SelectItem value="damage_case">Damage Case</SelectItem>
             </SelectContent>
           </Select>
           <Select value={selectedId} onValueChange={setSelectedId}>
             <SelectTrigger className="h-8 text-xs flex-1">
-              <SelectValue placeholder={clientId || newLinkType === "project" ? `Select ${newLinkType}…` : "No client on ticket"} />
+              <SelectValue placeholder={clientId || newLinkType === "project" || newLinkType === "damage_case" ? `Select ${newLinkType}…` : "No client on ticket"} />
             </SelectTrigger>
             <SelectContent>
               {options.length === 0 ? (
                 <SelectItem value="__empty" disabled>
-                  {clientId || newLinkType === "project" ? `No ${newLinkType}s found` : "Ticket has no client"}
+                  {clientId || newLinkType === "project" || newLinkType === "damage_case" ? `No ${newLinkType}s found` : "Ticket has no client"}
                 </SelectItem>
               ) : (
                 options.map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)
