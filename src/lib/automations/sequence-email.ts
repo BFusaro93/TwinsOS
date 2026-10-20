@@ -2,7 +2,7 @@ import { Resend } from "resend";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
 import { escapeHtml } from "@/lib/utils/escape-html";
-import { orgEmailFrom } from "@/lib/email/send";
+import { buildCanSpamFooter, orgEmailFrom } from "@/lib/email/send";
 import { getOrgReplyTo, isUsableReplyTo } from "@/lib/email/reply-to";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { computeWaitFireAt } from "./sequence-enrollment";
@@ -244,13 +244,40 @@ export async function sendResolvedSequenceEmail(
   const replyTo =
     params.replyTo !== undefined ? params.replyTo : await getOrgReplyTo(supabase, params.orgId);
 
+  // Automation steps already honor do_not_market like campaigns do, so they get
+  // the same CAN-SPAM footer and one-click List-Unsubscribe header — otherwise a
+  // recipient's only way out is replying (and `email.complained` is the result).
+  let html = params.bodyHtml;
+  let unsubscribeUrl: string | null = null;
+  if (params.clientId) {
+    const [{ data: tokenRow }, { data: orgRow }] = await Promise.all([
+      supabase.from("clients").select("unsubscribe_token").eq("id", params.clientId).maybeSingle(),
+      supabase.from("organizations").select("name, address").eq("id", params.orgId).maybeSingle(),
+    ]);
+    const token = (tokenRow as { unsubscribe_token: string | null } | null)?.unsubscribe_token;
+    if (token) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com";
+      unsubscribeUrl = `${appUrl}/api/crm/unsubscribe/${token}`;
+      const org = orgRow as { name: string | null; address: { street?: string; city?: string; state?: string; zip?: string } | null } | null;
+      html += buildCanSpamFooter(org?.name ?? "", org?.address ?? null, unsubscribeUrl);
+    }
+  }
+
   const resend = new Resend(resendKey);
   const { data: sent, error: sendErr } = await resend.emails.send({
     from: fromAddress,
     to: params.toEmails,
     subject: params.subject,
-    html: params.bodyHtml,
+    html,
     ...(replyTo ? { replyTo } : {}),
+    ...(unsubscribeUrl
+      ? {
+          headers: {
+            "List-Unsubscribe": `<${unsubscribeUrl}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          },
+        }
+      : {}),
   });
   if (sendErr) {
     // Resend's error is a plain { name, message, statusCode } object, not an
