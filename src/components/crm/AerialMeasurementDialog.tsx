@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Trash2, Undo2 } from "lucide-react";
+import { Pentagon, Ruler, SquareMinus, Trash2, Undo2 } from "lucide-react";
 import { useClient, useClientProperties, useAddClientProperty, useUpdateClientPropertyZones } from "@/lib/hooks/use-clients";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
@@ -19,22 +19,23 @@ import {
 } from "@/lib/hooks/use-client-custom-fields";
 
 /** Which measurement total a number-type custom field should be kept in sync with. */
-type FieldMapping = "none" | "turf" | "mulch_bed" | "parking_lot" | "gross";
+type FieldMapping = "none" | "turf" | "mulch_bed" | "parking_lot" | "gross" | "linear" | `line:${string}`;
 
 function suggestMapping(fieldName: string): FieldMapping {
   const n = fieldName.toLowerCase();
   if (n.includes("turf")) return "turf";
   if (n.includes("mulch")) return "mulch_bed";
   if (n.includes("parking")) return "parking_lot";
+  if (/linear|fence|edg|perimeter|length|distance|\bfeet\b|\bft\b/.test(n)) return "linear";
   if (n.includes("gross") || n.includes("total")) return "gross";
   return "none";
 }
 
-const ZONE_TYPES: { value: PropertyZone["type"]; label: string; color: string }[] = [
-  { value: "turf", label: "Turf", color: "#22c55e" },
-  { value: "mulch_bed", label: "Mulch Bed", color: "#92400e" },
-  { value: "parking_lot", label: "Parking Lot / Hardscape", color: "#64748b" },
-  { value: "other", label: "Other", color: "#6366f1" },
+const ZONE_TYPES: { value: PropertyZone["type"]; label: string; short: string; color: string }[] = [
+  { value: "turf", label: "Turf", short: "Turf", color: "#22c55e" },
+  { value: "mulch_bed", label: "Mulch Bed", short: "Mulch Bed", color: "#92400e" },
+  { value: "parking_lot", label: "Parking Lot / Hardscape", short: "Hardscape", color: "#64748b" },
+  { value: "other", label: "Other", short: "Other", color: "#6366f1" },
 ];
 
 const SQFT_PER_SQMETER = 10.7639;
@@ -146,6 +147,9 @@ export function AerialMeasurementDialog({
   const [zones, setZones] = useState<DraftZone[]>([]);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const [mapsReady, setMapsReady] = useState(false);
+  // Which distance (if any) feeds the client's built-in Perimeter / Linear ft edging fields.
+  const [perimeterMap, setPerimeterMap] = useState<FieldMapping>("none");
+  const [edgingMap, setEdgingMap] = useState<FieldMapping>("none");
   const [fieldMappings, setFieldMappings] = useState<Record<string, FieldMapping>>({});
 
   const [isDrawing, setIsDrawing] = useState(false);
@@ -161,6 +165,9 @@ export function AerialMeasurementDialog({
   const isDrawingRef = useRef(false);
   const drawKindRef = useRef<DrawKind>("add");
   const markerRef = useRef<google.maps.Marker | null>(null);
+  const draftVertexMarkersRef = useRef<google.maps.Marker[]>([]);
+  const draftGuideRef = useRef<google.maps.Polyline | null>(null);
+  const [draftReadout, setDraftReadout] = useState("");
   const draftPathRef = useRef<google.maps.LatLngLiteral[]>([]);
   const draftPolygonRef = useRef<google.maps.Polygon | google.maps.Polyline | null>(null);
   const autoCreatedPropertyRef = useRef(false);
@@ -184,8 +191,7 @@ export function AerialMeasurementDialog({
       mapRef.current = null;
       polygonsRef.current.forEach((p) => p.setMap(null));
       polygonsRef.current.clear();
-      draftPolygonRef.current?.setMap(null);
-      draftPolygonRef.current = null;
+      clearDraftOverlays();
       markerRef.current?.setMap(null);
       markerRef.current = null;
       draftPathRef.current = [];
@@ -193,6 +199,8 @@ export function AerialMeasurementDialog({
       setIsDrawing(false);
       setDraftPointCount(0);
       setFieldMappings({});
+      setPerimeterMap("none");
+      setEdgingMap("none");
       autoCreatedPropertyRef.current = false;
     }
   }, [open, properties, propertyId]);
@@ -245,9 +253,34 @@ export function AerialMeasurementDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, customFieldDefs]);
 
-  function startDrawing(kind: DrawKind) {
+  /** Removes every in-progress overlay: the draft shape, its numbered corner dots, and the cursor guide line. */
+  function clearDraftOverlays() {
     draftPolygonRef.current?.setMap(null);
     draftPolygonRef.current = null;
+    draftVertexMarkersRef.current.forEach((m) => m.setMap(null));
+    draftVertexMarkersRef.current = [];
+    draftGuideRef.current?.setMap(null);
+    draftGuideRef.current = null;
+    mapRef.current?.setOptions({ draggableCursor: undefined });
+    setDraftReadout("");
+  }
+
+  /** Live "so far" figure shown while tracing, including the segment out to the cursor. */
+  function updateReadout(cursor?: google.maps.LatLngLiteral) {
+    const pts = cursor ? [...draftPathRef.current, cursor] : draftPathRef.current;
+    if (pts.length < 2) return setDraftReadout("");
+    if (drawKindRef.current === "linear") {
+      const ft = Math.round(google.maps.geometry.spherical.computeLength(pts) * FT_PER_METER);
+      setDraftReadout(`${ft.toLocaleString()} ft so far`);
+    } else if (pts.length >= 3) {
+      const sqft = Math.round(google.maps.geometry.spherical.computeArea(pts) * SQFT_PER_SQMETER);
+      setDraftReadout(`${sqft.toLocaleString()} sq ft so far`);
+    }
+  }
+
+  function startDrawing(kind: DrawKind) {
+    clearDraftOverlays();
+    mapRef.current?.setOptions({ draggableCursor: "crosshair" });
     draftPathRef.current = [];
     drawKindRef.current = kind;
     setDrawKind(kind);
@@ -257,8 +290,7 @@ export function AerialMeasurementDialog({
   }
 
   function cancelDrawing() {
-    draftPolygonRef.current?.setMap(null);
-    draftPolygonRef.current = null;
+    clearDraftOverlays();
     draftPathRef.current = [];
     isDrawingRef.current = false;
     setIsDrawing(false);
@@ -269,6 +301,9 @@ export function AerialMeasurementDialog({
     if (draftPathRef.current.length === 0) return;
     draftPathRef.current = draftPathRef.current.slice(0, -1);
     draftPolygonRef.current?.setPath(draftPathRef.current);
+    draftVertexMarkersRef.current.pop()?.setMap(null);
+    draftGuideRef.current?.setPath([]);
+    updateReadout();
     setDraftPointCount(draftPathRef.current.length);
   }
 
@@ -283,8 +318,7 @@ export function AerialMeasurementDialog({
       return; // leave the draft in place so the user can keep adjusting or hit Cancel
     }
 
-    draftPolygonRef.current?.setMap(null);
-    draftPolygonRef.current = null;
+    clearDraftOverlays();
 
     const id = crypto.randomUUID();
     if (kind === "linear") {
@@ -414,6 +448,49 @@ export function AerialMeasurementDialog({
             draftPolygonRef.current.setPath(draftPathRef.current);
           }
           setDraftPointCount(draftPathRef.current.length);
+
+          // Numbered dot at each placed corner so it's obvious exactly where the click landed.
+          const n = draftPathRef.current.length;
+          draftVertexMarkersRef.current.push(
+            new google.maps.Marker({
+              position: pt,
+              map,
+              clickable: false,
+              zIndex: 1000,
+              icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 9,
+                fillColor: n === 1 ? "#16a34a" : "#ffffff",
+                fillOpacity: 1,
+                strokeColor: drawKindRef.current === "subtract" ? SUBTRACT_COLOR : drawKindRef.current === "linear" ? LINEAR_COLOR : "#2563eb",
+                strokeWeight: 3,
+              },
+              label: { text: String(n), color: n === 1 ? "#ffffff" : "#111827", fontSize: "10px", fontWeight: "700" },
+            })
+          );
+          updateReadout();
+        });
+
+        // Dashed guide from the last placed point to the cursor, so the next segment is visible before clicking.
+        map.addListener("mousemove", (e: google.maps.MapMouseEvent) => {
+          if (!isDrawingRef.current || !e.latLng || draftPathRef.current.length === 0) return;
+          const cursor = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+          const last = draftPathRef.current[draftPathRef.current.length - 1];
+          const guide = [last, cursor];
+          if (!draftGuideRef.current) {
+            draftGuideRef.current = new google.maps.Polyline({
+              path: guide,
+              strokeColor: "#111827",
+              strokeOpacity: 0.7,
+              strokeWeight: 2,
+              clickable: false,
+              zIndex: 999,
+              map,
+            });
+          } else {
+            draftGuideRef.current.setPath(guide);
+          }
+          updateReadout(cursor);
         });
 
         setMapsReady(true);
@@ -432,8 +509,7 @@ export function AerialMeasurementDialog({
     // shape (it stays drawn against the old property's map view but its data is discarded
     // the moment `zones` is reseeded below) — cancel the draft and warn instead.
     if (isDrawingRef.current) {
-      draftPolygonRef.current?.setMap(null);
-      draftPolygonRef.current = null;
+      clearDraftOverlays();
       draftPathRef.current = [];
       isDrawingRef.current = false;
       setIsDrawing(false);
@@ -522,14 +598,25 @@ export function AerialMeasurementDialog({
 
   const areaZones = zones.filter(isAreaZone);
   const linearZones = zones.filter((z) => z.kind === "linear");
-  const totalsByType: Record<FieldMapping, number> = {
+  const totalsByType: Record<"none" | "turf" | "mulch_bed" | "parking_lot" | "gross" | "linear", number> = {
     none: 0,
     turf: sumZoneSqft(areaZones, "turf"),
     mulch_bed: sumZoneSqft(areaZones, "mulch_bed"),
     parking_lot: sumZoneSqft(areaZones, "parking_lot"),
     gross: sumZoneSqft(areaZones),
+    linear: Math.round(linearZones.reduce((t, z) => t + (z.lengthFt || 0), 0)),
   };
+  function mappedValue(mapping: FieldMapping): number {
+    if (mapping.startsWith("line:")) {
+      const line = linearZones.find((z) => z._id === mapping.slice(5));
+      return Math.round(line?.lengthFt ?? 0);
+    }
+    return totalsByType[mapping as keyof typeof totalsByType] ?? 0;
+  }
   const totalSqft = totalsByType.gross;
+  function distanceMappingValid(m: FieldMapping): boolean {
+    return m === "linear" ? linearZones.length > 0 : m.startsWith("line:") && linearZones.some((z) => `line:${z._id}` === m);
+  }
   const totalLinearFt = linearZones.reduce((s, z) => s + (z.lengthFt || 0), 0);
 
   async function handleSave() {
@@ -550,6 +637,10 @@ export function AerialMeasurementDialog({
         propertyId: property.id,
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         zones: zones.map(({ _id, invalid, ...z }) => z),
+        clientLinear: {
+          ...(perimeterMap !== "none" && distanceMappingValid(perimeterMap) ? { perimeter: mappedValue(perimeterMap) } : {}),
+          ...(edgingMap !== "none" && distanceMappingValid(edgingMap) ? { edging: mappedValue(edgingMap) } : {}),
+        },
       });
     } catch {
       toast.error("Failed to save measurements");
@@ -560,14 +651,16 @@ export function AerialMeasurementDialog({
     // so a sync failure doesn't read as "nothing was saved" when the zones did save.
     const syncs = numberFieldDefs
       .map((f) => ({ f, mapping: fieldMappings[f.id] ?? "none" }))
-      .filter(({ mapping }) => mapping !== "none");
+      .filter(({ mapping }) => mapping !== "none")
+      // Don't wipe an existing value with 0 when nothing was measured (no distances drawn, or the picked line was deleted).
+      .filter(({ mapping }) => (mapping === "linear" ? linearZones.length > 0 : !mapping.startsWith("line:") || linearZones.some((z) => `line:${z._id}` === mapping)));
     let syncFailures = 0;
     for (const { f, mapping } of syncs) {
       try {
         await upsertCustomField.mutateAsync({
           clientId,
           fieldDefId: f.id,
-          valueNumber: totalsByType[mapping],
+          valueNumber: mappedValue(mapping),
         });
       } catch {
         syncFailures++;
@@ -626,61 +719,73 @@ export function AerialMeasurementDialog({
 
             {mapsError && <p className="text-sm text-red-600 dark:text-red-400">{mapsError}</p>}
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-slate-50 dark:bg-muted/40 px-2 py-2">
               {!isDrawing ? (
                 <>
                   <Button type="button" size="sm" variant="outline" onClick={() => startDrawing("add")} disabled={!mapsReady}>
-                    + Trace a Zone
+                    <Pentagon className="mr-1.5 h-3.5 w-3.5 text-green-600" />
+                    Trace Area
                   </Button>
                   <Button type="button" size="sm" variant="outline" onClick={() => startDrawing("subtract")} disabled={!mapsReady}>
-                    − Subtract an Area
+                    <SquareMinus className="mr-1.5 h-3.5 w-3.5 text-red-600" />
+                    Subtract Area
                   </Button>
                   <Button type="button" size="sm" variant="outline" onClick={() => startDrawing("linear")} disabled={!mapsReady}>
+                    <Ruler className="mr-1.5 h-3.5 w-3.5 text-orange-500" />
                     Measure Distance
                   </Button>
+                  <span className="ml-auto hidden text-[11px] text-slate-400 dark:text-neutral-500 sm:block">
+                    Pick a tool, then click the map
+                  </span>
                 </>
               ) : (
                 <>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs font-medium text-slate-700 dark:text-neutral-300">
                     {drawKind === "linear"
-                      ? "Click the map to place each point along the line"
+                      ? "Measuring distance — click each point along the line."
                       : drawKind === "subtract"
-                        ? "Click the map to trace the area to subtract (e.g. the house)"
-                        : "Click the map to trace the boundary"}{" "}
-                    ({draftPointCount} point{draftPointCount === 1 ? "" : "s"})
+                        ? "Subtracting — click each corner of the area to cut out (e.g. the house)."
+                        : "Tracing — click each corner of the area."}
                   </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={finishDrawing}
-                    disabled={draftPointCount < (drawKind === "linear" ? 2 : 3)}
-                  >
-                    {drawKind === "linear" ? "Finish Line" : "Finish Shape"}
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={undoLastPoint} disabled={draftPointCount === 0}>
-                    <Undo2 className="mr-1 h-3.5 w-3.5" />
-                    Undo Point
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={cancelDrawing}>
-                    Cancel
-                  </Button>
+                  {draftReadout && (
+                    <span className="rounded bg-white dark:bg-background px-1.5 py-0.5 text-xs font-semibold text-slate-700 dark:text-neutral-300 border border-border">
+                      {draftReadout}
+                    </span>
+                  )}
+                  <div className="ml-auto flex items-center gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={undoLastPoint} disabled={draftPointCount === 0}>
+                      <Undo2 className="mr-1 h-3.5 w-3.5" />
+                      Undo Point
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={cancelDrawing}>
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={finishDrawing}
+                      disabled={draftPointCount < (drawKind === "linear" ? 2 : 3)}
+                    >
+                      {drawKind === "linear" ? "Finish Line" : "Finish Shape"}
+                    </Button>
+                  </div>
                 </>
               )}
             </div>
 
             <div ref={setMapEl} className="h-[420px] w-full rounded-md border border-border bg-muted" />
 
-            <p className="text-xs text-slate-400 dark:text-neutral-500">
-              The pin marks the property&rsquo;s address. Use &ldquo;Trace a Zone&rdquo; for each turf area, bed, or
-              hardscape &mdash; several zones of the same type add together. Use &ldquo;Subtract an Area&rdquo;
-              (shown in red) to cut something out, like the house, from that type&rsquo;s total. &ldquo;Measure
-              Distance&rdquo; (orange) records a length such as a fence line or edging run. Drag a saved shape&rsquo;s
-              corners to adjust it &mdash; measurements update automatically.
-            </p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500 dark:text-neutral-400">
+              <span>📍 Pin = the property&rsquo;s address</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: "#22c55e" }} /> Area (adds)</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SUBTRACT_COLOR }} /> Subtracted</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: LINEAR_COLOR }} /> Distance</span>
+              <span>Zones of the same type add together · drag corners to adjust</span>
+            </div>
 
             {areaZones.length > 0 && (
               <div className="rounded-md border border-border">
-                <div className="grid grid-cols-[1fr_9rem_7rem_6rem_2.5rem] gap-2 border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                <div className="grid grid-cols-[1fr_9rem_7.5rem_6rem_2.5rem] gap-2 border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                   <span>Zone name</span>
                   <span>Type</span>
                   <span>Effect</span>
@@ -691,7 +796,7 @@ export function AerialMeasurementDialog({
                   {areaZones.map((z) => (
                     <div
                       key={z._id}
-                      className={`grid grid-cols-[1fr_9rem_7rem_6rem_2.5rem] items-center gap-2 px-3 py-1.5 ${z.invalid ? "bg-red-50 dark:bg-red-950/40" : ""}`}
+                      className={`grid grid-cols-[1fr_9rem_7.5rem_6rem_2.5rem] items-center gap-2 px-3 py-1.5 ${z.invalid ? "bg-red-50 dark:bg-red-950/40" : ""}`}
                     >
                       <div className="min-w-0">
                         <Input
@@ -711,8 +816,14 @@ export function AerialMeasurementDialog({
                         )}
                       </div>
                       <Select value={z.type} onValueChange={(v) => updateZone(z._id, { type: v as PropertyZone["type"] })}>
-                        <SelectTrigger className="h-7 text-xs">
-                          <SelectValue />
+                        <SelectTrigger className="h-7 gap-1 px-2 text-left text-xs">
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span
+                              className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                              style={{ background: colorForZone(z) }}
+                            />
+                            <span className="truncate">{ZONE_TYPES.find((t) => t.value === z.type)?.short}</span>
+                          </span>
                         </SelectTrigger>
                         <SelectContent>
                           {ZONE_TYPES.map((t) => (
@@ -726,8 +837,8 @@ export function AerialMeasurementDialog({
                         value={z.mode === "subtract" ? "subtract" : "add"}
                         onValueChange={(v) => updateZone(z._id, { mode: v as "add" | "subtract" })}
                       >
-                        <SelectTrigger className="h-7 text-xs">
-                          <SelectValue />
+                        <SelectTrigger className="h-7 px-2 text-left text-xs">
+                          <span className="truncate">{z.mode === "subtract" ? "− Subtracts" : "+ Adds"}</span>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="add">Adds</SelectItem>
@@ -812,6 +923,44 @@ export function AerialMeasurementDialog({
               </div>
             )}
 
+            {linearZones.length > 0 && (
+              <div className="rounded-md border border-border">
+                <div className="border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                  Show distances on Client Details
+                </div>
+                <div className="divide-y">
+                  {([
+                    { label: "Perimeter ft", value: perimeterMap, set: setPerimeterMap },
+                    { label: "Linear ft edging", value: edgingMap, set: setEdgingMap },
+                  ] as const).map(({ label, value, set }) => (
+                    <div key={label} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                      <p className="text-slate-700 dark:text-neutral-300">{label}</p>
+                      <Select value={value} onValueChange={(v) => set(v as FieldMapping)}>
+                        <SelectTrigger className="h-7 w-52 px-2 text-left text-xs">
+                          <span className="truncate">
+                            {value === "none"
+                              ? "Don’t sync"
+                              : value === "linear"
+                                ? `All distances (${totalsByType.linear.toLocaleString()} ft)`
+                                : (linearZones.find((z) => `line:${z._id}` === value)?.name ?? "Don’t sync")}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Don&rsquo;t sync</SelectItem>
+                          <SelectItem value="linear">All distances ({totalsByType.linear.toLocaleString()} ft)</SelectItem>
+                          {linearZones.map((z) => (
+                            <SelectItem key={z._id} value={`line:${z._id}`}>
+                              {z.name || "Distance"} ({(z.lengthFt ?? 0).toLocaleString()} ft)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {numberFieldDefs.length > 0 && (
               <div className="rounded-md border border-border">
                 <div className="border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
@@ -842,6 +991,14 @@ export function AerialMeasurementDialog({
                             <SelectItem value="mulch_bed">Mulch bed total ({totalsByType.mulch_bed.toLocaleString()})</SelectItem>
                             <SelectItem value="parking_lot">Parking lot total ({totalsByType.parking_lot.toLocaleString()})</SelectItem>
                             <SelectItem value="gross">Gross total ({totalsByType.gross.toLocaleString()})</SelectItem>
+                            {linearZones.length > 0 && (
+                              <SelectItem value="linear">All distances total ({totalsByType.linear.toLocaleString()} ft)</SelectItem>
+                            )}
+                            {linearZones.map((z) => (
+                              <SelectItem key={z._id} value={`line:${z._id}`}>
+                                {z.name || "Distance"} ({(z.lengthFt ?? 0).toLocaleString()} ft)
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>

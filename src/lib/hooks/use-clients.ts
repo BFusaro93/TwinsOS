@@ -510,10 +510,13 @@ export function useUpdateClientPropertyZones() {
       clientId,
       propertyId,
       zones: inputZones,
+      clientLinear,
     }: {
       clientId: string;
       propertyId: string;
       zones: PropertyZone[];
+      /** Distance totals (ft) to copy onto the client's Perimeter / Edging fields; omit a key to leave it alone. */
+      clientLinear?: { perimeter?: number | null; edging?: number | null };
     }) => {
       const supabase = createClient();
       // Linear measurements carry no area and must not touch any rollup.
@@ -536,7 +539,7 @@ export function useUpdateClientPropertyZones() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: prior } = await (supabase as any)
         .from("client_properties")
-        .select("zones")
+        .select("zones, is_master")
         .eq("id", propertyId)
         .maybeSingle();
       const priorZones: PropertyZone[] = (Array.isArray(prior?.zones) ? prior.zones : []).filter(isAreaZone);
@@ -557,9 +560,30 @@ export function useUpdateClientPropertyZones() {
         .update({ zones: allZones, ...rollup })
         .eq("id", propertyId);
       if (error) throw error;
+
+      // The client Details tab reads takeoffs off the clients row, not the property, so the
+      // master property (the client's own address) mirrors its rollup there. Satellite
+      // properties stay property-level only.
+      if (prior?.is_master) {
+        const clientUpdate: Record<string, number | null> = {};
+        for (const k of ["turf_sqft", "mulch_bed_sqft", "gross_sqft"] as const) {
+          if (k in rollup) clientUpdate[k] = rollup[k];
+        }
+        if (clientLinear?.perimeter !== undefined) clientUpdate.linear_ft_perimeter = clientLinear.perimeter;
+        if (clientLinear?.edging !== undefined) clientUpdate.linear_ft_edging = clientLinear.edging;
+        if (Object.keys(clientUpdate).length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: clientError } = await (supabase as any)
+            .from("clients")
+            .update(clientUpdate)
+            .eq("id", clientId);
+          if (clientError) throw clientError;
+        }
+      }
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId] });
     },
   });
 }
