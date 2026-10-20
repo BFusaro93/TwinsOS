@@ -36,7 +36,7 @@ Font.registerHyphenationCallback((word) => [word]);
 /** More columns than this and equal-width cells stop working (headers collide,
  *  long tokens such as licence numbers overflow into the next column). */
 const WIDE_TABLE_COLUMNS = 10;
-const PAGE_TEXT_WIDTH = 841.89 - 2 * 28;
+const PAGE_TEXT_WIDTH = 792 - 2 * 28;
 const CELL_PADDING = 4;
 
 interface ColumnLayout {
@@ -121,7 +121,7 @@ function ExportBarChart({ chart, color }: { chart: ReportExportChart; color: str
 export function ReportExportDocument({ title, generatedAt, sections, charts }: ReportExportData) {
   return (
     <Document>
-      <Page size="A4" orientation="landscape" style={styles.page}>
+      <Page size="LETTER" orientation={sections.some((s) => s.columns.length > 6) ? "landscape" : "portrait"} style={styles.page}>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.generatedAt}>Generated {generatedAt}</Text>
         {charts && charts.length > 0 && (

@@ -70,6 +70,7 @@ function formatStatus(status: string): string {
 function buildStyles(brandColor: string): string {
   return `
     @page {
+      size: letter portrait;
       margin: 0.5in;
     }
 

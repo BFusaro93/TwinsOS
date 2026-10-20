@@ -43,7 +43,7 @@ export function sanitizeStorageFileName(name: string): string {
   return `${safeBase || "file"}${ext.replace(/[^a-zA-Z0-9.]/g, "")}`;
 }
 
-export function useUploadAttachment(recordType: AttachmentRecordType, recordId: string) {
+export function useUploadAttachment(recordType: AttachmentRecordType, hookRecordId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     /**
@@ -51,8 +51,12 @@ export function useUploadAttachment(recordType: AttachmentRecordType, recordId: 
      * Returns an array of per-file results so callers can surface partial failures.
      * Always invalidates the cache even when some files fail.
      */
-    mutationFn: async (files: File | File[]): Promise<UploadResult[]> => {
-      const fileList = Array.isArray(files) ? files : [files];
+    mutationFn: async (input: File | File[] | { files: File[]; recordId: string }): Promise<UploadResult[]> => {
+      // `recordId` override lets a create form upload against a record whose
+      // id only exists after the hook was called.
+      const isOverride = !Array.isArray(input) && !(input instanceof File);
+      const fileList = isOverride ? input.files : Array.isArray(input) ? input : [input];
+      const recordId = isOverride ? input.recordId : hookRecordId;
       const supabase = createClient();
 
       // Fetch caller identity once for all files
@@ -136,7 +140,7 @@ export function useUploadAttachment(recordType: AttachmentRecordType, recordId: 
       return Promise.all(fileList.map(uploadOne));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["attachments", recordType, recordId] });
+      queryClient.invalidateQueries({ queryKey: ["attachments", recordType] });
     },
   });
 }
