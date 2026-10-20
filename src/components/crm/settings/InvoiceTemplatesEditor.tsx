@@ -87,6 +87,7 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
   const [logoUrl, setLogoUrl] = useState(template.logoUrl ?? "");
   const [accentColor, setAccentColor] = useState(template.accentColor ?? "#60ab45");
   const [showNotes, setShowNotes] = useState(template.showNotes);
+  const [showChemicalApplications, setShowChemicalApplications] = useState(template.showChemicalApplications);
   const [defaultNotes, setDefaultNotes] = useState(template.defaultNotes ?? "");
   const [advertisementText, setAdvertisementText] = useState(template.advertisementText ?? "");
 
@@ -98,6 +99,7 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
         logoUrl: logoUrl.trim() || null,
         accentColor: accentColor.trim() || null,
         showNotes,
+        showChemicalApplications,
         defaultNotes: defaultNotes.trim() || null,
         advertisementText: advertisementText.trim() || null,
       },
@@ -145,6 +147,10 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
       <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
         <Checkbox checked={showNotes} onCheckedChange={(v) => setShowNotes(v === true)} />
         Show invoice notes section
+      </label>
+      <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
+        <Checkbox checked={showChemicalApplications} onCheckedChange={(v) => setShowChemicalApplications(v === true)} />
+        Add chemical application record (product, amount, method, targets, re-entry, applicator license)
       </label>
       <div>
         <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">

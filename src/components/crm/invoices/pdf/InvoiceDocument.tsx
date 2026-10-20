@@ -28,6 +28,18 @@ export interface InvoicePDFPhoto {
   dataUri: string;
 }
 
+/** One chemical applied on an invoiced visit, for the "Chemical Application
+ *  Record" page. All display strings — "—" when unknown. */
+export interface InvoicePDFChemicalApplication {
+  serviceDate: string | null;
+  product: string;
+  amount: string;
+  method: string;
+  targets: string;
+  reEntryInterval: string;
+  applicatorLicense: string;
+}
+
 export interface InvoicePDFData {
   invoiceNumber: number;
   description: string | null;
@@ -38,6 +50,9 @@ export interface InvoicePDFData {
   notes: string | null;
   /** Photos attached to the invoice (max 12). Rendered after the invoice page. */
   photos?: InvoicePDFPhoto[];
+  /** Chemicals applied on the billed visits. Only populated when the invoice's
+   *  template has "show chemical applications" on; rendered after the invoice. */
+  chemicals?: InvoicePDFChemicalApplication[];
 
   clientName: string | null;
   clientAddress: string | null;
@@ -917,10 +932,70 @@ function InvoicePhotoPages({ invoice, org }: { invoice: InvoicePDFData; org: Org
   );
 }
 
+const SCH = StyleSheet.create({
+  page: { fontFamily: "Helvetica", fontSize: 8, color: "#1e293b", paddingTop: 40, paddingBottom: 60, paddingHorizontal: 40, backgroundColor: "#ffffff" },
+  heading: { fontSize: 14, fontFamily: "Helvetica-Bold", color: "#0f172a", marginBottom: 4 },
+  sub: { fontSize: 8, color: "#64748b", marginBottom: 12 },
+  headRow: { flexDirection: "row", backgroundColor: "#f1f5f9", borderBottomWidth: 1, borderBottomColor: "#cbd5e1", paddingVertical: 4, paddingHorizontal: 4 },
+  row: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#e2e8f0", paddingVertical: 4, paddingHorizontal: 4 },
+  headCell: { fontFamily: "Helvetica-Bold", fontSize: 7, color: "#475569" },
+  cDate: { width: "12%", paddingRight: 4 },
+  cProduct: { width: "22%", paddingRight: 4 },
+  cAmount: { width: "13%", paddingRight: 4 },
+  cMethod: { width: "14%", paddingRight: 4 },
+  cTargets: { width: "17%", paddingRight: 4 },
+  cReEntry: { width: "11%", paddingRight: 4 },
+  cLicense: { width: "11%" },
+  footer: { position: "absolute", bottom: 24, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between" },
+  footerText: { fontSize: 7, color: "#94a3b8" },
+});
+
+function formatServiceDate(d: string | null): string {
+  if (!d) return "—";
+  const [y, m, day] = d.slice(0, 10).split("-");
+  return y && m && day ? `${m}/${day}/${y}` : d;
+}
+
+function InvoiceChemicalPage({ invoice, org }: { invoice: InvoicePDFData; org: OrgPDFData }) {
+  const chemicals = invoice.chemicals ?? [];
+  if (chemicals.length === 0) return null;
+  return (
+    <Page size="LETTER" style={SCH.page}>
+      <Text style={SCH.heading}>Chemical Application Record</Text>
+      <Text style={SCH.sub}>Invoice #{invoice.invoiceNumber}{invoice.clientName ? ` · ${invoice.clientName}` : ""}</Text>
+      <View style={SCH.headRow} fixed>
+        <Text style={[SCH.headCell, SCH.cDate]}>Date</Text>
+        <Text style={[SCH.headCell, SCH.cProduct]}>Product</Text>
+        <Text style={[SCH.headCell, SCH.cAmount]}>Amount Applied</Text>
+        <Text style={[SCH.headCell, SCH.cMethod]}>Method</Text>
+        <Text style={[SCH.headCell, SCH.cTargets]}>Targets</Text>
+        <Text style={[SCH.headCell, SCH.cReEntry]}>Re-Entry</Text>
+        <Text style={[SCH.headCell, SCH.cLicense]}>License #</Text>
+      </View>
+      {chemicals.map((c, i) => (
+        <View key={i} style={SCH.row} wrap={false}>
+          <Text style={SCH.cDate}>{formatServiceDate(c.serviceDate)}</Text>
+          <Text style={SCH.cProduct}>{c.product}</Text>
+          <Text style={SCH.cAmount}>{c.amount}</Text>
+          <Text style={SCH.cMethod}>{c.method}</Text>
+          <Text style={SCH.cTargets}>{c.targets}</Text>
+          <Text style={SCH.cReEntry}>{c.reEntryInterval}</Text>
+          <Text style={SCH.cLicense}>{c.applicatorLicense}</Text>
+        </View>
+      ))}
+      <View style={SCH.footer} fixed>
+        <Text style={SCH.footerText}>{org.name}{org.phone ? ` · ${org.phone}` : ""}</Text>
+        <Text style={SCH.footerText} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
+      </View>
+    </Page>
+  );
+}
+
 function renderLayout(layoutKey: InvoicePDFLayoutKey, invoice: InvoicePDFData, org: OrgPDFData) {
   return (
     <>
       {renderInvoicePages(layoutKey, invoice, org)}
+      <InvoiceChemicalPage invoice={invoice} org={org} />
       <InvoicePhotoPages invoice={invoice} org={org} />
     </>
   );
