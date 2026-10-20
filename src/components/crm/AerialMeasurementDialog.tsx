@@ -147,6 +147,9 @@ export function AerialMeasurementDialog({
   const [zones, setZones] = useState<DraftZone[]>([]);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const [mapsReady, setMapsReady] = useState(false);
+  // Which distance (if any) feeds the client's built-in Perimeter / Linear ft edging fields.
+  const [perimeterMap, setPerimeterMap] = useState<FieldMapping>("none");
+  const [edgingMap, setEdgingMap] = useState<FieldMapping>("none");
   const [fieldMappings, setFieldMappings] = useState<Record<string, FieldMapping>>({});
 
   const [isDrawing, setIsDrawing] = useState(false);
@@ -196,6 +199,8 @@ export function AerialMeasurementDialog({
       setIsDrawing(false);
       setDraftPointCount(0);
       setFieldMappings({});
+      setPerimeterMap("none");
+      setEdgingMap("none");
       autoCreatedPropertyRef.current = false;
     }
   }, [open, properties, propertyId]);
@@ -609,6 +614,9 @@ export function AerialMeasurementDialog({
     return totalsByType[mapping as keyof typeof totalsByType] ?? 0;
   }
   const totalSqft = totalsByType.gross;
+  function distanceMappingValid(m: FieldMapping): boolean {
+    return m === "linear" ? linearZones.length > 0 : m.startsWith("line:") && linearZones.some((z) => `line:${z._id}` === m);
+  }
   const totalLinearFt = linearZones.reduce((s, z) => s + (z.lengthFt || 0), 0);
 
   async function handleSave() {
@@ -629,6 +637,10 @@ export function AerialMeasurementDialog({
         propertyId: property.id,
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         zones: zones.map(({ _id, invalid, ...z }) => z),
+        clientLinear: {
+          ...(perimeterMap !== "none" && distanceMappingValid(perimeterMap) ? { perimeter: mappedValue(perimeterMap) } : {}),
+          ...(edgingMap !== "none" && distanceMappingValid(edgingMap) ? { edging: mappedValue(edgingMap) } : {}),
+        },
       });
     } catch {
       toast.error("Failed to save measurements");
@@ -908,6 +920,44 @@ export function AerialMeasurementDialog({
                     Total: {totalLinearFt.toLocaleString()} ft
                   </div>
                 )}
+              </div>
+            )}
+
+            {linearZones.length > 0 && (
+              <div className="rounded-md border border-border">
+                <div className="border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                  Show distances on Client Details
+                </div>
+                <div className="divide-y">
+                  {([
+                    { label: "Perimeter ft", value: perimeterMap, set: setPerimeterMap },
+                    { label: "Linear ft edging", value: edgingMap, set: setEdgingMap },
+                  ] as const).map(({ label, value, set }) => (
+                    <div key={label} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                      <p className="text-slate-700 dark:text-neutral-300">{label}</p>
+                      <Select value={value} onValueChange={(v) => set(v as FieldMapping)}>
+                        <SelectTrigger className="h-7 w-52 px-2 text-left text-xs">
+                          <span className="truncate">
+                            {value === "none"
+                              ? "Don’t sync"
+                              : value === "linear"
+                                ? `All distances (${totalsByType.linear.toLocaleString()} ft)`
+                                : (linearZones.find((z) => `line:${z._id}` === value)?.name ?? "Don’t sync")}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Don&rsquo;t sync</SelectItem>
+                          <SelectItem value="linear">All distances ({totalsByType.linear.toLocaleString()} ft)</SelectItem>
+                          {linearZones.map((z) => (
+                            <SelectItem key={z._id} value={`line:${z._id}`}>
+                              {z.name || "Distance"} ({(z.lengthFt ?? 0).toLocaleString()} ft)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
