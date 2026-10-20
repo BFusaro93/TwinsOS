@@ -470,9 +470,12 @@ function LineItemRow({
 // ── record payment dialog ─────────────────────────────────────────────────────
 
 function RecordPaymentDialog({
-  invoiceId, clientId, balanceCents, open, onOpenChange,
+  invoiceId, clientId, balanceCents, open, onOpenChange, cardPaymentsReady, onCollectOnline,
 }: {
   invoiceId: string; clientId: string; balanceCents: number; open: boolean; onOpenChange: (o: boolean) => void;
+  /** Stripe Connect is live for this org, so a card / ACH can actually be charged. */
+  cardPaymentsReady: boolean;
+  onCollectOnline: () => void;
 }) {
   const [amount, setAmount] = useState((balanceCents/100).toFixed(2));
   const orgTimeZone = useOrgTimeZone();
@@ -488,6 +491,7 @@ function RecordPaymentDialog({
   const appliedCents = Math.min(amountCents, Math.max(0, balanceCents));
   const overageCents = Math.max(0, amountCents - appliedCents);
   const isWriteOff = method === "AR Write-off";
+  const isElectronicMethod = method.startsWith("Credit Card") || method === "ACH/E-Check";
 
   async function submit() {
     if (!amountCents || amountCents <= 0) { toast.error("Enter a valid amount"); return; }
@@ -518,6 +522,26 @@ function RecordPaymentDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Enter Payment</DialogTitle></DialogHeader>
         <div className="flex flex-col gap-3 py-2">
+          {/* This form only RECORDS money already received (check, cash, a terminal swipe…). It never
+              charges anything — card / ACH charges go through Collect Payment, so say so up front. */}
+          <div className="rounded-md border border-border bg-slate-50 dark:bg-muted/40 px-3 py-2 text-xs text-slate-600 dark:text-neutral-400">
+            This records a payment you already received — it doesn&rsquo;t charge a card or bank account.
+            {cardPaymentsReady ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2 h-7 w-full text-xs"
+                onClick={() => { onOpenChange(false); onCollectOnline(); }}
+              >
+                <CreditCard className="mr-1 h-3.5 w-3.5" /> Charge a card or bank account instead
+              </Button>
+            ) : (
+              <span className="mt-1 block">
+                To charge cards or ACH from here, connect Stripe in Settings &rsaquo; Accounting.
+              </span>
+            )}
+          </div>
           <div className="flex flex-col gap-1.5">
             <Label>Amount</Label>
             <div className="relative">
@@ -547,6 +571,12 @@ function RecordPaymentDialog({
               </Select>
             </div>
           </div>
+          {isElectronicMethod && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Only pick {method.startsWith("Credit Card") ? "a card" : "ACH"} here if it was already collected elsewhere
+              (e.g. a separate terminal) — nothing is charged by saving this.
+            </p>
+          )}
           <div className="flex flex-col gap-1.5">
             <Label>Reference / Check #</Label>
             <Input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Optional" />
@@ -1629,6 +1659,8 @@ export function InvoiceDetail({
         balanceCents={invoice.balanceCents}
         open={paymentOpen}
         onOpenChange={setPaymentOpen}
+        cardPaymentsReady={cardPaymentsReady}
+        onCollectOnline={() => setChargeCardOpen(true)}
       />
       <ChargeCardDialog
         invoiceId={invoice.id}

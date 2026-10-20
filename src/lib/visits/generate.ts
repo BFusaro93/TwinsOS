@@ -433,7 +433,7 @@ export async function generateVisitsForJobs(
 
   const { rows: scheduleRows, error: schedErr } = await selectAllRows<ScheduleRow & { org_id: string | null }>(() => supabase
     .from("crm_schedules")
-    .select("org_id, name, frequency, day_of_week, week_pattern, anchor_date, week_of_month, season_start, season_end")
+    .select("org_id, name, frequency, day_of_week, week_pattern, anchor_date, week_of_month, season_start, season_end, custom_dates, excluded_dates")
     .is("deleted_at", null));
   if (schedErr) { result.errors.push(schedErr); return result; }
   const schedulesByOrg = new Map<string, Map<string, ScheduleRow>>();

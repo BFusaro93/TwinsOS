@@ -479,10 +479,23 @@ export function DispatchBoardGuide() {
             &quot;All Crews&quot; to clear it).
           </li>
           <li>
-            <strong>Search</strong> — a free-text box for finding a visit by client, address, or
-            similar. Click the &times; in the box (or press Escape) to clear it. The per-column
+            <strong>Search</strong> — a free-text box that matches client name, street address,
+            city, zip, service name or code, crew code, and notes to crew. Click the &times; in the box (or press Escape) to clear it. The per-column
             filter&apos;s Crew option is a pick-list of your active crews plus Unassigned, so
             you choose a crew instead of typing its name or code.
+          </li>
+          <li>
+            <strong>Map</strong> — the <strong>Map</strong> button next to Stats opens a map above
+            the list with every stop in view, numbered in route order and coloured by crew; click a
+            pin for the client, address, crew and status. It follows the filters and any new order
+            or optimize result. Stops with no resolvable address are left off, and the panel says
+            how many are missing. It uses the Google Maps key under Settings &gt; Integrations.
+          </li>
+          <li>
+            <strong>Weather</strong> — a chip in the count bar shows the National Weather Service
+            forecast for the selected day (conditions, high/low, wind, chance of precipitation)
+            plus any active weather alerts, positioned at the average location of the day&apos;s
+            jobs. It covers the US and appears for days within about a week ahead.
           </li>
           <li>
             <strong>Date range</strong> — an optional end date lets the board span more than a single
@@ -638,13 +651,18 @@ export function DispatchBoardGuide() {
           Optimize Route solves each crew&apos;s tour separately (in parallel) and anchors it at that{" "}
           <strong>crew&apos;s own starting address</strong> (set per crew under Team → Crews) — a
           mixed-crew day no longer needs to be filtered down to one crew first to get a real route. A
-          crew with no starting address set still gets routed by driving time, just without a shop to
-          start or end at, and the confirmation toast says which crews that applies to. If one
+          crew with no starting address of its own starts from the{" "}
+          <strong>Company Address</strong> in Settings &gt; Organization instead. Only if neither is
+          set is the route unanchored (routed by driving time without a shop to start or end at),
+          and the confirmation toast says which crews that applies to. If one
           crew&apos;s route fails to solve (a bad address, a Distance Matrix error), the others still
           come back — it isn&apos;t all-or-nothing.
         </p>
         <p>
-          After optimizing, the banner reports how many crews were routed and the combined driving time{" "}
+          After optimizing, each row shows the drive time to <em>arrive</em> at it: the first stop of a
+          crew shows the leg from the shop (⌂), and every later stop shows the leg from the stop
+          above it (↑). The leg back to the shop at the end of the day is in the banner, not on a
+          row. The banner reports how many crews were routed and the combined driving time{" "}
           <em>between stops</em> and shop legs across all of them. An optimized order is a proposal like
           any manual drag — it isn&apos;t saved, and doesn&apos;t become the crew&apos;s remembered
           order, until you click <strong>Save Order</strong>.

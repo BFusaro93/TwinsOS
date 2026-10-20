@@ -41,6 +41,7 @@ export function JobsPackagesGuide() {
           <TOCLink href="#equipment">Equipment to bring</TOCLink>
           <TOCLink href="#packages">Packages, in detail</TOCLink>
           <TOCLink href="#projects">Projects (Landscapt vs. Equipt/PO)</TOCLink>
+          <TOCLink href="#schedule-templates">Schedule templates</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
         </div>
       </div>
@@ -359,6 +360,37 @@ export function JobsPackagesGuide() {
           linked. A Landscapt <code>project</code> job and an Equipt/PO project are two separate things
           that happen to share a name.
         </Callout>
+      </Section>
+
+      <Section id="schedule-templates" title="Schedule templates">
+        <p>
+          The <strong>Schedule</strong> dropdown on a recurring job is fed by{" "}
+          <strong>Settings &gt; Schedules</strong>. Each schedule is a reusable pattern: a name, a
+          frequency (Weekly, Bi-Weekly, Every 3 or 4 Weeks, Monthly, or Custom dates), a day of the
+          week, and an optional season window. The <strong>Upcoming Dates</strong> panel in the
+          dialog previews the dates it will produce, and those are the same dates the visit
+          generator uses.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Skip Dates.</strong> To drop a single date from a recurring schedule — say a
+            holiday Monday on a weekly Monday run — use the <strong>Skip Dates</strong> calendar in
+            the dialog. Dates the schedule lands on show in green; click one to skip it (it turns
+            red and struck through) and click again to restore it. Skipped dates are left out of the
+            preview and out of newly generated visits. Visits already created for a date you later
+            skip are not removed — cancel those on the Dispatch Board.
+          </li>
+          <li>
+            <strong>Custom dates.</strong> Choose the <strong>Custom dates</strong> frequency to pick
+            the exact service dates from a month calendar — click a day to add it, click it again to
+            remove it, and use the arrows to move between months. Custom schedules ignore the day of
+            week and season window, and need at least one date.
+          </li>
+          <li>
+            <strong>Season window.</strong> Season Start and Season End each have a{" "}
+            <strong>Clear</strong> link, so you can go back to year-round after setting one.
+          </li>
+        </ul>
       </Section>
 
       <Section id="see-also" title="See also">

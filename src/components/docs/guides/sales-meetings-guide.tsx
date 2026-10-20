@@ -17,7 +17,7 @@ const MEETING_STATUSES: [string, string][] = [
 
 const MEETING_FIELDS: [string, string][] = [
   ["Sales Rep *", "Required. Only employees flagged as a sales rep (and active) appear in this list."],
-  ["Client / Lead Name", "Either pick an existing client, or leave it unset and type a free-text lead name for a prospect who isn't in the system yet. A meeting can't have both — picking a client hides the lead-name field."],
+  ["Client or Lead", "Pick an existing client or lead — leads are client records, so one search box finds both, and leads are tagged \"(Lead)\". If the prospect isn't in the system at all, leave it unset and type their name in Prospect Name. A meeting can't have both — picking a client or lead hides the Prospect Name field."],
   ["Title *", "Free text, e.g. \"Estimate walkthrough\"."],
   ["Meeting Type", "In Person, Phone, or Video — label only, doesn't change any behavior."],
   ["Date / Time / Duration *", "Duration is in minutes (5-minute increments). Together with the start time, this defines the window used for the double-booking check."],

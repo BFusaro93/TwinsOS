@@ -7,6 +7,8 @@ import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { alreadyBilledReason, billedInPeriod, planContractBilling, termSkipReason } from "@/lib/contract-billing";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { normalizeCsvDate, parseCsvMoneyCents } from "@/lib/hooks/use-invoices";
 import { todayInZone } from "@/lib/time/zone";
 import type {
   CRMContract,
@@ -170,6 +172,141 @@ export function useCreateContract() {
       qc.invalidateQueries({ queryKey: ["crm-contracts"] });
       fireAutomationTrigger({ triggerType: "contract_created", clientId: contract.clientId });
     },
+  });
+}
+
+const MONTH_KEYS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"] as const;
+const IMPORT_STATUSES = new Set<ContractStatus>(["draft", "sent", "signed", "active", "expired", "cancelled"]);
+const IMPORT_FREQUENCIES = new Set<BillingFrequency>(["weekly", "biweekly", "monthly", "quarterly", "annual", "one_time"]);
+
+/** Column order shared by the Settings → Import / Export contracts export, import and template. */
+export const CONTRACT_CSV_COLUMNS = [
+  "clientName", "title", "status", "startDate", "endDate", "monthlyAmount", "billingFrequency",
+  "billingDayOfMonth", "billMonthInAdvance", "paymentType", "poNumber", "autoGenerate", "isActive",
+  "includeSubProperties", "defaultService", "invoiceLineItems",
+  ...MONTH_KEYS.map((m) => `${m}Amount`),
+] as const;
+
+const yesNo = (raw: string | undefined, fallback: boolean): boolean => {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (!v) return fallback;
+  return ["yes", "y", "true", "1"].includes(v);
+};
+
+/** One export row per contract, in CONTRACT_CSV_COLUMNS order. Line items are joined with " | ". */
+export function contractToCsvRow(c: CRMContract): string[] {
+  return [
+    c.clientName ?? "", c.title, c.status, c.startDate ?? "", c.endDate ?? "",
+    (c.monthlyAmountCents / 100).toFixed(2), c.billingFrequency, String(c.billingDayOfMonth),
+    c.billMonthInAdvance ? "yes" : "no", c.paymentType ?? "", c.poNumber ?? "",
+    c.autoGenerate ? "yes" : "no", c.isActive ? "yes" : "no", c.includeSubProperties ? "yes" : "no",
+    c.defaultService ?? "", (c.invoiceLineItems ?? []).join(" | "),
+    ...MONTH_KEYS.map((m) => (c.monthlyAmounts?.[m] != null ? (c.monthlyAmounts[m]! / 100).toFixed(2) : "")),
+  ];
+}
+
+/**
+ * Bulk import from the Settings → Import / Export tab. Clients are matched by exact display name
+ * (ambiguous names are skipped, not guessed). A row whose client + title + start date already
+ * exists is skipped so re-importing a file doesn't double up. Imports don't fire automations.
+ */
+export function useBulkImportContracts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rows: Record<string, string>[]) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const clients = await fetchAllRows<any>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any).from("clients").select("id, display_name").is("deleted_at", null).order("id")
+      );
+      const byName = new Map<string, string>();
+      const ambiguous = new Set<string>();
+      for (const c of clients) {
+        const key = String(c.display_name).trim().toLowerCase();
+        if (byName.has(key)) ambiguous.add(key); else byName.set(key, c.id);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const existing = await fetchAllRows<any>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any).from("crm_contracts").select("client_id, title, start_date").is("deleted_at", null).order("id")
+      );
+      const seen = new Set(existing.map((e) => `${e.client_id}|${String(e.title).trim().toLowerCase()}|${e.start_date ?? ""}`));
+
+      let created = 0;
+      let skipped = 0;
+      const warnings: { row: number; reason: string }[] = [];
+
+      for (const [idx, r] of rows.entries()) {
+        const rowNo = idx + 1;
+        const nameKey = r.clientName?.trim().toLowerCase() ?? "";
+        const title = r.title?.trim() ?? "";
+        if (!nameKey || !title) { warnings.push({ row: rowNo, reason: "clientName and title are required — row skipped" }); skipped++; continue; }
+        if (ambiguous.has(nameKey)) { warnings.push({ row: rowNo, reason: `more than one client is named "${r.clientName.trim()}" — row skipped` }); skipped++; continue; }
+        const clientId = byName.get(nameKey);
+        if (!clientId) { warnings.push({ row: rowNo, reason: `no client named "${r.clientName.trim()}" — row skipped` }); skipped++; continue; }
+
+        const startDate = r.startDate?.trim() ? normalizeCsvDate(r.startDate) : null;
+        const endDate = r.endDate?.trim() ? normalizeCsvDate(r.endDate) : null;
+        if ((r.startDate?.trim() && !startDate) || (r.endDate?.trim() && !endDate)) {
+          warnings.push({ row: rowNo, reason: "start/end date isn't a valid date (use YYYY-MM-DD or M/D/YYYY) — row skipped" });
+          skipped++;
+          continue;
+        }
+        if (startDate && endDate && endDate < startDate) { warnings.push({ row: rowNo, reason: "end date is before the start date — row skipped" }); skipped++; continue; }
+
+        const dupKey = `${clientId}|${title.toLowerCase()}|${startDate ?? ""}`;
+        if (seen.has(dupKey)) { warnings.push({ row: rowNo, reason: "a contract with this client, name and start date already exists — row skipped" }); skipped++; continue; }
+
+        const rawStatus = (r.status?.trim().toLowerCase() || "draft") as ContractStatus;
+        const status: ContractStatus = IMPORT_STATUSES.has(rawStatus) ? rawStatus : "draft";
+        if (!IMPORT_STATUSES.has(rawStatus)) warnings.push({ row: rowNo, reason: `unrecognized status "${r.status?.trim()}" imported as "draft"` });
+        const rawFreq = (r.billingFrequency?.trim().toLowerCase().replace(/[\s-]/g, "_") || "monthly") as BillingFrequency;
+        const billingFrequency: BillingFrequency = IMPORT_FREQUENCIES.has(rawFreq) ? rawFreq : "monthly";
+        if (!IMPORT_FREQUENCIES.has(rawFreq)) warnings.push({ row: rowNo, reason: `unrecognized billing frequency "${r.billingFrequency?.trim()}" imported as "monthly"` });
+
+        const monthlyAmounts: MonthlyAmounts = {};
+        let anyMonth = false;
+        for (const m of MONTH_KEYS) {
+          const raw = r[`${m}Amount`];
+          if (raw != null && raw.trim() !== "") { monthlyAmounts[m] = parseCsvMoneyCents(raw); anyMonth = true; }
+        }
+        let monthlyAmountCents = parseCsvMoneyCents(r.monthlyAmount);
+        if (anyMonth && !monthlyAmountCents) {
+          // Same averaging the contract form does: over billed (positive) months only.
+          const billed = Object.values(monthlyAmounts).filter((v) => (v ?? 0) > 0) as number[];
+          monthlyAmountCents = billed.length ? Math.round(billed.reduce((s, v) => s + v, 0) / billed.length) : 0;
+        }
+        const day = Math.round(Number(r.billingDayOfMonth));
+        const lineItems = (r.invoiceLineItems ?? "").split("|").map((x) => x.trim()).filter(Boolean);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from("crm_contracts").insert({
+          client_id: clientId,
+          title,
+          status,
+          start_date: startDate,
+          end_date: endDate,
+          monthly_amount_cents: monthlyAmountCents,
+          billing_frequency: billingFrequency,
+          billing_day_of_month: Number.isFinite(day) && day >= 1 && day <= 31 ? day : 1,
+          bill_month_in_advance: yesNo(r.billMonthInAdvance, false),
+          payment_type: r.paymentType?.trim() || null,
+          po_number: r.poNumber?.trim() || null,
+          auto_generate: yesNo(r.autoGenerate, true),
+          is_active: yesNo(r.isActive, true),
+          include_sub_properties: yesNo(r.includeSubProperties, true),
+          default_service: r.defaultService?.trim() || null,
+          invoice_line_items: lineItems,
+          monthly_amounts: anyMonth ? monthlyAmounts : {},
+        });
+        if (error) { warnings.push({ row: rowNo, reason: `could not be imported: ${error.message}` }); skipped++; continue; }
+        seen.add(dupKey);
+        created++;
+      }
+      return { created, skipped, warnings };
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-contracts"] }),
   });
 }
 

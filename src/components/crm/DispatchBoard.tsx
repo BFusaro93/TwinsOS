@@ -1704,6 +1704,8 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useCrewRouteOrder, useSaveRouteOrder, routeOrderKey, weekdayOfDate } from "@/lib/hooks/use-route-order";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { DispatchCalendar } from "@/components/crm/dispatch/DispatchCalendar";
+import { DispatchMap, type DispatchMapStop } from "@/components/crm/dispatch/DispatchMap";
+import { DispatchWeather } from "@/components/crm/dispatch/DispatchWeather";
 import { CalendarRange, List as ListIcon, LayoutDashboard } from "lucide-react";
 
 /** Route-sheet blank fill-in field — an underlined space for the crew to write on the printed page. */
@@ -2116,7 +2118,7 @@ function TeamAssignDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-3xl p-0 gap-0 pt-10 sm:pt-10 max-h-[90vh] flex flex-col [&>button:last-child]:top-3"
+        className="max-w-6xl h-[85vh] p-0 gap-0 pt-10 sm:pt-10 max-h-[90vh] flex flex-col [&>button:last-child]:top-3"
         // Escape cancels a pick-up first; a second press closes the dialog.
         onEscapeKeyDown={(e) => {
           if (held) {
@@ -2157,7 +2159,7 @@ function TeamAssignDialog({
           {/* Unassigned pool — drop target to un-assign */}
           <div
             className={cn(
-              "w-52 shrink-0 border-r bg-green-50 dark:bg-green-950/40 p-4",
+              "w-64 shrink-0 border-r bg-green-50 dark:bg-green-950/40 p-4",
               held?.kind === "visit" && "cursor-pointer ring-2 ring-inset ring-brand-400"
             )}
             onDragOver={(e) => e.preventDefault()}
@@ -2221,7 +2223,7 @@ function TeamAssignDialog({
                 <div
                   key={crew.id}
                   className={cn(
-                    "w-52 shrink-0 border-r p-4",
+                    "w-64 shrink-0 border-r p-4",
                     held && "cursor-pointer ring-2 ring-inset ring-brand-400"
                   )}
                   onDragOver={(e) => e.preventDefault()}
@@ -2877,7 +2879,8 @@ function VisitRow({
   selectedDate,
   onOpen,
   onEditTimes,
-  driveMinsToNext,
+  driveMinsToHere,
+  fromShop,
   selected,
   onToggleSelect,
   onDragStart,
@@ -2905,7 +2908,10 @@ function VisitRow({
   selectedDate: string;
   onOpen: (v: CRMJobVisit) => void;
   onEditTimes: (v: CRMJobVisit) => void;
-  driveMinsToNext?: number;
+  /** Drive minutes to ARRIVE at this stop, from the previous stop (or the shop for a crew's first stop). */
+  driveMinsToHere?: number;
+  /** True when driveMinsToHere is the leg from the shop rather than from the previous stop. */
+  fromShop?: boolean;
   selected: boolean;
   onToggleSelect: (id: string) => void;
   onDragStart: (id: string) => void;
@@ -3204,9 +3210,12 @@ function VisitRow({
             <span className="text-slate-400 dark:text-neutral-500 text-[10px]">{orderNum}</span>
           )}
         </div>
-        {driveMinsToNext !== undefined && (
-          <div className="text-[9px] text-blue-500 dark:text-blue-400 font-normal leading-tight whitespace-nowrap">
-            ↓{driveMinsToNext}m
+        {driveMinsToHere !== undefined && (
+          <div
+            className="text-[9px] text-blue-500 dark:text-blue-400 font-normal leading-tight whitespace-nowrap"
+            title={fromShop ? "Drive time from the shop" : "Drive time from the previous stop"}
+          >
+            {fromShop ? "⌂" : "↑"}{driveMinsToHere}m
           </div>
         )}
       </td>
@@ -3815,6 +3824,8 @@ export function DispatchBoard() {
     [customFieldDefs]
   );
   const [statsOpen,       setStatsOpen]       = useState(false);
+  const [mapOpen,         setMapOpen]         = useState(false);
+  const { data: boardOrgSettings } = useOrgSettings();
   const [callAheadOpen,   setCallAheadOpen]   = useState(false);
   const [printOpen,       setPrintOpen]       = useState(false);
   const [chemicalWizardOpen, setChemicalWizardOpen] = useState(false);
@@ -3829,6 +3840,8 @@ export function DispatchBoard() {
   const [optimizedOrder,     setOptimizedOrder]     = useState<string[] | null>(null);
   const [driveTimeMap,       setDriveTimeMap]       = useState<Map<string, number>>(new Map());
   const [totalDriveMins,     setTotalDriveMins]     = useState<number | null>(null);
+  // First stop of each crew (visits whose drive time is from the shop, not the previous stop).
+  const [shopStartVisits,     setShopStartVisits]    = useState<Set<string>>(new Set());
   const [shopLegMins,        setShopLegMins]        = useState<number | null>(null);
   // How many crews the last optimize actually routed — each crew is solved as
   // its own tour, so the banner totals are sums across that many routes.
@@ -4054,6 +4067,7 @@ export function DispatchBoard() {
           driveTimes?: { visitId: string; minutesToNext: number }[];
           totalDriveMinutes?: number;
           shopLegMinutes?: number | null;
+          shopOutMinutes?: number | null;
           anchoredToShop?: boolean;
         };
       }[];
@@ -4088,11 +4102,23 @@ export function DispatchBoard() {
       });
       setOptimizedOrder(merged);
 
+      // Each row shows the drive to ARRIVE at it: the first stop from the shop, every later stop
+      // from the one before. The server's legs are keyed by the stop they leave, so shift by one.
       const dtMap = new Map<string, number>();
+      const shopStarts = new Set<string>();
       for (const { data } of successes) {
-        for (const dt of data.driveTimes ?? []) dtMap.set(dt.visitId, dt.minutesToNext);
+        const ordered = data.orderedVisitIds ?? [];
+        if (ordered[0] && data.shopOutMinutes != null) {
+          dtMap.set(ordered[0], data.shopOutMinutes);
+          shopStarts.add(ordered[0]);
+        }
+        (data.driveTimes ?? []).forEach((dt, i) => {
+          const next = ordered[i + 1];
+          if (next) dtMap.set(next, dt.minutesToNext);
+        });
       }
       setDriveTimeMap(dtMap);
+      setShopStartVisits(shopStarts);
       setTotalDriveMins(successes.reduce((s, r) => s + (r.data.totalDriveMinutes ?? 0), 0));
       const legs = successes
         .map((r) => r.data.shopLegMinutes)
@@ -4105,7 +4131,7 @@ export function DispatchBoard() {
       toast.success(
         `Routed ${successes.length} ${crewWord} separately${scope.scoped ? " (selected stops only)" : ""}.` +
           (unanchored > 0
-            ? ` ${unanchored} ${unanchored === 1 ? "crew has" : "crews have"} no starting address, so ${unanchored === 1 ? "its" : "their"} route isn't anchored to a shop.`
+            ? ` ${unanchored} ${unanchored === 1 ? "crew has" : "crews have"} no starting address and no company address is set in Settings, so ${unanchored === 1 ? "its" : "their"} route isn't anchored to a shop.`
             : "") +
           (failures.length > 0 ? ` ${failures.length} failed: ${failures[0].error}` : "")
       );
@@ -4117,6 +4143,7 @@ export function DispatchBoard() {
   function clearOptimization() {
     setOptimizedOrder(null);
     setDriveTimeMap(new Map());
+    setShopStartVisits(new Set());
     setTotalDriveMins(null);
     setShopLegMins(null);
     setRoutedCrewCount(0);
@@ -4182,7 +4209,18 @@ export function DispatchBoard() {
         .map((s) => `${s.serviceName} ${(s.serviceId && serviceCodeById.get(s.serviceId)) || ""}`)
         .join(" ")
         .toLowerCase();
-      if (!cli.includes(q) && !cty.includes(q) && !svc.includes(q)) return false;
+      // Also match the street address, zip, crew code, and notes so the box finds a stop by
+      // anything the dispatcher can see on the row, not just client/city/service.
+      const other = [
+        v.job?.serviceAddress,
+        v.job?.serviceZip,
+        v.job?.notesToCrew,
+        effectiveCrewIdOf(v) ? crewCodeById.get(effectiveCrewIdOf(v) as string) : null,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!cli.includes(q) && !cty.includes(q) && !svc.includes(q) && !other.includes(q)) return false;
     }
     if (colFilterKey && colFilterValue) {
       const q = colFilterValue.toLowerCase();
@@ -4871,6 +4909,15 @@ export function DispatchBoard() {
             <BarChart3 className="h-3.5 w-3.5" />
             Stats
           </Button>
+          <Button
+            size="sm" variant="outline"
+            className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", mapOpen && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
+            onClick={() => setMapOpen((o) => !o)}
+            title="Show all stops on a map"
+          >
+            <MapPin className="h-3.5 w-3.5" />
+            Map
+          </Button>
           <Popover open={callAheadOpen} onOpenChange={setCallAheadOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -5348,6 +5395,34 @@ export function DispatchBoard() {
         </div>
       )}
 
+      {mapOpen && (
+        boardOrgSettings?.googleMapsApiKey ? (
+          <DispatchMap
+            apiKey={boardOrgSettings.googleMapsApiKey}
+            stops={displayVisits.map((v, i): DispatchMapStop => {
+              const crewId = effectiveCrewIdOf(v);
+              const job = v.job;
+              return {
+                visitId: v.id,
+                jobId: v.jobId,
+                order: i + 1,
+                clientName: v.clientName ?? "Unknown client",
+                address: [job?.serviceAddress, job?.serviceCity].filter(Boolean).join(", "),
+                crewKey: crewId ?? "__none__",
+                crewLabel: (crewId && crewCodeById.get(crewId)) || v.crewName || job?.crewName || "Unassigned",
+                statusLabel: VISIT_STATUS_LABELS[v.status] ?? v.status,
+                lat: job?.lat ?? null,
+                lng: job?.lng ?? null,
+              };
+            })}
+          />
+        ) : (
+          <p className="border-b bg-card px-4 py-6 text-center text-sm text-muted-foreground">
+            Google Maps API key not configured. Add it in Settings → Integrations.
+          </p>
+        )
+      )}
+
       {/* Count bar */}
       <div className="bg-muted border-b px-4 py-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] shrink-0">
         <span className="font-semibold text-slate-700 dark:text-neutral-300">
@@ -5359,6 +5434,10 @@ export function DispatchBoard() {
         {!isLoading && completedCount > 0 && (
           <span className="text-green-600 dark:text-green-400">{completedCount} completed</span>
         )}
+        <DispatchWeather
+          date={selectedDate}
+          jobs={displayVisits.slice(0, 25).map((v) => ({ id: v.jobId, lat: v.job?.lat ?? null, lng: v.job?.lng ?? null }))}
+        />
         {optimizedOrder && totalDriveMins !== null && (
           <span className="ml-auto flex items-center gap-1.5 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-2.5 py-0.5 text-blue-700 dark:text-blue-400 font-medium">
             <Route className="h-3 w-3" />
@@ -5444,7 +5523,8 @@ export function DispatchBoard() {
                   selectedDate={selectedDate}
                   onOpen={(v) => setDetailVisitId(v.id)}
                   onEditTimes={(v) => setEditTimesVisitId(v.id)}
-                  driveMinsToNext={driveTimeMap.get(visit.id)}
+                  driveMinsToHere={driveTimeMap.get(visit.id)}
+                  fromShop={shopStartVisits.has(visit.id)}
                   selected={selectedIds.has(visit.id)}
                   onToggleSelect={toggleSelect}
                   onDragStart={handleDragStart}

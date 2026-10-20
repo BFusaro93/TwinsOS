@@ -269,6 +269,25 @@ export async function POST(request: Request) {
     }
   }
 
+  // A crew with no starting address of its own starts from the company address
+  // (Settings → Organization → Company Address).
+  if (!originAddress) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: org } = await (sb as any)
+      .from("organizations")
+      .select("address")
+      .eq("id", profile.org_id)
+      .maybeSingle();
+    const addr = (org?.address ?? {}) as { street?: string; city?: string; state?: string; zip?: string };
+    // A bare city/state with no street is not worth routing from.
+    if (addr.street?.trim()) {
+      originAddress = [addr.street, addr.city, addr.state, addr.zip]
+        .map((p) => p?.trim())
+        .filter(Boolean)
+        .join(", ");
+    }
+  }
+
   // With an origin it sits at index 0 and is dropped from the result; without
   // one we fall back to the old behaviour of anchoring on the first visit.
   const nodes = originAddress
@@ -324,6 +343,11 @@ export async function POST(request: Request) {
     driveTimes,
     totalDriveMinutes: driveTimes.reduce((s, d) => s + d.minutesToNext, 0),
     shopLegMinutes,
+    // Drive time from the shop to the first stop actually driven, so the board can label row 1.
+    shopOutMinutes:
+      originAddress && drivenSequence.length > 0 && matrix[0][drivenSequence[0]] < UNREACHABLE
+        ? Math.round(matrix[0][drivenSequence[0]] / 60)
+        : null,
     anchoredToShop: !!originAddress,
     strategy,
   });

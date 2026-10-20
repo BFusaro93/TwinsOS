@@ -373,6 +373,17 @@ export function InvoicingGuide() {
           more than its own amount.
         </p>
         <p>
+          <strong>Enter Payment records; Collect Payment charges.</strong> The invoice&apos;s{" "}
+          <strong>Enter Payment</strong> dialog only <em>records</em> money you already received —
+          a check, cash, or a card swiped on a separate terminal. Choosing a credit card or ACH
+          method there does not charge anything. To actually charge a card or bank account, use{" "}
+          <strong>Collect Payment</strong>, which is available once Stripe is connected under
+          Settings &gt; Accounting (ACH also needs the ACH setting turned on). When Stripe is
+          connected, Enter Payment also offers a <strong>Charge a card or bank account
+          instead</strong> shortcut that opens Collect Payment; when it isn&apos;t, the dialog says
+          so.
+        </p>
+        <p>
           <strong>Writing off a balance.</strong> The invoice&apos;s <strong>Enter Payment</strong>{" "}
           dialog offers <strong>AR Write-off (non-cash)</strong> alongside the real payment methods.
           A write-off is capped at the invoice&apos;s balance (&quot;A write-off can&apos;t exceed the

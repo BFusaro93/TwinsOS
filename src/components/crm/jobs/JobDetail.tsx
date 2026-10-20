@@ -1143,8 +1143,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             />
                           </div>
                         )}
-                        {((edits.invoice_type as string | undefined) ?? job.invoiceType) === "per_event_per_inch" && (
-                          <SnowRateTiersEditor jobId={job.id} />
+                        {(((edits.invoice_type as string | undefined) ?? job.invoiceType) === "per_event_per_inch" ||
+                          ((edits.invoice_type as string | undefined) ?? job.invoiceType) === "per_push_per_inch") && (
+                          <SnowRateTiersEditor
+                            jobId={job.id}
+                            perPush={((edits.invoice_type as string | undefined) ?? job.invoiceType) === "per_push_per_inch"}
+                          />
                         )}
                         {((edits.invoice_type as string | undefined) ?? job.invoiceType) === "monthly_flat_rate" && (
                           <SnowMonthlyBillingLink jobId={job.id} clientId={job.clientId} contractId={job.contractId} />

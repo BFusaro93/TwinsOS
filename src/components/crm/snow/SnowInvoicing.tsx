@@ -50,7 +50,7 @@ export function SnowInvoicing() {
   const [confirm, confirmDialog] = useConfirm();
 
   const perEventPerInchJobIds = useMemo(
-    () => visits.filter((v) => v.job?.invoiceType === "per_event_per_inch" && v.job?.id).map((v) => v.job!.id),
+    () => visits.filter((v) => (v.job?.invoiceType === "per_event_per_inch" || v.job?.invoiceType === "per_push_per_inch") && v.job?.id).map((v) => v.job!.id),
     [visits]
   );
   const {
