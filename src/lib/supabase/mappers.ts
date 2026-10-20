@@ -892,6 +892,7 @@ export function mapInjuryCase(row: Record<string, any>): import("@/types").Injur
     incidentType: row.incident_type ?? "injury",
     severity: row.severity ?? null,
     employeeName: row.employee_name,
+    employeeId: row.employee_id ?? null,
     dateOfIncident: row.date_of_incident,
     timeOfIncident: row.time_of_incident ? String(row.time_of_incident).slice(0, 5) : null,
     jobTitle: row.job_title ?? null,

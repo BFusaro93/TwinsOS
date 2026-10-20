@@ -37,6 +37,8 @@ import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { NewProjectDialog } from "@/components/po/NewProjectDialog";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { AlertTriangle, Plus, X } from "lucide-react";
+import { SnowRateTiersDraftEditor, parseTierDrafts, type DraftTier } from "@/components/crm/jobs/SnowRateTiersEditor";
+import { useSaveSnowRateTiers } from "@/lib/hooks/use-snow-rate-tiers";
 import { toast } from "sonner";
 import type { JobType, BudgetMethod } from "@/types/crm-jobs";
 import { resolveStopAddress } from "@/lib/utils/stop-address";
@@ -191,6 +193,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const [ratePerInchCents, setRatePerInchCents] = useState<number | null>(null);
   const [assetType, setAssetType] = useState("");
   const [snowDaysAuthorized, setSnowDaysAuthorized] = useState<string[]>([]);
+  // Interval billing (rate by inches), saved against the job right after it is created.
+  const [tierDrafts, setTierDrafts] = useState<DraftTier[]>([]);
+  const saveSnowTiers = useSaveSnowRateTiers();
 
   useEffect(() => {
     if (open) {
@@ -216,6 +221,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setRatePerInchCents(null);
       setAssetType("");
       setSnowDaysAuthorized([]);
+      setTierDrafts([]);
     }
   }, [open, initialJobType]);
 
@@ -570,6 +576,11 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       return;
     }
 
+    // Validate interval-billing ranges up front so a typo doesn't leave a job with half its billing setup.
+    const usesRanges = jobType === "snow" && (invoiceType === "per_event_per_inch" || invoiceType === "per_push_per_inch");
+    const parsedTiers = usesRanges && tierDrafts.length > 0 ? parseTierDrafts(tierDrafts) : [];
+    if (parsedTiers === null) return;
+
     setIsPending(true);
     try {
       const result = await createJob.mutateAsync({
@@ -637,6 +648,13 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             unitCostCents: p.unitCostCents,
           })),
       });
+      if (parsedTiers.length > 0) {
+        try {
+          await saveSnowTiers.mutateAsync({ jobId: (result as { id: string }).id, tiers: parsedTiers });
+        } catch {
+          toast.error("Job created, but the rate ranges didn't save — add them from the job's Details.");
+        }
+      }
       toast.success("Job created");
       onOpenChange(false);
       if (onCreated) onCreated((result as { id: string }).id);
@@ -896,8 +914,15 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   </div>
                 </div>
                 {(invoiceType === "per_event_per_inch" || invoiceType === "per_push_per_inch") && (
+                  <SnowRateTiersDraftEditor
+                    tiers={tierDrafts}
+                    onChange={setTierDrafts}
+                    perPush={invoiceType === "per_push_per_inch"}
+                  />
+                )}
+                {(invoiceType === "per_event_per_inch" || invoiceType === "per_push_per_inch") && (
                   <div className="flex flex-col gap-1.5">
-                    <Label>Rate Per Inch ($)</Label>
+                    <Label>Rate Per Inch ($){tierDrafts.length > 0 ? " — used when no range matches" : ""}</Label>
                     <Input
                       type="number" min="0" step="0.01"
                       value={ratePerInchCents != null ? ratePerInchCents / 100 : ""}

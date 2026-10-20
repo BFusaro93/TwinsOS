@@ -133,7 +133,10 @@ export function AerialMeasurementDialog({
   const [isDrawing, setIsDrawing] = useState(false);
   const [draftPointCount, setDraftPointCount] = useState(0);
 
-  const mapDivRef = useRef<HTMLDivElement | null>(null);
+  // State (not a plain ref) so the map-init effect re-runs once the container actually mounts —
+  // the dialog content is portaled and the container only renders after properties load, so a
+  // ref read at effect time was usually still null and the map stayed blank.
+  const [mapEl, setMapEl] = useState<HTMLDivElement | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const polygonsRef = useRef<Map<string, google.maps.Polygon>>(new Map());
   const isDrawingRef = useRef(false);
@@ -157,6 +160,7 @@ export function AerialMeasurementDialog({
       setZones([]);
       setMapsReady(false);
       setMapsError(null);
+      mapRef.current = null;
       polygonsRef.current.forEach((p) => p.setMap(null));
       polygonsRef.current.clear();
       draftPolygonRef.current?.setMap(null);
@@ -284,12 +288,12 @@ export function AerialMeasurementDialog({
 
   // Load the map once we have a container + API key
   useEffect(() => {
-    if (!open || !orgSettings?.googleMapsApiKey || !mapDivRef.current) return;
+    if (!open || !orgSettings?.googleMapsApiKey || !mapEl) return;
     let cancelled = false;
     loadGoogleMaps(orgSettings.googleMapsApiKey)
       .then(() => {
-        if (cancelled || !mapDivRef.current) return;
-        const map = new google.maps.Map(mapDivRef.current, {
+        if (cancelled) return;
+        const map = new google.maps.Map(mapEl, {
           center: { lat: 39.5, lng: -98.35 },
           zoom: 4,
           mapTypeId: google.maps.MapTypeId.HYBRID,
@@ -328,7 +332,7 @@ export function AerialMeasurementDialog({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, orgSettings?.googleMapsApiKey]);
+  }, [open, orgSettings?.googleMapsApiKey, mapEl]);
 
   // Seed zones + redraw saved shapes whenever the selected property (or map readiness) changes
   useEffect(() => {
@@ -523,7 +527,7 @@ export function AerialMeasurementDialog({
               )}
             </div>
 
-            <div ref={mapDivRef} className="h-[420px] w-full rounded-md border border-border bg-muted" />
+            <div ref={setMapEl} className="h-[420px] w-full rounded-md border border-border bg-muted" />
 
             <p className="text-xs text-slate-400 dark:text-neutral-500">
               Click &ldquo;Trace a Zone&rdquo;, then click the map to place each corner of a turf area, bed, or

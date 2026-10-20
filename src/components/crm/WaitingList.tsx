@@ -519,9 +519,18 @@ export function WaitingList() {
 
     if (search.trim()) {
       const q = search.toLowerCase();
+      // Match anything visible on the row — client, service, address, city, zip, crew, notes —
+      // not just client and service, so typing a street or town doesn't look like a dead box.
       list = list.filter((job) =>
-        (job.clientName ?? "").toLowerCase().includes(q) ||
-        (job.services ?? []).some((s) => s.serviceName.toLowerCase().includes(q))
+        [
+          job.clientName,
+          job.serviceAddress,
+          job.serviceCity,
+          job.serviceZip,
+          job.notesToCrew,
+          job.crewId ? crewCodeById.get(job.crewId) : null,
+          ...(job.services ?? []).map((s) => s.serviceName),
+        ].some((f) => (f ?? "").toLowerCase().includes(q))
       );
     }
 

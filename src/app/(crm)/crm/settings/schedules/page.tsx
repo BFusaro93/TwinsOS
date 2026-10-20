@@ -42,7 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, CalendarDays } from "lucide-react";
+import { Plus, Pencil, Trash2, CalendarDays, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { ruleFromScheduleRow, scheduleOccurrences } from "@/lib/visits/recurrence";
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -53,6 +53,7 @@ const FREQUENCY_LABELS: Record<CRMSchedule['frequency'], string> = {
   every_3_weeks: 'Every 3 Weeks',
   every_4_weeks: 'Every 4 Weeks',
   monthly:       'Monthly',
+  custom:        'Custom dates',
 };
 
 const DAY_OPTIONS: CRMSchedule['dayOfWeek'][] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -85,6 +86,8 @@ function computeUpcomingDates(sched: CRMSchedule, count = 20): Date[] {
     week_of_month: sched.weekOfMonth ?? null,
     season_start: sched.seasonStart ?? null,
     season_end: sched.seasonEnd ?? null,
+    custom_dates: sched.customDates ?? null,
+    excluded_dates: sched.excludedDates ?? null,
   });
   if (!rule) return [];
   const now = new Date();
@@ -126,7 +129,18 @@ function MonthDayPicker({ label, value, onChange }: { label: string; value: stri
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Label>{label}</Label>
+      <div className="flex items-center justify-between">
+        <Label>{label}</Label>
+        {(localMonth || localDay) && (
+          <button
+            type="button"
+            onClick={() => { setLocalMonth(''); setLocalDay(''); onChange(''); }}
+            className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-slate-700 dark:hover:text-neutral-300"
+          >
+            <X className="h-3 w-3" /> Clear
+          </button>
+        )}
+      </div>
       <div className="flex gap-2">
         <Select value={localMonth} onValueChange={handleMonthChange}>
           <SelectTrigger className="flex-1"><SelectValue placeholder="Month" /></SelectTrigger>
@@ -149,6 +163,193 @@ function MonthDayPicker({ label, value, onChange }: { label: string; value: stri
   );
 }
 
+// ── CustomDatePicker ──────────────────────────────────────────────────────────
+
+const WEEKDAY_HEADERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/** Month grid where each click toggles a date on/off — for hand-picked service dates. */
+function CustomDatePicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [cursor, setCursor] = useState(() => {
+    const first = [...value].sort()[0];
+    const base = first ? new Date(`${first}T00:00:00`) : new Date();
+    return { year: base.getFullYear(), month: base.getMonth() };
+  });
+  const selected = useMemo(() => new Set(value), [value]);
+
+  const firstDow = new Date(cursor.year, cursor.month, 1).getDay();
+  const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
+  const cells: (string | null)[] = [
+    ...Array.from({ length: firstDow }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) =>
+      `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`
+    ),
+  ];
+
+  function toggle(ymd: string) {
+    const next = new Set(selected);
+    if (next.has(ymd)) next.delete(ymd); else next.add(ymd);
+    onChange([...next].sort());
+  }
+  function shift(delta: number) {
+    setCursor((c) => {
+      const d = new Date(c.year, c.month + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+  }
+
+  return (
+    <div className="rounded-lg border p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => shift(-1)}>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-sm font-medium">{MONTHS[cursor.month]} {cursor.year}</span>
+        <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => shift(1)}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-muted-foreground">
+        {WEEKDAY_HEADERS.map((d, i) => <span key={i}>{d}</span>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((ymd, i) =>
+          ymd ? (
+            <button
+              key={ymd}
+              type="button"
+              onClick={() => toggle(ymd)}
+              className={`h-8 rounded text-xs transition-colors ${
+                selected.has(ymd)
+                  ? 'bg-brand-600 text-white font-semibold hover:bg-brand-700'
+                  : 'hover:bg-slate-100 dark:hover:bg-neutral-800 text-slate-700 dark:text-neutral-300'
+              }`}
+            >
+              {Number(ymd.slice(8))}
+            </button>
+          ) : (
+            <span key={`b${i}`} />
+          )
+        )}
+      </div>
+      <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
+        <span>{value.length} date{value.length !== 1 ? 's' : ''} selected — click a selected date to remove it</span>
+        {value.length > 0 && (
+          <button type="button" className="hover:text-slate-700 dark:hover:text-neutral-300" onClick={() => onChange([])}>
+            Clear all
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Month calendar for the dates a recurring schedule lands on; click one to skip it (turns red),
+ * click again to restore it. Lets you drop a single holiday Monday without breaking the weekly rule.
+ */
+function SkipDatesPicker({
+  schedule,
+  value,
+  onChange,
+}: {
+  schedule: CRMSchedule;
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [cursor, setCursor] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const skipped = useMemo(() => new Set(value), [value]);
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const monthStart = `${cursor.year}-${pad(cursor.month + 1)}-01`;
+  const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
+  const monthEnd = `${cursor.year}-${pad(cursor.month + 1)}-${pad(daysInMonth)}`;
+
+  // Occurrences with NOTHING skipped, so skipped days stay visible (as red) and can be restored.
+  const scheduled = useMemo(() => {
+    const rule = ruleFromScheduleRow({
+      name: schedule.name,
+      frequency: schedule.frequency,
+      day_of_week: schedule.dayOfWeek,
+      week_pattern: schedule.weekPattern ?? null,
+      anchor_date: schedule.anchorDate ?? null,
+      week_of_month: schedule.weekOfMonth ?? null,
+      season_start: schedule.seasonStart ?? null,
+      season_end: schedule.seasonEnd ?? null,
+    });
+    return new Set(rule ? scheduleOccurrences(rule, monthStart, monthEnd) : []);
+  }, [schedule.frequency, schedule.dayOfWeek, schedule.weekPattern, schedule.anchorDate, schedule.weekOfMonth, schedule.seasonStart, schedule.seasonEnd, schedule.name, monthStart, monthEnd]);
+
+  const firstDow = new Date(cursor.year, cursor.month, 1).getDay();
+  const cells: (string | null)[] = [
+    ...Array.from({ length: firstDow }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => `${cursor.year}-${pad(cursor.month + 1)}-${pad(i + 1)}`),
+  ];
+
+  function toggle(ymd: string) {
+    const next = new Set(skipped);
+    if (next.has(ymd)) next.delete(ymd); else next.add(ymd);
+    onChange([...next].sort());
+  }
+  function shift(delta: number) {
+    setCursor((c) => {
+      const d = new Date(c.year, c.month + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+  }
+
+  return (
+    <div className="rounded-lg border p-3 space-y-2">
+      <p className="text-xs font-semibold text-slate-600 dark:text-neutral-400">
+        Skip Dates <span className="font-normal text-slate-400 dark:text-neutral-500">(optional)</span>
+      </p>
+      <div className="flex items-center justify-between">
+        <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => shift(-1)}>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-sm font-medium">{MONTHS[cursor.month]} {cursor.year}</span>
+        <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => shift(1)}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-muted-foreground">
+        {WEEKDAY_HEADERS.map((d, i) => <span key={i}>{d}</span>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((ymd, i) => {
+          if (!ymd) return <span key={`b${i}`} />;
+          const day = Number(ymd.slice(8));
+          const isSkipped = skipped.has(ymd);
+          if (!scheduled.has(ymd) && !isSkipped) {
+            return <span key={ymd} className="flex h-8 items-center justify-center text-xs text-slate-300 dark:text-neutral-700">{day}</span>;
+          }
+          return (
+            <button
+              key={ymd}
+              type="button"
+              onClick={() => toggle(ymd)}
+              title={isSkipped ? 'Skipped — click to restore' : 'Scheduled — click to skip'}
+              className={`h-8 rounded text-xs font-semibold transition-colors ${
+                isSkipped
+                  ? 'bg-red-100 dark:bg-red-950/50 text-red-600 dark:text-red-400 line-through hover:bg-red-200 dark:hover:bg-red-950'
+                  : 'bg-brand-600 text-white hover:bg-brand-700'
+              }`}
+            >
+              {day}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {value.length > 0 ? `${value.length} date${value.length !== 1 ? 's' : ''} skipped. ` : ''}
+        Click a green date to skip it; click a red one to restore it. Visits already created for a skipped date aren&rsquo;t removed.
+      </p>
+    </div>
+  );
+}
+
 // ── ScheduleDialog ────────────────────────────────────────────────────────────
 
 interface ScheduleFormValues {
@@ -160,10 +361,12 @@ interface ScheduleFormValues {
   seasonStart: string;
   seasonEnd: string;
   weekOfMonth: CRMSchedule['weekOfMonth'];
+  customDates: string[];
+  excludedDates: string[];
 }
 
 function defaultForm(): ScheduleFormValues {
-  return { name: '', frequency: 'weekly', dayOfWeek: 'Mon', weekPattern: null, anchorDate: '', seasonStart: '', seasonEnd: '', weekOfMonth: null };
+  return { name: '', frequency: 'weekly', dayOfWeek: 'Mon', weekPattern: null, anchorDate: '', seasonStart: '', seasonEnd: '', weekOfMonth: null, customDates: [], excludedDates: [] };
 }
 
 function scheduleToForm(s: CRMSchedule): ScheduleFormValues {
@@ -176,6 +379,8 @@ function scheduleToForm(s: CRMSchedule): ScheduleFormValues {
     seasonStart: s.seasonStart ?? '',
     seasonEnd: s.seasonEnd ?? '',
     weekOfMonth: s.weekOfMonth ?? 'first',
+    customDates: s.customDates ?? [],
+    excludedDates: s.excludedDates ?? [],
   };
 }
 
@@ -227,7 +432,13 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
       seasonStart: form.seasonStart || null,
       seasonEnd: form.seasonEnd || null,
       weekOfMonth: form.frequency === 'monthly' ? (form.weekOfMonth ?? 'first') : null,
+      customDates: form.frequency === 'custom' ? form.customDates : [],
+      excludedDates: form.frequency === 'custom' ? [] : form.excludedDates,
     };
+    if (form.frequency === 'custom' && form.customDates.length === 0) {
+      toast.error('Pick at least one date on the calendar');
+      return;
+    }
     try {
       if (schedule) {
         await updateSchedule.mutateAsync({ id: schedule.id, patch: payload });
@@ -242,6 +453,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
 
   const isBiWeekly = form.frequency === 'bi_weekly';
   const isMonthly = form.frequency === 'monthly';
+  const isCustom = form.frequency === 'custom';
   const showAnchor = isBiWeekly && (form.weekPattern === 'even' || form.weekPattern === 'odd');
   const isPending = createSchedule.isPending || updateSchedule.isPending;
 
@@ -252,12 +464,14 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
     weekPattern: form.weekPattern, anchorDate: form.anchorDate || null,
     seasonStart: form.seasonStart || null, seasonEnd: form.seasonEnd || null,
     weekOfMonth: form.weekOfMonth,
+    customDates: form.customDates,
+    excludedDates: form.excludedDates,
   };
   const previewDates = useMemo(() => computeUpcomingDates(previewSched, 12), [form]);
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
-      <DialogContent className="sm:max-w-2xl p-0 gap-0 h-[90vh] flex flex-col sm:p-0">
+      <DialogContent className="sm:max-w-2xl p-0 gap-0 max-h-[85vh] flex flex-col sm:p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>{schedule ? 'Edit Schedule' : 'Add Schedule'}</DialogTitle>
         </DialogHeader>
@@ -301,7 +515,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1.5">
+                    {!isCustom && <div className="space-y-1.5">
                       <Label>Day of Week</Label>
                       <Select value={form.dayOfWeek} onValueChange={(v) => setField('dayOfWeek', v as CRMSchedule['dayOfWeek'])}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
@@ -309,8 +523,10 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
                           {DAY_OPTIONS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                         </SelectContent>
                       </Select>
-                    </div>
+                    </div>}
                   </div>
+
+                  {isCustom && <CustomDatePicker value={form.customDates} onChange={(v) => setField('customDates', v)} />}
 
                   {isMonthly && (
                     <div className="space-y-1.5">
@@ -349,15 +565,19 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
                     </div>
                   )}
 
+                  {!isCustom && (
+                    <SkipDatesPicker schedule={previewSched} value={form.excludedDates} onChange={(v) => setField('excludedDates', v)} />
+                  )}
+
                   {/* Season window */}
-                  <div className="rounded-lg border p-3 space-y-3">
+                  {!isCustom && <div className="rounded-lg border p-3 space-y-3">
                     <p className="text-xs font-semibold text-slate-600 dark:text-neutral-400">Season Window <span className="font-normal text-slate-400 dark:text-neutral-500">(optional)</span></p>
                     <div className="grid grid-cols-2 gap-3">
                       <MonthDayPicker label="Season Start" value={form.seasonStart} onChange={(v) => setField('seasonStart', v)} />
                       <MonthDayPicker label="Season End" value={form.seasonEnd} onChange={(v) => setField('seasonEnd', v)} />
                     </div>
                     <p className="text-xs text-slate-400 dark:text-neutral-500">E.g. April 1 – November 30 for mowing season. Leave blank for year-round.</p>
-                  </div>
+                  </div>}
 
                   <DialogFooter className="pt-2">
                     <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>Cancel</Button>
@@ -475,9 +695,9 @@ export default function SchedulesPage() {
         <div className="flex flex-wrap items-center gap-2">
           <ImportExportMenu
             entityLabel="Schedules"
-            templateColumns={["name", "frequency", "dayOfWeek", "weekPattern", "anchorDate", "seasonStart", "seasonEnd", "weekOfMonth"]}
+            templateColumns={["name", "frequency", "dayOfWeek", "weekPattern", "anchorDate", "seasonStart", "seasonEnd", "weekOfMonth", "customDates", "excludedDates"]}
             templateFilename="schedules-template.csv"
-            requiredColumns={["name", "frequency", "dayOfWeek"]}
+            requiredColumns={["name", "frequency"]}
             onExport={() =>
               exportCSV(
                 schedules.map((s) => ({
@@ -489,6 +709,8 @@ export default function SchedulesPage() {
                   seasonStart: s.seasonStart ?? "",
                   seasonEnd: s.seasonEnd ?? "",
                   weekOfMonth: s.weekOfMonth ?? "",
+                  customDates: (s.customDates ?? []).join(" | "),
+                  excludedDates: (s.excludedDates ?? []).join(" | "),
                 })),
                 "schedules-export.csv"
               )
@@ -532,12 +754,16 @@ export default function SchedulesPage() {
                 <td className="px-4 py-3 font-medium text-slate-900 dark:text-neutral-100">{s.name}</td>
                 <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">{FREQUENCY_LABELS[s.frequency]}</td>
                 <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">
-                  {s.frequency === 'monthly' && s.weekOfMonth
+                  {s.frequency === 'custom'
+                    ? `${s.customDates?.length ?? 0} dates`
+                    : s.frequency === 'monthly' && s.weekOfMonth
                     ? `${WEEK_OF_MONTH_LABELS[s.weekOfMonth]} ${s.dayOfWeek}`
                     : s.dayOfWeek}
                 </td>
                 <td className="px-4 py-3 text-slate-600 dark:text-neutral-400 text-xs">
-                  {s.seasonStart && s.seasonEnd
+                  {s.frequency === 'custom'
+                    ? <span className="text-slate-400 dark:text-neutral-500">—</span>
+                    : s.seasonStart && s.seasonEnd
                     ? `${s.seasonStart} – ${s.seasonEnd}`
                     : s.seasonStart ? `From ${s.seasonStart}`
                     : s.seasonEnd ? `Until ${s.seasonEnd}`

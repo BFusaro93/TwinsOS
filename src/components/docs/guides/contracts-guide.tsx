@@ -45,6 +45,7 @@ export function ContractsGuide() {
           <TOCLink href="#status-lifecycle">Status lifecycle &amp; signing</TOCLink>
           <TOCLink href="#billing-mechanics">Billing mechanics</TOCLink>
           <TOCLink href="#billing-frequency">Billing frequency options</TOCLink>
+          <TOCLink href="#templates">Contract templates</TOCLink>
           <TOCLink href="#multi-property-example">Worked example: multi-property commercial contract</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
         </div>
@@ -216,6 +217,33 @@ export function ContractsGuide() {
           Invoices click mid-period bills that period and the cron then skips it. Bill 1 Month in
           Advance only applies to monthly, quarterly, and annual contracts.
         </Callout>
+      </Section>
+
+      <Section id="templates" title="Contract templates">
+        <p>
+          If you set up many contracts the same way — the same name, invoice description lines,
+          monthly amounts and billing terms — save that setup as a template instead of retyping it.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Save one.</strong> Fill in the Details tab the way you want it, then click{" "}
+            <strong>Save as template</strong> at the top of the tab and give it a name. A template
+            stores the contract name, invoice line items, default service, the twelve monthly
+            amounts, billing day of month, bill-a-month-in-advance, payment type, auto-generate
+            invoices, and include sub-properties. It does <strong>not</strong> store the client or the
+            start and end dates.
+          </li>
+          <li>
+            <strong>Use one.</strong> On a new contract, choose it from{" "}
+            <strong>Start from a template…</strong>. The form fills in and you can change anything
+            before saving.
+          </li>
+          <li>
+            <strong>Editing and deleting.</strong> A contract keeps no link to the template it came
+            from, so deleting a template (use <strong>Delete template</strong> after picking it)
+            never changes existing contracts.
+          </li>
+        </ul>
       </Section>
 
       <Section id="multi-property-example" title="Worked example: multi-property commercial contract">

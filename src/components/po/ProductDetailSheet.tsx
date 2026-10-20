@@ -44,6 +44,7 @@ import { ManageVendorsDialog } from "@/components/shared/ManageVendorsDialog";
 import { NewProductDialog } from "./NewProductDialog";
 import { QtyAdjustControl } from "@/components/shared/QtyAdjustControl";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useChartColors } from "@/lib/theme/use-chart-colors";
 import { PRODUCT_CATEGORY_LABELS } from "@/lib/constants";
@@ -684,6 +685,7 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
               {[
                 "details",
                 ...(product.trackChemicals ? ["chemical"] : []),
+                "files",
                 "history",
                 "audit trail",
               ].map((v) => (
@@ -711,6 +713,9 @@ export function ProductDetailSheet({ product, open, onOpenChange }: ProductDetai
               <ChemicalTab product={product} />
             </TabsContent>
           )}
+          <TabsContent value="files" className="mt-0 flex-1 overflow-y-auto p-6">
+            <AttachmentsSection recordType="product" recordId={product.id} />
+          </TabsContent>
           <TabsContent value="history" className="mt-0 flex-1 overflow-y-auto">
             <HistoryTab product={product} purchaseOrders={purchaseOrders} onPOClick={setSelectedPOId} onWOClick={setSelectedWOId} />
           </TabsContent>

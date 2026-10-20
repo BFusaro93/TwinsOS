@@ -17,7 +17,7 @@ const INVOICE_TYPES: [string, string, string][] = [
   ],
   [
     "Per Inch (Event, or Push)",
-    "A rate per inch of snowfall. “Per Event” prices the storm’s single deepest reading once; “Per Push” prices every visit separately off its own logged depth.",
+    "A rate per inch of snowfall. “Per Event” prices the storm’s single deepest reading once; “Per Push” prices every visit separately off its own logged depth. Either can instead use interval billing — a table of inch ranges, each with its own flat rate (see Interval billing below).",
     "Event: $12/in × 6\" storm max = $72.00. Push: two 3\" pushes × $12/in = $36 + $36 = $72.00.",
   ],
   [
@@ -45,8 +45,10 @@ export function SnowGuide() {
           <TOCLink href="#creating">Creating a storm event</TOCLink>
           <TOCLink href="#adding-jobs">Adding jobs and setting priority</TOCLink>
           <TOCLink href="#dispatch-close-out">Dispatching, logging pushes, closing out</TOCLink>
+          <TOCLink href="#board-tools">Filters, crews, route order, map, and weather</TOCLink>
           <TOCLink href="#worked-scenario">Worked scenario: a 6&quot; storm</TOCLink>
           <TOCLink href="#invoicing">Snow invoicing and the three rate types</TOCLink>
+          <TOCLink href="#interval-billing">Interval billing (rate by inches)</TOCLink>
           <TOCLink href="#why-separate">Why snow billing has its own screen</TOCLink>
         </div>
       </div>
@@ -161,6 +163,72 @@ export function SnowGuide() {
         </p>
       </Section>
 
+      <Section id="board-tools" title="Filters, crews, route order, map, and weather">
+        <p>
+          The Snow Jobs board has the same dark action bar as the Dispatch Board, so a storm can be
+          run from one screen.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Status tabs and filters.</strong> Tabs for All, Scheduled, Dispatched, In
+            Progress, Completed, Skipped and Cancelled (each with a count), a multi-select{" "}
+            <strong>crew filter</strong> that includes <strong>Unassigned</strong>, and a{" "}
+            <strong>search</strong> box that matches client, address, zip, notes and crew.
+          </li>
+          <li>
+            <strong>Changing crews.</strong> The Crew column is a dropdown on every row. To move
+            several stops, tick them and use <strong>Assign crew…</strong> in the selection bar.
+            Setting a stop to Unassigned pins it to no crew rather than falling back to the
+            job&apos;s crew. A stop shows the crew on its visit, or the job&apos;s crew if the visit
+            has none — Team Assign uses the same rule.
+          </li>
+          <li>
+            <strong>Route order.</strong> The <strong>#</strong> column is each stop&apos;s position
+            within its crew&apos;s route; the arrows beside it move a stop up or down, and the
+            order is saved. <strong>Optimize</strong> (next to a Nearest first / Furthest first
+            choice) routes each crew separately by driving time, starting from the crew&apos;s own
+            starting address or, failing that, the Company Address in Settings &gt; Organization,
+            and saves the result. With rows selected it routes only those. After optimizing, each
+            row shows the drive time to arrive at it (⌂ from the shop for the first stop, ↑ from the
+            stop above for the rest).
+          </li>
+          <li>
+            <strong>Actions menu.</strong> <em>Dispatch Selected</em> (or <em>Dispatch All
+            Assigned</em> when nothing is selected), <em>Close Out Selected</em>, <em>Skip
+            Selected</em> and <em>Cancel Selected</em>, Team Assign, Optimize Routes, Show Crew
+            Stats, Print Route Sheets, and Clear Filters &amp; Selection.
+          </li>
+          <li>
+            <strong>Skip and cancel with a reason.</strong> Skipping or cancelling asks for a
+            reason — No snow at this site, Client cancelled, Equipment down, Site inaccessible, or
+            your own. It is saved on the visit and shown on the client&apos;s timeline. The status
+            icon on a row still just cycles status without asking.
+          </li>
+          <li>
+            <strong>Crew stats.</strong> <em>Show Crew Stats</em> opens a card per crew with stops,
+            done, left, and billable total.
+          </li>
+          <li>
+            <strong>Notes to crew.</strong> A column you edit in place: click the cell, type, Save.
+            It saves on the visit only and shows the job&apos;s note until you override it.
+          </li>
+          <li>
+            <strong>Columns.</strong> The column chooser shows or hides Address, City, Zip, Trigger,
+            Crew, Depth, Temp, Notes to Crew and Amt, and remembers your choice.
+          </li>
+          <li>
+            <strong>Map.</strong> The <strong>Map</strong> button plots the stops currently shown,
+            numbered by route position and coloured by crew.
+          </li>
+          <li>
+            <strong>Weather.</strong> A chip above the storm bar shows the National Weather Service
+            forecast and any active alerts for the storm date (US only, within about a week). It is
+            only a heads-up — depth and temperature on a visit are still entered by hand at
+            close-out.
+          </li>
+        </ul>
+      </Section>
+
       <Section id="worked-scenario" title="Worked scenario: a 6&quot; storm">
         <ol className="list-decimal space-y-2 pl-5">
           <li>
@@ -252,6 +320,36 @@ export function SnowGuide() {
           off the storm&apos;s single deepest reading, not two separate charges. Per Push and
           Hourly jobs are the opposite: each visit prices and invoices on its own.
         </p>
+      </Section>
+
+      <Section id="interval-billing" title="Interval billing (rate by inches)">
+        <p>
+          Many snow contracts price by bands of snowfall rather than a straight rate per inch — for
+          example 0–3&quot; is $165, 3.01–6&quot; is $299, and 6.01–9&quot; is $422. That is{" "}
+          <strong>interval billing</strong>, and you set it while creating the job: choose{" "}
+          <strong>Per Event, Per Inch</strong> or <strong>Per Push</strong> as the invoice type and
+          an <strong>Interval Billing — Rate by Inches</strong> table appears. Click{" "}
+          <strong>Add Range</strong> for each band (from, to, flat rate). Leave the last range&apos;s{" "}
+          <em>to</em> blank for an open-ended top band billed per inch (for example 12&quot;+ at
+          $57 per inch). The same table is on the job&apos;s Details tab afterwards, with a{" "}
+          <strong>Save Ranges</strong> button.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Per Event, Per Inch</strong> prices the storm&apos;s single deepest reading
+            against the ranges. <strong>Per Push</strong> prices each visit by its own recorded
+            depth against the ranges.
+          </li>
+          <li>
+            If no range matches a depth (below the first range or in a gap), it falls back to the
+            flat <strong>Rate Per Inch</strong> on the job. Ranges can&apos;t overlap, and only the
+            last one may be open-ended.
+          </li>
+          <li>
+            The Snow Jobs board totals and the Snow Invoicing queue both price from the ranges, and
+            the queue&apos;s description column says when a row used them.
+          </li>
+        </ul>
       </Section>
 
       <Section id="why-separate" title="Why snow billing has its own screen">

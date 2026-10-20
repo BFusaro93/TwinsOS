@@ -55,6 +55,7 @@ export function DispatchBoardGuide() {
           <TOCLink href="#status-cycle">Visit status and the status menu</TOCLink>
           <TOCLink href="#crews-and-assignment">Crews and assignment</TOCLink>
           <TOCLink href="#actual-hours">How actual hours are calculated</TOCLink>
+          <TOCLink href="#punches-vs-hours">Crew punches vs. visit hours</TOCLink>
           <TOCLink href="#worked-example">Worked example</TOCLink>
           <TOCLink href="#columns">Board columns</TOCLink>
           <TOCLink href="#products">Products (materials) on a visit</TOCLink>
@@ -268,6 +269,12 @@ export function DispatchBoardGuide() {
           </li>
         </ol>
         <Callout>
+          <strong>Only worked visits count toward a job&apos;s Actual Hours.</strong> A visit that is
+          still scheduled or dispatched can carry a planned Start/End on the board, but those planned
+          hours are not added to the job&apos;s Actual Hours until the visit is in progress or
+          completed. Reopening or cancelling a visit takes its hours back out.
+        </Callout>
+        <Callout>
           <strong>Break time is not billed or costed as worked time.</strong> Minutes recorded with
           the crew app&apos;s <strong>Pause</strong> button are subtracted from the measured duration
           before it is multiplied by crew size, so a one-hour lunch inside a nine-hour day with a
@@ -292,6 +299,70 @@ export function DispatchBoardGuide() {
           reasonable, non-zero hours estimate by default, so reports stay usable even for crews that
           never touch the time clock. Clocking in/out with real times simply overrides that estimate
           with the truth once it&apos;s available.
+        </Callout>
+      </Section>
+
+      <Section id="punches-vs-hours" title="Crew punches vs. visit hours">
+        <p>
+          A stop keeps two separate records of time. <strong>Crew punches</strong> are one clock-in
+          and clock-out per crew member, and they are what the <strong>Timesheet</strong> reports
+          read. <strong>Visit hours</strong> are the visit&apos;s own Start/End, Actual Hrs and Men,
+          and they are what <strong>Job Costing</strong> reads. The board keeps the two lined up
+          wherever it can, and flags the stops where it can&apos;t.
+        </p>
+        <p>
+          <strong>What stays in sync automatically</strong>
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Start and End.</strong> Changing Start or End on a board row, in the job
+            panel&apos;s appointment fields, or in the visit sheet moves every crew member&apos;s
+            punch to the same time and moves every service visit in the stop together.
+          </li>
+          <li>
+            <strong>Correcting one person in Edit Job Times.</strong> If three people clocked in and
+            out together and you change one of them because they arrived late or left early, the
+            visit&apos;s hours become the <strong>sum of everyone&apos;s punch hours</strong> (each
+            person&apos;s time minus their break, lunch and the stop&apos;s pause time). With several
+            services in the stop, those hours are split across them in the proportions they already
+            held. Labor cost is worked out from the same punches, so Job Costing and the Timesheet
+            report show the same hours. For example, three people for 4 hours is 12 hours; if one
+            leaves an hour early it is 11 on both.
+          </li>
+        </ul>
+        <p>
+          <strong>What changes the visit only</strong>
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            Typing a number into <strong>Actual Hrs</strong>, or changing <strong>Men</strong>. Neither
+            can be turned into per-person times, so the crew punches are left alone. Job Costing
+            follows your number and the Timesheet report keeps showing the punches. If you are
+            correcting a clocking mistake, use <strong>Edit Job Times</strong> instead so both agree.
+          </li>
+          <li>
+            When you change a visit&apos;s hours this way on a visit the crew punched, its labor cost
+            switches from the exact punch-based figure to <strong>hours × the crew&apos;s average
+            labor rate</strong>, and the Job Costing tab says so next to Labor Cost. Editing the
+            punches in Edit Job Times restores the exact figure.
+          </li>
+        </ul>
+        <p>
+          <strong>The mismatch warning.</strong> A small amber triangle appears in a row&apos;s icon
+          column, and an amber banner appears at the top of the visit sheet, when a stop that has
+          finished crew punches disagrees with its visit times or hours. Hover the triangle to see
+          why. It appears when either of these is true:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>Start or End differs by more than 10 minutes from the crew&apos;s <strong>first punch in</strong> or <strong>last punch out</strong>.</li>
+          <li>Visit hours differ from the total of the crew&apos;s punch hours by at least 1 hour <strong>and</strong> at least 15%.</li>
+        </ul>
+        <Callout>
+          One person arriving late or leaving early does not trigger the warning on its own, because
+          the first-in and last-out times are unchanged and a short shift is a small share of the
+          total. A person who is a couple of hours short on a long job will trigger the hours check.
+          That is the prompt to confirm the punches are right. The banner links straight to Edit Job
+          Times. The warning only shows for the dates you are viewing on the board.
         </Callout>
       </Section>
 
@@ -408,10 +479,23 @@ export function DispatchBoardGuide() {
             &quot;All Crews&quot; to clear it).
           </li>
           <li>
-            <strong>Search</strong> — a free-text box for finding a visit by client, address, or
-            similar. Click the &times; in the box (or press Escape) to clear it. The per-column
+            <strong>Search</strong> — a free-text box that matches client name, street address,
+            city, zip, service name or code, crew code, and notes to crew. Click the &times; in the box (or press Escape) to clear it. The per-column
             filter&apos;s Crew option is a pick-list of your active crews plus Unassigned, so
             you choose a crew instead of typing its name or code.
+          </li>
+          <li>
+            <strong>Map</strong> — the <strong>Map</strong> button next to Stats opens a map above
+            the list with every stop in view, numbered in route order and coloured by crew; click a
+            pin for the client, address, crew and status. It follows the filters and any new order
+            or optimize result. Stops with no resolvable address are left off, and the panel says
+            how many are missing. It uses the Google Maps key under Settings &gt; Integrations.
+          </li>
+          <li>
+            <strong>Weather</strong> — a chip in the count bar shows the National Weather Service
+            forecast for the selected day (conditions, high/low, wind, chance of precipitation)
+            plus any active weather alerts, positioned at the average location of the day&apos;s
+            jobs. It covers the US and appears for days within about a week ahead.
           </li>
           <li>
             <strong>Date range</strong> — an optional end date lets the board span more than a single
@@ -567,13 +651,18 @@ export function DispatchBoardGuide() {
           Optimize Route solves each crew&apos;s tour separately (in parallel) and anchors it at that{" "}
           <strong>crew&apos;s own starting address</strong> (set per crew under Team → Crews) — a
           mixed-crew day no longer needs to be filtered down to one crew first to get a real route. A
-          crew with no starting address set still gets routed by driving time, just without a shop to
-          start or end at, and the confirmation toast says which crews that applies to. If one
+          crew with no starting address of its own starts from the{" "}
+          <strong>Company Address</strong> in Settings &gt; Organization instead. Only if neither is
+          set is the route unanchored (routed by driving time without a shop to start or end at),
+          and the confirmation toast says which crews that applies to. If one
           crew&apos;s route fails to solve (a bad address, a Distance Matrix error), the others still
           come back — it isn&apos;t all-or-nothing.
         </p>
         <p>
-          After optimizing, the banner reports how many crews were routed and the combined driving time{" "}
+          After optimizing, each row shows the drive time to <em>arrive</em> at it: the first stop of a
+          crew shows the leg from the shop (⌂), and every later stop shows the leg from the stop
+          above it (↑). The leg back to the shop at the end of the day is in the banner, not on a
+          row. The banner reports how many crews were routed and the combined driving time{" "}
           <em>between stops</em> and shop legs across all of them. An optimized order is a proposal like
           any manual drag — it isn&apos;t saved, and doesn&apos;t become the crew&apos;s remembered
           order, until you click <strong>Save Order</strong>.

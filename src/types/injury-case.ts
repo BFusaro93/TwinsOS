@@ -1,7 +1,7 @@
 import { BaseRecord } from "./common";
 
 export type InjuryCaseStatus = "open" | "in_progress" | "resolved" | "closed";
-export type InjurySeverity = "first_aid" | "medical_treatment" | "lost_time" | "fatality";
+export type InjurySeverity = "no_treatment" | "first_aid" | "medical_treatment" | "lost_time" | "fatality";
 export type InjuryIncidentType = "injury" | "illness" | "near_miss";
 export type InjuryClaimRoute = "workers_comp" | "self_pay";
 export type InjuryExpenseType = "medical" | "lost_wages" | "other";
@@ -13,6 +13,8 @@ export interface InjuryCase extends BaseRecord {
   /** Null for near misses — nobody was hurt. */
   severity: InjurySeverity | null;
   employeeName: string;
+  /** Optional link to a crm_employees row so the case shows on their profile. */
+  employeeId: string | null;
   dateOfIncident: string;
   timeOfIncident: string | null; // HH:MM
   jobTitle: string | null;

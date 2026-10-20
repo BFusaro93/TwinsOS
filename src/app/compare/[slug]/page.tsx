@@ -19,8 +19,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const competitor = getCompetitor(slug);
   if (!competitor) return {};
   return buildMetadata({
-    title: `${competitor.product} vs. ${competitor.name} | Landscaping Software Comparison`,
-    description: `${competitor.tagline} See how ${competitor.product} compares to ${competitor.name} on estimating, snow operations, job costing, and equipment maintenance.`,
+    title: competitor.seoTitle ?? `${competitor.product} vs. ${competitor.name} | Landscaping Software Comparison`,
+    description:
+      competitor.seoDescription ??
+      `${competitor.tagline} See how ${competitor.product} compares to ${competitor.name} on estimating, snow operations, job costing, and equipment maintenance.`,
     path: `/compare/${competitor.slug}`,
   });
 }
@@ -95,7 +97,18 @@ export default async function ComparePage({ params }: { params: Promise<{ slug: 
           </Reveal>
         </div>
 
-        <p className="mt-8 text-xs text-slate-400">{competitor.pricingNote}</p>
+        <div className="mt-14">
+          <h2 className="font-[family-name:var(--font-heading)] mb-3 text-2xl font-bold text-[#0a0a0a]">
+            {competitor.name} pricing
+          </h2>
+          <p className="text-[14.5px] leading-relaxed text-[#5a5a56]">{competitor.pricingNote}</p>
+          <p className="mt-3 text-[14.5px] leading-relaxed text-[#5a5a56]">
+            {competitor.product} is priced per seat with a 30-day free trial and no credit card required.{" "}
+            <Link href="/pricing" className="font-semibold text-[#005642] hover:underline">
+              See {competitor.product} plans and pricing &rarr;
+            </Link>
+          </p>
+        </div>
 
         <div className="mt-16">
           <h2 className="font-[family-name:var(--font-heading)] mb-6 text-2xl font-bold text-[#0a0a0a]">

@@ -294,7 +294,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="flex h-[85vh] max-w-5xl flex-col">
         <DialogHeader>
           <DialogTitle>{pkg ? `Edit: ${pkg.name}` : "New Package Program"}</DialogTitle>
         </DialogHeader>
@@ -320,6 +320,8 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
           ))}
         </div>
 
+        {/* Fixed-size body so the dialog doesn't resize between tabs */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
         {/* Details tab */}
         {tab === "details" && (
           <div className="flex flex-col gap-4 py-2">
@@ -433,6 +435,8 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
             <AuditTrailTab recordType="package" recordId={pkg.id} />
           </div>
         )}
+
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isPending}>Cancel</Button>

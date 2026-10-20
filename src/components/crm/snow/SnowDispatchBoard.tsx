@@ -17,6 +17,10 @@ import { useCRMCrews, useUpdateVisit, useUpdateVisitStatus } from "@/lib/hooks/u
 import { printSnowRouteSheets } from "@/lib/print";
 import { JobDetailSheet } from "@/components/crm/jobs/JobDetailSheet";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { DispatchWeather } from "@/components/crm/dispatch/DispatchWeather";
+import { SearchInput } from "@/components/shared/SearchInput";
+import { DispatchMap, type DispatchMapStop } from "@/components/crm/dispatch/DispatchMap";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Button } from "@/components/ui/button";
@@ -43,8 +47,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
+import { ColumnChooser, type ColumnDef } from "@/components/shared/ColumnChooser";
+import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
+import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { formatCurrency, cn } from "@/lib/utils";
 import { billingGroupKey } from "@/lib/hooks/use-snow-invoicing";
 import { useSnowRateTiersForJobs } from "@/lib/hooks/use-snow-rate-tiers";
@@ -53,7 +63,7 @@ import { toast } from "sonner";
 import {
   Snowflake, Plus, Printer, Users, ChevronDown, RefreshCw,
   Calendar, Smartphone, CalendarCheck, CheckCircle2, XCircle, CornerDownRight,
-  ListChecks, ThermometerSnowflake, Ruler, HelpCircle,
+  ListChecks, ThermometerSnowflake, Ruler, HelpCircle, MapPin, ArrowUp, ArrowDown, Route as RouteIcon,
 } from "lucide-react";
 import type { CRMJobVisit, VisitStatus, StormEventStatus } from "@/types/crm-jobs";
 
@@ -75,6 +85,108 @@ function dayAbbrForDate(dateStr: string): string {
 
 // clients.priority is 'high' | 'normal' | 'low' — lower rank number sorts first (higher priority)
 const PRIORITY_RANK: Record<string, number> = { high: 1, normal: 2, low: 3 };
+
+const SNOW_FILTER_TABS: { value: string; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "dispatched", label: "Dispatched" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "completed", label: "Completed" },
+  { value: "skipped", label: "Skipped" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
+const SNOW_COLUMNS: ColumnDef[] = [
+  { key: "address", label: "Address" },
+  { key: "city", label: "City", defaultHidden: true },
+  { key: "zip", label: "Zip", defaultHidden: true },
+  { key: "trigger", label: "Trigger" },
+  { key: "crew", label: "Crew" },
+  { key: "depth", label: "Depth" },
+  { key: "temp", label: "Temp" },
+  { key: "notes", label: "Notes to Crew" },
+  { key: "amt", label: "Amt" },
+];
+
+const SNOW_OUTCOME_REASONS = ["No snow at this site", "Client cancelled", "Equipment down", "Site inaccessible", "Other"] as const;
+
+/** Notes to crew for one stop — the visit's own note, else the job's — edited in place. */
+function NotesToCrewCell({ visit, canEdit }: { visit: CRMJobVisit; canEdit: boolean }) {
+  const { mutateAsync: updateVisit, isPending } = useUpdateVisit();
+  const current = visit.notesToCrew ?? visit.job?.notesToCrew ?? "";
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(current);
+  useEffect(() => { if (open) setText(current); }, [open, current]);
+
+  async function save() {
+    try {
+      await updateVisit({ id: visit.id, updates: { notes_to_crew: text.trim() || null }, jobId: visit.jobId });
+      setOpen(false);
+    } catch {
+      toast.error("Failed to save note");
+    }
+  }
+
+  const label = (
+    <span className={cn("block max-w-[200px] truncate text-left", current ? "text-slate-700 dark:text-neutral-300" : "text-slate-300 dark:text-neutral-600")}>
+      {current || (canEdit ? "Add note…" : "—")}
+    </span>
+  );
+  if (!canEdit) return label;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild><button type="button" title={current || "Add a note for the crew"}>{label}</button></PopoverTrigger>
+      <PopoverContent align="start" className="w-72 space-y-2">
+        <p className="text-xs font-medium">Notes to crew</p>
+        <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} className="text-sm" placeholder="Gate code, skip the back lot…" />
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button type="button" size="sm" className="h-7 text-xs" onClick={save} disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Reason prompt for skipping or cancelling stops — recorded on the visit and the client's timeline. */
+function OutcomeDialog({
+  state, onClose, onConfirm,
+}: {
+  state: { ids: string[]; status: "skipped" | "cancelled" } | null;
+  onClose: () => void;
+  onConfirm: (reason: string) => Promise<void>;
+}) {
+  const [preset, setPreset] = useState<string>(SNOW_OUTCOME_REASONS[0]);
+  const [other, setOther] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (state) { setPreset(SNOW_OUTCOME_REASONS[0]); setOther(""); } }, [state]);
+  const verb = state?.status === "cancelled" ? "Cancel" : "Skip";
+  const reason = preset === "Other" ? other.trim() : preset;
+  return (
+    <Dialog open={!!state} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>{verb} {state?.ids.length} stop{state?.ids.length === 1 ? "" : "s"}</DialogTitle></DialogHeader>
+        <div className="space-y-3 py-1">
+          <Label>Reason</Label>
+          <Select value={preset} onValueChange={setPreset}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{SNOW_OUTCOME_REASONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+          </Select>
+          {preset === "Other" && <Input value={other} onChange={(e) => setOther(e.target.value)} placeholder="Reason" />}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Back</Button>
+          <Button
+            disabled={saving || !reason}
+            onClick={async () => { setSaving(true); try { await onConfirm(reason); } finally { setSaving(false); } }}
+          >
+            {saving ? "Saving…" : `${verb} Stops`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const STATUS_CYCLE: VisitStatus[] = ["scheduled", "dispatched", "in_progress", "completed", "skipped"];
 
@@ -388,7 +500,7 @@ function SnowCrewAssignDialog({
   // so the drag paths below are dead on a tablet. Mirrors the main Dispatch
   // Board's TeamAssignDialog; there are no crew-member chips on snow, only visits.
   const [heldVisitId, setHeldVisitId] = useState<string | null>(null);
-  const unassigned = visits.filter((v) => !v.crewId);
+  const unassigned = visits.filter((v) => !effectiveCrewIdOf(v));
   const heldVisit = heldVisitId ? visits.find((v) => v.id === heldVisitId) ?? null : null;
 
   useEffect(() => {
@@ -401,7 +513,7 @@ function SnowCrewAssignDialog({
       // don't fall back to the job's crew; an explicit crew clears the flag.
       await updateVisit({
         id: visitId,
-        updates: crewId ? { crew_id: crewId } : { crew_id: null, crew_unassigned: true },
+        updates: crewId ? { crew_id: crewId, crew_unassigned: false } : { crew_id: null, crew_unassigned: true },
         jobId,
       });
     } catch {
@@ -415,7 +527,7 @@ function SnowCrewAssignDialog({
   async function place(crewId: string | null) {
     const v = heldVisit;
     setHeldVisitId(null);
-    if (v && v.crewId !== crewId) await reassign(v.id, crewId, v.jobId);
+    if (v && effectiveCrewIdOf(v) !== crewId) await reassign(v.id, crewId, v.jobId);
   }
 
   // Mirrors the main Dispatch Board's TeamAssignDialog "Dispatch Assigned"
@@ -425,7 +537,7 @@ function SnowCrewAssignDialog({
   async function dispatchAll() {
     setDispatching(true);
     try {
-      const scheduled = visits.filter((v) => v.status === "scheduled" && v.crewId);
+      const scheduled = visits.filter((v) => v.status === "scheduled" && effectiveCrewIdOf(v));
       await Promise.all(
         scheduled.map((v) =>
           updateVisit({
@@ -447,7 +559,7 @@ function SnowCrewAssignDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-3xl p-0 gap-0 pt-10 sm:pt-10 max-h-[85vh] flex flex-col [&>button:last-child]:top-3"
+        className="max-w-6xl h-[85vh] p-0 gap-0 pt-10 sm:pt-10 max-h-[90vh] flex flex-col [&>button:last-child]:top-3"
         // Escape cancels a pick-up first; a second press closes the dialog.
         onEscapeKeyDown={(e) => {
           if (heldVisit) {
@@ -480,7 +592,7 @@ function SnowCrewAssignDialog({
         <div className="flex flex-1 overflow-hidden">
           <div
             className={cn(
-              "w-52 shrink-0 border-r bg-green-50 dark:bg-green-950/40 p-4",
+              "w-64 shrink-0 border-r bg-green-50 dark:bg-green-950/40 p-4",
               heldVisit && "cursor-pointer ring-2 ring-inset ring-brand-400"
             )}
             onDragOver={(e) => e.preventDefault()}
@@ -526,12 +638,12 @@ function SnowCrewAssignDialog({
           <div className="flex-1 overflow-x-auto">
             <div className="flex h-full min-w-max">
               {crews.map((crew) => {
-                const crewVisits = visits.filter((v) => v.crewId === crew.id);
+                const crewVisits = visits.filter((v) => effectiveCrewIdOf(v) === crew.id);
                 return (
                   <div
                     key={crew.id}
                     className={cn(
-                      "w-52 shrink-0 border-r p-4",
+                      "w-64 shrink-0 border-r p-4",
                       heldVisit && "cursor-pointer ring-2 ring-inset ring-brand-400"
                     )}
                     onDragOver={(e) => e.preventDefault()}
@@ -580,7 +692,7 @@ function SnowCrewAssignDialog({
           <Button
             size="sm"
             className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white"
-            disabled={dispatching || visits.filter((v) => v.status === "scheduled" && v.crewId).length === 0}
+            disabled={dispatching || visits.filter((v) => v.status === "scheduled" && effectiveCrewIdOf(v)).length === 0}
             onClick={() => void dispatchAll()}
           >
             {dispatching ? "Dispatching…" : "Dispatch Assigned"}
@@ -602,8 +714,8 @@ function SnowPrintDialog({
   crews: { id: string; name: string }[];
   event: { name: string; eventDate: string } | null;
 }) {
-  const byCrew = crews.map((c) => ({ crew: c, visits: visits.filter((v) => v.crewId === c.id) })).filter((x) => x.visits.length > 0);
-  const unassigned = visits.filter((v) => !v.crewId);
+  const byCrew = crews.map((c) => ({ crew: c, visits: visits.filter((v) => effectiveCrewIdOf(v) === c.id) })).filter((x) => x.visits.length > 0);
+  const unassigned = visits.filter((v) => !effectiveCrewIdOf(v));
 
   function table(cv: CRMJobVisit[]) {
     return (
@@ -853,6 +965,19 @@ const STATUS_PILL: Record<StormEventStatus, string> = {
   complete: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
 };
 
+interface RouteResult {
+  error?: string;
+  orderedVisitIds?: string[];
+  driveTimes?: { visitId: string; minutesToNext: number }[];
+  shopOutMinutes?: number | null;
+}
+
+/** The visit's own crew, else its job's — same rule the main Dispatch Board uses. */
+function effectiveCrewIdOf(v: CRMJobVisit): string | null {
+  if (v.crewUnassigned) return null;
+  return v.crewId ?? v.job?.crewId ?? null;
+}
+
 export function SnowDispatchBoard() {
   const { can, isLoading: permissionsLoading } = usePermissions();
   const canManage = can("snow_dispatch_manage");
@@ -869,6 +994,21 @@ export function SnowDispatchBoard() {
   const [closeOutIds, setCloseOutIds] = useState<Set<string> | null>(null);
   const [selectedVisitIds, setSelectedVisitIds] = useState<Set<string>>(new Set());
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [crewFilters, setCrewFilters] = useState<string[]>([]); // crew ids, plus "none" for Unassigned
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [outcomeDialog, setOutcomeDialog] = useState<{ ids: string[]; status: "skipped" | "cancelled" } | null>(null);
+  const [visibleKeys, setVisibleKeys] = usePersistedColumns("snow_dispatch", SNOW_COLUMNS.filter((c) => !c.defaultHidden).map((c) => c.key));
+  const isVisible = (k: string) => visibleKeys.includes(k);
+  const { mutateAsync: updateVisitStatus } = useUpdateVisitStatus();
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [routeStrategy, setRouteStrategy] = useState<"furthest_first" | "nearest_first">("nearest_first");
+  const [optimizing, setOptimizing] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
+  const { data: orgSettings } = useOrgSettings();
+  // Minutes to ARRIVE at each stop (from the previous stop, or the shop for a crew's first stop).
+  const [driveMins, setDriveMins] = useState<Map<string, { mins: number; fromShop: boolean }>>(new Map());
+  const { mutateAsync: updateVisitMutation } = useUpdateVisit();
 
   const activeEvent = events.find((e) => e.id === selectedEventId) ?? events[0] ?? null;
   const effectiveEventId = activeEvent?.id ?? "";
@@ -915,7 +1055,7 @@ export function SnowDispatchBoard() {
   // invoice generation in use-snow-invoicing.ts/SnowInvoicing.tsx — a naive
   // per-visit rateCents undercounted/overcounted every non-flat-rate job.
   const perEventPerInchJobIds = useMemo(
-    () => visits.filter((v) => v.job?.invoiceType === "per_event_per_inch" && v.job?.id).map((v) => v.job!.id),
+    () => visits.filter((v) => (v.job?.invoiceType === "per_event_per_inch" || v.job?.invoiceType === "per_push_per_inch") && v.job?.id).map((v) => v.job!.id),
     [visits]
   );
   const { data: tiersByJobId } = useSnowRateTiersForJobs(perEventPerInchJobIds);
@@ -944,6 +1084,205 @@ export function SnowDispatchBoard() {
     [amountByVisitId]
   );
 
+  const crewNameById = useMemo(() => new Map(crews.map((c) => [c.id, c.name])), [crews]);
+
+  const filteredVisits = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return visits.filter((v) => {
+      const crewId = effectiveCrewIdOf(v);
+      if (crewFilters.length > 0 && !crewFilters.includes(crewId ?? "none")) return false;
+      if (statusFilter !== "all" && v.status !== statusFilter) return false;
+      if (q) {
+        const hay = [
+          v.clientName, v.job?.serviceAddress, v.job?.serviceCity, v.job?.serviceZip, v.job?.notesToCrew,
+          crewId ? crewNameById.get(crewId) : null,
+        ].filter(Boolean).join(" ").toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [visits, search, crewFilters, statusFilter, crewNameById]);
+
+  // Stop number within the crew's route, following order_num.
+  const stopNumberById = useMemo(() => {
+    const counters = new Map<string, number>();
+    const result = new Map<string, number>();
+    for (const v of visits) {
+      const key = effectiveCrewIdOf(v) ?? "none";
+      const n = (counters.get(key) ?? 0) + 1;
+      counters.set(key, n);
+      result.set(v.id, n);
+    }
+    return result;
+  }, [visits]);
+
+  const filteredTotalAmt = useMemo(
+    () => filteredVisits.reduce((s, v) => s + (amountByVisitId.get(v.id) ?? 0), 0),
+    [filteredVisits, amountByVisitId]
+  );
+
+  function toggleCrewFilter(id: string) {
+    setCrewFilters((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  const crewStats = useMemo(() => {
+    const map = new Map<string, { key: string; name: string; total: number; done: number; amount: number }>();
+    for (const v of visits) {
+      const crewId = effectiveCrewIdOf(v);
+      const key = crewId ?? "none";
+      if (!map.has(key)) map.set(key, { key, name: crewId ? crewNameById.get(crewId) ?? "Crew" : "Unassigned", total: 0, done: 0, amount: 0 });
+      const row = map.get(key)!;
+      row.total++;
+      if (v.status === "completed") row.done++;
+      row.amount += amountByVisitId.get(v.id) ?? 0;
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [visits, crewNameById, amountByVisitId]);
+
+  /** Dispatches the given visits, or — with null — every scheduled visit that has a crew. */
+  async function dispatchVisits(ids: string[] | null) {
+    const targets = visits.filter((v) => v.status === "scheduled" && effectiveCrewIdOf(v) && (ids ? ids.includes(v.id) : true));
+    if (targets.length === 0) {
+      toast.info(ids ? "Selected stops are already dispatched or have no crew." : "No scheduled stops with a crew to dispatch.");
+      return;
+    }
+    try {
+      await Promise.all(targets.map((v) => updateVisitMutation({
+        id: v.id,
+        updates: { status: "dispatched", dispatched_at: new Date().toISOString() },
+        jobId: v.jobId,
+      })));
+      toast.success(`${targets.length} stop${targets.length !== 1 ? "s" : ""} dispatched`);
+    } catch {
+      toast.error("Dispatch failed");
+    }
+  }
+
+  async function applyOutcome(reason: string) {
+    if (!outcomeDialog) return;
+    const { ids, status } = outcomeDialog;
+    try {
+      await Promise.all(ids.map((id) => {
+        const v = visits.find((x) => x.id === id);
+        return updateVisitStatus({ id, status, reason, jobId: v?.jobId, jobType: v?.job?.jobType });
+      }));
+      toast.success(`${ids.length} stop${ids.length !== 1 ? "s" : ""} ${status === "skipped" ? "skipped" : "cancelled"}`);
+      setSelectedVisitIds(new Set());
+      setOutcomeDialog(null);
+    } catch {
+      toast.error("Failed to update stops");
+    }
+  }
+
+  /** Writes order_num for every visit whose position in `orderedIds` changed. */
+  async function persistOrder(orderedIds: string[]) {
+    const byId = new Map(visits.map((v) => [v.id, v]));
+    const changes = orderedIds
+      .map((id, i) => ({ id, i, v: byId.get(id) }))
+      .filter((x) => x.v && x.v.orderNum !== x.i);
+    await Promise.all(changes.map((x) => updateVisitMutation({ id: x.id, updates: { order_num: x.i }, jobId: x.v!.jobId })));
+  }
+
+  async function moveStop(v: CRMJobVisit, dir: -1 | 1) {
+    const crewKey = effectiveCrewIdOf(v) ?? "none";
+    const group = filteredVisits.filter((x) => (effectiveCrewIdOf(x) ?? "none") === crewKey);
+    const idx = group.findIndex((x) => x.id === v.id);
+    const neighbor = group[idx + dir];
+    if (!neighbor) return;
+    const ids = visits.map((x) => x.id);
+    const a = ids.indexOf(v.id);
+    const b = ids.indexOf(neighbor.id);
+    [ids[a], ids[b]] = [ids[b], ids[a]];
+    setDriveMins(new Map());
+    try { await persistOrder(ids); } catch { toast.error("Failed to reorder"); }
+  }
+
+  async function changeCrew(visitIds: string[], crewId: string | null) {
+    try {
+      await Promise.all(visitIds.map((id) => {
+        const v = visits.find((x) => x.id === id);
+        return updateVisitMutation({
+          id,
+          // Unassign pins the visit to no crew so it doesn't fall back to the job's crew.
+          updates: crewId ? { crew_id: crewId, crew_unassigned: false } : { crew_id: null, crew_unassigned: true },
+          jobId: v?.jobId,
+        });
+      }));
+      setDriveMins(new Map());
+    } catch {
+      toast.error("Failed to change crew");
+    }
+  }
+
+  async function optimizeRoutes() {
+    // Selected stops if any, else everything currently shown. Each crew is routed on its own.
+    const pool = selectedVisitIds.size > 0 ? visits.filter((v) => selectedVisitIds.has(v.id)) : filteredVisits;
+    const byCrew = new Map<string, CRMJobVisit[]>();
+    for (const v of pool) {
+      const crewId = effectiveCrewIdOf(v);
+      if (!crewId) continue;
+      if (!byCrew.has(crewId)) byCrew.set(crewId, []);
+      byCrew.get(crewId)!.push(v);
+    }
+    const routable = [...byCrew.entries()].filter(([, list]) => list.length >= 2);
+    if (routable.length === 0) {
+      toast.error("Each crew needs at least 2 stops with an address to optimize — assign crews first.");
+      return;
+    }
+    setOptimizing(true);
+    try {
+      const results = await Promise.all(routable.map(async ([crewId, list]) => {
+        try {
+          const res = await fetch("/api/crm/route-optimize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ visitIds: list.map((v) => v.id), strategy: routeStrategy, crewId }),
+          });
+          const data = await res.json() as RouteResult;
+          return res.ok ? { crewId, data } : { crewId, error: data.error ?? "Route optimization failed" };
+        } catch {
+          return { crewId, error: "Failed to reach route optimizer" };
+        }
+      }));
+      const ok = results.filter((r): r is { crewId: string; data: RouteResult } => "data" in r);
+      const failed = results.filter((r): r is { crewId: string; error: string } => "error" in r);
+      if (ok.length === 0) { toast.error(failed[0]?.error ?? "Route optimization failed"); return; }
+
+      // Splice each crew's new order back over the positions that crew already occupies.
+      const queues = new Map<string, string[]>();
+      for (const { crewId, data } of ok) {
+        const ordered = data.orderedVisitIds ?? [];
+        const placed = new Set(ordered);
+        queues.set(crewId, [...ordered, ...(byCrew.get(crewId) ?? []).map((v) => v.id).filter((id) => !placed.has(id))]);
+      }
+      const members = new Map<string, Set<string>>(ok.map(({ crewId }) => [crewId, new Set((byCrew.get(crewId) ?? []).map((v) => v.id))]));
+      const pointers = new Map<string, number>();
+      const merged = visits.map((v) => {
+        const crewId = effectiveCrewIdOf(v);
+        if (!crewId || !members.get(crewId)?.has(v.id)) return v.id;
+        const ptr = pointers.get(crewId) ?? 0;
+        pointers.set(crewId, ptr + 1);
+        return queues.get(crewId)![ptr] ?? v.id;
+      });
+
+      const dt = new Map<string, { mins: number; fromShop: boolean }>();
+      for (const { data } of ok) {
+        const ordered = data.orderedVisitIds ?? [];
+        if (ordered[0] && data.shopOutMinutes != null) dt.set(ordered[0], { mins: data.shopOutMinutes, fromShop: true });
+        (data.driveTimes ?? []).forEach((d, i) => {
+          if (ordered[i + 1]) dt.set(ordered[i + 1], { mins: d.minutesToNext, fromShop: false });
+        });
+      }
+      await persistOrder(merged);
+      setDriveMins(dt);
+      toast.success(`Routed ${ok.length} ${ok.length === 1 ? "crew" : "crews"} and saved the stop order.` + (failed.length ? ` ${failed.length} failed: ${failed[0].error}` : ""));
+    } catch {
+      toast.error("Failed to optimize routes");
+    } finally {
+      setOptimizing(false);
+    }
+  }
+
   if (!permissionsLoading && !can("snow_dispatch_view")) {
     return (
       <EmptyState
@@ -957,6 +1296,14 @@ export function SnowDispatchBoard() {
   return (
     <div className="flex h-full flex-col gap-4">
       <PageHeader title="Snow Jobs" description="Storm-based scheduling and service entry" />
+
+      {activeEvent && visits.length > 0 && (
+        <DispatchWeather
+          className="px-4 shrink-0"
+          date={activeEvent.eventDate}
+          jobs={visits.slice(0, 25).map((v) => ({ id: v.jobId, lat: v.job?.lat ?? null, lng: v.job?.lng ?? null }))}
+        />
+      )}
 
       {/* Storm event bar — wraps so the action group drops to its own line
           rather than running off the edge on a tablet. */}
@@ -1027,15 +1374,207 @@ export function SnowDispatchBoard() {
         </div>
       </div>
 
+      {/* Dark action bar — same layout as the Dispatch Board: status tabs, crew filter, actions, search, columns */}
+      {activeEvent && (
+        <div className="bg-[#4a4a4a] px-4 py-2 flex flex-wrap xl:flex-nowrap items-center gap-x-3 gap-y-2 shrink-0">
+          <button
+            onClick={() => { void refetchVisits(); }}
+            title="Refresh"
+            className="h-7 w-7 max-lg:h-9 max-lg:w-9 flex items-center justify-center rounded bg-[#5a5a5a] border border-[#6a6a6a] text-slate-300 hover:text-white transition-colors shrink-0"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+
+          <div className="flex items-center max-lg:max-w-full max-lg:overflow-x-auto max-lg:[&>*]:shrink-0 max-lg:[&>*]:whitespace-nowrap">
+            {SNOW_FILTER_TABS.map((t) => {
+              const cnt = t.value === "all" ? visits.length : visits.filter((v) => v.status === t.value).length;
+              return (
+                <button
+                  key={t.value}
+                  onClick={() => setStatusFilter(t.value)}
+                  className={cn(
+                    "px-2.5 py-1 max-lg:py-2.5 text-[10px] font-medium rounded transition-colors",
+                    statusFilter === t.value ? "bg-card text-slate-800 dark:text-neutral-100" : "text-slate-300 hover:text-white"
+                  )}
+                >
+                  {t.label}
+                  {cnt > 0 && (
+                    <span className={cn(
+                      "ml-1 rounded-full px-1 text-[9px]",
+                      statusFilter === t.value ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-slate-600 text-slate-300 dm-fixed-dark"
+                    )}>
+                      {cnt}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+                <Users className="h-3 w-3" />
+                {crewFilters.length === 0 ? "All Crews" : `${crewFilters.length} Crew${crewFilters.length > 1 ? "s" : ""}`}
+                <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48 p-1" align="start">
+              <FilterOptionRow checked={crewFilters.length === 0} onToggle={() => setCrewFilters([])}>All Crews</FilterOptionRow>
+              <FilterOptionRow checked={crewFilters.includes("none")} onToggle={() => toggleCrewFilter("none")}>Unassigned</FilterOptionRow>
+              {crews.map((c) => (
+                <FilterOptionRow key={c.id} checked={crewFilters.includes(c.id)} onToggle={() => toggleCrewFilter(c.id)}>
+                  {c.name}
+                </FilterOptionRow>
+              ))}
+            </PopoverContent>
+          </Popover>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors">
+                <ListChecks className="h-3 w-3" />
+                Actions{selectedVisitIds.size > 0 ? ` (${selectedVisitIds.size})` : ""}
+                <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              {canManage && (
+                <>
+                  <DropdownMenuItem onSelect={() => void dispatchVisits(selectedVisitIds.size > 0 ? [...selectedVisitIds] : null)}>
+                    {selectedVisitIds.size > 0 ? "Dispatch Selected" : "Dispatch All Assigned"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setCloseOutIds(new Set(selectedVisitIds))}>
+                    Close Out Selected…
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setOutcomeDialog({ ids: [...selectedVisitIds], status: "skipped" })}>
+                    Skip Selected…
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled={selectedVisitIds.size === 0} onSelect={() => setOutcomeDialog({ ids: [...selectedVisitIds], status: "cancelled" })}>
+                    Cancel Selected…
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => setCrewAssignOpen(true)}>Team Assign…</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void optimizeRoutes()} disabled={optimizing || visits.length < 2}>
+                    {selectedVisitIds.size > 0 ? "Optimize Selected Routes" : "Optimize Routes"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuItem onSelect={() => setStatsOpen((o) => !o)}>{statsOpen ? "Hide Crew Stats" : "Show Crew Stats"}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setPrintOpen(true)}>Print Route Sheets…</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => { setSearch(""); setCrewFilters([]); setStatusFilter("all"); setSelectedVisitIds(new Set()); }}>
+                Clear Filters &amp; Selection
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search…"
+            className="w-44 max-sm:w-full max-sm:basis-full"
+            inputClassName="h-7 max-lg:h-9 text-xs"
+          />
+          <span className="text-[10px] text-slate-300">{filteredVisits.length} of {visits.length} stops</span>
+
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setMapOpen((o) => !o)}
+              className={cn(
+                "h-7 max-lg:h-9 flex items-center gap-1.5 rounded border px-2.5 text-[10px] transition-colors",
+                mapOpen ? "bg-card text-slate-800 dark:text-neutral-100 border-card" : "bg-[#5a5a5a] border-[#6a6a6a] text-slate-200 hover:text-white"
+              )}
+            >
+              <MapPin className="h-3 w-3" />Map
+            </button>
+            {canManage && (
+              <>
+                <Select value={routeStrategy} onValueChange={(v) => setRouteStrategy(v as typeof routeStrategy)}>
+                  <SelectTrigger className="h-7 max-lg:h-9 w-32 text-[10px] bg-[#5a5a5a] border-[#6a6a6a] text-slate-200"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nearest_first">Nearest first</SelectItem>
+                    <SelectItem value="furthest_first">Furthest first</SelectItem>
+                  </SelectContent>
+                </Select>
+                <button
+                  onClick={() => void optimizeRoutes()}
+                  disabled={optimizing || visits.length < 2}
+                  className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  <RouteIcon className="h-3 w-3" />{optimizing ? "Optimizing…" : "Optimize"}
+                </button>
+              </>
+            )}
+            <ColumnChooser columns={SNOW_COLUMNS} visibleKeys={visibleKeys} onVisibleKeysChange={setVisibleKeys} />
+          </div>
+        </div>
+      )}
+
+      {statsOpen && activeEvent && (
+        <div className="mx-4 shrink-0 rounded-lg border bg-card p-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {crewStats.map((c) => (
+              <div key={c.key} className="rounded border px-3 py-2">
+                <p className="truncate text-xs font-semibold text-slate-700 dark:text-neutral-300">{c.name}</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  {c.total} stops · {c.done} done · {c.total - c.done} left
+                </p>
+                <p className="text-[11px] font-medium text-slate-700 dark:text-neutral-300">{c.amount > 0 ? formatCurrency(c.amount) : "—"}</p>
+              </div>
+            ))}
+            {crewStats.length === 0 && <p className="text-xs italic text-muted-foreground">No stops to summarize</p>}
+          </div>
+        </div>
+      )}
+
+      {mapOpen && activeEvent && (
+        <div className="mx-4 overflow-hidden rounded-lg border shrink-0">
+          {orgSettings?.googleMapsApiKey ? (
+            <DispatchMap
+              apiKey={orgSettings.googleMapsApiKey}
+              stops={filteredVisits.map((v): DispatchMapStop => {
+                const crewId = effectiveCrewIdOf(v);
+                return {
+                  visitId: v.id,
+                  jobId: v.jobId,
+                  order: stopNumberById.get(v.id) ?? 0,
+                  clientName: v.clientName ?? "Unknown client",
+                  address: [v.job?.serviceAddress, v.job?.serviceCity].filter(Boolean).join(", "),
+                  crewKey: crewId ?? "__none__",
+                  crewLabel: (crewId && crewNameById.get(crewId)) || "Unassigned",
+                  statusLabel: v.status,
+                  lat: v.job?.lat ?? null,
+                  lng: v.job?.lng ?? null,
+                };
+              })}
+            />
+          ) : (
+            <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+              Google Maps API key not configured. Add it in Settings → Integrations.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Selected-visit actions */}
       {selectedVisitIds.size > 0 && (
         <div className="mx-4 flex flex-wrap items-center gap-2 rounded border bg-brand-50 dark:bg-brand-900/30 px-3 py-2 shrink-0">
           <ListChecks className="h-4 w-4 text-brand-600 dark:text-brand-400" />
           <span className="text-xs font-medium text-brand-700 dark:text-brand-400">{selectedVisitIds.size} selected</span>
           {canManage && (
-            <Button size="sm" className="h-7 text-xs ml-2" onClick={() => setCloseOutIds(new Set(selectedVisitIds))}>
-              Close Out…
-            </Button>
+            <>
+              <Select value="" onValueChange={(v) => void changeCrew([...selectedVisitIds], v === "none" ? null : v)}>
+                <SelectTrigger className="h-7 w-40 text-xs ml-2"><SelectValue placeholder="Assign crew…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Button size="sm" className="h-7 text-xs" onClick={() => setCloseOutIds(new Set(selectedVisitIds))}>
+                Close Out…
+              </Button>
+            </>
           )}
           <button className="ml-auto text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400" onClick={() => setSelectedVisitIds(new Set())}>Clear</button>
         </div>
@@ -1052,32 +1591,40 @@ export function SnowDispatchBoard() {
             <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40 border-b">
               <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 <th className="w-8 px-2 py-2.5" />
+                <th className="w-12 px-2 py-2.5">#</th>
                 <th className="w-8 px-2 py-2.5">St</th>
                 <th className="min-w-[140px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
-                <th className="px-2 py-2.5">Address</th>
-                <th className="px-2 py-2.5">Trigger</th>
-                <th className="px-2 py-2.5">Crew</th>
-                <th className="px-2 py-2.5 text-right">Depth</th>
-                <th className="px-2 py-2.5 text-right">Temp</th>
-                <th className="px-2 py-2.5 text-right">Amt</th>
+                {isVisible("address") && <th className="px-2 py-2.5">Address</th>}
+                {isVisible("city") && <th className="px-2 py-2.5">City</th>}
+                {isVisible("zip") && <th className="px-2 py-2.5">Zip</th>}
+                {isVisible("trigger") && <th className="px-2 py-2.5">Trigger</th>}
+                {isVisible("crew") && <th className="px-2 py-2.5">Crew</th>}
+                {isVisible("depth") && <th className="px-2 py-2.5 text-right">Depth</th>}
+                {isVisible("temp") && <th className="px-2 py-2.5 text-right">Temp</th>}
+                {isVisible("notes") && <th className="px-2 py-2.5">Notes to Crew</th>}
+                {isVisible("amt") && <th className="px-2 py-2.5 text-right">Amt</th>}
               </tr>
             </thead>
             <tbody>
               {visitsLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b">
-                    {Array.from({ length: 9 }).map((__, j) => <td key={j} className="px-2 py-2.5"><Skeleton className="h-3 w-full" /></td>)}
+                    {Array.from({ length: 4 + visibleKeys.length }).map((__, j) => <td key={j} className="px-2 py-2.5"><Skeleton className="h-3 w-full" /></td>)}
                   </tr>
                 ))
               ) : visits.length === 0 ? (
-                <tr><td colSpan={9} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">No jobs dispatched to this storm event yet.</td></tr>
+                <tr><td colSpan={4 + visibleKeys.length} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">No jobs dispatched to this storm event yet.</td></tr>
+              ) : filteredVisits.length === 0 ? (
+                <tr><td colSpan={4 + visibleKeys.length} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">No stops match the current filters.</td></tr>
               ) : (
                 <>
                   <tr className="bg-muted text-[10px] font-semibold text-slate-700 dark:text-neutral-300">
-                    <td colSpan={8} className="px-2 py-1.5 text-right text-muted-foreground">Totals</td>
-                    <td className="px-2 py-1.5 text-right">{totalAmt > 0 ? formatCurrency(totalAmt) : "—"}</td>
+                    <td colSpan={isVisible("amt") ? 3 + visibleKeys.length : 4 + visibleKeys.length} className="px-2 py-1.5 text-right text-muted-foreground">Totals</td>
+                    {isVisible("amt") && (
+                      <td className="px-2 py-1.5 text-right">{(filteredVisits.length === visits.length ? totalAmt : filteredTotalAmt) > 0 ? formatCurrency(filteredVisits.length === visits.length ? totalAmt : filteredTotalAmt) : "—"}</td>
+                    )}
                   </tr>
-                  {visits.map((v) => (
+                  {filteredVisits.map((v) => (
                     <tr
                       key={v.id}
                       className="border-b border-slate-100 dark:border-neutral-800 bg-card hover:bg-slate-50 dark:hover:bg-muted/40 cursor-pointer"
@@ -1089,20 +1636,52 @@ export function SnowDispatchBoard() {
                           <Checkbox checked={selectedVisitIds.has(v.id)} onCheckedChange={() => toggleSelect(v.id)} className="h-3.5 w-3.5" />
                         </label>
                       </td>
+                      <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-0.5">
+                          <span className="w-4 text-center text-[11px] text-slate-500 dark:text-neutral-400">{stopNumberById.get(v.id)}</span>
+                          {canManage && (
+                            <span className="flex flex-col">
+                              <button type="button" title="Move up in route" className="text-slate-300 hover:text-slate-600 dark:text-neutral-600 dark:hover:text-neutral-300" onClick={() => void moveStop(v, -1)}><ArrowUp className="h-3 w-3" /></button>
+                              <button type="button" title="Move down in route" className="text-slate-300 hover:text-slate-600 dark:text-neutral-600 dark:hover:text-neutral-300" onClick={() => void moveStop(v, 1)}><ArrowDown className="h-3 w-3" /></button>
+                            </span>
+                          )}
+                        </div>
+                        {driveMins.get(v.id) && (
+                          <div
+                            className="text-[9px] leading-tight text-blue-500 dark:text-blue-400 whitespace-nowrap"
+                            title={driveMins.get(v.id)!.fromShop ? "Drive time from the shop" : "Drive time from the previous stop"}
+                          >
+                            {driveMins.get(v.id)!.fromShop ? "⌂" : "↑"}{driveMins.get(v.id)!.mins}m
+                          </div>
+                        )}
+                      </td>
                       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}><StatusCycleButton visit={v} /></td>
                       <td className="px-2 py-2 max-lg:sticky max-lg:left-0 max-lg:z-[1] max-lg:bg-inherit max-lg:shadow-[1px_0_0_rgb(226_232_240)]" onClick={(e) => e.stopPropagation()}>
                         <Link href={`/crm/clients/${v.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">{v.clientName ?? "—"}</Link>
                       </td>
-                      <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceAddress ?? "—"}</td>
-                      <td className="px-2 py-2 text-muted-foreground">{v.job?.inchTrigger != null ? `${v.job.inchTrigger}"` : "—"}</td>
-                      <td className="px-2 py-2">
-                        {v.crewName ? <Badge variant="secondary" className="text-[10px]">{v.crewName}</Badge> : <span className="text-slate-300 dark:text-neutral-500 italic">—</span>}
-                      </td>
-                      <td className="px-2 py-2 text-right text-muted-foreground">{v.snowDepthInches != null ? `${v.snowDepthInches}"` : "—"}</td>
-                      <td className="px-2 py-2 text-right text-muted-foreground">{v.temperature != null ? `${v.temperature}°` : "—"}</td>
-                      <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">
+                      {isVisible("address") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceAddress ?? "—"}</td>}
+                      {isVisible("city") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceCity ?? "—"}</td>}
+                      {isVisible("zip") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceZip ?? "—"}</td>}
+                      {isVisible("trigger") && <td className="px-2 py-2 text-muted-foreground">{v.job?.inchTrigger != null ? `${v.job.inchTrigger}"` : "—"}</td>}
+                      {isVisible("crew") && <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                        {canManage ? (
+                          <Select value={effectiveCrewIdOf(v) ?? "none"} onValueChange={(c) => void changeCrew([v.id], c === "none" ? null : c)}>
+                            <SelectTrigger className="h-7 w-32 text-[11px]"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Unassigned</SelectItem>
+                              {crews.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        ) : effectiveCrewIdOf(v) ? (
+                          <Badge variant="secondary" className="text-[10px]">{crewNameById.get(effectiveCrewIdOf(v)!) ?? v.crewName}</Badge>
+                        ) : <span className="text-slate-300 dark:text-neutral-500 italic">—</span>}
+                      </td>}
+                      {isVisible("depth") && <td className="px-2 py-2 text-right text-muted-foreground">{v.snowDepthInches != null ? `${v.snowDepthInches}"` : "—"}</td>}
+                      {isVisible("temp") && <td className="px-2 py-2 text-right text-muted-foreground">{v.temperature != null ? `${v.temperature}°` : "—"}</td>}
+                      {isVisible("notes") && <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}><NotesToCrewCell visit={v} canEdit={canManage} /></td>}
+                      {isVisible("amt") && <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">
                         {amountByVisitId.has(v.id) ? formatCurrency(amountByVisitId.get(v.id) ?? 0) : "—"}
-                      </td>
+                      </td>}
                     </tr>
                   ))}
                 </>
@@ -1111,6 +1690,8 @@ export function SnowDispatchBoard() {
           </table>
         )}
       </div>
+
+      <OutcomeDialog state={outcomeDialog} onClose={() => setOutcomeDialog(null)} onConfirm={applyOutcome} />
 
       <StormEventDialog
         open={newEventOpen}

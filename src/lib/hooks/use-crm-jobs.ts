@@ -21,6 +21,7 @@ import { reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { computeBudgetedHours } from "@/lib/utils/visit-hours";
 
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
+import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
 
 const log = logger.child("use-crm-jobs");
 
@@ -2530,6 +2531,8 @@ function mapSchedule(row: any): CRMSchedule {
     seasonStart: row.season_start ?? null,
     seasonEnd: row.season_end ?? null,
     weekOfMonth: row.week_of_month ?? null,
+    customDates: row.custom_dates ?? [],
+    excludedDates: row.excluded_dates ?? [],
     isActive: row.is_active,
   };
 }
@@ -2581,6 +2584,8 @@ export function useCreateCRMSchedule() {
       seasonStart: string | null;
       seasonEnd: string | null;
       weekOfMonth?: CRMSchedule['weekOfMonth'];
+      customDates?: string[];
+      excludedDates?: string[];
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2595,6 +2600,8 @@ export function useCreateCRMSchedule() {
           season_start: values.seasonStart ?? null,
           season_end: values.seasonEnd ?? null,
           week_of_month: values.weekOfMonth ?? null,
+          custom_dates: values.customDates ?? [],
+          excluded_dates: values.excludedDates ?? [],
         })
         .select()
         .single();
@@ -2607,7 +2614,19 @@ export function useCreateCRMSchedule() {
   });
 }
 
-const SCHEDULE_FREQUENCIES = ['weekly', 'bi_weekly', 'every_3_weeks', 'every_4_weeks', 'monthly'];
+const SCHEDULE_FREQUENCIES = ['weekly', 'bi_weekly', 'every_3_weeks', 'every_4_weeks', 'monthly', 'custom'];
+
+/** "2026-07-06 | 2026-07-20" (or ; separated) → sorted, de-duplicated ISO dates. null when any entry isn't a real date. */
+function parseScheduleDateList(raw: string | undefined): string[] | null {
+  const parts = (raw ?? '').split(/[|;]/).map((x) => x.trim()).filter(Boolean);
+  const out = new Set<string>();
+  for (const p of parts) {
+    const d = normalizeCsvDate(p);
+    if (!d) return null;
+    out.add(d);
+  }
+  return [...out].sort();
+}
 const SCHEDULE_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export function useBulkImportCRMSchedules() {
@@ -2622,8 +2641,14 @@ export function useBulkImportCRMSchedules() {
       for (const r of rows) {
         const name = r.name?.trim();
         const frequency = r.frequency?.trim().toLowerCase();
-        const dayOfWeek = SCHEDULE_DAYS.find((d) => d.toLowerCase() === r.dayOfWeek?.trim().toLowerCase());
+        // Custom schedules ignore the weekday, so it's optional there.
+        const dayOfWeek = SCHEDULE_DAYS.find((d) => d.toLowerCase() === r.dayOfWeek?.trim().toLowerCase())
+          ?? (frequency === 'custom' ? 'Mon' : undefined);
         if (!name || !SCHEDULE_FREQUENCIES.includes(frequency) || !dayOfWeek) { skipped++; continue; }
+        const customDates = parseScheduleDateList(r.customDates);
+        const excludedDates = parseScheduleDateList(r.excludedDates);
+        // A custom schedule with no (or an unreadable) date list would generate nothing.
+        if (customDates === null || excludedDates === null || (frequency === 'custom' && customDates.length === 0)) { skipped++; continue; }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any).from('crm_schedules').insert({
@@ -2635,6 +2660,8 @@ export function useBulkImportCRMSchedules() {
           season_start: r.seasonStart?.trim() || null,
           season_end: r.seasonEnd?.trim() || null,
           week_of_month: ['first', 'second', 'third', 'fourth', 'last'].includes(r.weekOfMonth?.trim().toLowerCase()) ? r.weekOfMonth.trim().toLowerCase() : null,
+          custom_dates: frequency === 'custom' ? customDates : [],
+          excluded_dates: frequency === 'custom' ? [] : excludedDates,
         });
         if (error) throw error;
         created++;
@@ -2665,6 +2692,8 @@ export function useUpdateCRMSchedule() {
         seasonStart?: string | null;
         seasonEnd?: string | null;
         weekOfMonth?: CRMSchedule['weekOfMonth'];
+        customDates?: string[];
+        excludedDates?: string[];
         isActive?: boolean;
       };
     }) => {
@@ -2678,6 +2707,8 @@ export function useUpdateCRMSchedule() {
       if (patch.seasonStart !== undefined) dbPatch.season_start = patch.seasonStart;
       if (patch.seasonEnd !== undefined)   dbPatch.season_end = patch.seasonEnd;
       if (patch.weekOfMonth !== undefined) dbPatch.week_of_month = patch.weekOfMonth;
+      if (patch.customDates !== undefined) dbPatch.custom_dates = patch.customDates;
+      if (patch.excludedDates !== undefined) dbPatch.excluded_dates = patch.excludedDates;
       if (patch.isActive !== undefined)    dbPatch.is_active = patch.isActive;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)

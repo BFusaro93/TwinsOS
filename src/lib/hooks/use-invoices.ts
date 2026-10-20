@@ -558,7 +558,7 @@ export function useCreateInvoice() {
 const IMPORTABLE_INVOICE_STATUSES = new Set(["draft", "printed", "sent", "viewed"]);
 
 /** "$1,250.00" / "1250" / "" → integer cents (0 when blank or unparseable). */
-function parseCsvMoneyCents(raw: string | null | undefined): number {
+export function parseCsvMoneyCents(raw: string | null | undefined): number {
   const cleaned = (raw ?? "").replace(/[$,\s]/g, "");
   if (!cleaned) return 0;
   const n = Number(cleaned);
@@ -570,7 +570,7 @@ function parseCsvMoneyCents(raw: string | null | undefined): number {
  * a real calendar date. Slash dates are read US-style (M/D/Y), matching how the
  * exports this app and QuickBooks/Excel produce them.
  */
-function normalizeCsvDate(raw: string | null | undefined): string | null {
+export function normalizeCsvDate(raw: string | null | undefined): string | null {
   const s = (raw ?? "").trim();
   if (!s) return null;
   let y: number, m: number, d: number;

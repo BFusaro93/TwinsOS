@@ -105,6 +105,15 @@ export function ProductCatalogGuide() {
         </p>
       </Section>
 
+      <Section id="files" title="Files and photos">
+        <p>
+          Open a product and use its <strong>Files</strong> tab to attach spec sheets, safety data
+          sheets (SDS), manuals, or photos of the item. Drag files in or click to upload; images,
+          PDFs, Word, Excel, CSV and text files are accepted. Attachments are stored per product and
+          can be downloaded or deleted from the same tab.
+        </p>
+      </Section>
+
       <Section id="chemicals" title="Chemical tracking">
         <p>
           Checking <strong>Track Chemicals</strong> reveals a second Chemical tab: Scientific Name,

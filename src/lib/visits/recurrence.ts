@@ -11,7 +11,7 @@
  * decide which calendar "today" is (the org's — see todayInZone).
  */
 
-export type ScheduleFrequency = "weekly" | "bi_weekly" | "every_3_weeks" | "every_4_weeks" | "monthly";
+export type ScheduleFrequency = "weekly" | "bi_weekly" | "every_3_weeks" | "every_4_weeks" | "monthly" | "custom";
 export type WeekPattern = "even" | "odd" | "any";
 export type WeekOfMonth = "first" | "second" | "third" | "fourth" | "last";
 
@@ -28,6 +28,10 @@ export interface ScheduleRule {
   /** Season window, "MM-DD" (may wrap the year, e.g. 11-01 → 03-31). */
   seasonStart?: string | null;
   seasonEnd?: string | null;
+  /** custom only: the exact service dates ("YYYY-MM-DD"). Weekday and season are ignored. */
+  customDates?: string[] | null;
+  /** Dates to skip ("YYYY-MM-DD") — e.g. one holiday Monday on a weekly schedule. */
+  excludedDates?: string[] | null;
 }
 
 /** Shape of a crm_schedules row as selected from the DB. */
@@ -40,6 +44,8 @@ export interface ScheduleRow {
   week_of_month?: string | null;
   season_start?: string | null;
   season_end?: string | null;
+  custom_dates?: string[] | null;
+  excluded_dates?: string[] | null;
 }
 
 export const DAY_INDEX: Record<string, number> = {
@@ -47,7 +53,7 @@ export const DAY_INDEX: Record<string, number> = {
   sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
 };
 
-const INTERVAL_WEEKS: Record<Exclude<ScheduleFrequency, "monthly">, number> = {
+const INTERVAL_WEEKS: Record<Exclude<ScheduleFrequency, "monthly" | "custom">, number> = {
   weekly: 1, bi_weekly: 2, every_3_weeks: 3, every_4_weeks: 4,
 };
 
@@ -125,10 +131,35 @@ export function scheduleOccurrences(
   to: string | null,
   opts: OccurrenceOptions = {}
 ): string[] {
+  const excluded = new Set(rule.excludedDates ?? []);
+  if (excluded.size === 0) return rawOccurrences(rule, from, to, opts);
+  // Over-fetch by the number of skipped dates so a `limit` still yields that many real dates.
+  const limit = opts.limit ?? Number.POSITIVE_INFINITY;
+  return rawOccurrences(rule, from, to, { ...opts, limit: limit + excluded.size })
+    .filter((d) => !excluded.has(d))
+    .slice(0, limit);
+}
+
+function rawOccurrences(
+  rule: ScheduleRule,
+  from: string,
+  to: string | null,
+  opts: OccurrenceOptions = {}
+): string[] {
   const limit = opts.limit ?? Number.POSITIVE_INFINITY;
   // Hard stop so a null `to` with an unsatisfiable season can't spin forever.
   const hardEnd = to ?? addDaysYmd(from, 366 * 5);
   const out: string[] = [];
+
+  if (rule.frequency === "custom") {
+    // Hand-picked dates: exactly these, no weekday or season filtering.
+    for (const d of [...new Set(rule.customDates ?? [])].sort()) {
+      if (out.length >= limit) break;
+      if (d >= from && d <= hardEnd) out.push(d);
+    }
+    return out;
+  }
+
   if (rule.dayIndex < 0 || rule.dayIndex > 6) return out;
 
   if (rule.frequency === "monthly") {
@@ -167,7 +198,7 @@ export function scheduleOccurrences(
   return out;
 }
 
-const FREQUENCIES = new Set<ScheduleFrequency>(["weekly", "bi_weekly", "every_3_weeks", "every_4_weeks", "monthly"]);
+const FREQUENCIES = new Set<ScheduleFrequency>(["weekly", "bi_weekly", "every_3_weeks", "every_4_weeks", "monthly", "custom"]);
 
 /** crm_schedules row → rule. Null for an unusable row (bad weekday/frequency). */
 export function ruleFromScheduleRow(row: ScheduleRow): ScheduleRule | null {
@@ -182,6 +213,8 @@ export function ruleFromScheduleRow(row: ScheduleRow): ScheduleRule | null {
     weekOfMonth: (row.week_of_month as WeekOfMonth | null) ?? null,
     seasonStart: row.season_start ?? null,
     seasonEnd: row.season_end ?? null,
+    customDates: row.custom_dates ?? null,
+    excludedDates: row.excluded_dates ?? null,
   };
 }
 

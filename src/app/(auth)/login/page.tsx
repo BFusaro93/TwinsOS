@@ -1,11 +1,12 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BrandMark } from "@/components/shared/BrandMark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
 
 /** Only ever follow `redirectTo` back into our own app — a same-origin
  *  relative path set by middleware.ts. Rejects absolute/protocol-relative
@@ -39,6 +40,28 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // An emailed deep link can land here even though the browser holds a valid
+  // session (e.g. the server-side check ran against an access token that had
+  // just expired). The browser client refreshes its own session, so if it
+  // comes back signed in, carry on to the destination instead of asking for a
+  // password the person doesn't need to type.
+  useEffect(() => {
+    let cancelled = false;
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        if (cancelled || !data.user) return;
+        router.replace(safeRedirectTarget(searchParams.get("redirectTo")));
+        router.refresh();
+      })
+      .catch(() => {
+        // No usable session — fall through to the normal sign-in form.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [router, searchParams]);
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();

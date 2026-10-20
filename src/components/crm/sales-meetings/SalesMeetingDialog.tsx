@@ -204,7 +204,12 @@ export function SalesMeetingDialog({
   }
 
   const selectableClients = useMemo(
-    () => (clients ?? []).map((c) => ({ id: c.id, displayName: c.displayName, billingAddress: c.billingAddress })),
+    () => (clients ?? []).map((c) => ({
+      id: c.id,
+      // Leads are client records too (status "lead") — tag them so one picker serves both.
+      displayName: c.status === "lead" ? `${c.displayName} (Lead)` : c.displayName,
+      billingAddress: c.billingAddress,
+    })),
     [clients]
   );
 
@@ -283,7 +288,7 @@ export function SalesMeetingDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>Client</Label>
+            <Label>Client or Lead</Label>
             <ClientCombobox
               clients={selectableClients}
               value={clientId}
@@ -294,14 +299,14 @@ export function SalesMeetingDialog({
                 setValue("estimateId", "");
                 setValue("ticketId", "");
               }}
-              noneLabel="No client (new lead)"
+              noneLabel="Search clients & leads…"
             />
           </div>
 
           {!clientId && (
             <div className="flex flex-col gap-1.5">
-              <Label>Lead Name</Label>
-              <Input {...register("leadName")} placeholder="Name of prospect, if not an existing client" />
+              <Label>Prospect Name</Label>
+              <Input {...register("leadName")} placeholder="Only if they aren't a client or lead yet" />
             </div>
           )}
 

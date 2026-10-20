@@ -6,6 +6,7 @@ export const INJURY_STATUS_COLORS: Record<string, string> = {
 };
 
 export const INJURY_SEVERITY_COLORS: Record<string, string> = {
+  no_treatment: "bg-slate-50 text-slate-600 border border-slate-200",
   first_aid: "bg-slate-100 text-slate-700",
   medical_treatment: "bg-orange-100 text-orange-800",
   lost_time: "bg-red-100 text-red-800",

@@ -24,10 +24,11 @@ const LANDSCAPT_ENTITIES: [string, string, string][] = [
   ["Leads", "displayName", "accountType, primaryPhone, primaryEmail, billingAddress/City/State/Zip, source"],
   ["Estimates", "clientName, description", "estimateDate, validUntilDate, poNumber, stage"],
   ["Invoices", "clientName, description, amount", "invoiceDate, dueDate, poNumber, status, taxAmount"],
+  ["Contracts", "clientName, title", "status, startDate, endDate, monthlyAmount, billingFrequency, billingDayOfMonth, billMonthInAdvance, paymentType, poNumber, autoGenerate, isActive, includeSubProperties, defaultService, invoiceLineItems (separate lines with |), janAmount … decAmount (optional seasonal amounts)"],
   ["Payments", "clientName, amount", "paymentDate, method, reference, memo, invoiceNumber"],
   ["Tickets", "subject", "clientName, type, status, priority, category, body, dueDate"],
   ["Services", "name", "code, category, unit, defaultRate, productionRate, isActive"],
-  ["Schedules", "name, frequency, dayOfWeek", "weekPattern, anchorDate, seasonStart, seasonEnd, weekOfMonth"],
+  ["Schedules", "name, frequency (weekly, bi_weekly, every_3_weeks, every_4_weeks, monthly, custom)", "dayOfWeek (required except for custom), weekPattern, anchorDate, seasonStart, seasonEnd, weekOfMonth, customDates (required for custom), excludedDates — date lists are separated with | , e.g. 2026-07-06 | 2026-07-20"],
   ["Employees", "firstName, lastName", "email, phone, cellPhone, address, city, state, zip, dateHired, resourceCode, hourlyRate"],
 ];
 
@@ -36,6 +37,7 @@ const DEDUPE_BEHAVIOR: [string, string, string][] = [
   ["Parts", "partNumber (unique per org)", "Existing part is updated with the new row's name, description, category, cost, quantity, min stock, vendor name, and location."],
   ["Clients", "accountNumber, only when the row supplies one", "Existing client is updated with the new row's contact and address fields. Clients without an account number always insert as new — the org auto-assigns one."],
   ["Leads", "primaryEmail or primaryPhone against every existing non-deleted client", "No new record is created. Instead the matched client is tagged “imported-lead” and the row is counted separately as “matched,” not “created.”"],
+  ["Contracts", "client + contract name + start date", "The row is skipped with a note — an existing contract is never overwritten. Clients are matched by exact name; a name shared by two clients, or not found, skips the row. Status defaults to draft, so set it to active in the file for contracts that should bill. Imports don\u2019t fire automations."],
   ["Purchase Orders", "po_number (derived as PO-{year}-{csv PO #})", "The row is skipped outright — not merged, not counted as imported. Existing POs are never overwritten by a re-import."],
 ];
 
