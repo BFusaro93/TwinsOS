@@ -24,6 +24,8 @@ import {
   useChemicalSettings,
   useDeleteChemicalApplication,
   useSaveChemicalApplication,
+  useChemicalConfirmationWaived,
+  useWaiveChemicalConfirmation,
 } from "@/lib/hooks/use-chemical-tracking";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -168,6 +170,8 @@ function ApplicationRow({
         applicationEndTime: fromLocalInput(endTime),
         ...(applicatorChanged && { applicatorLicenseNumber: employee?.applicatorLicense ?? null }),
         notes: notes || null,
+        // Saving the row is the office confirming what was actually used.
+        confirm: true,
       },
       { onError: () => toast.error("Failed to save chemical application") }
     );
@@ -178,6 +182,11 @@ function ApplicationRow({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-slate-800 dark:text-neutral-100">{productName}</span>
+          {application.preloaded && !application.confirmedAt && (
+            <span className="rounded bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300">
+              Planned — unconfirmed
+            </span>
+          )}
           <label className="flex items-center gap-1.5 text-xs">
             <Checkbox checked={used} onCheckedChange={(v) => setUsed(v === true)} />
             <span className={used ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}>{used ? "Used" : "Not used"}</span>
@@ -341,7 +350,7 @@ function ApplicationRow({
 
 /** Per-visit chemical application logging — the compliance-critical record. */
 export function ChemicalApplicationPanel({ jobId, visitId }: Props) {
-  const { can } = usePermissions();
+  const { can, isAdmin } = usePermissions();
   const canEdit = can("chem_add_edit_usage");
   const canSendNotice = can("chem_send_application_notice");
   const { data: applications = [], isFetched: applicationsFetched } = useChemicalApplicationsForVisit(visitId);
@@ -358,6 +367,24 @@ export function ChemicalApplicationPanel({ jobId, visitId }: Props) {
   const saveApplication = useSaveChemicalApplication();
   const loadServiceChemicals = useLoadServiceChemicals();
   const { data: clockTimes } = useVisitClockTimes(visitId);
+  const { data: confirmationWaived = false } = useChemicalConfirmationWaived(visitId);
+  const waiveConfirmation = useWaiveChemicalConfirmation();
+  const unconfirmed = applications.filter((a) => a.preloaded && !a.confirmedAt);
+  const [confirmingAll, setConfirmingAll] = useState(false);
+
+  async function confirmAllAsPlanned() {
+    setConfirmingAll(true);
+    try {
+      for (const a of unconfirmed) {
+        await saveApplication.mutateAsync({ id: a.id, jobId, visitId, confirm: true });
+      }
+      toast.success(`Confirmed ${unconfirmed.length} chemical${unconfirmed.length === 1 ? "" : "s"} as planned`);
+    } catch {
+      toast.error("Failed to confirm chemicals");
+    } finally {
+      setConfirmingAll(false);
+    }
+  }
 
   const [addingProductId, setAddingProductId] = useState("");
   const { data: addingProductRates = [] } = useChemicalApplicationRates(addingProductId || undefined);
@@ -535,6 +562,41 @@ export function ChemicalApplicationPanel({ jobId, visitId }: Props) {
 
       {applications.length === 0 && (
         <p className="text-xs text-slate-400 dark:text-neutral-500">No chemical applications logged for this visit yet.</p>
+      )}
+
+      {unconfirmed.length > 0 && canEdit && (
+        <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-900 dark:text-amber-200">
+          <p className="font-medium">
+            {unconfirmed.length} chemical{unconfirmed.length === 1 ? " is" : "s are"} still the planned amount.
+          </p>
+          <p className="mt-0.5 text-amber-800 dark:text-amber-300">
+            Until the amount used is confirmed (by the crew, or by saving it here), {unconfirmed.length === 1 ? "it isn't" : "they aren't"} counted
+            in the compliance report or taken out of stock
+            {confirmationWaived ? "." : ", and the visit can't be completed when the crew confirmation setting is on."}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={confirmAllAsPlanned} disabled={confirmingAll}>
+              {confirmingAll ? "Confirming…" : "Confirm all as planned"}
+            </Button>
+            {isAdmin && !confirmationWaived && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                disabled={waiveConfirmation.isPending}
+                onClick={() =>
+                  waiveConfirmation.mutate(visitId, {
+                    onSuccess: () => toast.success("This visit can now be completed without chemical confirmation"),
+                    onError: () => toast.error("Couldn't waive chemical confirmation"),
+                  })
+                }
+              >
+                Allow completing without confirmation
+              </Button>
+            )}
+            {confirmationWaived && <span className="self-center text-amber-800 dark:text-amber-300">Admin allowed completing without confirmation.</span>}
+          </div>
+        </div>
       )}
 
       {applications.map((a) => (

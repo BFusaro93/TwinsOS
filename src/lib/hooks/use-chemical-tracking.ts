@@ -115,6 +115,8 @@ function mapApplication(row: any): ChemicalApplication {
     budgetedConcentrateAmount:
       row.budgeted_concentrate_amount !== null ? Number(row.budgeted_concentrate_amount) : null,
     notes: row.notes,
+    preloaded: row.preloaded === true,
+    confirmedAt: row.confirmed_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     createdBy: row.created_by,
@@ -201,6 +203,7 @@ const DEFAULT_SETTINGS: Omit<ChemicalSettings, "id" | "orgId" | "updatedAt"> = {
   conditionsDisplay: "weather",
   autoCalcQuantity: true,
   areaCustomFieldId: null,
+  confirmationMode: "crew_required",
 };
 
 export function useChemicalSettings() {
@@ -223,6 +226,8 @@ export function useChemicalSettings() {
         conditionsDisplay: data.conditions_display as ChemicalSettings["conditionsDisplay"],
         autoCalcQuantity: data.auto_calc_quantity,
         areaCustomFieldId: data.area_custom_field_id,
+        confirmationMode:
+          (data as { confirmation_mode?: string }).confirmation_mode === "office_later" ? "office_later" : "crew_required",
         updatedAt: data.updated_at,
       };
     },
@@ -254,8 +259,10 @@ export function useUpdateChemicalSettings() {
           ...(values.conditionsDisplay !== undefined && { conditions_display: values.conditionsDisplay }),
           ...(values.autoCalcQuantity !== undefined && { auto_calc_quantity: values.autoCalcQuantity }),
           ...(values.areaCustomFieldId !== undefined && { area_custom_field_id: values.areaCustomFieldId }),
+          ...(values.confirmationMode !== undefined && { confirmation_mode: values.confirmationMode }),
           updated_at: new Date().toISOString(),
-        },
+          // confirmation_mode is newer than the generated Supabase types.
+        } as never,
         { onConflict: "org_id" }
       );
       if (error) throw error;
@@ -474,8 +481,9 @@ export function useSaveChemicalApplication() {
       ...input
     }: Partial<
       Omit<ChemicalApplication, "id" | "orgId" | "createdAt" | "updatedAt" | "createdBy" | "deletedAt">
-    > & { id?: string; jobId: string; visitId: string }) => {
+    > & { id?: string; jobId: string; visitId: string; /** Saving counts as confirming what was actually used. */ confirm?: boolean }) => {
       const supabase = createClient();
+      const { data: { user: authUser } } = await supabase.auth.getUser();
       const payload = {
         job_id: input.jobId,
         visit_id: input.visitId,
@@ -508,12 +516,14 @@ export function useSaveChemicalApplication() {
           budgeted_concentrate_amount: input.budgetedConcentrateAmount,
         }),
         ...(input.notes !== undefined && { notes: input.notes }),
+        // confirmed_at/by are newer than the generated Supabase types.
+        ...(input.confirm && { confirmed_at: new Date().toISOString(), confirmed_by: authUser?.id ?? null }),
       };
 
       if (id) {
         const { data, error } = await supabase
           .from("crm_chemical_applications")
-          .update(payload)
+          .update(payload as never)
           .eq("id", id)
           .select()
           .single();
@@ -521,10 +531,9 @@ export function useSaveChemicalApplication() {
         return mapApplication(data);
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from("crm_chemical_applications")
-        .insert({ ...payload, created_by: user?.id ?? null })
+        .insert({ ...payload, created_by: authUser?.id ?? null } as never)
         .select()
         .single();
       if (error) throw error;
@@ -534,6 +543,38 @@ export function useSaveChemicalApplication() {
       qc.invalidateQueries({ queryKey: ["chemical-applications", "visit", data.visitId] });
       qc.invalidateQueries({ queryKey: ["chemical-applications", "date"] });
     },
+  });
+}
+
+/** Whether an admin already waived chemical confirmation for this visit. */
+export function useChemicalConfirmationWaived(visitId: string | undefined) {
+  return useQuery({
+    queryKey: ["chemical-confirmation-waived", visitId],
+    queryFn: async (): Promise<boolean> => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("crm_job_visits")
+        .select("*")
+        .eq("id", visitId!)
+        .maybeSingle();
+      if (error) throw error;
+      return !!(data as { chemical_confirmation_waived_at?: string | null } | null)?.chemical_confirmation_waived_at;
+    },
+    enabled: !!visitId,
+  });
+}
+
+/** Admin override: let this visit be completed without the crew's chemical confirmation. */
+export function useWaiveChemicalConfirmation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (visitId: string) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.rpc as any)("waive_chemical_confirmation", { p_visit_id: visitId });
+      if (error) throw error;
+    },
+    onSuccess: (_d, visitId) => qc.invalidateQueries({ queryKey: ["chemical-confirmation-waived", visitId] }),
   });
 }
 

@@ -99,7 +99,7 @@ const SECTIONS: ReportSection[] = [
         description: "Post-application compliance record of chemicals actually applied — date, EPA #, quantities, conditions, applicator, and license number.",
         filters: "Applied Between",
         notes: [
-          "Only chemicals marked as applied (Used) are included — planned applications that were never made are excluded. Service Date is the date the visit was actually worked when the application is tied to a visit.",
+          "Only chemicals marked as applied (Used) are included — planned applications that were never made are excluded, and so are preloaded chemicals nobody has confirmed yet. Service Date is the date the visit was actually worked when the application is tied to a visit.",
           "Applicator Name populates whenever an applicator is assigned to the application. Applicator License Number only populates if that employee had a license on file at the time. Application Start/End Time populate only when entered on the application record, independent of licensing.",
           "Chemical Amount is the concentrate used; Solution Amount is the total mixed solution actually applied.",
         ],

@@ -79,6 +79,16 @@ function GeneralChemicalSettings() {
     );
   }
 
+  function handleConfirmationModeChange(v: "crew_required" | "office_later") {
+    update.mutate(
+      { confirmationMode: v },
+      {
+        onSuccess: () => toast.success("Saved"),
+        onError: (err) => toast.error(`Failed to save: ${(err as Error).message}`),
+      }
+    );
+  }
+
   function handleAreaFieldChange(v: string) {
     update.mutate(
       { areaCustomFieldId: v === "none" ? null : v },
@@ -107,6 +117,28 @@ function GeneralChemicalSettings() {
             <SelectItem value="neither">Neither</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="flex flex-col gap-1.5 max-w-xs">
+        <Label className="text-xs">Who Confirms Chemicals Applied</Label>
+        <Select
+          value={settings?.confirmationMode ?? "crew_required"}
+          onValueChange={(v) => handleConfirmationModeChange(v as "crew_required" | "office_later")}
+        >
+          <SelectTrigger className="text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="crew_required">Crew, before the job can be completed</SelectItem>
+            <SelectItem value="office_later">Office adds amounts later (no crew gate)</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Chemicals preloaded onto a visit are only the planned amount. The compliance report and
+          stock deduction count them once someone confirms what was actually used. With the crew
+          setting, a crew can&apos;t finish a stop until it enters the amount used (or marks a product
+          Not used). An admin can still complete a visit without confirming.
+        </p>
       </div>
 
       <label className="flex max-w-xs items-center justify-between gap-3 rounded-md border px-3 py-2.5">

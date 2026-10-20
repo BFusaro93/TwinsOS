@@ -14,6 +14,8 @@ import {
   useStopDetail,
   useVisitPhotos,
   useVisitChemicals,
+  useChemicalConfirmationStatus,
+  useConfirmChemicals,
   useStopClockIn,
   useStopClockOut,
   useStopPause,
@@ -154,6 +156,38 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const stopVisitIds = stop?.visits.map((v) => v.id) ?? [];
   const { data: chemicals = [] } = useVisitChemicals(stopVisitIds);
   const usedChemicals = chemicals.filter((c) => c.used);
+  // Preloaded chemicals are only the PLANNED amount until the crew confirms what
+  // was actually used (amount, or "Not used"). Confirmation gates completing the
+  // stop when the company requires it — the server enforces it either way.
+  const unconfirmedChemicals = chemicals.filter((c) => c.preloaded && !c.confirmedAt);
+  const { data: chemConfirmStatus } = useChemicalConfirmationStatus(stopVisitIds);
+  const confirmChemicals = useConfirmChemicals();
+  const [chemEdits, setChemEdits] = useState<Record<string, { amount: string; notUsed: boolean }>>({});
+  const waived = new Set(chemConfirmStatus?.waivedVisitIds ?? []);
+  const chemBlocked =
+    (chemConfirmStatus?.mode ?? "crew_required") === "crew_required" &&
+    unconfirmedChemicals.some((c) => !waived.has(c.visitId));
+  function chemEditFor(c: { id: string; chemicalAmount: number | null }) {
+    return chemEdits[c.id] ?? { amount: c.chemicalAmount != null ? String(c.chemicalAmount) : "", notUsed: false };
+  }
+  async function handleConfirmChemicals() {
+    const items: { id: string; used: boolean; chemicalAmount?: number }[] = [];
+    for (const c of unconfirmedChemicals) {
+      const e = chemEditFor(c);
+      if (e.notUsed) {
+        items.push({ id: c.id, used: false });
+        continue;
+      }
+      const amount = parseFloat(e.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        toast.error(`Enter how much ${c.productName ?? "chemical"} was used, or mark it Not used`);
+        return;
+      }
+      items.push({ id: c.id, used: true, chemicalAmount: amount });
+    }
+    await confirmChemicals.mutateAsync(items);
+    toast.success("Chemicals confirmed");
+  }
   const { data: orgSettings } = useOrgSettings();
   const hidePricing = orgSettings?.crewHidePricing ?? false;
 
@@ -447,6 +481,65 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </div>
         </div>
 
+        {unconfirmedChemicals.length > 0 && (
+          <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800 overflow-hidden">
+            <div className="px-4 py-3 border-b border-amber-100 dark:border-amber-900">
+              <h2 className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                <FlaskConical className="h-4 w-4" />
+                Confirm chemicals applied
+              </h2>
+              <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
+                {chemBlocked
+                  ? "Enter how much was actually used (or mark it Not used) before you can stop this job."
+                  : "Enter how much was actually used, or mark it Not used."}
+              </p>
+            </div>
+            <div className="p-3 space-y-2">
+              {unconfirmedChemicals.map((c) => {
+                const e = chemEditFor(c);
+                return (
+                  <div key={c.id} className="rounded-lg bg-card border border-border px-3 py-2">
+                    <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{c.productName ?? "Chemical"}</p>
+                    {c.chemicalAmount != null && (
+                      <p className="text-xs text-muted-foreground">Planned: {c.chemicalAmount} {c.unitName ?? ""}</p>
+                    )}
+                    <div className="mt-2 flex items-center gap-3">
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        value={e.notUsed ? "" : e.amount}
+                        disabled={e.notUsed}
+                        onChange={(ev) => setChemEdits((prev) => ({ ...prev, [c.id]: { ...e, amount: ev.target.value } }))}
+                        placeholder="Amount used"
+                        className="h-11 w-32 text-base"
+                      />
+                      <span className="text-sm text-muted-foreground">{c.unitName ?? ""}</span>
+                      <label className="ml-auto flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={e.notUsed}
+                          onChange={(ev) => setChemEdits((prev) => ({ ...prev, [c.id]: { ...e, notUsed: ev.target.checked } }))}
+                          className="h-5 w-5"
+                        />
+                        Not used
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
+              <Button
+                className="w-full h-12 text-base font-bold bg-emerald-600 hover:bg-emerald-700"
+                onClick={handleConfirmChemicals}
+                disabled={confirmChemicals.isPending}
+              >
+                {confirmChemicals.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : "Confirm chemicals"}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Chemical mix — what to use and how much finished-mix solution to
             prepare, computed from the product's application rate + dilution
             ratio when the office has it configured. Only shown when this
@@ -581,10 +674,16 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 <Button
                   className="w-full h-14 text-base font-bold bg-red-600 hover:bg-red-700 gap-2"
                   onClick={() => setClockOutOpen(true)}
+                  disabled={chemBlocked}
                 >
                   <StopIcon className="h-5 w-5" />
                   Stop Job
                 </Button>
+                {chemBlocked && (
+                  <p className="text-center text-xs text-amber-700 dark:text-amber-400">
+                    Confirm the chemicals applied (above) to stop this job.
+                  </p>
+                )}
               </>
             )}
           </div>

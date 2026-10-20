@@ -177,6 +177,12 @@ export function CrewAppGuide() {
           it&apos;s per service, so a crew can skip the hedges and still complete the mow at the same
           property.
         </p>
+        <p>
+          If the stop has chemicals, a <strong>Confirm chemicals applied</strong> card lists each one
+          at its planned amount. Enter how much was actually used, or tick <strong>Not used</strong>,
+          then tap <strong>Confirm chemicals</strong>. When the company requires crew confirmation,{" "}
+          <strong>Stop Job stays disabled</strong> until every chemical is confirmed.
+        </p>
         <Callout>
           If the office left <strong>notes for the crew</strong> on the job, the stop asks the crew to{" "}
           <strong>Acknowledge</strong> them — and <strong>Start Job is disabled until they do</strong>.

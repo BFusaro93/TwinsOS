@@ -107,6 +107,10 @@ export interface ChemicalApplication {
   phLevel: number | null;
   budgetedConcentrateAmount: number | null;
   notes: string | null;
+  /** Added by dispatch preload at the planned amount (an estimate until confirmed). */
+  preloaded: boolean;
+  /** When someone confirmed what was actually used; null on a preloaded row = still an estimate. */
+  confirmedAt: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy: string | null;
@@ -126,5 +130,7 @@ export interface ChemicalSettings {
   autoCalcQuantity: boolean;
   /** Property custom field (crm_rate_matrix_field_defs) that represents treatable area, e.g. "Turf Sq Ft". */
   areaCustomFieldId: string | null;
+  /** crew_required: crew confirms chemicals before a visit can be completed. office_later: no gate. */
+  confirmationMode: "crew_required" | "office_later";
   updatedAt: string;
 }
