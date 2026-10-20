@@ -11,7 +11,7 @@ import { useClient, useClientProperties, useAddClientProperty, useUpdateClientPr
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import type { PropertyZone } from "@/types/crm";
-import { isAreaZone, isLinearZone, sumLinearFt, sumZoneSqft, type LinearType } from "@/lib/property-zones";
+import { isAreaZone, sumLinearFt, sumZoneSqft, type LinearType } from "@/lib/property-zones";
 import {
   useCustomFieldDefs,
   useClientCustomFieldValues,
