@@ -163,6 +163,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  // Optimizing spends the org's Google Maps quota and reads stop addresses, so it
+  // needs the same permission as the Dispatch Board that calls it (any org login,
+  // including crew, could previously hit this).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canDispatch } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "sched_dispatch_board",
+  });
+  if (!canDispatch) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const parsed = BodySchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json(

@@ -548,9 +548,11 @@ interface TimesheetRow {
 
 /** ISO-week bucket key (Monday-based) for a YYYY-MM-DD date string. */
 function weekKey(ymd: string): string {
-  const d = new Date(`${ymd}T00:00:00`);
-  const day = (d.getDay() + 6) % 7; // Monday = 0
-  d.setDate(d.getDate() - day);
+  // UTC throughout: a host-local Date then toISOString() shifts the key by a day
+  // on any non-UTC runtime.
+  const d = new Date(`${ymd}T00:00:00Z`);
+  const day = (d.getUTCDay() + 6) % 7; // Monday = 0
+  d.setUTCDate(d.getUTCDate() - day);
   return d.toISOString().slice(0, 10);
 }
 
