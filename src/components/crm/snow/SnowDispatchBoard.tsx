@@ -732,7 +732,11 @@ function CloseOutDialog({
       // Costing/COGS and hourly-billed invoicing (both key off per-visit
       // values). A single-visit close-out is unaffected (divide by 1).
       const qty = totalQty / pending.length;
-      const hoursPerVisit = totalHours !== null ? totalHours / pending.length : null;
+      // Hours only matter to hourly-billed jobs: splitting them across every visit
+      // in a mixed batch under-billed the hourly clients (6h over 5 visits = 1.2h
+      // each, with 3 non-hourly visits soaking up half of it).
+      const hourlyPending = pending.filter((v) => v.job?.invoiceType === "hourly");
+      const hoursPerVisit = totalHours !== null && hourlyPending.length > 0 ? totalHours / hourlyPending.length : null;
       // Completion fires per-client side effects (auto-invoice, review
       // requests…), so visits for the SAME client run one after another —
       // parallel completions race each other into duplicate invoices — while
@@ -757,7 +761,7 @@ function CloseOutDialog({
               materials_used: materialName
                 ? [{ name: materialName, qty, rate_cents: unitCostCents }]
                 : [],
-              ...(hoursPerVisit !== null ? { actual_hours: hoursPerVisit } : {}),
+              ...(hoursPerVisit !== null && v.job?.invoiceType === "hourly" ? { actual_hours: hoursPerVisit } : {}),
             },
           });
           // materials_used on crm_job_visits is display-only — it never feeds

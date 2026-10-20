@@ -34,7 +34,43 @@ import { Snowflake, FileText } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMJobVisit } from "@/types/crm-jobs";
+import { useUpdateVisit } from "@/lib/hooks/use-crm-jobs";
+import { Input } from "@/components/ui/input";
 
+
+/** Per-inch visits completed from the crew app have no depth (only the office
+ *  close-out dialog sets one), so they price at $0 and sit in the queue. Lets
+ *  the office enter the measured depth right here. */
+function SnowDepthInput({ visit, onSaved }: { visit: CRMJobVisit; onSaved: () => void }) {
+  const { mutateAsync: updateVisit } = useUpdateVisit();
+  const [value, setValue] = useState("");
+  async function save() {
+    const depth = parseFloat(value);
+    if (!Number.isFinite(depth) || depth <= 0) return;
+    try {
+      await updateVisit({ id: visit.id, jobId: visit.jobId, updates: { snow_depth_inches: depth } });
+      onSaved();
+    } catch {
+      toast.error("Couldn't save the snow depth");
+    }
+  }
+  return (
+    <span className="mt-1 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <Input
+        type="number"
+        min={0}
+        step="0.1"
+        placeholder="depth (in)"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+        className="h-6 w-24 text-[11px]"
+      />
+      <span className="text-[10px] text-amber-700 dark:text-amber-400">no depth recorded</span>
+    </span>
+  );
+}
 
 export function SnowInvoicing() {
   const { can, isLoading: permissionsLoading } = usePermissions();
@@ -297,7 +333,13 @@ export function SnowInvoicing() {
                         )}
                       </td>
                       <td className="px-2 py-2 text-muted-foreground">{visit.job?.services?.[0]?.serviceName ?? "Snow Service"}</td>
-                      <td className="px-2 py-2 text-muted-foreground">{describeAmount(visit, groupSize, tiersByJobId)}</td>
+                      <td className="px-2 py-2 text-muted-foreground">
+                        {describeAmount(visit, groupSize, tiersByJobId)}
+                        {(visit.job?.invoiceType === "per_event_per_inch" || visit.job?.invoiceType === "per_push_per_inch") &&
+                          (visit.snowDepthInches == null || visit.snowDepthInches <= 0) && (
+                            <SnowDepthInput visit={visit} onSaved={() => void refetch()} />
+                          )}
+                      </td>
                       <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">{formatCurrency(amountCents)}</td>
                     </tr>
                   ))}
