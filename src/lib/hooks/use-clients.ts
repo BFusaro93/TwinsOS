@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import { isAreaZone, sumZoneSqft } from "@/lib/property-zones";
 import type { AddressVerdict } from "@/types/address-verification";
 import { logger } from "@/lib/logger";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
@@ -508,23 +509,22 @@ export function useUpdateClientPropertyZones() {
     mutationFn: async ({
       clientId,
       propertyId,
-      zones,
+      zones: inputZones,
     }: {
       clientId: string;
       propertyId: string;
       zones: PropertyZone[];
     }) => {
       const supabase = createClient();
-      const sums = zones.reduce(
-        (acc, z) => {
-          acc.gross += z.sqft || 0;
-          if (z.type === "turf") acc.turf += z.sqft || 0;
-          if (z.type === "mulch_bed") acc.mulch += z.sqft || 0;
-          if (z.type === "parking_lot") acc.parking += z.sqft || 0;
-          return acc;
-        },
-        { gross: 0, turf: 0, mulch: 0, parking: 0 }
-      );
+      // Linear measurements carry no area and must not touch any rollup.
+      const allZones = inputZones;
+      const zones = inputZones.filter(isAreaZone);
+      const sums = {
+        gross: sumZoneSqft(zones),
+        turf: sumZoneSqft(zones, "turf"),
+        mulch: sumZoneSqft(zones, "mulch_bed"),
+        parking: sumZoneSqft(zones, "parking_lot"),
+      };
       // Only overwrite a rollup column when the saved zone list actually
       // contains zones of that type. Properties whose turf_sqft / mulch_bed_sqft
       // / parking_lot_sqft / gross_sqft were typed in by hand (no zones) were
@@ -539,7 +539,7 @@ export function useUpdateClientPropertyZones() {
         .select("zones")
         .eq("id", propertyId)
         .maybeSingle();
-      const priorZones: PropertyZone[] = Array.isArray(prior?.zones) ? prior.zones : [];
+      const priorZones: PropertyZone[] = (Array.isArray(prior?.zones) ? prior.zones : []).filter(isAreaZone);
       const hasType = (t: string) => zones.some((z) => z.type === t);
       const hadType = (t: string) => priorZones.some((z) => z.type === t);
       const rollup: Record<string, number | null> = {};
@@ -554,7 +554,7 @@ export function useUpdateClientPropertyZones() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("client_properties")
-        .update({ zones, ...rollup })
+        .update({ zones: allZones, ...rollup })
         .eq("id", propertyId);
       if (error) throw error;
     },

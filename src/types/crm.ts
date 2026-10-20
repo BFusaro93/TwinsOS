@@ -23,6 +23,11 @@ export interface PropertyZone {
   notes?: string;
   /** Traced polygon vertices from the aerial measurement tool, if this zone was drawn on the map. */
   path?: { lat: number; lng: number }[];
+  /** 'subtract' zones (e.g. the house inside a whole-lot trace) reduce their type's total instead of adding to it. Absent = add. */
+  mode?: 'add' | 'subtract';
+  /** 'linear' entries are polyline distance/perimeter measurements: sqft is 0 and length lives in `lengthFt`. Absent = area. */
+  kind?: 'area' | 'linear';
+  lengthFt?: number;
 }
 
 export interface Client {
