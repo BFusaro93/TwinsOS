@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCreateDamageCase } from "@/lib/hooks/use-damage-cases";
 import { useUploadAttachment } from "@/lib/hooks/use-attachments";
 import { convertHeicToJpeg, isHeicMimeType, withEffectiveMimeType } from "@/modules/photo-docs/lib/fileType";
+import { DamageClientPicker } from "@/components/damage-cases/DamageClientPicker";
 import type { DamageCaseType } from "@/types";
 
 interface PendingPhoto {
@@ -138,6 +139,7 @@ export function DamageReportForm() {
               <Input type="date" value={dateOfIncident} onChange={(e) => setDateOfIncident(e.target.value)} required />
             </div>
           </div>
+          <DamageClientPicker onPick={(c) => { setCustomerName(c.name); if (!propertyAddress) setPropertyAddress(c.address); }} />
           <div className="space-y-1.5">
             <Label>Customer / Property Name</Label>
             <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required placeholder="e.g. Sterling Storage" />
