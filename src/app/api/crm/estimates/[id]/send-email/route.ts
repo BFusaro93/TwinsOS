@@ -406,6 +406,7 @@ export async function POST(
     estimateNumber: est.estimate_number as number,
     description: est.description as string | null,
     createdAt: est.created_at as string,
+    estimateDate: (est.estimate_date as string | null) ?? null,
     validUntil: est.valid_until_date as string | null,
     notes: est.notes as string | null,
     clientName: est.clients?.display_name ?? null,

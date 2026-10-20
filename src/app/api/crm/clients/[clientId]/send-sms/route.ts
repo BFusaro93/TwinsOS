@@ -1,3 +1,4 @@
+import { assertOrgWritable } from "@/lib/org-writable";
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { resolveSmsStepContent } from "@/lib/automations/sequence-sms";
@@ -86,6 +87,9 @@ export async function POST(
   // established above — the send path writes organization_sms_usage, which
   // has no insert policy for ordinary authenticated users.
   const service = createServiceClient();
+  // Service-role sends bypass the canceled-org read-only RLS; enforce it here.
+  const notWritable = await assertOrgWritable(service, profile.org_id);
+  if (notWritable) return notWritable;
 
   const resolved = await resolveSmsStepContent(service, {
     orgId: profile.org_id,

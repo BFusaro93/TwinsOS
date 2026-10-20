@@ -497,17 +497,23 @@ async function computeVisits(supabase: Client, w: YearWindow): Promise<Values> {
     materials = 0,
     budgeted = 0,
     actual = 0,
-    targetWeighted = 0;
+    targetWeighted = 0,
+    // Hour-based metrics only use visits that recorded hours (a null man_hours is
+    // "no data", not 0 worked), matching the Job Costing report. Otherwise their
+    // budget and revenue inflate against actuals that exclude them.
+    revenueWithHours = 0;
   for (const v of visits) {
     revenue += v.revenueCents;
     labor += v.laborCostCents;
     materials += v.materialsCostCents;
+    if (!v.hasActuals) continue;
+    revenueWithHours += v.revenueCents;
     budgeted += v.budgetedHours;
     actual += v.manHours;
     targetWeighted += weightedTargetRate(v.services, costing.services) * v.manHours;
   }
   const grossProfit = revenue - labor - materials;
-  const revPerManHr = actual > 0 ? revenue / actual : 0;
+  const revPerManHr = actual > 0 ? revenueWithHours / actual : 0;
   const targetRate = actual > 0 ? targetWeighted / actual : 0;
 
   const statusCounts = new Map<string, number>();
@@ -542,9 +548,11 @@ interface TimesheetRow {
 
 /** ISO-week bucket key (Monday-based) for a YYYY-MM-DD date string. */
 function weekKey(ymd: string): string {
-  const d = new Date(`${ymd}T00:00:00`);
-  const day = (d.getDay() + 6) % 7; // Monday = 0
-  d.setDate(d.getDate() - day);
+  // UTC throughout: a host-local Date then toISOString() shifts the key by a day
+  // on any non-UTC runtime.
+  const d = new Date(`${ymd}T00:00:00Z`);
+  const day = (d.getUTCDay() + 6) % 7; // Monday = 0
+  d.setUTCDate(d.getUTCDate() - day);
   return d.toISOString().slice(0, 10);
 }
 

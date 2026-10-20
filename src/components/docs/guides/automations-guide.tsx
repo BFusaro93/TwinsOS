@@ -314,6 +314,13 @@ export function AutomationsGuide() {
           Mail show as their own Unsubscribe button.
         </p>
         <p>
+          <strong>Do automation emails include an unsubscribe link?</strong> Yes. Emails sent by an
+          automation get the same footer and one-click header as campaigns, and a client who is
+          marked Do Not Market stops receiving them. Text-message steps never send before 8 AM or
+          from 9 PM in your company time zone &mdash; a step that comes due overnight waits and goes
+          out at 8 AM.
+        </p>
+        <p>
           <strong>What if someone marks one of our emails as spam?</strong> The client is
           automatically marked Do Not Market and a note is added to their Activity timeline, so
           campaigns and marketing automations stop reaching them. Invoices, estimates and other

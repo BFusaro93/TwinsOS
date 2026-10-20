@@ -72,7 +72,7 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const settings = estimate.display_settings ?? DEFAULT_DISPLAY_SETTINGS;
-  const openRows = (estimate.line_items ?? []).filter((li) => li.status !== "lost");
+  const openRows = (estimate.line_items ?? []).filter((li) => li.status !== "lost" && li.status !== "draft");
   const allItemRows = openRows.filter((li) => li.row_type !== "section");
   // Tiered estimate: the client picks ONE package, and only untiered lines
   // plus that package's lines are offered (matching the public proposal page).

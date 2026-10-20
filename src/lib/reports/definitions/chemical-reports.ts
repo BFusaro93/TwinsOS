@@ -108,6 +108,7 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
           )
           .is("deleted_at", null)
           // Dispatched = on the crew's board but not started; still to be loaded.
+          .is("crm_job_visits.deleted_at", null)
           .in("crm_job_visits.status", ["scheduled", "dispatched"]);
         if (from) query = query.gte("crm_job_visits.scheduled_date", from);
         if (to) query = query.lte("crm_job_visits.scheduled_date", to);

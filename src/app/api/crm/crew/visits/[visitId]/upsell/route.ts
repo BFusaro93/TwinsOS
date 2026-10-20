@@ -95,6 +95,30 @@ export async function POST(
     .filter((l, i, arr) => !(l === "" && (i === 0 || arr[i - 1] === "")))
     .join("\n");
 
+  // Replay guard: a queued-offline resend or a double-tap sends the same
+  // suggestion twice. The same person suggesting the same service for the same
+  // client within 10 minutes, while it is still open, is the same suggestion.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: dupe } = await (supabase as any)
+    .from("crm_tickets")
+    .select("id, ticket_number")
+    .eq("org_id", visit.org_id)
+    .eq("created_by", user.id)
+    .eq("category", UPSELL_CATEGORY)
+    .eq("upsell_service_id", service.id)
+    .eq("client_id", visit.client_id)
+    .eq("status", "open")
+    .is("deleted_at", null)
+    .gte("created_at", new Date(Date.now() - 10 * 60_000).toISOString())
+    .limit(1)
+    .maybeSingle();
+  if (dupe) {
+    return NextResponse.json(
+      { id: dupe.id, ticketNumber: dupe.ticket_number, photoAttached: false },
+      { status: 200 }
+    );
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: ticket, error: ticketError } = await (supabase as any)
     .from("crm_tickets")

@@ -81,13 +81,13 @@ export async function POST(
   const { data: client } = await (supabase as any)
     .from("clients")
     .select(`
-      id, display_name, first_name, last_name, primary_email, phones,
+      id, display_name, first_name, last_name, primary_email, phones, primary_phone,
       account_number, invoice_delivery, balance_outstanding_cents,
       billing_address, billing_city, billing_state, billing_zip,
       service_address, service_city, service_state, service_zip,
       turf_sqft, gross_sqft, mulch_bed_sqft, yards_of_mulch,
       linear_ft_perimeter, linear_ft_edging, gate_lock_code, notes_to_crew,
-      referred_by, do_not_market, email_bounced_at, unsubscribe_token,
+      referred_by, do_not_market, ok_to_email, email_bounced_at, unsubscribe_token,
       sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name),
       referring_client:referred_by_client_id(display_name)
     `)
@@ -108,6 +108,14 @@ export async function POST(
   if (client.email_bounced_at) {
     return NextResponse.json(
       { error: "Client's email address has hard-bounced" },
+      { status: 422 }
+    );
+  }
+  // "OK to Email = No" is honored by campaigns and automations; bulk marketing
+  // from here used to mail those clients anyway.
+  if (isMarketing && client.ok_to_email === false) {
+    return NextResponse.json(
+      { error: "Client is marked Not OK to Email" },
       { status: 422 }
     );
   }
@@ -134,7 +142,11 @@ export async function POST(
     lastName: client.last_name,
     balanceOutstandingCents: client.balance_outstanding_cents,
     primaryEmail: client.primary_email,
-    phones: client.phones,
+    phones: client.phones?.length
+      ? client.phones
+      : client.primary_phone
+        ? [{ phone: client.primary_phone, type: "cell" }]
+        : client.phones,
     accountNumber: client.account_number,
     invoiceDelivery: client.invoice_delivery,
     billingAddress: client.billing_address,

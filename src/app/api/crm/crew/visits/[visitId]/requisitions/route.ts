@@ -125,11 +125,35 @@ export async function POST(
   // caller's session, after doing all org/category validation above with
   // the caller's own RLS-scoped client.
   const db = adminClient();
+
+  // Replay guard: the crew app's offline queue (and a double-tap) can send the
+  // same request twice. An identical request from this person on this job, still
+  // open and made in the last 10 minutes, is the same request — return it
+  // instead of raising a duplicate purchase requisition.
+  const requestTitle = `Field request: ${product.name as string}`;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: recent } = await (db as any)
+    .from("requisitions")
+    .select("*")
+    .eq("org_id", visit.org_id)
+    .eq("crm_job_id", visit.job_id)
+    .eq("requested_by_id", user.id)
+    .eq("title", requestTitle)
+    .in("status", ["draft", "pending_approval"])
+    .is("deleted_at", null)
+    .gte("created_at", new Date(Date.now() - 10 * 60_000).toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (recent) {
+    return NextResponse.json(shapeCrewRequisition(recent as Record<string, unknown>), { status: 200 });
+  }
+
   const { requisition, error } = await createRequisitionRecord(
     db,
     {
       orgId: visit.org_id as string,
-      title: `Field request: ${product.name as string}`,
+      title: requestTitle,
       crmJobId: visit.job_id as string,
       requestedById: user.id,
       requestedByName,

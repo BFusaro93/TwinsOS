@@ -270,6 +270,12 @@ export function SnowGuide() {
           generating invoices twice never double-bills.
         </p>
         <p>
+          A per-inch visit that was completed from the crew app has no snow depth (only the office
+          Close Out records one), so it prices at $0 and waits in the queue. Type the measured
+          depth into the box under its Billing column and the amount updates. When you Close Out a
+          mixed batch, the hours you enter are split across the hourly jobs only.
+        </p>
+        <p>
           <strong>Possibly already billed.</strong> An invoice made by hand for a snow push has no
           link back to the visit, so the visit would stay in the queue. When a queued visit&apos;s
           job already has a non-void invoice line for the same service date, the row shows an

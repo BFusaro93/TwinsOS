@@ -60,6 +60,9 @@ export async function recalcNextPackageVisitDate(
       .eq("job_service_id", service.id)
       .is("deleted_at", null)
       .not("status", "in", "(completed,cancelled,skipped)")
+      // A crew already on site keeps its date; moving it would pull the visit out
+      // from under them mid-stop.
+      .is("clocked_in_at", null)
       .order("scheduled_date", { ascending: true })
       .limit(1);
     if (nextErr) throw nextErr;

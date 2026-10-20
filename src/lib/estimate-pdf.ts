@@ -73,7 +73,7 @@ async function buildEstimatePDFData(
     .single();
 
   const lineItems: EstimatePDFLineItem[] = (est.estimate_line_items ?? [])
-    .filter((li: Record<string, unknown>) => !li.deleted_at && li.status !== "lost")
+    .filter((li: Record<string, unknown>) => !li.deleted_at && li.status !== "lost" && li.status !== "draft")
     .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
       ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0)
     )
@@ -104,6 +104,7 @@ async function buildEstimatePDFData(
     estimateNumber: est.estimate_number as number,
     description: est.description as string | null,
     createdAt: est.created_at as string,
+    estimateDate: (est.estimate_date as string | null) ?? null,
     validUntil: est.valid_until_date as string | null,
     notes: est.notes as string | null,
     clientName: est.clients?.display_name ?? null,
