@@ -51,7 +51,44 @@ where not exists (
 )
 on conflict (org_id, list_name, value) do nothing;
 
--- 2. Every new damage case opens a ticket for the office to follow up on. Done in the DB (not the
+-- 2a. Tickets can link to a damage case (crm_ticket_links.link_type + its org-match guard).
+alter table public.crm_ticket_links drop constraint if exists crm_ticket_links_link_type_check;
+alter table public.crm_ticket_links
+  add constraint crm_ticket_links_link_type_check
+  check (link_type in ('estimate','invoice','job','project','damage_case'));
+
+create or replace function public.guard_ticket_link_org_match()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ok boolean;
+begin
+  if new.link_type = 'estimate' then
+    select exists(select 1 from public.estimates where id = new.linked_id and org_id = new.org_id) into v_ok;
+  elsif new.link_type = 'invoice' then
+    select exists(select 1 from public.crm_invoices where id = new.linked_id and org_id = new.org_id) into v_ok;
+  elsif new.link_type = 'job' then
+    select exists(select 1 from public.crm_jobs where id = new.linked_id and org_id = new.org_id) into v_ok;
+  elsif new.link_type = 'project' then
+    select exists(select 1 from public.projects where id = new.linked_id and org_id = new.org_id) into v_ok;
+  elsif new.link_type = 'damage_case' then
+    select exists(select 1 from public.damage_cases where id = new.linked_id and org_id = new.org_id) into v_ok;
+  else
+    v_ok := false;
+  end if;
+
+  if not v_ok then
+    raise exception 'linked_id must belong to the same org as this ticket link';
+  end if;
+
+  return new;
+end;
+$$;
+
+-- 2b. Every new damage case opens a ticket for the office to follow up on. Done in the DB (not the
 --    client) so it works for crew logins, whose RLS on crm_tickets is restricted, and for both the
 --    office dialog and the crew form. The client is matched by exact (trimmed, case-insensitive)
 --    name and only when unambiguous; otherwise the ticket is created without one.
@@ -88,6 +125,9 @@ begin
     NEW.created_by
   )
   returning id into v_ticket;
+
+  insert into crm_ticket_links (org_id, ticket_id, link_type, linked_id, linked_label, created_by)
+  values (NEW.org_id, v_ticket, 'damage_case', NEW.id, NEW.case_number || ' — ' || NEW.customer_name, NEW.created_by);
 
   if v_client is not null then
     begin

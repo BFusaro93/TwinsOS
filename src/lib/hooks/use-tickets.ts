@@ -340,10 +340,12 @@ export function useUpdateTicket() {
   });
 }
 
+export type TicketLinkType = "estimate" | "invoice" | "job" | "project" | "damage_case";
+
 export interface TicketLink {
   id: string;
   ticketId: string;
-  linkType: "estimate" | "invoice" | "job" | "project";
+  linkType: TicketLinkType;
   linkedId: string;
   linkedLabel: string;
   createdAt: string;
@@ -409,7 +411,7 @@ export function useAddTicketLink() {
   return useMutation({
     mutationFn: async (input: {
       ticketId: string;
-      linkType: "estimate" | "invoice" | "job" | "project";
+      linkType: TicketLinkType;
       linkedId: string;
       linkedLabel: string;
     }) => {
