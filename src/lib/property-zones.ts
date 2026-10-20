@@ -12,6 +12,19 @@ export function zoneSignedSqft(z: PropertyZone): number {
   return z.mode === "subtract" ? -sqft : sqft;
 }
 
+export type LinearType = NonNullable<PropertyZone["linearType"]>;
+
+export function isLinearZone(z: PropertyZone): boolean {
+  return z.kind === "linear";
+}
+
+/** Total length (ft) of linear measurements, optionally limited to one type (untyped lines count as 'other'). */
+export function sumLinearFt(zones: PropertyZone[], type?: LinearType): number {
+  return Math.round(
+    zones.reduce((s, z) => (!isLinearZone(z) || (type && (z.linearType ?? "other") !== type) ? s : s + (z.lengthFt || 0)), 0)
+  );
+}
+
 /** Sum of signed zone areas, optionally limited to one type; never below zero. */
 export function sumZoneSqft(zones: PropertyZone[], type?: PropertyZone["type"]): number {
   const total = zones.reduce((s, z) => (type && z.type !== type ? s : s + zoneSignedSqft(z)), 0);

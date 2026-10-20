@@ -779,6 +779,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     turfSqft: client.turfSqft != null ? String(client.turfSqft) : "",
     mulchBedSqft: client.mulchBedSqft != null ? String(client.mulchBedSqft) : "",
     grossSqft: client.grossSqft != null ? String(client.grossSqft) : "",
+    parkingLotSqft: client.parkingLotSqft != null ? String(client.parkingLotSqft) : "",
     linearFtPerimeter: client.linearFtPerimeter != null ? String(client.linearFtPerimeter) : "",
     linearFtEdging: client.linearFtEdging != null ? String(client.linearFtEdging) : "",
     yardsOfMulch: client.yardsOfMulch != null ? String(client.yardsOfMulch) : "",
@@ -799,6 +800,10 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   // treating every custom field as blank. Wait for the fetch to actually
   // settle for this client before seeding, and only do it once per client.
   useEffect(() => {
+    if (!open) {
+      customValuesSyncedForRef.current = null; // re-seed on next open so values synced elsewhere appear
+      return;
+    }
     if (fieldValuesLoading) return;
     if (customValuesSyncedForRef.current === client.id) return;
     customValuesSyncedForRef.current = client.id;
@@ -807,10 +812,13 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
       map[v.fieldDefId] = v.valueNumber != null ? String(v.valueNumber) : (v.valueText ?? "");
     });
     setCustomValues(map);
-  }, [client.id, fieldValuesLoading, fieldValues]);
+  }, [client.id, open, fieldValuesLoading, fieldValues]);
 
   // Reset all form state when a different client is opened
   useEffect(() => {
+    // The dialog stays mounted, so re-seed each time it opens — otherwise values changed
+    // elsewhere since mount (e.g. takeoffs written by Aerial Measurement) show up blank/stale here.
+    if (!open) return;
     // What consent looked like when the dialog opened: only a field the user
     // actually toggled is written back (see the save below).
     consentBaseline.current = { doNotMarket: client.doNotMarket, smsOptIn: client.smsOptIn ?? false };
@@ -859,13 +867,14 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
       turfSqft: client.turfSqft != null ? String(client.turfSqft) : "",
       mulchBedSqft: client.mulchBedSqft != null ? String(client.mulchBedSqft) : "",
       grossSqft: client.grossSqft != null ? String(client.grossSqft) : "",
+      parkingLotSqft: client.parkingLotSqft != null ? String(client.parkingLotSqft) : "",
       linearFtPerimeter: client.linearFtPerimeter != null ? String(client.linearFtPerimeter) : "",
       linearFtEdging: client.linearFtEdging != null ? String(client.linearFtEdging) : "",
       yardsOfMulch: client.yardsOfMulch != null ? String(client.yardsOfMulch) : "",
       gateCode: client.gateCode ?? "",
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client.id]);
+  }, [client.id, open]);
 
   function patch(k: keyof typeof form, v: string | number | boolean | null) {
     setForm((p) => ({ ...p, [k]: v }));
@@ -939,6 +948,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
           turfSqft: form.turfSqft !== "" ? parseFloat(form.turfSqft) : null,
           mulchBedSqft: form.mulchBedSqft !== "" ? parseFloat(form.mulchBedSqft) : null,
           grossSqft: form.grossSqft !== "" ? parseFloat(form.grossSqft) : null,
+          parkingLotSqft: form.parkingLotSqft !== "" ? parseFloat(form.parkingLotSqft) : null,
           linearFtPerimeter: form.linearFtPerimeter !== "" ? parseFloat(form.linearFtPerimeter) : null,
           linearFtEdging: form.linearFtEdging !== "" ? parseFloat(form.linearFtEdging) : null,
           yardsOfMulch: form.yardsOfMulch !== "" ? parseFloat(form.yardsOfMulch) : null,
@@ -1394,6 +1404,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                 {([
                   { label: "Turf Sq. Ft.", key: "turfSqft" as const },
                   { label: "Mulch Bed Sq. Ft.", key: "mulchBedSqft" as const },
+                  { label: "Parking Lot / Hardscape Sq. Ft.", key: "parkingLotSqft" as const },
                   { label: "Gross Sq. Ft.", key: "grossSqft" as const },
                   { label: "Linear Ft. Perimeter", key: "linearFtPerimeter" as const },
                   { label: "Linear Ft. Edging", key: "linearFtEdging" as const },
@@ -3934,6 +3945,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               <div className="space-y-2">
                 <InfoRow label="Turf sq ft" value={client.turfSqft?.toLocaleString()} />
                 <InfoRow label="Mulch bed sq ft" value={client.mulchBedSqft?.toLocaleString()} />
+                <InfoRow label="Parking lot / hardscape sq ft" value={client.parkingLotSqft?.toLocaleString()} />
                 <InfoRow label="Gross sq ft" value={client.grossSqft?.toLocaleString()} />
                 <InfoRow label="Perimeter ft" value={client.linearFtPerimeter?.toLocaleString()} />
                 <InfoRow label="Linear ft edging" value={client.linearFtEdging?.toLocaleString()} />

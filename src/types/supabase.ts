@@ -1609,6 +1609,7 @@ export type Database = {
           lng: number | null
           map_code: string | null
           mulch_bed_sqft: number | null
+          parking_lot_sqft: number | null
           notes_to_crew: string | null
           office_notes: string | null
           ok_to_email: boolean
@@ -1687,6 +1688,7 @@ export type Database = {
           lng?: number | null
           map_code?: string | null
           mulch_bed_sqft?: number | null
+          parking_lot_sqft?: number | null
           notes_to_crew?: string | null
           office_notes?: string | null
           ok_to_email?: boolean
@@ -1765,6 +1767,7 @@ export type Database = {
           lng?: number | null
           map_code?: string | null
           mulch_bed_sqft?: number | null
+          parking_lot_sqft?: number | null
           notes_to_crew?: string | null
           office_notes?: string | null
           ok_to_email?: boolean

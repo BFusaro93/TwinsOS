@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
-import { isAreaZone, sumZoneSqft } from "@/lib/property-zones";
+import { isAreaZone, isLinearZone, sumLinearFt, sumZoneSqft } from "@/lib/property-zones";
 import type { AddressVerdict } from "@/types/address-verification";
 import { logger } from "@/lib/logger";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
@@ -108,6 +108,7 @@ function mapClient(row: any): Client {
     turfSqft: row.turf_sqft,
     mulchBedSqft: row.mulch_bed_sqft,
     grossSqft: row.gross_sqft,
+    parkingLotSqft: row.parking_lot_sqft ?? null,
     linearFtPerimeter: row.linear_ft_perimeter,
     linearFtEdging: row.linear_ft_edging,
     yardsOfMulch: row.yards_of_mulch,
@@ -510,16 +511,13 @@ export function useUpdateClientPropertyZones() {
       clientId,
       propertyId,
       zones: inputZones,
-      clientLinear,
     }: {
       clientId: string;
       propertyId: string;
       zones: PropertyZone[];
-      /** Distance totals (ft) to copy onto the client's Perimeter / Edging fields; omit a key to leave it alone. */
-      clientLinear?: { perimeter?: number | null; edging?: number | null };
     }) => {
       const supabase = createClient();
-      // Linear measurements carry no area and must not touch any rollup.
+      // Linear measurements carry no area; they roll up separately (perimeter / edging) below.
       const allZones = inputZones;
       const zones = inputZones.filter(isAreaZone);
       const sums = {
@@ -554,6 +552,14 @@ export function useUpdateClientPropertyZones() {
       else if (hadType("parking_lot")) rollup.parking_lot_sqft = null;
       if (zones.length > 0) rollup.gross_sqft = sums.gross || null;
       else if (priorZones.length > 0) rollup.gross_sqft = null;
+      // Distances: per-type totals feed the Perimeter / Edging takeoffs, same only-when-present rule as areas.
+      const priorLinear: PropertyZone[] = (Array.isArray(prior?.zones) ? prior.zones : []).filter(isLinearZone);
+      for (const [type, col] of [["perimeter", "linear_ft_perimeter"], ["edging", "linear_ft_edging"]] as const) {
+        const has = allZones.some((z) => isLinearZone(z) && z.linearType === type);
+        const had = priorLinear.some((z) => z.linearType === type);
+        if (has) rollup[col] = sumLinearFt(allZones, type) || null;
+        else if (had) rollup[col] = null;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("client_properties")
@@ -566,11 +572,9 @@ export function useUpdateClientPropertyZones() {
       // properties stay property-level only.
       if (prior?.is_master) {
         const clientUpdate: Record<string, number | null> = {};
-        for (const k of ["turf_sqft", "mulch_bed_sqft", "gross_sqft"] as const) {
+        for (const k of ["turf_sqft", "mulch_bed_sqft", "gross_sqft", "parking_lot_sqft", "linear_ft_perimeter", "linear_ft_edging"] as const) {
           if (k in rollup) clientUpdate[k] = rollup[k];
         }
-        if (clientLinear?.perimeter !== undefined) clientUpdate.linear_ft_perimeter = clientLinear.perimeter;
-        if (clientLinear?.edging !== undefined) clientUpdate.linear_ft_edging = clientLinear.edging;
         if (Object.keys(clientUpdate).length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { error: clientError } = await (supabase as any)
@@ -997,6 +1001,8 @@ export function useUpdateClient() {
           turf_sqft: updates.turfSqft ?? null,
           mulch_bed_sqft: updates.mulchBedSqft ?? null,
           gross_sqft: updates.grossSqft ?? null,
+          // undefined (caller didn't touch it) is omitted by the client; null clears it.
+          parking_lot_sqft: updates.parkingLotSqft,
           linear_ft_perimeter: updates.linearFtPerimeter ?? null,
           linear_ft_edging: updates.linearFtEdging ?? null,
           yards_of_mulch: updates.yardsOfMulch ?? null,

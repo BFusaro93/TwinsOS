@@ -11,7 +11,7 @@ import { useClient, useClientProperties, useAddClientProperty, useUpdateClientPr
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import type { PropertyZone } from "@/types/crm";
-import { isAreaZone, sumZoneSqft } from "@/lib/property-zones";
+import { isAreaZone, isLinearZone, sumLinearFt, sumZoneSqft, type LinearType } from "@/lib/property-zones";
 import {
   useCustomFieldDefs,
   useClientCustomFieldValues,
@@ -19,14 +19,16 @@ import {
 } from "@/lib/hooks/use-client-custom-fields";
 
 /** Which measurement total a number-type custom field should be kept in sync with. */
-type FieldMapping = "none" | "turf" | "mulch_bed" | "parking_lot" | "gross" | "linear" | `line:${string}`;
+type FieldMapping = "none" | "turf" | "mulch_bed" | "parking_lot" | "gross" | "perimeter" | "edging" | "linear_other" | "linear";
 
 function suggestMapping(fieldName: string): FieldMapping {
   const n = fieldName.toLowerCase();
   if (n.includes("turf")) return "turf";
   if (n.includes("mulch")) return "mulch_bed";
   if (n.includes("parking")) return "parking_lot";
-  if (/linear|fence|edg|perimeter|length|distance|\bfeet\b|\bft\b/.test(n)) return "linear";
+  if (n.includes("perimeter")) return "perimeter";
+  if (n.includes("edg")) return "edging";
+  if (/linear|fence|length|distance|\bfeet\b|\bft\b/.test(n)) return "linear";
   if (n.includes("gross") || n.includes("total")) return "gross";
   return "none";
 }
@@ -40,6 +42,11 @@ const ZONE_TYPES: { value: PropertyZone["type"]; label: string; short: string; c
 
 const SQFT_PER_SQMETER = 10.7639;
 const FT_PER_METER = 3.28084;
+const LINEAR_TYPES: { value: LinearType; label: string }[] = [
+  { value: "perimeter", label: "Perimeter" },
+  { value: "edging", label: "Edging" },
+  { value: "other", label: "Other" },
+];
 const SUBTRACT_COLOR = "#dc2626";
 const LINEAR_COLOR = "#f97316";
 
@@ -147,9 +154,6 @@ export function AerialMeasurementDialog({
   const [zones, setZones] = useState<DraftZone[]>([]);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const [mapsReady, setMapsReady] = useState(false);
-  // Which distance (if any) feeds the client's built-in Perimeter / Linear ft edging fields.
-  const [perimeterMap, setPerimeterMap] = useState<FieldMapping>("none");
-  const [edgingMap, setEdgingMap] = useState<FieldMapping>("none");
   const [fieldMappings, setFieldMappings] = useState<Record<string, FieldMapping>>({});
 
   const [isDrawing, setIsDrawing] = useState(false);
@@ -199,8 +203,6 @@ export function AerialMeasurementDialog({
       setIsDrawing(false);
       setDraftPointCount(0);
       setFieldMappings({});
-      setPerimeterMap("none");
-      setEdgingMap("none");
       autoCreatedPropertyRef.current = false;
     }
   }, [open, properties, propertyId]);
@@ -325,7 +327,7 @@ export function AerialMeasurementDialog({
       const lengthFt = Math.round(google.maps.geometry.spherical.computeLength(path) * FT_PER_METER);
       setZones((prev) => {
         const n = prev.filter((z) => z.kind === "linear").length + 1;
-        return [...prev, { _id: id, name: `Distance ${n}`, type: "other", kind: "linear", sqft: 0, lengthFt, notes: "", path }];
+        return [...prev, { _id: id, name: `Distance ${n}`, type: "other", kind: "linear", linearType: "perimeter", sqft: 0, lengthFt, notes: "", path }];
       });
       registerPolyline(
         id,
@@ -598,26 +600,26 @@ export function AerialMeasurementDialog({
 
   const areaZones = zones.filter(isAreaZone);
   const linearZones = zones.filter((z) => z.kind === "linear");
-  const totalsByType: Record<"none" | "turf" | "mulch_bed" | "parking_lot" | "gross" | "linear", number> = {
+  const totalsByType: Record<Exclude<FieldMapping, "none">, number> & { none: number } = {
     none: 0,
     turf: sumZoneSqft(areaZones, "turf"),
     mulch_bed: sumZoneSqft(areaZones, "mulch_bed"),
     parking_lot: sumZoneSqft(areaZones, "parking_lot"),
     gross: sumZoneSqft(areaZones),
-    linear: Math.round(linearZones.reduce((t, z) => t + (z.lengthFt || 0), 0)),
+    perimeter: sumLinearFt(linearZones, "perimeter"),
+    edging: sumLinearFt(linearZones, "edging"),
+    linear_other: sumLinearFt(linearZones, "other"),
+    linear: sumLinearFt(linearZones),
   };
-  function mappedValue(mapping: FieldMapping): number {
-    if (mapping.startsWith("line:")) {
-      const line = linearZones.find((z) => z._id === mapping.slice(5));
-      return Math.round(line?.lengthFt ?? 0);
-    }
-    return totalsByType[mapping as keyof typeof totalsByType] ?? 0;
-  }
   const totalSqft = totalsByType.gross;
-  function distanceMappingValid(m: FieldMapping): boolean {
-    return m === "linear" ? linearZones.length > 0 : m.startsWith("line:") && linearZones.some((z) => `line:${z._id}` === m);
+  const totalLinearFt = totalsByType.linear;
+  /** A distance mapping only writes when something of that type was actually measured (never overwrite with a phantom 0). */
+  function hasMeasurementFor(m: FieldMapping): boolean {
+    if (m === "linear") return linearZones.length > 0;
+    if (m === "perimeter" || m === "edging") return linearZones.some((z) => z.linearType === m);
+    if (m === "linear_other") return linearZones.some((z) => (z.linearType ?? "other") === "other");
+    return true;
   }
-  const totalLinearFt = linearZones.reduce((s, z) => s + (z.lengthFt || 0), 0);
 
   async function handleSave() {
     if (!property) return;
@@ -637,10 +639,6 @@ export function AerialMeasurementDialog({
         propertyId: property.id,
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         zones: zones.map(({ _id, invalid, ...z }) => z),
-        clientLinear: {
-          ...(perimeterMap !== "none" && distanceMappingValid(perimeterMap) ? { perimeter: mappedValue(perimeterMap) } : {}),
-          ...(edgingMap !== "none" && distanceMappingValid(edgingMap) ? { edging: mappedValue(edgingMap) } : {}),
-        },
       });
     } catch {
       toast.error("Failed to save measurements");
@@ -652,15 +650,15 @@ export function AerialMeasurementDialog({
     const syncs = numberFieldDefs
       .map((f) => ({ f, mapping: fieldMappings[f.id] ?? "none" }))
       .filter(({ mapping }) => mapping !== "none")
-      // Don't wipe an existing value with 0 when nothing was measured (no distances drawn, or the picked line was deleted).
-      .filter(({ mapping }) => (mapping === "linear" ? linearZones.length > 0 : !mapping.startsWith("line:") || linearZones.some((z) => `line:${z._id}` === mapping)));
+      // Don't wipe an existing value with 0 when nothing of that distance type was measured.
+      .filter(({ mapping }) => hasMeasurementFor(mapping));
     let syncFailures = 0;
     for (const { f, mapping } of syncs) {
       try {
         await upsertCustomField.mutateAsync({
           clientId,
           fieldDefId: f.id,
-          valueNumber: mappedValue(mapping),
+          valueNumber: totalsByType[mapping],
         });
       } catch {
         syncFailures++;
@@ -885,19 +883,35 @@ export function AerialMeasurementDialog({
 
             {linearZones.length > 0 && (
               <div className="rounded-md border border-border">
-                <div className="grid grid-cols-[1fr_8rem_2.5rem] gap-2 border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                <div className="grid grid-cols-[1fr_9rem_8rem_2.5rem] gap-2 border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                   <span>Distance</span>
+                  <span>Type</span>
                   <span className="text-right">Length</span>
                   <span />
                 </div>
                 <div className="max-h-32 divide-y overflow-y-auto">
                   {linearZones.map((z) => (
-                    <div key={z._id} className="grid grid-cols-[1fr_8rem_2.5rem] items-center gap-2 px-3 py-1.5">
+                    <div key={z._id} className="grid grid-cols-[1fr_9rem_8rem_2.5rem] items-center gap-2 px-3 py-1.5">
                       <Input
                         value={z.name}
                         onChange={(e) => updateZone(z._id, { name: e.target.value })}
                         className="h-7 text-sm"
                       />
+                      <Select
+                        value={z.linearType ?? "other"}
+                        onValueChange={(v) => updateZone(z._id, { linearType: v as LinearType })}
+                      >
+                        <SelectTrigger className="h-7 px-2 text-left text-xs">
+                          <span className="truncate">{LINEAR_TYPES.find((t) => t.value === (z.linearType ?? "other"))?.label}</span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LINEAR_TYPES.map((t) => (
+                            <SelectItem key={t.value} value={t.value}>
+                              {t.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <span className="text-right text-sm text-slate-600 dark:text-neutral-400">
                         {(z.lengthFt ?? 0).toLocaleString()} ft
                         <span className="block text-[11px] text-slate-400 dark:text-neutral-500">
@@ -915,48 +929,13 @@ export function AerialMeasurementDialog({
                     </div>
                   ))}
                 </div>
-                {linearZones.length > 1 && (
-                  <div className="flex justify-end border-t bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-neutral-400">
-                    Total: {totalLinearFt.toLocaleString()} ft
-                  </div>
-                )}
-              </div>
-            )}
-
-            {linearZones.length > 0 && (
-              <div className="rounded-md border border-border">
-                <div className="border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-                  Show distances on Client Details
-                </div>
-                <div className="divide-y">
-                  {([
-                    { label: "Perimeter ft", value: perimeterMap, set: setPerimeterMap },
-                    { label: "Linear ft edging", value: edgingMap, set: setEdgingMap },
-                  ] as const).map(({ label, value, set }) => (
-                    <div key={label} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                      <p className="text-slate-700 dark:text-neutral-300">{label}</p>
-                      <Select value={value} onValueChange={(v) => set(v as FieldMapping)}>
-                        <SelectTrigger className="h-7 w-52 px-2 text-left text-xs">
-                          <span className="truncate">
-                            {value === "none"
-                              ? "Don’t sync"
-                              : value === "linear"
-                                ? `All distances (${totalsByType.linear.toLocaleString()} ft)`
-                                : (linearZones.find((z) => `line:${z._id}` === value)?.name ?? "Don’t sync")}
-                          </span>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Don&rsquo;t sync</SelectItem>
-                          <SelectItem value="linear">All distances ({totalsByType.linear.toLocaleString()} ft)</SelectItem>
-                          {linearZones.map((z) => (
-                            <SelectItem key={z._id} value={`line:${z._id}`}>
-                              {z.name || "Distance"} ({(z.lengthFt ?? 0).toLocaleString()} ft)
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-0.5 border-t bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-neutral-400">
+                  {LINEAR_TYPES.filter((t) => linearZones.some((z) => (z.linearType ?? "other") === t.value)).map((t) => (
+                    <span key={t.value} className="font-normal">
+                      {t.label}: {sumLinearFt(linearZones, t.value).toLocaleString()} ft
+                    </span>
                   ))}
+                  <span>Total: {totalLinearFt.toLocaleString()} ft</span>
                 </div>
               </div>
             )}
@@ -991,14 +970,10 @@ export function AerialMeasurementDialog({
                             <SelectItem value="mulch_bed">Mulch bed total ({totalsByType.mulch_bed.toLocaleString()})</SelectItem>
                             <SelectItem value="parking_lot">Parking lot total ({totalsByType.parking_lot.toLocaleString()})</SelectItem>
                             <SelectItem value="gross">Gross total ({totalsByType.gross.toLocaleString()})</SelectItem>
-                            {linearZones.length > 0 && (
-                              <SelectItem value="linear">All distances total ({totalsByType.linear.toLocaleString()} ft)</SelectItem>
-                            )}
-                            {linearZones.map((z) => (
-                              <SelectItem key={z._id} value={`line:${z._id}`}>
-                                {z.name || "Distance"} ({(z.lengthFt ?? 0).toLocaleString()} ft)
-                              </SelectItem>
-                            ))}
+                            <SelectItem value="perimeter">Perimeter total ({totalsByType.perimeter.toLocaleString()} ft)</SelectItem>
+                            <SelectItem value="edging">Edging total ({totalsByType.edging.toLocaleString()} ft)</SelectItem>
+                            <SelectItem value="linear_other">Other distance total ({totalsByType.linear_other.toLocaleString()} ft)</SelectItem>
+                            <SelectItem value="linear">All distances total ({totalsByType.linear.toLocaleString()} ft)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
