@@ -4,6 +4,9 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getPriceIdForPlan, isBillablePlan } from "@/lib/stripe/plans";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("billing checkout-session");
 
 const CheckoutSessionSchema = z.object({
   plan: z.string().refine(isBillablePlan, { message: "Unknown plan" }),
@@ -48,23 +51,25 @@ export async function POST(request: Request) {
 
   const stripe = getStripe();
 
-  // Clear pending_plan (set at signup) as soon as checkout is actually
-  // acted on for this org, so the auto-subscribe prompt doesn't re-trigger
-  // on a future login regardless of which plan they end up choosing here.
-  if (org.pending_plan) {
-    await createServiceClient().from("organizations").update({ pending_plan: null }).eq("id", org.id);
-  }
-
   let stripeCustomerId = org.stripe_customer_id;
   if (!stripeCustomerId) {
-    const customer = await stripe.customers.create(
-      {
-        email: user.email,
-        name: org.name,
-        metadata: { org_id: org.id },
-      },
-      { idempotencyKey: chargeIdempotencyKey(["org_stripe_customer", org.id]) }
-    );
+    let customer;
+    try {
+      customer = await stripe.customers.create(
+        {
+          email: user.email,
+          name: org.name,
+          metadata: { org_id: org.id },
+        },
+        { idempotencyKey: chargeIdempotencyKey(["org_stripe_customer", org.id]) }
+      );
+    } catch (err) {
+      log.error("stripe customer create failed", { error: err, orgId: org.id });
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "Could not create Stripe customer" },
+        { status: 502 }
+      );
+    }
     stripeCustomerId = customer.id;
 
     const serviceClient = createServiceClient();
@@ -73,6 +78,7 @@ export async function POST(request: Request) {
       .update({ stripe_customer_id: stripeCustomerId })
       .eq("id", org.id);
     if (updateError) {
+      log.error("failed to save stripe_customer_id", { error: updateError, orgId: org.id, stripeCustomerId });
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
   } else {
@@ -100,6 +106,9 @@ export async function POST(request: Request) {
         items: item ? [{ id: item.id, price: priceId }] : [{ price: priceId }],
         proration_behavior: "create_prorations",
       });
+      if (org.pending_plan) {
+        await createServiceClient().from("organizations").update({ pending_plan: null }).eq("id", org.id);
+      }
       // The customer.subscription.updated webhook will apply the new plan/
       // price to organizations once Stripe processes this change.
       return NextResponse.json({ updated: true });
@@ -108,18 +117,34 @@ export async function POST(request: Request) {
 
   const origin = new URL(request.url).origin;
 
-  const session = await stripe.checkout.sessions.create(
-    {
-      ui_mode: "embedded_page",
-      mode: "subscription",
-      customer: stripeCustomerId,
-      client_reference_id: org.id,
-      line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: { metadata: { org_id: org.id } },
-      return_url: `${origin}/settings?tab=subscription&checkout=return&session_id={CHECKOUT_SESSION_ID}`,
-    },
-    { idempotencyKey: chargeIdempotencyKey(["checkout_session", org.id, priceId]) }
-  );
+  let session;
+  try {
+    session = await stripe.checkout.sessions.create(
+      {
+        ui_mode: "embedded_page",
+        mode: "subscription",
+        customer: stripeCustomerId,
+        client_reference_id: org.id,
+        line_items: [{ price: priceId, quantity: 1 }],
+        subscription_data: { metadata: { org_id: org.id } },
+        return_url: `${origin}/settings?tab=subscription&checkout=return&session_id={CHECKOUT_SESSION_ID}`,
+      },
+      { idempotencyKey: chargeIdempotencyKey(["checkout_session", org.id, priceId]) }
+    );
+  } catch (err) {
+    log.error("stripe checkout session create failed", { error: err, orgId: org.id, priceId });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Could not start checkout" },
+      { status: 502 }
+    );
+  }
+
+  // Clear pending_plan (set at signup) only once checkout is actually open,
+  // so the auto-subscribe prompt doesn't re-trigger on a future login — but a
+  // failed attempt above stays retryable.
+  if (org.pending_plan) {
+    await createServiceClient().from("organizations").update({ pending_plan: null }).eq("id", org.id);
+  }
 
   return NextResponse.json({ clientSecret: session.client_secret });
 }
