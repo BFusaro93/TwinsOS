@@ -35,7 +35,7 @@ async function fetchUserPermissions(queryClient: QueryClient): Promise<{
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: employee, error: employeeError } = await (supabase as any)
     .from("crm_employees")
-    .select("crm_role_id, crm_roles(name, permissions, deleted_at)")
+    .select("crm_role_id, is_active, crm_roles(name, permissions, deleted_at)")
     .eq("user_id", profile.userId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -52,7 +52,9 @@ async function fetchUserPermissions(queryClient: QueryClient): Promise<{
   const role = employee?.crm_roles as any;
   // A soft-deleted role (crm_roles.deleted_at set) must stop granting access —
   // the join above doesn't filter deleted_at itself, so treat it as unassigned.
-  if (!employee?.crm_role_id || !role || role.deleted_at) {
+  // A deactivated employee (is_active = false) keeps no permissions — same as the
+  // has_crm_access()/has_settings_permission() RLS helpers.
+  if (!employee?.crm_role_id || !role || role.deleted_at || employee.is_active === false) {
     return { permissions: {}, isAdmin, roleId: null, roleName: null, profileRole: profile.role, hasEmployeeLink: !!employee };
   }
 
