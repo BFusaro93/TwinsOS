@@ -30,6 +30,8 @@ export interface PropertyZone {
   lengthFt?: number;
   /** What a linear measurement is, so lengths roll up per type like sq ft does. Absent on a linear entry = 'other'. */
   linearType?: 'perimeter' | 'edging' | 'other';
+  /** Number custom field this distance counts toward; lines pointing at the same field add together. */
+  customFieldId?: string | null;
 }
 
 export interface Client {

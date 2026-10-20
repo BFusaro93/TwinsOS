@@ -613,6 +613,13 @@ export function AerialMeasurementDialog({
   };
   const totalSqft = totalsByType.gross;
   const totalLinearFt = totalsByType.linear;
+  /** Sum of the distance lines that point at each number custom field (lines sharing a field add together). */
+  const lineSums = new Map<string, number>();
+  for (const z of linearZones) {
+    if (z.customFieldId && numberFieldDefs.some((f) => f.id === z.customFieldId)) {
+      lineSums.set(z.customFieldId, (lineSums.get(z.customFieldId) ?? 0) + (z.lengthFt || 0));
+    }
+  }
   /** A distance mapping only writes when something of that type was actually measured (never overwrite with a phantom 0). */
   function hasMeasurementFor(m: FieldMapping): boolean {
     if (m === "linear") return linearZones.length > 0;
@@ -648,17 +655,22 @@ export function AerialMeasurementDialog({
     // Zone save succeeded at this point — report custom-field sync problems separately
     // so a sync failure doesn't read as "nothing was saved" when the zones did save.
     const syncs = numberFieldDefs
-      .map((f) => ({ f, mapping: fieldMappings[f.id] ?? "none" }))
-      .filter(({ mapping }) => mapping !== "none")
-      // Don't wipe an existing value with 0 when nothing of that distance type was measured.
-      .filter(({ mapping }) => hasMeasurementFor(mapping));
+      .map((f) => {
+        // Distances pointed straight at this field win over the type-total dropdown.
+        if (lineSums.has(f.id)) return { f, value: lineSums.get(f.id) ?? 0 };
+        const mapping = fieldMappings[f.id] ?? "none";
+        // Don't wipe an existing value with 0 when nothing of that distance type was measured.
+        if (mapping === "none" || !hasMeasurementFor(mapping)) return null;
+        return { f, value: totalsByType[mapping] };
+      })
+      .filter((x): x is { f: (typeof numberFieldDefs)[number]; value: number } => x !== null);
     let syncFailures = 0;
-    for (const { f, mapping } of syncs) {
+    for (const { f, value } of syncs) {
       try {
         await upsertCustomField.mutateAsync({
           clientId,
           fieldDefId: f.id,
-          valueNumber: totalsByType[mapping],
+          valueNumber: value,
         });
       } catch {
         syncFailures++;
@@ -883,15 +895,16 @@ export function AerialMeasurementDialog({
 
             {linearZones.length > 0 && (
               <div className="rounded-md border border-border">
-                <div className="grid grid-cols-[1fr_9rem_8rem_2.5rem] gap-2 border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+                <div className="grid grid-cols-[1fr_9rem_10rem_8rem_2.5rem] gap-2 border-b bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                   <span>Distance</span>
                   <span>Type</span>
+                  <span>Counts toward</span>
                   <span className="text-right">Length</span>
                   <span />
                 </div>
                 <div className="max-h-32 divide-y overflow-y-auto">
                   {linearZones.map((z) => (
-                    <div key={z._id} className="grid grid-cols-[1fr_9rem_8rem_2.5rem] items-center gap-2 px-3 py-1.5">
+                    <div key={z._id} className="grid grid-cols-[1fr_9rem_10rem_8rem_2.5rem] items-center gap-2 px-3 py-1.5">
                       <Input
                         value={z.name}
                         onChange={(e) => updateZone(z._id, { name: e.target.value })}
@@ -908,6 +921,26 @@ export function AerialMeasurementDialog({
                           {LINEAR_TYPES.map((t) => (
                             <SelectItem key={t.value} value={t.value}>
                               {t.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select
+                        value={z.customFieldId ?? "none"}
+                        onValueChange={(v) => updateZone(z._id, { customFieldId: v === "none" ? null : v })}
+                        disabled={numberFieldDefs.length === 0}
+                      >
+                        <SelectTrigger className="h-7 px-2 text-left text-xs">
+                          <span className="truncate">
+                            {numberFieldDefs.find((f) => f.id === z.customFieldId)?.name ??
+                              (numberFieldDefs.length === 0 ? "No number fields" : "Not synced")}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Not synced</SelectItem>
+                          {numberFieldDefs.map((f) => (
+                            <SelectItem key={f.id} value={f.id}>
+                              {f.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -957,6 +990,11 @@ export function AerialMeasurementDialog({
                             <p className="text-xs text-slate-400 dark:text-neutral-500">Current: {current.toLocaleString()}</p>
                           )}
                         </div>
+                        {lineSums.has(f.id) ? (
+                          <span className="text-xs text-slate-500 dark:text-neutral-400">
+                            From distance lines: {Math.round(lineSums.get(f.id) ?? 0).toLocaleString()} ft
+                          </span>
+                        ) : (
                         <Select
                           value={mapping}
                           onValueChange={(v) => setFieldMappings((prev) => ({ ...prev, [f.id]: v as FieldMapping }))}
@@ -976,6 +1014,7 @@ export function AerialMeasurementDialog({
                             <SelectItem value="linear">All distances total ({totalsByType.linear.toLocaleString()} ft)</SelectItem>
                           </SelectContent>
                         </Select>
+                        )}
                       </div>
                     );
                   })}
