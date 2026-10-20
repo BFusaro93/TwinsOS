@@ -117,6 +117,7 @@ function printTicket(ticket: CRMTicket) {
     .body-section { margin-top: 20px; border-top: 2px solid #eee; padding-top: 16px; }
     .body-section h2 { font-size: 13px; text-transform: uppercase; letter-spacing:.05em; color:#888; margin-bottom:8px; }
     .body-text { white-space: pre-wrap; line-height: 1.6; }
+    @page { size: letter portrait; margin: 0.6in; }
     @media print { body { padding: 0; } }
   </style>
 </head>

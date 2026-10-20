@@ -20,7 +20,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
-import { exportReportPDF } from "@/lib/reports/export-pdf";
 import {
   useDashboard,
   useReportFilterOptions,
@@ -225,7 +224,6 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
   const [repFilter, setRepFilter] = useState("");
   const { data: salesRepOptions = [] } = useReportFilterOptions(tab.useRepFilter ? "salesReps" : undefined);
   const [panelResults, setPanelResults] = useState<Record<string, ReportResult>>({});
-  const [exportingPdf, setExportingPdf] = useState(false);
 
   // Without this, changing the date range and immediately exporting (before
   // the refetch for the new range lands) exported the PREVIOUS range's rows
@@ -306,30 +304,12 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
     }
   };
 
-  const handleExportPdf = async () => {
-    if (!hasData) return;
-    setExportingPdf(true);
-    try {
-      await exportReportPDF(
-        `${dashboardName} - ${tab.name}`,
-        panelsWithData.map((panel) => {
-          const result = panelResults[panel.id];
-          return {
-            heading: panel.title,
-            columns: result.columns.map((c) => c.label),
-            rows: exportRowsWithTotals(result, formatCellValue),
-          };
-        })
-      );
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "PDF export failed");
-    } finally {
-      setExportingPdf(false);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-4">
+      {/* The PDF button prints the page as shown (charts, KPIs, tables) —
+          choose "Save as PDF" in the print dialog. */}
+      <style media="print">{"@page { size: letter landscape; margin: 0.4in; }"}</style>
+      <h1 className="hidden text-lg font-semibold print:block">{dashboardName} — {tab.name}</h1>
       <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
         <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={!hasData}>
           <Download className="mr-1.5 h-3.5 w-3.5" />
@@ -342,11 +322,11 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
         <Button
           variant="outline"
           size="sm"
-          onClick={() => void handleExportPdf()}
-          disabled={!hasData || exportingPdf}
+          onClick={() => window.print()}
+          disabled={!hasData}
         >
           <FileText className="mr-1.5 h-3.5 w-3.5" />
-          {exportingPdf ? "Exporting…" : "PDF"}
+          PDF
         </Button>
       </div>
       {tab.useDateFilter && (
