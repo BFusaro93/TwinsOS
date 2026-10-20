@@ -23,6 +23,7 @@ import { AddExpenseDialog } from "./AddExpenseDialog";
 import { NewDamageCaseDialog } from "./NewDamageCaseDialog";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { DamageCasePhotos } from "@/components/damage-cases/DamageCasePhotos";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -355,6 +356,7 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
         </TabsContent>
 
         <TabsContent value="files" className="flex-1 overflow-y-auto p-6 mt-0">
+          <DamageCasePhotos caseId={data.id} />
           <AttachmentsSection recordType="damage_case" recordId={data.id} />
         </TabsContent>
 
