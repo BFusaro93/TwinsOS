@@ -81,7 +81,7 @@ export async function POST(
   const { data: client } = await (supabase as any)
     .from("clients")
     .select(`
-      id, display_name, first_name, last_name, primary_email, phones,
+      id, display_name, first_name, last_name, primary_email, phones, primary_phone,
       account_number, invoice_delivery, balance_outstanding_cents,
       billing_address, billing_city, billing_state, billing_zip,
       service_address, service_city, service_state, service_zip,
@@ -142,7 +142,11 @@ export async function POST(
     lastName: client.last_name,
     balanceOutstandingCents: client.balance_outstanding_cents,
     primaryEmail: client.primary_email,
-    phones: client.phones,
+    phones: client.phones?.length
+      ? client.phones
+      : client.primary_phone
+        ? [{ phone: client.primary_phone, type: "cell" }]
+        : client.phones,
     accountNumber: client.account_number,
     invoiceDelivery: client.invoice_delivery,
     billingAddress: client.billing_address,

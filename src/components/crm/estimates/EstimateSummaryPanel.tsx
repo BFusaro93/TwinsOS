@@ -107,7 +107,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   // its own cost breakdown client-side and must apply the identical filter
   // or its rows silently include stale/deleted totals the server total
   // never counted.
-  const lineItems   = (estimate.lineItems ?? []).filter((li) => !li.deletedAt && li.status !== "lost");
+  const lineItems   = (estimate.lineItems ?? []).filter((li) => !li.deletedAt && li.status !== "lost" && li.status !== "draft");
   const directCosts = estimate.directCosts ?? [];
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);

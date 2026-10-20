@@ -791,6 +791,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   // background refetch of fieldValues (e.g. window refocus) while the user
   // is mid-edit doesn't clobber their unsaved typing.
   const customValuesSyncedForRef = useRef<string | null>(null);
+  const consentBaseline = useRef({ doNotMarket: client.doNotMarket, smsOptIn: client.smsOptIn ?? false });
 
   // fieldValues loads asynchronously — seeding customValues from it via a
   // plain useState initializer only runs once on mount and would capture it
@@ -810,6 +811,9 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
 
   // Reset all form state when a different client is opened
   useEffect(() => {
+    // What consent looked like when the dialog opened: only a field the user
+    // actually toggled is written back (see the save below).
+    consentBaseline.current = { doNotMarket: client.doNotMarket, smsOptIn: client.smsOptIn ?? false };
     setEditTab("personal");
     setBillingSameAsService(client.billingSameAsService ?? true);
     setClientPhones(
@@ -903,10 +907,20 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
       const validClientPhones = clientPhones.filter((p) => p.phone.trim());
       const primaryClientPhone = validClientPhones.find((p) => p.isPrimary) ?? validClientPhones[0] ?? null;
 
+      // Consent flags are only sent when the user changed them. Sending the form's
+      // snapshot of an untouched checkbox let a stale `true` overwrite an opt-out
+      // that arrived (STOP reply, unsubscribe click) while the dialog was open.
+      const { doNotMarket: formDoNotMarket, smsOptIn: formSmsOptIn, ...formRest } = form;
+      const consentChanges = {
+        ...(formDoNotMarket !== consentBaseline.current.doNotMarket && { doNotMarket: formDoNotMarket }),
+        ...(formSmsOptIn !== consentBaseline.current.smsOptIn && { smsOptIn: formSmsOptIn }),
+      };
+
       await update({
         id: client.id,
         updates: {
-          ...form,
+          ...formRest,
+          ...consentChanges,
           ...serviceAddr,
           ...billingAddr,
           billingSameAsService,

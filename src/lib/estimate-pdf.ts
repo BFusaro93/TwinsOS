@@ -73,7 +73,7 @@ async function buildEstimatePDFData(
     .single();
 
   const lineItems: EstimatePDFLineItem[] = (est.estimate_line_items ?? [])
-    .filter((li: Record<string, unknown>) => !li.deleted_at && li.status !== "lost")
+    .filter((li: Record<string, unknown>) => !li.deleted_at && li.status !== "lost" && li.status !== "draft")
     .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
       ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0)
     )
