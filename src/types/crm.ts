@@ -28,6 +28,10 @@ export interface PropertyZone {
   /** 'linear' entries are polyline distance/perimeter measurements: sqft is 0 and length lives in `lengthFt`. Absent = area. */
   kind?: 'area' | 'linear';
   lengthFt?: number;
+  /** What a linear measurement is, so lengths roll up per type like sq ft does. Absent on a linear entry = 'other'. */
+  linearType?: 'perimeter' | 'edging' | 'other';
+  /** Number custom field this distance counts toward; lines pointing at the same field add together. */
+  customFieldId?: string | null;
 }
 
 export interface Client {
@@ -65,6 +69,7 @@ export interface Client {
   turfSqft: number | null;
   mulchBedSqft: number | null;
   grossSqft: number | null;
+  parkingLotSqft: number | null;
   linearFtPerimeter: number | null;
   linearFtEdging: number | null;
   yardsOfMulch: number | null;
