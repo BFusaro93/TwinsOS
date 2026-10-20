@@ -2021,9 +2021,14 @@ function ImportTile({
     setImporting(true);
     setImportError(null);
     try {
-      await onImport(parsedRows);
+      const result = await onImport(parsedRows);
       setPreviewOpen(false);
-      onStatus({ type: "success", message: `Successfully imported ${parsedRows.length} ${label.toLowerCase()}.` });
+      // An importer that skips rows can report how many it actually created; otherwise assume all.
+      const imported =
+        result && typeof result === "object" && "imported" in result && typeof (result as { imported: unknown }).imported === "number"
+          ? (result as { imported: number }).imported
+          : parsedRows.length;
+      onStatus({ type: "success", message: `Successfully imported ${imported} ${label.toLowerCase()}.` });
     } catch (err) {
       const message =
         err instanceof Error ? err.message :
@@ -2272,13 +2277,14 @@ function ImportExportTab() {
               { label: "Estimates", icon: <FileText className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportEstimates(r),  templateColumns: ["clientName", "description", "estimateDate", "validUntilDate", "poNumber", "stage"], required: ["clientName", "description"] },
               { label: "Invoices",  icon: <Receipt className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportInvoices(r),   templateColumns: ["clientName", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "taxAmount"], required: ["clientName", "description", "amount"] },
               { label: "Contracts", icon: <FileSignature className="h-6 w-6" />, onImport: async (r: Record<string, string>[]) => {
-                const { warnings } = await bulkImportContracts(r);
+                const { created, warnings } = await bulkImportContracts(r);
                 if (warnings.length > 0) {
                   toast.warning(`${warnings.length} contract row${warnings.length !== 1 ? "s" : ""} need attention`, {
                     description: warnings.slice(0, 5).map((f) => `Row ${f.row}: ${f.reason}`).join("\n") + (warnings.length > 5 ? `\n…and ${warnings.length - 5} more` : ""),
                     duration: 15000,
                   });
                 }
+                return { imported: created };
               }, templateColumns: [...CONTRACT_CSV_COLUMNS], required: ["clientName", "title"] },
               { label: "Payments",  icon: <DollarSign className="h-6 w-6" />,  onImport: async (r: Record<string, string>[]) => {
                 const { failures } = await bulkImportPayments(r);
