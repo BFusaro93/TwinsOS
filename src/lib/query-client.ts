@@ -18,6 +18,15 @@ export const queryClient = new QueryClient({
     // individual hook defined its own onError (e.g. after the session expired
     // the edit was dropped and the old value reappeared on reload).
     onError: (err, _vars, _ctx, mutation) => {
+      // The DB's chemical-confirmation gate refused to complete a visit. Say why,
+      // whatever generic message the caller's own handler shows.
+      const msg = (err as { message?: string } | null)?.message ?? "";
+      if (msg.includes("chemical_confirmation_required")) {
+        toast.error(msg.replace(/^.*chemical_confirmation_required:\s*/, "").replace(/^./, (c) => c.toUpperCase()), {
+          description: "Open the visit's Chemicals tab to confirm the amounts, or ask an admin to allow completing it without.",
+        });
+        return;
+      }
       if (mutation.options.onError) return; // hook handles it itself
       toast.error(
         isAuthError(err)

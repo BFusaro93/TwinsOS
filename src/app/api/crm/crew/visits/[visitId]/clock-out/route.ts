@@ -1,3 +1,4 @@
+import { chemicalGateMessage, isChemicalGateError } from "@/lib/crew/chemical-gate";
 import { NextResponse } from "next/server";
 import { resolveOccurredAt } from "@/lib/crew/occurred-at";
 import { z } from "zod";
@@ -88,6 +89,12 @@ export async function POST(
   // guard keeps a racing retry from overwriting; a visit the office already
   // completed keeps its own completed_at and does not re-run side effects.
   const alreadyCompleted = existing.status === "completed";
+  if (!alreadyCompleted) {
+    const chemMessage = await chemicalGateMessage([visitId]);
+    if (chemMessage) {
+      return NextResponse.json({ error: chemMessage, code: "chemical_confirmation_required" }, { status: 409 });
+    }
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: clockedOut, error } = await (supabase as any)
     .from("crm_job_visits")
@@ -108,6 +115,9 @@ export async function POST(
     .select()
     .maybeSingle();
 
+  if (isChemicalGateError(error?.message)) {
+    return NextResponse.json({ error: "Confirm the chemicals applied before finishing this job.", code: "chemical_confirmation_required" }, { status: 409 });
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!clockedOut) return NextResponse.json({ error: "Already clocked out" }, { status: 409 });
 

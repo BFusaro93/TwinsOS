@@ -122,6 +122,19 @@ export function ProductCatalogGuide() {
           Active Ingredients (name + percentage). Use this for any fertilizer, herbicide, or
           pesticide product where label compliance and client-facing route sheets matter.
         </p>
+        <p>
+          <strong>Confirming what was applied.</strong> When a visit is dispatched, its
+          service&apos;s chemicals are loaded onto it at the <em>planned</em> amount. That is only an
+          estimate: it is not counted in the Chemical Tracking report or taken out of stock until
+          someone confirms the amount actually used, or marks the product <strong>Not used</strong>.
+          Under <strong>Settings &gt; Chemical Tracking &gt; Who Confirms Chemicals Applied</strong>{" "}
+          choose <strong>Crew</strong> (the default) &mdash; the crew enters the amounts on the stop,
+          and can&apos;t Stop Job until they do &mdash; or <strong>Office adds amounts later</strong>,
+          which removes that requirement. The office can confirm from the visit&apos;s Chemicals tab
+          (<strong>Confirm all as planned</strong>, or edit and Save a row), and an admin can click{" "}
+          <strong>Allow completing without confirmation</strong> for a single visit. Chemicals added
+          by hand are recorded as entered and don&apos;t need confirming.
+        </p>
       </Section>
 
       <Section id="maintenance-part-link" title="The Maintenance Part ↔ CMMS Parts link">

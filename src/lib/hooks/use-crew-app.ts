@@ -442,6 +442,10 @@ export interface VisitChemicalApplication {
   solutionAmount: number | null;
   solutionUnitName: string | null;
   applicationRateLabel: string | null;
+  /** Preloaded from the service at the planned amount; an estimate until confirmed. */
+  preloaded: boolean;
+  /** When the crew confirmed what was actually used (null = still an estimate). */
+  confirmedAt: string | null;
 }
 
 /** Batched by visit id (a stop can bundle several same-day visits) so the
@@ -456,7 +460,7 @@ export function useVisitChemicals(visitIds: string[]) {
       const { data, error } = await (supabase as any)
         .from("crm_chemical_applications")
         .select(
-          "id, visit_id, chemical_amount, solution_amount, used, application_rate_label, " +
+          "id, visit_id, chemical_amount, solution_amount, used, application_rate_label, preloaded, confirmed_at, " +
           "product:product_id(name), unit:unit_of_measure_id(name), " +
           "solution_unit:solution_unit_of_measure_id(name)"
         )
@@ -475,9 +479,47 @@ export function useVisitChemicals(visitIds: string[]) {
         solutionAmount: row.solution_amount,
         solutionUnitName: row.solution_unit?.name ?? null,
         applicationRateLabel: row.application_rate_label,
+        preloaded: row.preloaded === true,
+        confirmedAt: row.confirmed_at ?? null,
       }));
     },
     enabled: visitIds.length > 0,
+  });
+}
+
+/** Org's confirmation mode + visits an admin waived. The server enforces the
+ *  gate regardless; this lets the stop page explain it before the crew taps. */
+export function useChemicalConfirmationStatus(visitIds: string[]) {
+  return useQuery<{ mode: "crew_required" | "office_later"; waivedVisitIds: string[] }>({
+    queryKey: ["crew-app-chemical-confirmation", [...visitIds].sort()],
+    queryFn: async () => {
+      const res = await fetch(`/api/crm/crew/chemicals/confirm?visitIds=${visitIds.join(",")}`);
+      if (!res.ok) return { mode: "crew_required", waivedVisitIds: [] };
+      return res.json();
+    },
+    enabled: visitIds.length > 0,
+  });
+}
+
+export function useConfirmChemicals() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (items: { id: string; used: boolean; chemicalAmount?: number }[]) => {
+      const res = await fetch("/api/crm/crew/chemicals/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+        throw new Error(typeof body?.error === "string" ? body.error : "Couldn't save chemicals");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crew-app-chemicals"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
   });
 }
 
@@ -814,6 +856,8 @@ export function useStopResume() {
   });
 }
 
+class ChemicalConfirmationRequiredError extends Error {}
+
 export function useStopClockOut() {
   const qc = useQueryClient();
   return useMutation({
@@ -824,7 +868,19 @@ export function useStopClockOut() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notes, localTime }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const text = await res.text();
+        // The company's chemical-confirmation gate — say what to do, not "check your connection".
+        try {
+          const body = JSON.parse(text) as { error?: string; code?: string };
+          if (body.code === "chemical_confirmation_required") {
+            throw new ChemicalConfirmationRequiredError(body.error ?? "Confirm the chemicals applied first.");
+          }
+        } catch (e) {
+          if (e instanceof ChemicalConfirmationRequiredError) throw e;
+        }
+        throw new Error(text);
+      }
       return res.json();
     },
     onSuccess: (_data, { anchorVisitId }) => {
@@ -834,7 +890,14 @@ export function useStopClockOut() {
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
-    onError: () => toast.error("Failed to stop job — check your connection and try again"),
+    onError: (err) => {
+      if (err instanceof ChemicalConfirmationRequiredError) {
+        toast.error(err.message);
+        qc.invalidateQueries({ queryKey: ["crew-app-chemicals"] });
+      } else {
+        toast.error("Failed to stop job — check your connection and try again");
+      }
+    },
   });
 }
 

@@ -1,3 +1,4 @@
+import { chemicalGateMessage, isChemicalGateError } from "@/lib/crew/chemical-gate";
 import { NextResponse } from "next/server";
 import { resolveOccurredAt } from "@/lib/crew/occurred-at";
 import { z } from "zod";
@@ -211,6 +212,14 @@ export async function POST(
 
   const openIds = openRows.map((r) => r.id);
 
+  // Company requires the crew to confirm chemicals applied before a stop is
+  // finished. Checked up front: the per-visit loop below would otherwise complete
+  // earlier siblings before the DB gate refused a later one.
+  const chemMessage = await chemicalGateMessage(openIds);
+  if (chemMessage) {
+    return NextResponse.json({ error: chemMessage, code: "chemical_confirmation_required" }, { status: 409 });
+  }
+
   // Per-sibling writes differ (actual_hours), so this is a loop rather than
   // one batched update. Each write is conditional on the row STILL being
   // open (clocked_out_at null, not terminal) and returns the row, so two
@@ -244,6 +253,9 @@ export async function POST(
       .select("id");
     if (error) updateErrors.push(`${row.id}: ${error.message}`);
     else if (((updated ?? []) as unknown[]).length > 0) transitionedRows.push(row);
+  }
+  if (updateErrors.some((e) => isChemicalGateError(e))) {
+    return NextResponse.json({ error: "Confirm the chemicals applied before finishing this job.", code: "chemical_confirmation_required" }, { status: 409 });
   }
   if (updateErrors.length > 0) {
     return NextResponse.json({ error: `Failed to clock out: ${updateErrors.join("; ")}` }, { status: 500 });
