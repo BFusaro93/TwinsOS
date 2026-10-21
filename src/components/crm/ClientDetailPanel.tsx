@@ -1027,16 +1027,16 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
             {/* ── Personal Info ── */}
             <TabsContent value="personal" className="mt-0 space-y-3">
               <div className="flex flex-col gap-1.5">
-                <Label>Display Name *</Label>
+                <Label>{form.accountType === "commercial" ? "Company Name *" : "Display Name *"}</Label>
                 <Input value={form.displayName} onChange={(e) => patch("displayName", e.target.value)} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <Label>First Name</Label>
+                  <Label>{form.accountType === "commercial" ? "Primary Contact First Name" : "First Name"}</Label>
                   <Input value={form.firstName} onChange={(e) => patch("firstName", e.target.value)} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label>Last Name</Label>
+                  <Label>{form.accountType === "commercial" ? "Primary Contact Last Name" : "Last Name"}</Label>
                   <Input value={form.lastName} onChange={(e) => patch("lastName", e.target.value)} />
                 </div>
               </div>

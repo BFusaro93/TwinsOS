@@ -104,11 +104,12 @@ const SUPPORT_INBOX = () => process.env.SUPPORT_INBOX_EMAIL ?? "support@landscap
 
 /**
  * Emails the support inbox about an Ask AI item that needs a human: a
- * question the help docs didn't cover, or a conversation the customer sent
- * to support. Best-effort; returns whether it was sent.
+ * question the help docs didn't cover or only partly answered, or a
+ * conversation the customer sent to support (the only email an escalation
+ * produces). Best-effort; returns whether it was sent.
  */
 export async function notifySupportInboxOfAskAI(item: {
-  kind: "not-covered" | "escalated";
+  kind: "not-covered" | "partial" | "escalated";
   orgName: string;
   asker: string;
   question: string;
@@ -120,7 +121,9 @@ export async function notifySupportInboxOfAskAI(item: {
   const escalated = item.kind === "escalated";
   const heading = escalated
     ? `${item.orgName} sent an Ask AI conversation to support`
-    : `Ask AI couldn't answer a question from ${item.orgName}`;
+    : item.kind === "partial"
+      ? `Ask AI only partly answered a question from ${item.orgName}`
+      : `Ask AI couldn't answer a question from ${item.orgName}`;
   const html = `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px 24px">
     <h2 style="margin:0 0 12px;font-size:20px;color:#0f172a">${escapeHtml(heading)}</h2>
     <p style="margin:0 0 4px;color:#475569">From: ${escapeHtml(item.asker)}</p>
@@ -134,7 +137,9 @@ export async function notifySupportInboxOfAskAI(item: {
     .send({
       from: EMAIL_FROM,
       to: SUPPORT_INBOX(),
-      subject: escalated ? `Ask AI conversation from ${item.orgName}` : `Ask AI gap: ${snippet(item.question, 70)}`,
+      subject: escalated
+        ? `Ask AI conversation from ${item.orgName}`
+        : `${item.kind === "partial" ? "Ask AI partial answer" : "Ask AI gap"}: ${snippet(item.question, 70)}`,
       html,
     })
     .then(() => true)

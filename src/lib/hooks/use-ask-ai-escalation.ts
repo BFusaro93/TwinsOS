@@ -17,8 +17,10 @@ export function formatAskAITranscript(messages: AskAIMessage[], note: string): s
 /**
  * Sends an Ask AI conversation to Landscapt support. Orgs with chat support
  * get it in their support chat thread (where staff reply in-app); everyone
- * else gets it as a feedback submission. Either way staff are emailed, and
- * the logged questions are flagged so they surface first in the review tab.
+ * else gets it as a feedback submission. support@landscapt.com is emailed
+ * once via /api/support/ask/escalate (not the individual staff members, who
+ * would otherwise get a second email), and the logged questions are flagged so
+ * they surface first in the review tab.
  */
 export function useSendAskAIToSupport(opts: { orgId: string; senderName: string; hasChatSupport: boolean }) {
   const sendChat = useSendSupportMessage();
@@ -27,18 +29,23 @@ export function useSendAskAIToSupport(opts: { orgId: string; senderName: string;
   return useMutation({
     mutationFn: async ({ messages, note, pageUrl }: { messages: AskAIMessage[]; note: string; pageUrl: string }) => {
       const body = formatAskAITranscript(messages, note);
+      const logIds = messages.map((m) => m.logId).filter((id): id is string => !!id);
+      // The escalate route emails support@ (once) for logged questions, so the
+      // per-staff email would be a duplicate. If nothing was logged, that route
+      // has nothing to email about, so fall back to the normal staff email.
+      const notifyStaff = logIds.length === 0;
       if (opts.hasChatSupport) {
         await sendChat.mutateAsync({
           orgId: opts.orgId,
           senderType: "org",
           senderName: opts.senderName,
           body,
+          notifyStaff,
         });
       } else {
-        await submitFeedback.mutateAsync({ category: "other", message: body, pageUrl });
+        await submitFeedback.mutateAsync({ category: "other", message: body, pageUrl, notifyStaff });
       }
 
-      const logIds = messages.map((m) => m.logId).filter((id): id is string => !!id);
       if (logIds.length > 0) {
         // Best-effort: the message is already with support.
         void fetch("/api/support/ask/escalate", {

@@ -223,13 +223,13 @@ ${formatDataDictionaryContext(query)}`;
           updated_at: new Date().toISOString(),
         })
         .eq("id", logId);
-      if (outcome === "none") {
+      if (outcome === "none" || outcome === "partial") {
         const [{ data: org }, { data: asker }] = await Promise.all([
           supabase.from("organizations").select("name").eq("id", orgId).maybeSingle(),
           supabase.from("profiles").select("name, email").eq("id", userId).maybeSingle(),
         ]);
         await notifySupportInboxOfAskAI({
-          kind: "not-covered",
+          kind: outcome === "partial" ? "partial" : "not-covered",
           orgName: org?.name ?? "an organization",
           asker: asker?.name ?? asker?.email ?? "Unknown user",
           question,

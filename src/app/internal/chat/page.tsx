@@ -5,47 +5,92 @@ import { MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCurrentUserStore } from "@/stores";
 import {
+  CONVERSATION_STATUS_LABEL,
   useStaffConversationList,
   useOrgConversation,
   useSupportMessagesRealtime,
   useSendSupportMessage,
+  useSetConversationStatus,
+  type ConversationStatus,
 } from "@/lib/hooks/use-support-chat";
+import { SupportThread } from "@/components/shared/SupportThread";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+
+const STATUS_DOT: Record<ConversationStatus, string> = {
+  open: "bg-red-500",
+  in_progress: "bg-amber-500",
+  resolved: "bg-green-500",
+};
+
+type StatusFilter = "active" | ConversationStatus | "all";
+const FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "open", label: "Open" },
+  { value: "in_progress", label: "In progress" },
+  { value: "resolved", label: "Resolved" },
+  { value: "all", label: "All" },
+];
 
 export default function StaffChatPage() {
   const { currentUser } = useCurrentUserStore();
   const { data: conversations = [], isLoading } = useStaffConversationList(true);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<StatusFilter>("active");
 
   useSupportMessagesRealtime(null);
 
-  const selected = conversations.find((c) => c.orgId === selectedOrgId) ?? conversations[0] ?? null;
+  const visible = conversations.filter((c) =>
+    filter === "all" ? true : filter === "active" ? c.status !== "resolved" : c.status === filter
+  );
+  // Keep the open thread on screen even after it's resolved out of the filter.
+  const selected = conversations.find((c) => c.orgId === selectedOrgId) ?? visible[0] ?? null;
   const effectiveOrgId = selectedOrgId ?? selected?.orgId ?? null;
 
   return (
     <div className="flex h-full gap-4">
-      <div className="w-72 shrink-0 overflow-y-auto rounded-lg border bg-white">
-        {isLoading ? (
-          <p className="p-4 text-sm text-slate-400">Loading…</p>
-        ) : conversations.length === 0 ? (
-          <p className="p-4 text-sm text-slate-400">No conversations yet.</p>
-        ) : (
-          conversations.map((c) => (
+      <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-lg border bg-white">
+        <div className="flex flex-wrap gap-1 border-b p-2">
+          {FILTERS.map((f) => (
             <button
-              key={c.orgId}
-              onClick={() => setSelectedOrgId(c.orgId)}
+              key={f.value}
+              onClick={() => setFilter(f.value)}
               className={cn(
-                "flex w-full flex-col gap-0.5 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50",
-                c.orgId === effectiveOrgId && "bg-brand-50"
+                "rounded-full px-2.5 py-0.5 text-xs transition-colors",
+                filter === f.value ? "bg-brand-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               )}
             >
-              <span className="text-sm font-medium text-slate-800">{c.orgName}</span>
-              <span className="truncate text-xs text-slate-500">{c.lastMessage}</span>
+              {f.label}
             </button>
-          ))
-        )}
+          ))}
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <p className="p-4 text-sm text-slate-400">Loading…</p>
+          ) : visible.length === 0 ? (
+            <p className="p-4 text-sm text-slate-400">
+              {conversations.length === 0 ? "No conversations yet." : "Nothing in this view."}
+            </p>
+          ) : (
+            visible.map((c) => (
+              <button
+                key={c.orgId}
+                onClick={() => setSelectedOrgId(c.orgId)}
+                className={cn(
+                  "flex w-full flex-col gap-0.5 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50",
+                  c.orgId === effectiveOrgId && "bg-brand-50"
+                )}
+              >
+                <span className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                  <span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_DOT[c.status])} title={CONVERSATION_STATUS_LABEL[c.status]} />
+                  {c.orgName}
+                </span>
+                <span className="truncate text-xs text-slate-500">{c.lastMessage}</span>
+              </button>
+            ))
+          )}
+        </div>
       </div>
 
       <div className="flex-1 rounded-lg border bg-white">
@@ -55,6 +100,8 @@ export default function StaffChatPage() {
             orgId={effectiveOrgId}
             orgName={conversations.find((c) => c.orgId === effectiveOrgId)?.orgName ?? ""}
             staffName={currentUser.name}
+            staffId={currentUser.id}
+            status={conversations.find((c) => c.orgId === effectiveOrgId)?.status ?? "open"}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-slate-400">
@@ -67,9 +114,10 @@ export default function StaffChatPage() {
   );
 }
 
-function ConversationPane({ orgId, orgName, staffName }: { orgId: string; orgName: string; staffName: string }) {
+function ConversationPane({ orgId, orgName, staffName, staffId, status }: { orgId: string; orgName: string; staffName: string; staffId: string; status: ConversationStatus }) {
   const { data: messages = [], isLoading } = useOrgConversation(orgId);
   const sendMessage = useSendSupportMessage();
+  const setStatus = useSetConversationStatus();
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -92,26 +140,33 @@ function ConversationPane({ orgId, orgName, staffName }: { orgId: string; orgNam
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b px-4 py-3 font-medium text-slate-800">{orgName}</div>
+      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+        <span className="font-medium text-slate-800">{orgName}</span>
+        <div className="flex gap-1">
+          {(["open", "in_progress", "resolved"] as ConversationStatus[]).map((st) => (
+            <button
+              key={st}
+              disabled={setStatus.isPending}
+              onClick={() => st !== status && setStatus.mutate(
+                { orgId, status: st },
+                { onError: () => toast.error("Couldn't change the status.") }
+              )}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                st === status ? "border-brand-500 bg-brand-50 text-brand-700" : "text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[st])} />
+              {CONVERSATION_STATUS_LABEL[st]}
+            </button>
+          ))}
+        </div>
+      </div>
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
         {isLoading ? (
           <p className="text-sm text-slate-400">Loading…</p>
         ) : (
-          messages.map((m) => (
-            <div key={m.id} className={cn("flex flex-col", m.senderType === "staff" ? "items-end" : "items-start")}>
-              <div
-                className={cn(
-                  "max-w-[70%] rounded-2xl px-3 py-2 text-sm",
-                  m.senderType === "staff" ? "bg-brand-500 text-white" : "bg-slate-100 text-slate-800"
-                )}
-              >
-                {m.body}
-              </div>
-              <span className="mt-0.5 px-1 text-[10px] text-slate-400">
-                {m.senderName} · {new Date(m.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-              </span>
-            </div>
-          ))
+          <SupportThread messages={messages} viewerIsStaff viewerId={staffId} />
         )}
       </div>
       <div className="flex items-end gap-2 border-t p-3">
