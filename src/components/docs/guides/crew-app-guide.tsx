@@ -89,6 +89,16 @@ export function CrewAppGuide() {
           schedule.
         </Callout>
         <p>
+          <strong>A regular user can be a crew&apos;s Linked Login too.</strong> If someone who works
+          a crew has their own login (a crew lead or owner, say), pick their name in Linked Login
+          instead of creating a separate shared crew login for them. They sign in as themselves,
+          keep their normal access, and find the crew&apos;s stops under{" "}
+          <strong>Scheduling → My Crew Schedule</strong> in Landscapt (the link only appears for
+          someone linked to a crew). It&apos;s the same Crew App screen, with the same clock-in and
+          stop rules. Being listed under Team Assignments is separate: that puts someone on the
+          crew&apos;s roster for scheduling and costing, but doesn&apos;t give them the Crew App.
+        </p>
+        <p>
           Because the login is shared, the app records hours for the <strong>crew</strong> — see below.
           Individual people&apos;s times are handled by the office, not on the phone.
         </p>
