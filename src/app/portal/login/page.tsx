@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -12,6 +13,8 @@ export default function PortalLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // The credentials were valid but belong to staff/crew, not a portal client.
+  const [staffLogin, setStaffLogin] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteInput, setInviteInput] = useState("");
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -20,6 +23,7 @@ export default function PortalLoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setStaffLogin(false);
 
     const supabase = createClient();
     const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
@@ -34,7 +38,8 @@ export default function PortalLoginPage() {
     const portalMeta = data.user?.user_metadata?.portal;
     if (!portalMeta) {
       await supabase.auth.signOut();
-      setError("No portal account found for this email.");
+      setError("This is a staff or crew login, not a client portal account.");
+      setStaffLogin(true);
       setLoading(false);
       return;
     }
@@ -92,6 +97,15 @@ export default function PortalLoginPage() {
             {error && (
               <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
                 {error}
+                {staffLogin && (
+                  <>
+                    {" "}
+                    <Link href="/login" className="font-medium underline">
+                      Sign in to Landscapt instead
+                    </Link>
+                    .
+                  </>
+                )}
               </p>
             )}
 

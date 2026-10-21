@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { assertOrgWritable } from "@/lib/org-writable";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 const log = logger.child("users-reactivate");
 
@@ -26,6 +27,11 @@ export async function POST(
   if (!callerProfile || callerProfile.role !== "admin") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+
+  // These routes compare the target's org with the caller's HOME org, so during
+  // a staff impersonation every target "isn't found" — say why instead.
+  const impersonating = await rejectIfImpersonating(supabase, user.id);
+  if (impersonating) return impersonating;
 
   // Service-role writes below bypass the canceled-org read-only RLS.
   const readOnly = await assertOrgWritable(supabase, callerProfile.org_id);

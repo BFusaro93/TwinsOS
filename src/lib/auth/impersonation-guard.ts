@@ -32,3 +32,25 @@ export async function rejectIfImpersonating(
   }
   return null;
 }
+
+/**
+ * The org a staff member is currently impersonating, or null. Only a staff
+ * member can have a row in staff_impersonation_sessions (RLS), so a non-null
+ * result is itself proof the caller is staff with a live grant.
+ */
+export async function getActiveImpersonationOrg(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any, any, any>,
+  userId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("staff_impersonation_sessions")
+    .select("target_org_id")
+    .eq("staff_user_id", userId)
+    .is("ended_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .order("started_at", { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  return (data[0] as { target_org_id: string }).target_org_id;
+}
