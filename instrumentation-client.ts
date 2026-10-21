@@ -15,6 +15,10 @@ Sentry.init({
     // an embedded CefSharp browser whose own bridge rejects with this string.
     // Not our code — see getsentry/sentry-javascript#3440.
     /Object Not Found Matching Id:\d+, MethodName:\w+, ParamCount:\d+/,
+    // Safari/Chrome web extensions (password managers, content blockers) throw
+    // this unhandled rejection from their injected scripts when their tab goes
+    // away. Nothing in our code calls runtime.sendMessage.
+    /Invalid call to runtime\.sendMessage\(\)\. Tab not found/,
   ],
 });
 
