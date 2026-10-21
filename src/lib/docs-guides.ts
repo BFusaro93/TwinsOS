@@ -23,6 +23,7 @@ import {
   ClipboardList,
   Ticket,
   AlertTriangle,
+  Percent,
   HeartPulse,
   Camera,
   Globe,
@@ -209,6 +210,20 @@ export const DOC_GUIDES: DocGuide[] = [
     title: "Damage Cases",
     description: "Tracking property damage and warranty claims tied to a job — what a case captures, how cost rolls up, and a real current limitation in how it connects to a client record.",
     icon: AlertTriangle,
+  },
+  {
+    slug: "warranties-guide",
+    kicker: "Landscapt (CRM)",
+    title: "Warranties",
+    description: "Tracking the warranties you give on walls, walkways, patios and renovations — when each starts and ends, how claims tie back to it, and expiry reminders.",
+    icon: ShieldCheck,
+  },
+  {
+    slug: "commissions-guide",
+    kicker: "Landscapt (CRM)",
+    title: "Commissions",
+    description: "Paying sales reps a percentage of what they sell — plans and rules by service and sale type, how earnings are calculated, and locking a quarter into a statement.",
+    icon: Percent,
   },
   {
     slug: "injury-cases-guide",

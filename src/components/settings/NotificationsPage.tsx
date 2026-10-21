@@ -337,6 +337,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               <SettingRow label="Contract Expiring Soon" description="When a contract you own is ending within 3 days and isn't set to auto-renew">
                 <Switch checked={prefs.emailContractExpiring} onCheckedChange={() => toggle("emailContractExpiring")} />
               </SettingRow>
+              <SettingRow label="Warranty Expiring Soon" description="When a warranty for one of your clients ends within 30 days — a renewal opportunity">
+                <Switch checked={prefs.emailWarrantyExpiring} onCheckedChange={() => toggle("emailWarrantyExpiring")} />
+              </SettingRow>
               <div className="pb-1 pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Sales Meetings</p>
               </div>
@@ -450,6 +453,9 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
               </div>
               <SettingRow label="Contract Expiring Soon" description="When a contract you own is ending within 3 days and isn't set to auto-renew">
                 <Switch checked={prefs.inAppContractExpiring} onCheckedChange={() => toggle("inAppContractExpiring")} />
+              </SettingRow>
+              <SettingRow label="Warranty Expiring Soon" description="When a warranty for one of your clients ends within 30 days — a renewal opportunity">
+                <Switch checked={prefs.inAppWarrantyExpiring} onCheckedChange={() => toggle("inAppWarrantyExpiring")} />
               </SettingRow>
               <div className="pb-1 pt-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Sales Meetings</p>
