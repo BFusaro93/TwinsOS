@@ -40,6 +40,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { Plus, Pencil, FileText, TrendingUp, BarChart3, ChevronDown, DollarSign, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import type { Project, ProjectStatus } from "@/types/project";
 import { SearchInput } from "@/components/shared/SearchInput";
 
@@ -410,6 +411,7 @@ function ProjectDetailDialog({
 }) {
   const [editMode, setEditMode] = useState(false);
   const router = useRouter();
+  const { can } = usePermissions();
 
   // useInvoices already sorts newest-first (invoice_date desc, number desc).
   const { data: projectInvoices } = useInvoices(
@@ -476,6 +478,9 @@ function ProjectDetailDialog({
           tabs={[
             { value: "milestone", label: "Milestone", content: <div className="p-6"><MilestoneTab project={project} /></div> },
             { value: "changeorders", label: "Change Orders", content: <div className="p-6"><ChangeOrdersTab project={project} /></div> },
+            ...(project.clientId && can("warranty_view")
+              ? [{ value: "warranties", label: "Warranties", content: <div className="p-6"><WarrantiesPanel scope={{ clientId: project.clientId, projectId: project.id }} projectComplete={project.status === "complete"} /></div> }]
+              : []),
             { value: "billing", label: "Billing", content: <div className="p-6"><BillingTab project={project} /></div> },
             { value: "analysis", label: "Analysis", content: <div className="p-6"><AnalysisTab project={project} /></div> },
             { value: "notes", label: "Notes & Attachments", content: <div className="p-6"><NotesTab project={project} /></div> },

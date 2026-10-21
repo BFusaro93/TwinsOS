@@ -68,6 +68,7 @@ import { ActivityTimeline } from "./ActivityTimeline";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import { TicketDetailSheet } from "./tickets/TicketDetailSheet";
 import { TicketsList, NewTicketDialog } from "./tickets/TicketsList";
 import { NewEstimateDialog } from "./estimates/NewEstimateDialog";
@@ -3855,6 +3856,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
               { value: "tickets",   label: "Tickets" },
               ...(!isLeadLike && can("contract_list") ? [{ value: "contracts", label: "Contracts" }] : []),
               { value: "projects",  label: "Projects" },
+              ...(!isLeadLike && can("warranty_view") ? [{ value: "warranties", label: "Warranties" }] : []),
               { value: "photos",    label: "Photos" },
               { value: "files",     label: "Files" },
               { value: "details",   label: "Details" },
@@ -3895,6 +3897,10 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
 
         <TabsContent value="projects" className="m-0 p-4">
           <ClientProjectsTab clientId={clientId} clientName={client.displayName} />
+        </TabsContent>
+
+        <TabsContent value="warranties" className="m-0 p-4">
+          <WarrantiesPanel scope={{ clientId }} />
         </TabsContent>
 
         <TabsContent value="photos" className="m-0 p-4">

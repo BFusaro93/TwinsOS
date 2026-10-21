@@ -20,6 +20,7 @@ import {
   useApplyCreditToInvoice,
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { SaleTypeSelect } from "@/components/crm/commissions/SaleTypeSelect";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
@@ -200,6 +201,8 @@ function LineItemRow({
   const editSeq = useRef(0);
   const { mutateAsync: upsert, isPending } = useUpsertInvoiceLineItem();
   const { mutateAsync: remove, isPending: removing } = useDeleteInvoiceLineItem();
+  const { data: allServices } = useCRMServices();
+  const lineServices = (allServices ?? []).filter((s) => s.isActive || s.id === item.serviceId);
 
   // Re-sync local draft from the refetched prop when this row isn't mid-edit —
   // otherwise an invalidation triggered by another row's save/delete (or a
@@ -247,6 +250,7 @@ function LineItemRow({
       service_date: r.serviceDate ?? null,
       hours: r.hours ?? null,
       men: r.men ?? null,
+      service_id: r.serviceId ?? null,
     };
   }
 
@@ -299,8 +303,31 @@ function LineItemRow({
   return (
     <tr className="group border-b text-xs hover:bg-slate-50 dark:hover:bg-muted/40">
       {/* Service name */}
-      <td className="w-36 px-3 py-2 font-medium text-slate-700 dark:text-neutral-300 align-middle">
-        {row.name ?? <span className="italic text-slate-300 dark:text-neutral-500">—</span>}
+      <td className="w-44 px-3 py-2 font-medium text-slate-700 dark:text-neutral-300 align-middle">
+        <select
+          value={row.serviceId ?? ""}
+          disabled={locked}
+          title="Every line bills a service — it decides where the revenue lands in reports and commissions"
+          onChange={(e) => {
+            const svc = lineServices.find((s) => s.id === e.target.value);
+            if (!svc) return;
+            const next = { ...row, serviceId: svc.id, name: row.name?.trim() ? row.name : svc.name };
+            setRow(next);
+            editSeq.current += 1;
+            setDirty(true);
+            void saveRow(next);
+          }}
+          className={cn(
+            "w-full rounded border bg-transparent px-1 py-0.5 text-xs focus:border-brand-400 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed",
+            row.serviceId ? "border-transparent hover:border-border" : "border-amber-400 text-amber-700 dark:text-amber-400"
+          )}
+        >
+          {!row.serviceId && <option value="">Select service…</option>}
+          {lineServices.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        {row.name && row.name !== lineServices.find((s) => s.id === row.serviceId)?.name && (
+          <span className="mt-0.5 block truncate text-[10px] font-normal text-muted-foreground">{row.name}</span>
+        )}
       </td>
       {/* Description */}
       <td className="px-3 py-2">
@@ -779,14 +806,15 @@ export function InvoiceDetail({
     setAppliedDiscountId(null);
   }
 
-  async function addLineItem(name?: string, description = "", rateCents = 0, isTaxable = false) {
+  async function addLineItem(serviceId: string, name: string, description = "", rateCents = 0, isTaxable = false) {
     if (addingLineItemRef.current) return;
     addingLineItemRef.current = true;
     try {
       await upsertItem({
         invoiceId: invoice!.id,
         item: {
-          name: name ?? null,
+          service_id: serviceId,
+          name,
           description,
           qty: 1,
           rate_cents: rateCents,
@@ -855,6 +883,10 @@ export function InvoiceDetail({
         !(li.description ?? "").trim() && !(li.name ?? "").trim() && (li.totalCents ?? 0) === 0;
       if (savedLines.length === 0 || savedLines.every(isBlankLine)) {
         toast.error("Add at least one line item with a description or amount before saving this invoice");
+        return;
+      }
+      if (savedLines.some((li) => !li.serviceId)) {
+        toast.error("Choose a service for every line item — it decides where the revenue lands in reports and commissions");
         return;
       }
       const netLine = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
@@ -1355,6 +1387,17 @@ export function InvoiceDetail({
                       </Select>
                     </td>
                   </tr>
+                  <tr className="border-b border-slate-50 dark:border-neutral-800">
+                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium" title="Decides which commission rate applies. Blank uses the job / contract / estimate, then new sale.">Sale Type</td>
+                    <td className="py-2">
+                      <SaleTypeSelect
+                        className="h-7 w-44 text-xs"
+                        value={invoice.saleType}
+                        disabled={invoice.locked}
+                        onChange={(v) => updateHeader({ id: invoice.id, patch: { sale_type: v } })}
+                      />
+                    </td>
+                  </tr>
                   <tr>
                     <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium">Payment Method</td>
                     <td className="py-2">
@@ -1466,7 +1509,7 @@ export function InvoiceDetail({
                           className="flex w-full items-center justify-between px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-muted/40 text-left"
                           onClick={() => {
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            addLineItem(svc.name, svc.name, svc.defaultRateCents ?? 0, (svc as any).isTaxable ?? false);
+                            addLineItem(svc.id, svc.name, svc.name, svc.defaultRateCents ?? 0, (svc as any).isTaxable ?? false);
                             setLineItemPickerOpen(false);
                             setLineItemSearch("");
                           }}
@@ -1488,18 +1531,6 @@ export function InvoiceDetail({
                     ).length === 0 && lineItemSearch && (
                       <p className="px-3 py-2 text-xs text-slate-400 dark:text-neutral-500">No services match &ldquo;{lineItemSearch}&rdquo;</p>
                     )}
-                    <div className="border-t mt-1 pt-1">
-                      <button
-                        className="flex w-full items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
-                        onClick={() => {
-                          addLineItem(undefined, "");
-                          setLineItemPickerOpen(false);
-                          setLineItemSearch("");
-                        }}
-                      >
-                        <Plus className="h-3 w-3" /> Blank line item
-                      </button>
-                    </div>
                   </div>
                 </PopoverContent>
               </Popover>
