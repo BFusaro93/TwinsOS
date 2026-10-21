@@ -3,7 +3,7 @@ import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { assertOrgWritable } from "@/lib/org-writable";
-import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
+import { getActiveImpersonationOrg } from "@/lib/auth/impersonation-guard";
 
 const log = logger.child("users-reset-password");
 
@@ -35,22 +35,39 @@ export async function POST(
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
 
-  // These routes compare the target's org with the caller's HOME org, so during
-  // a staff impersonation every target "isn't found" — say why instead.
-  const impersonating = await rejectIfImpersonating(supabase, user.id);
-  if (impersonating) return impersonating;
+  // A staff member impersonating a customer org resets passwords inside THAT
+  // org (support for crew logins, which have fake addresses and can't get a
+  // reset email); everyone else is confined to their own.
+  const impersonatedOrgId = await getActiveImpersonationOrg(supabase, user.id);
+  const effectiveOrgId = impersonatedOrgId ?? callerProfile.org_id;
 
   // Service-role writes below bypass the canceled-org read-only RLS.
-  const readOnly = await assertOrgWritable(supabase, callerProfile.org_id);
+  const readOnly = await assertOrgWritable(supabase, effectiveOrgId);
   if (readOnly) return readOnly;
 
-  const { data: targetProfile } = await supabase
+  const adminClient = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  // Read the target with the service role so the org check below is the only
+  // thing deciding visibility (the caller's RLS view shifts under impersonation).
+  const { data: targetProfile } = await adminClient
     .from("profiles")
-    .select("org_id")
+    .select("org_id, role")
     .eq("id", userId)
-    .single();
-  if (!targetProfile || targetProfile.org_id !== callerProfile.org_id) {
+    .maybeSingle();
+  if (!targetProfile || targetProfile.org_id !== effectiveOrgId) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  // Least privilege while impersonating: a password reset on a real person's
+  // login is an account takeover, so staff may only reset shared crew logins.
+  if (impersonatedOrgId && targetProfile.role !== "crew") {
+    return NextResponse.json(
+      { error: "While impersonating, staff can reset passwords for shared crew logins only. Ask the organization's admin to reset other users' passwords." },
+      { status: 403 }
+    );
   }
 
   let body: { password?: string };
@@ -62,17 +79,16 @@ export async function POST(
     return NextResponse.json({ error: "Password (min 8 chars) is required" }, { status: 400 });
   }
 
-  const adminClient = createServiceClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
   const { error: updateError } = await adminClient.auth.admin.updateUserById(userId, {
     password,
   });
   if (updateError) {
     log.error("password update failed", { error: updateError.message });
     return NextResponse.json({ error: "Failed to reset password" }, { status: 500 });
+  }
+
+  if (impersonatedOrgId) {
+    log.info("staff reset crew password during impersonation", { staffId: user.id, orgId: impersonatedOrgId, targetId: userId });
   }
 
   return NextResponse.json({ success: true });
