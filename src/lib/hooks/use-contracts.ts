@@ -44,6 +44,7 @@ function mapContract(row: any): CRMContract {
     includeSubProperties: row.include_sub_properties ?? true,
     source: row.source ?? null,
     salesRepId: row.sales_rep_id ?? null,
+    saleType: row.sale_type ?? null,
     lastBilledDate: row.last_billed_date ?? null,
     monthlyAmounts: (row.monthly_amounts as MonthlyAmounts) ?? {},
     invoiceLineItems: (row.invoice_line_items as string[]) ?? [],
@@ -133,6 +134,7 @@ export function useCreateContract() {
       includeSubProperties?: boolean;
       source?: string;
       salesRepId?: string;
+      saleType?: "new" | "renewal" | null;
       monthlyAmounts?: MonthlyAmounts;
       invoiceLineItems?: string[];
       defaultService?: string;
@@ -158,6 +160,7 @@ export function useCreateContract() {
           include_sub_properties: values.includeSubProperties ?? true,
           source: values.source ?? null,
           sales_rep_id: values.salesRepId ?? null,
+          sale_type: values.saleType ?? null,
           monthly_amounts: values.monthlyAmounts ?? {},
           invoice_line_items: values.invoiceLineItems ?? [],
           default_service: values.defaultService ?? null,

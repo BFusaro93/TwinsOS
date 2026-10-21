@@ -105,6 +105,7 @@ import { SnowRateTiersEditor } from "@/components/crm/jobs/SnowRateTiersEditor";
 import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBillingLink";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import { useConfirm } from "@/components/shared/useConfirm";
 
 /**
@@ -164,7 +165,7 @@ const VISIT_STATUS_COLOR: Record<string, string> = {
   skipped:     "bg-slate-50 dark:bg-muted/40 text-muted-foreground",
 };
 
-export type Tab = "overview" | "services" | "visits" | "notes" | "invoice" | "costing" | "attachments" | "audit";
+export type Tab = "overview" | "services" | "visits" | "notes" | "invoice" | "costing" | "attachments" | "warranties" | "audit";
 
 interface Props {
   jobId: string;
@@ -868,7 +869,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
       {/* ── tabs ── */}
       <div className="flex gap-0 border-b bg-card px-6">
-        {(["overview", "services", "visits", "notes", "invoice", "costing", "attachments", "audit"] as Tab[]).map((t) => (
+        {(["overview", "services", "visits", "notes", "invoice", "costing", "attachments", "warranties", "audit"] as Tab[]).filter((t) => t !== "warranties" || can("warranty_view")).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -1992,6 +1993,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           {tab === "attachments" && (
             <div className="rounded-lg border bg-card p-4 shadow-sm">
               <AttachmentsSection recordType="job" recordId={job.id} />
+            </div>
+          )}
+
+          {tab === "warranties" && (
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
+              <WarrantiesPanel scope={{ clientId: job.clientId, jobId: job.id }} />
             </div>
           )}
 

@@ -68,6 +68,7 @@ export function useCreateDamageCase() {
       dateOfIncident: string;
       description: string;
       notes?: string;
+      warrantyId?: string | null;
     }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -97,6 +98,7 @@ export function useCreateDamageCase() {
             date_of_incident: input.dateOfIncident,
             description: input.description,
             resolution_notes: input.notes || null,
+            warranty_id: input.warrantyId ?? null,
             created_by: user?.id ?? null,
           })
           .select()
@@ -223,6 +225,7 @@ export function useUpdateDamageCase() {
           ...(input.description !== undefined && { description: input.description }),
           ...(input.resolutionNotes !== undefined && { resolution_notes: input.resolutionNotes }),
           ...(input.linkedPoId !== undefined && { purchase_order_id: input.linkedPoId }),
+          ...(input.warrantyId !== undefined && { warranty_id: input.warrantyId }),
         })
         .eq("id", id)
         .select()

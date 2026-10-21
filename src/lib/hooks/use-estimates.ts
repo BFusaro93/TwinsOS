@@ -91,6 +91,7 @@ function mapEstimate(row: any): Estimate {
     propertyId: row.property_id ?? null,
     description: row.description,
     salesRepId: row.sales_rep_id,
+    saleType: row.sale_type ?? null,
     source: row.source,
     stage: row.stage,
     approvalStatus: (row.approval_status as Estimate['approvalStatus']) ?? 'not_required',

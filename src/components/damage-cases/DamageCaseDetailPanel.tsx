@@ -20,6 +20,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useDamageCase, useUpdateDamageCase, useDeleteDamageCaseExpense, useDeleteDamageCase } from "@/lib/hooks/use-damage-cases";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { AddExpenseDialog } from "./AddExpenseDialog";
+import { useWarranties } from "@/lib/hooks/use-warranties";
+import { warrantyCovers } from "./WarrantyClaimPicker";
 import { NewDamageCaseDialog } from "./NewDamageCaseDialog";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
@@ -93,6 +95,7 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
           {data.propertyAddress && (
             <p className="text-sm text-muted-foreground">{data.propertyAddress}</p>
           )}
+          {data.warrantyId && <LinkedWarrantyLine warrantyId={data.warrantyId} incidentDate={data.dateOfIncident} />}
         </div>
         <div className="flex items-center gap-2">
           <Badge className={TYPE_COLORS[data.caseType]}>{DAMAGE_CASE_TYPE_LABELS[data.caseType]}</Badge>
@@ -436,9 +439,25 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
           dateOfIncident: data.dateOfIncident,
           description: data.description,
           resolutionNotes: data.resolutionNotes,
+          warrantyId: data.warrantyId,
         }}
       />
     </div>
+  );
+}
+
+function LinkedWarrantyLine({ warrantyId, incidentDate }: { warrantyId: string; incidentDate: string }) {
+  const { data: warranties = [] } = useWarranties();
+  const w = warranties.find((x) => x.id === warrantyId);
+  if (!w) return null;
+  const covered = warrantyCovers(w, incidentDate);
+  return (
+    <p className="mt-0.5 text-xs text-muted-foreground">
+      Warranty: {w.name} ({formatDate(w.startDate)} – {formatDate(w.endDate)}){" "}
+      <span className={covered ? "text-green-700 dark:text-green-400" : "text-amber-700 dark:text-amber-400"}>
+        {covered ? "· incident covered" : "· incident outside coverage"}
+      </span>
+    </p>
   );
 }
 

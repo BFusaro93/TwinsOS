@@ -147,6 +147,7 @@ export interface CRMJob {
   ratePerInchCents: number | null;
   assetType: string | null;
   salesRepId: string | null;
+  saleType: "new" | "renewal" | null;
   source: string | null;
   paymentType: string | null;
   poNumber: string | null;
@@ -234,6 +235,7 @@ export interface NewClientJobFormValues {
   ratePerInchCents: number | null;
   assetType: string | null;
   salesRepId: string | null;
+  saleType?: "new" | "renewal" | null;
   source: string | null;
   paymentType: string | null;
   poNumber: string | null;

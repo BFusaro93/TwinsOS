@@ -50,6 +50,7 @@ import {
   FileImage,
   ClipboardList,
   CalendarCheck,
+  Percent,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -98,6 +99,7 @@ export const CRM_NAV: NavSection[] = [
       { label: "Jobs",           href: "/crm/scheduling",              icon: Briefcase },
       { label: "Snow Jobs",      href: "/crm/scheduling/snow",         icon: Snowflake, permission: "snow_dispatch_view" },
       { label: "Projects",       href: "/crm/scheduling/projects",     icon: FolderKanban },
+      { label: "Warranties",     href: "/crm/warranties",              icon: ShieldCheck, permission: "warranty_view" },
       { label: "Job Photos",     href: "/crm/scheduling/job-photos",   icon: FileImage },
     ],
   },
@@ -110,6 +112,7 @@ export const CRM_NAV: NavSection[] = [
       { label: "Purchase Orders", href: "/crm/accounting/purchase-orders", icon: ShoppingCart },
       { label: "Contracts",       href: "/crm/accounting/contracts",       icon: FileSignature, permission: "contract_list" },
       { label: "Snow Invoicing",  href: "/crm/accounting/snow-invoicing",  icon: FileText, permission: "snow_invoicing_view" },
+      { label: "Commissions",     href: "/crm/accounting/commissions",     icon: Percent, permission: "commission_view" },
     ],
   },
   {

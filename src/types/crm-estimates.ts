@@ -116,6 +116,7 @@ export interface Estimate {
   propertyId: string | null;
   description: string;
   salesRepId: string | null;
+  saleType: "new" | "renewal" | null;
   source: string | null;
   stage: EstimateStage;
   /** Approval gate for sending — independent of `stage`. 'not_required' when no flow applies. */

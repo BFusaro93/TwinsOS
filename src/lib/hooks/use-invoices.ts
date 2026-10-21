@@ -118,6 +118,7 @@ function mapLineItem(row: any): InvoiceLineItem {
     hours: row.hours != null ? Number(row.hours) : null,
     men: row.men ?? null,
     visitId: row.visit_id ?? null,
+    serviceId: row.service_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -165,6 +166,7 @@ export function mapInvoice(row: any): CRMInvoice {
     billingFrequency: (Array.isArray(row.crm_contracts) ? row.crm_contracts[0] : row.crm_contracts)?.billing_frequency ?? null,
     projectId: row.project_id ?? null,
     salesRepId: row.sales_rep_id ?? null,
+    saleType: row.sale_type ?? null,
     description: row.description,
     status: row.status,
     invoiceDate: row.invoice_date,
@@ -379,7 +381,7 @@ export function useCreateInvoiceFromEstimate() {
       dueDate?: string;
       poNumber?: string | null;
       lineItems: {
-        name?: string | null; description: string; qty: number; rateCents: number; totalCents: number;
+        name?: string | null; serviceId?: string | null; description: string; qty: number; rateCents: number; totalCents: number;
         discountCents?: number; discountType?: "percent" | "flat" | null; discountValue?: number | null;
         isTaxable?: boolean;
       }[];
@@ -466,6 +468,7 @@ export function useCreateInvoiceFromEstimate() {
         const { error: liErr } = await (supabase as any).from("crm_invoice_line_items").insert(
           lineItems.map((li, i) => ({
             invoice_id: inv.id,
+            service_id: li.serviceId ?? null,
             name: li.name ?? null,
             description: li.description,
             qty: li.qty,
@@ -625,6 +628,18 @@ export function useBulkImportInvoices() {
         .select("default_billing_terms")
         .maybeSingle();
 
+      // Every invoice line bills a catalog service; the CSV's "service" column
+      // must name one (matched case-insensitively).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: serviceRows } = await (supabase as any)
+        .from("crm_services")
+        .select("id, name")
+        .is("deleted_at", null);
+      const serviceByName = new Map<string, string>(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ((serviceRows ?? []) as any[]).map((s) => [String(s.name).trim().toLowerCase(), s.id as string]),
+      );
+
       let created = 0;
       let skipped = 0;
       // Row-level notes surfaced to the importer (1-based data-row numbers).
@@ -632,6 +647,12 @@ export function useBulkImportInvoices() {
 
       for (const [idx, r] of rows.entries()) {
         const rowNo = idx + 1;
+        const serviceId = serviceByName.get((r.service ?? "").trim().toLowerCase());
+        if (!serviceId) {
+          warnings.push({ row: rowNo, reason: `service "${(r.service ?? "").trim()}" is not in your service catalog — row skipped` });
+          skipped++;
+          continue;
+        }
         const nameKey = r.clientName?.trim().toLowerCase() ?? "";
         if (ambiguousNames.has(nameKey)) {
           warnings.push({ row: rowNo, reason: `more than one client is named "${r.clientName?.trim()}" — row skipped` });
@@ -732,6 +753,7 @@ export function useBulkImportInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: itemErr } = await (supabase as any).from("crm_invoice_line_items").insert({
           invoice_id: invoice.id,
+          service_id: serviceId,
           description: r.description.trim(),
           qty: 1,
           rate_cents: amountCents,
@@ -965,6 +987,7 @@ export function useUpdateInvoiceHeader() {
         service_address?: string | null;
         preferred_payment_method?: string | null;
         sales_rep_id?: string | null;
+        sale_type?: "new" | "renewal" | null;
         notes?: string | null;
       };
     }) => {

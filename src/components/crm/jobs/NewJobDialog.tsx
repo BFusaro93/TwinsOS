@@ -1,5 +1,6 @@
 "use client";
 
+import { SaleTypeSelect, type SaleTypeValue } from "@/components/crm/commissions/SaleTypeSelect";
 import { useState, useEffect } from "react";
 import { parsePositiveQty } from "@/lib/utils/quantity";
 import {
@@ -162,6 +163,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const { data: contracts } = useContracts(defaultClientId ?? selectedClientId);
   const [contractId, setContractId] = useState<string | null>(null);
   const [salesRepId, setSalesRepId] = useState<string | null>(null);
+  const [saleType, setSaleType] = useState<SaleTypeValue>(null);
   /** Date Sold — feeds the Sales by Date Sold / Approved Sales by Sales Rep reports. Defaults to today. */
   const [dateSold, setDateSold] = useState(todayStr());
   const [crewId, setCrewId] = useState<string | null>(null);
@@ -602,6 +604,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         ratePerInchCents: jobType === "snow" ? ratePerInchCents : null,
         assetType: jobType === "snow" ? (assetType || null) : null,
         salesRepId,
+        saleType,
         source: null,
         paymentType: null,
         poNumber: null,
@@ -733,6 +736,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label title="New or renewal — decides which commission rate applies">Sale Type</Label>
+                <SaleTypeSelect value={saleType} onChange={setSaleType} className="" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Date Sold</Label>
