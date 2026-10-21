@@ -1,0 +1,185 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { Resend } from "resend";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
+import { EMAIL_FROM } from "@/lib/email/send";
+import { escapeHtml } from "@/lib/utils/escape-html";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("warranty-expiry-notify cron");
+
+/** Days before a warranty ends that its owner is reminded. */
+const REMINDER_WINDOW_DAYS = 30;
+
+/**
+ * GET /api/cron/warranty-expiry-notify — called daily by Vercel Cron.
+ *
+ * Finds active warranties ending within the next 30 days and tells the client's
+ * sales rep ONCE per end date (crm_warranties.expiry_notified_for) so they can
+ * offer a renewal. With no rep on the client, org admins get the in-app
+ * notification only. Same shape as /api/cron/contract-expiry-notify.
+ *
+ * Security: Vercel passes Authorization: Bearer {CRON_SECRET}.
+ */
+
+const serviceClient = () =>
+  createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+
+export async function GET(request: Request) {
+  const authHeader = request.headers.get("authorization");
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const supabase = serviceClient();
+  const now = new Date();
+  // end_date is a calendar date, so the real window is each org's own. This cron
+  // spans every org: widen the SQL bounds a day either side, re-filter per row
+  // on that org's clock below.
+  const lower = shiftYmd(isoInZone(now, "UTC"), -1);
+  const upper = shiftYmd(isoInZone(now, "UTC"), REMINDER_WINDOW_DAYS + 1);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: expiring, error } = await (supabase as any)
+    .from("crm_warranties")
+    .select("id, org_id, name, end_date, client_id, clients(display_name, sales_rep_id), projects(name)")
+    .eq("status", "active")
+    .is("deleted_at", null)
+    .gte("end_date", lower)
+    .lte("end_date", upper);
+  if (error) {
+    log.error("could not load expiring warranties", { error });
+    return NextResponse.json({ error: "query failed" }, { status: 500 });
+  }
+  if (!expiring?.length) return NextResponse.json({ notified: 0 });
+
+  const resend = new Resend(process.env.RESEND_API_KEY!);
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
+  let notified = 0;
+
+  for (const w of expiring as Record<string, unknown>[]) {
+    const endDate = w.end_date as string;
+    const orgId = w.org_id as string;
+    const orgToday = todayInZone(await getOrgTimeZone(supabase, orgId));
+    if (endDate < orgToday || endDate > shiftYmd(orgToday, REMINDER_WINDOW_DAYS)) continue;
+
+    // Claim this end date atomically so a repeat or overlapping run skips it.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: claimed } = await (supabase as any)
+      .from("crm_warranties")
+      .update({ expiry_notified_for: endDate })
+      .eq("id", w.id as string)
+      .or(`expiry_notified_for.is.null,expiry_notified_for.neq.${endDate}`)
+      .select("id");
+    if (!claimed?.length) continue;
+
+    const releaseClaim = async (reason: string, err?: unknown) => {
+      log.error("warranty expiry notification failed; releasing claim for retry", {
+        warrantyId: w.id, orgId, endDate, reason, err,
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from("crm_warranties")
+        .update({ expiry_notified_for: null })
+        .eq("id", w.id as string)
+        .eq("expiry_notified_for", endDate);
+    };
+
+    const client = w.clients as { display_name?: string; sales_rep_id?: string | null } | null;
+    const clientName = client?.display_name ?? "the client";
+    const warrantyName = w.name as string;
+    const projectName = (w.projects as { name?: string } | null)?.name ?? null;
+    const daysLeft = Math.round(
+      (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${orgToday}T00:00:00Z`)) / 86_400_000,
+    );
+    const endLabel = new Date(`${endDate}T00:00:00`).toLocaleDateString("en-US", {
+      month: "long", day: "numeric", year: "numeric",
+    });
+    const title = `Warranty ${expiryPhrase(daysLeft)} — ${warrantyName}`;
+    const message = `${warrantyName}${projectName ? ` (${projectName})` : ""} for ${clientName} ends on ${endLabel}. Reach out about a renewal before it lapses.`;
+    const link = `${siteUrl}/crm/warranties`;
+
+    try {
+      // clients.sales_rep_id references crm_employees, whose email lives on the
+      // employee row; the notification needs the linked login (user_id).
+      let rep: { user_id: string | null; email: string | null; first_name: string | null } | null = null;
+      if (client?.sales_rep_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase as any)
+          .from("crm_employees")
+          .select("user_id, email, first_name")
+          .eq("id", client.sales_rep_id)
+          .is("deleted_at", null)
+          .maybeSingle();
+        rep = data ?? null;
+      }
+
+      const inAppUserIds: string[] = [];
+      let emailTo: string | null = null;
+      let prefs: Record<string, unknown> = {};
+
+      if (rep) {
+        if (rep.user_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: profile } = await (supabase as any)
+            .from("profiles").select("notification_prefs").eq("id", rep.user_id).maybeSingle();
+          prefs = (profile?.notification_prefs ?? {}) as Record<string, unknown>;
+          if (prefs.inAppWarrantyExpiring !== false) inAppUserIds.push(rep.user_id);
+        }
+        if (rep.email && prefs.emailWarrantyExpiring !== false) emailTo = rep.email;
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: admins } = await (supabase as any)
+          .from("profiles").select("id, notification_prefs").eq("org_id", orgId).eq("role", "admin");
+        for (const a of (admins ?? []) as { id: string; notification_prefs: Record<string, unknown> | null }[]) {
+          if (a.notification_prefs?.inAppWarrantyExpiring !== false) inAppUserIds.push(a.id);
+        }
+      }
+
+      if (inAppUserIds.length) {
+        const { error: notifErr } = await supabase.from("notifications").insert(
+          inAppUserIds.map((userId) => ({
+            org_id: orgId,
+            user_id: userId,
+            type: "warranty_expiring",
+            title,
+            message,
+            entity_id: w.id as string,
+            entity_type: "warranty",
+          })),
+        );
+        if (notifErr) throw notifErr;
+      }
+
+      if (emailTo) {
+        const { error: sendErr } = await resend.emails.send({
+          from: EMAIL_FROM,
+          to: emailTo,
+          subject: title,
+          html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+            <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Warranty Expiring Soon</h2>
+            <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(rep?.first_name || "there")},</p>
+            <p style="margin:0 0 24px;color:#475569">${escapeHtml(message)}</p>
+            <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Warranties</a>
+          </div>`,
+        });
+        if (sendErr) {
+          await releaseClaim("email send failed", sendErr.message);
+          continue;
+        }
+      }
+      notified++;
+    } catch (err) {
+      await releaseClaim("notification threw", err);
+    }
+  }
+
+  return NextResponse.json({ notified });
+}
+
+function expiryPhrase(daysLeft: number): string {
+  if (daysLeft <= 0) return "expires today";
+  if (daysLeft === 1) return "expires tomorrow";
+  return `expires in ${daysLeft} days`;
+}

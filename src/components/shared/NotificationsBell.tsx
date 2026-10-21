@@ -107,6 +107,7 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
     case "ticket_comment":
       return <MessageSquare className={cn(cls, "text-slate-400 dark:text-neutral-500")} />;
     case "contract_expiring":
+    case "warranty_expiring":
       return <CalendarClock className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "automation_alert":
       return <Bell className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
@@ -213,7 +214,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "injury_reported", "part_stock_short"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "injury_reported", "part_stock_short"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -373,6 +374,7 @@ export function NotificationsBell() {
       ticket_assigned:            { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "Ticket Assigned" },
       ticket_comment:             { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "New Comment" },
       contract_expiring:          { href: () => "/crm/accounting/contracts", title: "Contract Expiring Soon" },
+      warranty_expiring:          { href: () => "/crm/warranties", title: "Warranty Expiring Soon" },
       automation_alert:           { href: () => "/crm/communication/automations", title: "Automation Alert" },
       wo_status_changed:          { href: (id) => id ? `/cmms/work-orders?id=${id}` : "/cmms/work-orders", title: "Status Changed" },
       part_stock_short:           { href: (id) => id ? `/cmms/parts?open=${id}` : "/cmms/parts", title: "Part Used Before Received" },
