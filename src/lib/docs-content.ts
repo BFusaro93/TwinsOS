@@ -1852,4 +1852,33 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
     ],
   },
+  {
+    label: "How the pieces connect",
+    items: [
+      {
+        q: "If I create a crew account in Settings, does it show up as a crew in Landscapt?",
+        a: "Yes. Settings > Users > Create Crew Account makes the shared login and also creates a Landscapt crew with the same team name, linked to that login. If you already had an unlinked crew with that name, the login is attached to it instead of creating a duplicate. You can change the link any time under Landscapt > Team > Crews > edit the crew > Linked Login (pick another login, or None to unlink).",
+      },
+      {
+        q: "What does a crew see if their login isn't linked to a Landscapt crew?",
+        a: "An empty schedule. The Crew App finds a crew's stops by the crew its login is linked to, so an unlinked login has nothing to show and can't clock in or out on any stop. Link it under Landscapt > Team > Crews > Linked Login. Crew accounts created before the automatic link existed may need this done once by hand.",
+      },
+      {
+        q: "Why is my crew account password rejected?",
+        a: "Passwords that are common or have appeared in a known data breach are refused, even if they meet the length rule. Choose a longer, less predictable password — for example, three unrelated words plus a number.",
+      },
+      {
+        q: "Are clients and vendors the same thing?",
+        a: "No. Clients are your customers (Landscapt > Clients) and are never suppliers. Vendors are the companies you buy from, and the Vendors list is shared: Equipt (purchasing and maintenance) and Landscapt (subcontractors, chemical suppliers) all read and write the same vendor records, so editing a vendor in one place changes it everywhere.",
+      },
+      {
+        q: "Can a work order turn into a purchase requisition?",
+        a: "Yes. When a work order needs parts, you can create a requisition from it, and the requisition keeps a link back to that work order. It then follows the normal approval and PO process.",
+      },
+      {
+        q: "How do parts inventory counts change?",
+        a: "Quantity goes up only when you receive a purchase order line for a maintenance part on a goods receipt. It goes down when a part is added to a work order's Costs tab, or when a PM schedule generates work orders that include parts. Counts never go below zero.",
+      },
+    ],
+  },
 ];

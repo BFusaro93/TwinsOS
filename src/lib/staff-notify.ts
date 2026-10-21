@@ -97,3 +97,46 @@ export async function notifyStaffOfSupportMessage(
     path: "/internal/chat",
   });
 }
+
+// Shared inbox that gets Ask AI items needing a human reply, in addition to
+// the per-staff emails above. Override with SUPPORT_INBOX_EMAIL.
+const SUPPORT_INBOX = () => process.env.SUPPORT_INBOX_EMAIL ?? "support@landscapt.com";
+
+/**
+ * Emails the support inbox about an Ask AI item that needs a human: a
+ * question the help docs didn't cover, or a conversation the customer sent
+ * to support. Best-effort; returns whether it was sent.
+ */
+export async function notifySupportInboxOfAskAI(item: {
+  kind: "not-covered" | "escalated";
+  orgName: string;
+  asker: string;
+  question: string;
+  answer?: string | null;
+}): Promise<boolean> {
+  const resendKey = process.env.RESEND_API_KEY;
+  if (!resendKey) return false;
+
+  const escalated = item.kind === "escalated";
+  const heading = escalated
+    ? `${item.orgName} sent an Ask AI conversation to support`
+    : `Ask AI couldn't answer a question from ${item.orgName}`;
+  const html = `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px 24px">
+    <h2 style="margin:0 0 12px;font-size:20px;color:#0f172a">${escapeHtml(heading)}</h2>
+    <p style="margin:0 0 4px;color:#475569">From: ${escapeHtml(item.asker)}</p>
+    <p style="margin:0 0 4px;color:#475569">${escalated ? "The customer is waiting on a reply." : "No one has been contacted — write the answer once and Ask AI will reuse it."}</p>
+    <blockquote style="margin:16px 0 8px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#374151;white-space:pre-wrap">${escapeHtml(snippet(item.question))}</blockquote>
+    ${item.answer ? `<p style="margin:0 0 4px;color:#94a3b8;font-size:12px">Ask AI replied:</p><blockquote style="margin:0 0 24px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#64748b;white-space:pre-wrap">${escapeHtml(snippet(item.answer, 400))}</blockquote>` : '<div style="height:16px"></div>'}
+    <a href="${SITE_URL()}/internal/ask-ai" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Open Ask AI review</a>
+  </div>`;
+
+  return new Resend(resendKey).emails
+    .send({
+      from: EMAIL_FROM,
+      to: SUPPORT_INBOX(),
+      subject: escalated ? `Ask AI conversation from ${item.orgName}` : `Ask AI gap: ${snippet(item.question, 70)}`,
+      html,
+    })
+    .then(() => true)
+    .catch(() => false);
+}

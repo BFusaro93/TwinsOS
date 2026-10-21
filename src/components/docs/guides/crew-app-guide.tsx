@@ -76,12 +76,17 @@ export function CrewAppGuide() {
           a clearly wrong phone clock, fall back to the sync time.
         </p>
         <Callout>
-          <strong>The login belongs to the crew, not to a person.</strong> Create a user with the{" "}
-          <strong>Crew</strong> role, then attach it under Team → Crews → <strong>Linked Login</strong>{" "}
-          on that crew. A login can only be attached to one crew — once it&apos;s used, it stops
-          appearing in the list for the others. That attachment is what decides whose stops get shown,
-          and the app refuses to clock in or out on a stop belonging to a different crew. A crew login
-          that isn&apos;t attached to any crew signs in to an empty schedule.
+          <strong>The login belongs to the crew, not to a person.</strong> When you create a crew
+          account under Settings → Users → <strong>Create Crew Account</strong>, Landscapt also
+          creates a crew with the same team name and links the two. If you already have an unlinked
+          crew with that name, the new login is attached to it instead of making a duplicate. You
+          can change this any time under Team → Crews → <strong>Linked Login</strong> on that crew:
+          pick a different login, or choose None to unlink. A login can only be attached to one
+          crew — once it&apos;s used, it stops appearing in the list for the others. That attachment
+          is what decides whose stops get shown, and the app refuses to clock in or out on a stop
+          belonging to a different crew. A crew login that isn&apos;t attached to any crew (for
+          example, one you unlinked, or created before this was automatic) signs in to an empty
+          schedule.
         </Callout>
         <p>
           Because the login is shared, the app records hours for the <strong>crew</strong> — see below.

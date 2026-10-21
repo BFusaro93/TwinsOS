@@ -261,6 +261,14 @@ export function UsersRolesGuide() {
           the Users table — crew accounts use auto-generated addresses and can&apos;t receive a
           normal password-reset email.
         </p>
+        <p>
+          Creating a crew account also creates a matching Landscapt crew and links the login to it,
+          so the crew has a schedule the first time they sign in. If a crew with the same name
+          already exists and has no login, that crew is linked instead. You can re-link or unlink
+          at any time under Team → Crews → <strong>Linked Login</strong>. The password must not be
+          a common or previously breached one — a weak password is rejected with a message asking
+          for a longer, less guessable one.
+        </p>
       </Section>
 
       <Section id="worked-example" title="Worked example: inviting a Staff member">

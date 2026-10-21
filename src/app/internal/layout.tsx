@@ -13,6 +13,7 @@ const TABS = [
   { href: "/internal", label: "Impersonate" },
   { href: "/internal/chat", label: "Chat" },
   { href: "/internal/feedback", label: "Feedback" },
+  { href: "/internal/ask-ai", label: "Ask AI" },
 ];
 
 /**
