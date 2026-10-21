@@ -151,6 +151,19 @@ export function InvoicingGuide() {
             an amount; rows you added and left blank are dropped.
           </li>
           <li>
+            <strong>Every line bills a service.</strong> Each line has a service dropdown, and Save is
+            refused until every line has one &mdash; there are no free-form lines. The service decides
+            where the revenue lands in reports and which commission rate applies (see{" "}
+            <GuideLink href="/settings/support/commissions-guide" className="text-[#60ab45] underline">Commissions</GuideLink>
+            ). Lines created from visits, estimates and contracts get their service automatically, and a
+            line left without one shows in amber.
+          </li>
+          <li>
+            <strong>Sale type.</strong> The header&apos;s <em>Sale Type</em> (New sale or Renewal /
+            existing account) decides which commission rate applies. Left blank, it uses the job&apos;s,
+            contract&apos;s or estimate&apos;s, then counts as a new sale.
+          </li>
+          <li>
             <strong>Abandoned new invoices don&apos;t linger.</strong> Opening New Invoice creates a
             draft immediately so you can start adding lines; if you close the sheet without saving
             anything, that empty draft is removed rather than left on the client&apos;s Uninvoiced
