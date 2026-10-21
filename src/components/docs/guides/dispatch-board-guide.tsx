@@ -745,6 +745,13 @@ export function DispatchBoardGuide() {
           Crew Board, not on this grid.
         </Callout>
         <Callout>
+          <strong>Creating a crew:</strong> go to <strong>Team → Crews → Add Team</strong>, enter a Description (the crew&apos;s name) and Color
+          on <strong>Team Details</strong> (Team Code, Linked Login, starting address and Show In Calendar are optional), then click{" "}
+          <strong>Create &amp; Continue</strong>. On the <strong>Team Assignments</strong> tab, use <strong>Add Assignment</strong> to
+          put employees on the crew&apos;s default roster. A Linked Login is only needed if the crew will use the Crew App — creating a
+          crew account under Settings → Users makes the crew and the login together.
+        </Callout>
+        <Callout>
           <strong>Removing a crew from the board:</strong> go to <strong>Team → Crews</strong> and turn the crew&apos;s
           switch in the <strong>Active</strong> column off, then confirm. The crew moves to the <strong>Inactive</strong> tab
           and stops appearing as a crew to schedule on the Dispatch Board and Crew Board; its history is kept. Turn the switch
