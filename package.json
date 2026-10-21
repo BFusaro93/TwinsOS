@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:test": "sh -c 'export $(grep -v \"^#\" .env.local.test | xargs) && next dev'",
+    "prebuild": "node scripts/build-docs-index.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

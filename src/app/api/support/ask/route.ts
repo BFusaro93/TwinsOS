@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { searchDocs, searchDataDictionary } from "@/lib/docs-search";
+import { searchDocPassages, searchDataDictionary } from "@/lib/docs-search";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 
@@ -14,16 +14,29 @@ interface ChatTurn {
   content: string;
 }
 
-function formatDocsContext(question: string): string {
-  const results = searchDocs(question, 5);
-  if (results.length === 0) return "(no matching help articles or guides found)";
-  return results
-    .map((r) => `- [${r.type}] ${r.title} (${r.path}): ${r.excerpt}`)
-    .join("\n");
+/**
+ * Follow-ups like "and what if they're not linked?" carry no searchable
+ * nouns of their own, so the retrieval query also folds in the previous
+ * user questions from this conversation.
+ */
+function retrievalQuery(question: string, history: ChatTurn[]): string {
+  const earlier = history
+    .filter((t) => t.role === "user")
+    .slice(-2)
+    .map((t) => t.content.slice(0, 500));
+  return [...earlier, question].join(" ");
 }
 
-function formatDataDictionaryContext(question: string): string {
-  const results = searchDataDictionary(question, 5);
+function formatDocsContext(query: string): string {
+  const results = searchDocPassages(query, { limit: 8, maxChars: 9000, perDoc: 3 });
+  if (results.length === 0) return "(no matching help articles or guides found)";
+  return results
+    .map((r) => `### [${r.type}] ${r.title} (${r.path})\n${r.excerpt}`)
+    .join("\n\n");
+}
+
+function formatDataDictionaryContext(query: string): string {
+  const results = searchDataDictionary(query, 5);
   if (results.length === 0) return "(no matching data model entries found)";
   return results
     .map((r) => {
@@ -102,19 +115,25 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const systemPrompt = `You are the help assistant for a landscaping/CMMS business platform's Support Center. Answer the user's question using ONLY the two context sections below — matching help guide excerpts and matching data-model entries (what is actually tracked in the database).
+  const query = retrievalQuery(question, history);
 
-Rules:
-- Attribute every claim to its source: say "per the [Guide Name] guide" for guide content, or "per the data model" for data dictionary content.
-- If a question asks whether something is "tracked" or "stored" and the data dictionary context answers it, prefer that over guide prose — guides can go stale, the data model is the ground truth.
-- If neither context section answers the question, say plainly that it isn't covered in the docs and suggest using the feedback widget or contacting support. Do not guess or invent behavior.
-- Be concise and direct. Use plain language, not jargon.
+  const systemPrompt = `You are the in-app help assistant for Landscapt (field service / CRM for landscaping and snow) and Equipt (CMMS and purchasing). Your goal is to fully answer the user's question yourself so they don't need to email support. Build your answer from the two context sections below — help-guide passages, and data-model entries (what is actually tracked in the database).
 
-Matching help guides/articles:
-${formatDocsContext(question)}
+How to answer:
+- Lead with the direct answer in one or two sentences, then give detail. For "how do I…" questions give numbered steps with the exact menu path (e.g. "Settings → Users → Create Crew Account"), and say which role or permission is needed when the context mentions one.
+- Hypotheticals and "what happens if…" questions: reason from the documented behavior to the consequence, and walk through it. When your answer is an inference rather than something the context states outright, say so briefly ("The guide doesn't describe that exact case, but since …").
+- Questions that span features or products (Settings vs. Landscapt, Equipt vs. Landscapt, who can see what): explain how the pieces connect and what the user has to do on each side. Say plainly when two things are NOT linked automatically.
+- Cite the source in plain words: "per the [Guide Name] guide", or "per the data model" for data-dictionary content. If a question asks whether something is "tracked" or "stored" and the data model answers it, prefer that — guides can go stale.
+- Answer only what the context supports. Never invent menu paths, buttons, settings, limits or behaviors. If the context covers part of the question, answer that part and name exactly what it doesn't cover.
+- If the question is ambiguous, ask ONE short clarifying question (which module, which role, which step they're stuck on) instead of guessing or sending them away.
+- Only when the context truly doesn't cover it, or it needs something only the support team can do (billing changes, restoring or fixing data, a suspected bug, account-specific access), say so and suggest the Support feedback widget. Tell them what details to include (page, what they clicked, what they expected). Offer the closest related guide first if one exists.
+- Be concise and plain-spoken, no jargon. Don't repeat the question back.
+
+Matching help guide passages:
+${formatDocsContext(query)}
 
 Matching data model entries:
-${formatDataDictionaryContext(question)}`;
+${formatDataDictionaryContext(query)}`;
 
   const messages: Anthropic.MessageParam[] = [
     ...history.map((turn) => ({ role: turn.role, content: turn.content })),
@@ -124,7 +143,7 @@ ${formatDataDictionaryContext(question)}`;
   const encoder = new TextEncoder();
   const anthropicStream = anthropic.messages.stream({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 1024,
+    max_tokens: 1500,
     system: systemPrompt,
     messages,
   });
