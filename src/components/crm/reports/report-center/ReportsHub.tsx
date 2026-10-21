@@ -12,8 +12,9 @@ import { ReportCatalog } from "./ReportCatalog";
 import { MyReportsList } from "./MyReportsList";
 import { DashboardsList } from "./DashboardsList";
 import { GraphicsLibraryList } from "./GraphicsLibraryList";
+import { PayrollReport } from "./PayrollReport";
 
-const TAB_KEYS = ["dashboard", "dashboards", "center", "custom", "graphics"] as const;
+const TAB_KEYS = ["dashboard", "dashboards", "center", "custom", "graphics", "payroll"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 export function ReportsHub() {
@@ -82,6 +83,12 @@ export function ReportsHub() {
               My Reports
             </TabsTrigger>
             <TabsTrigger
+              value="payroll"
+              className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+            >
+              Payroll
+            </TabsTrigger>
+            <TabsTrigger
               value="graphics"
               className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
             >
@@ -100,6 +107,9 @@ export function ReportsHub() {
         </TabsContent>
         <TabsContent value="custom" className="mt-4 flex-1 overflow-auto">
           <MyReportsList />
+        </TabsContent>
+        <TabsContent value="payroll" className="mt-4 flex-1 overflow-auto">
+          <PayrollReport />
         </TabsContent>
         <TabsContent value="graphics" className="mt-4 flex-1 overflow-auto">
           <GraphicsLibraryList />

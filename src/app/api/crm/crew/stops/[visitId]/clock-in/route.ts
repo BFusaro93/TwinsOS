@@ -4,6 +4,10 @@ import { z } from "zod";
 import { stopKeyForVisit, isNotesAcknowledgmentCurrent, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { closeOpenDriveSegment } from "@/lib/crew/drive-time";
+import { openStopPunches } from "@/lib/crew/stop-punches";
+import { startCrewDay } from "@/lib/crew/day-shifts";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { isoInZone } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("crew/stops/clock-in");
@@ -187,6 +191,32 @@ export async function POST(
     .select();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // If nobody tapped Start Day, the first job opens the day so payroll still
+  // has a shift (flagged auto_first_job — the true start was earlier, at the shop).
+  try {
+    const crewId = effectiveVisitCrewId(anchor);
+    if (crewId) {
+      await startCrewDay(supabase, {
+        orgId: anchor.org_id,
+        crewId,
+        workDate: isoInZone(new Date(now), await getOrgTimeZone(supabase, anchor.org_id)),
+        at: now,
+        source: "auto_first_job",
+        userId: user.id,
+      });
+    }
+  } catch (err) {
+    log.error("auto-open crew day failed", { error: err instanceof Error ? err.message : String(err) });
+  }
+
+  // The leader's one tap clocks in the whole crew: punch every working
+  // member (roster minus anyone marked absent) at the same instant.
+  await openStopPunches(
+    supabase,
+    { id: anchor.id, orgId: anchor.org_id, crewId: effectiveVisitCrewId(anchor), scheduledDate: anchor.scheduled_date },
+    now
+  );
 
   // Safety net: a crew that forgets to hit "Arrived" before starting the
   // next job shouldn't leave a drive segment open for the rest of the day —

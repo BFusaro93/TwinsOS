@@ -9,6 +9,7 @@ import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib
 import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
 import { sumPunchLaborCents } from "@/lib/crew/visit-labor";
+import { closeStopPunches } from "@/lib/crew/stop-punches";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
@@ -283,6 +284,10 @@ export async function POST(
       log.error("package min_days recalc failed", { visitId: row.id, error: err instanceof Error ? err.message : String(err) });
     }
   }
+
+  // Stop Job also clocks the whole crew out; this must land before the labor
+  // total below is summed from the punches.
+  await closeStopPunches(supabase, anchor.id, now);
 
   // Labor cost: crew member punches are only ever recorded against the
   // anchor visit (the crew clocks in once, for the stop) — compute the total
