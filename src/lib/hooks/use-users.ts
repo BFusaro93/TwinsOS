@@ -115,10 +115,12 @@ export function useCreateCrewAccount() {
       if (!res.ok || !body.success) {
         throw new Error((body as { error?: string }).error ?? "Failed to create crew account");
       }
-      return body as { success: true; loginEmail: string };
+      return body as { success: true; loginEmail: string; crew: "created" | "linked" | "failed" };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["crm-crews"] });
+      queryClient.invalidateQueries({ queryKey: ["crm-crew-logins"] });
     },
   });
 }
