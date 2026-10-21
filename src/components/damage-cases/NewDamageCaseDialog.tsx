@@ -11,6 +11,7 @@ import { useCreateDamageCase, useUpdateDamageCase } from "@/lib/hooks/use-damage
 import { useUploadAttachment } from "@/lib/hooks/use-attachments";
 import { DamagePhotoPicker, useDamagePhotos } from "@/components/damage-cases/DamagePhotoPicker";
 import { DamageClientPicker } from "@/components/damage-cases/DamageClientPicker";
+import { WarrantyClaimPicker } from "@/components/damage-cases/WarrantyClaimPicker";
 import type { DamageCaseType } from "@/types";
 
 interface EditCaseData {
@@ -21,6 +22,7 @@ interface EditCaseData {
   dateOfIncident: string;
   description: string;
   resolutionNotes: string | null;
+  warrantyId?: string | null;
 }
 
 interface Props {
@@ -38,6 +40,7 @@ export function NewDamageCaseDialog({ open, onOpenChange, onCreated, editCase }:
   const [dateOfIncident, setDateOfIncident] = useState(editCase?.dateOfIncident ?? "");
   const [description, setDescription] = useState(editCase?.description ?? "");
   const [resolutionNotes, setResolutionNotes] = useState(editCase?.resolutionNotes ?? "");
+  const [warrantyId, setWarrantyId] = useState<string | null>(editCase?.warrantyId ?? null);
   const createCase = useCreateDamageCase();
   const updateCase = useUpdateDamageCase();
   const photoState = useDamagePhotos();
@@ -52,6 +55,7 @@ export function NewDamageCaseDialog({ open, onOpenChange, onCreated, editCase }:
       setDateOfIncident(editCase.dateOfIncident);
       setDescription(editCase.description);
       setResolutionNotes(editCase.resolutionNotes ?? "");
+      setWarrantyId(editCase.warrantyId ?? null);
     } else if (open && !editCase) {
       setCaseType("damage");
       setCustomerName("");
@@ -59,6 +63,7 @@ export function NewDamageCaseDialog({ open, onOpenChange, onCreated, editCase }:
       setDateOfIncident("");
       setDescription("");
       setResolutionNotes("");
+      setWarrantyId(null);
       photoState.clear();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -76,6 +81,7 @@ export function NewDamageCaseDialog({ open, onOpenChange, onCreated, editCase }:
           dateOfIncident,
           description,
           resolutionNotes: resolutionNotes || null,
+          warrantyId: caseType === "warranty" ? warrantyId : null,
         });
         onOpenChange(false);
       } else {
@@ -85,6 +91,7 @@ export function NewDamageCaseDialog({ open, onOpenChange, onCreated, editCase }:
           propertyAddress,
           dateOfIncident,
           description,
+          warrantyId: caseType === "warranty" ? warrantyId : null,
         });
         if (photoState.files.length) {
           // The case exists either way; a failed upload can be retried from its Files tab.
@@ -127,6 +134,16 @@ export function NewDamageCaseDialog({ open, onOpenChange, onCreated, editCase }:
             </div>
           </div>
           <DamageClientPicker onPick={(c) => { setCustomerName(c.name); if (!propertyAddress) setPropertyAddress(c.address); }} />
+          {caseType === "warranty" && (
+            <WarrantyClaimPicker
+              value={warrantyId}
+              incidentDate={dateOfIncident}
+              onChange={(w) => {
+                setWarrantyId(w?.id ?? null);
+                if (w?.clientName) setCustomerName(w.clientName);
+              }}
+            />
+          )}
           <div className="space-y-1.5">
             <Label>Customer / Property Name</Label>
             <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required placeholder="e.g. Sterling Storage" />
