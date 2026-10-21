@@ -211,6 +211,9 @@ export function JobsPackagesGuide() {
           progress bar, counts for in progress, upcoming, overdue, skipped and cancelled, and the next
           and last-done dates. Click it to open the Visits tab.
         </p>
+              <p>
+          On a stop worked by two crews, revenue is counted once (on the lead crew&apos;s visit) while the job&apos;s hours and labor cost add up both crews, and the budgeted hours are split evenly between them.
+        </p>
       </Section>
 
       <Section id="jobs-list" title="Finding jobs on the Jobs list">

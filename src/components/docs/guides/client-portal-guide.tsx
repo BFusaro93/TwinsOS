@@ -187,6 +187,9 @@ export function ClientPortalGuide() {
           subscription on <code>crm_job_visits</code> — the banner updates itself the moment staff mark a
           visit in progress or complete, with no page refresh needed.
         </p>
+              <p>
+          If two crews work the same stop, the portal shows it as a single visit &mdash; only the lead crew&apos;s visit is listed.
+        </p>
       </Section>
 
       <Section id="billing" title="Billing and online payment">

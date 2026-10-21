@@ -175,6 +175,9 @@ export function ContractsGuide() {
           not after. It&apos;s a cash-flow and collections-risk decision, not just a scheduling
           preference.
         </Callout>
+              <p>
+          A stop worked by two crews counts as <strong>one</strong> visit used against a contract&apos;s included visits. Both crews&apos; hours still count toward the job&apos;s labor cost.
+        </p>
       </Section>
 
       <Section id="billing-frequency" title="Billing frequency options">
