@@ -12,7 +12,9 @@ import { GuideLink } from "@/components/docs/GuideLink";
 const NEW_CASE_FIELDS: [string, string, string][] = [
   ["Case Type", "Required", "“Damage” or “Warranty” — a two-value select, defaults to Damage."],
   ["Date of Incident", "Required", "Date picker."],
-  ["Customer / Property Name", "Required", "Free-text field, not a client picker — see the limitation below."],
+  ["Find Client", "Optional", "Search-and-select that fills the name (and address, when blank) below — the case still stores the name as text, see the limitation below."],
+  ["Warranty", "Optional", "Warranty cases only — links the case to one of your active warranties, fills in the customer, and warns when the incident date is outside its coverage. See the Warranties guide."],
+  ["Customer / Property Name", "Required", "Free text, so a customer who isn’t a client can be typed directly."],
   ["Property Address", "Optional", "Free-text."],
   ["Description", "Required", "Textarea. Placeholder copy changes with the selected Case Type."],
   ["Resolution Notes", "Edit only", "Only shown once a case exists — not on initial creation."],

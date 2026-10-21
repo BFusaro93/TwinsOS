@@ -32,6 +32,7 @@ export interface AppNotification {
     | "ticket_assigned"
     | "ticket_comment"
     | "contract_expiring"
+    | "warranty_expiring"
     | "automation_alert"
     | "comment_mention"
     | "injury_reported"
