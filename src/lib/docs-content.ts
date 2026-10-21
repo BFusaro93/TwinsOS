@@ -1864,6 +1864,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "An empty schedule. The Crew App finds a crew's stops by the crew its login is linked to, so an unlinked login has nothing to show and can't clock in or out on any stop. Link it under Landscapt > Team > Crews > Linked Login. Crew accounts created before the automatic link existed may need this done once by hand.",
       },
       {
+        q: "Can a regular user (not a shared crew login) be assigned to a crew, and how do they see their jobs?",
+        a: "Yes, two ways. To put them on the crew's roster for scheduling and costing, add their employee record under Landscapt > Team > Crews > the crew > Team Assignments. To let them see the crew's stops in the Crew App as themselves, pick their name under Linked Login on the same crew (it lists regular users as well as shared crew logins) — they then find the stops under Scheduling > My Crew Schedule. Without a Linked Login, a regular user can still see the crew's jobs on the Dispatch Board by filtering it to that crew.",
+      },
+      {
         q: "Why is my crew account password rejected?",
         a: "Passwords that are common or have appeared in a known data breach are refused, even if they meet the length rule. Choose a longer, less predictable password — for example, three unrelated words plus a number.",
       },

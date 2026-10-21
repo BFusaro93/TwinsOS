@@ -420,14 +420,15 @@ function TeamDetailsTab({
                   <SelectItem value="none">None</SelectItem>
                   {availableLogins.map((l) => (
                     <SelectItem key={l.id} value={l.id}>
-                      {l.name}
+                      {l.role === "crew" ? l.name : `${l.name} (${l.role.charAt(0).toUpperCase()}${l.role.slice(1)})`}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">
-                The shared crew login (e.g. a field team&apos;s clock-in account) that sees this team&apos;s
-                visits in the Crew App.
+                Who sees this team&apos;s stops in the Crew App: a shared crew login (e.g. a field
+                team&apos;s clock-in account) or a regular user who works this crew, so they don&apos;t need
+                a second login. A regular user finds it under Scheduling → My Crew Schedule.
               </p>
             </Field>
             <Field label="Tags">

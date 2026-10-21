@@ -126,11 +126,16 @@ export interface CRMCrew {
   members?: CRMCrewMember[];
 }
 
-/** A shared crew login account (profiles.role === 'crew') available to link to a team. */
+/**
+ * A login that can be linked to a team (crm_crews.user_id): a shared crew
+ * login (role 'crew'), or a regular user who works a crew themselves.
+ */
 export interface CRMCrewLogin {
   id: string;
   name: string;
   email: string | null;
+  /** profiles.role — 'crew' for shared field logins, anything else is a regular user. */
+  role: string;
 }
 
 export interface CRMCrewMember {
