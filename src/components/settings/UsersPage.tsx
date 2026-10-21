@@ -350,6 +350,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loginEmail, setLoginEmail] = useState<string | null>(null);
+  const [crewStatus, setCrewStatus] = useState<"created" | "linked" | "failed" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const createCrewAccount = useCreateCrewAccount();
   const creating = createCrewAccount.isPending;
@@ -360,6 +361,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
     setPassword("");
     setConfirmPassword("");
     setLoginEmail(null);
+    setCrewStatus(null);
     setError(null);
   }
 
@@ -382,6 +384,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
         customEmail: customEmail.trim() || undefined,
       });
       setLoginEmail(data.loginEmail);
+      setCrewStatus(data.crew);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create crew account.");
     }
@@ -412,6 +415,11 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
                   <span className="select-all text-slate-900 dark:text-neutral-100">{password}</span>
                 </div>
               </div>
+              <p className="mt-3 text-xs text-slate-600 dark:text-neutral-400">
+                {crewStatus === "created" && "A matching Landscapt crew was created and linked. Change it under Team → Crews."}
+                {crewStatus === "linked" && "Linked to your existing Landscapt crew with this name."}
+                {crewStatus === "failed" && "Could not create a Landscapt crew — link this login to one under Team → Crews."}
+              </p>
               <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
                 Save these credentials — the password cannot be retrieved after this dialog is closed.
               </p>
