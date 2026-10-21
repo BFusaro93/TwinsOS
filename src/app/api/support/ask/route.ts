@@ -5,6 +5,7 @@ import { searchDocPassages, searchDataDictionary, matchStaffAnswers, type DocSea
 import { adminClient } from "@/lib/api/auth";
 import { createCoverageStripper, type AskCoverage } from "@/lib/support/ask-coverage";
 import { logger } from "@/lib/logger";
+import { notifySupportInboxOfAskAI } from "@/lib/staff-notify";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 
@@ -106,6 +107,7 @@ export async function POST(req: NextRequest) {
   }
 
   const orgId: string = profile.org_id;
+  const userId = user.id;
 
   let body: { question?: string; history?: ChatTurn[] };
   try {
@@ -205,21 +207,35 @@ ${formatDataDictionaryContext(query)}`;
 
   async function finishLog(update: { answer?: string; outcome: AskCoverage | "error" }) {
     if (!logId) return;
+    // Nothing retrieved and nothing from staff means the docs cannot have
+    // covered it, whatever the model claimed.
+    const outcome =
+      update.outcome !== "error" && docPassages.length === 0 && staffAnswers.length === 0
+        ? "none"
+        : update.outcome;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (db as any)
         .from("ask_ai_questions")
         .update({
           answer: update.answer?.slice(0, 8000),
-          // Nothing retrieved and nothing from staff means the docs cannot
-          // have covered it, whatever the model claimed.
-          outcome:
-            update.outcome !== "error" && docPassages.length === 0 && staffAnswers.length === 0
-              ? "none"
-              : update.outcome,
+          outcome,
           updated_at: new Date().toISOString(),
         })
         .eq("id", logId);
+      if (outcome === "none") {
+        const [{ data: org }, { data: asker }] = await Promise.all([
+          supabase.from("organizations").select("name").eq("id", orgId).maybeSingle(),
+          supabase.from("profiles").select("name, email").eq("id", userId).maybeSingle(),
+        ]);
+        await notifySupportInboxOfAskAI({
+          kind: "not-covered",
+          orgName: org?.name ?? "an organization",
+          asker: asker?.name ?? asker?.email ?? "Unknown user",
+          question,
+          answer: update.answer,
+        });
+      }
     } catch (err) {
       log.error("update ask log failed", { error: err instanceof Error ? err.message : String(err) });
     }
