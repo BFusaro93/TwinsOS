@@ -1856,6 +1856,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "How the pieces connect",
     items: [
       {
+        q: "How do I remove a crew from the Dispatch Board / make a crew inactive?",
+        a: "Go to Landscapt > Team > Crews. In the Active column, turn the crew's switch off and confirm. The crew moves to the Inactive tab and stops appearing as a crew you can schedule on the Dispatch Board and Crew Board; its history is kept. To bring it back, open the Inactive tab (or All) and turn the switch on. You need the Teams scheduling permission. This is separate from the crew's login: deactivating the login under Settings > Users only blocks sign-in and does not change the crew on the board.",
+      },
+      {
         q: "If I create a crew account in Settings, does it show up as a crew in Landscapt?",
         a: "Yes. Settings > Users > Create Crew Account makes the shared login and also creates a Landscapt crew with the same team name, linked to that login. If you already had an unlinked crew with that name, the login is attached to it instead of creating a duplicate. You can change the link any time under Landscapt > Team > Crews > edit the crew > Linked Login (pick another login, or None to unlink).",
       },

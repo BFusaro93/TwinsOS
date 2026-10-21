@@ -744,6 +744,13 @@ export function DispatchBoardGuide() {
           (Team settings) — one-day changes made in Team Assignment or on the Crew Board show on the
           Crew Board, not on this grid.
         </Callout>
+        <Callout>
+          <strong>Removing a crew from the board:</strong> go to <strong>Team → Crews</strong> and turn the crew&apos;s
+          switch in the <strong>Active</strong> column off, then confirm. The crew moves to the <strong>Inactive</strong> tab
+          and stops appearing as a crew to schedule on the Dispatch Board and Crew Board; its history is kept. Turn the switch
+          back on (Inactive or All tab) to restore it. This is separate from the crew&apos;s login — deactivating the login in
+          Settings → Users only blocks sign-in.
+        </Callout>
       </Section>
 
       <Section id="crew-board" title="The Crew Board (shop TV)">
