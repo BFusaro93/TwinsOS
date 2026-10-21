@@ -26,6 +26,17 @@ interface AskAIPanelProps {
   onOpenChange: (open: boolean) => void;
 }
 
+/** The model writes **bold** for emphasis; render it rather than showing the asterisks. */
+function renderBold(text: string) {
+  return text.split(/(\*\*[^*\n]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") && part.length > 4 ? (
+      <strong key={i}>{part.slice(2, -2)}</strong>
+    ) : (
+      part
+    )
+  );
+}
+
 export function AskAIPanel({ open, onOpenChange }: AskAIPanelProps) {
   const [input, setInput] = useState("");
   const { messages, ask, isStreaming, error, reset } = useAskAI();
@@ -103,7 +114,13 @@ export function AskAIPanel({ open, onOpenChange }: AskAIPanelProps) {
                       : "bg-muted text-slate-900 dark:text-neutral-100"
                   )}
                 >
-                  {m.content || (isStreaming && i === messages.length - 1 ? "…" : "")}
+                  {m.content
+                    ? m.role === "assistant"
+                      ? renderBold(m.content)
+                      : m.content
+                    : isStreaming && i === messages.length - 1
+                      ? "…"
+                      : ""}
                 </div>
               ))}
             </div>

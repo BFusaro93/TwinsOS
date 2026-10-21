@@ -56,21 +56,23 @@ export function useStaffConversationList(enabled: boolean) {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("support_messages")
-        .select("org_id, body, sender_type, created_at, organizations(name)")
+        .select("org_id, body, sender_type, created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
 
+      // Org names come from the staff-only RPC: embedding organizations(name)
+      // in the query above is filtered by RLS to the staff member's own org,
+      // so every customer org came back null and rendered as "Unknown org".
+      const { data: orgs, error: orgsError } = await supabase.rpc("list_organizations_for_staff");
+      if (orgsError) throw orgsError;
+      const orgNames = new Map((orgs as { id: string; name: string }[]).map((o) => [o.id, o.name]));
+
       const byOrg = new Map<string, { orgId: string; orgName: string; lastMessage: string; lastMessageAt: string }>();
-      for (const row of data as unknown as {
-        org_id: string;
-        body: string;
-        created_at: string;
-        organizations: { name: string } | null;
-      }[]) {
+      for (const row of data) {
         if (!byOrg.has(row.org_id)) {
           byOrg.set(row.org_id, {
             orgId: row.org_id,
-            orgName: row.organizations?.name ?? "Unknown org",
+            orgName: orgNames.get(row.org_id) ?? "Unknown org",
             lastMessage: row.body,
             lastMessageAt: row.created_at,
           });
