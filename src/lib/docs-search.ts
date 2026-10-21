@@ -74,6 +74,9 @@ const SYNONYMS: Record<string, string[]> = {
   invoice: ["bill", "charge"],
   permission: ["role", "access"],
   access: ["permission", "role"],
+  profit: ["margin", "cost", "costing", "revenue"],
+  profitability: ["profit", "margin", "cost", "costing", "revenue"],
+  profitable: ["profit", "margin", "cost", "costing"],
   create: ["add", "new"],
   add: ["create", "new"],
 };
