@@ -40,7 +40,9 @@ import { AlertTriangle, Plus, X } from "lucide-react";
 import { SnowRateTiersDraftEditor, parseTierDrafts, type DraftTier } from "@/components/crm/jobs/SnowRateTiersEditor";
 import { useSaveSnowRateTiers } from "@/lib/hooks/use-snow-rate-tiers";
 import { toast } from "sonner";
-import type { JobType, BudgetMethod } from "@/types/crm-jobs";
+import { ServiceDialog } from "@/components/crm/services/ServiceDialog";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import type { JobType, BudgetMethod, CRMService } from "@/types/crm-jobs";
 import { resolveStopAddress } from "@/lib/utils/stop-address";
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -115,6 +117,8 @@ interface ServiceRow {
   startDateEdited: boolean;
 }
 
+const NEW_SERVICE_VALUE = "__new_service__";
+
 function blankServiceRow(date: string): ServiceRow {
   return { serviceId: "", serviceName: "", startDate: date, completeByDate: "", qty: 1, rateCents: 0, budgetedHours: 0, budgetMethod: "manual", teamSize: 1, minDays: null, startDateEdited: false };
 }
@@ -186,6 +190,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const [productRows, setProductRows] = useState<ProductRow[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  // Row index that asked for "+ New service…" (null = dialog closed).
+  const [newServiceRow, setNewServiceRow] = useState<number | null>(null);
+  const { can } = usePermissions();
+  const canAddService = can("service_add");
 
   // Snow-specific billing fields
   const [invoiceType, setInvoiceType] = useState<string | null>(null);
@@ -407,8 +415,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     setServices((prev) => [...prev, blankServiceRow(startDate)]);
   }
 
-  function pickService(i: number, serviceId: string) {
-    const svc = (crmServices ?? []).find((s) => s.id === serviceId);
+  function pickService(i: number, serviceId: string, justCreated?: CRMService) {
+    // justCreated: a service saved a moment ago may not be in the refetched list yet.
+    const svc = justCreated ?? (crmServices ?? []).find((s) => s.id === serviceId);
     if (!svc) return;
     const qty = services[i]?.qty ?? 1;
     // Only fill the service's default rate into an EMPTY rate — a rate the
@@ -1008,10 +1017,16 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                         : "2fr 1fr 1fr 1fr 1fr 1.5fr 28px",
                     }}
                   >
-                    <Select value={svc.serviceId || ""} onValueChange={(v) => pickService(i, v)}>
+                    <Select
+                      value={svc.serviceId || ""}
+                      onValueChange={(v) => (v === NEW_SERVICE_VALUE ? setNewServiceRow(i) : pickService(i, v))}
+                    >
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select service…" /></SelectTrigger>
                       <SelectContent>
                         {(crmServices ?? []).map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                        {canAddService && (
+                          <SelectItem value={NEW_SERVICE_VALUE} className="font-medium text-brand-600">+ New service…</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                     {showServiceDate && (
@@ -1169,6 +1184,12 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <ServiceDialog
+      open={newServiceRow !== null}
+      service={null}
+      onClose={() => setNewServiceRow(null)}
+      onCreated={(created) => { if (newServiceRow !== null) pickService(newServiceRow, created.id, created); }}
+    />
     {jobType === "project" && effectiveClientId && (
       <NewProjectDialog
         open={newProjectOpen}

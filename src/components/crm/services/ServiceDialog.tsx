@@ -51,6 +51,8 @@ interface Props {
   open: boolean;
   service: CRMService | null;
   onClose: () => void;
+  /** Fired once, right after a brand-new service is saved (the dialog stays open for its other tabs). */
+  onCreated?: (service: CRMService) => void;
 }
 
 interface FormState {
@@ -671,7 +673,7 @@ function ChemicalsTab({ serviceId }: ChemicalsTabProps) {
 
 // ── Main Dialog ───────────────────────────────────────────────────────────────
 
-export function ServiceDialog({ open, service, onClose }: Props) {
+export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
   const [tab, setTab] = useState<Tab>("details");
   const [form, setForm] = useState<FormState>(emptyForm());
   // Tracks the saved service — set from prop on open, or updated after create so tabs unlock immediately
@@ -738,6 +740,7 @@ export function ServiceDialog({ open, service, onClose }: Props) {
         const created = await createService.mutateAsync(patch);
         setActiveService(created as CRMService);
         setForm(serviceToForm(created as CRMService));
+        onCreated?.(created as CRMService);
       }
     } catch {
       toast.error("Failed to save service");

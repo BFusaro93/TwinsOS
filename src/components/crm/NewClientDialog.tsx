@@ -129,11 +129,11 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
 
           <div className="flex flex-col gap-4 py-1">
             <div className="flex flex-col gap-1.5">
-              <Label>Display Name *</Label>
+              <Label>{accountType === "commercial" ? "Company Name *" : "Display Name *"}</Label>
               <Input
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="e.g. Christine Ward"
+                placeholder={accountType === "commercial" ? "e.g. Maple Ridge HOA" : "e.g. Christine Ward"}
                 autoFocus
                 onKeyDown={(e) => e.key === "Enter" && void handleCreate()}
               />
