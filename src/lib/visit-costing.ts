@@ -244,6 +244,8 @@ async function loadCompletedVisitCounts(supabase: Client, jobIds: string[]) {
         .in("job_id", idChunk)
         .eq("status", "completed")
         .is("deleted_at", null)
+        // Job-level materials are spread per STOP — a multi-crew stop is one.
+        .eq("crew_group_secondary", false)
         .order("id")
         .range(from, to)
     )

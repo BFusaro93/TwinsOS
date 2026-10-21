@@ -58,6 +58,9 @@ export async function POST(
     // Visits individually pinned to "no crew" stay unassigned — the job's
     // crew change must not reach them.
     .eq("crew_unassigned", false)
+    // A multi-crew stop's crews are set per visit — the job's default crew
+    // changing must not overwrite them.
+    .is("crew_group_id", null)
     // Never reassign a stop that is mid-clock — it would split the stop.
     .neq("status", "in_progress")
     .is("clocked_in_at", null)

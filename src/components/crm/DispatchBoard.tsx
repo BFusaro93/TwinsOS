@@ -51,6 +51,7 @@ import {
 import { formatCurrency, cn, relativeTime, formatDateShort, formatHours } from "@/lib/utils";
 import { useOrgDates, useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
+import { VisitCrewsSection } from "@/components/crm/dispatch/VisitCrewsSection";
 import { allocateStopHours, computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { printRouteSheets } from "@/lib/print";
 import { toast } from "sonner";
@@ -1109,7 +1110,7 @@ function JobDetailSheet({
                   View Job →
                 </Button>
               )}
-              {visit.status === "completed" && visit.clientId && (
+              {visit.status === "completed" && visit.clientId && !visit.crewGroupSecondary && (
                 <Button
                   size="sm"
                   className="h-7 text-xs bg-brand-500 hover:bg-brand-600 text-white px-3"
@@ -1229,6 +1230,9 @@ function JobDetailSheet({
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Multi-crew stop */}
+                <VisitCrewsSection visit={visit} groupVisits={allVisits} crews={crews} />
 
                 {/* Sub Status */}
                 <div>
@@ -3241,6 +3245,16 @@ function VisitRow({
           >
             {visit.clientName ?? "—"}
           </Link>
+          {visit.crewGroupId && (
+            <span
+              title={visit.crewGroupSecondary
+                ? "Shared stop — another crew is the lead and bills it. This crew's hours still count toward the job."
+                : "Shared stop — more than one crew works this stop. This is the lead visit: it bills and carries the revenue."}
+              className="shrink-0 rounded bg-violet-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+            >
+              {visit.crewGroupSecondary ? "Shared" : "Lead"}
+            </span>
+          )}
         </div>
         {job?.serviceAddress && (
           <p className="truncate max-w-[200px] max-lg:max-w-[150px] text-[10px] text-slate-400 dark:text-neutral-500">{job.serviceAddress}</p>

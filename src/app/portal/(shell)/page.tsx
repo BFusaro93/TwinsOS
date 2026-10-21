@@ -54,6 +54,8 @@ export default async function PortalHomePage() {
       .eq("client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
       .is("deleted_at", null)
+      // A multi-crew stop is one visit to the customer — show the lead's only.
+      .eq("crew_group_secondary", false)
       .eq("status", "completed")
       .order("scheduled_date", { ascending: false })
       .limit(3),

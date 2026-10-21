@@ -104,6 +104,9 @@ export function InvoicingGuide() {
           Snow billing runs storm-by-storm on per-inch/hourly rates a flat auto-invoice can&apos;t
           compute — see <GuideLink className="underline" href="/settings/support/snow-guide">Snow Invoicing</GuideLink>.
         </Callout>
+              <p>
+          Shared stops bill once. When two crews work the same stop (Dispatch Board guide: &quot;Two crews on one stop&quot;), only the lead crew&apos;s visit creates the invoice. The added crew&apos;s visit carries no revenue and its Invoice button is hidden; if you try to invoice it by another route you&apos;re pointed to the lead&apos;s invoice.
+        </p>
       </Section>
 
       <Section id="tax-on-auto-invoices" title="Sales tax on invoices generated from jobs">

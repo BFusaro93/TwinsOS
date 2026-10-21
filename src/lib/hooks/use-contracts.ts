@@ -837,6 +837,8 @@ export function useContractVisits(contractId?: string) {
         .select("id, scheduled_date, status, crm_jobs!inner(contract_id)")
         .eq("crm_jobs.contract_id", contractId)
         .is("deleted_at", null)
+        // A multi-crew stop counts as one visit.
+        .eq("crew_group_secondary", false)
         .order("scheduled_date", { ascending: true });
       if (error) throw error;
       const rows = (data ?? []) as { id: string; scheduled_date: string; status: string }[];
@@ -978,6 +980,8 @@ export function useContractServiceVisitCounts(contractId?: string) {
         .eq("crm_jobs.contract_id", contractId)
         .eq("status", "completed")
         .is("deleted_at", null)
+        // A multi-crew stop counts as one visit used.
+        .eq("crew_group_secondary", false)
         .not("job_service_id", "is", null);
       if (error) throw error;
       const counts = new Map<string, number>();
