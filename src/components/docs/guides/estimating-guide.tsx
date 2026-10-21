@@ -73,7 +73,9 @@ export function EstimatingGuide() {
             time zone); see &ldquo;Valid until&rdquo; under the proposal link below.
           </li>
           <li>
-            Assign a <strong>sales rep</strong>.
+            Assign a <strong>sales rep</strong> and, if needed, a <strong>Sale Type</strong> (new sale or
+            renewal) &mdash; it decides which commission rate applies and flows through to the job and
+            invoice.
           </li>
         </ol>
         <p>

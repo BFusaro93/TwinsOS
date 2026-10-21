@@ -37,6 +37,8 @@ import {
   Satellite,
   Handshake,
   DollarSign,
+  ShieldCheck,
+  Percent,
 } from "lucide-react";
 import type { ElementType } from "react";
 
@@ -945,6 +947,16 @@ export const DOC_SECTIONS: DocSection[] = [
               "Invoices move Draft → Sent → Viewed → Partial → Paid, with Overdue and Void as side states. Payments can be recorded against an invoice with a specific method — Cash, Check, ACH/E-Check, AutoPay, Credit Card by network, AR Write-off, or Other.",
           },
           {
+            step: "Every invoice line bills a service",
+            detail:
+              "Each invoice line has a service dropdown and an invoice can't be saved until every line has one — there are no free-form lines. The service decides where revenue lands in reports and which commission rate applies. Lines from visits, estimates and contracts get their service automatically; a line without one shows in amber. The invoice CSV import needs a 'service' column that matches a service in your catalog (rows that don't match are skipped).",
+          },
+          {
+            step: "Sale type on an invoice",
+            detail:
+              "Sale Type (New sale or Renewal / existing account) sits next to the Sales Rep and decides which commission rate applies. Blank uses the job's, contract's or estimate's sale type, then counts as a new sale.",
+          },
+          {
             step: "Photos on an invoice",
             detail:
               "Open the invoice's Photos tab (or 'Photos to include' in the email dialog) to attach up to 12 photos from the invoice's visits and jobs, Job Photos linked to the client or project, or direct uploads. They print on extra PDF pages and show as a gallery on the client's online invoice page. HEIC iPhone photos are converted automatically; only JPEG and PNG print in the PDF, and Print Selected leaves photos out.",
@@ -1162,11 +1174,106 @@ export const DOC_SECTIONS: DocSection[] = [
               "Open, In Progress, Resolved, or Closed. Creating a case can fire both an internal automation and a Zapier trigger. Once Resolved or Closed, adding an expense or editing the description/resolution notes is blocked until the case is reopened.",
           },
           {
+            step: "Linking a warranty",
+            detail:
+              "For Warranty cases, an optional Warranty picker lists your active warranties. Choosing one fills in the customer and warns if the incident date falls outside its coverage; the case header then shows whether the incident was covered. The warranty tracks how many claims and how much spend sit against it.",
+            href: "/settings/support/warranties-guide",
+            linkLabel: "Open the Warranties guide",
+          },
+          {
             step: "Full guide",
             detail:
               "A deeper walkthrough — a worked example, and a real current limitation worth knowing about client-linking before you rely on filtering cases by client.",
             href: "/settings/support/damage-cases-guide",
             linkLabel: "Open the Damage Cases guide",
+          },
+        ],
+      },
+      {
+        id: "warranties",
+        title: "Warranties",
+        summary: "Track the warranties you give on walls, walkways, patios and renovations.",
+        icon: ShieldCheck,
+        steps: [
+          {
+            step: "Where warranties live",
+            detail:
+              "A Warranties tab on each client, project and job, plus a Warranties page under Scheduling with search and status filters. Each warranty has a name, coverage note, length in months, start and end date, and an optional damages-covered cap.",
+          },
+          {
+            step: "Warranty types",
+            detail:
+              "On the Warranties page, Types lets you define what you offer (for example Retaining wall — 60 months). Picking a type fills in the length and coverage wording; you can still change them on the warranty.",
+          },
+          {
+            step: "When the clock starts",
+            detail:
+              "On an unfinished project, leave the start date blank: the warranty shows Not started and begins automatically the day the project is marked Complete. Elsewhere the start defaults to today. The end date is the day before the anniversary (12 months from March 15 covers through March 14).",
+          },
+          {
+            step: "Renew, void, delete",
+            detail:
+              "Renew creates a new warranty of the same length starting the day after the old one ends (or today if it already ended). Void removes a warranty from coverage but keeps it; Delete removes it from the lists.",
+          },
+          {
+            step: "Claims and reminders",
+            detail:
+              "Warranty cases link to the warranty they're claimed against. Each morning, warranties within 30 days of ending trigger one reminder to the client's sales rep so they can offer a renewal.",
+          },
+          {
+            step: "Permissions",
+            detail:
+              "View Warranties shows the tabs and page; Add/Edit/Void Warranties allows changes and managing types. Both are set per role in Settings > Roles under Scheduling.",
+          },
+          {
+            step: "Full guide",
+            detail: "Statuses, renewal rules, and how claims and reminders work in detail.",
+            href: "/settings/support/warranties-guide",
+            linkLabel: "Open the Warranties guide",
+          },
+        ],
+      },
+      {
+        id: "commissions",
+        title: "Sales Commissions",
+        summary: "Pay reps a percentage of what they sell, by service and sale type.",
+        icon: Percent,
+        steps: [
+          {
+            step: "Plans and rules",
+            detail:
+              "Accounting > Commissions > Plans & Assignments. A plan holds rules; each rule sets a percentage for a service, a service category or all services, for new sales, renewals or both, earned when the payment is collected or when the invoice is issued. The most specific rule wins (service, then category, then all; a sale type beats 'New & renewal').",
+          },
+          {
+            step: "Assigning reps",
+            detail:
+              "Assign an employee a plan with an effective date. A rep can hold several plans at once, such as outside sales plus renewals. End a plan with 'End today'.",
+          },
+          {
+            step: "New sale vs renewal",
+            detail:
+              "Set Sale Type on an estimate, contract, job or invoice. An invoice uses its own, then its job's, contract's and estimate's; blank counts as a new sale. The office decides, so a one-time job for an existing customer can still be paid as a new sale.",
+          },
+          {
+            step: "How earnings are calculated",
+            detail:
+              "Per invoice line, on pre-tax revenue. The rep is the one on the invoice, falling back to the job, contract, estimate, then the client's rep. 'When paid' rules earn on each payment applied (net of refunds); 'when invoiced' rules earn on the invoice date. Every line needs a service — lines without one only earn under an All services rule.",
+          },
+          {
+            step: "Statements",
+            detail:
+              "Create statement on the Earnings tab locks a rep's unclaimed earnings for a period. Each earning line can be on only one live statement, so nothing is paid twice. Draft → Approved → Paid; Void releases the lines (not allowed once paid).",
+          },
+          {
+            step: "Not covered",
+            detail:
+              "Percentages only (no flat per-job amounts), and annual bonuses tied to company results aren't calculated here. Permissions: Commission View and Commission Manage under Accounting in Settings > Roles; reps can see their own statements.",
+          },
+          {
+            step: "Full guide",
+            detail: "Rules, sale types, earnings math and statements in detail.",
+            href: "/settings/support/commissions-guide",
+            linkLabel: "Open the Commissions guide",
           },
         ],
       },
@@ -1391,6 +1498,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "The bell icon in the top bar shows live alerts for overdue work orders, low stock parts, pending approvals, and upcoming PM schedules. These update in real time.",
           },
           {
+            step: "Warranty expiring",
+            detail:
+              "A reminder goes out once per end date when a warranty is within 30 days of ending — to the client's sales rep (in-app and email), or to admins in-app when the client has no rep. Turn either off under Settings > Notifications > Warranty Expiring Soon.",
+          },
+          {
             step: "Per-user preferences",
             detail:
               "Go to Settings > Notifications to toggle which events show as in-app or email notifications. Preferences are per-user and save automatically.",
@@ -1485,6 +1597,11 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Where it lives",
             detail:
               "Both Equipt Settings and Landscapt Settings have their own Import/Export tab, each covering the entities relevant to that module. Export produces a real CSV of your actual data; import maps spreadsheet columns to fields and shows a preview before committing.",
+          },
+          {
+            step: "Invoice imports need a service",
+            detail:
+              "The Invoices import requires clientName, service, description and amount. The service must match a service in your catalog (case doesn't matter); a row whose service isn't found is skipped with a warning.",
           },
           {
             step: "Duplicate handling",
