@@ -20,6 +20,7 @@ import {
   type EstimateVersion,
 } from "@/lib/hooks/use-estimates";
 import { useCreateInvoiceFromEstimate } from "@/lib/hooks/use-invoices";
+import { SaleTypeSelect } from "@/components/crm/commissions/SaleTypeSelect";
 import { useCRMServices, useEstimateJobs, useEstimateConvertedLines } from "@/lib/hooks/use-crm-jobs";
 import { useApprovalFlow } from "@/lib/hooks/use-approval-flows";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
@@ -972,6 +973,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 const invoiceLines = liveLines
                   .filter((li) => !basis || !li.tier || li.tier === basis)
                   .map((li) => ({
+                    serviceId: li.serviceId ?? null,
                     name: li.serviceName ?? li.serviceId ?? "Service",
                     description: li.invoiceDesc ?? "",
                     qty: li.qty,
@@ -1290,6 +1292,12 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               )}
                             </SelectContent>
                           </Select>
+                        </FieldRow>
+                        <FieldRow label="Sale Type" title="New or renewal — decides which commission rate applies. Blank counts as a new sale.">
+                          <SaleTypeSelect
+                            value={("sale_type" in headerEdits ? (headerEdits.sale_type as "new" | "renewal" | null) : estimate.saleType) ?? null}
+                            onChange={(v) => { patchHeader("sale_type", v); saveHeader({ ...headerEdits, sale_type: v }); }}
+                          />
                         </FieldRow>
                         <FieldRow label="Stage" title="Where this estimate is in the pipeline — sets the estimate's overall status, not each line item's individual status">
                           <Select

@@ -288,7 +288,7 @@ interface Props {
 }
 
 const INVOICE_TEMPLATE_COLUMNS = [
-  "clientName", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "discount", "taxAmount",
+  "clientName", "service", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "discount", "taxAmount",
 ];
 
 export function InvoicesList({ clientId }: Props) {
@@ -714,7 +714,7 @@ export function InvoicesList({ clientId }: Props) {
                   entityLabel="Invoices"
                   templateColumns={INVOICE_TEMPLATE_COLUMNS}
                   templateFilename="invoices-template.csv"
-                  requiredColumns={["clientName", "description", "amount"]}
+                  requiredColumns={["clientName", "service", "description", "amount"]}
                   onExport={() =>
                     exportCSV(
                       allInvoices.map((inv) => ({

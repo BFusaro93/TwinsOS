@@ -190,6 +190,8 @@ export function useSendSupportMessage() {
       senderType: "org" | "staff";
       senderName: string;
       body: string;
+      /** Email Landscapt staff about this message (default true). Ask AI escalations opt out: support@ gets its own email. */
+      notifyStaff?: boolean;
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -210,7 +212,7 @@ export function useSendSupportMessage() {
 
       // A customer message emails Landscapt staff (new conversation, a reply
       // to staff, or after a quiet gap). Best-effort — the message is saved.
-      if (input.senderType === "org") {
+      if (input.senderType === "org" && input.notifyStaff !== false) {
         void fetch("/api/support/notify-chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
