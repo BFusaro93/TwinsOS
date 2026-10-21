@@ -105,20 +105,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to create crew account" }, { status: 500 });
   }
 
-  // 5. Ensure profile row exists (the DB trigger may have already inserted it)
+  // 5. Create the profile row. The signup trigger skips service-role-created
+  // users, so this is the only place it gets made. `email` is NOT NULL on
+  // profiles — leaving it out made this fail silently for every crew account
+  // (login created, but no profile: invisible in Settings → Users, missing
+  // from the Linked Login picker, and the credentials couldn't sign in to
+  // anything). A failure here must not leave a half-made account behind, so
+  // undo the auth user and report the error.
   const { error: upsertErr } = await adminClient
     .from("profiles")
     .upsert({
       id: createdUser.user.id,
       org_id: callerProfile.org_id,
       name: teamName.trim(),
+      email: loginEmail,
       role: "crew",
       status: "active",
     }, { onConflict: "id" });
 
   if (upsertErr) {
-    // Non-fatal — log and continue
-    console.error("[create-crew] profile upsert error:", upsertErr);
+    log.error("crew profile upsert failed", { error: upsertErr.message });
+    const { error: cleanupErr } = await adminClient.auth.admin.deleteUser(createdUser.user.id);
+    if (cleanupErr) log.error("crew auth user cleanup failed", { error: cleanupErr.message });
+    return NextResponse.json({ error: "Failed to create crew account" }, { status: 500 });
   }
 
   // 6. Give the login a Landscapt crew. Non-fatal: the account already works,
