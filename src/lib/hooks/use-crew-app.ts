@@ -146,7 +146,7 @@ function crewVisitSelect(hidePricing: boolean): string {
     "men_count", "job_comments", "assigned_employee_id", "dispatched_at",
     "clocked_in_at", "clocked_out_at", "paused_at", "break_minutes",
     "acknowledged_notes_at", "notes_to_crew_updated_at", "skip_reason",
-    "created_at", "updated_at", "deleted_at",
+    "created_at", "updated_at", "deleted_at", "crew_group_id", "crew_group_secondary",
   ].join(", ");
 
   return `
@@ -226,6 +226,8 @@ function mapVisit(row: Record<string, unknown>): VisitWithNotesStamp {
     // writes crewId back.
     crewId:               effectiveVisitCrewId(row as VisitCrewRow),
     crewName:             (crew?.name as string) ?? null,
+    crewGroupId:          (row.crew_group_id as string | null) ?? null,
+    crewGroupSecondary:   (row.crew_group_secondary as boolean | null) ?? false,
     scheduledDate:        row.scheduled_date as string,
     startTime:            row.start_time as string | null,
     endTime:              row.end_time as string | null,
@@ -311,6 +313,31 @@ export function useMyCrewVisits(date: string, includeCarryOver = false) {
       const cmp = crewVisitComparator(await fetchRememberedRouteOrder(supabase, membership.crew_id, [date]));
       return [...carried.sort(cmp), ...[...data].sort(cmp)].map(mapVisit);
     },
+  });
+}
+
+// ── useStopPartnerCrews ───────────────────────────────────────────────────────
+// Multi-crew stops: the OTHER crews working the same stop today, by visit id.
+// RLS hides sibling visits from a crew login, so this goes through the
+// crm_visit_crew_partners RPC, which only returns names for visits the caller
+// may see.
+
+export function useStopPartnerCrews(visits: CRMJobVisit[]) {
+  const groupedIds = visits.filter((v) => v.crewGroupId).map((v) => v.id).sort();
+  return useQuery<Map<string, string[]>>({
+    queryKey: ["crew-app-partner-crews", groupedIds],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc("crm_visit_crew_partners", { p_visit_ids: groupedIds });
+      if (error) throw error;
+      const byVisit = new Map<string, string[]>();
+      for (const row of (data ?? []) as { visit_id: string; crew_name: string }[]) {
+        byVisit.set(row.visit_id, [...(byVisit.get(row.visit_id) ?? []), row.crew_name]);
+      }
+      return byVisit;
+    },
+    enabled: groupedIds.length > 0,
   });
 }
 

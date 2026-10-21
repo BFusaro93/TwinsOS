@@ -1,5 +1,6 @@
 "use client";
 
+import { VisitCrewsSection } from "@/components/crm/dispatch/VisitCrewsSection";
 import { useState, useEffect, useRef } from "react";
 import { parsePositiveQty } from "@/lib/utils/quantity";
 import { useRouter } from "next/navigation";
@@ -1849,6 +1850,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         propertyId={job.propertyId}
                         isChemicalJob={isChemicalJob}
                         crews={crews}
+                        jobVisits={visits}
                         onDelete={async () => {
                           // A completed visit is usually billed — deleting it
                           // would leave its invoice charging for a visit the
@@ -2075,6 +2077,7 @@ function VisitRow({
   propertyId,
   isChemicalJob,
   crews,
+  jobVisits,
   onDelete,
   onSaveNote,
   onSaveInvoiceDesc,
@@ -2088,6 +2091,8 @@ function VisitRow({
   propertyId: string | null;
   isChemicalJob: boolean;
   crews: { id: string; name: string }[];
+  /** Every visit on the job — siblings of a multi-crew stop are found by crewGroupId. */
+  jobVisits: CRMJobVisit[];
   onDelete: () => void;
   onSaveNote: (note: string) => Promise<void>;
   onSaveInvoiceDesc: (desc: string) => Promise<void>;
@@ -2180,7 +2185,19 @@ function VisitRow({
               : "—"}
         </td>
         <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">{visitServiceName}</td>
-        <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">{visit.crewName ?? <span className="italic text-slate-400 dark:text-neutral-500">Unassigned</span>}</td>
+        <td className="px-4 py-3 text-slate-600 dark:text-neutral-400">
+          {visit.crewName ?? <span className="italic text-slate-400 dark:text-neutral-500">Unassigned</span>}
+          {visit.crewGroupId && (
+            <span
+              title={visit.crewGroupSecondary
+                ? "Shared stop — another crew is the lead and bills it. This crew's hours still count toward the job."
+                : "Shared stop — more than one crew works this stop. This is the lead visit: it bills and carries the revenue."}
+              className="ml-1.5 rounded bg-violet-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
+            >
+              {visit.crewGroupSecondary ? "Shared" : "Lead"}
+            </span>
+          )}
+        </td>
         <td className="px-4 py-3 text-right tabular-nums">{visitBudgetedHours ? `${formatHours(visitBudgetedHours)}h` : "—"}</td>
         <td className="px-4 py-3 text-right tabular-nums">{formatHours(computeActualHours(visit))}</td>
         <td className="px-4 py-3 text-center">
@@ -2317,6 +2334,9 @@ function VisitRow({
         <tr className="border-b bg-orange-50 dark:bg-orange-950/40">
           <td colSpan={7} className="px-4 py-2">
             <p className="text-xs font-medium text-orange-700 dark:text-orange-400 mb-1.5">{isFreshDispatch ? "Dispatch this visit" : "Change date / crew"}</p>
+            <div className="mb-2 max-w-md">
+              <VisitCrewsSection visit={visit} groupVisits={jobVisits} crews={crews} />
+            </div>
             <div className="flex items-end gap-2">
               <div className="flex flex-col gap-1">
                 <Label className="text-xs text-slate-600 dark:text-neutral-400">Date</Label>

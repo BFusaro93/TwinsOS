@@ -243,6 +243,57 @@ export function DispatchBoardGuide() {
         </Callout>
       </Section>
 
+      <Section id="multi-crew-stops" title="Two crews on one stop">
+        <p>
+          Some jobs need more than one crew on site the same day — a big cleanup, an install that
+          takes a mowing crew and an enhancement crew. Open the visit, find{" "}
+          <strong>Crews on this stop</strong>, and choose <strong>Add another crew…</strong>. (On the
+          job page, use the same control inside the visit&apos;s Change date / crew editor.) The visit
+          needs a crew already, and the stop must not have started yet.
+        </p>
+        <p>
+          Behind the scenes each crew gets <strong>its own visit</strong> for the stop. That&apos;s why
+          everything else just works: each crew has its own row in its own column on the board, its
+          own stop in the Crew App, and clocks its own hours with its own men count. Rows for the
+          added crew carry a purple <strong>Shared</strong> tag; the original visit is tagged{" "}
+          <strong>Lead</strong>.
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Billing happens once.</strong> The lead visit carries the service&apos;s revenue
+            and creates the invoice when it&apos;s completed. The added crew&apos;s visit shows $0, never
+            invoices, and doesn&apos;t log a second &quot;Visit completed&quot; entry or fire automations a
+            second time. The client portal shows the stop as a single visit.
+          </li>
+          <li>
+            <strong>Labor is combined.</strong> Job Costing, the job&apos;s Hours and the labor reports
+            add up every crew&apos;s hours and labor. The budgeted hours are split evenly between the
+            crews so variance isn&apos;t charged the full budget twice.
+          </li>
+          <li>
+            <strong>The day moves together.</strong> Rescheduling one crew&apos;s visit moves the
+            other crews&apos; visits that haven&apos;t started. A crew already clocked in stays put.
+          </li>
+          <li>
+            <strong>Visit counts don&apos;t double.</strong> A shared stop uses one of a contract&apos;s
+            included visits, and counts once toward materials spread across a job&apos;s visits.
+          </li>
+          <li>
+            <strong>Chemicals are logged on the lead.</strong> The added crew doesn&apos;t get a
+            chemical card, so amounts and inventory aren&apos;t counted twice.
+          </li>
+        </ul>
+        <p>
+          To take a crew back off, click the ✕ next to it in <strong>Crews on this stop</strong> —
+          only before that crew has started. Removing the lead hands billing to the next crew. Each
+          crew&apos;s order in its own route is set separately, and a change to the job&apos;s default
+          crew doesn&apos;t overwrite a stop&apos;s crews.
+        </p>
+        <Callout>
+          Snow visits can&apos;t take a second crew — they&apos;re staffed and billed per storm.
+        </Callout>
+      </Section>
+
       <Section id="actual-hours" title="How actual hours are calculated">
         <p>
           The <strong>Actual Hrs</strong> column is the real number used for job costing and crew

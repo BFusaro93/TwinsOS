@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, parseISO, differenceInMinutes } from "date-fns";
 import { MapPin, Clock, Users, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
-import { useMyCrewStops, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive } from "@/lib/hooks/use-crew-app";
+import { useMyCrewStops, useStopPartnerCrews, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive } from "@/lib/hooks/use-crew-app";
 import { useCurrentUserStore } from "@/stores";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { EditCrewDialog } from "@/components/crm/crew/EditCrewDialog";
@@ -40,7 +40,7 @@ const STATUS_CONFIG: Record<VisitStatus, { label: string; color: string; icon: R
   skipped:     { label: "Skipped",      color: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400", icon: <XCircle className="h-3 w-3" /> },
 };
 
-function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
+function StopCard({ stop, partners, onClick }: { stop: Stop; partners: string[]; onClick: () => void }) {
   const cfg = STATUS_CONFIG[stop.derivedStatus];
   const services = stop.visits.flatMap(visitServiceNames).join(", ");
   const startTime = stop.visits.find((v) => v.startTime)?.startTime;
@@ -63,6 +63,11 @@ function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
               </span>
             )}
           </div>
+          {partners.length > 0 && (
+            <p className="text-xs text-violet-700 dark:text-violet-400 mt-0.5">
+              With {partners.join(", ")}
+            </p>
+          )}
           {stop.address && (
             <button
               onClick={(e) => { e.stopPropagation(); openInMaps(stop.address); }}
@@ -116,6 +121,7 @@ export default function CrewSchedulePage() {
   const { today: orgToday } = useOrgDates();
   const today = orgToday();
   const { data: stops = [], isLoading } = useMyCrewStops(today, true);
+  const { data: partnerCrews } = useStopPartnerCrews(stops.flatMap((s) => s.visits));
   const { data: crewInfo } = useMyCrewInfo();
   const { data: drive } = useCrewDriveToday(today);
   const startDrive = useStartDrive();
@@ -274,6 +280,7 @@ export default function CrewSchedulePage() {
             <div className="flex-1 pb-1">
               <StopCard
                 stop={stop}
+                partners={[...new Set(stop.visits.flatMap((v) => partnerCrews?.get(v.id) ?? []))]}
                 onClick={() => router.push(`/crm/crew/stops/${stop.anchorVisitId}`)}
               />
             </div>

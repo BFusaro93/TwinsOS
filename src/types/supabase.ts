@@ -5355,6 +5355,8 @@ export type Database = {
           created_by: string | null
           crew_id: string | null
           crew_unassigned: boolean
+          crew_group_id: string | null
+          crew_group_secondary: boolean
           deleted_at: string | null
           dispatched_at: string | null
           end_time: string | null
@@ -5404,6 +5406,8 @@ export type Database = {
           created_by?: string | null
           crew_id?: string | null
           crew_unassigned?: boolean
+          crew_group_id?: string | null
+          crew_group_secondary?: boolean
           deleted_at?: string | null
           dispatched_at?: string | null
           end_time?: string | null
@@ -5453,6 +5457,8 @@ export type Database = {
           created_by?: string | null
           crew_id?: string | null
           crew_unassigned?: boolean
+          crew_group_id?: string | null
+          crew_group_secondary?: boolean
           deleted_at?: string | null
           dispatched_at?: string | null
           end_time?: string | null
@@ -15577,7 +15583,16 @@ export type Database = {
         }
         Returns: Json
       }
+      crm_add_visit_crew: {
+        Args: { p_crew_id: string; p_visit_id: string }
+        Returns: string
+      }
+      crm_remove_visit_crew: { Args: { p_visit_id: string }; Returns: undefined }
       crm_save_route_order: { Args: { p_visit_ids: string[] }; Returns: number }
+      crm_visit_crew_partners: {
+        Args: { p_visit_ids: string[] }
+        Returns: { crew_id: string; crew_name: string; visit_id: string }[]
+      }
       crm_unsubscribe_client: {
         Args: { p_campaign_id?: string; p_token: string }
         Returns: string

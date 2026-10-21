@@ -33,6 +33,8 @@ export async function GET() {
       .eq("crm_jobs.client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
       .is("deleted_at", null)
+      // A multi-crew stop is one visit to the customer — show the lead's only.
+      .eq("crew_group_secondary", false)
       .gte("scheduled_date", today)
       .not("status", "in", "(completed,cancelled)")
       .order("scheduled_date", { ascending: true })
@@ -44,6 +46,7 @@ export async function GET() {
       .eq("crm_jobs.client_id", ctx.clientId)
       .eq("org_id", ctx.orgId)
       .is("deleted_at", null)
+      .eq("crew_group_secondary", false)
       .eq("status", "completed")
       .order("scheduled_date", { ascending: false })
       .limit(5),

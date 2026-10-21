@@ -208,6 +208,18 @@ export function CrewAppGuide() {
         </Callout>
       </Section>
 
+      <Section id="shared-stops" title="When another crew is on your stop">
+        <p>
+          If the office put a second crew on the same stop, your stop card says{" "}
+          <strong>With &lt;other crew&gt;</strong> and the stop screen shows who else is on site.
+          You each have your own stop: tap <strong>Start Job</strong> and <strong>Stop Job</strong>
+          for <em>your</em> crew, and your hours are worked out from your clock times and your
+          headcount only. Nothing you do clocks the other crew in or out. The visit is billed once by
+          the office from the lead crew&apos;s stop, so your stop doesn&apos;t create its own invoice,
+          and chemicals are confirmed on the lead crew&apos;s stop.
+        </p>
+      </Section>
+
       <Section id="hours" title="How your hours are worked out">
         <p>
           When a crew taps Stop Job, the hours for that stop are:

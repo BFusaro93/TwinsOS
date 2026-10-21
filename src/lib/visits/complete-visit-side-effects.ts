@@ -107,6 +107,8 @@ type VisitRow = {
   scheduled_date: string | null;
   status: string;
   job_service_id: string | null;
+  /** Secondary crew on a multi-crew stop — billing/timeline/automations belong to the lead visit. */
+  crew_group_secondary: boolean | null;
 };
 
 type JobServiceRow = {
@@ -169,7 +171,7 @@ export async function applyVisitCompletionSideEffects(
 
   const { data: visitData, error: visitErr } = await supabase
     .from("crm_job_visits")
-    .select("id, org_id, job_id, client_id, invoice_description, scheduled_date, status, job_service_id")
+    .select("id, org_id, job_id, client_id, invoice_description, scheduled_date, status, job_service_id, crew_group_secondary")
     .eq("id", visitId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -233,6 +235,15 @@ export async function applyVisitCompletionSideEffects(
         .update({ last_service_date: serviceDay })
         .eq("id", j.id);
     }
+  }
+
+  // A secondary crew on a multi-crew stop only records its own hours: the stop
+  // bills once, logs one "Visit completed" row and fires its automations once,
+  // all from the lead visit's completion (see 20261029000000_multi_crew_visits.sql).
+  if (visit.crew_group_secondary) {
+    result.invoiceSkipReason = "crew_group_secondary";
+    result.ok = true;
+    return result;
   }
 
   // ── 2. Auto-invoice ───────────────────────────────────────────────────────

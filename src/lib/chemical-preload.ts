@@ -68,12 +68,16 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
   const { data: visit } = await supabase
     .from("crm_job_visits")
     .select(
-      "id, job_id, scheduled_date, status, job_service_id, crm_jobs(client_id, property_id, crm_job_services(id, service_id, included))"
+      "id, job_id, scheduled_date, status, job_service_id, crew_group_secondary, crm_jobs(client_id, property_id, crm_job_services(id, service_id, included))"
     )
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
   if (!visit || !["scheduled", "dispatched", "in_progress"].includes(visit.status ?? "")) return 0;
+  // A secondary crew on a multi-crew stop carries no chemical records: the mix
+  // is logged and confirmed once, on the lead crew's visit, so estimated
+  // amounts and inventory depletion aren't counted twice.
+  if ((visit as { crew_group_secondary?: boolean | null }).crew_group_secondary) return 0;
   const job = visit.crm_jobs as unknown as {
     client_id: string | null;
     property_id: string | null;

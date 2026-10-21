@@ -2128,7 +2128,24 @@ export function useCreateInvoiceFromJob() {
       let existing: InvoiceRef | null = null;
       let tagVisit = false;
       if (visitId) {
-        const found = await findLiveInvoiceForVisit(supabase, visitId);
+        // A secondary crew's visit on a multi-crew stop never bills on its own:
+        // the stop is billed once, from the lead visit.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: grp } = await (supabase as any)
+          .from("crm_job_visits").select("crew_group_id, crew_group_secondary").eq("id", visitId).maybeSingle();
+        const g = grp as { crew_group_id: string | null; crew_group_secondary: boolean | null } | null;
+        if (g?.crew_group_secondary && g.crew_group_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: lead } = await (supabase as any)
+            .from("crm_job_visits").select("id").eq("crew_group_id", g.crew_group_id)
+            .eq("crew_group_secondary", false).is("deleted_at", null).maybeSingle();
+          const leadFound = lead ? await findLiveInvoiceForVisit(supabase, (lead as { id: string }).id) : null;
+          if (!leadFound?.invoice) {
+            throw new Error("This crew shares the stop with another crew — it bills once, from the lead crew's visit. Invoice that visit instead.");
+          }
+          existing = leadFound.invoice;
+        }
+        const found = existing ? { invoice: existing, visitLineExists: true } : await findLiveInvoiceForVisit(supabase, visitId);
         existing = found.invoice;
         tagVisit = !found.visitLineExists;
         // Legacy single-visit one_time/waiting_list jobs: one invoice per job

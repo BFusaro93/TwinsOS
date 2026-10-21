@@ -1754,6 +1754,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "Can two crews work the same job on the same day?",
+        a: "Yes. Open the visit on the Dispatch Board (or the job's Visits table > Change date / crew) and use 'Crews on this stop' > 'Add another crew…'. Each crew gets its own visit, so it has its own row in its own column, its own stop in the Crew App, and clocks its own hours. The original visit is the Lead: it carries the revenue and creates the one invoice, the added crew's visit shows $0 and never invoices, and Job Costing adds up every crew's labor. A shared stop uses one contract visit, rescheduling one crew moves the others that haven't started, and snow visits can't take a second crew.",
+      },
+      {
+        q: "Why does the second crew on a shared stop show $0 and no Invoice button?",
+        a: "The stop bills once, from the Lead visit, so the added crew's visit carries no revenue and can't be invoiced on its own — its hours still count in Job Costing and the job's labor. If you remove the Lead crew from the stop, billing passes to the next crew automatically.",
+      },
+      {
         q: "Should we report near misses, or only injuries?",
         a: "Report both. A near miss is an event that could have hurt someone but didn't, and the Injury / Near Miss form in Job Photos > Field has its own type for it. Near misses are tracked and reported separately and never reset Days Since Last Injury or the Accident Free Workdays KPI, so reporting them can't make your numbers look worse.",
       },

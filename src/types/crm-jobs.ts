@@ -300,6 +300,13 @@ export interface CRMJobVisit {
   /** Per-visit "no crew" override: pins the visit to unassigned even when its job has a crew. */
   crewUnassigned?: boolean
   crewName?: string | null
+  /**
+   * Multi-crew stop: sibling visits (one per crew) share this id. Null for the
+   * normal single-crew visit. Exactly one member is the lead (the original
+   * visit — it bills and carries the revenue); the rest are `crewGroupSecondary`.
+   */
+  crewGroupId?: string | null
+  crewGroupSecondary?: boolean
   scheduledDate: string
   startTime: string | null
   endTime: string | null
