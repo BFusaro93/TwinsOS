@@ -7,6 +7,7 @@ import {
   TableHeadRow,
   TOCLink,
 } from "@/components/docs/DocsBrand";
+import { GuideLink } from "@/components/docs/GuideLink";
 
 const PROJECT_FIELDS: [string, string][] = [
   ["Project Name", "Free text — e.g. \"Smith Residence Backyard Renovation.\""],
@@ -271,6 +272,12 @@ export function ProjectsGuide() {
           actual Invoices — invoicing and payment activity shown on Billing/Analysis doesn&apos;t feed
           back into either contract figure.
         </Callout>
+              <p>
+          A <strong>Warranties</strong> tab also appears next to those when the project has a client.
+          Warranties added before the project is finished wait as &quot;Not started&quot; and begin
+          automatically the day the project is marked <strong>Complete</strong>. See the{" "}
+          <GuideLink href="/settings/support/warranties-guide" className="text-[#60ab45] underline">Warranties guide</GuideLink>.
+        </p>
       </Section>
 
       <Section id="job-costing-dashboard" title="The Job Costing Dashboard">
