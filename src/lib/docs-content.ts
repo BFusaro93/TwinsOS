@@ -1856,6 +1856,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "How the pieces connect",
     items: [
       {
+        q: "How do I create a crew (without a login) on the Team → Crews page?",
+        a: "Go to Landscapt > Team > Crews and click Add Team (needs the Teams scheduling permission). On the Team Details tab enter a Description (the crew's name), pick a Color, and optionally a Team Code, Linked Login, starting address and Show In Calendar, then click Create & Continue. The dialog stays open on the Team Assignments tab, where you click Add Assignment to put employees on the crew's default roster. A crew with no Linked Login still works on the Dispatch Board and Crew Board; it just has no Crew App schedule of its own until you link a login (or create a crew account under Settings > Users, which creates the crew and the login together).",
+      },
+      {
         q: "How do I remove a crew from the Dispatch Board / make a crew inactive?",
         a: "Go to Landscapt > Team > Crews. In the Active column, turn the crew's switch off and confirm. The crew moves to the Inactive tab and stops appearing as a crew you can schedule on the Dispatch Board and Crew Board; its history is kept. To bring it back, open the Inactive tab (or All) and turn the switch on. You need the Teams scheduling permission. This is separate from the crew's login: deactivating the login under Settings > Users only blocks sign-in and does not change the crew on the board.",
       },
