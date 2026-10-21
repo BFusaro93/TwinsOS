@@ -1065,6 +1065,85 @@ export function useUpsertCrewMemberTime() {
   });
 }
 
+// ── Crew day (paid shift, shop to shop) ───────────────────────────────────────
+
+export interface CrewDayMember {
+  id: string;
+  name: string;
+  role: string | null;
+  absent: boolean;
+  startedAt: string | null;
+  endedAt: string | null;
+}
+
+export function useCrewDay() {
+  return useQuery<{ workDate: string; members: CrewDayMember[] }>({
+    queryKey: ["crew-day"],
+    queryFn: async () => {
+      const res = await fetch("/api/crm/crew/day");
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
+}
+
+export function useCrewDayAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { action: "start_day" | "end_day" | "member_in" | "member_out"; crewMemberId?: string; visitId?: string }) => {
+      const res = await fetch("/api/crm/crew/day", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crew-day"] });
+      qc.invalidateQueries({ queryKey: ["crew-absences"] });
+      qc.invalidateQueries({ queryKey: ["crew-member-times"] });
+    },
+    onError: () => toast.error("Couldn't update the crew's day — try again"),
+  });
+}
+
+// ── Crew attendance (who is working today) ────────────────────────────────────
+// Start Job auto-punches the whole roster; a member marked absent is skipped.
+
+export function useCrewAbsences() {
+  return useQuery<string[]>({
+    queryKey: ["crew-absences"],
+    queryFn: async () => {
+      const res = await fetch("/api/crm/crew/attendance");
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { absentMemberIds: string[] };
+      return json.absentMemberIds;
+    },
+  });
+}
+
+export function useSetCrewMemberAbsent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ crewMemberId, absent, visitId }: { crewMemberId: string; absent: boolean; visitId?: string }) => {
+      const res = await fetch("/api/crm/crew/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ crewMemberId, absent, visitId }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crew-absences"] });
+      qc.invalidateQueries({ queryKey: ["crew-day"] });
+      qc.invalidateQueries({ queryKey: ["crew-member-times"] });
+    },
+    onError: () => toast.error("Failed to update who is working today"),
+  });
+}
+
 /**
  * Office-only: sets whether a stop's crew pause time is paid (true), unpaid
  * (false) or follows the org setting (null). The route rejects crew logins and

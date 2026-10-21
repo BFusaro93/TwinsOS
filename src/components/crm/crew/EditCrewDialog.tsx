@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useCrewMemberTimes, useUpsertCrewMemberTime } from "@/lib/hooks/use-crew-app";
+import { useCrewDay, useCrewDayAction, useSetCrewMemberAbsent } from "@/lib/hooks/use-crew-app";
 
 interface CrewInfo {
   crewId: string;
@@ -26,43 +26,27 @@ interface EditCrewDialogProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   crewInfo: CrewInfo;
+  /** The stop in progress, if any — a member clocked in/out here also joins/leaves that job's punches. */
   visitId?: string;
 }
 
+/**
+ * Per-person exceptions to the crew's day. Start Day / Start Job already clock
+ * in everyone working; this is for the late arrival, the person out today, and
+ * whoever leaves early.
+ */
 export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCrewDialogProps) {
-  const { data: memberTimes = [] } = useCrewMemberTimes(visitId ?? "");
-  const upsert = useUpsertCrewMemberTime();
+  const { data: day } = useCrewDay();
+  const dayAction = useCrewDayAction();
+  const setAbsent = useSetCrewMemberAbsent();
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  function getTime(memberId: string) {
-    return memberTimes.find(t => t.crewMemberId === memberId);
-  }
+  const members = day?.members ?? [];
 
-  async function handleClockIn(memberId: string) {
-    if (!visitId) return;
+  async function run(memberId: string, fn: () => Promise<unknown>) {
     setLoadingId(memberId);
     try {
-      await upsert.mutateAsync({
-        visitId,
-        crewMemberId: memberId,
-        clockedInAt: new Date().toISOString(),
-      });
-    } finally {
-      setLoadingId(null);
-    }
-  }
-
-  async function handleClockOut(memberId: string) {
-    if (!visitId) return;
-    const existing = getTime(memberId);
-    setLoadingId(memberId);
-    try {
-      await upsert.mutateAsync({
-        visitId,
-        crewMemberId: memberId,
-        clockedInAt:  existing?.clockedInAt ?? null,
-        clockedOutAt: new Date().toISOString(),
-      });
+      await fn();
     } finally {
       setLoadingId(null);
     }
@@ -84,12 +68,10 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
         </DialogHeader>
 
         <div className="space-y-2 mt-2">
-          {crewInfo.members.map(member => {
-            const time = getTime(member.id);
-            const isIn  = !!time?.clockedInAt && !time?.clockedOutAt;
-            const isDone = !!time?.clockedInAt && !!time?.clockedOutAt;
+          {members.map(member => {
+            const onClock = !!member.startedAt && !member.endedAt;
+            const done = !!member.startedAt && !!member.endedAt;
             const isLoading = loadingId === member.id;
-
             return (
               <div
                 key={member.id}
@@ -98,46 +80,58 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-slate-800 dark:text-neutral-100 truncate">{member.name}</p>
-                    <Badge variant="outline" className="text-xs capitalize shrink-0">
-                      {member.role}
-                    </Badge>
+                    {member.role && (
+                      <Badge variant="outline" className="text-xs capitalize shrink-0">{member.role}</Badge>
+                    )}
                   </div>
-                  {time?.clockedInAt && (
+                  {member.startedAt && (
                     <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      In: {format(parseISO(time.clockedInAt), "h:mm a")}
-                      {time.clockedOutAt && ` · Out: ${format(parseISO(time.clockedOutAt), "h:mm a")}`}
+                      In: {format(parseISO(member.startedAt), "h:mm a")}
+                      {member.endedAt && ` · Out: ${format(parseISO(member.endedAt), "h:mm a")}`}
                     </p>
+                  )}
+                  {member.absent && !member.startedAt && (
+                    <p className="text-xs text-muted-foreground mt-0.5">Not working today</p>
                   )}
                 </div>
 
-                <div className="shrink-0">
-                  {!visitId ? (
-                    <span className="text-xs text-slate-400 dark:text-neutral-500">No active job</span>
-                  ) : isDone ? (
-                    <Badge className="bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800 text-xs">Clocked Out</Badge>
-                  ) : isIn ? (
+                <div className="shrink-0 flex items-center gap-1">
+                  {onClock ? (
                     <Button
                       size="sm"
                       variant="outline"
                       className="gap-1 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 text-xs h-8"
-                      onClick={() => handleClockOut(member.id)}
+                      onClick={() => run(member.id, () => dayAction.mutateAsync({ action: "member_out", crewMemberId: member.id, visitId }))}
                       disabled={isLoading}
                     >
                       {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <LogOut className="h-3 w-3" />}
-                      Clock Out
+                      Left for the day
                     </Button>
                   ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40 text-xs h-8"
-                      onClick={() => handleClockIn(member.id)}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <LogIn className="h-3 w-3" />}
-                      Clock In
-                    </Button>
+                    <>
+                      {!done && !member.absent && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs h-8 text-muted-foreground"
+                          onClick={() => run(member.id, () => setAbsent.mutateAsync({ crewMemberId: member.id, absent: true }))}
+                          disabled={isLoading}
+                        >
+                          Not working
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40 text-xs h-8"
+                        onClick={() => run(member.id, () => dayAction.mutateAsync({ action: "member_in", crewMemberId: member.id, visitId }))}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <LogIn className="h-3 w-3" />}
+                        {done ? "Back" : "Clock In"}
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
@@ -145,11 +139,9 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
           })}
         </div>
 
-        {!visitId && (
-          <p className="text-xs text-slate-400 dark:text-neutral-500 text-center mt-2">
-            Open a job first to clock individual crew members in/out.
-          </p>
-        )}
+        <p className="text-xs text-slate-400 dark:text-neutral-500 text-center mt-2">
+          Start Day clocks in everyone working. Use this for anyone who arrives late, is out today, or leaves early.
+        </p>
       </DialogContent>
     </Dialog>
   );

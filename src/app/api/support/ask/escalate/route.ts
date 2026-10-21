@@ -32,8 +32,10 @@ export async function POST(request: Request) {
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile?.org_id) return NextResponse.json({ error: "Org not found" }, { status: 403 });
 
-  // Only rows not already escalated, so pressing the button twice (or
-  // re-sending the same conversation) emails support once.
+  // One email per send. The panel hides the button once sent, so a double
+  // press can't produce two; and a customer who sends the conversation again
+  // (with more to say) should reach support again, since this email is now
+  // the only alert an escalation produces.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (adminClient() as any)
     .from("ask_ai_questions")
@@ -41,7 +43,6 @@ export async function POST(request: Request) {
     .in("id", ids)
     .eq("org_id", profile.org_id)
     .eq("created_by", user.id)
-    .is("escalated_at", null)
     .select("id, question, answer, created_at");
   if (error) return NextResponse.json({ error: "Failed to flag questions" }, { status: 500 });
 
