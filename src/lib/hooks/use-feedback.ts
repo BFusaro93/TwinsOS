@@ -8,6 +8,8 @@ interface SubmitFeedbackInput {
   message: string;
   pageUrl: string;
   screenshotFile?: File | null;
+  /** Email Landscapt staff about this feedback (default true). Ask AI escalations opt out: support@ gets its own email. */
+  notifyStaff?: boolean;
 }
 
 export function useSubmitFeedback() {
@@ -52,11 +54,13 @@ export function useSubmitFeedback() {
 
       // Email Landscapt staff. Best-effort: the feedback is already saved, so
       // a failed email must never show up as a failed submission.
-      void fetch("/api/support/notify-feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: inserted.id }),
-      }).catch(() => {});
+      if (input.notifyStaff !== false) {
+        void fetch("/api/support/notify-feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: inserted.id }),
+        }).catch(() => {});
+      }
     },
   });
 }
