@@ -2054,8 +2054,8 @@ function TeamAssignDialog({
         updates: crewId ? { crew_id: crewId } : { crew_id: null, crew_unassigned: true },
         jobId,
       });
-    } catch {
-      toast.error("Failed to reassign");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to reassign");
     }
   }
 

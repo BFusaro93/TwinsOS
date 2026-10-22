@@ -39,10 +39,10 @@ export async function findUntouchedFutureVisits(
 ): Promise<string[]> {
   // Paginated: PostgREST truncates at 1000 rows, and a year of weekly
   // multi-service visits can exceed that.
-  const { rows, error } = await selectAllRows<{ id: string }>(() => {
+  const { rows, error } = await selectAllRows<{ id: string; crew_group_id: string | null }>(() => {
     let q = supabase
       .from("crm_job_visits")
-      .select("id")
+      .select("id, crew_group_id")
       .eq("job_id", jobId)
       .is("deleted_at", null)
       .is("clocked_in_at", null)
@@ -64,7 +64,30 @@ export async function findUntouchedFutureVisits(
     if (lineErr) throw new Error(lineErr);
     for (const l of lines) if (l.visit_id) invoiced.add(l.visit_id);
   }
-  return ids.filter((id) => !invoiced.has(id));
+  const eligible = new Set(ids.filter((id) => !invoiced.has(id)));
+
+  // A multi-crew stop is pruned all-or-nothing. If any crew on it has started,
+  // been dispatched past the allowed statuses, or been billed, leave the whole
+  // group alone — otherwise the lead failover would promote the survivor into
+  // a lone lead on a retracted occurrence (which the generator would then
+  // regenerate, doubling the stop).
+  const groupIds = [...new Set(rows.map((r) => r.crew_group_id).filter((g): g is string => !!g))];
+  if (groupIds.length > 0) {
+    const blocked = new Set<string>();
+    for (let i = 0; i < groupIds.length; i += 100) {
+      const { rows: members, error: memErr } = await selectAllRows<{ id: string; crew_group_id: string }>(() => supabase
+        .from("crm_job_visits")
+        .select("id, crew_group_id")
+        .in("crew_group_id", groupIds.slice(i, i + 100))
+        .is("deleted_at", null));
+      if (memErr) throw new Error(memErr);
+      for (const m of members) if (!eligible.has(m.id)) blocked.add(m.crew_group_id);
+    }
+    return rows
+      .filter((r) => eligible.has(r.id) && !(r.crew_group_id && blocked.has(r.crew_group_id)))
+      .map((r) => r.id);
+  }
+  return [...eligible];
 }
 
 /** Soft-deletes the given visits (re-checking they're still untouched) and

@@ -31,6 +31,7 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
         permissions: {
           view_report_center: "View Report Center",
           manage_report_center: "Manage Report Center",
+          payroll_report: "View & Edit Payroll Report",
         },
       },
       dashboard_access: {

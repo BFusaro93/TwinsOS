@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_TICKET_CATEGORIES } from "@/lib/crm/ticket-categories";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -122,10 +123,7 @@ const PRIORITY_OPTIONS: Array<{ label: string; value: TicketPriority | "all" }> 
   { label: "Low", value: "low" },
 ];
 
-// "Upsell" is the category crew-submitted field suggestions land under (see
-// /api/crm/crew/visits/[visitId]/upsell), so it has to be filterable here even
-// though nobody picks it by hand in the New Ticket dialog.
-const FALLBACK_CATEGORIES = ["Uncategorized", "Estimate", "Upsell", "Billing", "Change Service", "Complaint", "Other"];
+const FALLBACK_CATEGORIES: string[] = [...DEFAULT_TICKET_CATEGORIES];
 
 // ── NewTicketDialog ───────────────────────────────────────────────────────────
 

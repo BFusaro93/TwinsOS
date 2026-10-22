@@ -162,9 +162,12 @@ export function TicketsGuide() {
         </div>
         <p>
           <strong>Category</strong> is a free-form org-configured list (<code>crm_list_options</code>{" "}
-          under key <code>ticket_categories</code>), not a hard-coded enum. If your org hasn&apos;t
-          configured any, the New Ticket dialog and edit form fall back to a default set: Uncategorized,
-          Estimate, Billing, Change Service, Complaint, Other.
+          under key <code>ticket_categories</code>), not a hard-coded enum. Every organization starts with a
+          default list: Uncategorized, Estimate, Billing, Change Service, Schedule Service, Complaint,
+          Damage / Warranty, Need to Contact Customer, Client Portal Message, Terminate Service, Other
+          and Upsell (where crew-suggested work lands; it is never offered to clients in the portal). Rename, add or delete them under CRM Settings &gt; Ticket Categories. (If a list is ever
+          emptied, the pickers fall back to a short built-in set.) New damage cases file their ticket
+          under Damage / Warranty.
         </p>
       </Section>
 
@@ -272,7 +275,7 @@ export function TicketsGuide() {
           Clicking any ticket row opens <code>TicketDetailSheet</code>, with five tabs:
         </p>
         <ul className="list-disc space-y-2 pl-5">
-          <li><strong>Details</strong> — status flow buttons, the client/category/assignee/dates meta grid, body text, and a Linked Records picker that can attach the ticket to an Estimate, Invoice, or Job belonging to the same client.</li>
+          <li><strong>Details</strong> — status flow buttons, the client/category/assignee/dates meta grid, body text, and a Linked Records picker that can attach the ticket to an Estimate, Invoice, Job, Project or Damage Case (estimates, invoices and jobs must belong to the same client).</li>
           <li><strong>Comments &amp; History</strong> — threaded comments via the shared <code>CommentsSection</code> (<code>recordType=&quot;ticket&quot;</code>).</li>
           <li><strong>Files</strong> — attachments via the shared <code>AttachmentsSection</code>.</li>
           <li><strong>Contributors</strong> — additional staff CC&apos;d on the ticket as participants, distinct from the single assignee. Managed by <code>use-ticket-contributors.ts</code>.</li>

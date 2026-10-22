@@ -1262,7 +1262,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Statements",
             detail:
-              "Create statement on the Earnings tab locks a rep's unclaimed earnings for a period. Each earning line can be on only one live statement, so nothing is paid twice. Draft → Approved → Paid; Void releases the lines (not allowed once paid).",
+              "Create statement on the Earnings tab locks a rep's unclaimed earnings for a period. Each earning line can be on only one live statement, so nothing is paid twice. Draft → Approved → Paid; Void releases the lines (not allowed once paid). If a payment is refunded or deleted, or an invoice is voided or edited down after it was statemented, the rep's next statement gets a negative Adjustment line for the difference (once per change, at the original rate; a reversed refund adds back a positive one).",
           },
           {
             step: "Not covered",
@@ -1391,7 +1391,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Where it lives",
             detail:
-              "CRM > Reports. A 4-tab shell: Dashboard (the legacy overview), Custom Dashboards, Report Center (the searchable catalog), and My Reports (saved analyses).",
+              "CRM > Reports. A 6-tab shell: Dashboard (the legacy overview), Custom Dashboards, Report Center (the searchable catalog), My Reports (saved analyses), Payroll (crew hours from Start Day / End Day, editable and exportable; admins and managers only), and Graphics Library.",
           },
           {
             step: "Categories",
@@ -1871,6 +1871,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "How does the crew clock in for the day (Start Day / End Day)?",
+        a: "On the Crew App's My Schedule screen, tap Start Day once and everyone on the crew's roster for that day is clocked in; tap End Day at the shop to clock everyone out (the app asks you to confirm if a job is still running). This is the paid shop-to-shop day that feeds payroll. Start Job and Stop Job separately clock the crew in and out of each stop for Job Costing. If nobody taps Start Day, starting the first job opens the day anyway and payroll flags it as 'Started at first job'. The Start Day button stays disabled if the crew has nobody on its roster (add people under Team > Crews > Team Assignments).",
+      },
+      {
+        q: "What if someone is late, out today, or leaves early?",
+        a: "On the Crew App's My Schedule screen tap Edit Crew. Mark 'Not working' for someone who is out (they're skipped by Start Day and Start Job), tap Clock In for a late arrival, 'Left for the day' for someone leaving early, and Back if they return the same day (the time away comes off as an unpaid break). The office can fix anything afterward on Report Center > Payroll, or with Edit Job Times on the Dispatch Board.",
+      },
+      {
+        q: "Where do I get crew hours for payroll?",
+        a: "Landscapt > Reports > Payroll tab (admins and managers only). Pick a period (up to 62 days, with This week / Last week / Last 2 weeks shortcuts), expand an employee to see each day, and correct clock-in/out times, unpaid break minutes or hours, add extra hours (shop time, PTO) with a note, then Save. Export as Excel (totals + daily), CSV or PDF. Corrections only change the Payroll report; recorded shifts and Job Costing are untouched. Amber 'check' badges mark days that were never ended, have an open job punch, or had no Start Day.",
+      },
+      {
         q: "Can two crews work the same job on the same day?",
         a: "Yes. Open the visit on the Dispatch Board (or the job's Visits table > Change date / crew) and use 'Crews on this stop' > 'Add another crew…'. Each crew gets its own visit, so it has its own row in its own column, its own stop in the Crew App, and clocks its own hours. The original visit is the Lead: it carries the revenue and creates the one invoice, the added crew's visit shows $0 and never invoices, and Job Costing adds up every crew's labor. A shared stop uses one contract visit, rescheduling one crew moves the others that haven't started, and snow visits can't take a second crew.",
       },
@@ -1904,7 +1916,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Where do I enter a property's zone measurements, like turf or mulch bed square footage?",
-        a: "On the client's Custom Fields tab, not the Add Property dialog — there's currently no dedicated per-zone editor in the UI. The client-level totals (Turf Sq Ft, Mulch Bed Sq Ft, Gross Sq Ft, Linear Ft Perimeter/Edging, Yards of Mulch) entered there feed the estimating engine's production-rate calculations.",
+        a: "Use More → Aerial Measurement on the client: trace each turf, mulch bed or hardscape area on the satellite map (Trace Area), cut out things like the house with Subtract Area, and measure fences or edging with Measure Distance. Totals are saved on the property, and for the client's own address they are also copied to the client's takeoff fields (Turf, Mulch Bed, Parking Lot / Hardscape, Gross). You can also type the client-level totals on the Edit Client dialog's Custom Fields tab. Either way they feed the estimating engine's production-rate calculations. The Add Property dialog does not capture measurements.",
       },
       {
         q: "Does the 'PO Number' field on an invoice link to a purchase order in the PO module?",
@@ -1943,6 +1955,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Users & Settings",
     items: [
+      {
+        q: "What is Ask AI, and what if it can't answer my question?",
+        a: "Ask AI (Help menu > Ask AI) answers how-do-I questions from these help guides and the app's data model, including whether something is actually tracked. Check anything critical, since answers are generated. Each organization can ask up to 100 questions a day. If an answer doesn't solve it, click 'Didn't answer it? Send this conversation to support', add an optional note, and send. Our team gets the whole conversation and replies to you directly: in your support chat if your plan includes chat support, otherwise by email.",
+      },
+      {
+        q: "How do I chat with support, and can I edit a message?",
+        a: "If you have chat support (included with the Growth and Enterprise plans, or as an add-on), Help > Chat with us opens a conversation with the Landscapt team; once it has messages, a chat bubble stays on screen as the way back in. Messages keep line breaks and bold text, and links are clickable. Hover your own message and click the pencil to edit it (it then shows 'edited'). The header shows Open, In progress or Resolved; a resolved conversation reopens when you send another message. Without chat support you can use Send Feedback or Email Support from the same Help menu.",
+      },
       {
         q: "How do I report a bug or suggest an idea?",
         a: "Use Send Feedback (the feedback button in the app, also on the Support page). Pick Bug, Idea or Other, describe what happened or what you'd like, and attach a screenshot if you can — the page you were on is included automatically. Submissions go straight to the Landscapt team.",

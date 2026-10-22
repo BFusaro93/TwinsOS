@@ -3068,6 +3068,7 @@ export type Database = {
           rate_bps: number
           sale_type: string | null
           service_name: string | null
+          source_ev_key: string | null
           statement_id: string
         }
         Insert: {
@@ -3089,6 +3090,7 @@ export type Database = {
           rate_bps: number
           sale_type?: string | null
           service_name?: string | null
+          source_ev_key?: string | null
           statement_id: string
         }
         Update: {
@@ -3110,6 +3112,7 @@ export type Database = {
           rate_bps?: number
           sale_type?: string | null
           service_name?: string | null
+          source_ev_key?: string | null
           statement_id?: string
         }
         Relationships: [
@@ -16969,6 +16972,25 @@ export type Database = {
       crm_commission_create_statement: {
         Args: { p_employee_id: string; p_from: string; p_to: string }
         Returns: string
+      }
+      crm_commission_pending_clawbacks: {
+        Args: { p_employee_id?: string }
+        Returns: {
+          basis_cents: number
+          category: string
+          claw_ev_key: string
+          client_name: string
+          commission_cents: number
+          earned_on: string
+          employee_id: string
+          invoice_id: string
+          invoice_number: number
+          plan_name: string
+          rate_bps: number
+          sale_type: string
+          service_name: string
+          source_ev_key: string
+        }[]
       }
       crm_commission_lines: {
         Args: { p_employee_id?: string; p_from: string; p_to: string }

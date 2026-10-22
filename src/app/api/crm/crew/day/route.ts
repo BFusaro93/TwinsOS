@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getRouteAuth, resolveCallerCrewId } from "@/lib/supabase/route-auth";
+import { getRouteAuth, resolveCallerCrewId, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { resolveWorkingMemberIds } from "@/lib/crew/stop-punches";
-import { startCrewDay, endCrewDay } from "@/lib/crew/day-shifts";
+import { startCrewDay, endCrewDay, openShiftLookbackDate } from "@/lib/crew/day-shifts";
 
 /**
  * The crew's paid day (shop to shop).
@@ -92,27 +92,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "That crew member isn't on your crew today" }, { status: 403 });
     }
 
-    if (action === "member_in") {
-      // Arriving (late): back on the roster, shift starts now.
-      await db.from("crm_crew_day_absences").update({ deleted_at: now })
-        .eq("crew_member_id", crewMemberId).eq("work_date", workDate).is("deleted_at", null);
-      const { data: shift } = await db.from("crm_crew_day_shifts").select("id, ended_at, break_minutes")
-        .eq("crew_member_id", crewMemberId).eq("work_date", workDate).is("deleted_at", null).maybeSingle();
-      if (shift) {
-        // Already has a shift today (left, then came back): reopen it, and take
-        // the time they were away off the clock as an unpaid break.
-        const awayMinutes = shift.ended_at
-          ? Math.max(0, Math.round((Date.now() - new Date(shift.ended_at as string).getTime()) / 60_000))
-          : 0;
-        await db.from("crm_crew_day_shifts")
-          .update({ ended_at: null, break_minutes: Number(shift.break_minutes ?? 0) + awayMinutes })
-          .eq("id", shift.id);
-      } else {
-        const { error } = await db.from("crm_crew_day_shifts").insert({
-          org_id: orgId, crew_member_id: crewMemberId, work_date: workDate, started_at: now, source: "crew", created_by: user.id,
-        });
-        if (error) throw new Error(error.message);
+    // The optional visit must be one of THIS crew's visits in this org —
+    // RLS only checks org_id, so a stray id could otherwise punch anyone.
+    if (visitId) {
+      const { data: visit } = await db.from("crm_job_visits")
+        .select("id, crew_id, crew_unassigned, crm_jobs(crew_id)")
+        .eq("id", visitId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
+      if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
+      if (!(await assertCallerOwnsVisit(db, user.id, orgId, visit))) {
+        return NextResponse.json({ error: "That visit isn't on your crew" }, { status: 403 });
       }
+    }
+
+    if (action === "member_in") {
+      // Arriving (late): back on the roster and the shift opened/reopened, in
+      // one transaction so a failure can't leave them neither absent nor in.
+      const { error: inErr } = await db.rpc("crew_day_member_in", {
+        p_member: crewMemberId, p_work_date: workDate, p_at: now,
+      });
+      if (inErr) throw new Error(inErr.message);
       if (visitId) {
         // A job is in progress: the member also joins its job punches from now.
         const { data: punch } = await db.from("crm_crew_member_times").select("id")
@@ -129,11 +127,20 @@ export async function POST(request: Request) {
 
     // member_out — left for the day: end the shift, end any open job punch,
     // and drop them from the roster so the next Start Job doesn't punch them.
-    const { data: open } = await db.from("crm_crew_day_shifts").select("id, started_at")
-      .eq("crew_member_id", crewMemberId).eq("work_date", workDate).is("deleted_at", null).is("ended_at", null).maybeSingle();
+    // The open shift may have started before midnight (storm work): look back
+    // a day, newest first, and never past 24h so a forgotten shift isn't
+    // closed at an absurd length.
+    const { data: openRows } = await db.from("crm_crew_day_shifts").select("id, started_at")
+      .eq("crew_member_id", crewMemberId).eq("org_id", orgId)
+      .gte("work_date", openShiftLookbackDate(workDate)).lte("work_date", workDate)
+      .gt("started_at", new Date(Date.now() - 24 * 3_600_000).toISOString())
+      .is("deleted_at", null).is("ended_at", null)
+      .order("started_at", { ascending: false }).limit(1);
+    const open = ((openRows ?? []) as { id: string; started_at: string }[])[0];
     if (open) {
-      const end = new Date(open.started_at as string).getTime() > Date.now() ? open.started_at : now;
-      await db.from("crm_crew_day_shifts").update({ ended_at: end }).eq("id", open.id);
+      const end = new Date(open.started_at).getTime() > Date.now() ? open.started_at : now;
+      const { error: closeErr } = await db.from("crm_crew_day_shifts").update({ ended_at: end }).eq("id", open.id);
+      if (closeErr) throw new Error(closeErr.message);
     }
     if (visitId) {
       await db.from("crm_crew_member_times").update({ clocked_out_at: now, updated_at: now })

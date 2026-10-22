@@ -176,6 +176,8 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
           )
           .in("status", ["completed", "in_progress"])
           .is("deleted_at", null)
+          // Revenue is counted once per stop (lead only).
+          .eq("crew_group_secondary", false)
           .is("crm_jobs.deleted_at", null);
         if (from) query = query.gte("scheduled_date", from);
         if (to) query = query.lte("scheduled_date", to);

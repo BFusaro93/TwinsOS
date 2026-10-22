@@ -250,7 +250,7 @@ export function UsersRolesGuide() {
             within the hour even if already logged in. A deactivated user shows an{" "}
             <strong>Inactive</strong> badge and a reactivate icon in place of the trash icon;
             clicking it restores their login immediately, with their role and any CRM employee link
-            untouched. For a shared crew login, this only affects sign-in — to take the crew itself
+            untouched. Marking the user&apos;s CRM employee record inactive has the same effect on permissions: a deactivated employee keeps no CRM or role permissions until reactivated. For a shared crew login, this only affects sign-in — to take the crew itself
             off the Dispatch Board, turn it off under Team → Crews instead.
           </li>
         </ol>

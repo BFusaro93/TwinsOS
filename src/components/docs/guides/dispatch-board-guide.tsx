@@ -26,7 +26,7 @@ const CALENDAR_SETTINGS: [string, string][] = [
 const COLUMNS: [string, string][] = [
   ["Service, Date, City, Zip", "Identify the visit and where it is."],
   ["Assigned", "Which crew (or Unassigned) currently owns the visit."],
-  ["Last Svc", "When this client was last serviced for this service — useful for spotting overdue recurring stops."],
+  ["Last Svc", "When this client was last serviced for this service — useful for spotting overdue recurring stops. A completed visit stamps its scheduled day, so a stop done on the 15th and marked complete on the 17th shows the 15th (a visit completed ahead of its scheduled day stamps today, and the date never moves backward)."],
   ["Start / End", "Scheduled arrival and departure window, editable inline."],
   ["B Hrs", "Budgeted hours — from the job's linked service (production rate × team size), or the job-level total as a last resort. Shown to two decimals."],
   ["Actual Hrs", "See the dedicated section below — this is the number that matters most for job costing. Shown to two decimals."],
@@ -249,7 +249,8 @@ export function DispatchBoardGuide() {
           takes a mowing crew and an enhancement crew. Open the visit, find{" "}
           <strong>Crews on this stop</strong>, and choose <strong>Add another crew…</strong>. (On the
           job page, use the same control inside the visit&apos;s Change date / crew editor.) The visit
-          needs a crew already, and the stop must not have started yet.
+          needs a crew already, and the stop must not have started yet. This is an office action:
+          crew logins can&apos;t add or remove crews, and the Crew App has no equivalent.
         </p>
         <p>
           Behind the scenes each crew gets <strong>its own visit</strong> for the stop. That&apos;s why

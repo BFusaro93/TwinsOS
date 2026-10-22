@@ -99,7 +99,7 @@ function QuestionCard({ item }: { item: StaffAskAIQuestion }) {
 
       <div className="mt-3 flex flex-col gap-2">
         <label className="text-xs font-medium text-slate-600" htmlFor={`res-${item.id}`}>
-          Correct answer (Ask AI reuses this for similar questions)
+          Correct answer (Ask AI reuses this for similar questions in every organization, so keep it generic: no customer, client, employee or company names)
         </label>
         <Textarea
           id={`res-${item.id}`}
