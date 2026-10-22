@@ -8,6 +8,7 @@ import type {
   CommissionSaleType,
   CommissionEarnedOn,
   CommissionLine,
+  CommissionPendingAdjustment,
   CommissionPlan,
   CommissionStatement,
   CommissionStatementLine,
@@ -284,9 +285,41 @@ export function useCommissionStatementLines(statementId: string | null) {
         basisCents: l.basis_cents,
         rateBps: l.rate_bps,
         commissionCents: l.commission_cents,
+        sourceEvKey: l.source_ev_key ?? null,
+        invoiceId: l.invoice_id ?? null,
       }));
     },
     enabled: !!statementId,
+  });
+}
+
+/**
+ * Clawback / offset adjustments the next statement will carry, for one rep or
+ * (employeeId omitted) every rep the caller may see. Not tied to any period.
+ */
+export function useCommissionPendingAdjustments(employeeId?: string) {
+  return useQuery<CommissionPendingAdjustment[]>({
+    queryKey: ["commission-pending-adjustments", employeeId ?? null],
+    queryFn: async () => {
+      const { data, error } = await db().rpc("crm_commission_pending_clawbacks", {
+        p_employee_id: employeeId ?? null,
+      });
+      if (error) throw error;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data ?? []).map((r: any): CommissionPendingAdjustment => ({
+        clawEvKey: r.claw_ev_key,
+        sourceEvKey: r.source_ev_key,
+        employeeId: r.employee_id,
+        invoiceId: r.invoice_id ?? null,
+        invoiceNumber: r.invoice_number ?? null,
+        clientName: r.client_name ?? null,
+        planName: r.plan_name ?? null,
+        serviceName: r.service_name ?? null,
+        basisCents: r.basis_cents,
+        rateBps: r.rate_bps,
+        commissionCents: r.commission_cents,
+      }));
+    },
   });
 }
 
@@ -298,7 +331,7 @@ export function useCreateCommissionStatement() {
       });
       if (error) throw error;
     },
-    [["commission-statements"], ["commission-lines"]],
+    [["commission-statements"], ["commission-lines"], ["commission-pending-adjustments"]],
   );
 }
 
@@ -320,6 +353,6 @@ export function useVoidCommissionStatement() {
       const { error } = await db().rpc("crm_commission_void_statement", { p_statement_id: id });
       if (error) throw error;
     },
-    [["commission-statements"], ["commission-lines"]],
+    [["commission-statements"], ["commission-lines"], ["commission-pending-adjustments"]],
   );
 }

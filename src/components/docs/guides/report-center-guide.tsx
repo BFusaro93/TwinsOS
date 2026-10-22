@@ -65,6 +65,7 @@ export function ReportCenterGuide() {
           <TOCLink href="#dates-and-limits">Date ranges, Eastern time, and large results</TOCLink>
           <TOCLink href="#custom-analysis">Custom analyses (&quot;My Reports&quot;)</TOCLink>
           <TOCLink href="#dashboards-vs-reports">Dashboards vs. individual reports</TOCLink>
+          <TOCLink href="#payroll">The Payroll tab</TOCLink>
           <TOCLink href="#graphics-library">The Graphics Library</TOCLink>
           <TOCLink href="#curated-dashboards">The curated, top-level dashboards</TOCLink>
           <TOCLink href="#kpi-scorecard">The KPI Scorecard</TOCLink>
@@ -90,9 +91,9 @@ export function ReportCenterGuide() {
           The CRM admin sidebar has a <strong>Reports</strong> link that points to{" "}
           <code>/crm/admin/reports</code>. That route renders a single client component,{" "}
           <code>ReportsHub</code>, which is a
-          five-tab shell driven by a <code>?tab=</code> query param — <strong>Dashboard</strong>,{" "}
+          six-tab shell driven by a <code>?tab=</code> query param — <strong>Dashboard</strong>,{" "}
           <strong>Custom Dashboards</strong>, <strong>Report Center</strong>,{" "}
-          <strong>My Reports</strong>, and <strong>Graphics Library</strong>. This is the &quot;Report
+          <strong>My Reports</strong>, <strong>Payroll</strong>, and <strong>Graphics Library</strong>. This is the &quot;Report
           Center&quot; proper. It&apos;s a separate thing from the top-level{" "}
           <code>/dashboards</code> route group covered below — that one is reached from its own
           sidebar (<code>ReportsSidebar</code>) and holds a set of hand-built, curated
@@ -359,6 +360,66 @@ export function ReportCenterGuide() {
           don&apos;t have permission to view this panel&quot; in place of the chart — see{" "}
           <a href="#permissions" className="font-semibold underline">Permissions and gating</a>.
         </p>
+      </Section>
+
+      <Section id="payroll" title="The Payroll tab">
+        <p>
+          <strong>Payroll</strong> turns the crew&apos;s Start Day / End Day clock (see the Crew App
+          guide) into hours per person per day, ready to correct and send to payroll. It is limited to{" "}
+          <strong>admins and roles with the &quot;View &amp; Edit Payroll Report&quot; permission</strong>{" "}
+          (Home → Report Access in the role editor): anyone else doesn&apos;t see the tab, and crew logins
+          can&apos;t read it at all.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Pick the period.</strong> From / To dates, or the <strong>This week</strong>,{" "}
+            <strong>Last week</strong> and <strong>Last 2 weeks</strong> buttons (weeks run Monday to
+            Sunday). It opens on last week. A single report covers at most 62 days.
+          </li>
+          <li>
+            <strong>Paid time is the shift.</strong> Each person&apos;s day is clock-in at the shop to
+            clock-out at the shop, less lunch and unpaid pauses (whether a job pause is paid follows
+            the company setting, or the visit&apos;s own override). The <strong>On jobs</strong> column
+            is the part of that day spent on stops &mdash; the same punches Job Costing uses &mdash; so
+            the gap is drive and shop time. If nobody tapped Start Day for a person, their job punches
+            are used instead and the day is flagged.
+          </li>
+          <li>
+            <strong>Totals by person.</strong> One row per employee with Day hours, On jobs, Extra and
+            Total. Click a row to open the day-by-day detail.
+          </li>
+          <li>
+            <strong>Correct any day.</strong> In the detail, change the <strong>clock-in and
+            clock-out times</strong>, the <strong>unpaid break minutes</strong>, or type the hours
+            directly to override them; add <strong>Extra</strong> hours (shop time, PTO, anything not
+            on the clock); write a <strong>note</strong> saying why; and click <strong>Save</strong>. An
+            end time earlier than the start is read as the next morning, for storm work past
+            midnight. The reset arrow puts the day back to the recorded figures. Edited days show an{" "}
+            <em>adjusted</em> badge.
+          </li>
+          <li>
+            <strong>Nothing else changes.</strong> Corrections live only on the Payroll report. The
+            recorded shifts and punches stay as they were, and Job Costing, job hours and the
+            Timesheet report are not affected.
+          </li>
+          <li>
+            <strong>Check badges.</strong> An amber <em>check</em> badge means a day needs a look:
+            the shift was never ended (hours show as zero until someone taps End Day or you set the
+            clock-out), a job punch is still open, or no one started the day for that person.
+            &quot;Started at first job&quot; means the day was opened by the first Start Job rather
+            than Start Day, so the real start was earlier.
+          </li>
+          <li>
+            <strong>Export.</strong> The <strong>Export</strong> menu has Excel (a Totals sheet plus a
+            Daily sheet), CSV of totals by employee, CSV of daily detail, and PDF. Hours are numbers,
+            so Excel and payroll uploads can add them up.
+          </li>
+        </ul>
+        <Callout>
+          Payroll reads the crew&apos;s roster, so an employee has to be on a crew (Team → Crews → Team
+          Assignments, or placed on one for the day on the Crew Board) to be clocked in by Start Day.
+          Someone marked <em>Not working</em> in Edit Crew is skipped.
+        </Callout>
       </Section>
 
       <Section id="graphics-library" title="The Graphics Library">
@@ -681,6 +742,14 @@ export function ReportCenterGuide() {
           All three downloads end with a <strong>Totals</strong> row matching the one on screen
           (per-group subtotals for grouped reports). If the on-screen result was truncated at
           5,000 rows, the export is too — and its totals cover only those rows.
+        </p>
+        <p>
+          <strong>Paper size.</strong> PDFs and printouts use US <strong>Letter</strong>. A report
+          PDF is portrait, and switches to landscape when any section has more than six columns.
+          Ticket printouts are Letter portrait. On a <strong>dashboard</strong>, the PDF button
+          opens the browser print dialog with the page laid out as shown (charts, KPI tiles and
+          tables, Letter landscape, with the dashboard and tab name as a heading) &mdash; choose{" "}
+          <strong>Save as PDF</strong> as the destination.
         </p>
         <p>
           <strong>Scheduled delivery.</strong> Reports flagged as schedulable — currently the five

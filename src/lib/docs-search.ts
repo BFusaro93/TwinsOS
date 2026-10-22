@@ -79,6 +79,18 @@ const SYNONYMS: Record<string, string[]> = {
   profitable: ["profit", "margin", "cost", "costing"],
   create: ["add", "new"],
   add: ["create", "new"],
+  payroll: ["hours", "shift", "paid", "timesheet"],
+  shift: ["day", "payroll", "clock"],
+  absence: ["working", "late", "leave"],
+  absent: ["working", "late", "leave"],
+  second: ["another", "shared", "lead"],
+  shared: ["another", "second", "lead"],
+  measure: ["aerial", "trace", "takeoff", "satellite", "square", "footage"],
+  measurement: ["aerial", "trace", "takeoff", "satellite", "square", "footage"],
+  takeoff: ["measurement", "aerial", "square", "footage"],
+  sqft: ["square", "footage", "takeoff", "measurement"],
+  hardscape: ["parking", "lot", "takeoff"],
+  trace: ["aerial", "measure", "draw", "satellite"],
 };
 
 /** Light suffix stripping so "crews"/"linked"/"linking" all meet at "crew"/"link". */

@@ -69,7 +69,10 @@ async function loadStaffAnswers(): Promise<StaffAnswer[]> {
 
 function formatStaffAnswers(answers: StaffAnswer[]): string {
   if (answers.length === 0) return "(none)";
-  return answers.map((a) => `- Q: ${a.question}\n  A (from the support team): ${a.resolution}`).join("\n");
+  // Only the staff-written resolution goes into the prompt. The question that
+  // prompted it came from another organization and must never be echoed (it was
+  // used server-side only to pick relevant answers).
+  return answers.map((a) => `- A (from the support team): ${a.resolution}`).join("\n");
 }
 
 function formatDataDictionaryContext(query: string): string {

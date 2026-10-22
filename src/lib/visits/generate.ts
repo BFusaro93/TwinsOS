@@ -393,6 +393,8 @@ export async function generateVisitsForJobs(
       .from("crm_job_visits")
       .select("job_service_id")
       .in("job_service_id", ids)
+      // A multi-crew stop is ONE visit against the budget.
+      .eq("crew_group_secondary", false)
       .or(countsFilter));
     if (error) { result.errors.push(error); return result; }
     for (const v of rows) {
@@ -409,6 +411,7 @@ export async function generateVisitsForJobs(
       .select("job_id")
       .in("job_id", ids)
       .is("job_service_id", null)
+      .eq("crew_group_secondary", false)
       .or(countsFilter));
     if (error) { result.errors.push(error); return result; }
     for (const v of rows) unlinkedByJob.set(v.job_id, (unlinkedByJob.get(v.job_id) ?? 0) + 1);
@@ -426,6 +429,7 @@ export async function generateVisitsForJobs(
       .from("crm_job_visits")
       .select("id", { count: "exact", head: true })
       .eq("job_id", j.id)
+      .eq("crew_group_secondary", false)
       .is("deleted_at", null);
     if (error) { result.errors.push((error as { message: string }).message); return result; }
     liveCountByJob.set(j.id, count ?? 0);

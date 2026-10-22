@@ -23,3 +23,14 @@ export function yearBounds(ymd: string): { from: string; to: string } {
   const y = ymd.slice(0, 4);
   return { from: `${y}-01-01`, to: `${y}-12-31` };
 }
+
+/** Red for negative cents (clawbacks, amounts owed back); empty otherwise. */
+export function negativeClass(cents: number): string {
+  return cents < 0 ? "text-red-600 dark:text-red-400" : "";
+}
+
+/** "Adjustment: Mowing" / "Adjustment: refund / void" -> "Mowing" / "Refund / void". */
+export function adjustmentServiceLabel(serviceName: string | null): string {
+  const s = (serviceName ?? "").replace(/^Adjustment:\s*/i, "").trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : "Refund / void";
+}

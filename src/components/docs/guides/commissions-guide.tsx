@@ -127,6 +127,22 @@ export function CommissionsGuide() {
           lines so they can go on another statement; a paid statement can&apos;t be voided. The period and
           totals are fixed once created, and <strong>View</strong> shows every line behind the total.
         </p>
+        <p>
+          <strong>Refunds and voids after a statement.</strong> A statement never changes after it is created, so
+          if money is later refunded, a payment is deleted, or an invoice is voided or edited down, the earlier
+          statement keeps its original amount. The shortfall is taken back on the rep&apos;s <em>next</em>
+          statement as an <strong>Adjustment</strong> line with a negative amount, at the rate the original line
+          earned. It is added once per change: a further refund adds only the extra difference, and if the
+          refund is reversed or the invoice un-voided before that statement is created, nothing is deducted. If
+          the adjustment is already on a statement and the refund is then reversed, the next statement gets a
+          matching positive adjustment. An adjustment is not tied to the period you pick, and a statement can
+          be created for an adjustment alone. Voiding a statement releases its adjustments along with its lines.
+          Before you create a statement, the rep&apos;s card on the Earnings tab shows <em>Includes $X in
+          adjustments for refunds/voids since the last statement</em>, and a Pending adjustments table lists
+          each line. On the statement, adjustment lines carry an <strong>Adjustment</strong> badge and a link to
+          the invoice, with negative amounts in red. If adjustments outweigh new earnings the statement total is
+          negative and is labeled <em>owed back</em>; it is an amount to carry against the rep&apos;s future pay.
+        </p>
       </Section>
 
       <Section id="limits" title="What it doesn&apos;t cover">

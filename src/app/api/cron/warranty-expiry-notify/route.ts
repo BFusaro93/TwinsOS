@@ -119,7 +119,11 @@ export async function GET(request: Request) {
       let emailTo: string | null = null;
       let prefs: Record<string, unknown> = {};
 
-      if (rep) {
+      // A rep with neither a linked login nor an email can't be reached at all;
+      // treat that like having no rep so org admins hear about it instead.
+      const repReachable = !!rep && (!!rep.user_id || !!rep.email);
+
+      if (rep && repReachable) {
         if (rep.user_id) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: profile } = await (supabase as any)
@@ -135,6 +139,30 @@ export async function GET(request: Request) {
         for (const a of (admins ?? []) as { id: string; notification_prefs: Record<string, unknown> | null }[]) {
           if (a.notification_prefs?.inAppWarrantyExpiring !== false) inAppUserIds.push(a.id);
         }
+        if (inAppUserIds.length === 0) {
+          // Nobody could be told: don't consume the claim, so a later run (after
+          // a rep or admin is set up) can still send it.
+          await releaseClaim("no reachable recipient");
+          continue;
+        }
+      }
+
+      // The in-app row is inserted before the email, so a failed email releases
+      // the claim and the next run retries. Skip users who already have this
+      // reminder (same warranty, same message = same end date) so a retry
+      // doesn't duplicate it.
+      if (inAppUserIds.length) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: existing } = await (supabase as any)
+          .from("notifications")
+          .select("user_id")
+          .eq("org_id", orgId)
+          .eq("type", "warranty_expiring")
+          .eq("entity_id", w.id as string)
+          .eq("message", message)
+          .in("user_id", inAppUserIds);
+        const already = new Set(((existing ?? []) as { user_id: string }[]).map((r) => r.user_id));
+        for (let i = inAppUserIds.length - 1; i >= 0; i--) if (already.has(inAppUserIds[i])) inAppUserIds.splice(i, 1);
       }
 
       if (inAppUserIds.length) {

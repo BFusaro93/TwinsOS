@@ -12,9 +12,9 @@ import { GuideLink } from "@/components/docs/GuideLink";
 const STAGES: [string, string][] = [
   ["Draft", "Default stage for a brand-new estimate. Still being built — line items and pricing are in flux. Drafts were never presented to a client, so Close Ratios and win-rate figures leave them out of both counts and amounts."],
   ["Quote", "Set manually once the estimate is ready for internal review — the numbers are considered final pending sign-off."],
-  ["Sent", "Set when the estimate is actually delivered to the client (email, PDF, or the client portal). Blocked from actually going out if Approval Status is still Pending — see the callout below. Pipeline dashboards count Sent estimates as open pipeline alongside Draft and Quote."],
+  ["Sent", "Set when the estimate is actually delivered to the client (email, PDF, or the client portal). Blocked from actually going out if Approval Status is still Pending — see the callout below. The bulk Mark as Sent action on the estimates list skips any selected estimate whose approval is pending or denied, and says how many it skipped; open those and send from the estimate. A bulk stage change that is blocked for some estimates (for example one with active jobs or invoices) still applies to the rest and reports how many couldn’t be moved. Pipeline dashboards count Sent estimates as open pipeline alongside Draft and Quote."],
   ["Accepted", "Set when the client accepts — in full or via a tiered/partial acceptance, whether you mark it in-app or the client accepts online through the proposal link. Once an estimate is Accepted, a Convert to Job button appears in its header; converting normally happens from here."],
-  ["Lost", "Set when the client declines — including a Decline in the client portal, which records the reason “Declined by client via portal” — or when an estimate is manually marked dead. Line items already marked “lost” individually (e.g. a tier the client unchecked when accepting) don’t count toward totals, and the Accepted Estimates by Service reports skip them."],
+  ["Lost", "Set when the client declines — including a Decline in the client portal, which records the reason “Declined by client via portal” — or when an estimate is manually marked dead. Line items already marked “lost” individually (e.g. a tier the client unchecked when accepting) don’t count toward totals, and the Accepted Estimates by Service reports skip them. Lines still marked “draft” (not yet part of the quote — the proposal hides them too) are left out of totals, the PDF and the client portal the same way."],
   ["Invoiced", "Set once billing has started against the estimate (a deposit, milestone, or the full amount has been invoiced)."],
 ];
 
@@ -347,13 +347,14 @@ export function EstimatingGuide() {
         <p>
           Production-rate lines need a quantity to divide by the service&rsquo;s rate &mdash;
           that quantity usually comes from a property&rsquo;s zone measurements: Turf Sq Ft, Mulch
-          Bed Sq Ft, Gross Sq Ft, Linear Ft Perimeter/Edging, Yards of Mulch.
+          Bed Sq Ft, Gross Sq Ft, Parking Lot / Hardscape Sq Ft, Linear Ft Perimeter/Edging, Yards of Mulch.
         </p>
         <Callout>
-          These are entered on the <strong>client&rsquo;s Custom Fields tab</strong>, not in the
-          Add Property dialog and not in a dedicated per-zone editor &mdash; there currently isn&rsquo;t
-          one. If a production-rate line is coming out to 0 budgeted hours, check that the relevant
-          measurement is actually filled in there.
+          These are kept on the <strong>client</strong>. Fill them in with{" "}
+          <strong>More &rarr; Aerial Measurement</strong> on the client (trace the lawn and beds on
+          a satellite map), or type them on the Edit Client dialog&rsquo;s Custom Fields tab. If a
+          production-rate line is coming out to 0 budgeted hours, check that the relevant
+          measurement is actually filled in on the client&rsquo;s Details tab.
         </Callout>
       </Section>
 
