@@ -270,10 +270,22 @@ export function ClientsGuide() {
           Properties are service addresses on one account &mdash; they share the client&apos;s
           balance, invoices and portal login. If each location needs its own invoices or balance
           (for example a management company with several communities), create each one as its own
-          client and link them under a parent account instead. The Add Property dialog also
-          doesn&apos;t capture zone measurements (turf sq ft, mulch beds, etc.) &mdash; use{" "}
-          <strong>More → Aerial Measurement</strong> or the client&apos;s Custom Fields tab. See the
-          next two sections.
+          client and link them under a parent account instead.
+        </Callout>
+        <p>
+          <strong>Measurements per property.</strong> The Add/Edit Property dialog has an optional{" "}
+          <strong>Measurements</strong> block (turf, mulch beds, gross, parking lot / hardscape,
+          perimeter, edging, yards of mulch), or trace them with{" "}
+          <strong>More → Aerial Measurement</strong>. When an estimate is for one of the
+          client&apos;s properties, production-rate lines default their quantity from that
+          property&apos;s measurements &mdash; a blank value stays blank rather than borrowing
+          another address&apos;s numbers. For the client&apos;s own address (the primary property),
+          the client&apos;s Custom Fields takeoffs and the property&apos;s measurements are kept in
+          step. See the next two sections.
+        </p>
+        <Callout>
+          Existing estimate lines keep the quantities they already have; the property&apos;s
+          measurements apply to services you add afterward.
         </Callout>
       </Section>
 
