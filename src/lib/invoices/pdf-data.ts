@@ -7,6 +7,7 @@ import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 import { loadInvoicePhotosForPdf } from "@/lib/invoices/photos";
 import { loadInvoiceChemicalsForPdf } from "@/lib/invoices/chemical-applications";
+import { loadInvoiceVisitNotes, combineInvoiceNotes } from "@/lib/invoices/visit-notes";
 
 // Shared by the single-invoice and bulk PDF routes — extracted from the
 // route handler so both can build the same per-invoice data shape and only
@@ -29,7 +30,7 @@ async function buildInvoicePDFData(
       *,
       clients(display_name, billing_address, billing_city, billing_state, billing_zip),
       crm_invoice_line_items(*),
-      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications)
+      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications, show_visit_notes)
     `)
     .eq("id", invoiceId)
     .eq("org_id", orgId)
@@ -45,7 +46,7 @@ async function buildInvoicePDFData(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: defaultTemplate } = await (supabase as any)
       .from("crm_invoice_pdf_templates")
-      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications")
+      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications, show_visit_notes")
       .eq("org_id", inv.org_id)
       .eq("is_default", true)
       .is("deleted_at", null)
@@ -105,9 +106,18 @@ async function buildInvoicePDFData(
     dueDate: inv.due_date as string | null,
     poNumber: inv.po_number as string | null,
     terms: inv.terms as string | null,
-    notes: template?.show_notes === false
-      ? null
-      : ((inv.notes as string | null) || (template?.default_notes as string | null) || null),
+    notes: combineInvoiceNotes(
+      template?.show_notes === false
+        ? null
+        : ((inv.notes as string | null) || (template?.default_notes as string | null) || null),
+      template?.show_visit_notes
+        ? await loadInvoiceVisitNotes(
+            supabase,
+            inv.org_id as string,
+            (inv.crm_invoice_line_items ?? []).map((li: Record<string, unknown>) => li.visit_id as string | null)
+          )
+        : null
+    ),
     advertisementText: (template?.advertisement_text as string | null) ?? null,
     viewOnlineUrl: shareToken ? buildInvoiceViewUrl(shareToken) : null,
     clientName: inv.clients?.display_name ?? null,

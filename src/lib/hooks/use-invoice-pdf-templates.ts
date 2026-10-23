@@ -17,6 +17,7 @@ function mapTemplate(row: any): InvoicePDFTemplate {
     accentColor: row.accent_color ?? null,
     showNotes: row.show_notes ?? true,
     showChemicalApplications: row.show_chemical_applications ?? false,
+    showVisitNotes: row.show_visit_notes ?? false,
     defaultNotes: row.default_notes ?? null,
     advertisementText: row.advertisement_text ?? null,
     deletedAt: row.deleted_at,
@@ -72,6 +73,7 @@ export function useUpdateInvoicePDFTemplate() {
       accentColor,
       showNotes,
       showChemicalApplications,
+      showVisitNotes,
       defaultNotes,
       advertisementText,
     }: {
@@ -82,6 +84,7 @@ export function useUpdateInvoicePDFTemplate() {
       accentColor?: string | null;
       showNotes?: boolean;
       showChemicalApplications?: boolean;
+      showVisitNotes?: boolean;
       defaultNotes?: string | null;
       advertisementText?: string | null;
     }) => {
@@ -94,6 +97,7 @@ export function useUpdateInvoicePDFTemplate() {
       if (accentColor !== undefined) updates.accent_color = accentColor;
       if (showNotes !== undefined) updates.show_notes = showNotes;
       if (showChemicalApplications !== undefined) updates.show_chemical_applications = showChemicalApplications;
+      if (showVisitNotes !== undefined) updates.show_visit_notes = showVisitNotes;
       if (defaultNotes !== undefined) updates.default_notes = defaultNotes;
       if (advertisementText !== undefined) updates.advertisement_text = advertisementText;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

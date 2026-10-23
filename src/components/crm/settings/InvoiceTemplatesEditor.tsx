@@ -88,6 +88,7 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
   const [accentColor, setAccentColor] = useState(template.accentColor ?? "#60ab45");
   const [showNotes, setShowNotes] = useState(template.showNotes);
   const [showChemicalApplications, setShowChemicalApplications] = useState(template.showChemicalApplications);
+  const [showVisitNotes, setShowVisitNotes] = useState(template.showVisitNotes);
   const [defaultNotes, setDefaultNotes] = useState(template.defaultNotes ?? "");
   const [advertisementText, setAdvertisementText] = useState(template.advertisementText ?? "");
 
@@ -100,6 +101,7 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
         accentColor: accentColor.trim() || null,
         showNotes,
         showChemicalApplications,
+        showVisitNotes,
         defaultNotes: defaultNotes.trim() || null,
         advertisementText: advertisementText.trim() || null,
       },
@@ -150,7 +152,11 @@ function TemplateEditPanel({ template, onClose }: { template: InvoicePDFTemplate
       </label>
       <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
         <Checkbox checked={showChemicalApplications} onCheckedChange={(v) => setShowChemicalApplications(v === true)} />
-        Add chemical application record (product, amount, method, targets, re-entry, applicator license)
+        Add chemical application record (product, EPA #, ratio, areas, amount, method, targets, re-entry, applicator)
+      </label>
+      <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
+        <Checkbox checked={showVisitNotes} onCheckedChange={(v) => setShowVisitNotes(v === true)} />
+        Include technician completion notes in the Notes section (customers will see what the crew writes)
       </label>
       <div>
         <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">

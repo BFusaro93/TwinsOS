@@ -268,6 +268,9 @@ export interface InvoicePDFTemplate {
    *  each invoiced visit (product, amount, method, targets, re-entry interval,
    *  applicator license). */
   showChemicalApplications: boolean;
+  /** Print the technician's completion note from each invoiced visit in the
+   *  Notes section. Customer-facing once on. */
+  showVisitNotes: boolean;
   /** Fallback text for the PDF's Notes section when an invoice has no notes
    *  of its own — set once here instead of retyping per invoice. */
   defaultNotes: string | null;
