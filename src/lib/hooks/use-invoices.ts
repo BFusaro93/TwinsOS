@@ -1847,11 +1847,14 @@ export function useApplyCreditToInvoice() {
  * invoice_id) therefore belongs to no project, which is correct: it's client
  * credit, not project revenue.
  */
-export function usePayments(clientId?: string, opts?: { projectId?: string | null }) {
+export function usePayments(clientId?: string, opts?: { projectId?: string | null; includeDeleted?: boolean }) {
   const projectId = opts?.projectId;
+  // The Payments list's Deleted tab needs soft-deleted rows; every other
+  // consumer wants live payments only.
+  const includeDeleted = opts?.includeDeleted === true;
   const projectKey = projectId === undefined ? "any" : projectId ?? "none";
   return useQuery({
-    queryKey: ["crm-payments", clientId ?? "all", { projectId: projectKey }],
+    queryKey: ["crm-payments", clientId ?? "all", { projectId: projectKey, includeDeleted }],
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1867,10 +1870,10 @@ export function usePayments(clientId?: string, opts?: { projectId?: string | nul
         let q = (supabase as any)
           .from("crm_payments")
           .select(`*, clients(display_name, billing_address), ${invoiceJoin}`, { count: "exact" })
-          .is("deleted_at", null)
           .order("payment_date", { ascending: false })
           // Tiebreaker: payments share dates, and range paging needs a total order.
           .order("id", { ascending: false });
+        if (!includeDeleted) q = q.is("deleted_at", null);
         if (clientId) q = q.eq("client_id", clientId);
         if (projectId) q = q.eq("crm_invoices.project_id", projectId);
         return q;
