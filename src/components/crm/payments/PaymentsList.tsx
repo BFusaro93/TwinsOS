@@ -929,7 +929,7 @@ type FilterField = "reference" | "date" | "client" | "address" | "method";
 
 // ── main list ─────────────────────────────────────────────────────────────────
 
-type Tab = "last30" | "deleted";
+type Tab = "last30" | "all" | "deleted";
 
 interface Props {
   clientId?: string;
@@ -944,10 +944,11 @@ export function PaymentsList({ clientId }: Props) {
   // action by payment method in practice.
   const canRefund = can("acct_process_cc_refunds_voids") || can("acct_delete_card_payments") || can("acct_delete_ach_payments");
   const canModify = can("acct_add_modify_payments");
-  const { data: payments, isLoading, refetch } = usePayments(clientId);
-  const { mutateAsync: bulkImportPayments } = useBulkImportPayments();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>("last30");
+  // Soft-deleted payments are only fetched while the Deleted tab is open.
+  const { data: payments, isLoading, refetch } = usePayments(clientId, { includeDeleted: activeTab === "deleted" });
+  const { mutateAsync: bulkImportPayments } = useBulkImportPayments();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creditDialogOpen, setCreditDialogOpen] = useState(false);
   const [editPayment, setEditPayment] = useState<CRMPayment | null>(null);
@@ -970,8 +971,13 @@ export function PaymentsList({ clientId }: Props) {
   const filtered = useMemo(() => {
     let list = payments ?? [];
 
+    // A column filter or a search is looking for something specific, so it
+    // reaches past the 30-day window instead of silently hiding older payments.
+    const narrowing = search.trim() !== "" || (activeFilter != null && filterValue !== "");
     if (activeTab === "last30") {
-      list = list.filter((p) => p.paymentDate >= thirtyDaysAgo);
+      list = list.filter((p) => p.deletedAt == null && (narrowing || p.paymentDate >= thirtyDaysAgo));
+    } else if (activeTab === "all") {
+      list = list.filter((p) => p.deletedAt == null);
     } else {
       list = list.filter((p) => p.deletedAt != null);
     }
@@ -1129,7 +1135,7 @@ export function PaymentsList({ clientId }: Props) {
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
           <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
-            {(["last30", "deleted"] as Tab[]).map((tab) => (
+            {(["last30", "all", "deleted"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1139,7 +1145,7 @@ export function PaymentsList({ clientId }: Props) {
                     : "text-slate-300 hover:text-white"
                 }`}
               >
-                {tab === "last30" ? "Last 30 Days" : "Deleted"}
+                {tab === "last30" ? "Last 30 Days" : tab === "all" ? "All" : "Deleted"}
               </button>
             ))}
           </div>
@@ -1188,7 +1194,7 @@ export function PaymentsList({ clientId }: Props) {
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={clientId ? 6 : 7} className="py-16 text-center text-sm text-slate-400 dark:text-neutral-500">
-                  No payments recorded yet
+                  {activeTab === "deleted" ? "No deleted payments" : "No payments recorded yet"}
                 </td>
               </tr>
             ) : (
@@ -1226,7 +1232,7 @@ export function PaymentsList({ clientId }: Props) {
                   </td>
                   <td className="px-3 py-2.5 text-right">
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {(p.isCredit ? can("acct_add_modify_credits") : canModify) && (
+                      {p.deletedAt == null && (p.isCredit ? can("acct_add_modify_credits") : canModify) && (
                         <button
                           className="rounded px-2 py-0.5 text-xs bg-muted hover:bg-slate-200 dark:hover:bg-neutral-700 text-slate-600 dark:text-neutral-400"
                           onClick={(e) => { e.stopPropagation(); setEditPayment(p); }}
@@ -1234,7 +1240,7 @@ export function PaymentsList({ clientId }: Props) {
                           Edit
                         </button>
                       )}
-                      {canRefund && (
+                      {p.deletedAt == null && canRefund && (
                         <button
                           className="rounded px-2 py-0.5 text-xs bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400"
                           onClick={(e) => { e.stopPropagation(); setRefundPayment(p); }}
