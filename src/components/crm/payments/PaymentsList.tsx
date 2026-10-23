@@ -929,7 +929,7 @@ type FilterField = "reference" | "date" | "client" | "address" | "method";
 
 // ── main list ─────────────────────────────────────────────────────────────────
 
-type Tab = "last30" | "deleted";
+type Tab = "last30" | "all" | "deleted";
 
 interface Props {
   clientId?: string;
@@ -970,8 +970,13 @@ export function PaymentsList({ clientId }: Props) {
   const filtered = useMemo(() => {
     let list = payments ?? [];
 
+    // A column filter or a search is looking for something specific, so it
+    // reaches past the 30-day window instead of silently hiding older payments.
+    const narrowing = search.trim() !== "" || (activeFilter != null && filterValue !== "");
     if (activeTab === "last30") {
-      list = list.filter((p) => p.paymentDate >= thirtyDaysAgo);
+      if (!narrowing) list = list.filter((p) => p.paymentDate >= thirtyDaysAgo);
+    } else if (activeTab === "all") {
+      list = list.filter((p) => p.deletedAt == null);
     } else {
       list = list.filter((p) => p.deletedAt != null);
     }
@@ -1129,7 +1134,7 @@ export function PaymentsList({ clientId }: Props) {
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
           <div className="ml-2 flex min-w-0 items-center gap-1 overflow-x-auto">
-            {(["last30", "deleted"] as Tab[]).map((tab) => (
+            {(["last30", "all", "deleted"] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1139,7 +1144,7 @@ export function PaymentsList({ clientId }: Props) {
                     : "text-slate-300 hover:text-white"
                 }`}
               >
-                {tab === "last30" ? "Last 30 Days" : "Deleted"}
+                {tab === "last30" ? "Last 30 Days" : tab === "all" ? "All" : "Deleted"}
               </button>
             ))}
           </div>
