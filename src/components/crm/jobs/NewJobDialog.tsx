@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateClientJob, useCRMServices, useCRMSchedules, useCRMCrews } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
 import { useContracts } from "@/lib/hooks/use-contracts";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -171,6 +171,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   /** Date Sold — feeds the Sales by Date Sold / Approved Sales by Sales Rep reports. Defaults to today. */
   const [dateSold, setDateSold] = useState(todayStr());
   const [crewId, setCrewId] = useState<string | null>(null);
+  // Which of the client's properties this job is for; only asked when the client has 2+.
+  const [propertyId, setPropertyId] = useState<string | null>(null);
   const [notesToCrew, setNotesToCrew] = useState("");
   const [isPending, setIsPending] = useState(false);
 
@@ -215,6 +217,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setSalesRepId(null);
       setDateSold(today);
       setCrewId(null);
+      setPropertyId(null);
       setNotesToCrew("");
       setStartDate(today);
       setCompleteByDate("");
@@ -533,9 +536,16 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
    * Orgs that want it enforced set Service Address to required under
    * Settings → Required Fields, which gates it at client creation instead.
    */
+  const { data: clientProperties } = useClientProperties(effectiveClientId);
+  // Ignore a pick that belongs to a previously selected client.
+  const effectivePropertyId = (clientProperties ?? []).some((p) => p.id === propertyId) ? propertyId : null;
+  const selectedProperty = (clientProperties ?? []).find((p) => p.id === effectivePropertyId) ?? null;
   const clientHasNoAddress =
     !!effectiveClient &&
     !resolveStopAddress({
+      property: selectedProperty
+        ? { address: selectedProperty.address, city: selectedProperty.city, state: selectedProperty.state, zip: selectedProperty.zip }
+        : null,
       client: {
         service_address: effectiveClient.serviceAddress,
         service_city: effectiveClient.serviceCity,
@@ -596,6 +606,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     try {
       const result = await createJob.mutateAsync({
         clientId: effectiveClientId,
+        propertyId: effectivePropertyId,
         jobType,
         projectId: jobType === "project" ? projectId : null,
         contractId: contractId ?? null,
@@ -767,6 +778,26 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </Select>
               </div>
             </div>
+
+            {(clientProperties ?? []).length >= 2 && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Property</Label>
+                <Select value={effectivePropertyId ?? "client"} onValueChange={(v) => setPropertyId(v === "client" ? null : v)}>
+                  <SelectTrigger><SelectValue placeholder="Client's main address" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="client">Client&apos;s main address</SelectItem>
+                    {(clientProperties ?? []).map((pr) => (
+                      <SelectItem key={pr.id} value={pr.id}>
+                        {[pr.name, pr.address].filter(Boolean).join(" — ") || "Property"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-400 dark:text-neutral-500">
+                  The crew is sent here, and the property&apos;s gate code and notes show on the job.
+                </p>
+              </div>
+            )}
 
             {clientHasNoAddress && (
               <div className="flex items-start gap-2 rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">

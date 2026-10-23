@@ -1514,6 +1514,7 @@ export function useCreateClientJob() {
         .insert({
           created_by: user?.id ?? null,
           client_id: values.clientId,
+          property_id: values.propertyId || null,
           job_type: values.jobType,
           project_id: values.projectId || null,
           // Never insert as already-completed, even when the "already done"

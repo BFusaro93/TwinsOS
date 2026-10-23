@@ -217,6 +217,8 @@ export interface NewJobFormValues {
 
 export interface NewClientJobFormValues {
   clientId: string;
+  /** The client's property this job is for (client_properties.id). Null = the client's own service address. */
+  propertyId?: string | null;
   jobType: JobType;
   projectId: string | null;
   contractId: string | null;

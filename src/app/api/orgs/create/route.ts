@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import { isBillablePlan } from "@/lib/stripe/plans";
 import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
 import { logger } from "@/lib/logger";
+import { notifySupportInboxOfTrialSignup } from "@/lib/staff-notify";
 
 const log = logger.child("orgs-create");
 const MAX_COMPANY_NAME = 120;
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
   }
 
-  let body: { companyName?: string; plan?: string };
+  let body: { companyName?: string; plan?: string; contactName?: string; contactEmail?: string; contactPhone?: string };
   try {
     body = await request.json();
   } catch {
@@ -83,6 +84,16 @@ export async function POST(request: Request) {
     log.error("organization insert failed", { error: orgErr?.message });
     return NextResponse.json({ error: "Failed to create organization" }, { status: 500 });
   }
+
+  // Tell support who signed up. Best-effort and awaited so the serverless
+  // function isn't frozen mid-send; a failure never blocks the signup.
+  await notifySupportInboxOfTrialSignup({
+    companyName,
+    contactName: typeof body.contactName === "string" ? body.contactName.trim().slice(0, 120) || null : null,
+    contactEmail: typeof body.contactEmail === "string" ? body.contactEmail.trim().slice(0, 200) || null : null,
+    contactPhone: typeof body.contactPhone === "string" ? body.contactPhone.trim().slice(0, 30) || null : null,
+    plan: pendingPlan,
+  }).catch(() => false);
 
   return NextResponse.json({ orgId: org.id }, { status: 200 });
 }

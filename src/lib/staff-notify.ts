@@ -145,3 +145,43 @@ export async function notifySupportInboxOfAskAI(item: {
     .then(() => true)
     .catch(() => false);
 }
+
+/**
+ * Emails the support inbox when someone starts a free trial, with the contact
+ * details they typed on the signup form. The email address is unverified at
+ * this point (the account isn't confirmed yet), so the email says so.
+ * Best-effort; returns whether it was sent.
+ */
+export async function notifySupportInboxOfTrialSignup(signup: {
+  companyName: string;
+  contactName: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  plan: string | null;
+}): Promise<boolean> {
+  const resendKey = process.env.RESEND_API_KEY;
+  if (!resendKey) return false;
+
+  const row = (label: string, value: string | null) =>
+    `<p style="margin:0 0 4px;color:#475569"><strong>${label}:</strong> ${value ? escapeHtml(value) : "—"}</p>`;
+  const html = `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px 24px">
+    <h2 style="margin:0 0 12px;font-size:20px;color:#0f172a">New trial signup: ${escapeHtml(signup.companyName)}</h2>
+    ${row("Company", signup.companyName)}
+    ${row("Contact", signup.contactName)}
+    ${row("Email", signup.contactEmail)}
+    ${row("Phone", signup.contactPhone)}
+    ${row("Plan chosen", signup.plan)}
+    <p style="margin:12px 0 0;color:#94a3b8;font-size:12px">Sent when the signup form is submitted, before the email address is confirmed.</p>
+  </div>`;
+
+  return new Resend(resendKey).emails
+    .send({
+      from: EMAIL_FROM,
+      to: SUPPORT_INBOX(),
+      ...(signup.contactEmail ? { replyTo: signup.contactEmail } : {}),
+      subject: `New trial signup: ${signup.companyName}`,
+      html,
+    })
+    .then(() => true)
+    .catch(() => false);
+}
