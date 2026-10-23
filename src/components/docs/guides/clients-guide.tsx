@@ -251,17 +251,29 @@ export function ClientsGuide() {
 
       <Section id="properties" title="Properties">
         <p>
-          On a client&apos;s detail page, click <strong>Add Property</strong> under Related
-          Properties. The dialog captures a property name/label (e.g. &quot;Main Office,&quot;
-          &quot;Rental Unit&quot;), street address, city, state, ZIP, a gate code, and notes to
-          crew. A single client can have any number of properties — this is how one commercial
-          client, or a residential client with a rental, ends up with several distinct service
-          addresses under one account.
+          A client can have more than one service address. Open the client&apos;s{" "}
+          <strong>Details</strong> tab and find the <strong>Properties</strong> list; click{" "}
+          <strong>+ Add</strong> (or <strong>More → Add Property</strong>). The dialog captures a
+          property name/label (e.g. &quot;Main Office,&quot; &quot;Rental Unit&quot;), street
+          address, city, state, ZIP, a gate code, and notes to crew. The same list is where you view
+          and edit them &mdash; click the pencil on a row.
+        </p>
+        <p>
+          <strong>Picking a property on a job.</strong> When a client has two or more properties,
+          the New Job dialog shows a <strong>Property</strong> field. Choose the location the job is
+          for and the crew is routed to that address, and the property&apos;s gate code and notes to
+          crew show on the job. Leave it on <em>Client&apos;s main address</em> to use the
+          client&apos;s own service address. A client with only one property doesn&apos;t see the
+          field.
         </p>
         <Callout>
-          The Add Property dialog does not capture zone measurements (turf sq ft, mulch beds, etc.)
-          &mdash; use <strong>More → Aerial Measurement</strong> or the client&apos;s Custom Fields
-          tab. See the next two sections.
+          Properties are service addresses on one account &mdash; they share the client&apos;s
+          balance, invoices and portal login. If each location needs its own invoices or balance
+          (for example a management company with several communities), create each one as its own
+          client and link them under a parent account instead. The Add Property dialog also
+          doesn&apos;t capture zone measurements (turf sq ft, mulch beds, etc.) &mdash; use{" "}
+          <strong>More → Aerial Measurement</strong> or the client&apos;s Custom Fields tab. See the
+          next two sections.
         </Callout>
       </Section>
 

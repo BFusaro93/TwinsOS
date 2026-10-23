@@ -645,7 +645,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Adding a property",
             detail:
-              "On a client's detail page, open the More menu and click 'Add Property'. Enter the property name/label, street address, city/state/zip, gate code, and notes to crew. Properties are address-only — a second billed-together location on the same account, not a separate jobs/invoicing record. Turf sq ft, mulch bed sq ft, gross sq ft, and linear ft measurements are entered on the client's Custom Fields tab and feed the estimating engine's production-rate calculations.",
+              "On a client's detail page, open the Details tab and click '+ Add' in the Properties list (or More → Add Property). Enter the property name/label, street address, city/state/zip, gate code, and notes to crew. Properties are extra service addresses on the same account: they share the client's balance and invoices. When a client has two or more properties, the New Job dialog asks which one the job is for, so the crew is routed to that address and sees its gate code and notes. If each location needs its own invoices or balance, create each as its own client and link them under a parent account. Turf sq ft, mulch bed sq ft, gross sq ft, and linear ft measurements are entered on the client's Custom Fields tab and feed the estimating engine's production-rate calculations.",
           },
           {
             step: "A location that needs its own jobs/invoices",
