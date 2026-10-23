@@ -961,6 +961,9 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </DialogHeader>
           <div className="py-2 space-y-2">
             <p className="text-sm text-slate-600 dark:text-neutral-400">Add any completion notes before finishing.</p>
+            <p className="text-xs text-slate-500 dark:text-neutral-500">
+              Completion notes can appear on the client&apos;s invoice, so keep them professional and client-friendly.
+            </p>
             <Textarea
               placeholder="Completion notes (optional)"
               value={clockOutNotes}

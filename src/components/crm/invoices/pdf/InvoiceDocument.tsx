@@ -28,6 +28,24 @@ export interface InvoicePDFPhoto {
   dataUri: string;
 }
 
+/** One chemical applied on an invoiced visit, for the "Chemical Application
+ *  Record" page. All display strings — "—" when unknown. */
+export interface InvoicePDFChemicalApplication {
+  serviceDate: string | null;
+  product: string;
+  /** EPA registration number, shown under the product name. */
+  epaNumber: string | null;
+  amount: string;
+  /** Application rate / ratio label, e.g. "1 gal per 1,000 sq ft (...)". */
+  rate: string;
+  method: string;
+  targets: string;
+  areasTreated: string;
+  reEntryInterval: string;
+  /** Applicator name and license, e.g. "Alex Stebbing (Lic. T38358)". */
+  applicator: string;
+}
+
 export interface InvoicePDFData {
   invoiceNumber: number;
   description: string | null;
@@ -38,6 +56,9 @@ export interface InvoicePDFData {
   notes: string | null;
   /** Photos attached to the invoice (max 12). Rendered after the invoice page. */
   photos?: InvoicePDFPhoto[];
+  /** Chemicals applied on the billed visits. Only populated when the invoice's
+   *  template has "show chemical applications" on; rendered after the invoice. */
+  chemicals?: InvoicePDFChemicalApplication[];
 
   clientName: string | null;
   clientAddress: string | null;
@@ -917,10 +938,80 @@ function InvoicePhotoPages({ invoice, org }: { invoice: InvoicePDFData; org: Org
   );
 }
 
+const SCH = StyleSheet.create({
+  page: { fontFamily: "Helvetica", fontSize: 8, color: "#1e293b", paddingTop: 40, paddingBottom: 60, paddingHorizontal: 40, backgroundColor: "#ffffff" },
+  heading: { fontSize: 14, fontFamily: "Helvetica-Bold", color: "#0f172a", marginBottom: 4 },
+  sub: { fontSize: 8, color: "#64748b", marginBottom: 12 },
+  headRow: { flexDirection: "row", backgroundColor: "#f1f5f9", borderBottomWidth: 1, borderBottomColor: "#cbd5e1", paddingVertical: 4, paddingHorizontal: 4 },
+  row: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#e2e8f0", paddingVertical: 4, paddingHorizontal: 4 },
+  headCell: { fontFamily: "Helvetica-Bold", fontSize: 7, color: "#475569" },
+  cDate: { width: "8%", paddingRight: 4 },
+  cProduct: { width: "18%", paddingRight: 4 },
+  cTargets: { width: "11%", paddingRight: 4 },
+  cAreas: { width: "11%", paddingRight: 4 },
+  cRate: { width: "14%", paddingRight: 4 },
+  cAmount: { width: "9%", paddingRight: 4 },
+  cMethod: { width: "9%", paddingRight: 4 },
+  cReEntry: { width: "8%", paddingRight: 4 },
+  cApplicator: { width: "12%" },
+  epa: { fontSize: 7, color: "#64748b", marginTop: 1 },
+  footer: { position: "absolute", bottom: 24, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between" },
+  footerText: { fontSize: 7, color: "#94a3b8" },
+});
+
+function formatServiceDate(d: string | null): string {
+  if (!d) return "—";
+  const [y, m, day] = d.slice(0, 10).split("-");
+  return y && m && day ? `${m}/${day}/${y}` : d;
+}
+
+function InvoiceChemicalPage({ invoice, org }: { invoice: InvoicePDFData; org: OrgPDFData }) {
+  const chemicals = invoice.chemicals ?? [];
+  if (chemicals.length === 0) return null;
+  return (
+    <Page size="LETTER" orientation="landscape" style={SCH.page}>
+      <Text style={SCH.heading}>Chemical Application Record</Text>
+      <Text style={SCH.sub}>Invoice #{invoice.invoiceNumber}{invoice.clientName ? ` · ${invoice.clientName}` : ""}</Text>
+      <View style={SCH.headRow} fixed>
+        <Text style={[SCH.headCell, SCH.cDate]}>Date</Text>
+        <Text style={[SCH.headCell, SCH.cProduct]}>Product &amp; EPA #</Text>
+        <Text style={[SCH.headCell, SCH.cTargets]}>Targets</Text>
+        <Text style={[SCH.headCell, SCH.cAreas]}>Areas Treated</Text>
+        <Text style={[SCH.headCell, SCH.cRate]}>Ratio</Text>
+        <Text style={[SCH.headCell, SCH.cAmount]}>Amount Applied</Text>
+        <Text style={[SCH.headCell, SCH.cMethod]}>Method</Text>
+        <Text style={[SCH.headCell, SCH.cReEntry]}>Re-Entry</Text>
+        <Text style={[SCH.headCell, SCH.cApplicator]}>Applicator</Text>
+      </View>
+      {chemicals.map((c, i) => (
+        <View key={i} style={SCH.row} wrap={false}>
+          <Text style={SCH.cDate}>{formatServiceDate(c.serviceDate)}</Text>
+          <View style={SCH.cProduct}>
+            <Text>{c.product}</Text>
+            {c.epaNumber ? <Text style={SCH.epa}>EPA {c.epaNumber}</Text> : null}
+          </View>
+          <Text style={SCH.cTargets}>{c.targets}</Text>
+          <Text style={SCH.cAreas}>{c.areasTreated}</Text>
+          <Text style={SCH.cRate}>{c.rate}</Text>
+          <Text style={SCH.cAmount}>{c.amount}</Text>
+          <Text style={SCH.cMethod}>{c.method}</Text>
+          <Text style={SCH.cReEntry}>{c.reEntryInterval}</Text>
+          <Text style={SCH.cApplicator}>{c.applicator}</Text>
+        </View>
+      ))}
+      <View style={SCH.footer} fixed>
+        <Text style={SCH.footerText}>{org.name}{org.phone ? ` · ${org.phone}` : ""}</Text>
+        <Text style={SCH.footerText} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
+      </View>
+    </Page>
+  );
+}
+
 function renderLayout(layoutKey: InvoicePDFLayoutKey, invoice: InvoicePDFData, org: OrgPDFData) {
   return (
     <>
       {renderInvoicePages(layoutKey, invoice, org)}
+      <InvoiceChemicalPage invoice={invoice} org={org} />
       <InvoicePhotoPages invoice={invoice} org={org} />
     </>
   );

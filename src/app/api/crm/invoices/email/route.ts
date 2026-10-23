@@ -10,6 +10,8 @@ import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { addParagraphSpacing, resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { loadInvoicePhotosForPdf } from "@/lib/invoices/photos";
+import { loadInvoiceChemicalsForPdf } from "@/lib/invoices/chemical-applications";
+import { loadInvoiceVisitNotes, combineInvoiceNotes } from "@/lib/invoices/visit-notes";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
 import { replyToFromCustomizations } from "@/lib/email/reply-to";
@@ -92,7 +94,7 @@ export async function POST(req: NextRequest) {
         linear_ft_perimeter, linear_ft_edging, gate_lock_code, notes_to_crew
       ),
       crm_invoice_line_items(*),
-      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text),
+      crm_invoice_pdf_templates(layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications, show_visit_notes),
       sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name, last_name)
     `)
     .eq("id", invoiceId)
@@ -172,7 +174,7 @@ export async function POST(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: chosenTemplate } = await (supabase as any)
       .from("crm_invoice_pdf_templates")
-      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text")
+      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications, show_visit_notes")
       .eq("id", body.templateId)
       .eq("org_id", inv.org_id)
       .is("deleted_at", null)
@@ -184,7 +186,7 @@ export async function POST(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: defaultTemplate } = await (supabase as any)
       .from("crm_invoice_pdf_templates")
-      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text")
+      .select("layout_key, logo_url, accent_color, show_notes, default_notes, advertisement_text, show_chemical_applications, show_visit_notes")
       .eq("org_id", inv.org_id)
       .eq("is_default", true)
       .is("deleted_at", null)
@@ -364,9 +366,18 @@ export async function POST(req: NextRequest) {
     dueDate: inv.due_date as string | null,
     poNumber: inv.po_number as string | null,
     terms: inv.terms as string | null,
-    notes: pdfTemplate?.show_notes === false
-      ? null
-      : ((inv.notes as string | null) || (pdfTemplate?.default_notes as string | null) || null),
+    notes: combineInvoiceNotes(
+      pdfTemplate?.show_notes === false
+        ? null
+        : ((inv.notes as string | null) || (pdfTemplate?.default_notes as string | null) || null),
+      pdfTemplate?.show_visit_notes
+        ? await loadInvoiceVisitNotes(
+            supabase,
+            inv.org_id as string,
+            (inv.crm_invoice_line_items ?? []).map((li: { visit_id?: string | null }) => li.visit_id)
+          )
+        : null
+    ),
     advertisementText: (pdfTemplate?.advertisement_text as string | null) ?? null,
     viewOnlineUrl,
     clientName: inv.clients?.display_name ?? null,
@@ -384,6 +395,14 @@ export async function POST(req: NextRequest) {
     lineItems: pdfLineItems,
     statement,
     photos: includePdf ? await loadInvoicePhotosForPdf(inv.id as string, inv.org_id as string) : [],
+    chemicals:
+      includePdf && pdfTemplate?.show_chemical_applications
+        ? await loadInvoiceChemicalsForPdf(
+            supabase,
+            inv.org_id as string,
+            (inv.crm_invoice_line_items ?? []).map((li: { visit_id?: string | null }) => li.visit_id)
+          )
+        : [],
   };
   const orgPdfData: OrgPDFData = {
     name: orgName,

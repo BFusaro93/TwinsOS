@@ -264,6 +264,13 @@ export interface InvoicePDFTemplate {
   logoUrl: string | null;
   accentColor: string | null;
   showNotes: boolean;
+  /** Append a "Chemical Application Record" page listing what was applied on
+   *  each invoiced visit (product, amount, method, targets, re-entry interval,
+   *  applicator license). */
+  showChemicalApplications: boolean;
+  /** Print the technician's completion note from each invoiced visit in the
+   *  Notes section. Customer-facing once on. */
+  showVisitNotes: boolean;
   /** Fallback text for the PDF's Notes section when an invoice has no notes
    *  of its own — set once here instead of retyping per invoice. */
   defaultNotes: string | null;
