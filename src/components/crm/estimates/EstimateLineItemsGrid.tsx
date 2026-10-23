@@ -8,7 +8,7 @@ import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
-import { useClient } from "@/lib/hooks/use-clients";
+import { useClient, useClientProperties } from "@/lib/hooks/use-clients";
 import { useCustomFieldDefs, useClientCustomFieldValues } from "@/lib/hooks/use-client-custom-fields";
 import { usePropertyCustomFieldValues, lookupRateMatrixMatch, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
 import { createClient } from "@/lib/supabase/client";
@@ -932,12 +932,19 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
   usePropertyCustomFieldValues(propertyId ?? "");
   const { data: customFieldDefs = [] } = useCustomFieldDefs();
   const { data: customFieldValues = [] } = useClientCustomFieldValues(clientId ?? "");
+  // When the estimate is for one of the client's properties, its quantities come from
+  // that property: a satellite property's own measurements (blank stays blank rather
+  // than borrowing another address's numbers), while the client's own-address (master)
+  // property still falls back to the client's figures it mirrors. No property = the client's.
+  const { data: clientProperties = [] } = useClientProperties(clientId ?? "");
+  const estimateProperty = propertyId ? clientProperties.find((p) => p.id === propertyId) ?? null : null;
+  const useSatelliteTakeoff = !!estimateProperty && !estimateProperty.isMaster;
   const takeoff: ClientTakeoff | null = client
     ? {
-        turfSqft: client.turfSqft ?? null,
-        mulchBedSqft: client.mulchBedSqft ?? null,
-        grossSqft: client.grossSqft ?? null,
-        customNumeric: Object.fromEntries(
+        turfSqft: useSatelliteTakeoff ? estimateProperty.turfSqft ?? null : (estimateProperty?.turfSqft ?? client.turfSqft ?? null),
+        mulchBedSqft: useSatelliteTakeoff ? estimateProperty.mulchBedSqft ?? null : (estimateProperty?.mulchBedSqft ?? client.mulchBedSqft ?? null),
+        grossSqft: useSatelliteTakeoff ? estimateProperty.grossSqft ?? null : (estimateProperty?.grossSqft ?? client.grossSqft ?? null),
+        customNumeric: useSatelliteTakeoff ? {} : Object.fromEntries(
           customFieldValues.flatMap((v) => {
             const def = customFieldDefs.find((d) => d.id === v.fieldDefId);
             return def && def.fieldType === "number" && typeof v.valueNumber === "number"

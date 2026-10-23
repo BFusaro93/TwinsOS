@@ -1724,6 +1724,41 @@ function ContactDialog({
 
 // ── AddPropertyDialog ─────────────────────────────────────────────────────────
 
+type PropertyTakeoffKey = "turfSqft" | "mulchBedSqft" | "grossSqft" | "parkingLotSqft" | "linearFtPerimeter" | "linearFtEdging" | "yardsOfMulch";
+
+const PROPERTY_TAKEOFF_FIELDS: { key: PropertyTakeoffKey; label: string }[] = [
+  { key: "turfSqft", label: "Turf Sq. Ft." },
+  { key: "mulchBedSqft", label: "Mulch Bed Sq. Ft." },
+  { key: "grossSqft", label: "Gross Sq. Ft." },
+  { key: "parkingLotSqft", label: "Parking Lot / Hardscape Sq. Ft." },
+  { key: "linearFtPerimeter", label: "Linear Ft. Perimeter" },
+  { key: "linearFtEdging", label: "Linear Ft. Edging" },
+  { key: "yardsOfMulch", label: "Yards of Mulch" },
+];
+
+const emptyTakeoffs = (): Record<PropertyTakeoffKey, string> =>
+  Object.fromEntries(PROPERTY_TAKEOFF_FIELDS.map((f) => [f.key, ""])) as Record<PropertyTakeoffKey, string>;
+
+function takeoffsToText(p: ClientProperty | null | undefined): Record<PropertyTakeoffKey, string> {
+  const out = emptyTakeoffs();
+  if (!p) return out;
+  for (const f of PROPERTY_TAKEOFF_FIELDS) {
+    const v = p[f.key];
+    out[f.key] = v != null ? String(v) : "";
+  }
+  return out;
+}
+
+/** Blank clears the value (null); anything non-numeric or negative is treated as blank. */
+function textToTakeoffs(t: Record<PropertyTakeoffKey, string>): Record<PropertyTakeoffKey, number | null> {
+  const out = {} as Record<PropertyTakeoffKey, number | null>;
+  for (const f of PROPERTY_TAKEOFF_FIELDS) {
+    const n = parseFloat(t[f.key].replace(/,/g, ""));
+    out[f.key] = Number.isFinite(n) && n >= 0 ? n : null;
+  }
+  return out;
+}
+
 function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientId: string; open: boolean; onOpenChange: (o: boolean) => void; property?: ClientProperty | null }) {
   const isEditing = !!property;
   const { mutateAsync: addProperty, isPending: isAdding } = useAddClientProperty();
@@ -1732,6 +1767,8 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
   const [form, setForm] = useState({
     name: "", address: "", city: "", state: "", zip: "", gateCode: "", notesToCrew: "",
   });
+  // Measured areas for this property, as typed text (blank = none).
+  const [takeoffs, setTakeoffs] = useState<Record<PropertyTakeoffKey, string>>(emptyTakeoffs);
   const addr = useVerifyAddress();
 
   // Seed the form whenever the dialog opens (either for a new property, or to edit an existing one)
@@ -1746,6 +1783,7 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
       gateCode: property?.gateCode ?? "",
       notesToCrew: property?.notesToCrew ?? "",
     });
+    setTakeoffs(takeoffsToText(property));
     // A reopened dialog must not show the previous property's verdict.
     addr.reset();
   }, [open, property, addr]);
@@ -1768,10 +1806,10 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
             }
           : {};
       if (isEditing && property) {
-        await updateProperty({ id: property.id, clientId, property: { ...form, ...checked } });
+        await updateProperty({ id: property.id, clientId, property: { ...form, ...checked, takeoffs: textToTakeoffs(takeoffs) } });
         toast.success("Property updated");
       } else {
-        await addProperty({ clientId, property: { ...form, ...checked } });
+        await addProperty({ clientId, property: { ...form, ...checked, takeoffs: textToTakeoffs(takeoffs) } });
         toast.success("Property added");
       }
       onOpenChange(false);
@@ -1827,6 +1865,23 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
             <div className="flex flex-col gap-1.5">
               <Label>Notes to Crew</Label>
               <Input value={form.notesToCrew} onChange={(e) => patch("notesToCrew", e.target.value)} />
+            </div>
+          </div>
+          {/* Measured areas for this property. Estimates for it default production-rate
+              quantities from these; trace them with More → Aerial Measurement instead if you prefer. */}
+          <div className="flex flex-col gap-1.5">
+            <Label>Measurements <span className="font-normal text-slate-400">(optional)</span></Label>
+            <div className="grid grid-cols-2 gap-2">
+              {PROPERTY_TAKEOFF_FIELDS.map((f) => (
+                <div key={f.key} className="flex flex-col gap-1">
+                  <span className="text-xs text-slate-500 dark:text-neutral-400">{f.label}</span>
+                  <Input
+                    inputMode="decimal"
+                    value={takeoffs[f.key]}
+                    onChange={(e) => setTakeoffs((p) => ({ ...p, [f.key]: e.target.value }))}
+                  />
+                </div>
+              ))}
             </div>
           </div>
           {/* Rate Matrix pricing inputs (e.g. Turf Sq Ft) — only meaningful once
