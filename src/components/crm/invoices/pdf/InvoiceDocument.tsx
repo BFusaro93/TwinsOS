@@ -33,9 +33,14 @@ export interface InvoicePDFPhoto {
 export interface InvoicePDFChemicalApplication {
   serviceDate: string | null;
   product: string;
+  /** EPA registration number, shown under the product name. */
+  epaNumber: string | null;
   amount: string;
+  /** Application rate / ratio label, e.g. "1 gal per 1,000 sq ft (...)". */
+  rate: string;
   method: string;
   targets: string;
+  areasTreated: string;
   reEntryInterval: string;
   applicatorLicense: string;
 }
@@ -939,13 +944,16 @@ const SCH = StyleSheet.create({
   headRow: { flexDirection: "row", backgroundColor: "#f1f5f9", borderBottomWidth: 1, borderBottomColor: "#cbd5e1", paddingVertical: 4, paddingHorizontal: 4 },
   row: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#e2e8f0", paddingVertical: 4, paddingHorizontal: 4 },
   headCell: { fontFamily: "Helvetica-Bold", fontSize: 7, color: "#475569" },
-  cDate: { width: "12%", paddingRight: 4 },
-  cProduct: { width: "22%", paddingRight: 4 },
-  cAmount: { width: "13%", paddingRight: 4 },
-  cMethod: { width: "14%", paddingRight: 4 },
-  cTargets: { width: "17%", paddingRight: 4 },
-  cReEntry: { width: "11%", paddingRight: 4 },
-  cLicense: { width: "11%" },
+  cDate: { width: "9%", paddingRight: 4 },
+  cProduct: { width: "19%", paddingRight: 4 },
+  cTargets: { width: "11%", paddingRight: 4 },
+  cAreas: { width: "11%", paddingRight: 4 },
+  cRate: { width: "17%", paddingRight: 4 },
+  cAmount: { width: "9%", paddingRight: 4 },
+  cMethod: { width: "9%", paddingRight: 4 },
+  cReEntry: { width: "8%", paddingRight: 4 },
+  cLicense: { width: "7%" },
+  epa: { fontSize: 7, color: "#64748b", marginTop: 1 },
   footer: { position: "absolute", bottom: 24, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between" },
   footerText: { fontSize: 7, color: "#94a3b8" },
 });
@@ -960,25 +968,32 @@ function InvoiceChemicalPage({ invoice, org }: { invoice: InvoicePDFData; org: O
   const chemicals = invoice.chemicals ?? [];
   if (chemicals.length === 0) return null;
   return (
-    <Page size="LETTER" style={SCH.page}>
+    <Page size="LETTER" orientation="landscape" style={SCH.page}>
       <Text style={SCH.heading}>Chemical Application Record</Text>
       <Text style={SCH.sub}>Invoice #{invoice.invoiceNumber}{invoice.clientName ? ` · ${invoice.clientName}` : ""}</Text>
       <View style={SCH.headRow} fixed>
         <Text style={[SCH.headCell, SCH.cDate]}>Date</Text>
-        <Text style={[SCH.headCell, SCH.cProduct]}>Product</Text>
+        <Text style={[SCH.headCell, SCH.cProduct]}>Product &amp; EPA #</Text>
+        <Text style={[SCH.headCell, SCH.cTargets]}>Targets</Text>
+        <Text style={[SCH.headCell, SCH.cAreas]}>Areas Treated</Text>
+        <Text style={[SCH.headCell, SCH.cRate]}>Ratio</Text>
         <Text style={[SCH.headCell, SCH.cAmount]}>Amount Applied</Text>
         <Text style={[SCH.headCell, SCH.cMethod]}>Method</Text>
-        <Text style={[SCH.headCell, SCH.cTargets]}>Targets</Text>
         <Text style={[SCH.headCell, SCH.cReEntry]}>Re-Entry</Text>
         <Text style={[SCH.headCell, SCH.cLicense]}>License #</Text>
       </View>
       {chemicals.map((c, i) => (
         <View key={i} style={SCH.row} wrap={false}>
           <Text style={SCH.cDate}>{formatServiceDate(c.serviceDate)}</Text>
-          <Text style={SCH.cProduct}>{c.product}</Text>
+          <View style={SCH.cProduct}>
+            <Text>{c.product}</Text>
+            {c.epaNumber ? <Text style={SCH.epa}>EPA {c.epaNumber}</Text> : null}
+          </View>
+          <Text style={SCH.cTargets}>{c.targets}</Text>
+          <Text style={SCH.cAreas}>{c.areasTreated}</Text>
+          <Text style={SCH.cRate}>{c.rate}</Text>
           <Text style={SCH.cAmount}>{c.amount}</Text>
           <Text style={SCH.cMethod}>{c.method}</Text>
-          <Text style={SCH.cTargets}>{c.targets}</Text>
           <Text style={SCH.cReEntry}>{c.reEntryInterval}</Text>
           <Text style={SCH.cLicense}>{c.applicatorLicense}</Text>
         </View>
