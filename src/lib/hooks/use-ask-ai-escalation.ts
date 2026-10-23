@@ -31,8 +31,9 @@ export function useSendAskAIToSupport(opts: { orgId: string; senderName: string;
       const body = formatAskAITranscript(messages, note);
       const logIds = messages.map((m) => m.logId).filter((id): id is string => !!id);
       // The escalate route emails support@ (once) for logged questions, so the
-      // per-staff email would be a duplicate. If nothing was logged, that route
-      // has nothing to email about, so fall back to the normal staff email.
+      // per-staff feedback email would be a duplicate. If nothing was logged, that
+      // route has nothing to email about, so fall back to the normal staff email.
+      // (Chat messages are emailed by the 5-minute no-reply cron regardless.)
       const notifyStaff = logIds.length === 0;
       if (opts.hasChatSupport) {
         await sendChat.mutateAsync({
@@ -40,7 +41,6 @@ export function useSendAskAIToSupport(opts: { orgId: string; senderName: string;
           senderType: "org",
           senderName: opts.senderName,
           body,
-          notifyStaff,
         });
       } else {
         await submitFeedback.mutateAsync({ category: "other", message: body, pageUrl, notifyStaff });

@@ -14,6 +14,8 @@ export const CONVERSATION_STATUS_LABEL: Record<ConversationStatus, string> = {
 export interface SupportMessage {
   id: string;
   orgId: string;
+  /** The customer user whose private thread this message is in. */
+  threadUserId: string | null;
   senderType: "org" | "staff";
   senderId: string | null;
   senderName: string;
@@ -23,11 +25,12 @@ export interface SupportMessage {
   editedAt: string | null;
 }
 
-const MESSAGE_COLUMNS = "id, org_id, sender_type, sender_id, sender_name, body, created_at, edited_at";
+const MESSAGE_COLUMNS = "id, org_id, thread_user_id, sender_type, sender_id, sender_name, body, created_at, edited_at";
 
 function mapMessage(row: {
   id: string;
   org_id: string;
+  thread_user_id: string | null;
   sender_type: string;
   sender_id: string | null;
   sender_name: string;
@@ -38,6 +41,7 @@ function mapMessage(row: {
   return {
     id: row.id,
     orgId: row.org_id,
+    threadUserId: row.thread_user_id,
     senderType: row.sender_type as "org" | "staff",
     senderId: row.sender_id,
     senderName: row.sender_name,
@@ -47,10 +51,10 @@ function mapMessage(row: {
   };
 }
 
-/** The current user's own org's conversation with Landscapt support. */
-export function useMyConversation(orgId: string | undefined) {
+/** The current user's own private thread with Landscapt support (RLS also limits reads to it). */
+export function useMyConversation(orgId: string | undefined, userId: string | undefined) {
   return useQuery({
-    queryKey: ["support-messages", "mine", orgId],
+    queryKey: ["support-messages", "mine", orgId, userId],
     queryFn: async (): Promise<SupportMessage[]> => {
       const supabase = createClient();
       // The generated types predate edited_at, so the row shape is asserted.
@@ -58,15 +62,24 @@ export function useMyConversation(orgId: string | undefined) {
         .from("support_messages")
         .select(MESSAGE_COLUMNS)
         .eq("org_id", orgId!)
+        .eq("thread_user_id", userId!)
         .order("created_at", { ascending: true });
       if (error) throw error;
       return (data as unknown as Parameters<typeof mapMessage>[0][]).map(mapMessage);
     },
-    enabled: !!orgId,
+    enabled: !!orgId && !!userId,
   });
 }
 
-/** Staff inbox: every org that has a conversation, most recent first. */
+/** Identifies one private thread: an org plus the customer user it belongs to (null for legacy staff-only threads). */
+export interface ThreadRef {
+  orgId: string;
+  threadUserId: string | null;
+}
+
+export const threadKey = (t: ThreadRef) => `${t.orgId}:${t.threadUserId ?? "none"}`;
+
+/** Staff inbox: every customer thread (one per person), most recent first. */
 export function useStaffConversationList(enabled: boolean) {
   return useQuery({
     queryKey: ["support-messages", "staff-inbox"],
@@ -74,7 +87,7 @@ export function useStaffConversationList(enabled: boolean) {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("support_messages")
-        .select("org_id, body, sender_type, created_at")
+        .select("org_id, thread_user_id, body, sender_type, sender_name, created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
 
@@ -86,66 +99,76 @@ export function useStaffConversationList(enabled: boolean) {
       const orgNames = new Map((orgs as { id: string; name: string }[]).map((o) => [o.id, o.name]));
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: statusRows } = await (supabase as any).from("support_conversations").select("org_id, status");
-      const statusByOrg = new Map<string, ConversationStatus>(
-        ((statusRows ?? []) as { org_id: string; status: ConversationStatus }[]).map((r) => [r.org_id, r.status])
+      const { data: statusRows } = await (supabase as any).from("support_conversations").select("org_id, thread_user_id, status");
+      const statusByThread = new Map<string, ConversationStatus>(
+        ((statusRows ?? []) as { org_id: string; thread_user_id: string | null; status: ConversationStatus }[]).map(
+          (r) => [threadKey({ orgId: r.org_id, threadUserId: r.thread_user_id }), r.status]
+        )
       );
 
-      const byOrg = new Map<string, {
-        orgId: string; orgName: string; lastMessage: string; lastMessageAt: string; status: ConversationStatus;
-      }>();
-      for (const row of data) {
-        if (!byOrg.has(row.org_id)) {
-          byOrg.set(row.org_id, {
-            orgId: row.org_id,
+      type InboxRow = {
+        orgId: string; threadUserId: string | null; orgName: string; personName: string;
+        lastMessage: string; lastMessageAt: string; status: ConversationStatus;
+      };
+      const byThread = new Map<string, InboxRow>();
+      // Newest first: the first row per thread is its latest message; the person's name is
+      // the newest customer-side sender_name in it.
+      for (const row of data as unknown as {
+        org_id: string; thread_user_id: string | null; body: string; sender_type: string; sender_name: string; created_at: string;
+      }[]) {
+        const ref = { orgId: row.org_id, threadUserId: row.thread_user_id };
+        const key = threadKey(ref);
+        const existing = byThread.get(key);
+        if (!existing) {
+          byThread.set(key, {
+            ...ref,
             orgName: orgNames.get(row.org_id) ?? "Unknown org",
+            personName: row.sender_type === "org" ? row.sender_name : "",
             lastMessage: row.body,
             lastMessageAt: row.created_at,
-            status: statusByOrg.get(row.org_id) ?? "open",
+            status: statusByThread.get(key) ?? "open",
           });
+        } else if (!existing.personName && row.sender_type === "org") {
+          existing.personName = row.sender_name;
         }
       }
-      return Array.from(byOrg.values());
+      return Array.from(byThread.values());
     },
     enabled,
   });
 }
 
-/** Staff view of a specific org's conversation. */
-export function useOrgConversation(orgId: string | null) {
+/** Staff view of one customer thread. */
+export function useThreadConversation(thread: ThreadRef | null) {
   return useQuery({
-    queryKey: ["support-messages", "org", orgId],
+    queryKey: ["support-messages", "thread", thread ? threadKey(thread) : null],
     queryFn: async (): Promise<SupportMessage[]> => {
-      if (!orgId) return [];
+      if (!thread) return [];
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("support_messages")
-        .select(MESSAGE_COLUMNS)
-        .eq("org_id", orgId)
-        .order("created_at", { ascending: true });
+      let q = supabase.from("support_messages").select(MESSAGE_COLUMNS).eq("org_id", thread.orgId);
+      q = thread.threadUserId ? q.eq("thread_user_id", thread.threadUserId) : q.is("thread_user_id", null);
+      const { data, error } = await q.order("created_at", { ascending: true });
       if (error) throw error;
       return (data as unknown as Parameters<typeof mapMessage>[0][]).map(mapMessage);
     },
-    enabled: !!orgId,
+    enabled: !!thread,
   });
 }
 
-/** Status of one org's thread (open / in progress / resolved); null until it has any message. */
-export function useConversationStatus(orgId: string | null | undefined) {
+/** Status of one thread (open / in progress / resolved); null until it has any message. */
+export function useConversationStatus(thread: ThreadRef | null | undefined) {
   return useQuery({
-    queryKey: ["support-messages", "status", orgId],
+    queryKey: ["support-messages", "status", thread ? threadKey(thread) : null],
     queryFn: async (): Promise<ConversationStatus | null> => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("support_conversations")
-        .select("status")
-        .eq("org_id", orgId!)
-        .maybeSingle();
+      let q = (supabase as any).from("support_conversations").select("status").eq("org_id", thread!.orgId);
+      q = thread!.threadUserId ? q.eq("thread_user_id", thread!.threadUserId) : q.is("thread_user_id", null);
+      const { data, error } = await q.maybeSingle();
       if (error) throw error;
       return (data?.status as ConversationStatus | undefined) ?? null;
     },
-    enabled: !!orgId,
+    enabled: !!thread,
   });
 }
 
@@ -153,15 +176,15 @@ export function useConversationStatus(orgId: string | null | undefined) {
 export function useSetConversationStatus() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ orgId, status }: { orgId: string; status: ConversationStatus }) => {
+    mutationFn: async ({ orgId, threadUserId, status }: ThreadRef & { status: ConversationStatus }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("support_conversations")
         .upsert(
-          { org_id: orgId, status, status_changed_at: new Date().toISOString(), status_changed_by: user?.id ?? null },
-          { onConflict: "org_id" }
+          { org_id: orgId, thread_user_id: threadUserId, status, status_changed_at: new Date().toISOString(), status_changed_by: user?.id ?? null },
+          { onConflict: "org_id,thread_user_id" }
         );
       if (error) throw error;
     },
@@ -190,40 +213,29 @@ export function useSendSupportMessage() {
       senderType: "org" | "staff";
       senderName: string;
       body: string;
-      /** Email Landscapt staff about this message (default true). Ask AI escalations opt out: support@ gets its own email. */
-      notifyStaff?: boolean;
+      /** Staff replies only: the customer user whose thread this answers. A customer's own messages always go to their own thread. */
+      threadUserId?: string | null;
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in");
 
-      const { data: inserted, error } = await supabase
+      const { error } = await supabase
         .from("support_messages")
         .insert({
           org_id: input.orgId,
+          thread_user_id: input.senderType === "org" ? user.id : (input.threadUserId ?? null),
           sender_type: input.senderType,
           sender_id: user.id,
           sender_name: input.senderName,
           body: input.body,
         })
-        .select("id")
-        .single();
       if (error) throw error;
-
-      // A customer message emails Landscapt staff (new conversation, a reply
-      // to staff, or after a quiet gap). Best-effort — the message is saved.
-      if (input.senderType === "org" && input.notifyStaff !== false) {
-        void fetch("/api/support/notify-chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: inserted.id }),
-        }).catch(() => {});
-      }
+      // Staff are emailed by the support-chat-notify cron when a customer message
+      // has gone 5 minutes without a staff reply — nothing to fire from here.
     },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["support-messages", "mine"] });
-      queryClient.invalidateQueries({ queryKey: ["support-messages", "org", variables.orgId] });
-      queryClient.invalidateQueries({ queryKey: ["support-messages", "staff-inbox"] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["support-messages"] });
     },
   });
 }

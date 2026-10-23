@@ -47,7 +47,8 @@ export function ChatDialog({
   const scrollRef = useRef<HTMLDivElement>(null);
   const sendMessage = useSendSupportMessage();
   const { currentUser } = useCurrentUserStore();
-  const { data: status } = useConversationStatus(open ? orgId : null);
+  // A customer's thread is their own: keyed by org + their user id.
+  const { data: status } = useConversationStatus(open ? { orgId, threadUserId: currentUser.id } : null);
 
   useSupportMessagesRealtime(open ? orgId : null);
 

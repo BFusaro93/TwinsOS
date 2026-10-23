@@ -15110,6 +15110,8 @@ export type Database = {
           sender_id: string | null
           sender_name: string
           sender_type: string
+          staff_notified_at: string | null
+          thread_user_id: string | null
         }
         Insert: {
           body: string
@@ -15120,6 +15122,8 @@ export type Database = {
           sender_id?: string | null
           sender_name: string
           sender_type: string
+          staff_notified_at?: string | null
+          thread_user_id?: string | null
         }
         Update: {
           body?: string
@@ -15130,6 +15134,8 @@ export type Database = {
           sender_id?: string | null
           sender_name?: string
           sender_type?: string
+          staff_notified_at?: string | null
+          thread_user_id?: string | null
         }
         Relationships: [
           {
@@ -15142,6 +15148,13 @@ export type Database = {
           {
             foreignKeyName: "support_messages_sender_id_fkey"
             columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_messages_thread_user_id_fkey"
+            columns: ["thread_user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
