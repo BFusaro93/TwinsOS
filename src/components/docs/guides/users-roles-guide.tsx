@@ -206,6 +206,13 @@ export function UsersRolesGuide() {
             those and editing the KPI Scorecard.
           </li>
           <li>
+            <strong>View &amp; Edit Payroll Report</strong> (Home &gt; Report Access) unlocks the
+            Payroll tab in the Report Center, where each person&apos;s Start Day / End Day hours are
+            reviewed, corrected and exported. Admins always have it; the seeded Owner, Operations
+            Manager and Office Admin roles have it by default. A profile role of Manager alone does
+            not grant it.
+          </li>
+          <li>
             <strong>Individual report keys</strong> under CRM Reports, Scheduling Reports, and
             Accounting Reports each unlock one pre-built report by name (Client Balance, Job Cost
             Summary, A/R Aging Report, …). The same keys also gate the raw datasets behind custom

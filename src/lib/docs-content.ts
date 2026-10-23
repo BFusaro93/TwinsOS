@@ -1880,7 +1880,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Where do I get crew hours for payroll?",
-        a: "Landscapt > Reports > Payroll tab (admins and managers only). Pick a period (up to 62 days, with This week / Last week / Last 2 weeks shortcuts), expand an employee to see each day, and correct clock-in/out times, unpaid break minutes or hours, add extra hours (shop time, PTO) with a note, then Save. Export as Excel (totals + daily), CSV or PDF. Corrections only change the Payroll report; recorded shifts and Job Costing are untouched. Amber 'check' badges mark days that were never ended, have an open job punch, or had no Start Day.",
+        a: "Landscapt > Reports > Payroll tab (admins and any role with the \"View & Edit Payroll Report\" permission, under Report Access in the role editor; other users don't see the tab). Pick a period (up to 62 days, with This week / Last week / Last 2 weeks shortcuts), expand an employee to see each day, and correct clock-in/out times, unpaid break minutes or hours, add extra hours (shop time, PTO) with a note, then Save. Export as Excel (totals + daily), CSV or PDF. Corrections only change the Payroll report; recorded shifts and Job Costing are untouched. Amber 'check' badges mark days that were never ended, have an open job punch, or had no Start Day.",
       },
       {
         q: "Can two crews work the same job on the same day?",
