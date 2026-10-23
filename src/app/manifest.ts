@@ -9,7 +9,9 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Landscapt",
     description: "CRM, field service, work orders, purchasing & asset management",
     id: "/",
-    start_url: "/",
+    // Opens the login screen (signed-in users are sent on to /home). "/" is the marketing
+    // landing page for anyone logged out, which is what a home-screen icon showed.
+    start_url: "/login",
     scope: "/",
     display: "standalone",
     orientation: "any",

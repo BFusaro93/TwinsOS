@@ -14,7 +14,7 @@ import {
 import { FeedbackDialog } from "@/components/shared/FeedbackDialog";
 import { AskAIPanel } from "@/components/shared/AskAIPanel";
 import { SUPPORT_EMAIL } from "@/components/marketing/config";
-import { useChatStore } from "@/stores";
+import { useChatStore, useCurrentUserStore } from "@/stores";
 import { useAddonAccess } from "@/lib/hooks/use-module-access";
 
 /** Single TopBar entry point for Ask AI + Send Feedback, replacing the two
@@ -29,7 +29,10 @@ export function HelpMenu() {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [askAiOpen, setAskAiOpen] = useState(false);
   const { setOpen: setChatOpen } = useChatStore();
-  const { allowed: hasChatSupport } = useAddonAccess("chat_support");
+  const { allowed: hasChatSupportAddon } = useAddonAccess("chat_support");
+  const { currentUser } = useCurrentUserStore();
+  // The support conversation is org-wide, so crew logins never get it (see SupportChatWidget).
+  const hasChatSupport = hasChatSupportAddon && currentUser.role !== "crew";
 
   return (
     <>
