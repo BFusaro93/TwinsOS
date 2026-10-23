@@ -126,6 +126,7 @@ export function mapJob(row: any): CRMJob {
     ratePerInchCents: row.rate_per_inch_cents ?? null,
     assetType: row.asset_type ?? null,
     salesRepId: row.sales_rep_id ?? null,
+    saleType: row.sale_type ?? null,
     source: row.source ?? null,
     paymentType: row.payment_type ?? null,
     poNumber: row.po_number ?? null,
@@ -732,6 +733,26 @@ function applyJobServiceFallback(visit: CRMJobVisit, row: any): CRMJobVisit {
   return visit;
 }
 
+/**
+ * Shared-stop budget: each crew on a multi-crew stop carries an even share of
+ * the stop's budgeted hours, so per-crew and per-day totals don't count the
+ * full budget once per crew. Mirrors the rpt_job_visits split. Only members
+ * present in `visits` (and not cancelled) count toward the divisor.
+ */
+export function splitCrewGroupBudget(visits: CRMJobVisit[]): CRMJobVisit[] {
+  const sizes = new Map<string, number>();
+  for (const v of visits) {
+    if (v.crewGroupId && v.status !== 'cancelled') sizes.set(v.crewGroupId, (sizes.get(v.crewGroupId) ?? 0) + 1);
+  }
+  if (sizes.size === 0) return visits;
+  return visits.map((v) => {
+    const n = v.crewGroupId ? sizes.get(v.crewGroupId) ?? 1 : 1;
+    if (n <= 1) return v;
+    const b = computeBudgetedHours(v);
+    return b != null ? { ...v, budgetedHours: b / n } : v;
+  });
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapVisit(row: any): CRMJobVisit {
   return {
@@ -758,6 +779,8 @@ export function mapVisit(row: any): CRMJobVisit {
     crewId: row.crew_id ?? null,
     crewUnassigned: row.crew_unassigned ?? false,
     crewName: row.crm_crews?.name ?? null,
+    crewGroupId: row.crew_group_id ?? null,
+    crewGroupSecondary: row.crew_group_secondary ?? false,
     scheduledDate: row.scheduled_date,
     startTime: row.start_time ?? null,
     endTime: row.end_time ?? null,
@@ -776,7 +799,9 @@ export function mapVisit(row: any): CRMJobVisit {
     invoiceDescription: row.invoice_description ?? null,
     menCount: row.men_count ?? 0,
     qty: row.qty ?? null,
-    rateCents: row.rate_cents ?? null,
+    // A secondary crew on a shared stop carries no revenue — the lead visit bills
+    // and reports the stop's value once (see 20261029000000_multi_crew_visits.sql).
+    rateCents: row.crew_group_secondary ? 0 : (row.rate_cents ?? null),
     jobComments: Array.isArray(row.job_comments)
       ? row.job_comments
       : typeof row.job_comments === "string" && row.job_comments
@@ -854,7 +879,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
       // range was silently truncated. Page through everything.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = await fetchAllRows<any>(buildQuery);
-      const visits = (data.map(mapVisit)) as CRMJobVisit[];
+      const visits = splitCrewGroupBudget(data.map(mapVisit)) as CRMJobVisit[];
       // Filter out snow jobs. For cancelled/completed parent jobs, only hide the
       // visit if the visit itself is still pending (scheduled/dispatched) — completed
       // and skipped visits should always remain visible so they appear in the board's
@@ -1009,6 +1034,47 @@ export function useReturnVisitToWaitingList() {
       if (data.clientId) {
         qc.invalidateQueries({ queryKey: ['clients', data.clientId, 'activity'] });
       }
+    },
+  });
+}
+
+/**
+ * Multi-crew stops: add a second (third…) crew to a visit — creates that crew's
+ * own sibling visit for the same stop and day. See
+ * supabase/migrations/20261029000000_multi_crew_visits.sql.
+ */
+export function useAddVisitCrew() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ visitId, crewId }: { visitId: string; crewId: string }) => {
+      const res = await fetch(`/api/crm/visits/${visitId}/crews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ crewId }),
+      });
+      const body = await res.json().catch(() => ({})) as { error?: string; visitId?: string };
+      if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Failed to add crew');
+      return body.visitId as string;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
+    },
+  });
+}
+
+/** Takes one crew back off a multi-crew stop (soft-deletes that crew's visit; only before it has started). */
+export function useRemoveVisitCrew() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (visitId: string) => {
+      const res = await fetch(`/api/crm/visits/${visitId}/crews`, { method: 'DELETE' });
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Failed to remove crew');
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
     },
   });
 }
@@ -1316,7 +1382,14 @@ export function useUpdateVisit() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update(dbUpdates as any)
         .eq('id', id);
-      if (error) throw error;
+      if (error) {
+        // One crew can only appear once per multi-crew stop
+        // (crm_job_visits_crew_group_crew_unique).
+        if (error.code === '23505' && String(error.message ?? '').includes('crew_group_crew_unique')) {
+          throw new Error('That crew is already working this stop. Pick a different crew, or remove the duplicate crew from the stop first.');
+        }
+        throw error;
+      }
 
       if (updates.status === 'dispatched' && before && before.status !== 'dispatched') {
         await loadServiceChemicalsForVisit(supabase, id).catch(() => 0);
@@ -1448,6 +1521,7 @@ export function useCreateClientJob() {
         .insert({
           created_by: user?.id ?? null,
           client_id: values.clientId,
+          property_id: values.propertyId || null,
           job_type: values.jobType,
           project_id: values.projectId || null,
           // Never insert as already-completed, even when the "already done"
@@ -1471,6 +1545,7 @@ export function useCreateClientJob() {
           rate_per_inch_cents: values.ratePerInchCents ?? null,
           asset_type: values.assetType || null,
           sales_rep_id: values.salesRepId || null,
+          sale_type: values.saleType ?? null,
           source: values.source || null,
           payment_type: values.paymentType || null,
           po_number: values.poNumber || null,
@@ -2468,7 +2543,7 @@ export function useJobVisits(jobId: string) {
         .order('scheduled_date', { ascending: true });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data.map((row: any) => applyJobServiceFallback(mapVisit(row), row))) as CRMJobVisit[];
+      return splitCrewGroupBudget(data.map((row: any) => applyJobServiceFallback(mapVisit(row), row))) as CRMJobVisit[];
     },
     enabled: !!jobId,
   });
@@ -2488,7 +2563,7 @@ export function useClientAllVisits(clientId: string) {
         .order('scheduled_date', { ascending: false });
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data.map((row: any) => applyJobServiceFallback(mapVisit(row), row))) as CRMJobVisit[];
+      return splitCrewGroupBudget(data.map((row: any) => applyJobServiceFallback(mapVisit(row), row))) as CRMJobVisit[];
     },
     enabled: !!clientId,
   });

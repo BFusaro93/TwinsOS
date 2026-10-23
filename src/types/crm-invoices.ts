@@ -68,6 +68,8 @@ export interface InvoiceLineItem {
   hours: number | null;
   men: number | null;
   visitId: string | null;
+  /** The catalog service this line bills; drives P&L and commission. */
+  serviceId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,6 +90,8 @@ export interface CRMInvoice {
   /** Project this invoice bills against — derived from crmJobId by a DB trigger when unset. */
   projectId: string | null;
   salesRepId: string | null;
+  /** New vs renewal for commission; null inherits from the job / contract / estimate. */
+  saleType: "new" | "renewal" | null;
   description: string;
   status: InvoiceStatus;
   invoiceDate: string;
@@ -212,6 +216,7 @@ export interface CRMContract {
   includeSubProperties: boolean;
   source: string | null;
   salesRepId: string | null;
+  saleType: "new" | "renewal" | null;
   lastBilledDate: string | null;
   monthlyAmounts: MonthlyAmounts;
   invoiceLineItems: string[];

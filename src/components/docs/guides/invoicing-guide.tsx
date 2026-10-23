@@ -104,6 +104,9 @@ export function InvoicingGuide() {
           Snow billing runs storm-by-storm on per-inch/hourly rates a flat auto-invoice can&apos;t
           compute — see <GuideLink className="underline" href="/settings/support/snow-guide">Snow Invoicing</GuideLink>.
         </Callout>
+              <p>
+          Shared stops bill once. When two crews work the same stop (Dispatch Board guide: &quot;Two crews on one stop&quot;), only the lead crew&apos;s visit creates the invoice. The added crew&apos;s visit carries no revenue and its Invoice button is hidden; if you try to invoice it by another route you&apos;re pointed to the lead&apos;s invoice.
+        </p>
       </Section>
 
       <Section id="tax-on-auto-invoices" title="Sales tax on invoices generated from jobs">
@@ -146,6 +149,19 @@ export function InvoicingGuide() {
             lines &mdash; Save is refused with &quot;Add at least one line item with a description or
             amount before saving this invoice.&quot; Every line that&apos;s kept needs a description or
             an amount; rows you added and left blank are dropped.
+          </li>
+          <li>
+            <strong>Every line bills a service.</strong> Each line has a service dropdown, and Save is
+            refused until every line has one &mdash; there are no free-form lines. The service decides
+            where the revenue lands in reports and which commission rate applies (see{" "}
+            <GuideLink href="/settings/support/commissions-guide" className="text-[#60ab45] underline">Commissions</GuideLink>
+            ). Lines created from visits, estimates and contracts get their service automatically, and a
+            line left without one shows in amber.
+          </li>
+          <li>
+            <strong>Sale type.</strong> The header&apos;s <em>Sale Type</em> (New sale or Renewal /
+            existing account) decides which commission rate applies. Left blank, it uses the job&apos;s,
+            contract&apos;s or estimate&apos;s, then counts as a new sale.
           </li>
           <li>
             <strong>Abandoned new invoices don&apos;t linger.</strong> Opening New Invoice creates a

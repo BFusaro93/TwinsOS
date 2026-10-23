@@ -12,6 +12,7 @@ import {
   useUpdateCrewMember,
 } from "@/lib/hooks/use-employees";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { useVerifyAddress } from "@/lib/hooks/use-verify-address";
 import { AddressSuggestion } from "@/components/shared/AddressSuggestion";
@@ -420,14 +421,15 @@ function TeamDetailsTab({
                   <SelectItem value="none">None</SelectItem>
                   {availableLogins.map((l) => (
                     <SelectItem key={l.id} value={l.id}>
-                      {l.name}
+                      {l.role === "crew" ? l.name : `${l.name} (${l.role.charAt(0).toUpperCase()}${l.role.slice(1)})`}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">
-                The shared crew login (e.g. a field team&apos;s clock-in account) that sees this team&apos;s
-                visits in the Crew App.
+                Who sees this team&apos;s stops in the Crew App: a shared crew login (e.g. a field
+                team&apos;s clock-in account) or a regular user who works this crew, so they don&apos;t need
+                a second login. A regular user finds it under Scheduling → My Crew Schedule.
               </p>
             </Field>
             <Field label="Tags">
@@ -844,21 +846,18 @@ export function CrewsList() {
                         </span>
                       }
                     >
-                      {crew.isActive ? (
-                        <button
-                          className="text-sm text-slate-700 dark:text-neutral-300 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                          onClick={() => void handleDeactivate(crew.id, crew.name)}
-                        >
-                          Active
-                        </button>
-                      ) : (
-                        <button
-                          className="text-sm text-slate-400 dark:text-neutral-500 hover:text-green-600 dark:hover:text-green-400 transition-colors"
-                          onClick={() => handleActivate(crew.id)}
-                        >
-                          Inactive
-                        </button>
-                      )}
+                      <label className="flex w-fit cursor-pointer items-center gap-2">
+                        <Switch
+                          checked={crew.isActive}
+                          onCheckedChange={(next) =>
+                            next ? void handleActivate(crew.id) : void handleDeactivate(crew.id, crew.name)
+                          }
+                          aria-label={`${crew.name} is ${crew.isActive ? "active" : "inactive"}`}
+                        />
+                        <span className={`text-sm ${crew.isActive ? "text-slate-700 dark:text-neutral-300" : "text-slate-400 dark:text-neutral-500"}`}>
+                          {crew.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </label>
                     </PermissionGate>
                   </td>
                 </tr>

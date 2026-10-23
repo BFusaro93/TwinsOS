@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, parseISO, differenceInMinutes } from "date-fns";
-import { MapPin, Clock, Users, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
-import { useMyCrewStops, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive } from "@/lib/hooks/use-crew-app";
+import { MapPin, Clock, Users, Sun, Moon, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
+import { useMyCrewStops, useStopPartnerCrews, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive, useCrewDay, useCrewDayAction } from "@/lib/hooks/use-crew-app";
 import { useCurrentUserStore } from "@/stores";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { EditCrewDialog } from "@/components/crm/crew/EditCrewDialog";
@@ -40,7 +40,7 @@ const STATUS_CONFIG: Record<VisitStatus, { label: string; color: string; icon: R
   skipped:     { label: "Skipped",      color: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400", icon: <XCircle className="h-3 w-3" /> },
 };
 
-function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
+function StopCard({ stop, partners, onClick }: { stop: Stop; partners: string[]; onClick: () => void }) {
   const cfg = STATUS_CONFIG[stop.derivedStatus];
   const services = stop.visits.flatMap(visitServiceNames).join(", ");
   const startTime = stop.visits.find((v) => v.startTime)?.startTime;
@@ -63,6 +63,11 @@ function StopCard({ stop, onClick }: { stop: Stop; onClick: () => void }) {
               </span>
             )}
           </div>
+          {partners.length > 0 && (
+            <p className="text-xs text-violet-700 dark:text-violet-400 mt-0.5">
+              With {partners.join(", ")}
+            </p>
+          )}
           {stop.address && (
             <button
               onClick={(e) => { e.stopPropagation(); openInMaps(stop.address); }}
@@ -116,16 +121,26 @@ export default function CrewSchedulePage() {
   const { today: orgToday } = useOrgDates();
   const today = orgToday();
   const { data: stops = [], isLoading } = useMyCrewStops(today, true);
+  const { data: partnerCrews } = useStopPartnerCrews(stops.flatMap((s) => s.visits));
   const { data: crewInfo } = useMyCrewInfo();
   const { data: drive } = useCrewDriveToday(today);
   const startDrive = useStartDrive();
   const endDrive = useEndDrive();
+  const { data: crewDay } = useCrewDay();
+  const dayAction = useCrewDayAction();
   const { currentUser, currentUserLoaded } = useCurrentUserStore();
   const [editCrewOpen, setEditCrewOpen] = useState(false);
 
   const completed = stops.filter(s => s.derivedStatus === "completed").length;
   const total     = stops.length;
   const anyJobActive = stops.some(s => s.derivedStatus === "in_progress");
+  // The paid day, shop to shop: started once the leader taps Start Day, ended
+  // when no one is still on the clock after End Day.
+  const dayMembers = crewDay?.members ?? [];
+  const dayStarts = dayMembers.map(m => m.startedAt).filter((t): t is string => !!t).sort();
+  const dayStartedAt = dayStarts[0] ?? null;
+  const dayOpen = dayMembers.some(m => m.startedAt && !m.endedAt);
+  const dayEnded = !!dayStartedAt && !dayOpen;
 
   return (
     <div className="flex flex-col min-h-dvh">
@@ -186,6 +201,47 @@ export default function CrewSchedulePage() {
               />
             </div>
           </div>
+        )}
+      </div>
+
+      {/* The paid day — clock the whole crew in at the shop and out at the
+          shop. Individual exceptions (late, out, left early) are in Edit Crew. */}
+      <div className="px-4 pt-4">
+        {!dayStartedAt ? (
+          <Button
+            className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white h-12 text-base"
+            onClick={() => dayAction.mutate({ action: "start_day" })}
+            disabled={dayAction.isPending || dayMembers.length === 0}
+          >
+            {dayAction.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sun className="h-5 w-5" />}
+            Start Day
+          </Button>
+        ) : dayOpen ? (
+          <div className="bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-green-800 dark:text-green-300">Day started {format(parseISO(dayStartedAt), "h:mm a")}</p>
+              <p className="text-xs text-green-700 dark:text-green-400">
+                {dayMembers.filter(m => m.startedAt && !m.endedAt).length} on the clock
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 border-red-300 dark:border-red-800 text-red-600 dark:text-red-400"
+              onClick={() => {
+                if (anyJobActive && !window.confirm("A job is still in progress. End the day anyway?")) return;
+                dayAction.mutate({ action: "end_day" });
+              }}
+              disabled={dayAction.isPending}
+            >
+              {dayAction.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Moon className="h-4 w-4" />}
+              End Day
+            </Button>
+          </div>
+        ) : (
+          <p className="text-xs text-center text-slate-400 dark:text-neutral-500">
+            {dayEnded && "Day ended — everyone is clocked out."}
+          </p>
         )}
       </div>
 
@@ -274,6 +330,7 @@ export default function CrewSchedulePage() {
             <div className="flex-1 pb-1">
               <StopCard
                 stop={stop}
+                partners={[...new Set(stop.visits.flatMap((v) => partnerCrews?.get(v.id) ?? []))]}
                 onClick={() => router.push(`/crm/crew/stops/${stop.anchorVisitId}`)}
               />
             </div>

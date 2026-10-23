@@ -23,7 +23,7 @@ const LANDSCAPT_ENTITIES: [string, string, string][] = [
   ["Clients", "displayName", "accountType, primaryPhone, primaryEmail, billingAddress/City/State/Zip, serviceAddress/City/State/Zip, source, accountNumber"],
   ["Leads", "displayName", "accountType, primaryPhone, primaryEmail, billingAddress/City/State/Zip, source"],
   ["Estimates", "clientName, description", "estimateDate, validUntilDate, poNumber, stage"],
-  ["Invoices", "clientName, description, amount", "invoiceDate, dueDate, poNumber, status, taxAmount"],
+  ["Invoices", "clientName, service, description, amount", "invoiceDate, dueDate, poNumber, status, taxAmount"],
   ["Contracts", "clientName, title", "status, startDate, endDate, monthlyAmount, billingFrequency, billingDayOfMonth, billMonthInAdvance, paymentType, poNumber, autoGenerate, isActive, includeSubProperties, defaultService, invoiceLineItems (separate lines with |), janAmount … decAmount (optional seasonal amounts)"],
   ["Payments", "clientName, amount", "paymentDate, method, reference, memo, invoiceNumber"],
   ["Tickets", "subject", "clientName, type, status, priority, category, body, dueDate"],

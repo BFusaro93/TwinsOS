@@ -1,5 +1,6 @@
 "use client";
 
+import { SaleTypeSelect, type SaleTypeValue } from "@/components/crm/commissions/SaleTypeSelect";
 import { escapeCsvCell } from "@/lib/csv";
 import { useState } from "react";
 import Link from "next/link";
@@ -535,13 +536,14 @@ function ServiceLineItemPicker({ onAdd }: { onAdd: (name: string) => void }) {
 // ── other details tab ─────────────────────────────────────────────────────────
 
 function OtherDetailsTab({
-  source, salesRepId, salesRepName,
+  source, salesRepId, salesRepName, saleType,
   onChange,
 }: {
   source: string;
   salesRepId: string;
   salesRepName?: string | null;
-  onChange: (patch: { source?: string; salesRepId?: string }) => void;
+  saleType: SaleTypeValue;
+  onChange: (patch: { source?: string; salesRepId?: string; saleType?: SaleTypeValue }) => void;
 }) {
   const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
@@ -573,6 +575,11 @@ function OtherDetailsTab({
               )}
             </SelectContent>
           </Select>
+        </FieldRow>
+        <FieldRow label="Sale Type">
+          <div className="w-64">
+            <SaleTypeSelect value={saleType} onChange={(v) => onChange({ saleType: v })} className="h-8 text-sm" />
+          </div>
         </FieldRow>
       </Section>
     </div>
@@ -1080,6 +1087,7 @@ export function ContractDialog({
 
   const [source, setSource] = useState(contract?.source ?? "");
   const [salesRepId, setSalesRepId] = useState(contract?.salesRepId ?? "");
+  const [saleType, setSaleType] = useState<SaleTypeValue>(contract?.saleType ?? null);
 
   const { mutateAsync: createContract, isPending: creating } = useCreateContract();
   const { mutateAsync: updateContract, isPending: updating } = useUpdateContract();
@@ -1140,6 +1148,7 @@ export function ContractDialog({
           includeSubProperties: details.includeSubProperties,
           source: source || undefined,
           salesRepId: salesRepId || undefined,
+          saleType,
           monthlyAmounts: details.monthlyAmounts,
           invoiceLineItems: details.lineItems,
           defaultService: details.defaultService || undefined,
@@ -1163,6 +1172,7 @@ export function ContractDialog({
             include_sub_properties: details.includeSubProperties,
             source: source || null,
             sales_rep_id: salesRepId || null,
+            sale_type: saleType,
             monthly_amounts: details.monthlyAmounts,
             invoice_line_items: details.lineItems,
             default_service: details.defaultService || null,
@@ -1252,7 +1262,9 @@ export function ContractDialog({
               source={source}
               salesRepId={salesRepId}
               salesRepName={contract?.salesRepName}
+              saleType={saleType}
               onChange={(p) => {
+                if (p.saleType !== undefined) setSaleType(p.saleType);
                 if (p.source !== undefined) setSource(p.source);
                 if (p.salesRepId !== undefined) setSalesRepId(p.salesRepId);
               }}

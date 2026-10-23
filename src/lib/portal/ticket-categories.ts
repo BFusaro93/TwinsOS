@@ -25,5 +25,8 @@ export async function getEffectiveTicketCategories(
     .order("sort_order")
     .order("value");
 
-  return (data ?? []).map((row: { value: string }) => row.value);
+  // "Upsell" is the internal category for crew-suggested work; clients never file under it.
+  return (data ?? [])
+    .map((row: { value: string }) => row.value)
+    .filter((value: string) => value !== "Upsell");
 }

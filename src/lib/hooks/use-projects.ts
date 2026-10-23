@@ -268,6 +268,8 @@ export function useUpdateProject() {
     onSettled: (_, _err, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["projects", id] });
+      // A DB trigger starts a project's pending warranties when it flips to complete.
+      queryClient.invalidateQueries({ queryKey: ["crm-warranties"] });
     },
   });
 }

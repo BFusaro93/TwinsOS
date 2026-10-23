@@ -20,9 +20,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useDamageCase, useUpdateDamageCase, useDeleteDamageCaseExpense, useDeleteDamageCase } from "@/lib/hooks/use-damage-cases";
 import { usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { AddExpenseDialog } from "./AddExpenseDialog";
+import { useWarranties } from "@/lib/hooks/use-warranties";
+import { warrantyCovers } from "./WarrantyClaimPicker";
 import { NewDamageCaseDialog } from "./NewDamageCaseDialog";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { TicketDetailSheet } from "@/components/crm/tickets/TicketDetailSheet";
+import { useTicketsLinkedTo } from "@/lib/hooks/use-tickets";
 import { DamageCasePhotos } from "@/components/damage-cases/DamageCasePhotos";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -91,6 +95,7 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
           {data.propertyAddress && (
             <p className="text-sm text-muted-foreground">{data.propertyAddress}</p>
           )}
+          {data.warrantyId && <LinkedWarrantyLine warrantyId={data.warrantyId} incidentDate={data.dateOfIncident} />}
         </div>
         <div className="flex items-center gap-2">
           <Badge className={TYPE_COLORS[data.caseType]}>{DAMAGE_CASE_TYPE_LABELS[data.caseType]}</Badge>
@@ -276,7 +281,7 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
       <Tabs defaultValue="expenses" className="flex-1 flex flex-col min-h-0">
         <div className="shrink-0 overflow-x-auto border-b px-4 md:px-6">
           <TabsList className="h-10 bg-transparent p-0">
-            {(["expenses", "files", "comments", "audit trail"] as const).map((v) => (
+            {(["expenses", "files", "tickets", "comments", "audit trail"] as const).map((v) => (
               <TabsTrigger
                 key={v}
                 value={v === "audit trail" ? "audit" : v}
@@ -360,6 +365,10 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
           <AttachmentsSection recordType="damage_case" recordId={data.id} />
         </TabsContent>
 
+        <TabsContent value="tickets" className="flex-1 overflow-y-auto p-6 mt-0">
+          <DamageCaseTickets caseId={data.id} />
+        </TabsContent>
+
         <TabsContent value="comments" className="flex-1 overflow-y-auto p-6 mt-0">
           <CommentsSection recordType="damage_case" recordId={data.id} />
         </TabsContent>
@@ -430,8 +439,52 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
           dateOfIncident: data.dateOfIncident,
           description: data.description,
           resolutionNotes: data.resolutionNotes,
+          warrantyId: data.warrantyId,
         }}
       />
+    </div>
+  );
+}
+
+function LinkedWarrantyLine({ warrantyId, incidentDate }: { warrantyId: string; incidentDate: string }) {
+  const { data: warranties = [] } = useWarranties();
+  const w = warranties.find((x) => x.id === warrantyId);
+  if (!w) return null;
+  const covered = warrantyCovers(w, incidentDate);
+  return (
+    <p className="mt-0.5 text-xs text-muted-foreground">
+      Warranty: {w.name} ({formatDate(w.startDate)} – {formatDate(w.endDate)}){" "}
+      <span className={covered ? "text-green-700 dark:text-green-400" : "text-amber-700 dark:text-amber-400"}>
+        {covered ? "· incident covered" : "· incident outside coverage"}
+      </span>
+    </p>
+  );
+}
+
+function DamageCaseTickets({ caseId }: { caseId: string }) {
+  const { data: tickets = [], isLoading } = useTicketsLinkedTo("damage_case", caseId);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = tickets.find((t) => t.id === openId) ?? null;
+  if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  return (
+    <div className="space-y-2">
+      {tickets.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No tickets linked to this case.</p>
+      ) : (
+        tickets.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setOpenId(t.id)}
+            className="flex w-full items-center gap-3 rounded-md border p-3 text-left text-sm hover:bg-slate-50 dark:hover:bg-muted/40"
+          >
+            <span className="font-mono text-xs text-muted-foreground">#{t.ticketNumber}</span>
+            <span className="flex-1 truncate font-medium">{t.subject || "(no subject)"}</span>
+            <span className="text-xs capitalize text-muted-foreground">{t.status.replace("_", " ")}</span>
+          </button>
+        ))
+      )}
+      <TicketDetailSheet ticket={open} onClose={() => setOpenId(null)} />
     </div>
   );
 }

@@ -393,6 +393,37 @@ export function useClientActivity(clientId: string) {
   });
 }
 
+/** Measured areas ("takeoffs") stored on both `clients` and `client_properties`. A key left undefined is not touched; null clears it. */
+export interface TakeoffInput {
+  turfSqft?: number | null;
+  mulchBedSqft?: number | null;
+  grossSqft?: number | null;
+  parkingLotSqft?: number | null;
+  linearFtPerimeter?: number | null;
+  linearFtEdging?: number | null;
+  yardsOfMulch?: number | null;
+}
+
+const TAKEOFF_COLUMNS: ReadonlyArray<[keyof TakeoffInput, string]> = [
+  ["turfSqft", "turf_sqft"],
+  ["mulchBedSqft", "mulch_bed_sqft"],
+  ["grossSqft", "gross_sqft"],
+  ["parkingLotSqft", "parking_lot_sqft"],
+  ["linearFtPerimeter", "linear_ft_perimeter"],
+  ["linearFtEdging", "linear_ft_edging"],
+  ["yardsOfMulch", "yards_of_mulch"],
+];
+
+/** Column map for the takeoff keys the caller actually set (the shared table shape on clients and client_properties). */
+function takeoffColumns(t: TakeoffInput | undefined): Record<string, number | null> {
+  const out: Record<string, number | null> = {};
+  if (!t) return out;
+  for (const [key, col] of TAKEOFF_COLUMNS) {
+    if (t[key] !== undefined) out[col] = t[key] ?? null;
+  }
+  return out;
+}
+
 export function useAddClientProperty() {
   const qc = useQueryClient();
   return useMutation({
@@ -402,7 +433,7 @@ export function useAddClientProperty() {
       isMaster = false,
     }: {
       clientId: string;
-      property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string; addressVerdict?: AddressVerdict | null; lat?: number | null; lng?: number | null };
+      property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string; addressVerdict?: AddressVerdict | null; lat?: number | null; lng?: number | null; takeoffs?: TakeoffInput };
       /** True only for the auto-created property backed by the client's own address (see AerialMeasurementDialog) — every manual "Add Property" stays a non-master satellite property. */
       isMaster?: boolean;
     }) => {
@@ -417,6 +448,7 @@ export function useAddClientProperty() {
         zip: property.zip,
         gate_lock_code: property.gateCode,
         notes_to_crew: property.notesToCrew,
+        ...takeoffColumns(property.takeoffs),
         is_master: isMaster,
         ...(property.addressVerdict !== undefined && {
           address_verdict: property.addressVerdict,
@@ -446,7 +478,7 @@ export function useUpdateClientProperty() {
     }: {
       id: string;
       clientId: string;
-      property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string; addressVerdict?: AddressVerdict | null; lat?: number | null; lng?: number | null };
+      property: { name?: string; address?: string; city?: string; state?: string; zip?: string; gateCode?: string; notesToCrew?: string; addressVerdict?: AddressVerdict | null; lat?: number | null; lng?: number | null; takeoffs?: TakeoffInput };
     }) => {
       const supabase = createClient();
       // If an address field changed and this save carries no fresh verification
@@ -480,6 +512,7 @@ export function useUpdateClientProperty() {
           zip: property.zip,
           gate_lock_code: property.gateCode,
           notes_to_crew: property.notesToCrew,
+          ...takeoffColumns(property.takeoffs),
           // Only stamped when the form actually ran a check on the address
           // being saved - an untouched address keeps whatever verdict it had.
           ...(property.addressVerdict !== undefined && {
@@ -497,9 +530,25 @@ export function useUpdateClientProperty() {
         })
         .eq("id", id);
       if (error) throw error;
+
+      // The client row carries the same takeoff columns for its own address, and the
+      // Details tab / client-level estimate defaults read them there. Editing the master
+      // property (the client's own address) keeps the client row in step; satellite
+      // properties stay property-level only.
+      const clientTakeoffs = takeoffColumns(property.takeoffs);
+      if (Object.keys(clientTakeoffs).length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: self } = await (supabase as any).from("client_properties").select("is_master").eq("id", id).maybeSingle();
+        if (self?.is_master) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: clientError } = await (supabase as any).from("clients").update(clientTakeoffs).eq("id", clientId);
+          if (clientError) throw clientError;
+        }
+      }
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId] });
     },
   });
 }
@@ -1013,6 +1062,29 @@ export function useUpdateClient() {
         .eq("id", id);
       if (error) throw error;
 
+      // Keep the client's own-address property (is_master) in step with the client-level
+      // takeoffs, so an estimate that picks that property reads the same numbers. Only keys
+      // the caller actually passed are mirrored.
+      const mirrored = takeoffColumns({
+        turfSqft: updates.turfSqft,
+        mulchBedSqft: updates.mulchBedSqft,
+        grossSqft: updates.grossSqft,
+        parkingLotSqft: updates.parkingLotSqft,
+        linearFtPerimeter: updates.linearFtPerimeter,
+        linearFtEdging: updates.linearFtEdging,
+        yardsOfMulch: updates.yardsOfMulch,
+      });
+      if (Object.keys(mirrored).length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: mirrorError } = await (supabase as any)
+          .from("client_properties")
+          .update(mirrored)
+          .eq("client_id", id)
+          .eq("is_master", true)
+          .is("deleted_at", null);
+        if (mirrorError) throw mirrorError;
+      }
+
       const sourceChanged = updates.source !== undefined && before && updates.source !== before.source;
       const emailsOptedIn = updates.okToEmail === true && before && before.ok_to_email !== true;
       const newReferrerId = updates.referredByClientId && before && updates.referredByClientId !== before.referred_by_client_id
@@ -1042,6 +1114,7 @@ export function useUpdateClient() {
     onSuccess: (result, { id }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", id] });
+      qc.invalidateQueries({ queryKey: ["clients", id, "properties"] });
       if (result?.statusChanged) {
         qc.invalidateQueries({ queryKey: ["clients", id, "activity"] });
       }

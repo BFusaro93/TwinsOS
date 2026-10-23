@@ -6,6 +6,7 @@ import { AssetPerformanceGuide } from "@/components/docs/guides/asset-performanc
 import { AutomationsGuide } from "@/components/docs/guides/automations-guide";
 import { ClientPortalGuide } from "@/components/docs/guides/client-portal-guide";
 import { ClientsGuide } from "@/components/docs/guides/clients-guide";
+import { CommissionsGuide } from "@/components/docs/guides/commissions-guide";
 import { ContractsGuide } from "@/components/docs/guides/contracts-guide";
 import { CrewAppGuide } from "@/components/docs/guides/crew-app-guide";
 import { DamageCasesGuide } from "@/components/docs/guides/damage-cases-guide";
@@ -37,6 +38,7 @@ import { SnowGuide } from "@/components/docs/guides/snow-guide";
 import { TicketsGuide } from "@/components/docs/guides/tickets-guide";
 import { UsersRolesGuide } from "@/components/docs/guides/users-roles-guide";
 import { WaitingListGuide } from "@/components/docs/guides/waiting-list-guide";
+import { WarrantiesGuide } from "@/components/docs/guides/warranties-guide";
 import { WorkOrdersGuide } from "@/components/docs/guides/work-orders-guide";
 import { ZapierGuide } from "@/components/docs/guides/zapier-guide";
 
@@ -54,6 +56,7 @@ export const GUIDE_COMPONENTS: Record<string, ComponentType> = {
   "automations-guide": AutomationsGuide,
   "client-portal-guide": ClientPortalGuide,
   "clients-guide": ClientsGuide,
+  "commissions-guide": CommissionsGuide,
   "contracts-guide": ContractsGuide,
   "crew-app-guide": CrewAppGuide,
   "damage-cases-guide": DamageCasesGuide,
@@ -85,6 +88,7 @@ export const GUIDE_COMPONENTS: Record<string, ComponentType> = {
   "tickets-guide": TicketsGuide,
   "users-roles-guide": UsersRolesGuide,
   "waiting-list-guide": WaitingListGuide,
+  "warranties-guide": WarrantiesGuide,
   "work-orders-guide": WorkOrdersGuide,
   "zapier-guide": ZapierGuide,
 };

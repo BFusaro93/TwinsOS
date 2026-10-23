@@ -193,6 +193,7 @@ interface VisitLinkRow {
   id: string;
   job_id: string;
   crew_id: string | null;
+  crew_group_secondary: boolean | null;
 }
 
 /**
@@ -205,7 +206,7 @@ async function loadVisitLinks(supabase: Client, visitIds: string[]) {
     fetchAllPages<VisitLinkRow>((from, to) =>
       supabase
         .from("crm_job_visits")
-        .select("id, job_id, crew_id")
+        .select("id, job_id, crew_id, crew_group_secondary")
         .in("id", idChunk)
         .is("deleted_at", null)
         .order("id")
@@ -244,6 +245,8 @@ async function loadCompletedVisitCounts(supabase: Client, jobIds: string[]) {
         .in("job_id", idChunk)
         .eq("status", "completed")
         .is("deleted_at", null)
+        // Job-level materials are spread per STOP — a multi-crew stop is one.
+        .eq("crew_group_secondary", false)
         .order("id")
         .range(from, to)
     )
@@ -401,7 +404,13 @@ export async function loadVisitCosting(
     const manHours = num(row.man_hours);
 
     const labor = resolveLabor(row.actual_labor_cost_cents, row.labor_cost_source);
-    const materialsCents = resolveMaterials(row.id, jobId, materials, completedCounts);
+    const materialsCents = resolveMaterials(
+      row.id,
+      jobId,
+      materials,
+      completedCounts,
+      link?.crew_group_secondary === true
+    );
 
     visits.push({
       visitId: row.id,
@@ -448,10 +457,14 @@ function resolveMaterials(
   visitId: string,
   jobId: string | null,
   materials: MaterialsByVisit,
-  completedCounts: Map<string, number>
+  completedCounts: Map<string, number>,
+  isSecondary: boolean
 ): number {
   const direct = materials.direct.get(visitId) ?? 0;
   if (!jobId) return direct;
+  // Job-level materials are spread per STOP (counts exclude secondaries), so a
+  // multi-crew stop's secondary visit carries none of them.
+  if (isSecondary) return direct;
   const jobLevel = materials.jobLevel.get(jobId) ?? 0;
   if (jobLevel === 0) return direct;
   // This visit is itself completed, so the count is at least 1.

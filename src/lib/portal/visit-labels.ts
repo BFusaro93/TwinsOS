@@ -119,6 +119,8 @@ export async function loadUpcomingPortalVisits(
       .eq("client_id", clientId)
       .eq("org_id", orgId)
       .is("deleted_at", null)
+      // A multi-crew stop is one visit to the customer — show the lead's only.
+      .eq("crew_group_secondary", false)
       .neq("status", "cancelled")
       .neq("status", "completed");
 

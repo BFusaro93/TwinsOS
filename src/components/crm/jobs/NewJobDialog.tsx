@@ -1,5 +1,6 @@
 "use client";
 
+import { SaleTypeSelect, type SaleTypeValue } from "@/components/crm/commissions/SaleTypeSelect";
 import { useState, useEffect } from "react";
 import { parsePositiveQty } from "@/lib/utils/quantity";
 import {
@@ -23,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateClientJob, useCRMServices, useCRMSchedules, useCRMCrews } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
 import { useContracts } from "@/lib/hooks/use-contracts";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -40,7 +41,9 @@ import { AlertTriangle, Plus, X } from "lucide-react";
 import { SnowRateTiersDraftEditor, parseTierDrafts, type DraftTier } from "@/components/crm/jobs/SnowRateTiersEditor";
 import { useSaveSnowRateTiers } from "@/lib/hooks/use-snow-rate-tiers";
 import { toast } from "sonner";
-import type { JobType, BudgetMethod } from "@/types/crm-jobs";
+import { ServiceDialog } from "@/components/crm/services/ServiceDialog";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import type { JobType, BudgetMethod, CRMService } from "@/types/crm-jobs";
 import { resolveStopAddress } from "@/lib/utils/stop-address";
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -115,6 +118,8 @@ interface ServiceRow {
   startDateEdited: boolean;
 }
 
+const NEW_SERVICE_VALUE = "__new_service__";
+
 function blankServiceRow(date: string): ServiceRow {
   return { serviceId: "", serviceName: "", startDate: date, completeByDate: "", qty: 1, rateCents: 0, budgetedHours: 0, budgetMethod: "manual", teamSize: 1, minDays: null, startDateEdited: false };
 }
@@ -162,9 +167,12 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const { data: contracts } = useContracts(defaultClientId ?? selectedClientId);
   const [contractId, setContractId] = useState<string | null>(null);
   const [salesRepId, setSalesRepId] = useState<string | null>(null);
+  const [saleType, setSaleType] = useState<SaleTypeValue>(null);
   /** Date Sold — feeds the Sales by Date Sold / Approved Sales by Sales Rep reports. Defaults to today. */
   const [dateSold, setDateSold] = useState(todayStr());
   const [crewId, setCrewId] = useState<string | null>(null);
+  // Which of the client's properties this job is for; only asked when the client has 2+.
+  const [propertyId, setPropertyId] = useState<string | null>(null);
   const [notesToCrew, setNotesToCrew] = useState("");
   const [isPending, setIsPending] = useState(false);
 
@@ -186,6 +194,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const [productRows, setProductRows] = useState<ProductRow[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  // Row index that asked for "+ New service…" (null = dialog closed).
+  const [newServiceRow, setNewServiceRow] = useState<number | null>(null);
+  const { can } = usePermissions();
+  const canAddService = can("service_add");
 
   // Snow-specific billing fields
   const [invoiceType, setInvoiceType] = useState<string | null>(null);
@@ -205,6 +217,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setSalesRepId(null);
       setDateSold(today);
       setCrewId(null);
+      setPropertyId(null);
       setNotesToCrew("");
       setStartDate(today);
       setCompleteByDate("");
@@ -407,8 +420,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     setServices((prev) => [...prev, blankServiceRow(startDate)]);
   }
 
-  function pickService(i: number, serviceId: string) {
-    const svc = (crmServices ?? []).find((s) => s.id === serviceId);
+  function pickService(i: number, serviceId: string, justCreated?: CRMService) {
+    // justCreated: a service saved a moment ago may not be in the refetched list yet.
+    const svc = justCreated ?? (crmServices ?? []).find((s) => s.id === serviceId);
     if (!svc) return;
     const qty = services[i]?.qty ?? 1;
     // Only fill the service's default rate into an EMPTY rate — a rate the
@@ -522,9 +536,16 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
    * Orgs that want it enforced set Service Address to required under
    * Settings → Required Fields, which gates it at client creation instead.
    */
+  const { data: clientProperties } = useClientProperties(effectiveClientId);
+  // Ignore a pick that belongs to a previously selected client.
+  const effectivePropertyId = (clientProperties ?? []).some((p) => p.id === propertyId) ? propertyId : null;
+  const selectedProperty = (clientProperties ?? []).find((p) => p.id === effectivePropertyId) ?? null;
   const clientHasNoAddress =
     !!effectiveClient &&
     !resolveStopAddress({
+      property: selectedProperty
+        ? { address: selectedProperty.address, city: selectedProperty.city, state: selectedProperty.state, zip: selectedProperty.zip }
+        : null,
       client: {
         service_address: effectiveClient.serviceAddress,
         service_city: effectiveClient.serviceCity,
@@ -585,6 +606,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     try {
       const result = await createJob.mutateAsync({
         clientId: effectiveClientId,
+        propertyId: effectivePropertyId,
         jobType,
         projectId: jobType === "project" ? projectId : null,
         contractId: contractId ?? null,
@@ -602,6 +624,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         ratePerInchCents: jobType === "snow" ? ratePerInchCents : null,
         assetType: jobType === "snow" ? (assetType || null) : null,
         salesRepId,
+        saleType,
         source: null,
         paymentType: null,
         poNumber: null,
@@ -735,6 +758,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </Select>
               </div>
               <div className="flex flex-col gap-1.5">
+                <Label title="New or renewal — decides which commission rate applies">Sale Type</Label>
+                <SaleTypeSelect value={saleType} onChange={setSaleType} className="" />
+              </div>
+              <div className="flex flex-col gap-1.5">
                 <Label>Date Sold</Label>
                 <Input type="date" value={dateSold} onChange={(e) => setDateSold(e.target.value)} />
               </div>
@@ -751,6 +778,26 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 </Select>
               </div>
             </div>
+
+            {(clientProperties ?? []).length >= 2 && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Property</Label>
+                <Select value={effectivePropertyId ?? "client"} onValueChange={(v) => setPropertyId(v === "client" ? null : v)}>
+                  <SelectTrigger><SelectValue placeholder="Client's main address" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="client">Client&apos;s main address</SelectItem>
+                    {(clientProperties ?? []).map((pr) => (
+                      <SelectItem key={pr.id} value={pr.id}>
+                        {[pr.name, pr.address].filter(Boolean).join(" — ") || "Property"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-400 dark:text-neutral-500">
+                  The crew is sent here, and the property&apos;s gate code and notes show on the job.
+                </p>
+              </div>
+            )}
 
             {clientHasNoAddress && (
               <div className="flex items-start gap-2 rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
@@ -1008,10 +1055,16 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                         : "2fr 1fr 1fr 1fr 1fr 1.5fr 28px",
                     }}
                   >
-                    <Select value={svc.serviceId || ""} onValueChange={(v) => pickService(i, v)}>
+                    <Select
+                      value={svc.serviceId || ""}
+                      onValueChange={(v) => (v === NEW_SERVICE_VALUE ? setNewServiceRow(i) : pickService(i, v))}
+                    >
                       <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select service…" /></SelectTrigger>
                       <SelectContent>
                         {(crmServices ?? []).map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                        {canAddService && (
+                          <SelectItem value={NEW_SERVICE_VALUE} className="font-medium text-brand-600">+ New service…</SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                     {showServiceDate && (
@@ -1169,6 +1222,12 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <ServiceDialog
+      open={newServiceRow !== null}
+      service={null}
+      onClose={() => setNewServiceRow(null)}
+      onCreated={(created) => { if (newServiceRow !== null) pickService(newServiceRow, created.id, created); }}
+    />
     {jobType === "project" && effectiveClientId && (
       <NewProjectDialog
         open={newProjectOpen}

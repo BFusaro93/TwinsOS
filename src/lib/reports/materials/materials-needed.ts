@@ -214,6 +214,9 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
         )
         .in("status", OUTSTANDING_VISIT_STATUSES)
         .is("deleted_at", null)
+        // Area is applied once per STOP: a secondary crew on a multi-crew stop
+        // carries no chemical demand (mirrors chemical-preload.ts).
+        .eq("crew_group_secondary", false)
         .is("crm_jobs.deleted_at", null)
         .order("id")
     );

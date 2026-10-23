@@ -3,6 +3,8 @@ import { useCallback, useRef, useState } from "react";
 export interface AskAIMessage {
   role: "user" | "assistant";
   content: string;
+  /** ask_ai_questions row for this reply, used to flag it when escalated to support. */
+  logId?: string;
 }
 
 /**
@@ -38,6 +40,15 @@ export function useAskAI() {
         if (!res.ok || !res.body) {
           const body = await res.json().catch(() => ({ error: "Ask AI request failed" }));
           throw new Error(body.error ?? "Ask AI request failed");
+        }
+
+        const logId = res.headers.get("X-Ask-Log-Id");
+        if (logId) {
+          setMessages((prev) => {
+            const next = [...prev];
+            next[next.length - 1] = { ...next[next.length - 1], logId };
+            return next;
+          });
         }
 
         const reader = res.body.getReader();

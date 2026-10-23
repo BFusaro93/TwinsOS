@@ -37,6 +37,8 @@ import {
   Satellite,
   Handshake,
   DollarSign,
+  ShieldCheck,
+  Percent,
 } from "lucide-react";
 import type { ElementType } from "react";
 
@@ -643,7 +645,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Adding a property",
             detail:
-              "On a client's detail page, open the More menu and click 'Add Property'. Enter the property name/label, street address, city/state/zip, gate code, and notes to crew. Properties are address-only — a second billed-together location on the same account, not a separate jobs/invoicing record. Turf sq ft, mulch bed sq ft, gross sq ft, and linear ft measurements are entered on the client's Custom Fields tab and feed the estimating engine's production-rate calculations.",
+              "On a client's detail page, open the Details tab and click '+ Add' in the Properties list (or More → Add Property). Enter the property name/label, street address, city/state/zip, gate code, and notes to crew. Properties are extra service addresses on the same account: they share the client's balance and invoices. When a client has two or more properties, the New Job dialog asks which one the job is for, so the crew is routed to that address and sees its gate code and notes. If each location needs its own invoices or balance, create each as its own client and link them under a parent account. Turf sq ft, mulch bed sq ft, gross sq ft, and linear ft measurements are entered on the client's Custom Fields tab and feed the estimating engine's production-rate calculations.",
           },
           {
             step: "A location that needs its own jobs/invoices",
@@ -945,6 +947,16 @@ export const DOC_SECTIONS: DocSection[] = [
               "Invoices move Draft → Sent → Viewed → Partial → Paid, with Overdue and Void as side states. Payments can be recorded against an invoice with a specific method — Cash, Check, ACH/E-Check, AutoPay, Credit Card by network, AR Write-off, or Other.",
           },
           {
+            step: "Every invoice line bills a service",
+            detail:
+              "Each invoice line has a service dropdown and an invoice can't be saved until every line has one — there are no free-form lines. The service decides where revenue lands in reports and which commission rate applies. Lines from visits, estimates and contracts get their service automatically; a line without one shows in amber. The invoice CSV import needs a 'service' column that matches a service in your catalog (rows that don't match are skipped).",
+          },
+          {
+            step: "Sale type on an invoice",
+            detail:
+              "Sale Type (New sale or Renewal / existing account) sits next to the Sales Rep and decides which commission rate applies. Blank uses the job's, contract's or estimate's sale type, then counts as a new sale.",
+          },
+          {
             step: "Photos on an invoice",
             detail:
               "Open the invoice's Photos tab (or 'Photos to include' in the email dialog) to attach up to 12 photos from the invoice's visits and jobs, Job Photos linked to the client or project, or direct uploads. They print on extra PDF pages and show as a gallery on the client's online invoice page. HEIC iPhone photos are converted automatically; only JPEG and PNG print in the PDF, and Print Selected leaves photos out.",
@@ -1162,11 +1174,106 @@ export const DOC_SECTIONS: DocSection[] = [
               "Open, In Progress, Resolved, or Closed. Creating a case can fire both an internal automation and a Zapier trigger. Once Resolved or Closed, adding an expense or editing the description/resolution notes is blocked until the case is reopened.",
           },
           {
+            step: "Linking a warranty",
+            detail:
+              "For Warranty cases, an optional Warranty picker lists your active warranties. Choosing one fills in the customer and warns if the incident date falls outside its coverage; the case header then shows whether the incident was covered. The warranty tracks how many claims and how much spend sit against it.",
+            href: "/settings/support/warranties-guide",
+            linkLabel: "Open the Warranties guide",
+          },
+          {
             step: "Full guide",
             detail:
               "A deeper walkthrough — a worked example, and a real current limitation worth knowing about client-linking before you rely on filtering cases by client.",
             href: "/settings/support/damage-cases-guide",
             linkLabel: "Open the Damage Cases guide",
+          },
+        ],
+      },
+      {
+        id: "warranties",
+        title: "Warranties",
+        summary: "Track the warranties you give on walls, walkways, patios and renovations.",
+        icon: ShieldCheck,
+        steps: [
+          {
+            step: "Where warranties live",
+            detail:
+              "A Warranties tab on each client, project and job, plus a Warranties page under Scheduling with search and status filters. Each warranty has a name, coverage note, length in months, start and end date, and an optional damages-covered cap.",
+          },
+          {
+            step: "Warranty types",
+            detail:
+              "On the Warranties page, Types lets you define what you offer (for example Retaining wall — 60 months). Picking a type fills in the length and coverage wording; you can still change them on the warranty.",
+          },
+          {
+            step: "When the clock starts",
+            detail:
+              "On an unfinished project, leave the start date blank: the warranty shows Not started and begins automatically the day the project is marked Complete. Elsewhere the start defaults to today. The end date is the day before the anniversary (12 months from March 15 covers through March 14).",
+          },
+          {
+            step: "Renew, void, delete",
+            detail:
+              "Renew creates a new warranty of the same length starting the day after the old one ends (or today if it already ended). Void removes a warranty from coverage but keeps it; Delete removes it from the lists.",
+          },
+          {
+            step: "Claims and reminders",
+            detail:
+              "Warranty cases link to the warranty they're claimed against. Each morning, warranties within 30 days of ending trigger one reminder to the client's sales rep so they can offer a renewal.",
+          },
+          {
+            step: "Permissions",
+            detail:
+              "View Warranties shows the tabs and page; Add/Edit/Void Warranties allows changes and managing types. Both are set per role in Settings > Roles under Scheduling.",
+          },
+          {
+            step: "Full guide",
+            detail: "Statuses, renewal rules, and how claims and reminders work in detail.",
+            href: "/settings/support/warranties-guide",
+            linkLabel: "Open the Warranties guide",
+          },
+        ],
+      },
+      {
+        id: "commissions",
+        title: "Sales Commissions",
+        summary: "Pay reps a percentage of what they sell, by service and sale type.",
+        icon: Percent,
+        steps: [
+          {
+            step: "Plans and rules",
+            detail:
+              "Accounting > Commissions > Plans & Assignments. A plan holds rules; each rule sets a percentage for a service, a service category or all services, for new sales, renewals or both, earned when the payment is collected or when the invoice is issued. The most specific rule wins (service, then category, then all; a sale type beats 'New & renewal').",
+          },
+          {
+            step: "Assigning reps",
+            detail:
+              "Assign an employee a plan with an effective date. A rep can hold several plans at once, such as outside sales plus renewals. End a plan with 'End today'.",
+          },
+          {
+            step: "New sale vs renewal",
+            detail:
+              "Set Sale Type on an estimate, contract, job or invoice. An invoice uses its own, then its job's, contract's and estimate's; blank counts as a new sale. The office decides, so a one-time job for an existing customer can still be paid as a new sale.",
+          },
+          {
+            step: "How earnings are calculated",
+            detail:
+              "Per invoice line, on pre-tax revenue. The rep is the one on the invoice, falling back to the job, contract, estimate, then the client's rep. 'When paid' rules earn on each payment applied (net of refunds); 'when invoiced' rules earn on the invoice date. Every line needs a service — lines without one only earn under an All services rule.",
+          },
+          {
+            step: "Statements",
+            detail:
+              "Create statement on the Earnings tab locks a rep's unclaimed earnings for a period. Each earning line can be on only one live statement, so nothing is paid twice. Draft → Approved → Paid; Void releases the lines (not allowed once paid). If a payment is refunded or deleted, or an invoice is voided or edited down after it was statemented, the rep's next statement gets a negative Adjustment line for the difference (once per change, at the original rate; a reversed refund adds back a positive one).",
+          },
+          {
+            step: "Not covered",
+            detail:
+              "Percentages only (no flat per-job amounts), and annual bonuses tied to company results aren't calculated here. Permissions: Commission View and Commission Manage under Accounting in Settings > Roles; reps can see their own statements.",
+          },
+          {
+            step: "Full guide",
+            detail: "Rules, sale types, earnings math and statements in detail.",
+            href: "/settings/support/commissions-guide",
+            linkLabel: "Open the Commissions guide",
           },
         ],
       },
@@ -1284,7 +1391,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Where it lives",
             detail:
-              "CRM > Reports. A 4-tab shell: Dashboard (the legacy overview), Custom Dashboards, Report Center (the searchable catalog), and My Reports (saved analyses).",
+              "CRM > Reports. A 6-tab shell: Dashboard (the legacy overview), Custom Dashboards, Report Center (the searchable catalog), My Reports (saved analyses), Payroll (crew hours from Start Day / End Day, editable and exportable; admins and managers only), and Graphics Library.",
           },
           {
             step: "Categories",
@@ -1391,6 +1498,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "The bell icon in the top bar shows live alerts for overdue work orders, low stock parts, pending approvals, and upcoming PM schedules. These update in real time.",
           },
           {
+            step: "Warranty expiring",
+            detail:
+              "A reminder goes out once per end date when a warranty is within 30 days of ending — to the client's sales rep (in-app and email), or to admins in-app when the client has no rep. Turn either off under Settings > Notifications > Warranty Expiring Soon.",
+          },
+          {
             step: "Per-user preferences",
             detail:
               "Go to Settings > Notifications to toggle which events show as in-app or email notifications. Preferences are per-user and save automatically.",
@@ -1485,6 +1597,11 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Where it lives",
             detail:
               "Both Equipt Settings and Landscapt Settings have their own Import/Export tab, each covering the entities relevant to that module. Export produces a real CSV of your actual data; import maps spreadsheet columns to fields and shows a preview before committing.",
+          },
+          {
+            step: "Invoice imports need a service",
+            detail:
+              "The Invoices import requires clientName, service, description and amount. The service must match a service in your catalog (case doesn't matter); a row whose service isn't found is skipped with a warning.",
           },
           {
             step: "Duplicate handling",
@@ -1754,6 +1871,26 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "How does the crew clock in for the day (Start Day / End Day)?",
+        a: "On the Crew App's My Schedule screen, tap Start Day once and everyone on the crew's roster for that day is clocked in; tap End Day at the shop to clock everyone out (the app asks you to confirm if a job is still running). This is the paid shop-to-shop day that feeds payroll. Start Job and Stop Job separately clock the crew in and out of each stop for Job Costing. If nobody taps Start Day, starting the first job opens the day anyway and payroll flags it as 'Started at first job'. The Start Day button stays disabled if the crew has nobody on its roster (add people under Team > Crews > Team Assignments).",
+      },
+      {
+        q: "What if someone is late, out today, or leaves early?",
+        a: "On the Crew App's My Schedule screen tap Edit Crew. Mark 'Not working' for someone who is out (they're skipped by Start Day and Start Job), tap Clock In for a late arrival, 'Left for the day' for someone leaving early, and Back if they return the same day (the time away comes off as an unpaid break). The office can fix anything afterward on Report Center > Payroll, or with Edit Job Times on the Dispatch Board.",
+      },
+      {
+        q: "Where do I get crew hours for payroll?",
+        a: "Landscapt > Reports > Payroll tab (admins and any role with the \"View & Edit Payroll Report\" permission, under Report Access in the role editor; other users don't see the tab). Pick a period (up to 62 days, with This week / Last week / Last 2 weeks shortcuts), expand an employee to see each day, and correct clock-in/out times, unpaid break minutes or hours, add extra hours (shop time, PTO) with a note, then Save. Export as Excel (totals + daily), CSV or PDF. Corrections only change the Payroll report; recorded shifts and Job Costing are untouched. Amber 'check' badges mark days that were never ended, have an open job punch, or had no Start Day.",
+      },
+      {
+        q: "Can two crews work the same job on the same day?",
+        a: "Yes. Open the visit on the Dispatch Board (or the job's Visits table > Change date / crew) and use 'Crews on this stop' > 'Add another crew…'. Each crew gets its own visit, so it has its own row in its own column, its own stop in the Crew App, and clocks its own hours. The original visit is the Lead: it carries the revenue and creates the one invoice, the added crew's visit shows $0 and never invoices, and Job Costing adds up every crew's labor. A shared stop uses one contract visit, rescheduling one crew moves the others that haven't started, and snow visits can't take a second crew.",
+      },
+      {
+        q: "Why does the second crew on a shared stop show $0 and no Invoice button?",
+        a: "The stop bills once, from the Lead visit, so the added crew's visit carries no revenue and can't be invoiced on its own — its hours still count in Job Costing and the job's labor. If you remove the Lead crew from the stop, billing passes to the next crew automatically.",
+      },
+      {
         q: "Should we report near misses, or only injuries?",
         a: "Report both. A near miss is an event that could have hurt someone but didn't, and the Injury / Near Miss form in Job Photos > Field has its own type for it. Near misses are tracked and reported separately and never reset Days Since Last Injury or the Accident Free Workdays KPI, so reporting them can't make your numbers look worse.",
       },
@@ -1779,7 +1916,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Where do I enter a property's zone measurements, like turf or mulch bed square footage?",
-        a: "On the client's Custom Fields tab, not the Add Property dialog — there's currently no dedicated per-zone editor in the UI. The client-level totals (Turf Sq Ft, Mulch Bed Sq Ft, Gross Sq Ft, Linear Ft Perimeter/Edging, Yards of Mulch) entered there feed the estimating engine's production-rate calculations.",
+        a: "Use More → Aerial Measurement on the client: trace each turf, mulch bed or hardscape area on the satellite map (Trace Area), cut out things like the house with Subtract Area, and measure fences or edging with Measure Distance. Totals are saved on the property, and for the client's own address they are also copied to the client's takeoff fields (Turf, Mulch Bed, Parking Lot / Hardscape, Gross). You can also type the client-level totals on the Edit Client dialog's Custom Fields tab. Either way they feed the estimating engine's production-rate calculations. For a client with several properties, type each property's measurements in the Add/Edit Property dialog (Measurements), or trace them with Aerial Measurement; an estimate for a property defaults production-rate quantities from that property, and a blank value stays blank instead of using another address's numbers.",
       },
       {
         q: "Does the 'PO Number' field on an invoice link to a purchase order in the PO module?",
@@ -1819,6 +1956,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Users & Settings",
     items: [
       {
+        q: "What is Ask AI, and what if it can't answer my question?",
+        a: "Ask AI (Help menu > Ask AI) answers how-do-I questions from these help guides and the app's data model, including whether something is actually tracked. Check anything critical, since answers are generated. Each organization can ask up to 100 questions a day. If an answer doesn't solve it, click 'Didn't answer it? Send this conversation to support', add an optional note, and send. Our team gets the whole conversation and replies to you directly: in your support chat if your plan includes chat support, otherwise by email.",
+      },
+      {
+        q: "How do I chat with support, and can I edit a message?",
+        a: "If you have chat support (included with the Growth and Enterprise plans, or as an add-on), Help > Chat with us opens a conversation with the Landscapt team; once it has messages, a chat bubble stays on screen as the way back in. Messages keep line breaks and bold text, and links are clickable. Hover your own message and click the pencil to edit it (it then shows 'edited'). The header shows Open, In progress or Resolved; a resolved conversation reopens when you send another message. Without chat support you can use Send Feedback or Email Support from the same Help menu.",
+      },
+      {
         q: "How do I report a bug or suggest an idea?",
         a: "Use Send Feedback (the feedback button in the app, also on the Support page). Pick Bug, Idea or Other, describe what happened or what you'd like, and attach a screenshot if you can — the page you were on is included automatically. Submissions go straight to the Landscapt team.",
       },
@@ -1849,6 +1994,47 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I connect Zapier?",
         a: "Go to Master Account Settings > Integrations and click Generate Key — this is account-wide, not tied to Equipt or Landscapt specifically. Paste the key into Zapier's API Key field when connecting the app. Most Landscapt triggers fire instantly; most Equipt triggers check every few minutes instead. There's a full, detailed guide to every trigger and action linked right on that Integrations tab, under the API key.",
+      },
+    ],
+  },
+  {
+    label: "How the pieces connect",
+    items: [
+      {
+        q: "How do I create a crew (without a login) on the Team → Crews page?",
+        a: "Go to Landscapt > Team > Crews and click Add Team (needs the Teams scheduling permission). On the Team Details tab enter a Description (the crew's name), pick a Color, and optionally a Team Code, Linked Login, starting address and Show In Calendar, then click Create & Continue. The dialog stays open on the Team Assignments tab, where you click Add Assignment to put employees on the crew's default roster. A crew with no Linked Login still works on the Dispatch Board and Crew Board; it just has no Crew App schedule of its own until you link a login (or create a crew account under Settings > Users, which creates the crew and the login together).",
+      },
+      {
+        q: "How do I remove a crew from the Dispatch Board / make a crew inactive?",
+        a: "Go to Landscapt > Team > Crews. In the Active column, turn the crew's switch off and confirm. The crew moves to the Inactive tab and stops appearing as a crew you can schedule on the Dispatch Board and Crew Board; its history is kept. To bring it back, open the Inactive tab (or All) and turn the switch on. You need the Teams scheduling permission. This is separate from the crew's login: deactivating the login under Settings > Users only blocks sign-in and does not change the crew on the board.",
+      },
+      {
+        q: "If I create a crew account in Settings, does it show up as a crew in Landscapt?",
+        a: "Yes. Settings > Users > Create Crew Account makes the shared login and also creates a Landscapt crew with the same team name, linked to that login. If you already had an unlinked crew with that name, the login is attached to it instead of creating a duplicate. You can change the link any time under Landscapt > Team > Crews > edit the crew > Linked Login (pick another login, or None to unlink).",
+      },
+      {
+        q: "What does a crew see if their login isn't linked to a Landscapt crew?",
+        a: "An empty schedule. The Crew App finds a crew's stops by the crew its login is linked to, so an unlinked login has nothing to show and can't clock in or out on any stop. Link it under Landscapt > Team > Crews > Linked Login. Crew accounts created before the automatic link existed may need this done once by hand.",
+      },
+      {
+        q: "Can a regular user (not a shared crew login) be assigned to a crew, and how do they see their jobs?",
+        a: "Yes, two ways. To put them on the crew's roster for scheduling and costing, add their employee record under Landscapt > Team > Crews > the crew > Team Assignments. To let them see the crew's stops in the Crew App as themselves, pick their name under Linked Login on the same crew (it lists regular users as well as shared crew logins) — they then find the stops under Scheduling > My Crew Schedule. Without a Linked Login, a regular user can still see the crew's jobs on the Dispatch Board by filtering it to that crew.",
+      },
+      {
+        q: "Why is my crew account password rejected?",
+        a: "Passwords that are common or have appeared in a known data breach are refused, even if they meet the length rule. Choose a longer, less predictable password — for example, three unrelated words plus a number.",
+      },
+      {
+        q: "Are clients and vendors the same thing?",
+        a: "No. Clients are your customers (Landscapt > Clients) and are never suppliers. Vendors are the companies you buy from, and the Vendors list is shared: Equipt (purchasing and maintenance) and Landscapt (subcontractors, chemical suppliers) all read and write the same vendor records, so editing a vendor in one place changes it everywhere.",
+      },
+      {
+        q: "Can a work order turn into a purchase requisition?",
+        a: "Yes. When a work order needs parts, you can create a requisition from it, and the requisition keeps a link back to that work order. It then follows the normal approval and PO process.",
+      },
+      {
+        q: "How do parts inventory counts change?",
+        a: "Quantity goes up only when you receive a purchase order line for a maintenance part on a goods receipt. It goes down when a part is added to a work order's Costs tab, or when a PM schedule generates work orders that include parts. Counts never go below zero.",
       },
     ],
   },

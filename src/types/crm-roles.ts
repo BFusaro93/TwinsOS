@@ -31,6 +31,7 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
         permissions: {
           view_report_center: "View Report Center",
           manage_report_center: "Manage Report Center",
+          payroll_report: "View & Edit Payroll Report",
         },
       },
       dashboard_access: {
@@ -333,6 +334,13 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           sched_add_modify_projects: "Add/Modify Projects",
         },
       },
+      warranty_access: {
+        label: "Warranty Access",
+        permissions: {
+          warranty_view: "View Warranties",
+          warranty_manage: "Add/Edit/Void Warranties",
+        },
+      },
       snow_dispatch_access: {
         label: "Snow Dispatch Access",
         permissions: {
@@ -429,6 +437,13 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
           requisition_add: "Add Requisition",
           requisition_edit: "Edit Requisition",
           requisition_delete: "Delete Requisition",
+        },
+      },
+      commission_access: {
+        label: "Commission Access",
+        permissions: {
+          commission_view: "View Commission Earnings & Statements",
+          commission_manage: "Manage Commission Plans & Statements",
         },
       },
       snow_invoicing_access: {

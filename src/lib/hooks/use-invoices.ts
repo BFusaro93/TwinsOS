@@ -118,6 +118,7 @@ function mapLineItem(row: any): InvoiceLineItem {
     hours: row.hours != null ? Number(row.hours) : null,
     men: row.men ?? null,
     visitId: row.visit_id ?? null,
+    serviceId: row.service_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -165,6 +166,7 @@ export function mapInvoice(row: any): CRMInvoice {
     billingFrequency: (Array.isArray(row.crm_contracts) ? row.crm_contracts[0] : row.crm_contracts)?.billing_frequency ?? null,
     projectId: row.project_id ?? null,
     salesRepId: row.sales_rep_id ?? null,
+    saleType: row.sale_type ?? null,
     description: row.description,
     status: row.status,
     invoiceDate: row.invoice_date,
@@ -379,7 +381,7 @@ export function useCreateInvoiceFromEstimate() {
       dueDate?: string;
       poNumber?: string | null;
       lineItems: {
-        name?: string | null; description: string; qty: number; rateCents: number; totalCents: number;
+        name?: string | null; serviceId?: string | null; description: string; qty: number; rateCents: number; totalCents: number;
         discountCents?: number; discountType?: "percent" | "flat" | null; discountValue?: number | null;
         isTaxable?: boolean;
       }[];
@@ -466,6 +468,7 @@ export function useCreateInvoiceFromEstimate() {
         const { error: liErr } = await (supabase as any).from("crm_invoice_line_items").insert(
           lineItems.map((li, i) => ({
             invoice_id: inv.id,
+            service_id: li.serviceId ?? null,
             name: li.name ?? null,
             description: li.description,
             qty: li.qty,
@@ -625,6 +628,18 @@ export function useBulkImportInvoices() {
         .select("default_billing_terms")
         .maybeSingle();
 
+      // Every invoice line bills a catalog service; the CSV's "service" column
+      // must name one (matched case-insensitively).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: serviceRows } = await (supabase as any)
+        .from("crm_services")
+        .select("id, name")
+        .is("deleted_at", null);
+      const serviceByName = new Map<string, string>(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ((serviceRows ?? []) as any[]).map((s) => [String(s.name).trim().toLowerCase(), s.id as string]),
+      );
+
       let created = 0;
       let skipped = 0;
       // Row-level notes surfaced to the importer (1-based data-row numbers).
@@ -632,6 +647,12 @@ export function useBulkImportInvoices() {
 
       for (const [idx, r] of rows.entries()) {
         const rowNo = idx + 1;
+        const serviceId = serviceByName.get((r.service ?? "").trim().toLowerCase());
+        if (!serviceId) {
+          warnings.push({ row: rowNo, reason: `service "${(r.service ?? "").trim()}" is not in your service catalog — row skipped` });
+          skipped++;
+          continue;
+        }
         const nameKey = r.clientName?.trim().toLowerCase() ?? "";
         if (ambiguousNames.has(nameKey)) {
           warnings.push({ row: rowNo, reason: `more than one client is named "${r.clientName?.trim()}" — row skipped` });
@@ -732,6 +753,7 @@ export function useBulkImportInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: itemErr } = await (supabase as any).from("crm_invoice_line_items").insert({
           invoice_id: invoice.id,
+          service_id: serviceId,
           description: r.description.trim(),
           qty: 1,
           rate_cents: amountCents,
@@ -965,6 +987,7 @@ export function useUpdateInvoiceHeader() {
         service_address?: string | null;
         preferred_payment_method?: string | null;
         sales_rep_id?: string | null;
+        sale_type?: "new" | "renewal" | null;
         notes?: string | null;
       };
     }) => {
@@ -1824,11 +1847,14 @@ export function useApplyCreditToInvoice() {
  * invoice_id) therefore belongs to no project, which is correct: it's client
  * credit, not project revenue.
  */
-export function usePayments(clientId?: string, opts?: { projectId?: string | null }) {
+export function usePayments(clientId?: string, opts?: { projectId?: string | null; includeDeleted?: boolean }) {
   const projectId = opts?.projectId;
+  // The Payments list's Deleted tab needs soft-deleted rows; every other
+  // consumer wants live payments only.
+  const includeDeleted = opts?.includeDeleted === true;
   const projectKey = projectId === undefined ? "any" : projectId ?? "none";
   return useQuery({
-    queryKey: ["crm-payments", clientId ?? "all", { projectId: projectKey }],
+    queryKey: ["crm-payments", clientId ?? "all", { projectId: projectKey, includeDeleted }],
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1844,10 +1870,10 @@ export function usePayments(clientId?: string, opts?: { projectId?: string | nul
         let q = (supabase as any)
           .from("crm_payments")
           .select(`*, clients(display_name, billing_address), ${invoiceJoin}`, { count: "exact" })
-          .is("deleted_at", null)
           .order("payment_date", { ascending: false })
           // Tiebreaker: payments share dates, and range paging needs a total order.
           .order("id", { ascending: false });
+        if (!includeDeleted) q = q.is("deleted_at", null);
         if (clientId) q = q.eq("client_id", clientId);
         if (projectId) q = q.eq("crm_invoices.project_id", projectId);
         return q;
@@ -2128,7 +2154,24 @@ export function useCreateInvoiceFromJob() {
       let existing: InvoiceRef | null = null;
       let tagVisit = false;
       if (visitId) {
-        const found = await findLiveInvoiceForVisit(supabase, visitId);
+        // A secondary crew's visit on a multi-crew stop never bills on its own:
+        // the stop is billed once, from the lead visit.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: grp } = await (supabase as any)
+          .from("crm_job_visits").select("crew_group_id, crew_group_secondary").eq("id", visitId).maybeSingle();
+        const g = grp as { crew_group_id: string | null; crew_group_secondary: boolean | null } | null;
+        if (g?.crew_group_secondary && g.crew_group_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: lead } = await (supabase as any)
+            .from("crm_job_visits").select("id").eq("crew_group_id", g.crew_group_id)
+            .eq("crew_group_secondary", false).is("deleted_at", null).maybeSingle();
+          const leadFound = lead ? await findLiveInvoiceForVisit(supabase, (lead as { id: string }).id) : null;
+          if (!leadFound?.invoice) {
+            throw new Error("This crew shares the stop with another crew — it bills once, from the lead crew's visit. Invoice that visit instead.");
+          }
+          existing = leadFound.invoice;
+        }
+        const found = existing ? { invoice: existing, visitLineExists: true } : await findLiveInvoiceForVisit(supabase, visitId);
         existing = found.invoice;
         tagVisit = !found.visitLineExists;
         // Legacy single-visit one_time/waiting_list jobs: one invoice per job

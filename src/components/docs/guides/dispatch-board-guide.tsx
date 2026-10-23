@@ -26,7 +26,7 @@ const CALENDAR_SETTINGS: [string, string][] = [
 const COLUMNS: [string, string][] = [
   ["Service, Date, City, Zip", "Identify the visit and where it is."],
   ["Assigned", "Which crew (or Unassigned) currently owns the visit."],
-  ["Last Svc", "When this client was last serviced for this service — useful for spotting overdue recurring stops."],
+  ["Last Svc", "When this client was last serviced for this service — useful for spotting overdue recurring stops. A completed visit stamps its scheduled day, so a stop done on the 15th and marked complete on the 17th shows the 15th (a visit completed ahead of its scheduled day stamps today, and the date never moves backward)."],
   ["Start / End", "Scheduled arrival and departure window, editable inline."],
   ["B Hrs", "Budgeted hours — from the job's linked service (production rate × team size), or the job-level total as a last resort. Shown to two decimals."],
   ["Actual Hrs", "See the dedicated section below — this is the number that matters most for job costing. Shown to two decimals."],
@@ -240,6 +240,58 @@ export function DispatchBoardGuide() {
           whose steps set a <strong>Min Days</strong> gap, a move that would put a step too close to
           its neighbour is refused with a message like &quot;Step 2 must be at least 14 days after
           Step 1 (earliest 5/15)&quot; and the visit stays put. See the Jobs &amp; Packages guide.
+        </Callout>
+      </Section>
+
+      <Section id="multi-crew-stops" title="Two crews on one stop">
+        <p>
+          Some jobs need more than one crew on site the same day — a big cleanup, an install that
+          takes a mowing crew and an enhancement crew. Open the visit, find{" "}
+          <strong>Crews on this stop</strong>, and choose <strong>Add another crew…</strong>. (On the
+          job page, use the same control inside the visit&apos;s Change date / crew editor.) The visit
+          needs a crew already, and the stop must not have started yet. This is an office action:
+          crew logins can&apos;t add or remove crews, and the Crew App has no equivalent.
+        </p>
+        <p>
+          Behind the scenes each crew gets <strong>its own visit</strong> for the stop. That&apos;s why
+          everything else just works: each crew has its own row in its own column on the board, its
+          own stop in the Crew App, and clocks its own hours with its own men count. Rows for the
+          added crew carry a purple <strong>Shared</strong> tag; the original visit is tagged{" "}
+          <strong>Lead</strong>.
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Billing happens once.</strong> The lead visit carries the service&apos;s revenue
+            and creates the invoice when it&apos;s completed. The added crew&apos;s visit shows $0, never
+            invoices, and doesn&apos;t log a second &quot;Visit completed&quot; entry or fire automations a
+            second time. The client portal shows the stop as a single visit.
+          </li>
+          <li>
+            <strong>Labor is combined.</strong> Job Costing, the job&apos;s Hours and the labor reports
+            add up every crew&apos;s hours and labor. The budgeted hours are split evenly between the
+            crews so variance isn&apos;t charged the full budget twice.
+          </li>
+          <li>
+            <strong>The day moves together.</strong> Rescheduling one crew&apos;s visit moves the
+            other crews&apos; visits that haven&apos;t started. A crew already clocked in stays put.
+          </li>
+          <li>
+            <strong>Visit counts don&apos;t double.</strong> A shared stop uses one of a contract&apos;s
+            included visits, and counts once toward materials spread across a job&apos;s visits.
+          </li>
+          <li>
+            <strong>Chemicals are logged on the lead.</strong> The added crew doesn&apos;t get a
+            chemical card, so amounts and inventory aren&apos;t counted twice.
+          </li>
+        </ul>
+        <p>
+          To take a crew back off, click the ✕ next to it in <strong>Crews on this stop</strong> —
+          only before that crew has started. Removing the lead hands billing to the next crew. Each
+          crew&apos;s order in its own route is set separately, and a change to the job&apos;s default
+          crew doesn&apos;t overwrite a stop&apos;s crews.
+        </p>
+        <Callout>
+          Snow visits can&apos;t take a second crew — they&apos;re staffed and billed per storm.
         </Callout>
       </Section>
 
@@ -743,6 +795,20 @@ export function DispatchBoardGuide() {
           Each crew has its own color — set it under <strong>Team Settings → Team Details → Color</strong> (new crews get one automatically; the same color is used on the Crew Board). The roster under a crew name is its <em>default</em> roster
           (Team settings) — one-day changes made in Team Assignment or on the Crew Board show on the
           Crew Board, not on this grid.
+        </Callout>
+        <Callout>
+          <strong>Creating a crew:</strong> go to <strong>Team → Crews → Add Team</strong>, enter a Description (the crew&apos;s name) and Color
+          on <strong>Team Details</strong> (Team Code, Linked Login, starting address and Show In Calendar are optional), then click{" "}
+          <strong>Create &amp; Continue</strong>. On the <strong>Team Assignments</strong> tab, use <strong>Add Assignment</strong> to
+          put employees on the crew&apos;s default roster. A Linked Login is only needed if the crew will use the Crew App — creating a
+          crew account under Settings → Users makes the crew and the login together.
+        </Callout>
+        <Callout>
+          <strong>Removing a crew from the board:</strong> go to <strong>Team → Crews</strong> and turn the crew&apos;s
+          switch in the <strong>Active</strong> column off, then confirm. The crew moves to the <strong>Inactive</strong> tab
+          and stops appearing as a crew to schedule on the Dispatch Board and Crew Board; its history is kept. Turn the switch
+          back on (Inactive or All tab) to restore it. This is separate from the crew&apos;s login — deactivating the login in
+          Settings → Users only blocks sign-in.
         </Callout>
       </Section>
 

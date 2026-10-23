@@ -76,6 +76,7 @@ export function ClientsGuide() {
           <TOCLink href="#hierarchy">Commercial parent/child hierarchy</TOCLink>
           <TOCLink href="#properties">Properties</TOCLink>
           <TOCLink href="#custom-fields">Custom Fields &amp; zone measurements</TOCLink>
+          <TOCLink href="#aerial-measurement">Aerial Measurement</TOCLink>
           <TOCLink href="#contacts">Contacts</TOCLink>
           <TOCLink href="#timeline">Activity timeline</TOCLink>
           <TOCLink href="#account-statement">Account Statement</TOCLink>
@@ -250,36 +251,119 @@ export function ClientsGuide() {
 
       <Section id="properties" title="Properties">
         <p>
-          On a client&apos;s detail page, click <strong>Add Property</strong> under Related
-          Properties. The dialog captures a property name/label (e.g. &quot;Main Office,&quot;
-          &quot;Rental Unit&quot;), street address, city, state, ZIP, a gate code, and notes to
-          crew. A single client can have any number of properties — this is how one commercial
-          client, or a residential client with a rental, ends up with several distinct service
-          addresses under one account.
+          A client can have more than one service address. Open the client&apos;s{" "}
+          <strong>Details</strong> tab and find the <strong>Properties</strong> list; click{" "}
+          <strong>+ Add</strong> (or <strong>More → Add Property</strong>). The dialog captures a
+          property name/label (e.g. &quot;Main Office,&quot; &quot;Rental Unit&quot;), street
+          address, city, state, ZIP, a gate code, and notes to crew. The same list is where you view
+          and edit them &mdash; click the pencil on a row.
+        </p>
+        <p>
+          <strong>Picking a property on a job.</strong> When a client has two or more properties,
+          the New Job dialog shows a <strong>Property</strong> field. Choose the location the job is
+          for and the crew is routed to that address, and the property&apos;s gate code and notes to
+          crew show on the job. Leave it on <em>Client&apos;s main address</em> to use the
+          client&apos;s own service address. A client with only one property doesn&apos;t see the
+          field.
         </p>
         <Callout>
-          The Add Property dialog does not capture zone measurements (turf sq ft, mulch beds, etc.)
-          — that data lives one level up, on the client&apos;s Custom Fields tab, not per property.
-          See the next section.
+          Properties are service addresses on one account &mdash; they share the client&apos;s
+          balance, invoices and portal login. If each location needs its own invoices or balance
+          (for example a management company with several communities), create each one as its own
+          client and link them under a parent account instead.
+        </Callout>
+        <p>
+          <strong>Measurements per property.</strong> The Add/Edit Property dialog has an optional{" "}
+          <strong>Measurements</strong> block (turf, mulch beds, gross, parking lot / hardscape,
+          perimeter, edging, yards of mulch), or trace them with{" "}
+          <strong>More → Aerial Measurement</strong>. When an estimate is for one of the
+          client&apos;s properties, production-rate lines default their quantity from that
+          property&apos;s measurements &mdash; a blank value stays blank rather than borrowing
+          another address&apos;s numbers. For the client&apos;s own address (the primary property),
+          the client&apos;s Custom Fields takeoffs and the property&apos;s measurements are kept in
+          step. See the next two sections.
+        </p>
+        <Callout>
+          Existing estimate lines keep the quantities they already have; the property&apos;s
+          measurements apply to services you add afterward.
         </Callout>
       </Section>
 
       <Section id="custom-fields" title="Custom Fields & zone measurements">
         <p>
-          The client detail page has a <strong>Custom Fields</strong> tab with a Takeoffs section
-          where the measurements that feed the estimating engine&apos;s production-rate calculations
-          are entered: <strong>Turf Sq. Ft.</strong>, <strong>Mulch Bed Sq. Ft.</strong>,{" "}
+          Measurements that feed the estimating engine&apos;s production-rate calculations are kept
+          as <strong>takeoffs</strong> on the client: <strong>Turf Sq. Ft.</strong>,{" "}
+          <strong>Mulch Bed Sq. Ft.</strong>, <strong>Parking Lot / Hardscape Sq. Ft.</strong>,{" "}
           <strong>Gross Sq. Ft.</strong>, <strong>Linear Ft. Perimeter</strong>,{" "}
-          <strong>Linear Ft. Edging</strong>, and <strong>Yards of Mulch</strong>. The gate code
-          also has a home here, under an Access section, in addition to the one captured per
-          property.
+          <strong>Linear Ft. Edging</strong>, and <strong>Yards of Mulch</strong>. You can type them
+          in by hand on the Edit Client dialog&apos;s <strong>Custom Fields</strong> tab (Takeoffs
+          section), or let the Aerial Measurement tool calculate them from a satellite map. The
+          Details tab shows the current values. The gate code also has a home here, under an
+          Access section, in addition to the one captured per property.
         </p>
         <p>
-          These totals are entered at the <strong>client</strong> level, not per individual
-          property — there&apos;s currently no dedicated editor for breaking measurements down zone
-          by zone or property by property when a client has more than one service address. If a
-          commercial client has three properties with different turf areas, the Custom Fields tab
-          holds one combined number, not three.
+          Typed takeoffs are one combined number per client. Aerial Measurement is the only place
+          that breaks measurements down zone by zone and property by property.
+        </p>
+      </Section>
+
+      <Section id="aerial-measurement" title="Aerial Measurement">
+        <p>
+          Open a client and choose <strong>More → Aerial Measurement</strong> to trace the property
+          on a satellite map and have the square footage and distances calculated for you. It needs
+          the Google Maps key in <strong>Settings → Integrations</strong>; without one the dialog
+          tells you it isn&apos;t configured. If the client has no property yet, one is created
+          automatically from the client&apos;s service address (or billing address); a client with
+          no address on file needs one added under Details first. When the client has more than one
+          property, pick which one to measure from the dropdown at the top. A pin marks the
+          property&apos;s address.
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            <strong>Trace Area</strong> &mdash; click each corner of a lawn, bed or paved area, then{" "}
+            <strong>Finish Shape</strong>. <strong>Undo Point</strong> removes the last corner and{" "}
+            <strong>Cancel</strong> abandons the shape. Corners show as dots, and a running readout
+            follows the cursor while you trace.
+          </li>
+          <li>
+            <strong>Subtract Area</strong> &mdash; trace a region to cut out of the totals, such as
+            the house inside a whole-lot turf trace. Subtracted shapes draw in red and count as
+            negative square footage. A total never goes below zero.
+          </li>
+          <li>
+            <strong>Measure Distance</strong> &mdash; click along a fence line, edge or run, then{" "}
+            <strong>Finish Line</strong>. The length shows in feet, yards and meters.
+          </li>
+        </ol>
+        <p>
+          Every shape lands in a table below the map. For each area, set its <strong>name</strong>,{" "}
+          <strong>Type</strong> (Turf, Mulch Bed, Parking Lot / Hardscape, or Other) and{" "}
+          <strong>Effect</strong> (Adds or Subtracts); you can also drag the corners on the map to
+          adjust. For each distance, set its name and <strong>Type</strong> (Perimeter, Edging or
+          Other). Areas of the same type add together, and the table shows a total per type plus an
+          overall total. A shape that crosses itself is flagged and has to be retraced before you
+          can save.
+        </p>
+        <p>
+          <strong>Sync to Custom Fields.</strong> If your organization has number-type custom
+          fields (set up under CRM Settings → Custom Fields), the dialog lists each one with a
+          dropdown of what to keep it in sync with: Turf total, Mulch bed total, Parking lot total,
+          Gross total, or a Perimeter / Edging / Other / All-distances total (the dropdown guesses a
+          sensible match from the field name). A distance can instead be pointed at a specific
+          field with its <strong>Counts toward</strong> column; several distances pointed at the
+          same field add together, and that field shows &ldquo;From distance lines&rdquo; instead of
+          a dropdown. A field is only written when something of that type was actually measured, so
+          saving never overwrites an existing value with 0.
+        </p>
+        <p>
+          <strong>Saving.</strong> Click Save to store the shapes on the property. When the property
+          is the client&apos;s own (master) address, its Turf, Mulch Bed, Parking Lot / Hardscape and
+          Gross totals, plus the Perimeter and Edging distance totals, are also copied onto the
+          client&apos;s takeoff fields so the Details tab and estimates see them straight away. Each
+          takeoff is only changed when that type is in the saved shapes (or was there before and has
+          been deleted, which clears it); distances typed <em>Other</em> only feed custom fields. Extra properties you added yourself keep their
+          measurements at the property level only. A Trace or Measure still in progress has to be
+          finished or cancelled before saving.
         </p>
       </Section>
 

@@ -9,9 +9,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { SupportThread } from "@/components/shared/SupportThread";
+import { useCurrentUserStore } from "@/stores";
 import {
+  CONVERSATION_STATUS_LABEL,
+  useConversationStatus,
   useSendSupportMessage,
   useSupportMessagesRealtime,
   type SupportMessage,
@@ -42,6 +46,8 @@ export function ChatDialog({
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const sendMessage = useSendSupportMessage();
+  const { currentUser } = useCurrentUserStore();
+  const { data: status } = useConversationStatus(open ? orgId : null);
 
   useSupportMessagesRealtime(open ? orgId : null);
 
@@ -71,7 +77,12 @@ export function ChatDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[32rem] max-w-md flex-col gap-0 p-0 sm:p-0">
         <DialogHeader className="border-b p-4">
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            {title}
+            {status && messages.length > 0 && (
+              <Badge variant="outline" className="text-[10px] font-normal">{CONVERSATION_STATUS_LABEL[status]}</Badge>
+            )}
+          </DialogTitle>
         </DialogHeader>
 
         <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
@@ -84,30 +95,15 @@ export function ChatDialog({
                 : "Send a message and our team will get back to you."}
             </p>
           ) : (
-            messages.map((m) => {
-              const isOwnSide = viewerIsStaff ? m.senderType === "staff" : m.senderType === "org";
-              return (
-                <div key={m.id} className={cn("flex flex-col", isOwnSide ? "items-end" : "items-start")}>
-                  <div
-                    className={cn(
-                      "max-w-[80%] rounded-2xl px-3 py-2 text-sm",
-                      isOwnSide
-                        ? "bg-brand-500 text-white"
-                        : "bg-muted text-slate-800 dark:text-neutral-100"
-                    )}
-                  >
-                    {m.body}
-                  </div>
-                  <span className="mt-0.5 px-1 text-[10px] text-slate-400 dark:text-neutral-500">
-                    {m.senderName} ·{" "}
-                    {new Date(m.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                  </span>
-                </div>
-              );
-            })
+            <SupportThread messages={messages} viewerIsStaff={viewerIsStaff} viewerId={currentUser.id} />
           )}
         </div>
 
+        {!viewerIsStaff && status === "resolved" && (
+          <p className="border-t bg-muted/40 px-4 py-1.5 text-center text-xs text-slate-500 dark:text-neutral-400">
+            This conversation is marked resolved. Send a message to reopen it.
+          </p>
+        )}
         <div className="flex items-end gap-2 border-t p-3">
           <Textarea
             rows={1}

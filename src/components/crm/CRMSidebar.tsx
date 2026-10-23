@@ -8,11 +8,13 @@ import { cn } from "@/lib/utils";
 import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
 import { useSettingsStore } from "@/stores/settings-store";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useMyCrewInfo } from "@/lib/hooks/use-crew-app";
 import { BrandMark } from "@/components/shared/BrandMark";
 import {
   ArrowLeft,
   LayoutDashboard,
   Users,
+  Truck,
   UserRound,
   ClipboardSignature,
   Ticket,
@@ -48,6 +50,7 @@ import {
   FileImage,
   ClipboardList,
   CalendarCheck,
+  Percent,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -59,6 +62,8 @@ interface NavItem {
   /** Permission key gating this item — hidden entirely when the current
    *  user lacks it (admins always pass, per usePermissions()). */
   permission?: string;
+  /** Shown only to a user who is the Linked Login of a crew (crm_crews.user_id). */
+  linkedCrewOnly?: boolean;
 }
 
 interface NavSection {
@@ -89,10 +94,12 @@ export const CRM_NAV: NavSection[] = [
     items: [
       { label: "Dispatch Board", href: "/crm/scheduling/dispatch",     icon: CalendarDays, permission: "sched_dispatch_board" },
       { label: "Crew Board",     href: "/crm/scheduling/crew-board",   icon: Users, permission: "sched_dispatch_board" },
+      { label: "My Crew Schedule", href: "/crm/crew",                  icon: Truck, linkedCrewOnly: true },
       { label: "Waiting List",   href: "/crm/scheduling/waiting-list", icon: ListOrdered, permission: "sched_waiting_list" },
       { label: "Jobs",           href: "/crm/scheduling",              icon: Briefcase },
       { label: "Snow Jobs",      href: "/crm/scheduling/snow",         icon: Snowflake, permission: "snow_dispatch_view" },
       { label: "Projects",       href: "/crm/scheduling/projects",     icon: FolderKanban },
+      { label: "Warranties",     href: "/crm/warranties",              icon: ShieldCheck, permission: "warranty_view" },
       { label: "Job Photos",     href: "/crm/scheduling/job-photos",   icon: FileImage },
     ],
   },
@@ -105,6 +112,7 @@ export const CRM_NAV: NavSection[] = [
       { label: "Purchase Orders", href: "/crm/accounting/purchase-orders", icon: ShoppingCart },
       { label: "Contracts",       href: "/crm/accounting/contracts",       icon: FileSignature, permission: "contract_list" },
       { label: "Snow Invoicing",  href: "/crm/accounting/snow-invoicing",  icon: FileText, permission: "snow_invoicing_view" },
+      { label: "Commissions",     href: "/crm/accounting/commissions",     icon: Percent, permission: "commission_view" },
     ],
   },
   {
@@ -158,6 +166,7 @@ export function CRMSidebar() {
   const { logoDataUrl, orgName } = useSettingsStore();
   const { currentUser } = useCurrentUserStore();
   const { can } = usePermissions();
+  const { data: myCrew } = useMyCrewInfo();
 
   // Several nav items share a path prefix with siblings (e.g. "Settings" at
   // /crm/settings and "Documents" at /crm/settings/documents) — only the
@@ -210,7 +219,7 @@ export function CRMSidebar() {
                 {section.label}
               </p>
             )}
-            {section.items.filter((item) => !item.permission || can(item.permission)).map((item) => {
+            {section.items.filter((item) => (!item.permission || can(item.permission)) && (!item.linkedCrewOnly || !!myCrew)).map((item) => {
               const isActive = item.href === activeHref;
               const Icon = item.icon;
 

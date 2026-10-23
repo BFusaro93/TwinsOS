@@ -131,8 +131,9 @@ export function ClientPortalGuide() {
           Portal sign-in lives at <code>/portal/login</code> — a completely separate page from staff login,
           with its own email/password form. On successful sign-in the app checks for{" "}
           <code>user.user_metadata.portal</code>; if it&apos;s missing (i.e. this is a staff account, not a
-          portal account) the session is immediately signed back out with &quot;No portal account found for
-          this email.&quot; First-time visitors can also paste their invite link or bare token directly into
+          portal account) the session is immediately signed back out with &quot;This is a staff or crew login,
+          not a client portal account&quot; and a link to the regular sign-in page &mdash; so a staff
+          member or crew who types their own login here is pointed to where they belong. First-time visitors can also paste their invite link or bare token directly into
           the login page instead of clicking through email.
         </p>
         <p>
@@ -186,6 +187,9 @@ export function ClientPortalGuide() {
           when a visit&apos;s status is <code>in_progress</code>, kept live by a Supabase Realtime
           subscription on <code>crm_job_visits</code> — the banner updates itself the moment staff mark a
           visit in progress or complete, with no page refresh needed.
+        </p>
+              <p>
+          If two crews work the same stop, the portal shows it as a single visit &mdash; only the lead crew&apos;s visit is listed.
         </p>
       </Section>
 

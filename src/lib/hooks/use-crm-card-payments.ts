@@ -46,6 +46,17 @@ export function useStartConnectOnboarding() {
   });
 }
 
+export function useStartConnectOAuth() {
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/crm/payments/connect/oauth/start", { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to start Stripe connection");
+      return body as { url: string };
+    },
+  });
+}
+
 export function useCreateCrmPaymentIntent() {
   const qc = useQueryClient();
   return useMutation({

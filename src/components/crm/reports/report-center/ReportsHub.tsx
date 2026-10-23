@@ -12,8 +12,9 @@ import { ReportCatalog } from "./ReportCatalog";
 import { MyReportsList } from "./MyReportsList";
 import { DashboardsList } from "./DashboardsList";
 import { GraphicsLibraryList } from "./GraphicsLibraryList";
+import { PayrollReport } from "./PayrollReport";
 
-const TAB_KEYS = ["dashboard", "dashboards", "center", "custom", "graphics"] as const;
+const TAB_KEYS = ["dashboard", "dashboards", "center", "custom", "graphics", "payroll"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 export function ReportsHub() {
@@ -22,10 +23,15 @@ export function ReportsHub() {
   const searchParams = useSearchParams();
   const { can, isLoading: permissionsLoading } = usePermissions();
 
+  // Admins pass can() for every key. While permissions load, keep the tab
+  // addressable so a deep link to ?tab=payroll doesn't bounce.
+  const canPayroll = permissionsLoading || can("payroll_report");
+
   const raw = searchParams.get("tab") ?? "dashboard";
-  const active: TabKey = (TAB_KEYS as readonly string[]).includes(raw)
-    ? (raw as TabKey)
-    : "dashboard";
+  const active: TabKey =
+    (TAB_KEYS as readonly string[]).includes(raw) && (raw !== "payroll" || canPayroll)
+      ? (raw as TabKey)
+      : "dashboard";
 
   // Every hook has to run before the permission gate below: the first render
   // happens while permissions are still loading, so bailing out early on the
@@ -81,6 +87,14 @@ export function ReportsHub() {
             >
               My Reports
             </TabsTrigger>
+            {canPayroll && (
+              <TabsTrigger
+                value="payroll"
+                className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              >
+                Payroll
+              </TabsTrigger>
+            )}
             <TabsTrigger
               value="graphics"
               className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
@@ -101,6 +115,11 @@ export function ReportsHub() {
         <TabsContent value="custom" className="mt-4 flex-1 overflow-auto">
           <MyReportsList />
         </TabsContent>
+        {canPayroll && (
+          <TabsContent value="payroll" className="mt-4 flex-1 overflow-auto">
+            <PayrollReport />
+          </TabsContent>
+        )}
         <TabsContent value="graphics" className="mt-4 flex-1 overflow-auto">
           <GraphicsLibraryList />
         </TabsContent>

@@ -12,9 +12,12 @@ import { GuideLink } from "@/components/docs/GuideLink";
 const NEW_CASE_FIELDS: [string, string, string][] = [
   ["Case Type", "Required", "“Damage” or “Warranty” — a two-value select, defaults to Damage."],
   ["Date of Incident", "Required", "Date picker."],
-  ["Customer / Property Name", "Required", "Free-text field, not a client picker — see the limitation below."],
+  ["Find Client", "Optional", "Search-and-select that fills the name (and address, when blank) below — the case still stores the name as text, see the limitation below."],
+  ["Warranty", "Optional", "Warranty cases only — links the case to one of your active warranties, fills in the customer, and warns when the incident date is outside its coverage. See the Warranties guide."],
+  ["Customer / Property Name", "Required", "Free text, so a customer who isn’t a client can be typed directly."],
   ["Property Address", "Optional", "Free-text."],
   ["Description", "Required", "Textarea. Placeholder copy changes with the selected Case Type."],
+  ["Photos", "Optional", "New cases only. Take Photo opens the device camera; Choose Photos picks from the gallery (HEIC photos are converted automatically). They upload to the case right after it is created."],
   ["Resolution Notes", "Edit only", "Only shown once a case exists — not on initial creation."],
 ];
 
@@ -45,6 +48,7 @@ export function DamageCasesGuide() {
           <TOCLink href="#field-report">Reporting from the field</TOCLink>
           <TOCLink href="#status">Status</TOCLink>
           <TOCLink href="#expenses">Expenses &amp; cost tracking</TOCLink>
+          <TOCLink href="#tickets">Tickets</TOCLink>
           <TOCLink href="#po-link">Linking a Purchase Order</TOCLink>
           <TOCLink href="#automations">Automations &amp; Zapier</TOCLink>
           <TOCLink href="#client-linking">The client-linking limitation</TOCLink>
@@ -116,8 +120,8 @@ export function DamageCasesGuide() {
           <em>Damage</em>, Date of Incident set to today, Customer / Property Name typed as{" "}
           <em>&quot;Sterling Storage&quot;</em>, Description{" "}
           <em>&quot;Mower struck and cracked a sprinkler head on the west lawn near the fence
-          line.&quot;</em> A photo of the cracked head can be attached afterward from the case&apos;s
-          Files tab (see below). The case is now visible in the list with status{" "}
+          line.&quot;</em> The crew lead snaps a photo of the cracked head on the form, and it
+          lands on the case&apos;s Files tab (see below). The case is now visible in the list with status{" "}
           <strong>Open</strong> and $0.00 total cost until an expense is logged.
         </p>
       </Section>
@@ -127,7 +131,10 @@ export function DamageCasesGuide() {
           Crew and anyone with Job Photos access can also open a case without going near the Tools
           menu: <strong>Job Photos → Field → Damage Report</strong> is a phone-friendly form with the
           same fields (report type, date, customer / property, address, what happened). Submitting
-          it opens a new case with the same case number and automation behavior as the form above.
+          it opens a new case with the same case number, ticket and automation behavior as the form
+          above. The field form also has the <strong>Find Client</strong> search and a{" "}
+          <strong>Take Photo / Choose Photos</strong> control; if a photo fails to upload, the case
+          is still created and the form says how many photos need to be added by the office.
           Employee injuries are tracked separately — see{" "}
           <GuideLink href="/settings/support/injury-cases-guide" className="text-[#60ab45] underline">
             Injury &amp; Near-Miss Cases
@@ -184,8 +191,27 @@ export function DamageCasesGuide() {
           and <strong>Audit Trail</strong> tabs shared with other record types across the app
           (<code>AttachmentsSection</code>, <code>CommentsSection</code>, <code>AuditTrailTab</code>).
           Files accepts
-          images, PDFs, and common office documents, so incident photos go here — there is no
-          dedicated photo field on the case itself.
+          images, PDFs, and common office documents. Photos added when the case was opened, or
+          uploaded later, show as a thumbnail <strong>Photos</strong> strip at the top of the
+          Files tab; click one to open it full size.
+        </p>
+      </Section>
+
+      <Section id="tickets" title="Tickets">
+        <p>
+          Every new case automatically opens a <strong>ticket</strong> for the office to follow up
+          on, whether it was created from the Open Case dialog or the crew&apos;s field form. The
+          ticket is Open, normal priority, in the <strong>Damage / Warranty</strong> category, with
+          the case number, customer, address, incident date and description in its body, and it is
+          linked back to the case. If the customer name matches exactly one client, the ticket is
+          attached to that client and appears on their activity timeline; otherwise it is created
+          without a client.
+        </p>
+        <p>
+          The case&apos;s <strong>Tickets</strong> tab lists every ticket linked to it (number,
+          subject, status); click one to open it. You can link more tickets yourself: on the ticket,
+          use <strong>Linked Records → Add Link</strong>, choose <strong>Damage Case</strong>, and
+          pick the case.
         </p>
       </Section>
 
@@ -236,9 +262,8 @@ export function DamageCasesGuide() {
           <code>damage_cases.customer_name</code> is a plain text column — there is no foreign key
           to <code>clients.id</code>. This is confirmed still true directly in the code, not just in
           CLAUDE.md&apos;s general note about informal client-name strings: the type definition has
-          a <code>customerName: string</code> field and no <code>clientId</code>, the New/Edit Case form is a plain text{" "}
-          <code>Input</code> with placeholder <em>&quot;e.g. Sterling Storage&quot;</em>, not a
-          client picker,
+          a <code>customerName: string</code> field and no <code>clientId</code>, the Find Client picker on the New Case form only copies the
+          client&apos;s display name (and address) into the text fields,
           and case creation has to run an exact-match text lookup against the clients table after
           the fact just to fire automations — a workaround that only exists because there&apos;s no
           real relationship to query.

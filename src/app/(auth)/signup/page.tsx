@@ -32,6 +32,7 @@ export default function SignupPage() {
   const [companyName, setCompanyName] = useState("");
   const [name, setName]               = useState("");
   const [email, setEmail]             = useState("");
+  const [phone, setPhone]             = useState("");
   const [password, setPassword]       = useState("");
   const [confirm, setConfirm]         = useState("");
   const [error, setError]             = useState<string | null>(null);
@@ -86,7 +87,7 @@ export default function SignupPage() {
         orgRes = await fetch("/api/orgs/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyName: companyName.trim(), plan: selectedPlan }),
+          body: JSON.stringify({ companyName: companyName.trim(), plan: selectedPlan, contactName: name.trim(), contactEmail: email.trim(), contactPhone: phone.trim() }),
         });
         orgData = await orgRes.json();
       } catch {
@@ -299,6 +300,20 @@ export default function SignupPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+
+          {/* Phone (optional) — only shared with Landscapt support so we can help you get started */}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="phone">Phone <span className="font-normal text-slate-400">(optional)</span></Label>
+            <Input
+              id="phone"
+              type="tel"
+              placeholder="(555) 123-4567"
+              autoComplete="tel"
+              maxLength={30}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
             />
           </div>
 

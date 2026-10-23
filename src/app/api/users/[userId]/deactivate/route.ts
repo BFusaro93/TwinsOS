@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 const log = logger.child("users-deactivate");
 
@@ -30,6 +31,11 @@ export async function POST(
   if (!callerProfile || callerProfile.role !== "admin") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
+
+  // These routes compare the target's org with the caller's HOME org, so during
+  // a staff impersonation every target "isn't found" — say why instead.
+  const impersonating = await rejectIfImpersonating(supabase, user.id);
+  if (impersonating) return impersonating;
 
   if (userId === user.id) {
     return NextResponse.json({ error: "You cannot deactivate your own account" }, { status: 400 });

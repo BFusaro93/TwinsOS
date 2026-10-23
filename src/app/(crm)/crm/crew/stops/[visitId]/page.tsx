@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import {
   useStopDetail,
+  useStopPartnerCrews,
   useVisitPhotos,
   useVisitChemicals,
   useChemicalConfirmationStatus,
@@ -152,6 +153,8 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const { visitId: anchorVisitId } = use(params);
   const router = useRouter();
   const { data: stop, isLoading } = useStopDetail(anchorVisitId);
+  const { data: partnerCrews } = useStopPartnerCrews(stop?.visits ?? []);
+  const partners = [...new Set((stop?.visits ?? []).flatMap((v) => partnerCrews?.get(v.id) ?? []))];
   const { data: photos = [] } = useVisitPhotos(anchorVisitId);
   const stopVisitIds = stop?.visits.map((v) => v.id) ?? [];
   const { data: chemicals = [] } = useVisitChemicals(stopVisitIds);
@@ -383,6 +386,11 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </button>
           <div className="flex-1 min-w-0">
             <h1 className="font-bold text-slate-900 dark:text-neutral-100 truncate">{stop.clientName ?? "—"}</h1>
+            {partners.length > 0 && (
+              <p className="text-xs text-violet-700 dark:text-violet-400">
+                Shared stop — also on site: {partners.join(", ")}. You clock your own hours.
+              </p>
+            )}
             {stop.address && (
               <button onClick={openMaps} className="text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
                 <MapPin className="h-3 w-3" />

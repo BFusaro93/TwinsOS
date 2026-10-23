@@ -385,9 +385,11 @@ export function useCrews(activeOnly = false) {
 }
 
 /**
- * Shared crew logins (profiles.role === 'crew') that can be linked to a team via
- * crm_crews.user_id — this is what the Crew App uses to resolve "my crew" when a
- * shared login signs in (see useMyCrewVisits/useMyCrewInfo in use-crew-app.ts).
+ * Logins that can be linked to a team via crm_crews.user_id — this is what the
+ * Crew App uses to resolve "my crew" when someone signs in. Shared crew logins
+ * (profiles.role === 'crew') are the usual case, but a regular user (e.g. an
+ * admin who runs a crew) can be linked too so they don't need a second login.
+ * Shared crew logins sort first.
  */
 export function useCrewLogins() {
   return useQuery({
@@ -396,15 +398,18 @@ export function useCrewLogins() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, name, email")
-        .eq("role", "crew")
+        .select("id, name, email, role")
+        .eq("status", "active")
         .order("name");
       if (error) throw error;
-      return (data ?? []).map((row): CRMCrewLogin => ({
-        id: row.id,
-        name: row.name ?? row.email ?? "Unnamed login",
-        email: row.email ?? null,
-      }));
+      return (data ?? [])
+        .map((row): CRMCrewLogin => ({
+          id: row.id,
+          name: row.name ?? row.email ?? "Unnamed login",
+          email: row.email ?? null,
+          role: row.role,
+        }))
+        .sort((a, b) => Number(b.role === "crew") - Number(a.role === "crew") || a.name.localeCompare(b.name));
     },
   });
 }

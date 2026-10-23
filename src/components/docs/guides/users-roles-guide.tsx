@@ -206,6 +206,13 @@ export function UsersRolesGuide() {
             those and editing the KPI Scorecard.
           </li>
           <li>
+            <strong>View &amp; Edit Payroll Report</strong> (Home &gt; Report Access) unlocks the
+            Payroll tab in the Report Center, where each person&apos;s Start Day / End Day hours are
+            reviewed, corrected and exported. Admins always have it; the seeded Owner, Operations
+            Manager and Office Admin roles have it by default. A profile role of Manager alone does
+            not grant it.
+          </li>
+          <li>
             <strong>Individual report keys</strong> under CRM Reports, Scheduling Reports, and
             Accounting Reports each unlock one pre-built report by name (Client Balance, Job Cost
             Summary, A/R Aging Report, …). The same keys also gate the raw datasets behind custom
@@ -250,7 +257,8 @@ export function UsersRolesGuide() {
             within the hour even if already logged in. A deactivated user shows an{" "}
             <strong>Inactive</strong> badge and a reactivate icon in place of the trash icon;
             clicking it restores their login immediately, with their role and any CRM employee link
-            untouched.
+            untouched. Marking the user&apos;s CRM employee record inactive has the same effect on permissions: a deactivated employee keeps no CRM or role permissions until reactivated. For a shared crew login, this only affects sign-in — to take the crew itself
+            off the Dispatch Board, turn it off under Team → Crews instead.
           </li>
         </ol>
         <p>
@@ -260,6 +268,14 @@ export function UsersRolesGuide() {
           is lost or needs changing later, an Admin can set a new one for the account directly from
           the Users table — crew accounts use auto-generated addresses and can&apos;t receive a
           normal password-reset email.
+        </p>
+        <p>
+          Creating a crew account also creates a matching Landscapt crew and links the login to it,
+          so the crew has a schedule the first time they sign in. If a crew with the same name
+          already exists and has no login, that crew is linked instead. You can re-link or unlink
+          at any time under Team → Crews → <strong>Linked Login</strong>. The password must not be
+          a common or previously breached one — a weak password is rejected with a message asking
+          for a longer, less guessable one.
         </p>
       </Section>
 

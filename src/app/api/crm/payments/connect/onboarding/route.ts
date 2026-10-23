@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured, resolvedStripeMode } from "@/lib/stripe/server";
-import { syncConnectStatusFromStripe } from "@/lib/stripe/connect";
+import { clearStaleSavedPaymentMethods, syncConnectStatusFromStripe } from "@/lib/stripe/connect";
 import { logger } from "@/lib/logger";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 
@@ -94,16 +94,7 @@ export async function POST(request: Request) {
     // keep trying. A first-time connect (previousAccountId is null) has
     // nothing stale to clear.
     if (previousAccountId) {
-      const { error: clearError } = await serviceClient
-        .from("clients")
-        .update({
-          stripe_customer_id: null,
-          saved_payment_method_id: null,
-          saved_payment_method_type: null,
-          saved_payment_method_summary: null,
-          autopay_enabled: false,
-        })
-        .eq("org_id", org.id);
+      const clearError = await clearStaleSavedPaymentMethods(org.id);
       if (clearError) {
         log.error("failed to clear stale saved payment methods after reconnect", {
           error: clearError,

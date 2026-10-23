@@ -14,6 +14,7 @@ export interface DamageCase extends BaseRecord {
   resolutionNotes: string | null;
   totalCost: number; // cents, derived from expenses
   linkedPoId: string | null;
+  warrantyId: string | null;
 }
 
 export interface DamageCaseExpense extends BaseRecord {

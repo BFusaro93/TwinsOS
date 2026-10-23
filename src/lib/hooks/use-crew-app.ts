@@ -146,7 +146,7 @@ function crewVisitSelect(hidePricing: boolean): string {
     "men_count", "job_comments", "assigned_employee_id", "dispatched_at",
     "clocked_in_at", "clocked_out_at", "paused_at", "break_minutes",
     "acknowledged_notes_at", "notes_to_crew_updated_at", "skip_reason",
-    "created_at", "updated_at", "deleted_at",
+    "created_at", "updated_at", "deleted_at", "crew_group_id", "crew_group_secondary",
   ].join(", ");
 
   return `
@@ -226,6 +226,8 @@ function mapVisit(row: Record<string, unknown>): VisitWithNotesStamp {
     // writes crewId back.
     crewId:               effectiveVisitCrewId(row as VisitCrewRow),
     crewName:             (crew?.name as string) ?? null,
+    crewGroupId:          (row.crew_group_id as string | null) ?? null,
+    crewGroupSecondary:   (row.crew_group_secondary as boolean | null) ?? false,
     scheduledDate:        row.scheduled_date as string,
     startTime:            row.start_time as string | null,
     endTime:              row.end_time as string | null,
@@ -311,6 +313,31 @@ export function useMyCrewVisits(date: string, includeCarryOver = false) {
       const cmp = crewVisitComparator(await fetchRememberedRouteOrder(supabase, membership.crew_id, [date]));
       return [...carried.sort(cmp), ...[...data].sort(cmp)].map(mapVisit);
     },
+  });
+}
+
+// ── useStopPartnerCrews ───────────────────────────────────────────────────────
+// Multi-crew stops: the OTHER crews working the same stop today, by visit id.
+// RLS hides sibling visits from a crew login, so this goes through the
+// crm_visit_crew_partners RPC, which only returns names for visits the caller
+// may see.
+
+export function useStopPartnerCrews(visits: CRMJobVisit[]) {
+  const groupedIds = visits.filter((v) => v.crewGroupId).map((v) => v.id).sort();
+  return useQuery<Map<string, string[]>>({
+    queryKey: ["crew-app-partner-crews", groupedIds],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc("crm_visit_crew_partners", { p_visit_ids: groupedIds });
+      if (error) throw error;
+      const byVisit = new Map<string, string[]>();
+      for (const row of (data ?? []) as { visit_id: string; crew_name: string }[]) {
+        byVisit.set(row.visit_id, [...(byVisit.get(row.visit_id) ?? []), row.crew_name]);
+      }
+      return byVisit;
+    },
+    enabled: groupedIds.length > 0,
   });
 }
 
@@ -1062,6 +1089,85 @@ export function useUpsertCrewMemberTime() {
       qc.invalidateQueries({ queryKey: ["crew-member-times"] });
     },
     onError: () => toast.error("Failed to save crew member time"),
+  });
+}
+
+// ── Crew day (paid shift, shop to shop) ───────────────────────────────────────
+
+export interface CrewDayMember {
+  id: string;
+  name: string;
+  role: string | null;
+  absent: boolean;
+  startedAt: string | null;
+  endedAt: string | null;
+}
+
+export function useCrewDay() {
+  return useQuery<{ workDate: string; members: CrewDayMember[] }>({
+    queryKey: ["crew-day"],
+    queryFn: async () => {
+      const res = await fetch("/api/crm/crew/day");
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
+}
+
+export function useCrewDayAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { action: "start_day" | "end_day" | "member_in" | "member_out"; crewMemberId?: string; visitId?: string }) => {
+      const res = await fetch("/api/crm/crew/day", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crew-day"] });
+      qc.invalidateQueries({ queryKey: ["crew-absences"] });
+      qc.invalidateQueries({ queryKey: ["crew-member-times"] });
+    },
+    onError: () => toast.error("Couldn't update the crew's day — try again"),
+  });
+}
+
+// ── Crew attendance (who is working today) ────────────────────────────────────
+// Start Job auto-punches the whole roster; a member marked absent is skipped.
+
+export function useCrewAbsences() {
+  return useQuery<string[]>({
+    queryKey: ["crew-absences"],
+    queryFn: async () => {
+      const res = await fetch("/api/crm/crew/attendance");
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { absentMemberIds: string[] };
+      return json.absentMemberIds;
+    },
+  });
+}
+
+export function useSetCrewMemberAbsent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ crewMemberId, absent, visitId }: { crewMemberId: string; absent: boolean; visitId?: string }) => {
+      const res = await fetch("/api/crm/crew/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ crewMemberId, absent, visitId }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crew-absences"] });
+      qc.invalidateQueries({ queryKey: ["crew-day"] });
+      qc.invalidateQueries({ queryKey: ["crew-member-times"] });
+    },
+    onError: () => toast.error("Failed to update who is working today"),
   });
 }
 

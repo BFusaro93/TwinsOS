@@ -147,6 +147,7 @@ export interface CRMJob {
   ratePerInchCents: number | null;
   assetType: string | null;
   salesRepId: string | null;
+  saleType: "new" | "renewal" | null;
   source: string | null;
   paymentType: string | null;
   poNumber: string | null;
@@ -216,6 +217,8 @@ export interface NewJobFormValues {
 
 export interface NewClientJobFormValues {
   clientId: string;
+  /** The client's property this job is for (client_properties.id). Null = the client's own service address. */
+  propertyId?: string | null;
   jobType: JobType;
   projectId: string | null;
   contractId: string | null;
@@ -234,6 +237,7 @@ export interface NewClientJobFormValues {
   ratePerInchCents: number | null;
   assetType: string | null;
   salesRepId: string | null;
+  saleType?: "new" | "renewal" | null;
   source: string | null;
   paymentType: string | null;
   poNumber: string | null;
@@ -300,6 +304,13 @@ export interface CRMJobVisit {
   /** Per-visit "no crew" override: pins the visit to unassigned even when its job has a crew. */
   crewUnassigned?: boolean
   crewName?: string | null
+  /**
+   * Multi-crew stop: sibling visits (one per crew) share this id. Null for the
+   * normal single-crew visit. Exactly one member is the lead (the original
+   * visit — it bills and carries the revenue); the rest are `crewGroupSecondary`.
+   */
+  crewGroupId?: string | null
+  crewGroupSecondary?: boolean
   scheduledDate: string
   startTime: string | null
   endTime: string | null

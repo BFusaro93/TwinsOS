@@ -25,6 +25,7 @@ const PAIRED_EVENTS: [string, string][] = [
   ["Ticket assigned", "You're set as the assignee on a ticket."],
   ["Ticket comment", "Someone comments on a ticket you're involved with."],
   ["Contract expiring", "A contract is approaching its expiration date."],
+  ["Warranty expiring", "A warranty for one of your clients ends within 30 days — one reminder per end date. Goes to the client's sales rep, or to admins (in-app) when the client has none."],
   ["Low stock alert", "A part's quantity on hand drops to or below its minimum."],
   ["PM schedule due", "A preventive-maintenance schedule's next-due date has passed."],
   ["New maintenance request", "A new maintenance request is submitted."],
