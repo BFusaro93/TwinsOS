@@ -2305,6 +2305,14 @@ function VisitRow({
           </div>
         </td>
       </tr>
+      {notesToPlainText(visit.completionNotes).trim() && (
+        <tr className="border-b bg-slate-50/60 dark:bg-muted/30">
+          <td colSpan={7} className="px-4 py-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400 mb-0.5">Completion notes (from the crew)</p>
+            <p className="whitespace-pre-wrap text-xs text-slate-700 dark:text-neutral-300">{notesToPlainText(visit.completionNotes).trim()}</p>
+          </td>
+        </tr>
+      )}
       {showChemicals && (
         <tr className="border-b bg-teal-50/40 dark:bg-teal-950/40">
           <td colSpan={7} className="px-4 py-3">

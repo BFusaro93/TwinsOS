@@ -20,7 +20,7 @@ const STOP_ACTIONS: [string, string][] = [
   ["Resume", "Back to work. Shown in place of Take a Break while you're on a break."],
   [
     "Stop Job",
-    "You're done here. Asks for optional completion notes, then marks everything at the stop Completed and works out the hours.",
+    "You're done here. Asks for optional completion notes, then marks everything at the stop Completed and works out the hours. The office reads the notes on the job's Visits tab and on the client's timeline.",
   ],
   [
     "Skip",
@@ -67,7 +67,9 @@ export function CrewAppGuide() {
           It&apos;s also an installable web app: have crews use the browser&apos;s{" "}
           <strong>Add to Home Screen</strong> (iPhone Safari) or <strong>Install app</strong>{" "}
           (Android Chrome) option once, and it opens full-screen from a home-screen icon like a
-          normal app. It still needs a signal to load and save — installing doesn&apos;t add offline
+          normal app; the icon opens the login screen, and a phone that is still signed in goes straight to
+          its home. (If an icon was added before this changed and opens the marketing page instead,
+          remove it and add it again.) It still needs a signal to load and save — installing doesn&apos;t add offline
           use. Inputs are sized so iPhones don&apos;t zoom in when a field is tapped, and controls
           are larger for gloved or one-handed use.
         </p>

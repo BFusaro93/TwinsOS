@@ -19,7 +19,10 @@ const LAST_VIEWED_KEY_PREFIX = "support-chat-last-viewed:";
 export function SupportChatWidget() {
   const { currentUser } = useCurrentUserStore();
   const { open, setOpen } = useChatStore();
-  const { allowed: hasChatSupport } = useAddonAccess("chat_support");
+  const { allowed: hasChatSupportAddon } = useAddonAccess("chat_support");
+  // The conversation is shared by everyone in the org, so a crew login would read the
+  // admin's whole transcript with support. Crew never get the chat.
+  const hasChatSupport = hasChatSupportAddon && currentUser.role !== "crew";
   const { data: messages = [], isLoading } = useMyConversation(
     hasChatSupport ? currentUser.orgId || undefined : undefined
   );

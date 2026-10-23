@@ -172,6 +172,7 @@ type QuickAddItem = { label: string; quickAdd?: NonNullable<QuickAddType>; href?
 
 const CRM_QUICK_ADD: QuickAddItem[] = [
   { label: "Client",   quickAdd: "client" },
+  { label: "Job",      quickAdd: "job" },
   { label: "Estimate", quickAdd: "estimate" },
   { label: "Ticket",   quickAdd: "ticket" },
   { label: "Invoice",  quickAdd: "invoice" },
@@ -210,6 +211,7 @@ function QuickAddMenu() {
         : EQUIPT_QUICK_ADD
   )
     .filter((item) => item.quickAdd !== "client" || can("client_add"))
+    .filter((item) => item.quickAdd !== "job" || can("job_add"))
     // Limited Equipt app roles (viewer / requestor / purchaser) only see the
     // Equipt records they can actually create; Landscapt items follow the
     // Landscapt role.

@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { stripHtml } from "@/lib/utils/strip-html";
+import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { logger } from "@/lib/logger";
 import { fireServiceVisitCompletedTriggers, fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
@@ -109,6 +110,8 @@ type VisitRow = {
   job_service_id: string | null;
   /** Secondary crew on a multi-crew stop — billing/timeline/automations belong to the lead visit. */
   crew_group_secondary: boolean | null;
+  /** What the crew typed when finishing the stop; copied onto the "Visit completed" timeline row. */
+  completion_notes: string | null;
 };
 
 type JobServiceRow = {
@@ -171,7 +174,7 @@ export async function applyVisitCompletionSideEffects(
 
   const { data: visitData, error: visitErr } = await supabase
     .from("crm_job_visits")
-    .select("id, org_id, job_id, client_id, invoice_description, scheduled_date, status, job_service_id, crew_group_secondary")
+    .select("id, org_id, job_id, client_id, invoice_description, scheduled_date, status, job_service_id, crew_group_secondary, completion_notes")
     .eq("id", visitId)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -745,6 +748,8 @@ export async function applyVisitCompletionSideEffects(
         client_id: visit.client_id,
         activity_type: "job",
         subject,
+        // The crew's completion notes, so they read on the client timeline and not only in the audit trail.
+        body: notesToPlainText(visit.completion_notes).trim().slice(0, 2000) || null,
         ref_id: visit.job_id,
         ref_table: "crm_jobs",
         created_by: userId,
