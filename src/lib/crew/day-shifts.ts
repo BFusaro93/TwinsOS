@@ -1,4 +1,5 @@
 import { resolveWorkingMemberIds } from "@/lib/crew/stop-punches";
+import { shiftYmd } from "@/lib/time/zone";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = any;
@@ -41,7 +42,18 @@ export async function startCrewDay(
   return rows.length;
 }
 
-/** Closes every open shift for the crew's roster today. Returns how many closed. */
+/**
+ * The earliest work_date an open shift may still be closed from. A shift that
+ * started the evening before and runs past midnight keeps the earlier
+ * work_date, so closing it has to look back one day. Anything older than that
+ * is a forgotten shift — leave it open (payroll flags it) instead of closing
+ * it at an absurd length.
+ */
+export function openShiftLookbackDate(workDate: string): string {
+  return shiftYmd(workDate, -1);
+}
+
+/** Closes every open shift for the crew's roster (today's, or one that crossed midnight). Returns how many closed. */
 export async function endCrewDay(
   supabase: AnySupabase,
   p: { orgId: string; crewId: string; workDate: string; at: string }
@@ -53,7 +65,9 @@ export async function endCrewDay(
     .from("crm_crew_day_shifts")
     .select("id, started_at")
     .eq("org_id", p.orgId)
-    .eq("work_date", p.workDate)
+    .gte("work_date", openShiftLookbackDate(p.workDate))
+    .lte("work_date", p.workDate)
+    .gt("started_at", new Date(new Date(p.at).getTime() - 24 * 3_600_000).toISOString())
     .is("deleted_at", null)
     .is("ended_at", null)
     .in("crew_member_id", memberIds);

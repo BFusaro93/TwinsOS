@@ -115,7 +115,7 @@ const SECTIONS: ReportSection[] = [
         description: "For every product (chemical or general material): quantity needed for outstanding scheduled and waiting-list jobs, amount on hand, amount on order, and the resulting shortfall — with the ability to create a Requisition or PO directly from a shortfall.",
         notes: [
           "Chemical quantities require an Area Custom Field under Settings > Chemical Tracking and a default Application Rate on the product. General materials come from each job's Products section.",
-          "Chemical demand is the concentrate amount to stock or order, not the raw \"applied X per area\" rate — when a rate is configured with a diluted/mixed unit (e.g. 1 gallon of finished spray-mix per 1,000 sq ft), the report resolves the rate's dilution settings and the org's unit conversions to back out the concentrate, the same calculation the Daily Load List report uses. It used to report the mixed-solution figure directly, overstating purchasing needs by the full dilution ratio.",
+          "Chemical demand is the concentrate amount to stock or order, not the raw \"applied X per area\" rate — when a rate is configured with a diluted/mixed unit (e.g. 1 gallon of finished spray-mix per 1,000 sq ft), the report resolves the rate's dilution settings and the org's unit conversions to back out the concentrate, the same calculation the Daily Load List report uses.",
           "Amount on Order sums line-item quantities on open Requisitions (pending approval/approved) and Purchase Orders (requested through partially fulfilled) for that product, less any quantity already received against those PO lines.",
           "Demand counts visits in Scheduled, Dispatched, or In Progress status, plus waiting-list jobs that have not been dispatched yet. Only job products still marked Pending count — products already marked Invoiced or Used are excluded, since their quantity has already come out of on-hand.",
         ],
@@ -347,6 +347,7 @@ const SECTIONS: ReportSection[] = [
         notes: [
           "Built per completed visit whose completion date falls in the window. Revenue is the visit's service rate; labor is the crew's clock-out labor cost when one was recorded, otherwise estimated as man-hours × the crew's average labor burden rate and marked with a dagger (†); materials are the job materials logged against the visit.",
           "All hours are man-hours (crew hours × number of men).",
+          "On a stop worked by two crews, revenue is counted once (on the lead crew's visit) while every crew's hours and labor are added in, and the budgeted hours are split evenly between the crews.",
         ],
         fullPage: true,
       },
@@ -628,6 +629,9 @@ const SECTIONS: ReportSection[] = [
       {
         name: "Timesheet Detail",
         description: "Shows individual clock-in/out entries with breaks, hours, and labor cost per employee.",
+        notes: [
+          "These are job punches (clock-in/out on stops), which feed Job Costing. Paid hours for payroll come from the Start Day / End Day shift on the Report Center's Payroll tab instead, so the two can differ by drive and shop time.",
+        ],
         filters: "Worked Between, Crew",
       },
     ],

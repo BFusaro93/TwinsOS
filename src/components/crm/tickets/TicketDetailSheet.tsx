@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_TICKET_CATEGORIES } from "@/lib/crm/ticket-categories";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -89,7 +90,7 @@ const TICKET_STATUS_LABEL: Record<TicketStatus, string> = {
   closed:  "Closed",
 };
 
-const FALLBACK_CATEGORIES = ["Uncategorized", "Estimate", "Billing", "Change Service", "Complaint", "Other"];
+const FALLBACK_CATEGORIES: string[] = [...DEFAULT_TICKET_CATEGORIES];
 
 // ── print helper ──────────────────────────────────────────────────────────────
 

@@ -46,7 +46,9 @@ export function CrewAppGuide() {
           <TOCLink href="#my-schedule">My Schedule — the day&apos;s stops</TOCLink>
           <TOCLink href="#materials-called-for">Materials called for</TOCLink>
           <TOCLink href="#drive-time">Drive time</TOCLink>
+          <TOCLink href="#crew-day">Start Day and End Day</TOCLink>
           <TOCLink href="#working-a-stop">Working a stop</TOCLink>
+          <TOCLink href="#shared-stops">When another crew is on your stop</TOCLink>
           <TOCLink href="#hours">How your hours are worked out</TOCLink>
           <TOCLink href="#notes-photos">Notes and photos</TOCLink>
           <TOCLink href="#suggest-work">Suggesting work you spot</TOCLink>
@@ -170,6 +172,69 @@ export function CrewAppGuide() {
         </p>
       </Section>
 
+      <Section id="crew-day" title="Start Day and End Day">
+        <p>
+          The paid day runs <strong>shop to shop</strong>, not stop to stop. At the top of My
+          Schedule the crew has a green <strong>Start Day</strong> button. One tap by whoever has the
+          phone starts the day for <strong>everyone working on the crew</strong> that day; once it&apos;s
+          running the card reads &quot;Day started 7:02 AM &mdash; 3 on the clock&quot; with an{" "}
+          <strong>End Day</strong> button that clocks everyone out at once. If a job is still in
+          progress the app asks you to confirm before ending the day.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Who &quot;everyone&quot; is.</strong> The crew&apos;s roster for that date: the
+            employees under Team → Crews → Team Assignments, adjusted by any same-day reassignment on
+            the Crew Board, minus anyone marked not working. A crew with nobody on its roster can&apos;t
+            start a day &mdash; the button stays disabled until the office adds people.
+          </li>
+          <li>
+            <strong>Forgot to tap Start Day?</strong> Starting the first job opens the day anyway, so
+            payroll still has a shift. It&apos;s flagged <em>Started at first job</em> in the Payroll
+            report, because the real start (at the shop) was earlier &mdash; the office can correct it
+            there.
+          </li>
+          <li>
+            <strong>Start Job and Stop Job clock the whole crew too.</strong> Start Job punches every
+            working member in on that stop at the same moment and Stop Job punches them out. Those
+            per-person job punches feed Job Costing; the Start Day / End Day shift feeds payroll. They
+            are separate on purpose: drive time and shop time are paid but aren&apos;t on a job.
+          </li>
+          <li>
+            <strong>The day is the company&apos;s day.</strong> Which calendar day a shift belongs
+            to follows your organization&apos;s time zone, not the phone&apos;s.
+          </li>
+        </ul>
+        <p>
+          <strong>Late, out, or leaving early: Edit Crew.</strong> Tap <strong>Edit Crew</strong> on My
+          Schedule for the roster with each person&apos;s in/out time. For each person:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Not working</strong> &mdash; out today (sick, vacation, hasn&apos;t shown). They are
+            skipped by Start Day and Start Job, so they aren&apos;t clocked in by mistake.
+          </li>
+          <li>
+            <strong>Clock In</strong> &mdash; arrived late. Their shift starts now, and if a job is in
+            progress they join its punches from now.
+          </li>
+          <li>
+            <strong>Left for the day</strong> &mdash; ends their shift and any open job punch, and
+            marks them not working so the next Start Job doesn&apos;t clock them in again.
+          </li>
+          <li>
+            <strong>Back</strong> &mdash; someone who left returns the same day. Their shift reopens
+            and the time they were away is taken off as an unpaid break.
+          </li>
+        </ul>
+        <Callout>
+          The day clock is for the <strong>crew leader&apos;s login</strong> &mdash; the crew login (or
+          the regular user linked to the crew), and only for that crew&apos;s own roster. Office staff
+          fix anything after the fact in <strong>Report Center → Payroll</strong> (see the Report Center
+          guide) or with <strong>Edit Job Times</strong> on the dispatch board.
+        </Callout>
+      </Section>
+
       <Section id="working-a-stop" title="Working a stop">
         <Table>
           <thead>
@@ -250,10 +315,12 @@ export function CrewAppGuide() {
           </li>
         </ul>
         <Callout>
-          Hours are per <em>crew</em>, multiplied by headcount. Individual start and finish times —
-          for someone who came late or left early — are entered by the office on the dispatch board,
-          not by the crew on their phone. Those per-person times are what labour cost is calculated
-          from.
+          Hours on a stop are per <em>crew</em>, multiplied by headcount. Individual start and finish
+          times for someone who came late or left early come from two places: the crew leader&apos;s{" "}
+          <strong>Edit Crew</strong> button (see Start Day and End Day above), or the office in{" "}
+          <strong>Edit Job Times</strong> on the dispatch board. Those per-person punches are what
+          labour cost is calculated from. Pay is a different question: payroll uses the Start Day to
+          End Day shift, not the on-job hours.
         </Callout>
       </Section>
 
@@ -309,6 +376,11 @@ export function CrewAppGuide() {
           Everything a crew does lands on the <strong>Dispatch Board</strong> in real time: status
           moving to In Progress and Completed, actual hours against budgeted, notes, skip reasons, and
           photos. Nothing needs to be re-entered at the end of the day.
+        </p>
+        <p>
+          The day clock lands in <strong>Report Center → Payroll</strong> (admins and managers only):
+          each person&apos;s clock-in, clock-out, breaks and total hours per day, ready to correct and
+          export for payroll.
         </p>
         <p>
           Dashboards are scoped separately. A crew only sees dashboards that have been explicitly

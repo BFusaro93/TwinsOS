@@ -135,6 +135,31 @@ export function ProductCatalogGuide() {
           <strong>Allow completing without confirmation</strong> for a single visit. Chemicals added
           by hand are recorded as entered and don&apos;t need confirming.
         </p>
+        <p>
+          <strong>Estimated amounts.</strong> With <strong>Settings &gt; Chemical Tracking &gt;
+          Default Chemical Quantity</strong> on and an <strong>Area Custom Field</strong> chosen
+          (for example Turf Sq. Ft.), the planned amount is the product&apos;s default Application
+          Rate multiplied by the property&apos;s area. The rate&apos;s area unit is honored, so a
+          rate &ldquo;per 1,000 Sq Ft&rdquo; or &ldquo;per Acre&rdquo; is converted to square feet
+          before the math. The built-in takeoff fields count as an Area Custom Field, and a job
+          with no property of its own uses the client&apos;s property when the client has exactly
+          one. A client with two or more properties and no property on the job gets no estimate
+          rather than a guess. Start and end time inputs on the application record are optional.
+        </p>
+        <p>
+          <strong>Stock.</strong> When a visit is completed, each confirmed, used chemical
+          application takes its concentrate amount out of the product&apos;s on-hand quantity,
+          converted into the unit of the product&apos;s default Application Rate (the product needs
+          one, and &ldquo;Track inventory quantity&rdquo; on). Changing the amount, marking it Not
+          used, deleting it, or reopening the visit puts the stock back, and a deduction never takes
+          the quantity below zero or blocks completing the job. Stock quantities on a product can
+          have decimals.
+        </p>
+        <p>
+          <strong>Compliance report.</strong> The Chemical Tracking report lists applications on
+          visits that are in progress or completed, in a compact set of columns that prints
+          landscape and exports to a readable PDF.
+        </p>
       </Section>
 
       <Section id="maintenance-part-link" title="The Maintenance Part ↔ CMMS Parts link">

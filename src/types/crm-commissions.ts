@@ -77,4 +77,22 @@ export interface CommissionStatementLine {
   basisCents: number;
   rateBps: number;
   commissionCents: number;
+  /** Set on clawback/offset adjustment lines: ev_key of the line being adjusted. */
+  sourceEvKey: string | null;
+  invoiceId: string | null;
+}
+
+/** A clawback (negative) or offset (positive) line the rep's next statement will carry. */
+export interface CommissionPendingAdjustment {
+  clawEvKey: string;
+  sourceEvKey: string;
+  employeeId: string;
+  invoiceId: string | null;
+  invoiceNumber: number | null;
+  clientName: string | null;
+  planName: string | null;
+  serviceName: string | null;
+  basisCents: number;
+  rateBps: number;
+  commissionCents: number;
 }

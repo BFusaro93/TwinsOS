@@ -287,6 +287,8 @@ export const SERVICE_REPORTS: PrebuiltReportDef[] = [
             .from("crm_job_visits")
             .select("job_id, scheduled_date, status, rate_cents, qty")
             .in("job_id", chunk)
+            // Count a multi-crew stop once (lead only).
+            .eq("crew_group_secondary", false)
             .is("deleted_at", null)
         );
         for (const v of visits) {

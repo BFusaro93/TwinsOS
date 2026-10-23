@@ -9,8 +9,9 @@ import { shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
  * GET  /api/crm/reports/payroll?from=YYYY-MM-DD&to=YYYY-MM-DD
  * PUT  /api/crm/reports/payroll — upsert one member-day adjustment.
  *
- * Office only (admin / manager). Crew logins must never see payroll, and the
- * crm_payroll_adjustments RLS policy enforces the same rule in the database.
+ * Requires the payroll_report permission (admins always have it). Crew logins
+ * never hold it, and the crm_payroll_adjustments RLS policy enforces the same
+ * rule in the database.
  */
 const Ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const MAX_RANGE_DAYS = 62;
@@ -33,12 +34,13 @@ async function authorize(request: Request) {
   if (!user) return { response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any;
-  const { data: profile } = await db.from("profiles").select("org_id, role").eq("id", user.id).maybeSingle();
-  if (!profile?.org_id || !["admin", "manager"].includes(profile.role as string)) {
-    return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-  }
+  const { data: profile } = await db.from("profiles").select("org_id").eq("id", user.id).maybeSingle();
+  if (!profile?.org_id) return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   const { data: hasCrm } = await db.rpc("has_crm_access");
   if (!hasCrm) return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  // The payroll_report crm_roles permission (admins always pass inside the RPC).
+  const { data: allowed } = await db.rpc("has_settings_permission", { p_key: "payroll_report" });
+  if (allowed !== true) return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   return { db, user, orgId: profile.org_id as string };
 }
 

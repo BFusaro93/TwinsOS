@@ -83,7 +83,7 @@ export function PayrollReport() {
   }
 
   if (error instanceof PayrollForbiddenError) {
-    return <EmptyState icon={Wallet} title="Payroll is limited to admins and managers" description="Ask an admin if you need access." />;
+    return <EmptyState icon={Wallet} title="No access to Payroll" description="Payroll needs the View & Edit Payroll Report permission. Ask an admin if you need access." />;
   }
 
   const grand = members.reduce((s, m) => s + m.total, 0);

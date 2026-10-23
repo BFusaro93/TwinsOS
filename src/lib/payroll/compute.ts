@@ -99,7 +99,9 @@ export async function computePayroll(
       .select("crew_member_id, work_date, started_at, ended_at, break_minutes, source")
       .eq("org_id", orgId)
       .is("deleted_at", null)
-      .gte("work_date", from)
+      // One day of lead-in: a shift that started the evening before `from`
+      // can run past midnight into the range and own its early punches.
+      .gte("work_date", shiftYmd(from, -1))
       .lte("work_date", to)
   );
 
@@ -123,11 +125,25 @@ export async function computePayroll(
   );
   const shiftByKey = new Map<string, ShiftRow>(shifts.map((s) => [`${s.crew_member_id}|${s.work_date}`, s]));
 
+  // A punch belongs to the shift it happened inside, even when that shift
+  // crossed midnight (11pm start, 1am punch is still the previous work_date).
+  // Otherwise the punch's own local date is its day.
+  const DAY_MS = 86_400_000;
+  const punchDate = (memberId: string, clockedInAt: string): string => {
+    const localDate = isoInZone(new Date(clockedInAt), tz);
+    const prev = shiftByKey.get(`${memberId}|${shiftYmd(localDate, -1)}`);
+    if (!prev) return localDate;
+    const at = new Date(clockedInAt).getTime();
+    const startMs = new Date(prev.started_at).getTime();
+    const endMs = prev.ended_at ? new Date(prev.ended_at).getTime() : startMs + DAY_MS;
+    return at >= startMs && at <= endMs ? prev.work_date : localDate;
+  };
+
   // Per member-day: job hours, off-clock minutes recorded on jobs, open punches.
   const jobs = new Map<string, { jobHours: number; offClockMinutes: number; open: number }>();
   for (const p of punches) {
     if (!p.clocked_in_at) continue;
-    const date = isoInZone(new Date(p.clocked_in_at), tz);
+    const date = punchDate(p.crew_member_id, p.clocked_in_at);
     if (date < from || date > to) continue;
     const k = `${p.crew_member_id}|${date}`;
     const cur = jobs.get(k) ?? { jobHours: 0, offClockMinutes: 0, open: 0 };
@@ -148,6 +164,7 @@ export async function computePayroll(
   const rows: PayrollRow[] = [];
   for (const k of keys) {
     const [memberId, workDate] = k.split("|");
+    if (workDate < from || workDate > to) continue; // lead-in shift rows only feed punch attribution
     const member = memberById.get(memberId);
     if (!member) continue;
     const dayCrewId = overrideByDay.get(k) ?? member.crewId;

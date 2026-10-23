@@ -104,7 +104,7 @@ import {
 import { useTickets, useBulkImportTickets } from "@/lib/hooks/use-tickets";
 import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
 import { NotificationsPage } from "@/components/settings/NotificationsPage";
-import { useConnectStatus, useStartConnectOnboarding, type ConnectStatus } from "@/lib/hooks/use-crm-card-payments";
+import { useConnectStatus, useStartConnectOnboarding, useStartConnectOAuth, type ConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { LANDSCAPT_TAB_PERMISSIONS } from "@/lib/permissions/settings-access";
 import { useConfirm } from "@/components/shared/useConfirm";
@@ -1303,6 +1303,29 @@ const CONNECT_STATUS_LABEL: Record<ConnectStatus["status"], string> = {
 function ConnectAccountSection() {
   const { data: connectStatus, isLoading } = useConnectStatus();
   const { mutateAsync: startOnboarding, isPending: redirecting } = useStartConnectOnboarding();
+  const { mutateAsync: startOAuth, isPending: linking } = useStartConnectOAuth();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("connect");
+    if (result === "error") {
+      const messages: Record<string, string> = {
+        denied: "Stripe connection was cancelled.",
+        in_use: "That Stripe account is already connected to another Landscapt organization.",
+        unauthorized: "Only admins can connect Stripe.",
+      };
+      toast.error(messages[params.get("reason") ?? ""] ?? "Couldn't connect your Stripe account. Please try again.");
+    }
+  }, []);
+
+  async function handleLinkExisting() {
+    try {
+      const { url } = await startOAuth();
+      window.location.href = url;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to start Stripe connection");
+    }
+  }
 
   async function handleConnect() {
     try {
@@ -1355,6 +1378,20 @@ function ConnectAccountSection() {
               ? "Connect with Stripe"
               : "Continue Setup"}
       </Button>
+      {status !== "active" && (
+        <p className="text-sm text-slate-600 dark:text-neutral-400">
+          Already have a Stripe account (for example one you use with another system)?{" "}
+          <button
+            type="button"
+            className="font-medium underline underline-offset-2 disabled:opacity-50"
+            onClick={() => void handleLinkExisting()}
+            disabled={linking || redirecting}
+          >
+            {linking ? "Redirecting…" : "Connect your existing account"}
+          </button>{" "}
+          &mdash; it stays yours and keeps working everywhere else.
+        </p>
+      )}
     </div>
   );
 }

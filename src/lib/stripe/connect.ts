@@ -72,3 +72,25 @@ export async function achEnabledForAccount(stripe: Stripe, accountId: string): P
   const account = await stripe.accounts.retrieve(accountId);
   return account.capabilities?.us_bank_account_ach_payments === "active";
 }
+
+/**
+ * Customers and PaymentMethods live on the connected account (see
+ * saved-payment-methods.ts), so when an org's connected account changes every
+ * client's saved card/bank reference points at an account that no longer
+ * exists for them. Clears them (and autopay) so nothing tries to charge a
+ * dead reference. Returns the DB error, if any, for the caller to log.
+ */
+export async function clearStaleSavedPaymentMethods(orgId: string) {
+  const serviceClient = createServiceClient();
+  const { error } = await serviceClient
+    .from("clients")
+    .update({
+      stripe_customer_id: null,
+      saved_payment_method_id: null,
+      saved_payment_method_type: null,
+      saved_payment_method_summary: null,
+      autopay_enabled: false,
+    })
+    .eq("org_id", orgId);
+  return error;
+}

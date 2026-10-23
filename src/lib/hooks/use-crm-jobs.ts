@@ -1382,7 +1382,14 @@ export function useUpdateVisit() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update(dbUpdates as any)
         .eq('id', id);
-      if (error) throw error;
+      if (error) {
+        // One crew can only appear once per multi-crew stop
+        // (crm_job_visits_crew_group_crew_unique).
+        if (error.code === '23505' && String(error.message ?? '').includes('crew_group_crew_unique')) {
+          throw new Error('That crew is already working this stop. Pick a different crew, or remove the duplicate crew from the stop first.');
+        }
+        throw error;
+      }
 
       if (updates.status === 'dispatched' && before && before.status !== 'dispatched') {
         await loadServiceChemicalsForVisit(supabase, id).catch(() => 0);
