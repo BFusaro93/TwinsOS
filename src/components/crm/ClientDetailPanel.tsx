@@ -1770,6 +1770,10 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
   // Measured areas for this property, as typed text (blank = none).
   const [takeoffs, setTakeoffs] = useState<Record<PropertyTakeoffKey, string>>(emptyTakeoffs);
   const addr = useVerifyAddress();
+  // useVerifyAddress returns a new object every render, so depending on `addr` re-ran the
+  // seed effect below on every render and crashed the dialog on open (React #185). `reset`
+  // is a stable callback.
+  const resetAddr = addr.reset;
 
   // Seed the form whenever the dialog opens (either for a new property, or to edit an existing one)
   useEffect(() => {
@@ -1785,8 +1789,8 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
     });
     setTakeoffs(takeoffsToText(property));
     // A reopened dialog must not show the previous property's verdict.
-    addr.reset();
-  }, [open, property, addr]);
+    resetAddr();
+  }, [open, property, resetAddr]);
 
   function patch(k: keyof typeof form, v: string) {
     setForm((p) => ({ ...p, [k]: v }));
