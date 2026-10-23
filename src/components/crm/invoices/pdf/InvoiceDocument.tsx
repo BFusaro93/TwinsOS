@@ -42,7 +42,8 @@ export interface InvoicePDFChemicalApplication {
   targets: string;
   areasTreated: string;
   reEntryInterval: string;
-  applicatorLicense: string;
+  /** Applicator name and license, e.g. "Alex Stebbing (Lic. T38358)". */
+  applicator: string;
 }
 
 export interface InvoicePDFData {
@@ -944,15 +945,15 @@ const SCH = StyleSheet.create({
   headRow: { flexDirection: "row", backgroundColor: "#f1f5f9", borderBottomWidth: 1, borderBottomColor: "#cbd5e1", paddingVertical: 4, paddingHorizontal: 4 },
   row: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: "#e2e8f0", paddingVertical: 4, paddingHorizontal: 4 },
   headCell: { fontFamily: "Helvetica-Bold", fontSize: 7, color: "#475569" },
-  cDate: { width: "9%", paddingRight: 4 },
-  cProduct: { width: "19%", paddingRight: 4 },
+  cDate: { width: "8%", paddingRight: 4 },
+  cProduct: { width: "18%", paddingRight: 4 },
   cTargets: { width: "11%", paddingRight: 4 },
   cAreas: { width: "11%", paddingRight: 4 },
-  cRate: { width: "17%", paddingRight: 4 },
+  cRate: { width: "14%", paddingRight: 4 },
   cAmount: { width: "9%", paddingRight: 4 },
   cMethod: { width: "9%", paddingRight: 4 },
   cReEntry: { width: "8%", paddingRight: 4 },
-  cLicense: { width: "7%" },
+  cApplicator: { width: "12%" },
   epa: { fontSize: 7, color: "#64748b", marginTop: 1 },
   footer: { position: "absolute", bottom: 24, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between" },
   footerText: { fontSize: 7, color: "#94a3b8" },
@@ -980,7 +981,7 @@ function InvoiceChemicalPage({ invoice, org }: { invoice: InvoicePDFData; org: O
         <Text style={[SCH.headCell, SCH.cAmount]}>Amount Applied</Text>
         <Text style={[SCH.headCell, SCH.cMethod]}>Method</Text>
         <Text style={[SCH.headCell, SCH.cReEntry]}>Re-Entry</Text>
-        <Text style={[SCH.headCell, SCH.cLicense]}>License #</Text>
+        <Text style={[SCH.headCell, SCH.cApplicator]}>Applicator</Text>
       </View>
       {chemicals.map((c, i) => (
         <View key={i} style={SCH.row} wrap={false}>
@@ -995,7 +996,7 @@ function InvoiceChemicalPage({ invoice, org }: { invoice: InvoicePDFData; org: O
           <Text style={SCH.cAmount}>{c.amount}</Text>
           <Text style={SCH.cMethod}>{c.method}</Text>
           <Text style={SCH.cReEntry}>{c.reEntryInterval}</Text>
-          <Text style={SCH.cLicense}>{c.applicatorLicense}</Text>
+          <Text style={SCH.cApplicator}>{c.applicator}</Text>
         </View>
       ))}
       <View style={SCH.footer} fixed>
