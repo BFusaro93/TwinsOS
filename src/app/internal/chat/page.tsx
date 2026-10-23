@@ -7,7 +7,9 @@ import { useCurrentUserStore } from "@/stores";
 import {
   CONVERSATION_STATUS_LABEL,
   useStaffConversationList,
-  useOrgConversation,
+  useThreadConversation,
+  threadKey,
+  type ThreadRef,
   useSupportMessagesRealtime,
   useSendSupportMessage,
   useSetConversationStatus,
@@ -36,7 +38,7 @@ const FILTERS: { value: StatusFilter; label: string }[] = [
 export default function StaffChatPage() {
   const { currentUser } = useCurrentUserStore();
   const { data: conversations = [], isLoading } = useStaffConversationList(true);
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("active");
 
   useSupportMessagesRealtime(null);
@@ -45,8 +47,7 @@ export default function StaffChatPage() {
     filter === "all" ? true : filter === "active" ? c.status !== "resolved" : c.status === filter
   );
   // Keep the open thread on screen even after it's resolved out of the filter.
-  const selected = conversations.find((c) => c.orgId === selectedOrgId) ?? visible[0] ?? null;
-  const effectiveOrgId = selectedOrgId ?? selected?.orgId ?? null;
+  const selected = conversations.find((c) => threadKey(c) === selectedKey) ?? visible[0] ?? null;
 
   return (
     <div className="flex h-full gap-4">
@@ -75,16 +76,17 @@ export default function StaffChatPage() {
           ) : (
             visible.map((c) => (
               <button
-                key={c.orgId}
-                onClick={() => setSelectedOrgId(c.orgId)}
+                key={threadKey(c)}
+                onClick={() => setSelectedKey(threadKey(c))}
                 className={cn(
                   "flex w-full flex-col gap-0.5 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50",
-                  c.orgId === effectiveOrgId && "bg-brand-50"
+                  selected && threadKey(c) === threadKey(selected) && "bg-brand-50"
                 )}
               >
                 <span className="flex items-center gap-2 text-sm font-medium text-slate-800">
                   <span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_DOT[c.status])} title={CONVERSATION_STATUS_LABEL[c.status]} />
                   {c.orgName}
+                  {c.personName && <span className="font-normal text-slate-500">· {c.personName}</span>}
                 </span>
                 <span className="truncate text-xs text-slate-500">{c.lastMessage}</span>
               </button>
@@ -94,14 +96,15 @@ export default function StaffChatPage() {
       </div>
 
       <div className="flex-1 rounded-lg border bg-white">
-        {effectiveOrgId ? (
+        {selected ? (
           <ConversationPane
-            key={effectiveOrgId}
-            orgId={effectiveOrgId}
-            orgName={conversations.find((c) => c.orgId === effectiveOrgId)?.orgName ?? ""}
+            key={threadKey(selected)}
+            thread={{ orgId: selected.orgId, threadUserId: selected.threadUserId }}
+            orgName={selected.orgName}
+            personName={selected.personName}
             staffName={currentUser.name}
             staffId={currentUser.id}
-            status={conversations.find((c) => c.orgId === effectiveOrgId)?.status ?? "open"}
+            status={selected.status}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-slate-400">
@@ -114,8 +117,8 @@ export default function StaffChatPage() {
   );
 }
 
-function ConversationPane({ orgId, orgName, staffName, staffId, status }: { orgId: string; orgName: string; staffName: string; staffId: string; status: ConversationStatus }) {
-  const { data: messages = [], isLoading } = useOrgConversation(orgId);
+function ConversationPane({ thread, orgName, personName, staffName, staffId, status }: { thread: ThreadRef; orgName: string; personName: string; staffName: string; staffId: string; status: ConversationStatus }) {
+  const { data: messages = [], isLoading } = useThreadConversation(thread);
   const sendMessage = useSendSupportMessage();
   const setStatus = useSetConversationStatus();
   const [draft, setDraft] = useState("");
@@ -130,7 +133,7 @@ function ConversationPane({ orgId, orgName, staffName, staffId, status }: { orgI
     if (!body) return;
     setDraft("");
     try {
-      await sendMessage.mutateAsync({ orgId, senderType: "staff", senderName: staffName, body });
+      await sendMessage.mutateAsync({ orgId: thread.orgId, threadUserId: thread.threadUserId, senderType: "staff", senderName: staffName, body });
     } catch (err) {
       console.error("[ConversationPane]", err);
       toast.error("Couldn't send that message.");
@@ -141,14 +144,14 @@ function ConversationPane({ orgId, orgName, staffName, staffId, status }: { orgI
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <span className="font-medium text-slate-800">{orgName}</span>
+        <span className="font-medium text-slate-800">{orgName}{personName ? ` · ${personName}` : ""}</span>
         <div className="flex gap-1">
           {(["open", "in_progress", "resolved"] as ConversationStatus[]).map((st) => (
             <button
               key={st}
               disabled={setStatus.isPending}
               onClick={() => st !== status && setStatus.mutate(
-                { orgId, status: st },
+                { ...thread, status: st },
                 { onError: () => toast.error("Couldn't change the status.") }
               )}
               className={cn(

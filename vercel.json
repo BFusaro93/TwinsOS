@@ -20,6 +20,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/support-chat-notify",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/contract-invoices",
       "schedule": "0 8 * * *"
     },

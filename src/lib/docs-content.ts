@@ -1961,7 +1961,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I chat with support, and can I edit a message?",
-        a: "If you have chat support (included with the Growth and Enterprise plans, or as an add-on), Help > Chat with us opens a conversation with the Landscapt team; once it has messages, a chat bubble stays on screen as the way back in. Messages keep line breaks and bold text, and links are clickable. Hover your own message and click the pencil to edit it (it then shows 'edited'). The header shows Open, In progress or Resolved; a resolved conversation reopens when you send another message. Without chat support you can use Send Feedback or Email Support from the same Help menu.",
+        a: "If you have chat support (included with the Growth and Enterprise plans, or as an add-on), Help > Chat with us opens your own private conversation with the Landscapt team (teammates can't see it, and everyone else in your company has their own; crew logins don't get chat); once it has messages, a chat bubble stays on screen as the way back in. Messages keep line breaks and bold text, and links are clickable. Hover your own message and click the pencil to edit it (it then shows 'edited'). The header shows Open, In progress or Resolved; a resolved conversation reopens when you send another message. Without chat support you can use Send Feedback or Email Support from the same Help menu.",
       },
       {
         q: "How do I report a bug or suggest an idea?",
