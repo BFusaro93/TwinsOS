@@ -75,10 +75,10 @@ export function SupportChatWidget() {
           onClick={() => handleOpen(true)}
           title="Continue chat with support"
           className={cn(
-            // Bottom-right corner like the other floating buttons. Settings is the only TopBar screen that
-            // also mounts the Ask AI and Feedback buttons, so only there does the bubble stack above them.
+            // Bottom-right corner like the other floating buttons. Home and Settings are the only screens that
+            // also mount the Ask AI and Feedback buttons, so only there does the bubble stack above them.
             "fixed right-[calc(1.25rem+env(safe-area-inset-right))]",
-            pathname.startsWith("/settings") ? "bottom-[calc(9rem+env(safe-area-inset-bottom))]" : "bottom-[calc(1.25rem+env(safe-area-inset-bottom))]",
+            (pathname.startsWith("/settings") || pathname.startsWith("/home")) ? "bottom-[calc(9rem+env(safe-area-inset-bottom))]" : "bottom-[calc(1.25rem+env(safe-area-inset-bottom))]",
             "z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand-500 text-white shadow-lg transition-colors hover:bg-brand-600 print:hidden"
           )}
         >
