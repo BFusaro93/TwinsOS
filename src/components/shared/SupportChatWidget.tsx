@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { useCurrentUserStore, useChatStore } from "@/stores";
-import { useMyConversation, useSupportMessagesRealtime } from "@/lib/hooks/use-support-chat";
+import { useMyConversation, useConversationStatus, useSupportMessagesRealtime } from "@/lib/hooks/use-support-chat";
 import { useAddonAccess } from "@/lib/hooks/use-module-access";
 import { ChatDialog } from "@/components/shared/ChatDialog";
 import { cn } from "@/lib/utils";
@@ -12,8 +12,8 @@ import { cn } from "@/lib/utils";
 const LAST_VIEWED_KEY_PREFIX = "support-chat-last-viewed:";
 
 /**
- * Renders both the floating "continue this conversation" bubble (only once
- * a conversation exists — see FeedbackButton/AskAIButton for the same
+ * Renders both the floating "continue this conversation" bubble (only while
+ * a conversation is open or in progress — see FeedbackButton/AskAIButton for the same
  * bottom-right floating-button convention) and the ChatDialog itself. The
  * HelpMenu's "Chat with us" item starts a conversation by opening the same
  * dialog via useChatStore, before any bubble exists yet.
@@ -29,6 +29,12 @@ export function SupportChatWidget() {
     hasChatSupport ? currentUser.orgId || undefined : undefined,
     hasChatSupport ? currentUser.id || undefined : undefined
   );
+  const { data: status } = useConversationStatus(
+    hasChatSupport && currentUser.orgId && currentUser.id ? { orgId: currentUser.orgId, threadUserId: currentUser.id } : null
+  );
+  // The bubble is the way back into a conversation that is still going. A resolved one drops it
+  // (Help > Chat with us still opens the history); a new message from either side reopens it.
+  const conversationActive = messages.length > 0 && status !== "resolved";
   const [hasUnread, setHasUnread] = useState(false);
 
   useSupportMessagesRealtime(open ? null : currentUser.orgId || undefined);
@@ -63,7 +69,7 @@ export function SupportChatWidget() {
 
   return (
     <>
-      {messages.length > 0 && !open && (
+      {conversationActive && !open && (
         <button
           type="button"
           onClick={() => handleOpen(true)}
