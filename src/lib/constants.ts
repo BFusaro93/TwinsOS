@@ -128,6 +128,7 @@ export const ASSET_STATUS_LABELS: Record<string, string> = {
   in_shop: "In Shop",
   out_of_service: "Out of Service",
   disposed: "Disposed",
+  sold: "Sold",
 };
 
 export const ASSET_STATUS_COLORS: Record<string, string> = {
@@ -136,6 +137,7 @@ export const ASSET_STATUS_COLORS: Record<string, string> = {
   in_shop: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800",
   out_of_service: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
   disposed: "bg-slate-200 dark:bg-neutral-700 text-muted-foreground border-slate-300 dark:border-neutral-700",
+  sold: "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800",
 };
 
 // ─── Maintenance Request Status ───────────────────────────────────────────────
@@ -262,3 +264,8 @@ export const INJURY_TYPE_OPTIONS = [
   "Damage to a body system",
   "Other",
 ];
+
+/** Asset/vehicle statuses that mean the unit has left the fleet (scrapped or sold). */
+export function isRetiredStatus(status: string | null | undefined): boolean {
+  return status === "disposed" || status === "sold";
+}

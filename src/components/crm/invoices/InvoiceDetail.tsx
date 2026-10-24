@@ -20,6 +20,7 @@ import {
   useApplyCreditToInvoice,
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useOtherCharges } from "@/lib/hooks/use-other-charges";
 import { SaleTypeSelect } from "@/components/crm/commissions/SaleTypeSelect";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
@@ -304,6 +305,9 @@ function LineItemRow({
     <tr className="group border-b text-xs hover:bg-slate-50 dark:hover:bg-muted/40">
       {/* Service name */}
       <td className="w-44 px-3 py-2 font-medium text-slate-700 dark:text-neutral-300 align-middle">
+        {row.isOtherCharge && !row.serviceId ? (
+          <span className="block px-1 py-0.5 text-xs text-slate-600 dark:text-neutral-400" title="Other charge (fee) — not tied to a service">Other charge</span>
+        ) : (
         <select
           value={row.serviceId ?? ""}
           disabled={locked}
@@ -325,6 +329,7 @@ function LineItemRow({
           {!row.serviceId && <option value="">Select service…</option>}
           {lineServices.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
+        )}
         {row.name && row.name !== lineServices.find((s) => s.id === row.serviceId)?.name && (
           <span className="mt-0.5 block truncate text-[10px] font-normal text-muted-foreground">{row.name}</span>
         )}
@@ -669,6 +674,7 @@ export function InvoiceDetail({
   const { data: unappliedPayments = [] } = useUnappliedPayments(invoice?.clientId);
   const unappliedCents = unappliedPayments.reduce((s, p) => s + p.unusedAmountCents, 0);
   const { data: savedServices } = useCRMServices();
+  const { data: otherCharges } = useOtherCharges();
   const { data: orgSettings } = useOrgSettings();
   const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
@@ -827,6 +833,28 @@ export function InvoiceDetail({
     finally { addingLineItemRef.current = false; }
   }
 
+  /** Other charges are catalog templates: copy the fields onto a plain line (no service_id). */
+  async function addOtherCharge(c: { name: string; description: string; amountCents: number; isTaxable: boolean }) {
+    if (addingLineItemRef.current) return;
+    addingLineItemRef.current = true;
+    try {
+      await upsertItem({
+        invoiceId: invoice!.id,
+        item: {
+          name: c.name,
+          description: c.description || c.name,
+          qty: 1,
+          rate_cents: c.amountCents,
+          total_cents: c.amountCents,
+          is_taxable: c.isTaxable,
+          is_other_charge: true,
+          sort_order: lineItems.length,
+        },
+      });
+    } catch { toast.error("Failed to add charge"); }
+    finally { addingLineItemRef.current = false; }
+  }
+
   /**
    * Row saves are fire-on-blur, so clicking Save right after typing races the
    * row's own upsert. Wait for any in-flight line-item mutations, then read the
@@ -885,7 +913,7 @@ export function InvoiceDetail({
         toast.error("Add at least one line item with a description or amount before saving this invoice");
         return;
       }
-      if (savedLines.some((li) => !li.serviceId)) {
+      if (savedLines.some((li) => !li.serviceId && !li.isOtherCharge)) {
         toast.error("Choose a service for every line item — it decides where the revenue lands in reports and commissions");
         return;
       }
@@ -1492,7 +1520,7 @@ export function InvoiceDetail({
                       ref={lineItemSearchRef}
                       value={lineItemSearch}
                       onChange={(e) => setLineItemSearch(e.target.value)}
-                      placeholder="Search services…"
+                      placeholder="Search services & charges…"
                       className="flex-1 bg-transparent text-xs outline-none placeholder:text-slate-400 dark:placeholder:text-neutral-500"
                     />
                   </div>
@@ -1526,6 +1554,36 @@ export function InvoiceDetail({
                           </div>
                         </button>
                       ))}
+                    {(() => {
+                      const matches = (otherCharges ?? []).filter((c) =>
+                        c.isActive && (!lineItemSearch || c.name.toLowerCase().includes(lineItemSearch.toLowerCase()))
+                      );
+                      if (matches.length === 0) return null;
+                      return (
+                        <>
+                          <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Other Charges</p>
+                          {matches.map((c) => (
+                            <button
+                              key={c.id}
+                              className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
+                              onClick={() => {
+                                void addOtherCharge(c);
+                                setLineItemPickerOpen(false);
+                                setLineItemSearch("");
+                              }}
+                            >
+                              <span className="font-medium text-slate-800 dark:text-neutral-100">{c.name}</span>
+                              <div className="ml-2 flex shrink-0 items-center gap-2">
+                                {c.isTaxable && (
+                                  <span className="rounded bg-amber-50 px-1 text-[10px] text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">Tax</span>
+                                )}
+                                {c.amountCents > 0 && <span className="text-slate-400 dark:text-neutral-500">${(c.amountCents / 100).toFixed(2)}</span>}
+                              </div>
+                            </button>
+                          ))}
+                        </>
+                      );
+                    })()}
                     {(savedServices ?? []).filter((svc) =>
                       !lineItemSearch || svc.name.toLowerCase().includes(lineItemSearch.toLowerCase())
                     ).length === 0 && lineItemSearch && (

@@ -9,6 +9,8 @@ import {
   useUpdateStormEvent,
   useSnowRoutes,
   useSnowRouteStops,
+  useMasterRouteSlots,
+  useSaveStormOrderToRoutes,
   useSnowJobs,
   useStormEventVisits,
   useAddJobsToStormEvent,
@@ -325,7 +327,26 @@ function AddJobsDialog({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [initialized, setInitialized] = useState(false);
 
-  const candidateJobIds = routeId ? routeStops.map((s) => s.jobId) : snowJobs.map((j) => j.id);
+  const { data: masterSlots } = useMasterRouteSlots();
+  const selectedRoute = routes.find((r) => r.id === routeId);
+
+  // With no route picked, keep the saved Master Route order (route by route,
+  // stop by stop) rather than arbitrary job order, so every storm comes up in
+  // the same sequence. Jobs on no route follow, in their usual order.
+  const candidateJobIds = routeId
+    ? routeStops.map((s) => s.jobId)
+    : snowJobs
+        .map((j, i) => ({ id: j.id, i, slot: masterSlots?.get(j.id) }))
+        .sort((a, b) => {
+          if (!!a.slot !== !!b.slot) return a.slot ? -1 : 1;
+          if (a.slot && b.slot) {
+            const byRoute = a.slot.routeName.localeCompare(b.slot.routeName);
+            if (byRoute !== 0) return byRoute;
+            if (a.slot.sortOrder !== b.slot.sortOrder) return a.slot.sortOrder - b.slot.sortOrder;
+          }
+          return a.i - b.i;
+        })
+        .map((x) => x.id);
   const candidates = useMemo(() => {
     const byId = new Map(snowJobs.map((j) => [j.id, j]));
     return candidateJobIds
@@ -356,7 +377,15 @@ function AddJobsDialog({
   async function handleAdd() {
     const jobs = candidates
       .filter((c) => selectedIds.has(c.job.id))
-      .map((c) => ({ jobId: c.job.id, clientId: c.job.clientId, crewId: defaultCrewId || c.job.crewId || null }));
+      .map((c) => ({
+        jobId: c.job.id,
+        clientId: c.job.clientId,
+        // Explicit crew pick, else the job's Master Route crew, else the job's own crew.
+        crewId: defaultCrewId
+          || (routeId ? selectedRoute?.defaultCrewId : masterSlots?.get(c.job.id)?.routeCrewId)
+          || c.job.crewId
+          || null,
+      }));
     if (jobs.length === 0) { toast.error("No jobs selected"); return; }
     try {
       await addJobs.mutateAsync({ stormEventId, date, jobs });
@@ -1009,6 +1038,7 @@ export function SnowDispatchBoard() {
   // Minutes to ARRIVE at each stop (from the previous stop, or the shop for a crew's first stop).
   const [driveMins, setDriveMins] = useState<Map<string, { mins: number; fromShop: boolean }>>(new Map());
   const { mutateAsync: updateVisitMutation } = useUpdateVisit();
+  const { mutateAsync: saveOrderToRoutes, isPending: savingOrder } = useSaveStormOrderToRoutes();
 
   const activeEvent = events.find((e) => e.id === selectedEventId) ?? events[0] ?? null;
   const effectiveEventId = activeEvent?.id ?? "";
@@ -1181,6 +1211,16 @@ export function SnowDispatchBoard() {
       .map((id, i) => ({ id, i, v: byId.get(id) }))
       .filter((x) => x.v && x.v.orderNum !== x.i);
     await Promise.all(changes.map((x) => updateVisitMutation({ id: x.id, updates: { order_num: x.i }, jobId: x.v!.jobId })));
+  }
+
+  async function saveOrderToMasterRoutes() {
+    if (!effectiveEventId) return;
+    try {
+      const n = await saveOrderToRoutes(effectiveEventId);
+      toast.success(`Saved the order of ${n} stop${n === 1 ? "" : "s"} to the Master Routes. Future storms will start in this order.`);
+    } catch {
+      toast.error("Failed to save the order to the Master Routes");
+    }
   }
 
   async function moveStop(v: CRMJobVisit, dir: -1 | 1) {
@@ -1457,6 +1497,9 @@ export function SnowDispatchBoard() {
                   <DropdownMenuItem onSelect={() => setCrewAssignOpen(true)}>Team Assign…</DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => void optimizeRoutes()} disabled={optimizing || visits.length < 2}>
                     {selectedVisitIds.size > 0 ? "Optimize Selected Routes" : "Optimize Routes"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void saveOrderToMasterRoutes()} disabled={savingOrder || visits.length === 0}>
+                    Save Order to Master Routes
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                 </>

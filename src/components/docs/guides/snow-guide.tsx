@@ -94,7 +94,10 @@ export function SnowGuide() {
       <Section id="adding-jobs" title="Adding jobs and setting priority">
         <p>
           Click <strong>Add Jobs</strong> on an open storm event to bring up the candidate list —
-          every client with a snow job, or just the stops on a chosen master route. Each candidate
+          every client with a snow job, or just the stops on a chosen master route. With no route
+          chosen, the list follows your saved master-route order (route by route, stop by stop), with
+          jobs on no route after them, and each stop picks up its route&apos;s default crew unless
+          you choose a crew in the dialog. Each candidate
           shows its trigger depth, its client&apos;s priority, and its assigned crew, and the list
           filters itself with three controls:
         </p>
@@ -197,6 +200,17 @@ export function SnowGuide() {
             Assigned</em> when nothing is selected), <em>Close Out Selected</em>, <em>Skip
             Selected</em> and <em>Cancel Selected</em>, Team Assign, Optimize Routes, Show Crew
             Stats, Print Route Sheets, and Clear Filters &amp; Selection.
+          </li>
+          <li>
+            <strong>Keeping the same order storm to storm.</strong> Once you&apos;ve ordered the
+            stops the way you want them (by hand or with Optimize), choose Actions &gt;{" "}
+            <em>Save Order to Master Routes</em>. Each crew&apos;s order is written onto its master
+            route (the active route whose default crew is that crew, created and named after the crew
+            if there isn&apos;t one), so the next storm&apos;s Add Jobs comes up in that sequence.
+            Stops that weren&apos;t on this storm keep their place on the route, jobs new to the route
+            go on the end, and a job moved to another crew moves to that crew&apos;s route (a job is
+            on only one route). You can also edit the order directly in Settings &gt; Services &gt;
+            Snow Routes.
           </li>
           <li>
             <strong>Skip and cancel with a reason.</strong> Skipping or cancelling asks for a

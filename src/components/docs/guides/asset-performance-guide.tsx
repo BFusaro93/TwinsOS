@@ -34,6 +34,7 @@ const STATUSES: [string, string][] = [
   ["Out of Service", "Down."],
   ["Inactive", "Left out entirely — parked for the season isn't the same as broken, so it's neither up nor down."],
   ["Disposed", "Left out entirely."],
+  ["Sold", "Left out entirely — same as Disposed, but records that the unit was sold rather than scrapped."],
 ];
 
 export function AssetPerformanceGuide() {
@@ -302,7 +303,7 @@ export function AssetPerformanceGuide() {
           <li>
             <strong>Warranties</strong> — counts of active, expiring and expired warranties, and the list
             filtered to the next 30 days, next 90 days, everything under warranty, expired, or no warranty
-            on file. Disposed assets are left out.
+            on file. Disposed and sold assets are left out.
           </li>
         </ul>
       </Section>

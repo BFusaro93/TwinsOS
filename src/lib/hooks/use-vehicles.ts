@@ -192,7 +192,7 @@ export function useUpdateVehicleStatus() {
   });
 }
 
-const VALID_VEHICLE_STATUSES = new Set(["active", "inactive", "in_shop", "out_of_service", "disposed"]);
+const VALID_VEHICLE_STATUSES = new Set(["active", "inactive", "in_shop", "out_of_service", "disposed", "sold"]);
 
 function normaliseVehicleStatus(raw: string): string {
   const s = raw.trim().toLowerCase().replace(/\s+/g, "_");

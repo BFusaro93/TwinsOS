@@ -79,6 +79,8 @@ import { OverheadSettingsEditor } from "@/components/crm/settings/OverheadSettin
 import { LaborRatesEditor } from "@/components/crm/settings/LaborRatesEditor";
 import { ClientPortalTab } from "@/components/crm/settings/ClientPortalSettings";
 import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
+import { OtherChargesEditor } from "@/components/crm/settings/OtherChargesEditor";
+import { useOtherCharges } from "@/lib/hooks/use-other-charges";
 import { ChemicalTrackingTab } from "@/components/crm/settings/ChemicalTrackingSettings";
 import { SmsOnboardingSettings } from "@/components/crm/settings/SmsOnboardingSettings";
 import { InvoiceTemplatesEditor } from "@/components/crm/settings/InvoiceTemplatesEditor";
@@ -1549,6 +1551,7 @@ function QuickBooksSyncStatusSection() {
 function AccountingTab() {
   const { data: paymentMethods = [] } = useOrgList("payment_methods");
   const { data: discountsList = [] } = useDiscounts();
+  const { data: otherChargesList = [] } = useOtherCharges();
   const { data: invoiceTemplates = [] } = useInvoicePDFTemplates();
   const { data: orgSettings } = useOrgSettings();
   const { mutateAsync: updateOrg } = useUpdateOrgSettings();
@@ -1736,6 +1739,9 @@ function AccountingTab() {
       </AccordionSection>
       <AccordionSection title="Discounts" count={discountsList.length} description="Each discount needs a default rate — a percent off or a flat dollar amount.">
         <DiscountsEditor />
+      </AccordionSection>
+      <AccordionSection title="Other Charges" count={otherChargesList.length} description="Fees such as late fees or trip charges that can be added to invoices, one at a time or in bulk from the Invoices list.">
+        <OtherChargesEditor />
       </AccordionSection>
       <AccordionSection
         title="Invoice Templates"

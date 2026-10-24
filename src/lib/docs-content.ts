@@ -493,7 +493,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Keep status current for uptime",
             detail:
-              "Uptime is measured from the asset's status: In Shop and Out of Service are down, Active is up, and Inactive (parked) or Disposed time is left out. Set a machine to In Shop when it goes down and back to Active when it's fixed.",
+              "Uptime is measured from the asset's status: In Shop and Out of Service are down, Active is up, and Inactive (parked), Disposed or Sold time is left out. Set a machine to In Shop when it goes down and back to Active when it's fixed.",
           },
           {
             step: "Full guide",
@@ -1831,7 +1831,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How is asset uptime calculated?",
-        a: "From the asset's status history: time Active ÷ time Active + In Shop + Out of Service, over the window you pick. Inactive and Disposed time is left out entirely, so a mower parked for the winter isn't counted as down. Average repair time is the average length of an In Shop / Out of Service stretch.",
+        a: "From the asset's status history: time Active ÷ time Active + In Shop + Out of Service, over the window you pick. Inactive, Disposed and Sold time is left out entirely, so a mower parked for the winter isn't counted as down. Average repair time is the average length of an In Shop / Out of Service stretch.",
       },
       {
         q: "What counts toward an asset's maintenance cost?",
