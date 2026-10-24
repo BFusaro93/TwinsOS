@@ -119,6 +119,7 @@ function mapLineItem(row: any): InvoiceLineItem {
     men: row.men ?? null,
     visitId: row.visit_id ?? null,
     serviceId: row.service_id ?? null,
+    isOtherCharge: !!row.is_other_charge,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

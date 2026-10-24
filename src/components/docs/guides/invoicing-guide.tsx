@@ -47,6 +47,7 @@ export function InvoicingGuide() {
           <TOCLink href="#tax-on-auto-invoices">Sales tax on invoices generated from jobs</TOCLink>
           <TOCLink href="#editing-and-sending">Editing and sending an invoice</TOCLink>
           <TOCLink href="#invoice-photos">Photos on an invoice</TOCLink>
+          <TOCLink href="#other-charges">Other charges (late fees, trip charges, surcharges)</TOCLink>
           <TOCLink href="#invoice-list">The Invoices list: columns and filters</TOCLink>
           <TOCLink href="#status-lifecycle">Invoice status lifecycle</TOCLink>
           <TOCLink href="#recording-payments">Recording payments</TOCLink>
@@ -156,7 +157,9 @@ export function InvoicingGuide() {
             where the revenue lands in reports and which commission rate applies (see{" "}
             <GuideLink href="/settings/support/commissions-guide" className="text-[#60ab45] underline">Commissions</GuideLink>
             ). Lines created from visits, estimates and contracts get their service automatically, and a
-            line left without one shows in amber.
+            line left without one shows in amber. The exception is an{" "}
+            <a href="#other-charges" className="text-[#60ab45] underline">other charge</a> (a fee such
+            as a late fee), which is labelled &ldquo;Other charge&rdquo; and doesn&apos;t need a service.
           </li>
           <li>
             <strong>Sale type.</strong> The header&apos;s <em>Sale Type</em> (New sale or Renewal /
@@ -239,6 +242,34 @@ export function InvoicingGuide() {
           <li>
             <strong>Who can edit.</strong> Attaching, captioning, and removing needs the
             permission to send invoices or to add/modify invoices.
+          </li>
+        </ul>
+      </Section>
+
+      <Section id="other-charges" title="Other charges (late fees, trip charges, surcharges)">
+        <p>
+          Other charges are a catalog of standard fees you add to invoices &mdash; a late fee, trip
+          charge, fuel surcharge, returned-check fee and so on. They&apos;re separate from services, so
+          they don&apos;t need a service and don&apos;t earn commission.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Set them up</strong> in Settings &gt; Accounting &gt; <em>Other Charges</em>. Each has
+            a name, a description (what prints on the invoice), a default amount, and a Taxable switch.
+            Turn a charge off to stop offering it without losing the invoices it&apos;s already on.
+          </li>
+          <li>
+            <strong>On one invoice</strong>, open <em>Add Line Item</em>; active charges are listed under
+            an <em>Other Charges</em> heading below your services. The line is a normal line &mdash; edit
+            its amount, quantity or taxable flag like any other. Changing the catalog later never
+            changes lines already on invoices.
+          </li>
+          <li>
+            <strong>On many invoices at once</strong>, tick them in the Invoices list and choose
+            Actions &gt; <em>Add Other Charge&hellip;</em>. Pick the charge, adjust the amount if this
+            run needs a different one, and it&apos;s added to every selected invoice and their totals
+            recalculated. Locked and void invoices are skipped, and the result tells you how many were.
+            You need the <em>Add / modify invoices</em> permission.
           </li>
         </ul>
       </Section>

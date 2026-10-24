@@ -51,7 +51,7 @@ export interface WorkOrder extends BaseRecord {
 
 export type PaymentMethod = "outright" | "loan" | "lease" | "rental";
 
-export type AssetStatus = "active" | "inactive" | "in_shop" | "out_of_service" | "disposed";
+export type AssetStatus = "active" | "inactive" | "in_shop" | "out_of_service" | "disposed" | "sold";
 
 export interface Asset extends BaseRecord {
   name: string;

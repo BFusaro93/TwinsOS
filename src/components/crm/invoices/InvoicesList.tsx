@@ -31,6 +31,7 @@ import { InvoiceDetailSheet } from "./InvoiceDetailSheet";
 import { NewInvoiceSheet } from "./NewInvoiceSheet";
 import { MergeInvoicesDialog } from "./MergeInvoicesDialog";
 import { BulkEmailInvoicesDialog } from "./BulkEmailInvoicesDialog";
+import { BulkAddOtherChargeDialog } from "./BulkAddOtherChargeDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import type { ColumnDef } from "@/components/shared/ColumnChooser";
@@ -330,6 +331,7 @@ export function InvoicesList({ clientId }: Props) {
   const [filterValue, setFilterValue] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
+  const [otherChargeOpen, setOtherChargeOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [sortKey, setSortKey] = useState<string>("number");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -886,6 +888,14 @@ export function InvoicesList({ clientId }: Props) {
                 Mark as Paid
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              {can("acct_add_modify_invoices") && (
+                <DropdownMenuItem
+                  disabled={!someSelected}
+                  onSelect={() => setOtherChargeOpen(true)}
+                >
+                  Add Other Charge…
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 disabled={selectedIds.size < 2}
                 onSelect={() => setMergeOpen(true)}
@@ -1262,6 +1272,13 @@ export function InvoicesList({ clientId }: Props) {
           onClose={() => { setMergeOpen(false); setSelectedIds(new Set()); }}
         />
       )}
+
+      <BulkAddOtherChargeDialog
+        invoiceIds={Array.from(selectedIds)}
+        open={otherChargeOpen}
+        onClose={() => setOtherChargeOpen(false)}
+        onDone={() => { setSelectedIds(new Set()); refetchInvoices(); }}
+      />
 
       <BulkEmailInvoicesDialog
         invoiceIds={Array.from(selectedIds)}

@@ -284,7 +284,7 @@ export function JobsPackagesGuide() {
         <p>
           The items come straight from Equipt — vehicles from the Vehicles registry and everything else
           from Assets — so the truck a crew is told to bring is the same record maintenance tracks.
-          Retired (disposed) equipment isn&apos;t offered.
+          Retired (disposed or sold) equipment isn&apos;t offered.
         </p>
         <Callout>
           The list rolls up on the Dispatch Board&apos;s <strong>Crew Board</strong>: if a crew is

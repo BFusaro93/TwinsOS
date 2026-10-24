@@ -338,6 +338,7 @@ export function NewVehicleDialog({ open, onOpenChange, initialData }: NewVehicle
                     <SelectItem value="out_of_service">Out of Service</SelectItem>
                     <SelectItem value="inactive">Inactive</SelectItem>
                     <SelectItem value="disposed">Disposed</SelectItem>
+                    <SelectItem value="sold">Sold</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
