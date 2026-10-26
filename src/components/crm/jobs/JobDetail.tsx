@@ -2003,7 +2003,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           )}
 
           {tab === "audit" && (
-            <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+            <div className="rounded-lg border bg-card shadow-sm">
               <AuditTrailTab
                 groups={[
                   { recordType: "job", recordIds: [job.id] },
