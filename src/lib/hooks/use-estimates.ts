@@ -332,8 +332,21 @@ export function useBulkImportEstimates() {
         idsByName.set(key, [...(idsByName.get(key) ?? []), c.id]);
       }
 
+      // Optional `salesperson` column: match an employee by full name so the
+      // estimate lands under the right rep. Unmatched names just leave it blank.
+      const normName = (v: string) => v.replace(/\s+/g, " ").trim().toLowerCase();
+      const employees = await fetchAllRows<{ id: string; first_name: string; last_name: string }>(() =>
+        supabase.from("crm_employees").select("id, first_name, last_name").is("deleted_at", null).order("id")
+      );
+      const repIdsByName = new Map<string, string[]>();
+      for (const e of employees) {
+        const key = normName(`${e.first_name} ${e.last_name}`);
+        repIdsByName.set(key, [...(repIdsByName.get(key) ?? []), e.id]);
+      }
+
       let created = 0;
       let skipped = 0;
+      let linesAdded = 0;
 
       for (const r of rows) {
         const matches = idsByName.get(r.clientName?.trim().toLowerCase() ?? "") ?? [];
@@ -341,8 +354,12 @@ export function useBulkImportEstimates() {
         const description = r.description?.trim();
         if (!clientId || !description) { skipped++; continue; }
 
+        const repMatches = r.salesperson?.trim() ? repIdsByName.get(normName(r.salesperson)) ?? [] : [];
+        const probabilityPct = Number.parseFloat((r.probability ?? "").replace("%", ""));
+        const externalRef = r.externalRef?.trim();
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (supabase as any).from("estimates").insert({
+        const { data: inserted, error } = await (supabase as any).from("estimates").insert({
           created_by: user?.id ?? null,
           client_id: clientId,
           description,
@@ -350,15 +367,46 @@ export function useBulkImportEstimates() {
           valid_until_date: r.validUntilDate?.trim() || null,
           po_number: r.poNumber?.trim() || null,
           stage: (r.stage?.trim().toLowerCase() as Estimate['stage']) || "draft",
-        });
+          ...(repMatches.length === 1 && { sales_rep_id: repMatches[0] }),
+          ...(Number.isFinite(probabilityPct) && {
+            probability_bps: Math.min(10000, Math.max(0, Math.round(probabilityPct * 100))),
+          }),
+          ...(externalRef && { notes: `Imported from another system — original estimate #${externalRef}` }),
+        }).select("id").single();
         // A bad row (unknown stage, unparseable date, ...) is a skipped row. Throwing
         // here aborted the batch part-way with earlier rows already created and
         // no summary shown.
-        if (error) { skipped++; continue; }
+        if (error || !inserted) { skipped++; continue; }
         created++;
+
+        // Optional `amount` (dollars): a header with no lines totals $0, so carry
+        // the source system's total as one editable summary line and let the
+        // shared recalc derive the estimate totals the same way the grid does.
+        const amountCents = Math.round(Number.parseFloat((r.amount ?? "").replace(/[$,\s]/g, "")) * 100);
+        if (Number.isFinite(amountCents) && amountCents > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: lineError } = await (supabase as any).from("estimate_line_items").insert({
+            estimate_id: inserted.id,
+            service_name: "Imported estimate total",
+            estimate_desc: description,
+            status: "quote",
+            qty: 1,
+            rate_cents: amountCents,
+            total_cents: amountCents,
+          });
+          if (!lineError) {
+            try {
+              await recalcEstimateTotalsShared(supabase as any, inserted.id);
+              linesAdded++;
+            } catch {
+              // The line exists; totals refresh the next time the estimate is edited.
+              linesAdded++;
+            }
+          }
+        }
       }
 
-      return { created, skipped };
+      return { created, skipped, linesAdded };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["estimates"] });
