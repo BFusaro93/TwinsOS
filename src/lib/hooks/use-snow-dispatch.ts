@@ -445,3 +445,64 @@ export function useAddJobsToStormEvent() {
     },
   });
 }
+
+// ── master-route order lookups + saving a storm's order back ────────────────
+
+export interface MasterRouteSlot {
+  routeId: string;
+  routeName: string;
+  routeCrewId: string | null;
+  /** Position within its route. */
+  sortOrder: number;
+}
+
+/**
+ * Every job's place on its Master Route (a job is on at most one route), so a
+ * new storm can come up in route order instead of arbitrary job order.
+ */
+export function useMasterRouteSlots() {
+  return useQuery({
+    queryKey: ["snow-route-stops", "all"],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_snow_route_stops")
+        .select("job_id, sort_order, route_id, crm_snow_routes!inner(name, default_crew_id, is_active, deleted_at)")
+        .is("crm_snow_routes.deleted_at", null);
+      if (error) throw error;
+      const map = new Map<string, MasterRouteSlot>();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const row of (data ?? []) as any[]) {
+        if (!row.crm_snow_routes?.is_active) continue;
+        map.set(row.job_id, {
+          routeId: row.route_id,
+          routeName: row.crm_snow_routes.name,
+          routeCrewId: row.crm_snow_routes.default_crew_id ?? null,
+          sortOrder: row.sort_order ?? 0,
+        });
+      }
+      return map;
+    },
+  });
+}
+
+/** Writes the storm's current stop order onto the crews' Master Routes. */
+export function useSaveStormOrderToRoutes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (stormEventId: string) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc("save_storm_order_to_snow_routes", {
+        p_storm_event_id: stormEventId,
+      });
+      if (error) throw error;
+      return Number(data ?? 0);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["snow-route-stops"] });
+      qc.invalidateQueries({ queryKey: ["snow-routes"] });
+    },
+  });
+}

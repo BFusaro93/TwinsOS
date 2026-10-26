@@ -19,6 +19,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type { Asset, Vehicle } from "@/types";
+import { isRetiredStatus } from "@/lib/constants";
 
 interface EntityComboboxProps {
   assets: Asset[];
@@ -43,8 +44,8 @@ export function EntityCombobox({
 }: EntityComboboxProps) {
   const [open, setOpen] = React.useState(false);
 
-  const activeAssets = assets.filter((a) => a.status !== "disposed");
-  const activeVehicles = vehicles.filter((v) => v.status !== "disposed");
+  const activeAssets = assets.filter((a) => !isRetiredStatus(a.status));
+  const activeVehicles = vehicles.filter((v) => !isRetiredStatus(v.status));
 
   // Resolve display label from the current value
   const displayLabel = React.useMemo(() => {

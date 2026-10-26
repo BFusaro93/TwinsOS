@@ -18,16 +18,20 @@ const TOKEN = /(\*\*[^*\n]+\*\*|https?:\/\/[^\s<]+)/g;
  */
 export function formatChatText(text: string, linkClass: string): ReactNode[] {
   return text.split("\n").flatMap((line, li, lines) => {
+    // flatMap joins every line into ONE child list, so keys must be unique across lines,
+    // not just within one (keys restarting at 0 on each line made React mix up the bold
+    // pieces on re-render, e.g. while typing a reply, and stack their text together).
     const parts = line.split(TOKEN).map((part, i): ReactNode => {
+      const key = `${li}-${i}`;
       if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
-        return <strong key={i}>{part.slice(2, -2)}</strong>;
+        return <strong key={key}>{part.slice(2, -2)}</strong>;
       }
       if (/^https?:\/\//.test(part)) {
         // Trailing punctuation belongs to the sentence, not the URL.
         const trailing = /[.,;:!?)\]]+$/.exec(part)?.[0] ?? "";
         const url = trailing ? part.slice(0, -trailing.length) : part;
         return (
-          <Fragment key={i}>
+          <Fragment key={key}>
             <a href={url} target="_blank" rel="noopener noreferrer" className={linkClass}>{url}</a>
             {trailing}
           </Fragment>

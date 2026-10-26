@@ -275,14 +275,14 @@ export async function POST(
       .eq("org_id", profile.org_id)
       .in("id", assetIds)
       .is("deleted_at", null)
-      .not("status", "eq", "disposed"),
+      .not("status", "in", "(disposed,sold)"),
     adminClient
       .from("vehicles")
       .select("id")
       .eq("org_id", profile.org_id)
       .in("id", assetIds)
       .is("deleted_at", null)
-      .not("status", "eq", "disposed"),
+      .not("status", "in", "(disposed,sold)"),
   ]);
   if (liveAssetsErr || liveVehiclesErr) {
     return NextResponse.json(
@@ -297,7 +297,7 @@ export async function POST(
 
   if (scheduleAssets.length === 0) {
     return NextResponse.json(
-      { error: "All assets and vehicles linked to this PM schedule have been deleted or disposed. Update the schedule's assets before generating work orders." },
+      { error: "All assets and vehicles linked to this PM schedule have been deleted, disposed or sold. Update the schedule's assets before generating work orders." },
       { status: 422 }
     );
   }

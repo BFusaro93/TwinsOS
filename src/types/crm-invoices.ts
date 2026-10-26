@@ -70,6 +70,8 @@ export interface InvoiceLineItem {
   visitId: string | null;
   /** The catalog service this line bills; drives P&L and commission. */
   serviceId: string | null;
+  /** Added from the Other Charges catalog; exempt from the "every line bills a service" rule. */
+  isOtherCharge: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -282,4 +284,17 @@ export interface InvoicePDFTemplate {
   createdAt: string;
   updatedAt: string;
   createdBy: string | null;
+}
+
+// ── other charges ─────────────────────────────────────────────────────────────
+
+/** Catalog fee (late fee, trip charge…) that can be added to invoices. */
+export interface CRMOtherCharge {
+  id: string;
+  name: string;
+  description: string;
+  amountCents: number;
+  isTaxable: boolean;
+  isActive: boolean;
+  sortOrder: number;
 }

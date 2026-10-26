@@ -1,6 +1,7 @@
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { FeedbackButton } from "@/components/shared/FeedbackButton";
 import { AskAIButton } from "@/components/shared/AskAIButton";
+import { SupportChatWidget } from "@/components/shared/SupportChatWidget";
 
 export default function HomeLayout({
   children,
@@ -13,6 +14,7 @@ export default function HomeLayout({
       {children}
       <AskAIButton />
       <FeedbackButton />
+      <SupportChatWidget />
     </div>
   );
 }

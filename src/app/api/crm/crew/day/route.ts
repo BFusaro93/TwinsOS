@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { createServiceClient } from "@/lib/supabase/server";
 import { getRouteAuth, resolveCallerCrewId, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -9,13 +10,13 @@ import { startCrewDay, endCrewDay, closeMemberOpenShift } from "@/lib/crew/day-s
 /**
  * The crew's paid day (shop to shop).
  *   GET  — today's roster with each member's shift and absent flag.
- *   POST — { action: "start_day" | "end_day" | "member_in" | "member_out" }.
+ *   POST — { action: "start_day" | "end_day" | "member_in" | "member_out" | "add_member" }.
  *
  * Crew logins only, and only for their own crew's roster. The work date is the
  * org's today, computed here — never taken from the request.
  */
 const Body = z.object({
-  action: z.enum(["start_day", "end_day", "member_in", "member_out"]),
+  action: z.enum(["start_day", "end_day", "member_in", "member_out", "add_member"]),
   crewMemberId: z.string().uuid().optional(),
   /** The stop's anchor visit, when one is in progress — keeps its job punch in step. */
   visitId: z.string().uuid().optional(),
@@ -52,8 +53,21 @@ export async function GET(request: Request) {
     ((shifts ?? []) as { crew_member_id: string; started_at: string; ended_at: string | null }[]).map((s) => [s.crew_member_id, s])
   );
   const absent = new Set(((absences ?? []) as { crew_member_id: string }[]).map((a) => a.crew_member_id));
+  // Crew members from other crews who can be pulled onto this crew for today.
+  // Names only — read with the service client (scoped to the caller's org)
+  // because a crew login's own RLS shouldn't expose other crews' rosters.
+  const admin = createServiceClient();
+  const [{ data: everyone }, { data: moves }] = await Promise.all([
+    admin.from("crm_crew_members").select("id, name, role, crew_id").eq("org_id", orgId).order("name"),
+    admin.from("crm_crew_daily_members").select("member_id, crew_id").eq("org_id", orgId).eq("work_date", workDate),
+  ]);
+  const movedTo = new Map(((moves ?? []) as { member_id: string; crew_id: string }[]).map((m) => [m.member_id, m.crew_id]));
+  const available = ((everyone ?? []) as { id: string; name: string; role: string | null; crew_id: string }[])
+    .filter((m) => (movedTo.get(m.id) ?? m.crew_id) !== crewId)
+    .map((m) => ({ id: m.id, name: m.name, role: m.role }));
   return NextResponse.json({
     workDate,
+    available,
     members: ((members ?? []) as { id: string; name: string; role: string | null }[]).map((m) => ({
       id: m.id,
       name: m.name,
@@ -85,8 +99,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, closed });
     }
 
-    // Per-member actions: the member must be on this crew's roster today.
     if (!crewMemberId) return NextResponse.json({ error: "crewMemberId is required" }, { status: 400 });
+
+    // Pull someone from another crew onto this one for today (the same
+    // same-day roster move the Dispatch Board's Team Assignment makes), then
+    // clock them in below like a late arrival. Written with the service client:
+    // the caller can't yet "own" this member, which is what crew RLS checks.
+    if (action === "add_member") {
+      const admin = createServiceClient();
+      const { data: member } = await admin.from("crm_crew_members").select("id").eq("id", crewMemberId).eq("org_id", orgId).maybeSingle();
+      if (!member) return NextResponse.json({ error: "That person isn't in your company's crew list" }, { status: 404 });
+      const { error: moveErr } = await admin.from("crm_crew_daily_members").upsert(
+        { org_id: orgId, work_date: workDate, crew_id: crewId, member_id: crewMemberId, created_by: user.id },
+        { onConflict: "work_date,member_id" }
+      );
+      if (moveErr) throw new Error(moveErr.message);
+    }
+
+    // Per-member actions: the member must be on this crew's roster today.
     const roster = await resolveWorkingMemberIds(db, orgId, crewId, workDate, { includeAbsent: true });
     if (!roster.includes(crewMemberId)) {
       return NextResponse.json({ error: "That crew member isn't on your crew today" }, { status: 403 });
@@ -104,7 +134,7 @@ export async function POST(request: Request) {
       }
     }
 
-    if (action === "member_in") {
+    if (action === "member_in" || action === "add_member") {
       // Arriving (late): back on the roster and the shift opened/reopened, in
       // one transaction so a failure can't leave them neither absent nor in.
       const { error: inErr } = await db.rpc("crew_day_member_in", {

@@ -66,6 +66,7 @@ function mapEmployee(row: any): CRMEmployee {
     lastPayRaiseDate: row.last_pay_raise_date,
     userType: row.user_type ?? 'field',
     showInSelection: row.show_in_selection ?? true,
+    assignableToJobs: row.assignable_to_jobs ?? false,
     showInCalendar: row.show_in_calendar ?? true,
     fieldTimeClock: row.field_time_clock ?? true,
     officeTimeClock: row.office_time_clock ?? false,
@@ -325,6 +326,8 @@ export function useUpdateEmployee() {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-employees"] });
       qc.invalidateQueries({ queryKey: ["crm-employees", vars.id] });
+      // "Schedule jobs directly" creates/retires a personal crew.
+      qc.invalidateQueries({ queryKey: ["crm-crews"] });
     },
   });
 }

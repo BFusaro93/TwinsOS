@@ -108,6 +108,8 @@ interface Props {
 
 const ESTIMATE_TEMPLATE_COLUMNS = [
   "clientName", "description", "estimateDate", "validUntilDate", "poNumber", "stage",
+  // Optional: carry a source system's estimate over with its total, rep and probability.
+  "amount", "salesperson", "probability", "externalRef",
 ];
 
 export function EstimatesList({ clientId }: Props) {
@@ -374,11 +376,15 @@ export function EstimatesList({ clientId }: Props) {
                   )
                 }
                 onImport={async (rows) => {
-                  const { created, skipped } = await bulkImportEstimates(rows);
+                  const { created, skipped, linesAdded } = await bulkImportEstimates(rows);
                   if (skipped > 0) {
                     toast.warning(`Imported ${created} estimate${created !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (unmatched or duplicate-named client, missing description, or an invalid stage/date).`);
                   } else {
-                    toast.success(`Successfully imported ${created} estimate${created !== 1 ? "s" : ""}.`);
+                    toast.success(
+                      `Successfully imported ${created} estimate${created !== 1 ? "s" : ""}${
+                        linesAdded > 0 ? `, ${linesAdded} with an imported total line` : ""
+                      }.`
+                    );
                   }
                 }}
               />

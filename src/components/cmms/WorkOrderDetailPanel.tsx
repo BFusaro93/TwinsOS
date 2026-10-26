@@ -149,6 +149,7 @@ const ASSET_STATUS_OPTIONS: Array<{ value: AssetStatus; label: string }> = [
   { value: "in_shop",        label: ASSET_STATUS_LABELS.in_shop },
   { value: "out_of_service", label: ASSET_STATUS_LABELS.out_of_service },
   { value: "disposed",       label: ASSET_STATUS_LABELS.disposed },
+  { value: "sold",           label: ASSET_STATUS_LABELS.sold },
 ];
 
 const WO_FLOW_STEPS = [

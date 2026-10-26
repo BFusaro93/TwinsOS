@@ -14,6 +14,7 @@ import { useModuleAccess, useAddonAccess } from "@/lib/hooks/use-module-access";
 import { useCrmAccess } from "@/lib/hooks/use-permissions";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
+import { useMyCrewInfo } from "@/lib/hooks/use-crew-app";
 import { parseHomeShortcuts, getHomeShortcutIcon } from "@/lib/home-shortcuts";
 
 /**
@@ -137,6 +138,10 @@ export default function HomePage() {
   // check, so don't show a tile that leads straight to that block screen.
   const { allowed: hasCrmAccess } = useCrmAccess("/crm/home");
   const { data: orgSettings } = useOrgSettings();
+  // A regular (office) login can be attached to a crew in Team settings; those
+  // users get the same My Schedule entry the shared crew logins have, so they
+  // don't need a second login to work in the field.
+  const { data: myCrew } = useMyCrewInfo();
   const shortcuts = parseHomeShortcuts(orgSettings?.customizations);
   usePendingPlanRedirect();
 
@@ -168,6 +173,18 @@ export default function HomePage() {
 
       {/* Primary app boxes */}
       <div className="flex w-full max-w-6xl flex-wrap justify-center gap-5">
+        {myCrew && (
+          <Link href="/crm/crew" className={INTERNAL_BOX}>
+            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
+              <CalendarCheck className="h-8 w-8" />
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-slate-900 dark:text-neutral-100">My Schedule</p>
+              <p className="mt-1 text-sm text-muted-foreground">Today&apos;s stops &amp; job visits</p>
+            </div>
+          </Link>
+        )}
+
         <Link href="/dashboards" className={INTERNAL_BOX}>
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
             <BarChart2 className="h-8 w-8" />

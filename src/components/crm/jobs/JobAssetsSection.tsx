@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { isRetiredStatus } from "@/lib/constants";
 
 const GROUPS = [
   { rank: 0, label: "Trucks & vehicles" },
@@ -35,7 +36,7 @@ export function JobAssetsSection({ jobId }: { jobId: string }) {
 
   const available = useMemo(() => {
     const taken = new Set(jobAssets.map((a) => a.key));
-    return equipment.filter((e) => !taken.has(e.key) && e.status !== "disposed");
+    return equipment.filter((e) => !taken.has(e.key) && !isRetiredStatus(e.status));
   }, [equipment, jobAssets]);
 
   function handleAdd(key: string) {

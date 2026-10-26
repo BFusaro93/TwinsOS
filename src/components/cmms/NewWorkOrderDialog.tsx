@@ -28,7 +28,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
-import { ASSET_STATUS_LABELS } from "@/lib/constants";
+import { ASSET_STATUS_LABELS, isRetiredStatus } from "@/lib/constants";
 import { EntityCombobox } from "@/components/shared/EntityCombobox";
 import { MultiEntityCombobox } from "@/components/shared/MultiEntityCombobox";
 import { Info } from "lucide-react";
@@ -64,6 +64,7 @@ const ASSET_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "in_shop", label: ASSET_STATUS_LABELS.in_shop },
   { value: "out_of_service", label: ASSET_STATUS_LABELS.out_of_service },
   { value: "disposed", label: ASSET_STATUS_LABELS.disposed },
+  { value: "sold", label: ASSET_STATUS_LABELS.sold },
 ];
 
 export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated, defaultEntityKey, parentWorkOrder }: NewWorkOrderDialogProps) {
@@ -105,7 +106,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
   // Build unified entity list (excluding disposed items)
   const entityOptions: EntityOption[] = [
     ...(assets ?? [])
-      .filter((a) => a.status !== "disposed")
+      .filter((a) => !isRetiredStatus(a.status))
       .map((a) => ({
         id: `asset:${a.id}`,
         name: a.name,
@@ -113,7 +114,7 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
         type: "asset" as const,
       })),
     ...(vehicles ?? [])
-      .filter((v) => v.status !== "disposed")
+      .filter((v) => !isRetiredStatus(v.status))
       .map((v) => ({
         id: `vehicle:${v.id}`,
         name: v.name,

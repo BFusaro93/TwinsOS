@@ -29,6 +29,7 @@ import { useCreatePMSchedule, useUpdatePMSchedule } from "@/lib/hooks/use-pm-sch
 import { useAddPMScheduleAsset, usePMScheduleAssets, useRemovePMScheduleAsset } from "@/lib/hooks/use-pm-schedule-assets";
 import { X } from "lucide-react";
 import type { PMSchedule } from "@/types";
+import { isRetiredStatus } from "@/lib/constants";
 
 interface NewPMScheduleDialogProps {
   open: boolean;
@@ -249,7 +250,7 @@ export function NewPMScheduleDialog({ open, onOpenChange, initialData, onCreated
                   entityOptions filter, so a disposed asset can't be picked
                   for a PM schedule. */}
               <EntityCombobox
-                assets={(assets ?? []).filter((a) => a.status !== "disposed")}
+                assets={(assets ?? []).filter((a) => !isRetiredStatus(a.status))}
                 vehicles={vehicles ?? []}
                 value={pickerKey || "none"}
                 onValueChange={(val) => {

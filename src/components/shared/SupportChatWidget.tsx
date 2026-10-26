@@ -1,23 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { useCurrentUserStore, useChatStore } from "@/stores";
-import { useMyConversation, useSupportMessagesRealtime } from "@/lib/hooks/use-support-chat";
+import { useMyConversation, useConversationStatus, useSupportMessagesRealtime } from "@/lib/hooks/use-support-chat";
 import { useAddonAccess } from "@/lib/hooks/use-module-access";
 import { ChatDialog } from "@/components/shared/ChatDialog";
+import { cn } from "@/lib/utils";
 
 const LAST_VIEWED_KEY_PREFIX = "support-chat-last-viewed:";
 
 /**
- * Renders both the floating "continue this conversation" bubble (only once
- * a conversation exists — see FeedbackButton/AskAIButton for the same
+ * Renders both the floating "continue this conversation" bubble (only while
+ * a conversation is open or in progress — see FeedbackButton/AskAIButton for the same
  * bottom-right floating-button convention) and the ChatDialog itself. The
  * HelpMenu's "Chat with us" item starts a conversation by opening the same
  * dialog via useChatStore, before any bubble exists yet.
  */
 export function SupportChatWidget() {
   const { currentUser } = useCurrentUserStore();
+  const pathname = usePathname();
   const { open, setOpen } = useChatStore();
   const { allowed: hasChatSupportAddon } = useAddonAccess("chat_support");
   // Chat is a private thread per person. Crew logins don't get it.
@@ -26,6 +29,12 @@ export function SupportChatWidget() {
     hasChatSupport ? currentUser.orgId || undefined : undefined,
     hasChatSupport ? currentUser.id || undefined : undefined
   );
+  const { data: status } = useConversationStatus(
+    hasChatSupport && currentUser.orgId && currentUser.id ? { orgId: currentUser.orgId, threadUserId: currentUser.id } : null
+  );
+  // The bubble is the way back into a conversation that is still going. A resolved one drops it
+  // (Help > Chat with us still opens the history); a new message from either side reopens it.
+  const conversationActive = messages.length > 0 && status !== "resolved";
   const [hasUnread, setHasUnread] = useState(false);
 
   useSupportMessagesRealtime(open ? null : currentUser.orgId || undefined);
@@ -60,12 +69,18 @@ export function SupportChatWidget() {
 
   return (
     <>
-      {messages.length > 0 && !open && (
+      {conversationActive && !open && (
         <button
           type="button"
           onClick={() => handleOpen(true)}
           title="Continue chat with support"
-          className="fixed bottom-[calc(9rem+env(safe-area-inset-bottom))] right-[calc(1.25rem+env(safe-area-inset-right))] z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand-500 text-white shadow-lg transition-colors hover:bg-brand-600 print:hidden"
+          className={cn(
+            // Bottom-right corner like the other floating buttons. Home and Settings are the only screens that
+            // also mount the Ask AI and Feedback buttons, so only there does the bubble stack above them.
+            "fixed right-[calc(1.25rem+env(safe-area-inset-right))]",
+            (pathname.startsWith("/settings") || pathname.startsWith("/home")) ? "bottom-[calc(9rem+env(safe-area-inset-bottom))]" : "bottom-[calc(1.25rem+env(safe-area-inset-bottom))]",
+            "z-40 flex h-11 w-11 items-center justify-center rounded-full bg-brand-500 text-white shadow-lg transition-colors hover:bg-brand-600 print:hidden"
+          )}
         >
           <MessageCircle className="h-5 w-5" />
           {hasUnread && (

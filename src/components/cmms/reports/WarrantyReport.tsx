@@ -14,6 +14,7 @@ import {
   getWarrantyStatus,
   type WarrantyState,
 } from "@/lib/utils/warranty";
+import { isRetiredStatus } from "@/lib/constants";
 
 type Filter = "expiring_30" | "expiring_90" | "expired" | "covered" | "none";
 
@@ -66,7 +67,7 @@ export function WarrantyReport() {
     ];
     return all
       // A disposed unit's warranty no longer matters to anyone.
-      .filter((r) => r.status !== "disposed")
+      .filter((r) => !isRetiredStatus(r.status))
       .map((r) => {
         const s = getWarrantyStatus(r.warrantyEndDate, todayStr);
         return {
