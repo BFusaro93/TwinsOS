@@ -58,7 +58,7 @@ export async function GET(request: Request) {
   // because a crew login's own RLS shouldn't expose other crews' rosters.
   const admin = createServiceClient();
   const [{ data: everyone }, { data: moves }] = await Promise.all([
-    admin.from("crm_crew_members").select("id, name, role, crew_id").eq("org_id", orgId).order("name"),
+    admin.from("crm_crew_members").select("id, name, role, crew_id").eq("org_id", orgId).is("deleted_at", null).order("name"),
     admin.from("crm_crew_daily_members").select("member_id, crew_id").eq("org_id", orgId).eq("work_date", workDate),
   ]);
   const movedTo = new Map(((moves ?? []) as { member_id: string; crew_id: string }[]).map((m) => [m.member_id, m.crew_id]));
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     // the caller can't yet "own" this member, which is what crew RLS checks.
     if (action === "add_member") {
       const admin = createServiceClient();
-      const { data: member } = await admin.from("crm_crew_members").select("id").eq("id", crewMemberId).eq("org_id", orgId).maybeSingle();
+      const { data: member } = await admin.from("crm_crew_members").select("id").eq("id", crewMemberId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
       if (!member) return NextResponse.json({ error: "That person isn't in your company's crew list" }, { status: 404 });
       const { error: moveErr } = await admin.from("crm_crew_daily_members").upsert(
         { org_id: orgId, work_date: workDate, crew_id: crewId, member_id: crewMemberId, created_by: user.id },
