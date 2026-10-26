@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
-import { Loader2, Clock, LogIn, LogOut } from "lucide-react";
+import { Loader2, Clock, LogIn, LogOut, UserPlus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCrewDay, useCrewDayAction, useSetCrewMemberAbsent } from "@/lib/hooks/use-crew-app";
 
 interface CrewInfo {
@@ -40,8 +41,10 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
   const dayAction = useCrewDayAction();
   const setAbsent = useSetCrewMemberAbsent();
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [addId, setAddId] = useState("");
 
   const members = day?.members ?? [];
+  const available = day?.available ?? [];
 
   async function run(memberId: string, fn: () => Promise<unknown>) {
     setLoadingId(memberId);
@@ -138,6 +141,33 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
             );
           })}
         </div>
+
+        {available.length > 0 && (
+          <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
+            <Select value={addId} onValueChange={setAddId}>
+              <SelectTrigger className="h-9 flex-1">
+                <SelectValue placeholder="Add someone to my crew today" />
+              </SelectTrigger>
+              <SelectContent>
+                {available.map(a => (
+                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              className="gap-1 h-9"
+              disabled={!addId || loadingId === addId}
+              onClick={() => run(addId, async () => {
+                await dayAction.mutateAsync({ action: "add_member", crewMemberId: addId, visitId });
+                setAddId("");
+              })}
+            >
+              {loadingId === addId ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserPlus className="h-3 w-3" />}
+              Add
+            </Button>
+          </div>
+        )}
 
         <p className="text-xs text-slate-400 dark:text-neutral-500 text-center mt-2">
           Start Day clocks in everyone working. Use this for anyone who arrives late, is out today, or leaves early.

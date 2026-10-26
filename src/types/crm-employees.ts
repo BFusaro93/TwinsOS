@@ -69,6 +69,8 @@ export interface CRMEmployee {
   // User / App Settings
   userType: UserType;
   showInSelection: boolean;
+  /** Gets a personal one-person crew, so jobs can be scheduled straight to this person. */
+  assignableToJobs: boolean;
   showInCalendar: boolean;
   fieldTimeClock: boolean;
   officeTimeClock: boolean;

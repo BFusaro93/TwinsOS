@@ -559,6 +559,12 @@ function UserSettingsTab({
           <Field label="Show in Selection Lists">
             <Checkbox checked={!!form.show_in_selection} onCheckedChange={(c) => onChange("show_in_selection", !!c)} />
           </Field>
+          <Field label="Schedule Jobs Directly">
+            <div className="flex items-center gap-2">
+              <Checkbox checked={!!form.assignable_to_jobs} onCheckedChange={(c) => onChange("assignable_to_jobs", !!c)} />
+              <span className="text-xs text-muted-foreground">Appears in the job and dispatch crew dropdowns under their own name</span>
+            </div>
+          </Field>
           <Field label="Show in Calendar List">
             <Checkbox checked={!!form.show_in_calendar} onCheckedChange={(c) => onChange("show_in_calendar", !!c)} />
           </Field>
@@ -737,7 +743,7 @@ function EmployeeDialog({
 
   const defaultForm = {
     first_name: "", last_name: "", employment_status: "full_time",
-    user_type: "field", show_in_selection: true, show_in_calendar: true,
+    user_type: "field", show_in_selection: true, assignable_to_jobs: false, show_in_calendar: true,
     field_time_clock: true, office_time_clock: false,
     eligible_overtime: false, is_certified_driver: false,
     covered_by_insurance: false, is_sales_rep: false, is_active: true,
@@ -771,7 +777,7 @@ function EmployeeDialog({
       sick_days: e.sickDays, commission_pct: e.commissionPct,
       payment_frequency: e.paymentFrequency, last_pay_raise_cents: e.lastPayRaiseCents,
       last_pay_raise_date: e.lastPayRaiseDate,
-      user_type: e.userType, show_in_selection: e.showInSelection,
+      user_type: e.userType, show_in_selection: e.showInSelection, assignable_to_jobs: e.assignableToJobs,
       show_in_calendar: e.showInCalendar, field_time_clock: e.fieldTimeClock,
       office_time_clock: e.officeTimeClock, send_text_alerts: e.sendTextAlerts,
       user_role: e.userRole, crm_role_id: e.crmRoleId, route_sheet_format: e.routeSheetFormat,

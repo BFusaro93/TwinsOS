@@ -1104,7 +1104,7 @@ export interface CrewDayMember {
 }
 
 export function useCrewDay() {
-  return useQuery<{ workDate: string; members: CrewDayMember[] }>({
+  return useQuery<{ workDate: string; members: CrewDayMember[]; available: { id: string; name: string; role: string | null }[] }>({
     queryKey: ["crew-day"],
     queryFn: async () => {
       const res = await fetch("/api/crm/crew/day");
@@ -1117,7 +1117,7 @@ export function useCrewDay() {
 export function useCrewDayAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { action: "start_day" | "end_day" | "member_in" | "member_out"; crewMemberId?: string; visitId?: string }) => {
+    mutationFn: async (input: { action: "start_day" | "end_day" | "member_in" | "member_out" | "add_member"; crewMemberId?: string; visitId?: string }) => {
       const res = await fetch("/api/crm/crew/day", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
