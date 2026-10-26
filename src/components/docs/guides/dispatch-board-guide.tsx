@@ -264,7 +264,9 @@ export function DispatchBoardGuide() {
             <strong>Billing happens once.</strong> The lead visit carries the service&apos;s revenue
             and creates the invoice when it&apos;s completed. The added crew&apos;s visit shows $0, never
             invoices, and doesn&apos;t log a second &quot;Visit completed&quot; entry or fire automations a
-            second time. The client portal shows the stop as a single visit.
+            second time. The client portal shows the stop as a single visit. If the lead visit is
+            skipped, cancelled or removed, the lead role (and billing) passes to another crew still on
+            the stop; the lead can&apos;t be removed once another crew has completed its work.
           </li>
           <li>
             <strong>Labor is combined.</strong> Job Costing, the job&apos;s Hours and the labor reports

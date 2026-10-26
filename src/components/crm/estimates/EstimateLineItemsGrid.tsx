@@ -929,7 +929,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
   // Prefetch only — addService reads the property's field value straight from
   // the DB so it can't race this query (see the comment there). Keeping the
   // hook warms the cache and keeps the values a click away.
-  usePropertyCustomFieldValues(propertyId ?? "");
+  const { data: propertyFieldValues = [] } = usePropertyCustomFieldValues(propertyId ?? "");
   const { data: customFieldDefs = [] } = useCustomFieldDefs();
   const { data: customFieldValues = [] } = useClientCustomFieldValues(clientId ?? "");
   // When the estimate is for one of the client's properties, its quantities come from
@@ -944,8 +944,10 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         turfSqft: useSatelliteTakeoff ? estimateProperty.turfSqft ?? null : (estimateProperty?.turfSqft ?? client.turfSqft ?? null),
         mulchBedSqft: useSatelliteTakeoff ? estimateProperty.mulchBedSqft ?? null : (estimateProperty?.mulchBedSqft ?? client.mulchBedSqft ?? null),
         grossSqft: useSatelliteTakeoff ? estimateProperty.grossSqft ?? null : (estimateProperty?.grossSqft ?? client.grossSqft ?? null),
-        customNumeric: useSatelliteTakeoff ? {} : Object.fromEntries(
-          customFieldValues.flatMap((v) => {
+        // A satellite uses only its own property-level values; the client-level ones
+        // belong to the master address and must not leak in.
+        customNumeric: Object.fromEntries(
+          (useSatelliteTakeoff ? propertyFieldValues : customFieldValues).flatMap((v) => {
             const def = customFieldDefs.find((d) => d.id === v.fieldDefId);
             return def && def.fieldType === "number" && typeof v.valueNumber === "number"
               ? [[def.name.toLowerCase(), v.valueNumber]]

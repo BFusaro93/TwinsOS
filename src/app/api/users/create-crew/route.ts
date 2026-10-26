@@ -67,7 +67,10 @@ export async function POST(request: Request) {
     loginEmail = customEmail.trim().toLowerCase();
   } else {
     const slug = teamName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-    loginEmail = `${slug}@crew.equipt.app`;
+    // Short org id keeps auto emails unique per tenant (a bare slug collided
+    // across orgs and revealed that another org used the same team name).
+    const orgTag = String(callerProfile.org_id).replace(/-/g, "").slice(0, 8);
+    loginEmail = `${slug || "crew"}-${orgTag}@crew.equipt.app`;
   }
 
   // 4. Create the auth user with the service role client (no email confirmation needed)

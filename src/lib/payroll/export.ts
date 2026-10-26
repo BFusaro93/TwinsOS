@@ -46,24 +46,35 @@ function clock(iso: string | null, tz: string): string {
 }
 
 export const DAILY_HEADERS = [
-  "Employee", "Crew", "Date", "Clock In", "Clock Out", "Break (min)", "Day Hours", "Job Hours", "Extra Hours", "Total Hours", "Note",
+  "Employee", "Crew", "Date", "Clock In", "Clock Out", "Break (min)", "Day Hours", "Job Hours", "Extra Hours", "Total Hours", "Status", "Note",
 ];
+
+/** Flags a day that needs a look before it is paid. */
+export function dayStatus(d: PayrollRow): string {
+  const flags: string[] = [];
+  if (d.openShift) flags.push("OPEN SHIFT");
+  if (d.noShift) flags.push("NO SHIFT");
+  if (d.openPunches > 0) flags.push("OPEN PUNCH");
+  if (d.adjusted) flags.push("ADJUSTED");
+  return flags.join(", ");
+}
 
 /** One row per person per day — numbers stay numbers so Excel and payroll uploads can sum them. */
 export function dailyRows(members: PayrollMemberTotals[], tz: string): (string | number)[][] {
   return members.flatMap((m) =>
     m.days.map((d) => [
       m.memberName, d.crewName ?? "", d.workDate, clock(d.shiftStart, tz), clock(d.shiftEnd, tz), d.breakMinutes,
-      r2(d.baseHours), r2(d.jobHours), r2(d.extraHours), r2(d.totalHours), d.note ?? "",
+      r2(d.baseHours), r2(d.jobHours), r2(d.extraHours), r2(d.totalHours), dayStatus(d), d.note ?? "",
     ])
   );
 }
 
-export const SUMMARY_HEADERS = ["Employee", "Crew", "Days Worked", "Day Hours", "Extra Hours", "Total Hours"];
+export const SUMMARY_HEADERS = ["Employee", "Crew", "Days Worked", "Open/No-Shift Days", "Day Hours", "Extra Hours", "Total Hours"];
 
 export function summaryRows(members: PayrollMemberTotals[]): (string | number)[][] {
   return members.map((m) => [
     m.memberName, m.crewName ?? "", m.days.filter((d) => d.totalHours > 0).length,
+    m.openShifts + m.noShiftDays,
     r2(m.shiftHours), r2(m.extra), r2(m.total),
   ]);
 }

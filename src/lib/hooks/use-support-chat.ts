@@ -85,11 +85,25 @@ export function useStaffConversationList(enabled: boolean) {
     queryKey: ["support-messages", "staff-inbox"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("support_messages")
-        .select("org_id, thread_user_id, body, sender_type, sender_name, created_at")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
+      // PostgREST caps a response at 1000 rows, so a single select silently dropped
+      // every older thread once the table grew. Page until a short page comes back;
+      // id breaks created_at ties so pages never skip or repeat rows.
+      const pageSize = 1000;
+      const data: {
+        org_id: string; thread_user_id: string | null; body: string; sender_type: string; sender_name: string; created_at: string;
+      }[] = [];
+      for (let from = 0; ; from += pageSize) {
+        const { data: page, error } = await supabase
+          .from("support_messages")
+          .select("org_id, thread_user_id, body, sender_type, sender_name, created_at")
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        const rows = (page ?? []) as unknown as typeof data;
+        data.push(...rows);
+        if (rows.length < pageSize) break;
+      }
 
       // Org names come from the staff-only RPC: embedding organizations(name)
       // in the query above is filtered by RLS to the staff member's own org,
@@ -113,9 +127,7 @@ export function useStaffConversationList(enabled: boolean) {
       const byThread = new Map<string, InboxRow>();
       // Newest first: the first row per thread is its latest message; the person's name is
       // the newest customer-side sender_name in it.
-      for (const row of data as unknown as {
-        org_id: string; thread_user_id: string | null; body: string; sender_type: string; sender_name: string; created_at: string;
-      }[]) {
+      for (const row of data) {
         const ref = { orgId: row.org_id, threadUserId: row.thread_user_id };
         const key = threadKey(ref);
         const existing = byThread.get(key);

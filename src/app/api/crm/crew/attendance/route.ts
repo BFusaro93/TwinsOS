@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getRouteAuth, resolveCallerCrewId } from "@/lib/supabase/route-auth";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { closeMemberOpenShift } from "@/lib/crew/day-shifts";
 
 /**
  * POST /api/crm/crew/attendance — the crew leader marks a member as not
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
     .select("id, crew_id")
     .eq("id", crewMemberId)
     .eq("org_id", orgId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (!member) return NextResponse.json({ error: "Crew member not found" }, { status: 404 });
 
@@ -97,6 +99,14 @@ export async function POST(request: Request) {
         .from("crm_crew_day_absences")
         .insert({ org_id: orgId, crew_member_id: crewMemberId, work_date: workDate, created_by: user.id });
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    // Absent also means "left for the day": close the member's open shift
+    // the same way crew/day member_out does, so they aren't paid until a
+    // forgotten End Day.
+    try {
+      await closeMemberOpenShift(db, { orgId, crewMemberId, workDate, at: now });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to close shift" }, { status: 500 });
     }
     if (visitId) {
       // Ends an in-progress punch: the member isn't on this job any more.

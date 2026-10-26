@@ -104,7 +104,20 @@ export async function PUT(request: Request) {
   if ((b.startTime && !startAt) || (b.endTime && !endAt)) {
     return NextResponse.json({ error: "Invalid time" }, { status: 422 });
   }
-  if (startAt && endAt && endAt.getTime() <= startAt.getTime()) {
+  // With only an End given, the day's start is the recorded shift start.
+  let refStartMs = startAt ? startAt.getTime() : null;
+  if (refStartMs == null && endAt) {
+    const { data: shift } = await auth.db
+      .from("crm_crew_day_shifts")
+      .select("started_at")
+      .eq("org_id", auth.orgId)
+      .eq("crew_member_id", b.crewMemberId)
+      .eq("work_date", b.workDate)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (shift?.started_at) refStartMs = new Date(shift.started_at as string).getTime();
+  }
+  if (refStartMs != null && endAt && endAt.getTime() <= refStartMs) {
     endAt = zoneWallClockToInstant(shiftYmd(b.workDate, 1), b.endTime as string, tz);
   }
 

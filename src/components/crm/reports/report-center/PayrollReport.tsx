@@ -60,17 +60,28 @@ export function PayrollReport() {
   const fileBase = `payroll-${from}-to-${to}`;
   const flagged = members.reduce((s, m) => s + m.openShifts + m.openPunches + m.noShiftDays, 0);
 
+  // Open and no-shift days are understated or missing — make the exporter acknowledge that.
+  const unpaidFlags = members.reduce((s, m) => s + m.openShifts + m.noShiftDays, 0);
+  function confirmFlagged(): boolean {
+    return unpaidFlags === 0 || window.confirm(
+      `${unpaidFlags} day${unpaidFlags === 1 ? " is" : "s are"} open or have no shift, so hours are understated or missing. Export anyway?`
+    );
+  }
+
   function exportCsv(kind: "daily" | "summary") {
+    if (!confirmFlagged()) return;
     if (kind === "daily") downloadCSV(`${fileBase}-daily.csv`, DAILY_HEADERS, dailyRows(members, tz));
     else downloadCSV(`${fileBase}-totals.csv`, SUMMARY_HEADERS, summaryRows(members));
   }
   function exportExcel() {
+    if (!confirmFlagged()) return;
     downloadXLSX(`${fileBase}.xlsx`, [
       { name: "Totals", headers: SUMMARY_HEADERS, rows: summaryRows(members) },
       { name: "Daily", headers: DAILY_HEADERS, rows: dailyRows(members, tz) },
     ]);
   }
   async function exportPdf() {
+    if (!confirmFlagged()) return;
     const text = (rows: (string | number)[][]) => rows.map((r) => r.map((c) => (typeof c === "number" ? fmt(c) : c)));
     try {
       await exportReportPDF(`Payroll ${periodLabel(from, to)}`, [

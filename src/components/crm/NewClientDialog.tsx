@@ -200,11 +200,11 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
                 <div className="grid grid-cols-[1fr_auto_auto] gap-3">
                   <div className="flex flex-col gap-1.5">
                     <Label>City</Label>
-                    <Input value={serviceCity} onChange={(e) => setServiceCity(e.target.value)} placeholder="Worcester" />
+                    <Input value={serviceCity} onChange={(e) => setServiceCity(e.target.value)} placeholder="Worcester" onBlur={() => void addr.verify({ address: serviceAddress, city: serviceCity, state: serviceState, zip: serviceZip })} />
                   </div>
                   <div className="flex w-20 flex-col gap-1.5">
                     <Label>State</Label>
-                    <Input value={serviceState} onChange={(e) => setServiceState(e.target.value)} placeholder="MA" />
+                    <Input value={serviceState} onChange={(e) => setServiceState(e.target.value)} placeholder="MA" onBlur={() => void addr.verify({ address: serviceAddress, city: serviceCity, state: serviceState, zip: serviceZip })} />
                   </div>
                   <div className="flex w-24 flex-col gap-1.5">
                     <Label>Zip</Label>

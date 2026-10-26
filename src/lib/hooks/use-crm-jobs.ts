@@ -1002,6 +1002,22 @@ export function useDeleteVisit() {
   return useMutation({
     mutationFn: async (visitId: string) => {
       const supabase = createClient();
+      // A visit that belongs to a multi-crew group must go through
+      // crm_remove_visit_crew so the crew-removal rules apply (not started,
+      // lead can't be removed after a sibling completed); the DB trigger then
+      // hands over the lead role and dissolves a group left with one visit.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: row } = await (supabase as any)
+        .from('crm_job_visits')
+        .select('crew_group_id')
+        .eq('id', visitId)
+        .maybeSingle();
+      if (row?.crew_group_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: rpcErr } = await (supabase as any).rpc('crm_remove_visit_crew', { p_visit_id: visitId });
+        if (rpcErr) throw new Error((rpcErr as { message?: string }).message ?? 'Failed to delete visit');
+        return;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('crm_job_visits')
@@ -1091,6 +1107,8 @@ export function useDeleteVisitsByDayOfWeek() {
         .select('id, scheduled_date')
         .eq('job_id', jobId)
         .is('deleted_at', null)
+        // Multi-crew group members are removed per crew (crm_remove_visit_crew).
+        .is('crew_group_id', null)
         .eq('status', 'scheduled');
       if (error) throw error;
       const ids = (data as { id: string; scheduled_date: string }[])

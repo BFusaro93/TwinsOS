@@ -38,8 +38,47 @@ export async function startCrewDay(
     }));
   if (rows.length === 0) return 0;
   const { error } = await supabase.from("crm_crew_day_shifts").insert(rows);
+  if (!error) return rows.length;
+  // 23505 = a double tap / offline retry already opened the shift (partial
+  // unique index on member+day). Idempotent: insert row by row and count only
+  // the ones that actually landed.
+  if (error.code !== "23505") throw new Error(error.message);
+  let opened = 0;
+  for (const row of rows) {
+    const { error: rowErr } = await supabase.from("crm_crew_day_shifts").insert(row);
+    if (!rowErr) opened += 1;
+    else if (rowErr.code !== "23505") throw new Error(rowErr.message);
+  }
+  return opened;
+}
+
+/**
+ * An open shift older than this is a forgotten one: End Day / leaving early
+ * leaves it open so payroll flags it, instead of paying ~a full day.
+ */
+export const MAX_AUTO_CLOSE_SHIFT_MS = 16 * 3_600_000;
+
+/**
+ * Closes one member's open shift (today's, or one that crossed midnight) at
+ * `at`. Returns whether a shift was closed. Throws on a write failure.
+ */
+export async function closeMemberOpenShift(
+  supabase: AnySupabase,
+  p: { orgId: string; crewMemberId: string; workDate: string; at: string }
+): Promise<boolean> {
+  const atMs = new Date(p.at).getTime();
+  const { data: openRows } = await supabase.from("crm_crew_day_shifts").select("id, started_at")
+    .eq("crew_member_id", p.crewMemberId).eq("org_id", p.orgId)
+    .gte("work_date", openShiftLookbackDate(p.workDate)).lte("work_date", p.workDate)
+    .gt("started_at", new Date(atMs - MAX_AUTO_CLOSE_SHIFT_MS).toISOString())
+    .is("deleted_at", null).is("ended_at", null)
+    .order("started_at", { ascending: false }).limit(1);
+  const open = ((openRows ?? []) as { id: string; started_at: string }[])[0];
+  if (!open) return false;
+  const end = new Date(open.started_at).getTime() > atMs ? open.started_at : p.at;
+  const { error } = await supabase.from("crm_crew_day_shifts").update({ ended_at: end }).eq("id", open.id).is("ended_at", null);
   if (error) throw new Error(error.message);
-  return rows.length;
+  return true;
 }
 
 /**
@@ -67,7 +106,7 @@ export async function endCrewDay(
     .eq("org_id", p.orgId)
     .gte("work_date", openShiftLookbackDate(p.workDate))
     .lte("work_date", p.workDate)
-    .gt("started_at", new Date(new Date(p.at).getTime() - 24 * 3_600_000).toISOString())
+    .gt("started_at", new Date(new Date(p.at).getTime() - MAX_AUTO_CLOSE_SHIFT_MS).toISOString())
     .is("deleted_at", null)
     .is("ended_at", null)
     .in("crew_member_id", memberIds);

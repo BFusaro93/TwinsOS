@@ -12,6 +12,7 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { loadGoogleMaps } from "@/lib/google-maps-loader";
 import type { PropertyZone } from "@/types/crm";
 import { isAreaZone, sumLinearFt, sumZoneSqft, type LinearType } from "@/lib/property-zones";
+import { usePropertyCustomFieldValues, useUpsertPropertyCustomFieldValue } from "@/lib/hooks/use-rate-matrix";
 import {
   useCustomFieldDefs,
   useClientCustomFieldValues,
@@ -148,6 +149,7 @@ export function AerialMeasurementDialog({
   const { data: customFieldDefs } = useCustomFieldDefs();
   const { data: customFieldValues } = useClientCustomFieldValues(clientId);
   const upsertCustomField = useUpsertClientCustomFieldValue();
+  const upsertPropertyField = useUpsertPropertyCustomFieldValue();
   const numberFieldDefs = (customFieldDefs ?? []).filter((f) => f.fieldType === "number");
 
   const [propertyId, setPropertyId] = useState<string | null>(null);
@@ -179,6 +181,11 @@ export function AerialMeasurementDialog({
   const property = useMemo(
     () => properties?.find((p) => p.id === propertyId) ?? null,
     [properties, propertyId]
+  );
+
+  // Satellite properties keep their own custom values; only the master mirrors the client's.
+  const { data: propertyFieldValues } = usePropertyCustomFieldValues(
+    property && !property.isMaster ? property.id : ""
   );
 
   // Reset / default property selection whenever the dialog opens or closes
@@ -667,11 +674,22 @@ export function AerialMeasurementDialog({
     let syncFailures = 0;
     for (const { f, value } of syncs) {
       try {
-        await upsertCustomField.mutateAsync({
-          clientId,
-          fieldDefId: f.id,
-          valueNumber: value,
-        });
+        // Client-level custom values mirror the client's own (master) address only.
+        // A satellite property writes its own values so the totals can't leak into
+        // estimates for the master property.
+        if (property.isMaster) {
+          await upsertCustomField.mutateAsync({
+            clientId,
+            fieldDefId: f.id,
+            valueNumber: value,
+          });
+        } else {
+          await upsertPropertyField.mutateAsync({
+            propertyId: property.id,
+            fieldDefId: f.id,
+            valueNumber: value,
+          });
+        }
       } catch {
         syncFailures++;
       }
@@ -980,7 +998,7 @@ export function AerialMeasurementDialog({
                 </div>
                 <div className="divide-y">
                   {numberFieldDefs.map((f) => {
-                    const current = (customFieldValues ?? []).find((v) => v.fieldDefId === f.id)?.valueNumber;
+                    const current = (property && !property.isMaster ? propertyFieldValues : customFieldValues ?? [])?.find((v) => v.fieldDefId === f.id)?.valueNumber;
                     const mapping = fieldMappings[f.id] ?? "none";
                     return (
                       <div key={f.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">

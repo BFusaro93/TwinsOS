@@ -14,22 +14,35 @@ import type { AddressParts, VerifyAddressResult } from "@/types/address-verifica
  *
  * Pairs with POST /api/crm/address/verify.
  */
+export function addressKey(typed: AddressParts): string {
+  return [typed.address, typed.city, typed.state, typed.zip].join("|").toLowerCase();
+}
+
 export function useVerifyAddress() {
   const [state, setState] = useState<"idle" | "checking" | "done">("idle");
   const [result, setResult] = useState<VerifyAddressResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** The address the current `result` describes, so a stale reply is ignored. */
   const lastChecked = useRef<string>("");
+  /** Key of the address `result` was produced for (state so consumers re-render). */
+  const [resultKey, setResultKey] = useState<string>("");
 
   const reset = useCallback(() => {
     setState("idle");
     setResult(null);
     setError(null);
     lastChecked.current = "";
+    setResultKey("");
   }, []);
 
+  /** True only when the current verdict describes exactly this address. */
+  const isCurrent = useCallback(
+    (typed: AddressParts) => state === "done" && !!result && resultKey === addressKey(typed),
+    [state, result, resultKey],
+  );
+
   const verify = useCallback(async (typed: AddressParts) => {
-    const key = [typed.address, typed.city, typed.state, typed.zip].join("|").toLowerCase();
+    const key = addressKey(typed);
     // Nothing to check, or nothing changed since the last check.
     if (!typed.address?.trim() || key === lastChecked.current) return;
     lastChecked.current = key;
@@ -51,6 +64,7 @@ export function useVerifyAddress() {
         return;
       }
       setResult(data);
+      setResultKey(key);
       setState("done");
     } catch {
       if (lastChecked.current !== key) return;
@@ -60,5 +74,5 @@ export function useVerifyAddress() {
     }
   }, []);
 
-  return { state, result, error, verify, reset };
+  return { state, result, error, verify, reset, isCurrent };
 }
