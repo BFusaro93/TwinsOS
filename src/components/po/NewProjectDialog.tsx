@@ -24,6 +24,7 @@ import { useCreateProject, useUpdateProject } from "@/lib/hooks/use-projects";
 import { useClients } from "@/lib/hooks/use-clients";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useSettingsStore } from "@/stores/settings-store";
+import { formatCurrency } from "@/lib/utils";
 import type { Project } from "@/types";
 
 interface NewProjectDialogProps {
@@ -72,7 +73,12 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
       setStatus(initialData.status);
       setStartDate(initialData.startDate ?? "");
       setEndDate(initialData.endDate ?? "");
-      setContractPrice(initialData.contractPrice > 0 ? (initialData.contractPrice / 100).toFixed(2) : "");
+      // The form edits the ORIGINAL contract price. initialData.contractPrice is
+      // the derived revised figure (original + approved change orders); saving
+      // it back into original_contract_price made the DB re-add every approved
+      // change order on top, double-counting them on any edit of the project.
+      const originalCents = initialData.originalContractPrice ?? initialData.contractPrice;
+      setContractPrice(originalCents > 0 ? (originalCents / 100).toFixed(2) : "");
       setLaborHours(initialData.laborHours != null ? String(initialData.laborHours) : "");
       setBudgetHours(initialData.budgetHours != null ? String(initialData.budgetHours) : "");
       setNotes(initialData.notes ?? "");
@@ -266,7 +272,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
 
             {/* Contract Price — half width */}
             <div className="grid gap-1.5">
-              <Label htmlFor="project-contract-price">Contract Price ($)</Label>
+              <Label htmlFor="project-contract-price">{isEditing ? "Original Contract Price ($)" : "Contract Price ($)"}</Label>
               <Input
                 id="project-contract-price"
                 type="number"
@@ -276,6 +282,11 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
                 onChange={(e) => setContractPrice(e.target.value)}
                 placeholder="0.00"
               />
+              {isEditing && initialData && initialData.contractPrice !== (initialData.originalContractPrice ?? initialData.contractPrice) && (
+                <p className="text-[11px] text-muted-foreground">
+                  Revised contract is {formatCurrency(initialData.contractPrice)} after approved change orders.
+                </p>
+              )}
             </div>
 
             {/* Budget Hours — half width */}
