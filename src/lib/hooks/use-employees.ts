@@ -3,6 +3,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
+import { closeMemberPunchesOnOtherCrews } from "@/lib/crew/member-moves";
 import type { BulkImportResult } from "@/lib/csv";
 import type { CRMEmployee, CRMCrew, CRMCrewMember, CRMCrewLogin } from "@/types/crm-employees";
 
@@ -576,9 +578,15 @@ export function useCrewDailyMembersRange(fromDate: string, toDate: string) {
 /** Move a crew member onto `crewId` for `workDate` only — replaces any prior override for that day. */
 export function useSetCrewDailyMember() {
   const qc = useQueryClient();
+  const { today } = useOrgDates();
   return useMutation({
     mutationFn: async ({ memberId, crewId, workDate }: { memberId: string; crewId: string; workDate: string }) => {
       const supabase = createClient();
+      // Moving someone mid-day: close their open job punches on the old crew's
+      // visits now (the day shift keeps running; hours are counted once).
+      if (workDate === today()) {
+        await closeMemberPunchesOnOtherCrews(supabase, { memberId, newCrewId: crewId, at: new Date().toISOString() });
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_crew_daily_members")
