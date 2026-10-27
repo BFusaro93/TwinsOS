@@ -14,6 +14,7 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { BulkImportResult } from "@/lib/csv";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { cancelClientVisitsRemote } from "@/lib/client-visits-api";
 import type {
   Client,
   ClientContact,
@@ -1324,8 +1325,8 @@ export function useDeleteClient() {
   const qc = useQueryClient();
   const orgTimeZone = useOrgTimeZone();
   return useMutation({
-    mutationFn: async (input: string | { id: string; confirmed?: boolean }) => {
-      const { id, confirmed = false } = typeof input === "string" ? { id: input } : input;
+    mutationFn: async (input: string | { id: string; confirmed?: boolean; cancelVisits?: boolean }) => {
+      const { id, confirmed = false, cancelVisits = false } = typeof input === "string" ? { id: input } : input;
       if (!confirmed) {
         const blockers = await fetchClientDeletionBlockers(id, orgTimeZone);
         if (hasClientDeletionBlockers(blockers)) {
@@ -1347,9 +1348,15 @@ export function useDeleteClient() {
         .update({ deleted_at: nowIso })
         .eq("client_id", id)
         .is("deleted_at", null);
+      // The caller asked "Cancel their N upcoming visits?" (see
+      // clientVisitsConfirmOptions) and the answer was Yes. After the delete so
+      // a failed delete never cancels anything; a failure here is reported to
+      // the caller because the visits would otherwise silently stay on the board.
+      if (cancelVisits) await cancelClientVisitsRemote([id]);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
   });
 }
