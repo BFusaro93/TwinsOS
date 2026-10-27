@@ -689,7 +689,8 @@ export function useUpdatePurchaseOrderStatus() {
       paymentBookedInQB,
     }: {
       id: string;
-      status: POStatus;
+      /** Omit for payment-field-only updates so a stale local status is never written back. */
+      status?: POStatus;
       invoiceNumber?: string | null;
       paymentSubmittedToAP?: boolean;
       paymentRemitted?: boolean;
@@ -701,7 +702,7 @@ export function useUpdatePurchaseOrderStatus() {
       const { error } = await supabase
         .from("purchase_orders")
         .update({
-          status,
+          ...(status !== undefined && { status }),
           ...(invoiceNumber !== undefined && { invoice_number: invoiceNumber }),
           ...(paymentSubmittedToAP !== undefined && { payment_submitted_to_ap: paymentSubmittedToAP }),
           ...(paymentRemitted !== undefined && { payment_remitted: paymentRemitted }),
@@ -718,7 +719,7 @@ export function useUpdatePurchaseOrderStatus() {
       await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
       const previous = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
       patchPOCache(queryClient, id, {
-        status,
+        ...(status !== undefined && { status }),
         ...(invoiceNumber !== undefined && { invoiceNumber }),
         ...(paymentSubmittedToAP !== undefined && { paymentSubmittedToAP }),
         ...(paymentRemitted !== undefined && { paymentRemitted }),
@@ -743,7 +744,7 @@ export function useUpdatePurchaseOrderStatus() {
       // with the PO's CURRENT status — that isn't a status change, and firing
       // "PO became <status>" automations again on every checkbox would repeat
       // their actions (emails, work orders, requisitions) each time.
-      if (context?.previousStatus === status) return;
+      if (status === undefined || context?.previousStatus === status) return;
       // Fire any po_status_change automations configured for this target status (best-effort)
       fetch("/api/automations/run", {
         method: "POST",

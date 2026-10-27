@@ -70,7 +70,39 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .select(PART_SELECT)
     .maybeSingle();
 
+  if (error?.code === "23505") return jsonError("Another part already uses that partNumber", 409);
   if (error) return jsonServerError("PATCH /api/v1/parts/[id]", error);
   if (!data) return jsonError("Part not found", 404);
+
+  // Keep the linked catalog product in step, as the app's useUpdatePart does —
+  // otherwise POs (which default their unit cost, name and part number from
+  // the catalog item) keep the old values.
+  const { data: linked } = await db
+    .from("parts")
+    .select("product_item_id")
+    .eq("id", id)
+    .eq("org_id", auth.orgId)
+    .maybeSingle();
+  if (linked?.product_item_id) {
+    const productSync: Record<string, unknown> = {};
+    if (body.name !== undefined) productSync.name = body.name;
+    if (body.partNumber !== undefined) productSync.part_number = body.partNumber;
+    if (body.description !== undefined) productSync.description = body.description;
+    if (body.minimumStock !== undefined) productSync.minimum_stock = body.minimumStock;
+    if (body.unitCostCents !== undefined) productSync.unit_cost = body.unitCostCents;
+    if (body.vendorId !== undefined) {
+      productSync.vendor_id = body.vendorId;
+      productSync.vendor_name = vendorName ?? "";
+    }
+    if (Object.keys(productSync).length > 0) {
+      const { error: syncError } = await db
+        .from("product_items")
+        .update(productSync)
+        .eq("id", linked.product_item_id)
+        .eq("org_id", auth.orgId);
+      if (syncError?.code === "23505") return jsonError("Another product already uses that partNumber", 409);
+      if (syncError) return jsonServerError("PATCH /api/v1/parts/[id] (catalog sync)", syncError);
+    }
+  }
   return NextResponse.json(shapePart(data));
 }

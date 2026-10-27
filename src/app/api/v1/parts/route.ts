@@ -61,6 +61,66 @@ export async function POST(request: Request) {
     .select(PART_SELECT)
     .single();
 
+  if (error?.code === "23505") return jsonError("Another part already uses that partNumber", 409);
   if (error || !data) return jsonServerError("POST /api/v1/parts", error);
+
+  // Every part has a shadow product_items row (the app's own useCreatePart
+  // creates it): the Products catalog is the only thing a PO/requisition line
+  // can reference, and goods receiving resolves the part through it. Without
+  // one an API-created part could never be ordered or received. An existing
+  // unlinked catalog item with the same part number is the same physical item
+  // — adopt it rather than colliding on the unique index.
+  let productId: string | null = null;
+  if (body.partNumber) {
+    const { data: existingProduct } = await db
+      .from("product_items")
+      .select("id")
+      .eq("org_id", auth.orgId)
+      .eq("part_number", body.partNumber)
+      .eq("category", "maintenance_part")
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (existingProduct) {
+      const { data: taken } = await db
+        .from("parts")
+        .select("id")
+        .eq("product_item_id", existingProduct.id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (!taken) productId = existingProduct.id as string;
+    }
+  }
+  if (!productId) {
+    const { data: product, error: productError } = await db
+      .from("product_items")
+      .insert({
+        org_id: auth.orgId,
+        name: body.name,
+        part_number: body.partNumber ?? "",
+        description: body.description ?? "",
+        category: "maintenance_part",
+        unit_cost: body.unitCostCents ?? 0,
+        price: body.unitCostCents ?? 0,
+        vendor_id: body.vendorId ?? null,
+        vendor_name: vendorName ?? "",
+        is_inventory: true,
+        minimum_stock: body.minimumStock ?? 0,
+        part_category: body.category || null,
+      })
+      .select("id")
+      .single();
+    if (productError || !product) {
+      // Don't leave a part that can't be ordered or received: retire it.
+      await db
+        .from("parts")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", data.id)
+        .eq("org_id", auth.orgId);
+      return jsonServerError("POST /api/v1/parts (catalog mirror)", productError);
+    }
+    productId = product.id as string;
+  }
+  await db.from("parts").update({ product_item_id: productId }).eq("id", data.id).eq("org_id", auth.orgId);
+
   return NextResponse.json(shapePart(data), { status: 201 });
 }
