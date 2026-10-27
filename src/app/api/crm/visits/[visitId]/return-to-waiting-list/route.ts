@@ -74,11 +74,24 @@ export async function POST(
     .eq("id", visitId);
   if (deleteErr) return NextResponse.json({ error: deleteErr.message }, { status: 500 });
 
-  const { error: jobUpdateErr } = await db
-    .from("crm_jobs")
-    .update({ scheduled_date: null, crew_id: null })
-    .eq("id", job.id);
-  if (jobUpdateErr) return NextResponse.json({ error: jobUpdateErr.message }, { status: 500 });
+  // A multi-service waiting-list job is dispatched one service at a time, so
+  // other services may still have live visits. Clearing the job's date and crew
+  // under them would strip the crew from every visit that inherits it from the
+  // job — only reset the job once nothing else is scheduled on it.
+  const { count: remainingVisits, error: remainingErr } = await db
+    .from("crm_job_visits")
+    .select("id", { count: "exact", head: true })
+    .eq("job_id", job.id)
+    .is("deleted_at", null);
+  if (remainingErr) return NextResponse.json({ error: remainingErr.message }, { status: 500 });
+
+  if ((remainingVisits ?? 0) === 0) {
+    const { error: jobUpdateErr } = await db
+      .from("crm_jobs")
+      .update({ scheduled_date: null, crew_id: null })
+      .eq("id", job.id);
+    if (jobUpdateErr) return NextResponse.json({ error: jobUpdateErr.message }, { status: 500 });
+  }
 
   if (visit.client_id) {
     await db.from("client_activity").insert({

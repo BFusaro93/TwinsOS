@@ -328,10 +328,18 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
       // A one-time waiting-list job that's already been dispatched (has an active
       // visit) is done waiting — drop it. Packages keep multiple visits over their
       // lifetime, so they stay until their date window says otherwise.
+      // A waiting-list job with MORE THAN ONE service is dispatched one service at
+      // a time (one visit per service, so each can go to a different crew), so it
+      // is only done waiting once every service has its visit — dropping the whole
+      // job after the first dispatch stranded the other services: no visit and no
+      // longer on this list. A visit with no linked service covers them all.
       const rows = (data as WaitingListRow[]).filter((row) => {
         if (row.job_type !== "waiting_list") return true;
-        const hasActiveVisit = (row.crm_job_visits ?? []).some((v) => !v.deleted_at);
-        return !hasActiveVisit;
+        const live = (row.crm_job_visits ?? []).filter((v) => !v.deleted_at);
+        if (live.length === 0) return true;
+        const services = row.crm_job_services ?? [];
+        if (services.length <= 1 || live.some((v) => !v.job_service_id)) return false;
+        return services.some((s) => !live.some((v) => v.job_service_id === s.id));
       });
 
       // Package jobs' visits are often bulk-generated up front for the whole
@@ -342,10 +350,12 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
       // been dispatched, worked, or resolved); a still-'scheduled' visit means
       // the service is still exactly what the Waiting List is for.
       for (const row of rows) {
-        if (row.job_type !== "package") continue;
+        if (row.job_type !== "package" && row.job_type !== "waiting_list") continue;
+        // A split waiting-list job drops each service once it has ANY live visit
+        // (its visit is created in 'scheduled'); a package keeps the placeholder rule.
         const dispatchedServiceIds = new Set(
           (row.crm_job_visits ?? [])
-            .filter((v) => !v.deleted_at && v.job_service_id && v.status !== "scheduled")
+            .filter((v) => !v.deleted_at && v.job_service_id && (row.job_type === "waiting_list" || v.status !== "scheduled"))
             .map((v) => v.job_service_id)
         );
         row.crm_job_services = (row.crm_job_services ?? []).filter(
@@ -2803,15 +2813,34 @@ export function useUpdateCRMSchedule() {
       if (patch.customDates !== undefined) dbPatch.custom_dates = patch.customDates;
       if (patch.excludedDates !== undefined) dbPatch.excluded_dates = patch.excludedDates;
       if (patch.isActive !== undefined)    dbPatch.is_active = patch.isActive;
+      // Jobs point at their schedule BY NAME (crm_jobs.schedule), so renaming one
+      // has to carry its jobs along — otherwise every job on it stops matching the
+      // schedule row and the generator quietly falls back to parsing the old name
+      // as a legacy "Weekly - Monday" pattern (wrong cadence, or no visits at all).
+      let previousName: string | null = null;
+      if (patch.name !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: current } = await (supabase as any).from('crm_schedules').select('name').eq('id', id).maybeSingle();
+        previousName = (current?.name as string | undefined) ?? null;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('crm_schedules')
         .update(dbPatch)
         .eq('id', id);
       if (error) throw error;
+      if (previousName && patch.name !== undefined && previousName !== patch.name) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: renameErr } = await (supabase as any)
+          .from('crm_jobs')
+          .update({ schedule: patch.name })
+          .eq('schedule', previousName);
+        if (renameErr) throw renameErr;
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['crm-schedules'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
     },
   });
 }

@@ -5223,7 +5223,7 @@ export function DispatchBoard() {
                       // Per-visit override: crew_unassigned pins each visit to no
                       // crew, including ones that inherit the job's crew.
                       const ids = displayVisits
-                        .filter((v) => selectedIds.has(v.id) && !!effectiveCrewId(v))
+                        .filter((v) => selectedIds.has(v.id) && v.status !== "completed" && !!effectiveCrewId(v))
                         .map((v) => v.id);
                       if (ids.length === 0) return;
                       try {
@@ -5248,19 +5248,31 @@ export function DispatchBoard() {
                       key={c.id}
                       className="text-xs"
                       onSelect={async () => {
-                        const ids = [...selectedIds];
+                        // Completed visits keep the crew that did the work — a select-all
+                        // here used to rewrite their crew, moving finished labor and
+                        // history onto the new crew.
+                        const ids = displayVisits
+                          .filter((v) => selectedIds.has(v.id) && v.status !== "completed")
+                          .map((v) => v.id);
+                        if (ids.length === 0) {
+                          toast.info("Completed visits can't be re-assigned to another crew");
+                          return;
+                        }
                         try {
                           const res = await fetch("/api/crm/visits/bulk-update", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ ids, updates: { crew_id: c.id } }),
                           });
-                          if (!res.ok) throw new Error("One or more updates failed");
+                          if (!res.ok) {
+                            const err = await res.json().catch(() => ({})) as { error?: unknown };
+                            throw new Error(typeof err.error === "string" ? err.error : "One or more updates failed");
+                          }
                           await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
                           setSelectedIds(new Set());
                           toast.success(`Assigned ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${c.name}`);
-                        } catch {
-                          toast.error("Failed to reassign one or more visits");
+                        } catch (err) {
+                          toast.error(err instanceof Error && err.message ? err.message : "Failed to reassign one or more visits");
                         }
                       }}
                     >
@@ -5294,7 +5306,9 @@ export function DispatchBoard() {
                   onSelect={async () => {
                     const ids = [...selectedIds];
                     try {
-                      await Promise.all(ids.map((id) => returnToWaitingList(id)));
+                      // One at a time: the route resets the job's date/crew only when its
+                      // LAST visit goes back, which concurrent calls can't tell.
+                      for (const id of ids) await returnToWaitingList(id);
                       setSelectedIds(new Set());
                       toast.success(`Returned ${ids.length} visit${ids.length > 1 ? "s" : ""} to the waiting list`);
                     } catch (err) {

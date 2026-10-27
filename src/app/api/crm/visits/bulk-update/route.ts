@@ -5,6 +5,8 @@ import { z } from "zod";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { formatMonthDay } from "@/lib/utils";
+import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
+import { notifyVisitAssigned } from "@/lib/notifications/visit-notify";
 import {
   INVOICED_VISIT_LOCKED_CODE,
   INVOICED_VISIT_LOCKED_MESSAGE,
@@ -56,12 +58,24 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: beforeRows } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, client_id, job_id, scheduled_date, status, clocked_in_at, clocked_out_at")
+    .select("id, client_id, job_id, scheduled_date, status, crew_id, start_time, clocked_in_at, clocked_out_at")
     .in("id", ids);
   const before = (beforeRows ?? []) as {
     id: string; client_id: string; job_id: string; scheduled_date: string; status: string;
+    crew_id: string | null; start_time: string | null;
     clocked_in_at: string | null; clocked_out_at: string | null;
   }[];
+
+  // crm_crews has no org-scoped FK to crm_job_visits, so a crew id from another
+  // org would write through RLS (which only checks the visit's own org_id) and
+  // leak this org's schedule to that crew. Resolve it through the caller's
+  // RLS-scoped client — a foreign id comes back empty.
+  if (updates.crew_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: crewRow } = await (supabase as any)
+      .from("crm_crews").select("id").eq("id", updates.crew_id).is("deleted_at", null).maybeSingle();
+    if (!crewRow) return NextResponse.json({ error: "Crew not found" }, { status: 404 });
+  }
 
   // A visit the crew is working right now (clocked in, not out) can't be moved to
   // another day: the crew app only carries over clocked-in visits scheduled
@@ -135,6 +149,46 @@ export async function POST(request: Request) {
   }
 
   await reopenOneTimeJobsForVisits(supabase, before, updates.status);
+
+  // Dispatching from the board's bulk Change Status: the single-visit paths stamp
+  // dispatched_at (what the "visit dispatched" Zapier trigger keys on) and
+  // pre-load the service's chemicals onto the crew's Chemical Mix card; the bulk
+  // path did neither, so those visits looked undispatched to both.
+  if (updates.status === "dispatched") {
+    const newlyDispatched = before.filter((r) => r.status !== "dispatched").map((r) => r.id);
+    if (newlyDispatched.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from("crm_job_visits")
+        .update({ dispatched_at: new Date().toISOString() })
+        .in("id", newlyDispatched);
+      for (const id of newlyDispatched) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await loadServiceChemicalsForVisit(supabase as any, id).catch(() => 0);
+      }
+    }
+  }
+
+  // Re-assigning a batch of visits to a crew: the single-visit path pushes "New
+  // Job Assigned" to that crew's phones (useUpdateVisit -> /notify) but the bulk
+  // path never did, so a dispatcher moving a sick crew's day over to another
+  // crew left that crew with no notice. Capped so a select-all doesn't turn
+  // into hundreds of pushes in one request.
+  if (updates.crew_id) {
+    const crewId = updates.crew_id;
+    const changed = before.filter((r) => r.crew_id !== crewId && r.status !== "completed").slice(0, 40);
+    await Promise.allSettled(
+      changed.map((r) =>
+        notifyVisitAssigned({
+          visitId: r.id,
+          crewId,
+          clientId: r.client_id,
+          scheduledDate: updates.scheduled_date ?? r.scheduled_date,
+          startTime: r.start_time,
+        })
+      )
+    );
+  }
 
   // One lightweight client-timeline row per moved / newly-dispatched visit
   // ("Visit moved 9/7 → 9/8"). No notifications; best-effort.
