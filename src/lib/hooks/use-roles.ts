@@ -90,6 +90,22 @@ export function useDeleteRole() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
+      // A soft-deleted role stops granting anything (has_crm_access /
+      // has_settings_permission ignore it), so deleting one that employees still
+      // hold silently locks all of them out of Landscapt. Make the admin
+      // reassign them first.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { count: assigned, error: countError } = await (supabase as any)
+        .from("crm_employees")
+        .select("id", { count: "exact", head: true })
+        .eq("crm_role_id", id)
+        .is("deleted_at", null);
+      if (countError) throw countError;
+      if ((assigned ?? 0) > 0) {
+        throw new Error(
+          `${assigned} employee${assigned === 1 ? " is" : "s are"} still assigned to this role. Reassign them to another role first.`
+        );
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_roles")
