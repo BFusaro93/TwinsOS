@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import { BrandMark } from "@/components/shared/BrandMark";
 import { TurnstileWidget } from "@/components/shared/TurnstileWidget";
 import { createClient } from "@/lib/supabase/client";
+import { sanitizeStorageFileName } from "@/lib/hooks/use-attachments";
 
 // Unset in most environments — see .env.local.example. When unset, no widget
 // renders and no token is required, so existing forms are unaffected.
@@ -232,7 +233,8 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     setAttachmentUploading((prev) => ({ ...prev, [fieldId]: true }));
     try {
       const supabase = createClient();
-      const path = `${form.id}/${crypto.randomUUID()}-${file.name}`;
+      // Storage keys reject spaces/unicode/brackets ("Resume (1).pdf" → "Invalid key"); the original name stays in `name`.
+      const path = `${form.id}/${crypto.randomUUID()}-${sanitizeStorageFileName(file.name)}`;
       const { error } = await supabase.storage.from("form-attachments").upload(path, file, { upsert: false });
       if (error) throw error;
       setAttachments((prev) => ({ ...prev, [fieldId]: { path, name: file.name, size: file.size } }));

@@ -42,6 +42,44 @@ const MAX_SEND_ATTEMPTS = 5;
 const SEND_RETRY_BASE_MS = 15 * 60 * 1000;
 
 /**
+ * When an email step has a "Send Between" window and `now` (on the org's
+ * clock) is outside it, the instant the window next opens; null when the step
+ * may go out now (no/invalid/zero-width window, or already inside it). A window
+ * whose start is after its end ("22:00" → "06:00") runs overnight.
+ */
+function emailWindowFireAt(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  config: Record<string, any>,
+  now: Date,
+  timeZone: string
+): Date | null {
+  const toMinutes = (v: unknown): number | null => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(typeof v === "string" ? v.trim() : "");
+    if (!m) return null;
+    const h = Number(m[1]);
+    const min = Number(m[2]);
+    return h <= 23 && min <= 59 ? h * 60 + min : null;
+  };
+  const start = toMinutes(config.between_start);
+  const end = toMinutes(config.between_end);
+  if (start === null || end === null || start === end) return null;
+
+  const wall = instantToZoneWallClock(now, timeZone);
+  const nowMin = Number(wall.time.slice(0, 2)) * 60 + Number(wall.time.slice(3, 5));
+  const overnight = start > end;
+  const inside = overnight ? nowMin >= start || nowMin < end : nowMin >= start && nowMin < end;
+  if (inside) return null;
+
+  // Outside the window: next opening is today's start if it hasn't passed yet
+  // (daytime window before it opens, or an overnight window's daytime gap),
+  // otherwise tomorrow's.
+  const opensToday = nowMin < start;
+  const date = opensToday ? wall.date : shiftYmd(wall.date, 1);
+  const hhmm = `${String(Math.floor(start / 60)).padStart(2, "0")}:${String(start % 60).padStart(2, "0")}`;
+  return zoneWallClockToInstant(date, hhmm, timeZone) ?? new Date(now.getTime() + 3_600_000);
+}
+
+/**
  * Atomically claims the enrollment's current step: only one caller can move
  * next_fire_at from "due" to "leased" for a given position, so the cron
  * sweep (now every 15 minutes) and an immediate post-enrollment run can
@@ -347,6 +385,21 @@ async function runClaimedStep(
           .update({ next_fire_at: d.toISOString(), updated_at: nowIso })
           .eq("id", enrollId);
         return { skipped: { enrollmentId: enrollId, reason: "deferred to next weekday (send_weekdays_only)" } };
+      }
+    }
+
+    // "Send Between" window (Email event dialog, default 08:00–18:00): it was
+    // saved on every email step but never read, so a step that came due at 11pm
+    // (a visit completed in the evening, a wait that ended overnight) went out
+    // at 11pm. Defer to the next window start on the ORG's clock instead.
+    {
+      const windowFireAt = emailWindowFireAt(eventConfig, new Date(), await getOrgTimeZone(adminClient, orgId));
+      if (windowFireAt) {
+        await adminClient
+          .from("crm_sequence_enrollments")
+          .update({ next_fire_at: windowFireAt.toISOString(), updated_at: nowIso })
+          .eq("id", enrollId);
+        return { skipped: { enrollmentId: enrollId, reason: `email held until its send window opens at ${windowFireAt.toISOString()}` } };
       }
     }
 

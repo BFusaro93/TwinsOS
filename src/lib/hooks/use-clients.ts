@@ -1828,13 +1828,22 @@ export function useBulkAddTag() {
     mutationFn: async ({ clientIds, tag }: { clientIds: string[]; tag: string }) => {
       const supabase = createClient();
       const rows = clientIds.map((client_id) => ({ client_id, tag }));
-      const { error } = await supabase
+      // ignoreDuplicates returns only the rows actually inserted, so clients that
+      // already had the tag aren't reported (or re-triggered) as newly tagged.
+      const { data, error } = await supabase
         .from("client_tags")
-        .upsert(rows, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true });
+        .upsert(rows, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true })
+        .select("client_id");
       if (error) throw error;
+      return { addedClientIds: (data ?? []).map((r) => r.client_id as string) };
     },
-    onSuccess: () => {
+    onSuccess: (result, { tag }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      // The single-client add fires tag_added; a bulk add silently skipped every
+      // "when tag X is added" automation for the whole selection.
+      for (const clientId of result?.addedClientIds ?? []) {
+        fireAutomationTrigger({ triggerType: "tag_added", clientId, matchValues: [tag] });
+      }
     },
   });
 }
@@ -1845,15 +1854,21 @@ export function useBulkRemoveTag() {
   return useMutation({
     mutationFn: async ({ clientIds, tag }: { clientIds: string[]; tag: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("client_tags")
         .delete()
         .in("client_id", clientIds)
-        .eq("tag", tag);
+        .eq("tag", tag)
+        .select("client_id");
       if (error) throw error;
+      return { removedClientIds: (data ?? []).map((r) => r.client_id as string) };
     },
-    onSuccess: () => {
+    onSuccess: (result, { tag }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      // Mirrors the single-client remove, which fires tag_removed.
+      for (const clientId of result?.removedClientIds ?? []) {
+        fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
+      }
     },
   });
 }

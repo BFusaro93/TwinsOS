@@ -285,7 +285,9 @@ export async function sendClientEmail(opts: SendClientEmailOpts): Promise<{ rese
   const { data, error } = await resend.emails.send({
     from: opts.from ?? EMAIL_FROM,
     to: opts.to,
-    subject: opts.subject,
+    // A merge value with a line break (e.g. [notestocrew] in a subject) would put
+    // a raw newline in the Subject header, which the provider rejects.
+    subject: opts.subject.replace(/[\r\n]+/g, " ").trim(),
     html: opts.html,
     ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
     ...(opts.unsubscribeUrl

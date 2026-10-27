@@ -105,7 +105,9 @@ async function sendToRecipients(
     await resend.emails.send({
       from: EMAIL_FROM,
       to: p.email,
-      subject: opts.title,
+      // Ticket subjects can arrive from forms/portal text with line breaks; a
+      // raw newline in the Subject header makes the mail API reject the send.
+      subject: opts.title.replace(/\s+/g, " ").trim(),
       html: opts.emailHtml(p.name ?? null),
     }).catch(() => {
       // Non-fatal — one recipient's email failing shouldn't block the others

@@ -139,7 +139,9 @@ export async function notifySupportInboxOfAskAI(item: {
       to: SUPPORT_INBOX(),
       subject: escalated
         ? `Ask AI conversation from ${item.orgName}`
-        : `${item.kind === "partial" ? "Ask AI partial answer" : "Ask AI gap"}: ${snippet(item.question, 70)}`,
+        // A multi-line question (the box is a textarea) put raw newlines in the
+        // subject header, which the mail API rejects — the gap email was dropped.
+        : `${item.kind === "partial" ? "Ask AI partial answer" : "Ask AI gap"}: ${snippet(item.question, 70).replace(/\s+/g, " ")}`,
       html,
     })
     .then(() => true)
