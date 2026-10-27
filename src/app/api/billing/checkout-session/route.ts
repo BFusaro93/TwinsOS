@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
-import { getPriceIdForPlan, isBillablePlan } from "@/lib/stripe/plans";
+import { getPlanForPriceId, getPriceIdForPlan, isBillablePlan } from "@/lib/stripe/plans";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { logger } from "@/lib/logger";
 
@@ -98,7 +98,9 @@ export async function POST(request: Request) {
       ["active", "trialing", "past_due"].includes(s.status)
     );
     if (activeSub) {
-      const item = activeSub.items.data[0];
+      // Swap the PLAN item, not whichever add-on/seat-overage item Stripe lists first.
+      const item =
+        activeSub.items.data.find((i) => getPlanForPriceId(i.price.id) !== null) ?? activeSub.items.data[0];
       if (item && item.price.id === priceId) {
         return NextResponse.json({ error: "This organization is already subscribed to this plan" }, { status: 422 });
       }

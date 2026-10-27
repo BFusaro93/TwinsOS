@@ -177,10 +177,14 @@ async function applySubscriptionToOrg(
   lookup: { id: string } | { stripeCustomerId: string },
   subscription: Stripe.Subscription
 ) {
-  // items.data[0] is always the base plan price — a seat-overage item (if
-  // present) is added/removed by syncSeatOverage below and never the first
-  // item on a subscription created through checkout-session.ts.
-  const priceId = subscription.items.data[0]?.price.id ?? null;
+  // The base plan item is the one whose price maps to a plan. Seat-overage and
+  // add-on items ride on the same subscription, and Stripe doesn't promise
+  // items.data order, so taking [0] could record an overage/add-on price as
+  // the plan price (and leave the plan unchanged). Falls back to [0] when
+  // none matches (price env vars unset).
+  const planItem =
+    subscription.items.data.find((item) => getPlanForPriceId(item.price.id) !== null) ?? subscription.items.data[0];
+  const priceId = planItem?.price.id ?? null;
   const plan = priceId ? getPlanForPriceId(priceId) : null;
 
   const patch: Record<string, unknown> = {
