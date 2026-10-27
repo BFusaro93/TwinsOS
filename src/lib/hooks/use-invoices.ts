@@ -859,12 +859,19 @@ export function useDeleteInvoice() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: current, error: currentErr } = await (supabase as any)
         .from("crm_invoices")
-        .select("amount_paid_cents")
+        .select("amount_paid_cents, locked")
         .eq("id", id)
         .single();
       if (currentErr) throw currentErr;
       if ((current?.amount_paid_cents ?? 0) > 0) {
         throw new Error("This invoice cannot be deleted: payments are applied to it. Refund or unapply them first.");
+      }
+      // A locked invoice's lines can't be deleted (trigger) — and that failure
+      // used to land AFTER its materials were reset to pending and their stock
+      // restored, leaving the invoice live while the materials were free to be
+      // billed (and counted back into inventory) a second time.
+      if (current?.locked) {
+        throw new Error("This invoice is locked. Unlock it before deleting it.");
       }
       // Free any materials this draft billed before its lines disappear.
       const { data: lines, error: linesErr } = await supabase
@@ -1408,6 +1415,18 @@ export function computeInvoiceTotals(input: {
 // job product from an invoice deletes its line item the same way).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, invoiceId: string) {
+  // Refuse before touching the materials: a locked invoice rejects the line
+  // delete (trigger), and that used to happen AFTER the materials were reset to
+  // pending with their stock restored — the line stayed, the materials were
+  // free to be billed again.
+  const { data: lockRow, error: lockErr } = await supabase
+    .from("crm_invoices")
+    .select("locked")
+    .eq("id", invoiceId)
+    .single();
+  if (lockErr) throw lockErr;
+  if (lockRow?.locked) throw new Error(LOCKED_INVOICE_MESSAGE);
+
   // A material billed by this line is 'invoiced'; deleting the line nulls its
   // link (ON DELETE SET NULL) but leaves the status, so nothing would ever
   // bill it again and its stock stays decremented. Send it back to pending.
