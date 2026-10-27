@@ -339,7 +339,10 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
       // longer on this list. A visit with no linked service covers them all.
       const rows = (data as WaitingListRow[]).filter((row) => {
         if (row.job_type !== "waiting_list") return true;
-        const live = (row.crm_job_visits ?? []).filter((v) => !v.deleted_at);
+        // A skipped or cancelled visit never happened, so it doesn't count as
+        // dispatched: a job whose only visits were skipped/cancelled goes back
+        // on the list. Rescheduling creates a fresh live visit, which removes it.
+        const live = (row.crm_job_visits ?? []).filter((v) => !v.deleted_at && v.status !== "skipped" && v.status !== "cancelled");
         if (live.length === 0) return true;
         const services = row.crm_job_services ?? [];
         if (services.length <= 1 || live.some((v) => !v.job_service_id)) return false;
@@ -359,7 +362,7 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
         // (its visit is created in 'scheduled'); a package keeps the placeholder rule.
         const dispatchedServiceIds = new Set(
           (row.crm_job_visits ?? [])
-            .filter((v) => !v.deleted_at && v.job_service_id && (row.job_type === "waiting_list" || v.status !== "scheduled"))
+            .filter((v) => !v.deleted_at && v.status !== "skipped" && v.status !== "cancelled" && v.job_service_id && (row.job_type === "waiting_list" || v.status !== "scheduled"))
             .map((v) => v.job_service_id)
         );
         row.crm_job_services = (row.crm_job_services ?? []).filter(

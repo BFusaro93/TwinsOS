@@ -35,15 +35,16 @@ export async function GET(request: Request) {
   const utcToday = new Date().toISOString().slice(0, 10);
 
   // Page through the results — a single select silently truncates at 1000 rows.
-  type Row = { id: string; org_id: string; client_id: string; due_date: string };
+  type Row = { id: string; org_id: string; client_id: string; due_date: string | null; invoice_date: string; terms: string | null };
   const overdue: Row[] = [];
   for (let from = 0; ; ) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: page, error } = await (supabase as any)
       .from("crm_invoices")
-      .select("id, org_id, client_id, due_date")
-      .not("due_date", "is", null)
-      .lt("due_date", utcToday)
+      .select("id, org_id, client_id, due_date, invoice_date, terms")
+      // Same rule as isInvoiceOverdue (src/lib/invoice-status.ts): no due date +
+      // due_on_receipt terms falls back to the invoice date as the due day.
+      .or(`and(due_date.not.is.null,due_date.lt.${utcToday}),and(due_date.is.null,terms.eq.due_on_receipt,invoice_date.lt.${utcToday})`)
       .not("status", "in", '("paid","void","draft")')
       .is("deleted_at", null)
       .order("id")
@@ -82,7 +83,8 @@ export async function GET(request: Request) {
     for (const invoice of rows) {
       // Re-check on the owning org's calendar: a row due today is not past
       // due, and the UTC-bounded query above may have included one.
-      if (!(invoice.due_date < orgToday)) continue;
+      const effectiveDue = invoice.due_date ?? (invoice.terms === "due_on_receipt" ? invoice.invoice_date : null);
+      if (!effectiveDue || !(effectiveDue.slice(0, 10) < orgToday)) continue;
       await fireSimpleTrigger(supabase, {
         orgId,
         clientId: invoice.client_id,
