@@ -739,7 +739,8 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         open={newProjectOpen}
         onOpenChange={setNewProjectOpen}
         defaultClientId={estimate.clientId}
-        defaultContractPriceCents={estimate.totalCents}
+        // Pre-tax (subtotal minus discounts): tax is added per milestone invoice.
+        defaultContractPriceCents={estimate.revenueCents > 0 ? estimate.revenueCents : Math.max(0, estimate.subtotalCents - estimate.discountCents)}
         defaultName={estimate.description ?? undefined}
         onCreated={(project) => setProjectId(project.id)}
       />

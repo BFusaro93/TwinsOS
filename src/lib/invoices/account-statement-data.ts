@@ -57,6 +57,24 @@ export async function buildAccountStatementData(
     return inv.status !== "void" && inv.status !== "draft" && !inv.deleted_at;
   });
 
+  // Payments recorded on ANOTHER account (typically the parent) but allocated
+  // to this client's invoices. They reduce what this client owes, so omitting
+  // them overstated the child's balance by every such payment. Only the share
+  // allocated to this client's invoices counts (net of any refund, pro rata).
+  const { rows: parentAllocRows, error: parentAllocErr } = await selectAllRows<Record<string, unknown>>(() => supabase
+    .from("crm_payment_allocations")
+    .select("payment_id, amount_cents, crm_invoices!inner(client_id, invoice_number, status, deleted_at), crm_payments!inner(payment_date, amount_cents, refunded_amount_cents, method, reference, is_credit, client_id, deleted_at)")
+    .eq("crm_invoices.client_id", clientId)
+    .neq("crm_payments.client_id", clientId)
+    .is("crm_payments.deleted_at", null)
+    .lte("crm_payments.payment_date", toDate));
+  if (parentAllocErr) throw new Error(`Failed to load parent-paid allocations for statement: ${parentAllocErr}`);
+
+  const parentPaid = parentAllocRows.filter((r) => {
+    const inv = r.crm_invoices as { status?: string; deleted_at?: string | null } | null;
+    return !!r.crm_payments && !!inv && inv.status !== "void" && inv.status !== "draft" && !inv.deleted_at;
+  });
+
   type LedgerEntry = {
     date: string;
     kind: "invoice" | "payment" | "credit";
@@ -86,6 +104,21 @@ export async function buildAccountStatementData(
         invoiceNumber,
         // Net of refunds: a refunded payment no longer reduces what's owed.
         amountCents: -(((r.amount_cents as number) ?? 0) - ((r.refunded_amount_cents as number) ?? 0)),
+      };
+    }),
+    ...parentPaid.map((r: Record<string, unknown>): LedgerEntry => {
+      const pay = r.crm_payments as { payment_date: string; amount_cents: number | null; refunded_amount_cents: number | null; method: string | null; reference: string | null };
+      const inv = r.crm_invoices as { invoice_number?: number | null };
+      const gross = pay.amount_cents ?? 0;
+      const refunded = pay.refunded_amount_cents ?? 0;
+      const share = (r.amount_cents as number) ?? 0;
+      const net = gross > 0 ? Math.round((share * (gross - refunded)) / gross) : share;
+      return {
+        date: pay.payment_date,
+        kind: "payment",
+        label: `Paid by parent account — ${pay.method ?? "Payment"}${inv.invoice_number ? ` (Invoice #${inv.invoice_number})` : ""}${pay.reference ? ` (Ref #: ${pay.reference})` : ""}`,
+        invoiceNumber: inv.invoice_number ?? null,
+        amountCents: -net,
       };
     }),
   ].sort((a, b) => a.date.localeCompare(b.date));

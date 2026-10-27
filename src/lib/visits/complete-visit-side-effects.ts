@@ -256,9 +256,33 @@ export async function applyVisitCompletionSideEffects(
   // Snow Invoicing page (per-inch/hourly rates this flat auto-invoice can't
   // compute).
   try {
+    // A contract-linked job only bills inside the contract price while that
+    // contract is still in force. Once it is cancelled / expired / switched
+    // inactive / deleted / past its end date, neither the contract cron nor this
+    // path would ever bill the visit, so it bills like normal per-visit work.
+    // Draft/sent contracts are NOT treated as ended: they may still be signed,
+    // and billing the visit now would double-bill once they are.
+    let contractCoversVisit = false;
+    if (j?.contract_id) {
+      const { data: contractRow } = await supabase
+        .from("crm_contracts")
+        .select("status, is_active, deleted_at, end_date")
+        .eq("id", j.contract_id)
+        .maybeSingle();
+      const c = contractRow as { status: string; is_active: boolean | null; deleted_at: string | null; end_date: string | null } | null;
+      const visitDay = visit.scheduled_date && visit.scheduled_date <= today ? visit.scheduled_date : today;
+      const ended =
+        !c ||
+        c.deleted_at != null ||
+        c.is_active === false ||
+        c.status === "cancelled" ||
+        c.status === "expired" ||
+        (c.end_date != null && c.end_date < visitDay);
+      contractCoversVisit = !ended;
+    }
     if (!j) {
       result.invoiceSkipReason = "job_not_found";
-    } else if (j.contract_id) {
+    } else if (j.contract_id && contractCoversVisit) {
       result.invoiceSkipReason = "contract";
     } else if (j.job_type === "snow") {
       result.invoiceSkipReason = "snow";

@@ -302,13 +302,17 @@ export async function POST(
   // find it even if the client confirms immediately. Best-effort: failing to
   // record it must not deny a client who is trying to pay — it only degrades
   // to the previous (duplicate-prone) behaviour.
+  //
+  // ONLY the internal duplicate-guard marker (the intent id) is written here.
+  // The staff-facing "payment pending" badge reads deposit_pending_cents /
+  // _method / _at, which markEstimateDepositPending sets when Stripe reports
+  // the payment actually processing. Writing them at intent creation made every
+  // abandoned card form (client opened the page and never paid) show a phantom
+  // "payment pending" badge forever.
   await supabase
     .from("estimates")
     .update({
       deposit_pending_intent_id: paymentIntent.id,
-      deposit_pending_cents: depositCents,
-      deposit_pending_method: paymentMethod,
-      deposit_pending_at: new Date().toISOString(),
     })
     .eq("id", estimate.id)
     .eq("org_id", estimate.org_id);

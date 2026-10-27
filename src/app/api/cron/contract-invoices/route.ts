@@ -6,6 +6,8 @@ import {
   billedInPeriod,
   isBillingDueOn,
   planContractBilling,
+  planFirstPeriodProration,
+  prorationPending,
   termSkipReason,
 } from "@/lib/contract-billing";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
@@ -109,7 +111,7 @@ export async function GET(request: Request) {
     contracts = await fetchAllRows<Record<string, unknown>>(() =>
       sb
         .from("crm_contracts")
-        .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at, default_terms, status)")
+        .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, start_billing_mode, first_period_prorated_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at, default_terms, status)")
         // A cancelled client's contract must not keep billing — generate.ts already
         // treats cancelled clients (and deleted ones) as inactive for visits, but the
         // invoicing paths only checked deleted_at, so a cancelled client kept getting
@@ -151,11 +153,112 @@ export async function GET(request: Request) {
     if (isBillingDueOn(c, todayDate)) dueTodayContracts.push(c);
   }
 
-  if (dueTodayContracts.length === 0) {
-    return NextResponse.json({ generated: 0, message: "No contracts due today." });
+  const results: { contractId: string; status: "created" | "skipped"; reason?: string }[] = [];
+
+  // ── prorated first-period stubs ───────────────────────────────────────────
+  // A contract set to "prorate first period" that starts mid-cycle bills the
+  // stub (start date → day before its first regular billing day) as soon as it
+  // is signed/active and has started, independent of billing day. Idempotent:
+  // the contract's first_period_prorated_at marker, last_billed_date (a full
+  // cycle already went out) and any live prorated invoice each block it.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const contract of ((contracts ?? []) as any[])) {
+    if (contract.start_billing_mode !== "prorate_first_period") continue;
+    const { str: todayStr } = await orgToday(contract.org_id);
+    const stub = planFirstPeriodProration(contract);
+    if (!stub || todayStr < stub.periodStart) continue;
+    if (contract.end_date && contract.end_date < stub.periodStart) continue;
+
+    const { data: liveStub } = await sb
+      .from("crm_invoices")
+      .select("id")
+      .eq("contract_id", contract.id)
+      .not("proration_period_start", "is", null)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle();
+    if (!prorationPending(contract, !!liveStub)) continue;
+
+    const { data: orgTermsRow } = await sb
+      .from("organizations")
+      .select("default_billing_terms")
+      .eq("id", contract.org_id)
+      .maybeSingle();
+    const stubTerms = resolveInvoiceTerms(contract.clients?.default_terms, orgTermsRow?.default_billing_terms);
+    const lineItems = (contract.invoice_line_items ?? []) as string[];
+    const baseDescription = lineItems.length > 0 ? lineItems.join("\n") : contract.title;
+    const description = `${baseDescription}\n${stub.label}\n${stub.formula}`;
+
+    const { data: stubInvoice, error: stubErr } = await sb
+      .from("crm_invoices")
+      .insert({
+        org_id: contract.org_id,
+        client_id: contract.client_id,
+        contract_id: contract.id,
+        sales_rep_id: contract.sales_rep_id ?? null,
+        description,
+        po_number: contract.po_number ?? null,
+        invoice_date: todayStr,
+        terms: stubTerms,
+        due_date: computeDueDate(todayStr, stubTerms),
+        status: "draft",
+        subtotal_cents: stub.amountCents,
+        total_cents: stub.amountCents,
+        balance_cents: stub.amountCents,
+        proration_period_start: stub.periodStart,
+        proration_period_end: stub.periodEnd,
+      })
+      .select("id")
+      .single();
+    if (stubErr || !stubInvoice) {
+      // 23505 = a regular invoice already holds today's date for this contract;
+      // the marker isn't set, so tomorrow's run retries on a free date.
+      results.push({ contractId: contract.id, status: "skipped", reason: stubErr?.message ?? "prorated invoice insert failed" });
+      continue;
+    }
+    const { error: stubLiErr } = await sb.from("crm_invoice_line_items").insert({
+      org_id: contract.org_id,
+      invoice_id: stubInvoice.id,
+      name: stub.label,
+      description: `${baseDescription} — ${stub.formula}`,
+      qty: 1,
+      rate_cents: stub.amountCents,
+      total_cents: stub.amountCents,
+      is_taxable: false,
+      sort_order: 1,
+    });
+    if (stubLiErr) {
+      console.error(`[contract-invoices] prorated line item insert error for contract ${contract.id}:`, stubLiErr);
+      await sb.from("crm_invoices").update({ deleted_at: new Date().toISOString() }).eq("id", stubInvoice.id);
+      results.push({ contractId: contract.id, status: "skipped", reason: `prorated line item insert failed: ${stubLiErr.message}` });
+      continue;
+    }
+    const { data: stubNumber, error: stubNumErr } = await sb.rpc("assign_invoice_number", { p_invoice_id: stubInvoice.id });
+    if (stubNumErr) {
+      console.error(`[contract-invoices] prorated invoice number assignment error for contract ${contract.id}:`, stubNumErr);
+    }
+    const { error: stubActErr } = await sb.from("client_activity").insert({
+      org_id: contract.org_id,
+      client_id: contract.client_id,
+      activity_type: "invoice",
+      subject: stubNumber != null ? `Invoice #${stubNumber} (prorated first period)` : "Invoice (prorated first period)",
+      amount_cents: stub.amountCents,
+      ref_id: stubInvoice.id,
+      ref_table: "crm_invoices",
+    });
+    if (stubActErr) {
+      console.error(`[contract-invoices] client activity insert error for contract ${contract.id}:`, stubActErr);
+    }
+    // Marker only — last_billed_date is left alone so the first REGULAR cycle's
+    // catch-up rules aren't suppressed by the stub.
+    await sb.from("crm_contracts").update({ first_period_prorated_at: todayStr }).eq("id", contract.id);
+    results.push({ contractId: contract.id, status: "created", reason: "prorated first period" });
   }
 
-  const results: { contractId: string; status: "created" | "skipped"; reason?: string }[] = [];
+  if (dueTodayContracts.length === 0) {
+    const stubCreated = results.filter((r) => r.status === "created").length;
+    return NextResponse.json({ generated: stubCreated, skipped: results.length - stubCreated, results, message: stubCreated ? undefined : "No contracts due today." });
+  }
 
   for (const contract of dueTodayContracts) {
     // ── work out the invoice date and the "already billed" window for THIS
@@ -183,6 +286,9 @@ export async function GET(request: Request) {
       .select("id")
       .eq("client_id", contract.client_id)
       .eq("contract_id", contract.id)
+      // The prorated first-period stub is a separate invoice; it must not
+      // count as this period's regular invoice.
+      .is("proration_period_start", null)
       .is("deleted_at", null)
       .limit(1);
     if (plan.periodStart) existingQuery = existingQuery.gte("invoice_date", plan.periodStart);

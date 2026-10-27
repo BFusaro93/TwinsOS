@@ -82,6 +82,35 @@ async function assertVoidable(
 }
 
 /**
+ * Sends the materials a voided invoice billed back to pending (and restores
+ * their stock), exactly as deleting a draft does — otherwise they stay
+ * 'invoiced' against a dead invoice and never bill again. Runs AFTER the void
+ * itself succeeded (a trigger can still reject the void after assertVoidable's
+ * pre-check; resetting first would free the materials on an invoice that is
+ * still live — the delete bug). The invoice's lines are kept for the audit
+ * trail; the visit tag on a dead line is released when the visit re-invoices
+ * (complete-visit-side-effects).
+ */
+async function releaseMaterialsForVoidedInvoice(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  invoiceId: string,
+) {
+  const { data: lines, error } = await supabase
+    .from("crm_invoice_line_items")
+    .select("id")
+    .eq("invoice_id", invoiceId);
+  if (error) throw error;
+  try {
+    await resetJobProductsForLines(supabase, ((lines ?? []) as { id: string }[]).map((l) => l.id));
+  } catch (e) {
+    throw new Error(
+      `The invoice was voided, but its materials could not be released back to pending: ${e instanceof Error ? e.message : "unknown error"}. Set them to pending on the job.`,
+    );
+  }
+}
+
+/**
  * The DB-side void guards raise plain Postgres exceptions; Postgrest surfaces
  * the RAISE message verbatim. Re-throw them as-is (they are already written
  * for a user) rather than letting a raw driver error reach a generic toast.
@@ -927,6 +956,7 @@ export function useVoidInvoice() {
       // Re-sync the client's outstanding balance now that this invoice is excluded
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
+      await releaseMaterialsForVoidedInvoice(supabase, id);
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.id] });
@@ -960,6 +990,7 @@ export function useUpdateInvoiceStatus() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase.rpc as any)("sync_client_balance", { p_client_id: inv.clientId });
         }
+        await releaseMaterialsForVoidedInvoice(supabase, id);
         return;
       }
       // Voiding zeroed balance_cents; taking an invoice back out of void
