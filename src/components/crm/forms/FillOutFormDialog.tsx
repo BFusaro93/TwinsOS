@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { sanitizeStorageFileName } from "@/lib/hooks/use-attachments";
 import type { CRMForm, CRMFormField } from "@/types/crm-forms";
 
 interface AttachmentValue {
@@ -360,7 +361,8 @@ export function FillOutFormDialog({ form, open, onOpenChange }: Props) {
     setAttachmentUploading((prev) => ({ ...prev, [label]: true }));
     try {
       const supabase = createClient();
-      const path = `${form.id}/${crypto.randomUUID()}-${file.name}`;
+      // Storage keys reject spaces/unicode/brackets; the original name stays in `name`.
+      const path = `${form.id}/${crypto.randomUUID()}-${sanitizeStorageFileName(file.name)}`;
       const { error } = await supabase.storage.from("form-attachments").upload(path, file, { upsert: false });
       if (error) throw error;
       setAttachments((prev) => ({ ...prev, [label]: { path, name: file.name, size: file.size } }));

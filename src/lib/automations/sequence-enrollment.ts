@@ -23,9 +23,16 @@ export function computeWaitFireAt(
   config: Record<string, number> | null | undefined,
   from: Date = new Date()
 ): Date {
-  const days = config?.days ?? 0;
-  const hours = config?.hours ?? 0;
-  const minutes = config?.minutes ?? 0;
+  // The Wait dialog only sets min={0} as a browser hint, so a typed "-2" is
+  // saved as-is; a negative (or non-numeric) part must not schedule the next
+  // step in the past — or, for NaN, throw on toISOString() in the cron sweep.
+  const part = (v: unknown) => {
+    const n = Number(v ?? 0);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const days = part(config?.days);
+  const hours = part(config?.hours);
+  const minutes = part(config?.minutes);
   const d = new Date(from);
   d.setDate(d.getDate() + days);
   d.setHours(d.getHours() + hours);
@@ -59,6 +66,36 @@ export async function isEligibleForEnrollment(
     reentryAfterMinutes: number;
   }
 ): Promise<boolean> {
+  // "Restrict Entry To" (Rules dialog) was saved but never read anywhere, so a
+  // "Residential clients only" sequence enrolled — and emailed — commercial
+  // clients, and an "Active clients only" one enrolled leads and cancelled
+  // accounts. Every enrollment path (simple triggers, service-visit, estimate /
+  // meeting date triggers) goes through this check.
+  const { data: seqRow } = await supabase
+    .from("crm_automation_sequences")
+    .select("restrict_entry_to")
+    .eq("id", params.sequenceId)
+    .maybeSingle();
+  const restrictEntryTo = (seqRow?.restrict_entry_to as string | null | undefined) ?? "all";
+  if (restrictEntryTo !== "all") {
+    const { data: entryClient } = await supabase
+      .from("clients")
+      .select("status, account_type")
+      .eq("id", params.clientId)
+      .maybeSingle();
+    if (!entryClient) return false;
+    const status = String(entryClient.status ?? "");
+    const accountType = String(entryClient.account_type ?? "");
+    const allowed =
+      restrictEntryTo === "active_clients" ? status === "active"
+      : restrictEntryTo === "residential" ? accountType === "residential"
+      : restrictEntryTo === "commercial" ? accountType === "commercial"
+      : restrictEntryTo === "leads" ? status === "lead"
+      : restrictEntryTo === "former_clients" ? status === "inactive" || status === "cancelled"
+      : true; // unknown value: don't silently block everyone
+    if (!allowed) return false;
+  }
+
   let query = supabase
     .from("crm_sequence_enrollments")
     .select("completed_at, stopped_at")

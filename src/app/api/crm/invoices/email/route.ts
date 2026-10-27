@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
     .select(`
       *,
       clients(
-        display_name, first_name, last_name, primary_email, email_bounced_at, phones, account_number,
+        display_name, first_name, last_name, primary_email, billing_email, email_bounced_at, phones, account_number,
         invoice_delivery, balance_outstanding_cents, referred_by, referred_by_client_id,
         billing_address, billing_city, billing_state, billing_zip,
         service_address, service_city, service_state, service_zip,
@@ -139,7 +139,12 @@ export async function POST(req: NextRequest) {
 
   const toEmails = (body.to && body.to.length > 0)
     ? body.to.map((e) => e.trim())
-    : (inv.clients?.primary_email ? [inv.clients.primary_email as string] : []);
+    : (() => {
+      // The client form promises "If blank, invoices will be sent to the primary
+      // email" — i.e. a Billing Email, when set, is where invoices go.
+      const stored = ((inv.clients?.billing_email as string | null)?.trim() || (inv.clients?.primary_email as string | null)) ?? null;
+      return stored ? [stored] : [];
+    })();
   if (toEmails.length === 0) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
   }

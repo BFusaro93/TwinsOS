@@ -163,7 +163,10 @@ export async function POST(req: Request) {
       .select("email, first_name, last_name")
       .eq("id", client.sales_rep_id)
       .eq("org_id", ctx.orgId)
-      .single();
+      // A rep who has since left must not keep receiving the client's tickets;
+      // fall through to the portal's support email instead.
+      .is("deleted_at", null)
+      .maybeSingle();
     if (rep?.email) {
       notifyEmail = rep.email;
       notifyName = `${rep.first_name ?? ""} ${rep.last_name ?? ""}`.trim() || null;
@@ -239,7 +242,7 @@ function buildTicketNotificationEmail({
       <table width="520" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden">
         <tr>
           <td style="background:#60ab45;padding:20px 32px">
-            <p style="margin:0;color:#fff;font-size:18px;font-weight:700">${orgName}</p>
+            <p style="margin:0;color:#fff;font-size:18px;font-weight:700">${escapeHtml(orgName)}</p>
             <p style="margin:4px 0 0;color:rgba(255,255,255,0.8);font-size:13px">New client portal ticket</p>
           </td>
         </tr>

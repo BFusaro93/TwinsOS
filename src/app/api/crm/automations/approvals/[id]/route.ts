@@ -78,15 +78,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Suppression can change while a step sits in the queue (unsubscribe link,
   // hard bounce). The queued content was vetted at queue time only, so
   // re-check before the send — SMS consent is re-checked inside sendClientSms.
-  if (approval.channel !== "sms" && approval.client_id) {
+  if (approval.client_id) {
     const { data: recipient } = await db
       .from("clients")
-      .select("do_not_market, email_bounced_at")
+      .select("do_not_market, ok_to_email, email_bounced_at, deleted_at")
       .eq("id", approval.client_id)
       .maybeSingle();
-    if (recipient?.do_not_market || recipient?.email_bounced_at) {
+    // A client deleted while the step sat in the queue (removed at their
+    // request, say) must not still be sent to — the processor refuses deleted
+    // clients, and this path bypasses the processor.
+    if (!recipient || recipient.deleted_at) {
       return NextResponse.json(
-        { error: "Client has opted out of marketing emails or their address has bounced — reject this step instead" },
+        { error: "This client was deleted — reject this step instead" },
+        { status: 409 }
+      );
+    }
+    if (approval.channel !== "sms" && (recipient.do_not_market || recipient.ok_to_email === false || recipient.email_bounced_at)) {
+      return NextResponse.json(
+        { error: "Client has opted out of email or their address has bounced — reject this step instead" },
         { status: 409 }
       );
     }

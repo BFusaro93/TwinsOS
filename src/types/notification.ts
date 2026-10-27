@@ -37,7 +37,8 @@ export interface AppNotification {
     | "comment_mention"
     | "injury_reported"
     | "part_stock_short"
-    | "sales_meeting_reminder";
+    | "sales_meeting_reminder"
+    | "payment_disputed";
   title: string;
   body: string;
   href: string;

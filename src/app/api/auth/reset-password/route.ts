@@ -28,7 +28,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { email } = body;
+  // Trimmed (and required to be a string): a pasted or autofilled address with a
+  // trailing space made generateLink fail, which this route deliberately swallows
+  // as "success" — the person never got a reset email and was never told why.
+  const email = typeof body.email === "string" ? body.email.trim() : "";
   // Only changes the wording of the email. Where the reset link SENDS someone
   // is worked out in /reset-password from their own account, so a portal user
   // who used the staff page (or the reverse) still lands in the right place.

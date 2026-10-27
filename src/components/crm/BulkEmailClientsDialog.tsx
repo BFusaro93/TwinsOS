@@ -22,6 +22,8 @@ type Recipient = {
   name: string;
   email: string | null;
   doNotMarket: boolean;
+  /** Per-client "OK to Email = No" — the send route refuses marketing mail to these (422), so the dialog must skip them up front rather than report a confusing "failed". */
+  notOkToEmail: boolean;
   /** Hard bounce — a dead address, not a preference. Blocks BOTH purposes. */
   emailBouncedAt: string | null;
 };
@@ -104,7 +106,7 @@ export function BulkEmailClientsDialog({
       const { data } = await supabase
         .from("clients")
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .select("id, display_name, primary_email, do_not_market, email_bounced_at" as any)
+        .select("id, display_name, primary_email, do_not_market, ok_to_email, email_bounced_at" as any)
         .in("id", ids)
         .is("deleted_at", null);
       if (cancelled) return;
@@ -116,6 +118,7 @@ export function BulkEmailClientsDialog({
           name: r.display_name as string,
           email: (r.primary_email as string | null) ?? null,
           doNotMarket: (r.do_not_market as boolean | null) ?? false,
+          notOkToEmail: r.ok_to_email === false,
           emailBouncedAt: (r.email_bounced_at as string | null) ?? null,
         }))
       );
@@ -142,7 +145,7 @@ export function BulkEmailClientsDialog({
     [recipients]
   );
   const optedOut = useMemo(
-    () => recipients.filter((r) => !!r.email && !r.emailBouncedAt && r.doNotMarket),
+    () => recipients.filter((r) => !!r.email && !r.emailBouncedAt && (r.doNotMarket || r.notOkToEmail)),
     [recipients]
   );
   const withEmail = useMemo(
@@ -151,7 +154,7 @@ export function BulkEmailClientsDialog({
         (r) =>
           !!r.email &&
           !r.emailBouncedAt &&
-          (purpose === "service" || !r.doNotMarket)
+          (purpose === "service" || (!r.doNotMarket && !r.notOkToEmail))
       ),
     [recipients, purpose]
   );
@@ -245,7 +248,7 @@ export function BulkEmailClientsDialog({
                 )}
                 {purpose === "marketing" && optedOut.length > 0 && (
                   <p className="text-xs text-amber-600 dark:text-amber-400">
-                    {optedOut.length} skipped (Do Not Market): {optedOut.map((r) => r.name).join(", ")}
+                    {optedOut.length} skipped (Do Not Market / Not OK to Email): {optedOut.map((r) => r.name).join(", ")}
                   </p>
                 )}
                 {purpose === "service" && optedOut.length > 0 && (

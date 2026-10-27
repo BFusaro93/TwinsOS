@@ -76,7 +76,9 @@ export async function GET(req: NextRequest) {
       .from("profiles")
       .select("email, name, notification_prefs")
       .eq("id", createdBy)
-      .single();
+      // A deactivated rep must not keep getting expiry emails.
+      .neq("status", "inactive")
+      .maybeSingle();
 
     if (!profile?.email) continue;
     const prefs = (profile.notification_prefs ?? {}) as Record<string, unknown>;

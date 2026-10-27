@@ -1,7 +1,7 @@
 import type { createClient } from "@supabase/supabase-js";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { Resend } from "resend";
-import { EMAIL_FROM } from "@/lib/email/send";
+import { EMAIL_FROM, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
 
@@ -120,6 +120,7 @@ export async function executeAction(
           .from("profiles")
           .select("email, name, notification_prefs")
           .eq("org_id", orgId)
+          .neq("status", "inactive")
           .in("role", ["admin", "manager"]);
 
         const eligible = (recipients ?? []).filter((p: { email: string | null; notification_prefs: Record<string, unknown> | null }) => {
@@ -133,9 +134,12 @@ export async function executeAction(
           const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
           const subject = `New maintenance request: ${acTitle}`;
           const link = `${siteUrl}/cmms/requests?id=${mr.id}`;
-          await Promise.allSettled(
-            eligible.map((p: { email: string | null; name: string | null }) =>
-              resend.emails.send({
+          // Sequential with a rate-limit retry — a parallel burst trips the
+          // provider's 2 requests/second limit and the rejections resolve
+          // silently, so managers past the second never got the email.
+          for (const p of eligible as { email: string | null; name: string | null }[]) {
+            try {
+              await sendEmailRetryingRateLimit(resend, {
                 from: EMAIL_FROM,
                 to: p.email as string,
                 subject,
@@ -145,9 +149,11 @@ export async function executeAction(
                   <p style="margin:0 0 24px;color:#475569">Automation <strong>${escapeHtml(auto.name)}</strong> created: <strong>${escapeHtml(`${mr.request_number} — ${acTitle}`)}</strong>.</p>
                   <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
                 </div>`,
-              })
-            )
-          );
+              });
+            } catch {
+              // Non-fatal — one recipient failing shouldn't block the others
+            }
+          }
         }
       }
     } catch {

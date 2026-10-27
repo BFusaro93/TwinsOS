@@ -13,7 +13,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { formatCurrency } from "@/lib/utils";
-import { EMAIL_FROM, EMAIL_FROM_EQUIPT, escapeHtml } from "@/lib/email/send";
+import { EMAIL_FROM, EMAIL_FROM_EQUIPT, escapeHtml, sendEmailRetryingRateLimit } from "@/lib/email/send";
 
 // `linkPath` has an `{id}` slot the deep link is built from — list pages that
 // only support auto-opening a record via `?id=` (po/requisitions, po/orders)
@@ -142,12 +142,16 @@ export async function POST(request: Request) {
 
   const emailMap = new Map<string, string>();
   for (const p of profiles ?? []) {
-    // crm_estimate has its own "Estimate Approval Required" toggle, separate
-    // from requisition/PO — don't email an approver who's opted out.
-    if (entityType === "crm_estimate") {
-      const prefs = (p.notification_prefs ?? {}) as Record<string, unknown>;
-      if (prefs.emailEstimateApprovalRequired === false) continue;
-    }
+    // Each record type has its own "… Approval Required" email toggle in
+    // Settings → Notifications (estimates, requisitions, purchase orders) —
+    // don't email an approver who's opted out of that one. The requisition and
+    // PO toggles were shown but never read, so opting out changed nothing.
+    const approvalPrefKey =
+      entityType === "crm_estimate" ? "emailEstimateApprovalRequired"
+      : entityType === "purchase_order" ? "emailPoApprovalRequired"
+      : "emailApprovalRequired";
+    const prefs = (p.notification_prefs ?? {}) as Record<string, unknown>;
+    if (prefs[approvalPrefKey] === false) continue;
     if (p.email) emailMap.set(p.id, p.email);
   }
 
@@ -177,7 +181,7 @@ export async function POST(request: Request) {
     const toEmail = emailMap.get(req.approver_id);
     if (!toEmail) continue;
 
-    await resend.emails.send({
+    const sendResult = await sendEmailRetryingRateLimit(resend, {
       from: fromAddress,
       to: toEmail,
       subject: `Action required: ${entityNumber} needs your approval`,
@@ -202,6 +206,10 @@ export async function POST(request: Request) {
         </div>
       `,
     });
+    // A rejected send resolves with `error` (it doesn't throw): stamping
+    // last_notified_at anyway started the 10-minute cooldown for an approver who
+    // never got the email, so the resubmit that would have retried it was a no-op.
+    if (sendResult.error) continue;
     sent++;
     await adminClient
       .from("approval_requests")
