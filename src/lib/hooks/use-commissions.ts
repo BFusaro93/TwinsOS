@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type {
   CommissionAssignment,
   CommissionSaleType,
@@ -199,14 +200,29 @@ export function useCommissionLines(from: string, to: string, employeeId?: string
   return useQuery<CommissionLine[]>({
     queryKey: ["commission-lines", from, to, employeeId ?? null],
     queryFn: async () => {
-      const { data, error } = await db().rpc("crm_commission_lines", {
-        p_from: from,
-        p_to: to,
-        p_employee_id: employeeId ?? null,
-      });
-      if (error) throw error;
+      // Paged: a set-returning RPC is silently capped at PostgREST's 1000 rows,
+      // and a rep's quarter of recurring-service invoice lines can pass that —
+      // the earnings screen then showed (and totalled) only a slice of what the
+      // statement RPC, which runs in SQL, would actually pay.
+      const PAGE_SIZE = 1000;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((r: any): CommissionLine => ({
+      const data: any[] = [];
+      for (let offset = 0; ; offset += PAGE_SIZE) {
+        const { data: page, error } = await db()
+          .rpc("crm_commission_lines", {
+            p_from: from,
+            p_to: to,
+            p_employee_id: employeeId ?? null,
+          })
+          .order("employee_id", { ascending: true })
+          .order("ev_key", { ascending: true })
+          .range(offset, offset + PAGE_SIZE - 1);
+        if (error) throw error;
+        data.push(...(page ?? []));
+        if (!page || page.length < PAGE_SIZE) break;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return data.map((r: any): CommissionLine => ({
         evKey: r.ev_key,
         employeeId: r.employee_id,
         employeeName: r.employee_name,
@@ -265,14 +281,18 @@ export function useCommissionStatementLines(statementId: string | null) {
   return useQuery<CommissionStatementLine[]>({
     queryKey: ["commission-statement-lines", statementId],
     queryFn: async () => {
-      const { data, error } = await db()
-        .from("crm_commission_statement_lines")
-        .select("*")
-        .eq("statement_id", statementId)
-        .order("event_date");
-      if (error) throw error;
+      // Paged past the 1000-row PostgREST cap — a long statement's detail
+      // otherwise stops short of its own stored total.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []).map((l: any): CommissionStatementLine => ({
+      const data = await fetchAllRows<any>(() =>
+        db()
+          .from("crm_commission_statement_lines")
+          .select("*")
+          .eq("statement_id", statementId)
+          .order("event_date")
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return data.map((l: any): CommissionStatementLine => ({
         id: l.id,
         invoiceNumber: l.invoice_number ?? null,
         clientName: l.client_name ?? null,
