@@ -159,6 +159,32 @@ export function useUpdateDocumentTemplate(id: string) {
         .update(payload)
         .eq("id", id);
       if (error) throw error;
+
+      // One default per document type. Nothing enforces it in the database, so
+      // ticking "default" on a second template left BOTH flagged and every picker
+      // (`find(t => t.isDefault)`) kept choosing whichever sorted first by name —
+      // the template the user just made the default was ignored.
+      if (updates.isDefault === true) {
+        let docType: string | null = updates.docType ?? null;
+        if (!docType) {
+          const { data: row } = await supabase
+            .from("crm_document_templates")
+            .select("doc_type")
+            .eq("id", id)
+            .maybeSingle();
+          docType = row?.doc_type ?? null;
+        }
+        if (docType) {
+          const { error: clearError } = await supabase
+            .from("crm_document_templates")
+            .update({ is_default: false })
+            .eq("doc_type", docType)
+            .eq("is_default", true)
+            .neq("id", id)
+            .is("deleted_at", null);
+          if (clearError) throw clearError;
+        }
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-document-templates"] });

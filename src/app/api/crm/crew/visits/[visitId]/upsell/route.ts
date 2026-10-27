@@ -96,8 +96,11 @@ export async function POST(
     .join("\n");
 
   // Replay guard: a queued-offline resend or a double-tap sends the same
-  // suggestion twice. The same person suggesting the same service for the same
-  // client within 10 minutes, while it is still open, is the same suggestion.
+  // suggestion twice. The same person suggesting the same service on the same
+  // VISIT (which pins the client and property) with the same note within 10
+  // minutes, while it is still open, is the same suggestion. Without the visit
+  // and note in the match, a second property's suggestion, or a follow-up with
+  // a new note/photo, came back as the earlier ticket and was silently dropped.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: dupe } = await (supabase as any)
     .from("crm_tickets")
@@ -107,6 +110,8 @@ export async function POST(
     .eq("category", UPSELL_CATEGORY)
     .eq("upsell_service_id", service.id)
     .eq("client_id", visit.client_id)
+    .eq("upsell_visit_id", visit.id)
+    .eq("body", contextLines)
     .eq("status", "open")
     .is("deleted_at", null)
     .gte("created_at", new Date(Date.now() - 10 * 60_000).toISOString())
@@ -136,6 +141,8 @@ export async function POST(
       // "Create estimate" can pre-fill a real line item from the service's
       // rate, unit and production rate.
       upsell_service_id: service.id,
+      // The visit it was spotted on (replay guard above; also pins the property).
+      upsell_visit_id: visit.id,
       subject: `Upsell: ${service.name}`,
       body: contextLines,
     })

@@ -15,7 +15,7 @@ const PROJECT_FIELDS: [string, string][] = [
   ["Address / City / State / Zip", "Job site location."],
   ["Status", "Sold, Scheduled, In Progress, On Hold, Complete, or Canceled."],
   ["Start Date / End Date", "End Date defaults to \"TBD\" until set."],
-  ["Contract Price", "The editable field here is the ORIGINAL contract price. The Revised Contract Price shown elsewhere (Analysis, Change Orders, Milestone billing) is derived — original plus every approved change order — and is maintained by the database, not editable directly."],
+  ["Contract Price", "The editable field here is the ORIGINAL contract price, entered BEFORE tax (converting an estimate seeds it from the estimate subtotal minus discounts; milestone invoices add tax at the estimate/client rate, so a percent milestone is a percent of the pre-tax price). Projects created before this change keep their tax-inclusive price and are billed as before. The Revised Contract Price shown elsewhere (Analysis, Change Orders, Milestone billing) is derived — original plus every approved change order — and is maintained by the database, not editable directly."],
   ["Budget Hours", "Planned labor hours, compared against Actual Hours for a variance once logged."],
   ["Notes", "Optional free text."],
 ];
@@ -119,6 +119,12 @@ export function ProjectsGuide() {
         <p>
           A project&apos;s status runs through a flow — Sold → Scheduled → In Progress → Complete —
           with On Hold and Canceled as side branches, shown as a step indicator on the Details tab.
+        </p>
+        <p>
+          Users with the Equipt <strong>Viewer</strong> or <strong>Requestor</strong> role can see
+          projects but not change them: New Project, Edit, Archive, Delete, the status buttons and
+          the Materials / Other Costs actions are hidden, and the database refuses writes from those
+          roles. Purchasers keep full access so they can track job costs.
         </p>
       </Section>
 

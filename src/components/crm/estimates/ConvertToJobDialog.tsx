@@ -35,6 +35,16 @@ import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { useConvertLeadToClient } from "@/lib/hooks/use-clients";
 
+/**
+ * A line that is part of what the client agreed to: not lost, and not a
+ * 'draft' (the "not yet part of the quote" status — recalcEstimateTotals
+ * excludes both, and acceptance only ever moves 'quote' lines to won/lost, so
+ * a draft line survives acceptance untouched). Treating draft as live pre-
+ * selected it for conversion into a billable job service the client never saw,
+ * and let it dilute the header-discount split.
+ */
+const isQuoted = (li: Pick<EstimateLineItem, "status">) => li.status !== "lost" && li.status !== "draft";
+
 const JOB_TYPES = [
   { value: "one_time",    label: "One Time" },
   { value: "recurring",   label: "Recurring" },
@@ -176,11 +186,11 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   // chose; untiered lines still default in.
   const tierOf = (li: EstimateLineItem) => (estimate.tiersEnabled ? li.tier : null);
   const openTiers = new Set(
-    lineItems.filter((li) => li.status !== "lost").map(tierOf).filter((t): t is NonNullable<typeof t> => !!t)
+    lineItems.filter((li) => isQuoted(li)).map(tierOf).filter((t): t is NonNullable<typeof t> => !!t)
   );
   const tierUndecided = openTiers.size > 1;
   const isDefaultSelected = (li: EstimateLineItem) =>
-    li.status !== "lost" &&
+    isQuoted(li) &&
     Math.max(0, li.totalCents - (li.discountCents ?? 0)) + (subitemTotals[li.id] ?? 0) > 0 &&
     !(tierUndecided && tierOf(li));
   const [selected, setSelected] = useState<Set<string>>(
@@ -259,7 +269,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
    *  job, its multi-visit lines on a recurring one. Also sets the job type. */
   function selectByVisits(kind: "single" | "multi") {
     const pick = convertibleLines.filter(
-      (li) => li.status !== "lost" && (kind === "single" ? (li.visits || 1) <= 1 : (li.visits || 1) > 1)
+      (li) => isQuoted(li) && (kind === "single" ? (li.visits || 1) <= 1 : (li.visits || 1) > 1)
     );
     setSelected(new Set(pick.map((li) => li.id)));
     setJobType(kind === "single" ? "one_time" : "recurring");
@@ -296,7 +306,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       }))))
     : null;
   const countedLines = lineItems.filter(
-    (li) => li.status !== "lost" && (!basisTier || !tierOf(li) || tierOf(li) === basisTier)
+    (li) => isQuoted(li) && (!basisTier || !tierOf(li) || tierOf(li) === basisTier)
   );
   const netByLineId = netByLine(estimate, lineItems, countedLines, subitemTotals);
   const totalCents = selectedItems.reduce((s, li) => s + (netByLineId.get(li.id) ?? 0), 0);
@@ -392,7 +402,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       const remaining = convertibleLines.filter(
         (li) =>
           !selected.has(li.id) &&
-          li.status !== "lost" &&
+          isQuoted(li) &&
           (netByLineId.get(li.id) ?? 0) > 0 &&
           !(basisTier && tierOf(li) && tierOf(li) !== basisTier)
       );
@@ -414,8 +424,8 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   }
 
   const allSelected = convertibleLines.length > 0 && convertibleLines.every((li) => selected.has(li.id));
-  const hasSingle = convertibleLines.some((li) => li.status !== "lost" && (li.visits || 1) <= 1);
-  const hasMulti = convertibleLines.some((li) => li.status !== "lost" && (li.visits || 1) > 1);
+  const hasSingle = convertibleLines.some((li) => isQuoted(li) && (li.visits || 1) <= 1);
+  const hasMulti = convertibleLines.some((li) => isQuoted(li) && (li.visits || 1) > 1);
 
   return (
     <>
@@ -729,7 +739,8 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         open={newProjectOpen}
         onOpenChange={setNewProjectOpen}
         defaultClientId={estimate.clientId}
-        defaultContractPriceCents={estimate.totalCents}
+        // Pre-tax (subtotal minus discounts): tax is added per milestone invoice.
+        defaultContractPriceCents={estimate.revenueCents > 0 ? estimate.revenueCents : Math.max(0, estimate.subtotalCents - estimate.discountCents)}
         defaultName={estimate.description ?? undefined}
         onCreated={(project) => setProjectId(project.id)}
       />

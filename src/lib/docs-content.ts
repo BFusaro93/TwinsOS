@@ -414,7 +414,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Parts lists",
             detail:
-              "Two ways to plan parts for a PM: the schedule-level Parts tab lists parts expected for the routine in general, while each asset row on the Assets tab can carry its own per-asset parts list (with quantity and unit cost) — useful when different assets on the same schedule need different parts, e.g. different oil filter part numbers per mower model.",
+              "Two ways to plan parts for a PM: the schedule-level Parts tab lists parts expected for the routine in general, while each asset row on the Assets tab can carry its own per-asset parts list (with quantity and unit cost) — useful when different assets on the same schedule need different parts, e.g. different oil filter part numbers per mower model. When work orders generate, Parts-tab parts go once on the master work order (or the single work order for a one-asset schedule) with one stock deduction, while each asset's own parts go on that asset's sub-work order.",
           },
           {
             step: "Notifications",
@@ -424,7 +424,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Generating work orders",
             detail:
-              "Click Generate WOs on the schedule. Each work order is due on the schedule's Next Due Date, and Next Due moves to the next date on the cadence. Generating late doesn't shift the calendar: last Wednesday's batch generated on Sunday leaves Next Due on this Wednesday. Only one batch can be open at a time — finish or skip it before generating the next.",
+              "Click Generate WOs on the schedule (clicking a work order in the schedule's list takes you to the Work Orders page with that work order open). Each work order is due on the schedule's Next Due Date, and Next Due moves to the next date on the cadence. Generating late doesn't shift the calendar: last Wednesday's batch generated on Sunday leaves Next Due on this Wednesday. Only one batch can be open at a time — finish or skip it before generating the next.",
           },
           {
             step: "Pausing for the off-season",
@@ -516,6 +516,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Go to CMMS > Parts and click '+ New Part'. Enter the part name, part number, unit of measure, minimum stock level, and current quantity on hand. You can also add a picture, a storage location, and one or more categories to help with search and filtering.",
           },
           {
+            step: "Copying a part",
+            detail:
+              "On a part's detail, click Copy to start a new part from it (needs inventory-management permission). The name becomes '<name> (Copy)', the part number is left blank for you to fill in, quantity on hand starts at 0, and category, cost, minimum stock, location, vendor and description carry over.",
+          },
+          {
             step: "Linking to assets",
             detail:
               "In the part detail, use the Assets tab to link which assets use this part. This is many-to-many — a single part can serve multiple assets.",
@@ -523,7 +528,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Multiple vendors per part",
             detail:
-              "A part can list a primary vendor plus alternate vendors it's also sourced from. This is for reference/reordering convenience — it does not split the part into separate catalog entries.",
+              "A part can list a primary vendor plus alternate vendors it's also sourced from. This is for reference/reordering convenience — it does not split the part into separate catalog entries. A vendor name in a parts CSV import is matched to your existing vendor by name (when exactly one vendor has that name) so the part links to the real vendor record, and a blank vendor column on re-import leaves the vendor alone.",
           },
           {
             step: "Generic / interchangeable equivalents get their own part",
@@ -964,7 +969,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Invoices list columns and filters",
             detail:
-              "The Columns menu adds Account Balance, Prepay, Credits, Payment type, Sent / Printed (where a draft is queued, or Sent/Printed once issued) and Frequency (the contract's cadence, or One-time). Filters: Date takes a from/to range, Balance takes At least / At most / Exactly, and Status and Payment type are pick-from-list (Status matches what the column shows, so a past-due Sent invoice is under Overdue). The Payments page has the same Date range filter.",
+              "The Columns menu adds Account Balance, Prepay, Credits, Payment type, Sent / Printed (where a draft is queued, or Sent/Printed once issued) and Frequency (the contract's cadence, or One-time). Filters: Date takes a from/to range, Balance takes At least / At most / Exactly, and Status and Payment type are pick-from-list (Status matches what the column shows, so a past-due Sent invoice is under Overdue). The Payments page has the same Date range filter; it opens on Last 30 Days, the All tab shows every payment, and searching or filtering reaches past the 30-day window.",
           },
           {
             step: "Limits, voids and disputes",
@@ -979,7 +984,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Contracts",
             detail:
-              "CRM > Accounting > Contracts covers ongoing agreements: a monthly amount, billing frequency (weekly through annual, or one-time — honored by the invoicing cron, set through the API since the dialog doesn't expose it), auto-renew, billing day of month, and whether the contract bills a month in advance. The amount is charged per invoice at every frequency, not annualized. The end date can't be before the start date. Month-by-month amount overrides are supported for seasonal pricing.",
+              "CRM > Accounting > Contracts covers ongoing agreements: a monthly amount, billing frequency (weekly through annual, or one-time — honored by the invoicing cron, set through the API since the dialog doesn't expose it), auto-renew, billing day of month, and whether the contract bills a month in advance. The amount is charged per invoice at every frequency, not annualized. The end date can't be before the start date. Month-by-month amount overrides are supported for seasonal pricing. If a contract starts mid-cycle you can choose 'Prorate first period' (a daily-prorated first invoice for the partial stretch, then normal billing) or leave the default of starting on the first full cycle. Editing the financial terms of a signed contract keeps it billing at the new terms and flags it 'Changed since signed — needs client approval' until you clear the flag. Visits on a cancelled, expired or inactive contract bill like normal per-visit work.",
           },
           {
             step: "Sub-properties on one contract",
@@ -1021,7 +1026,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "One-time setup: connect your Stripe account",
             detail:
-              "CRM > Settings > Card Payments (Stripe). Click Connect and complete Stripe's onboarding — this creates a Standard connected Stripe account for your org, fully independent of Landscapt's own billing. Charges, payouts, and your Stripe dashboard login are entirely managed by Stripe; Landscapt only initiates charges and listens for the result.",
+              "CRM > Settings > Card Payments (Stripe). Click Connect and complete Stripe's onboarding — this creates a Standard connected Stripe account for your org, fully independent of Landscapt's own billing. Charges, payouts, and your Stripe dashboard login are entirely managed by Stripe; Landscapt only initiates charges and listens for the result. If you already have a Stripe account, click 'Connect your existing account' (shown until you're connected) to link it through Stripe instead of creating a new one; admins only, and an account can be linked to one Landscapt organization only.",
           },
           {
             step: "Managing your Stripe account",
@@ -1075,6 +1080,11 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Automation structure",
             detail:
               "CRM > Communication > Automations. Each automation contains one or more Sequences; a sequence has Triggers (with optional Trigger Conditions), Stop Conditions, and an ordered list of Events that run once triggered.",
+          },
+          {
+            step: "Custom field conditions",
+            detail:
+              "Trigger conditions, stop conditions, and If Branches can check a client custom field: pick the field, then compare it (text: equals, not equals, contains, does not contain, is set, is not set; number: also greater/less than). The condition reads the client's saved value at trigger time and at each stop/If check. A client with no value only matches 'is not set'. If the field is later deleted, the condition is never met and the editor shows 'Field deleted'.",
           },
           {
             step: "What can trigger a sequence",

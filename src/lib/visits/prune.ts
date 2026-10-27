@@ -30,6 +30,10 @@ export interface FindUntouchedOptions {
   /** Only visits strictly after this date (shortened recurrence_end). */
   afterDate?: string | null;
   statuses: string[];
+  /** Skip visits a person moved by hand: occurrence_date is the date the
+   *  generator produced the visit for, so a live visit whose scheduled_date
+   *  differs from it was dragged elsewhere and must stay where it is. */
+  skipMoved?: boolean;
 }
 
 export async function findUntouchedFutureVisits(
@@ -39,10 +43,15 @@ export async function findUntouchedFutureVisits(
 ): Promise<string[]> {
   // Paginated: PostgREST truncates at 1000 rows, and a year of weekly
   // multi-service visits can exceed that.
-  const { rows, error } = await selectAllRows<{ id: string; crew_group_id: string | null }>(() => {
+  const { rows, error } = await selectAllRows<{
+    id: string;
+    crew_group_id: string | null;
+    scheduled_date: string | null;
+    occurrence_date: string | null;
+  }>(() => {
     let q = supabase
       .from("crm_job_visits")
-      .select("id, crew_group_id")
+      .select("id, crew_group_id, scheduled_date, occurrence_date")
       .eq("job_id", jobId)
       .is("deleted_at", null)
       .is("clocked_in_at", null)
@@ -64,7 +73,12 @@ export async function findUntouchedFutureVisits(
     if (lineErr) throw new Error(lineErr);
     for (const l of lines) if (l.visit_id) invoiced.add(l.visit_id);
   }
-  const eligible = new Set(ids.filter((id) => !invoiced.has(id)));
+  const movedByHand = new Set(
+    opts.skipMoved
+      ? rows.filter((r) => r.occurrence_date && r.scheduled_date && r.occurrence_date !== r.scheduled_date).map((r) => r.id)
+      : []
+  );
+  const eligible = new Set(ids.filter((id) => !invoiced.has(id) && !movedByHand.has(id)));
 
   // A multi-crew stop is pruned all-or-nothing. If any crew on it has started,
   // been dispatched past the allowed statuses, or been billed, leave the whole

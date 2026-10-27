@@ -267,7 +267,9 @@ export async function sendResolvedSequenceEmail(
   const { data: sent, error: sendErr } = await resend.emails.send({
     from: fromAddress,
     to: params.toEmails,
-    subject: params.subject,
+    // A merge value with a line break (e.g. [notestocrew]) would put a raw
+    // newline in the Subject header, which the provider rejects.
+    subject: params.subject.replace(/[\r\n]+/g, " ").trim(),
     html,
     ...(replyTo ? { replyTo } : {}),
     ...(unsubscribeUrl

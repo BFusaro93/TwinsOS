@@ -5,7 +5,9 @@ import { getRouteAuth, resolveCallerCrewId, assertCallerOwnsVisit } from "@/lib/
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { resolveWorkingMemberIds } from "@/lib/crew/stop-punches";
-import { startCrewDay, endCrewDay, closeMemberOpenShift } from "@/lib/crew/day-shifts";
+import { memberWorksOn } from "@/lib/crew/roster-days";
+import { closeMemberPunchesOnOtherCrews } from "@/lib/crew/member-moves";
+import { startCrewDay, endCrewDay, closeMemberOpenShift, openShiftLookbackDate, MAX_AUTO_CLOSE_SHIFT_MS } from "@/lib/crew/day-shifts";
 
 /**
  * The crew's paid day (shop to shop).
@@ -45,25 +47,44 @@ export async function GET(request: Request) {
   const [{ data: members }, { data: shifts }, { data: absences }] = await Promise.all([
     memberIds.length ? db.from("crm_crew_members").select("id, name, role").in("id", memberIds).order("name") : { data: [] },
     memberIds.length
-      ? db.from("crm_crew_day_shifts").select("crew_member_id, started_at, ended_at").eq("org_id", orgId).eq("work_date", workDate).is("deleted_at", null).in("crew_member_id", memberIds)
+      // Today's shifts plus last evening's still-open one (storm work crosses
+      // midnight): without it the crew saw "Start Day" and no End Day after
+      // midnight, and a second Start Day opened an overlapping shift.
+      ? db.from("crm_crew_day_shifts").select("crew_member_id, work_date, started_at, ended_at").eq("org_id", orgId)
+          .gte("work_date", openShiftLookbackDate(workDate)).lte("work_date", workDate)
+          .is("deleted_at", null).in("crew_member_id", memberIds)
       : { data: [] },
     db.from("crm_crew_day_absences").select("crew_member_id").eq("org_id", orgId).eq("work_date", workDate).is("deleted_at", null),
   ]);
-  const shiftBy = new Map<string, { started_at: string; ended_at: string | null }>(
-    ((shifts ?? []) as { crew_member_id: string; started_at: string; ended_at: string | null }[]).map((s) => [s.crew_member_id, s])
-  );
+  const shiftBy = new Map<string, { started_at: string; ended_at: string | null }>();
+  const nowMs = Date.now();
+  for (const s of (shifts ?? []) as { crew_member_id: string; work_date: string; started_at: string; ended_at: string | null }[]) {
+    if (s.work_date === workDate) {
+      shiftBy.set(s.crew_member_id, s);
+    } else if (!s.ended_at && nowMs - new Date(s.started_at).getTime() < MAX_AUTO_CLOSE_SHIFT_MS && !shiftBy.has(s.crew_member_id)) {
+      // Yesterday's shift that is still running — the member's current shift
+      // unless they already have one for today (which the loop sets below).
+      shiftBy.set(s.crew_member_id, s);
+    }
+  }
+  // A shift for today always wins over a carried-over one, whatever the row order.
+  for (const s of (shifts ?? []) as { crew_member_id: string; work_date: string; started_at: string; ended_at: string | null }[]) {
+    if (s.work_date === workDate) shiftBy.set(s.crew_member_id, s);
+  }
   const absent = new Set(((absences ?? []) as { crew_member_id: string }[]).map((a) => a.crew_member_id));
   // Crew members from other crews who can be pulled onto this crew for today.
   // Names only — read with the service client (scoped to the caller's org)
   // because a crew login's own RLS shouldn't expose other crews' rosters.
   const admin = createServiceClient();
   const [{ data: everyone }, { data: moves }] = await Promise.all([
-    admin.from("crm_crew_members").select("id, name, role, crew_id").eq("org_id", orgId).is("deleted_at", null).order("name"),
+    admin.from("crm_crew_members").select("id, name, role, crew_id, days_of_week").eq("org_id", orgId).is("deleted_at", null).order("name"),
     admin.from("crm_crew_daily_members").select("member_id, crew_id").eq("org_id", orgId).eq("work_date", workDate),
   ]);
   const movedTo = new Map(((moves ?? []) as { member_id: string; crew_id: string }[]).map((m) => [m.member_id, m.crew_id]));
-  const available = ((everyone ?? []) as { id: string; name: string; role: string | null; crew_id: string }[])
-    .filter((m) => (movedTo.get(m.id) ?? m.crew_id) !== crewId)
+  const available = ((everyone ?? []) as { id: string; name: string; role: string | null; crew_id: string; days_of_week: number[] | null }[])
+    // Not "on a crew today" when rostered off today, so a member of THIS crew who
+    // isn't scheduled today can still be pulled in for the day.
+    .filter((m) => (movedTo.get(m.id) ?? (memberWorksOn(m.days_of_week, workDate) ? m.crew_id : null)) !== crewId)
     .map((m) => ({ id: m.id, name: m.name, role: m.role }));
   return NextResponse.json({
     workDate,
@@ -109,6 +130,10 @@ export async function POST(request: Request) {
       const admin = createServiceClient();
       const { data: member } = await admin.from("crm_crew_members").select("id").eq("id", crewMemberId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
       if (!member) return NextResponse.json({ error: "That person isn't in your company's crew list" }, { status: 404 });
+      // Mid-day move: end their open job punches on the OLD crew's visits at
+      // this instant first (hours counted once); the day shift keeps running.
+      // Before the move so a failure here leaves them where they were.
+      await closeMemberPunchesOnOtherCrews(admin, { memberId: crewMemberId, newCrewId: crewId, at: now });
       const { error: moveErr } = await admin.from("crm_crew_daily_members").upsert(
         { org_id: orgId, work_date: workDate, crew_id: crewId, member_id: crewMemberId, created_by: user.id },
         { onConflict: "work_date,member_id" }
@@ -124,14 +149,20 @@ export async function POST(request: Request) {
 
     // The optional visit must be one of THIS crew's visits in this org —
     // RLS only checks org_id, so a stray id could otherwise punch anyone.
+    let jobInProgress = false;
     if (visitId) {
       const { data: visit } = await db.from("crm_job_visits")
-        .select("id, crew_id, crew_unassigned, crm_jobs(crew_id)")
+        .select("id, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, crm_jobs(crew_id)")
         .eq("id", visitId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
       if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
       if (!(await assertCallerOwnsVisit(db, user.id, orgId, visit))) {
         return NextResponse.json({ error: "That visit isn't on your crew" }, { status: 403 });
       }
+      // A closed punch is only reopened while the stop is still running: after
+      // Stop Job the crew dialog can still be open, and reopening it then would
+      // leave the punch open forever.
+      jobInProgress = !!visit.clocked_in_at && !visit.clocked_out_at
+        && !["completed", "cancelled", "skipped"].includes(visit.status as string);
     }
 
     if (action === "member_in" || action === "add_member") {
@@ -143,9 +174,21 @@ export async function POST(request: Request) {
       if (inErr) throw new Error(inErr.message);
       if (visitId) {
         // A job is in progress: the member also joins its job punches from now.
-        const { data: punch } = await db.from("crm_crew_member_times").select("id")
+        const { data: punch } = await db.from("crm_crew_member_times").select("id, clocked_out_at, break_minutes")
           .eq("visit_id", visitId).eq("crew_member_id", crewMemberId).is("deleted_at", null).maybeSingle();
-        if (!punch) {
+        if (punch?.clocked_out_at && jobInProgress) {
+          // Left earlier and is back: one punch per member per visit, so the
+          // closed punch is reopened with the time away taken off — leaving it
+          // closed dropped everything they did on this job after returning
+          // (job hours, Job Costing and labor cost all under-counted).
+          const outMs = new Date(punch.clocked_out_at as string).getTime();
+          if (outMs < new Date(now).getTime()) {
+            const away = Math.max(0, Math.round((new Date(now).getTime() - outMs) / 60_000));
+            await db.from("crm_crew_member_times")
+              .update({ clocked_out_at: null, break_minutes: Number(punch.break_minutes ?? 0) + away, updated_at: now })
+              .eq("id", punch.id).eq("clocked_out_at", punch.clocked_out_at);
+          }
+        } else if (!punch) {
           await db.from("crm_crew_member_times").upsert(
             { org_id: orgId, visit_id: visitId, crew_member_id: crewMemberId, clocked_in_at: now, clocked_out_at: null, deleted_at: null, updated_at: now },
             { onConflict: "visit_id,crew_member_id", ignoreDuplicates: false }

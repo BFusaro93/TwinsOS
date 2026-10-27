@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { sendCampaignEmails, STUCK_SENDING_THRESHOLD_MS } from "@/lib/campaigns/send-campaign";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 // This loops over every due campaign (potentially several, each with its own
 // full recipient list) in one invocation — extend the ceiling so it has room
@@ -72,20 +73,11 @@ export async function GET(request: Request) {
 
   const results: { campaignId: string; status: "sent" | "skipped"; reason?: string }[] = [];
 
-  // Canceled orgs are read-only; this service-role cron would otherwise keep
-  // sending their due campaigns on our Resend account.
-  const { data: planRows } = await db
-    .from("organizations")
-    .select("id, plan")
-    .in("id", [...new Set(dueCampaigns.map((c: { org_id: string }) => c.org_id))]);
-  const canceledOrgs = new Set(
-    ((planRows ?? []) as { id: string; plan: string | null }[])
-      .filter((o) => o.plan === "canceled")
-      .map((o) => o.id)
-  );
+  // Canceled orgs get no automated sends (shared helper, resolved per campaign).
+  const orgCanceled = createOrgCanceledResolver(supabase);
 
   for (const campaign of dueCampaigns) {
-    if (canceledOrgs.has(campaign.org_id)) {
+    if (await orgCanceled(campaign.org_id)) {
       results.push({ campaignId: campaign.id, status: "skipped", reason: "org canceled" });
       continue;
     }

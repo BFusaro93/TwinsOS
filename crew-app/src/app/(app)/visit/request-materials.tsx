@@ -58,7 +58,9 @@ export default function RequestMaterialsScreen() {
     };
   }, [query]);
 
-  const qty = Math.max(1, Math.round(Number(quantity)) || 1);
+  // Stocked / project materials can be fractional (half a yard of mulch) —
+  // up to 2 decimals, matching numeric(10,2) on the server.
+  const qty = Math.max(0.01, Math.round((Number(quantity.replace(',', '.')) || 1) * 100) / 100);
   const canSubmit = !!visitId && !!selected && qty > 0 && !isSubmitting;
 
   const handleSubmit = async () => {
@@ -98,7 +100,7 @@ export default function RequestMaterialsScreen() {
           </ThemedText>
           <TextInput
             style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
-            keyboardType="number-pad"
+            keyboardType="decimal-pad"
             value={quantity}
             onChangeText={setQuantity}
           />

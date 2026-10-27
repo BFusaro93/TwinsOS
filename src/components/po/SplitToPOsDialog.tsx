@@ -20,6 +20,7 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useCreatePurchaseOrder, usePurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useUpdateRequisitionStatus } from "@/lib/hooks/use-requisitions";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import type { Requisition, LineItem, PurchaseOrder } from "@/types";
 import { computeSalesTax } from "@/lib/utils/po-tax";
 
@@ -67,6 +68,7 @@ export function SplitToPOsDialog({
   const { mutateAsync: createPO } = useCreatePurchaseOrder();
   const { refetch: refetchPurchaseOrders } = usePurchaseOrders();
   const { mutateAsync: syncRequisition } = useUpdateRequisitionStatus();
+  const { today: orgToday } = useOrgDates();
   // POs already created for a vendor group in this dialog session, keyed by
   // the group's vendor + line ids. A retry after a mid-loop failure skips
   // these instead of creating duplicates.
@@ -115,7 +117,6 @@ export function SplitToPOsDialog({
 
   async function handleCreate() {
     setCreating(true);
-    const now = new Date().toISOString();
     const createdMap = createdByGroupRef.current;
 
     // The requisition's discount/shipping apply to the whole requisition, not
@@ -171,7 +172,8 @@ export function SplitToPOsDialog({
         const grandTotal = subtotal - discountCost + salesTax + shippingCost;
 
         const result = await createPO({
-          poDate: now.split("T")[0],
+          // The org's calendar day — UTC is already tomorrow after ~8pm ET.
+          poDate: orgToday(),
           invoiceNumber: null,
           status: "requested",
           vendorId: group.vendorId === "none" ? "" : group.vendorId,

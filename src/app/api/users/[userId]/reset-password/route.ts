@@ -28,9 +28,14 @@ export async function POST(
 
   const { data: callerProfile } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, status")
     .eq("id", user.id)
     .single();
+  // A deactivated admin's token outlives the ban by up to an hour; without
+  // this they could still set any teammate's password via the service role.
+  if (callerProfile?.status === "inactive") {
+    return NextResponse.json({ error: "Account is deactivated" }, { status: 403 });
+  }
   if (!callerProfile || callerProfile.role !== "admin") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }

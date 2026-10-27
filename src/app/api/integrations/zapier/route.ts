@@ -20,10 +20,11 @@ export async function POST() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, status")
     .eq("id", user.id)
     .single();
-  if (!profile || profile.role !== "admin") {
+  // Service-role upsert below: a deactivated admin's still-valid token must not mint a key.
+  if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
 

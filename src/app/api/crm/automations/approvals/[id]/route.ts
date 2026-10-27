@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "@/lib/automations/sequence-email";
-import { sendResolvedSequenceSms } from "@/lib/automations/sequence-sms";
+import { sendResolvedSequenceSms, nextSmsSendTime } from "@/lib/automations/sequence-sms";
+import { instantToZoneWallClock } from "@/lib/time/zone";
 import { logSequenceExecution } from "@/lib/automations/sequence-enrollment";
 
 /**
@@ -78,15 +79,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Suppression can change while a step sits in the queue (unsubscribe link,
   // hard bounce). The queued content was vetted at queue time only, so
   // re-check before the send — SMS consent is re-checked inside sendClientSms.
-  if (approval.channel !== "sms" && approval.client_id) {
+  if (approval.client_id) {
     const { data: recipient } = await db
       .from("clients")
-      .select("do_not_market, email_bounced_at")
+      .select("do_not_market, ok_to_email, email_bounced_at, deleted_at")
       .eq("id", approval.client_id)
       .maybeSingle();
-    if (recipient?.do_not_market || recipient?.email_bounced_at) {
+    // A client deleted while the step sat in the queue (removed at their
+    // request, say) must not still be sent to — the processor refuses deleted
+    // clients, and this path bypasses the processor.
+    if (!recipient || recipient.deleted_at) {
       return NextResponse.json(
-        { error: "Client has opted out of marketing emails or their address has bounced — reject this step instead" },
+        { error: "This client was deleted — reject this step instead" },
+        { status: 409 }
+      );
+    }
+    if (approval.channel !== "sms" && (recipient.do_not_market || recipient.ok_to_email === false || recipient.email_bounced_at)) {
+      return NextResponse.json(
+        { error: "Client has opted out of email or their address has bounced — reject this step instead" },
         { status: 409 }
       );
     }
@@ -102,6 +112,38 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .select("id");
   if (!claimed || claimed.length === 0) {
     return NextResponse.json({ error: "Already decided" }, { status: 409 });
+  }
+
+  // Texts approved outside quiet hours (8am-9pm org time) must not go out
+  // now: the processor checked quiet hours when the step was queued, but the
+  // approval can land at any hour. Keep the approval as approved, release the
+  // enrollment and schedule it for the next 8:00 AM; the processor sends the
+  // approved text then (re-checking consent at the actual send).
+  if (approval.channel === "sms") {
+    const deferred = await nextSmsSendTime(db, approval.org_id);
+    if (deferred) {
+      const sendAtIso = deferred.sendAt.toISOString();
+      await db
+        .from("crm_sequence_enrollments")
+        .update({ awaiting_approval: false, next_fire_at: sendAtIso, updated_at: nowIso })
+        .eq("id", approval.enrollment_id);
+      const wallNow = instantToZoneWallClock(new Date(), deferred.tz);
+      const wallSend = instantToZoneWallClock(deferred.sendAt, deferred.tz);
+      const when = wallSend.date === wallNow.date ? "today" : "tomorrow";
+      await logSequenceExecution(db, {
+        orgId: approval.org_id, enrollmentId: approval.enrollment_id, sequenceId: approval.sequence_id,
+        clientId: approval.client_id, eventId: approval.event_id, eventType: approval.channel,
+        action: "approval_approved",
+        detail: `${approval.body_text} → ${approval.to_phone} — approved by ${user.id}, held for quiet hours until ${sendAtIso}`,
+      });
+      return NextResponse.json({
+        ok: true,
+        action: "approved",
+        deferred: true,
+        sendAt: sendAtIso,
+        message: `Approved — will send ${when} at 8:00 AM`,
+      });
+    }
   }
 
   // Approve: send the already-resolved content, then advance the enrollment

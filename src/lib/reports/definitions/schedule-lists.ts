@@ -1,5 +1,6 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import { buildResult, col } from "@/lib/reports/helpers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { AnalysisFilter } from "@/types/crm-reports";
 import { todayInZone } from "@/lib/time/zone";
 
@@ -19,19 +20,6 @@ export const SCHEDULE_LIST_REPORTS: PrebuiltReportDef[] = [
       // UTC, which after 8pm Eastern is already tomorrow — that dropped the
       // current service day's jobs off this list every evening.
       const today = todayInZone(timeZone);
-      const { data, error } = await supabase
-        .from("crm_jobs")
-        .select(
-          "job_number, job_type, scheduled_date, rate_cents, clients(display_name), crm_crews(name)"
-        )
-        .is("deleted_at", null)
-        .is("contract_id", null)
-        .not("status", "in", "(cancelled,skipped)")
-        .gte("scheduled_date", today)
-        .order("scheduled_date", { ascending: true })
-        .limit(2000);
-      if (error) throw new Error(error.message);
-
       type Row = {
         job_number: number | null;
         job_type: string | null;
@@ -41,7 +29,22 @@ export const SCHEDULE_LIST_REPORTS: PrebuiltReportDef[] = [
         crm_crews: { name: string | null } | null;
       };
 
-      const rows = ((data ?? []) as unknown as Row[]).map((r) => ({
+      // Paged: .limit(2000) is capped at 1000 rows by PostgREST, so the list
+      // was silently cut off once an org had more upcoming non-contract jobs.
+      const data = await fetchAllRows<Row>(() =>
+        supabase
+          .from("crm_jobs")
+          .select(
+            "job_number, job_type, scheduled_date, rate_cents, clients(display_name), crm_crews(name)"
+          )
+          .is("deleted_at", null)
+          .is("contract_id", null)
+          .not("status", "in", "(cancelled,skipped)")
+          .gte("scheduled_date", today)
+          .order("scheduled_date", { ascending: true })
+      );
+
+      const rows = data.map((r) => ({
         job_number: r.job_number,
         client_name: r.clients?.display_name ?? "",
         job_type: r.job_type,

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mapPurchaseOrder } from "@/lib/supabase/mappers";
 import { submitEntityForApproval } from "@/lib/hooks/use-approval-requests";
 import type { PurchaseOrder, POStatus, LineItem } from "@/types";
+import type { BulkImportResult, BulkImportRowError } from "@/lib/csv";
 import { correctPartReceipt, clampProductReduction, shortfallMessage } from "@/lib/inventory/part-stock";
 
 /**
@@ -223,18 +224,23 @@ export function useUpdatePurchaseOrder() {
       const { error } = await supabase
         .from("purchase_orders")
         .update({
-          vendor_id: vendorId ?? undefined,
-          vendor_name: vendorName ?? undefined,
+          // null = the user chose "No vendor": clear both, never leave a
+          // vendor_name pointing at a vendor the PO no longer has.
+          vendor_id: vendorId,
+          vendor_name: vendorName ?? "",
           po_date: poDate ?? undefined,
-          payment_type: paymentType ?? undefined,
-          invoice_number: invoiceNumber ?? undefined,
+          // These three are nullable columns and the edit form sends null for
+          // a field the user cleared — `?? undefined` skipped the write, so a
+          // cleared invoice number / payment type / note silently came back.
+          payment_type: paymentType,
+          invoice_number: invoiceNumber,
           tax_rate_percent: taxRatePercent,
           shipping_cost: shippingCost,
           discount_cost: discountCost,
           discount_reduces_tax: discountReducesTax,
           sales_tax: salesTax,
           grand_total: grandTotal,
-          notes: notes ?? undefined,
+          notes,
         })
         .eq("id", id);
       if (error) throw error;
@@ -272,7 +278,7 @@ export function useBulkImportPurchaseOrders() {
   return useMutation({
     mutationFn: async (rows: Record<string, string>[]) => {
       const supabase = createClient();
-      if (rows.length === 0) return 0;
+      if (rows.length === 0) return { succeeded: 0, failed: [] } satisfies BulkImportResult;
 
       // Detect format: denormalized (line-level) vs flat (header-only)
       const sample = rows[0];
@@ -300,27 +306,43 @@ function getField(row: Record<string, string>, ...keys: string[]): string {
   return "";
 }
 
+/**
+ * A CSV date cell as a calendar day ("YYYY-MM-DD"), or null. po_date is a
+ * `date` column, so this must stay a calendar day: the old version built a
+ * local Date and returned toISOString() (UTC), which moved an export stamp
+ * after ~8pm ET ("4/9/26 20:30") to the NEXT day — and the PO-number year of a
+ * Jan 1 PO to the previous year.
+ */
 function parseDate(raw: string): string | null {
   if (!raw) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const ymd = (y: number, m: number, d: number) => {
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    return `${String(y).padStart(4, "0")}-${pad(m)}-${pad(d)}`;
+  };
 
   // Handle M/D/YY HH:MM format from QuickBooks exports (e.g. "4/9/26 14:09")
   // JavaScript's Date constructor treats 2-digit years as year 26 AD, not 2026.
   const shortYearFull = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(\d{1,2}):(\d{2})$/);
   if (shortYearFull) {
-    const [, mo, dy, yr, hr, mn] = shortYearFull;
-    return new Date(2000 + parseInt(yr), parseInt(mo) - 1, parseInt(dy), parseInt(hr), parseInt(mn)).toISOString();
+    const [, mo, dy, yr] = shortYearFull;
+    return ymd(2000 + parseInt(yr), parseInt(mo), parseInt(dy));
   }
 
   // Handle M/D/YY (date only, no time)
   const shortYearDate = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
   if (shortYearDate) {
     const [, mo, dy, yr] = shortYearDate;
-    return new Date(2000 + parseInt(yr), parseInt(mo) - 1, parseInt(dy)).toISOString();
+    return ymd(2000 + parseInt(yr), parseInt(mo), parseInt(dy));
   }
 
-  // Fallback for ISO / long-year formats
+  // ISO yyyy-mm-dd (with optional time): the day as written.
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return ymd(parseInt(iso[1]), parseInt(iso[2]), parseInt(iso[3]));
+
+  // M/D/YYYY and other long-year formats
   const d = new Date(raw);
-  return isNaN(d.getTime()) ? null : d.toISOString();
+  return isNaN(d.getTime()) ? null : ymd(d.getFullYear(), d.getMonth() + 1, d.getDate());
 }
 
 function mapStatus(raw: string): string {
@@ -375,15 +397,32 @@ async function logCatalogNameConflict(
   });
 }
 
-async function importDenormalized(supabase: SupabaseClient, rows: Record<string, string>[]): Promise<number> {
-  // Group rows by PO number
+/**
+ * An "Ordered Quantity" cell as a number. Blank defaults to 1 (as before);
+ * decimals are kept (case/bulk quantities like 2.5) instead of being cut to
+ * an integer by parseInt. Returns null for text, zero or negative values so
+ * the row can be reported instead of silently importing the wrong quantity.
+ */
+function parseOrderedQuantity(raw: string): number | null {
+  if (!raw) return 1;
+  const n = Number(raw.replace(/,/g, ""));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+async function importDenormalized(supabase: SupabaseClient, rows: Record<string, string>[]): Promise<BulkImportResult> {
+  // Group rows by PO number, remembering each row's 1-based position in the
+  // file so a failure can be reported against the row that caused it.
   const poGroups = new Map<string, Record<string, string>[]>();
+  const rowNumbers = new Map<Record<string, string>, number>();
+  rows.forEach((row, i) => rowNumbers.set(row, i + 1));
   for (const row of rows) {
     const poNum = getField(row, "Purchase Order #", "poNumber");
     if (!poNum) continue;
     if (!poGroups.has(poNum)) poGroups.set(poNum, []);
     poGroups.get(poNum)!.push(row);
   }
+  const failed: BulkImportRowError[] = [];
 
   // Get existing vendors for lookup
   const { data: existingVendors = [] } = await supabase
@@ -395,6 +434,7 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
   let count = 0;
   for (const [poNum, poRows] of poGroups) {
     const headerRow = poRows[0];
+    const headerRowNo = rowNumbers.get(headerRow) ?? 0;
     const vendorName = getField(headerRow, "Vendor", "vendorName");
     const status = mapStatus(getField(headerRow, "Status", "status"));
     const createdOn = parseDate(getField(headerRow, "Created On", "createdAt"));
@@ -451,7 +491,7 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
     const grandTotalCents = subtotalCents + salesTaxCents + shippingCents;
 
     // Create the PO — derive year from the CSV's Created On date, not today
-    const poYear = createdOn ? new Date(createdOn).getFullYear() : new Date().getFullYear();
+    const poYear = createdOn ? Number(createdOn.slice(0, 4)) : new Date().getFullYear();
     const poNumber = `PO-${poYear}-${poNum}`;
     const { data: created, error: poErr } = await supabase
       .from("purchase_orders")
@@ -471,8 +511,13 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
       .single();
 
     if (poErr) {
-      if (poErr.code === "23505") continue; // duplicate — skip, not counted as imported
-      throw poErr;
+      failed.push({
+        row: headerRowNo,
+        error: poErr.code === "23505"
+          ? `${poNumber} already exists — skipped`
+          : `${poNumber}: ${poErr.message}`,
+      });
+      continue;
     }
 
     // Create line items + product catalog entries
@@ -481,7 +526,12 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
       const partNumber = getField(line, "Part Number", "partNumber");
       const unitCostDollars = parseFloat(getField(line, "Unit Cost", "unitCost")) || 0;
       const unitCostCents = Math.round(unitCostDollars * 100);
-      const quantity = parseInt(getField(line, "Ordered Quantity", "orderedQuantity")) || 1;
+      const lineRowNo = rowNumbers.get(line) ?? headerRowNo;
+      const quantity = parseOrderedQuantity(getField(line, "Ordered Quantity", "orderedQuantity"));
+      if (quantity === null) {
+        failed.push({ row: lineRowNo, error: `${poNumber} "${itemName}": invalid Ordered Quantity "${getField(line, "Ordered Quantity", "orderedQuantity")}"` });
+        continue;
+      }
 
       // Find or create product catalog entry. Every po_line_items row must
       // reference a catalog entry (CLAUDE.md: "Do not allow free-text item
@@ -490,10 +540,11 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
       // line. Now falls back to matching/creating by item name so a line
       // always ends up with a real catalog reference.
       let productItemId: string | null = null;
+      let productCategory: string | null = null;
       if (partNumber) {
         const { data: existingProduct } = await supabase
           .from("product_items")
-          .select("id, name")
+          .select("id, name, category")
           .eq("part_number", partNumber)
           .is("deleted_at", null)
           .limit(1)
@@ -501,6 +552,7 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
 
         if (existingProduct) {
           productItemId = existingProduct.id;
+          productCategory = existingProduct.category;
           await logCatalogNameConflict(supabase, "product", existingProduct.id, existingProduct.name, itemName, poNumber);
         } else {
           const { data: newProduct } = await supabase
@@ -520,12 +572,12 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
             })
             .select("id")
             .single();
-          if (newProduct) productItemId = newProduct.id;
+          if (newProduct) { productItemId = newProduct.id; productCategory = "maintenance_part"; }
         }
       } else if (itemName) {
         const { data: existingByName } = await supabase
           .from("product_items")
-          .select("id")
+          .select("id, category")
           .eq("name", itemName)
           .is("deleted_at", null)
           .limit(1)
@@ -533,6 +585,7 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
 
         if (existingByName) {
           productItemId = existingByName.id;
+          productCategory = existingByName.category;
         } else {
           const { data: newProduct } = await supabase
             .from("product_items")
@@ -551,14 +604,22 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
             })
             .select("id")
             .single();
-          if (newProduct) productItemId = newProduct.id;
+          if (newProduct) { productItemId = newProduct.id; productCategory = "maintenance_part"; }
         }
       }
 
       // No part number AND no name to key off of — nothing to link this line
       // to a catalog entry, so skip it rather than insert a row that violates
       // the "every line item references a catalog entry" invariant.
-      if (!productItemId) continue;
+      if (!productItemId) {
+        failed.push({ row: lineRowNo, error: `${poNumber} "${itemName || "(no name)"}": no part number or name to match a catalog product — line skipped` });
+        continue;
+      }
+      // Maintenance parts are counted in whole units (DB guard on the line).
+      if (productCategory === "maintenance_part" && !Number.isInteger(quantity)) {
+        failed.push({ row: lineRowNo, error: `${poNumber} "${itemName}": maintenance parts need a whole-number quantity (got ${quantity})` });
+        continue;
+      }
 
       // Sync to CMMS Parts inventory so the part appears in inventory and links back to this PO
       if (productItemId && partNumber) {
@@ -607,28 +668,33 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("po_line_items").insert({
+      const { error: lineErr } = await (supabase as any).from("po_line_items").insert({
         po_id: created.id,
         product_item_id: productItemId,
         product_item_name: itemName,
         part_number: partNumber,
         quantity,
         unit_cost: unitCostCents,
-        total_cost: quantity * unitCostCents,
+        total_cost: Math.round(quantity * unitCostCents),
       });
+      if (lineErr) {
+        failed.push({ row: lineRowNo, error: `${poNumber} "${itemName}": line not saved — ${lineErr.message}` });
+      }
     }
 
     count++;
   }
-  return count;
+  return { succeeded: count, failed };
 }
 
-async function importFlat(supabase: SupabaseClient, rows: Record<string, string>[]): Promise<number> {
-  const filtered = rows.filter((r) => r.vendorName?.trim());
-  if (filtered.length === 0) return 0;
-
+async function importFlat(supabase: SupabaseClient, rows: Record<string, string>[]): Promise<BulkImportResult> {
+  const failed: BulkImportRowError[] = [];
   let count = 0;
-  for (const r of filtered) {
+  for (const [i, r] of rows.entries()) {
+    if (!r.vendorName?.trim()) {
+      failed.push({ row: i + 1, error: "Missing vendorName — row skipped" });
+      continue;
+    }
     // Same atomic per-org/year counter useCreatePurchaseOrder uses — a
     // client-side `Date.now()` + random-suffix generator here could still
     // collide with a PO created (or another row imported) in the same
@@ -661,14 +727,16 @@ async function importFlat(supabase: SupabaseClient, rows: Record<string, string>
     };
 
     const { error } = await supabase.from("purchase_orders").insert(row);
-    if (error?.code === "23505") {
-      continue; // duplicate — skip, not counted as imported
-    } else if (error) {
-      throw error;
+    if (error) {
+      failed.push({
+        row: i + 1,
+        error: error.code === "23505" ? `${poNumber} already exists — skipped` : `${poNumber}: ${error.message}`,
+      });
+      continue;
     }
     count++;
   }
-  return count;
+  return { succeeded: count, failed };
 }
 
 export function useUpdatePurchaseOrderStatus() {
@@ -686,7 +754,8 @@ export function useUpdatePurchaseOrderStatus() {
       paymentBookedInQB,
     }: {
       id: string;
-      status: POStatus;
+      /** Omit for payment-field-only updates so a stale local status is never written back. */
+      status?: POStatus;
       invoiceNumber?: string | null;
       paymentSubmittedToAP?: boolean;
       paymentRemitted?: boolean;
@@ -698,7 +767,7 @@ export function useUpdatePurchaseOrderStatus() {
       const { error } = await supabase
         .from("purchase_orders")
         .update({
-          status,
+          ...(status !== undefined && { status }),
           ...(invoiceNumber !== undefined && { invoice_number: invoiceNumber }),
           ...(paymentSubmittedToAP !== undefined && { payment_submitted_to_ap: paymentSubmittedToAP }),
           ...(paymentRemitted !== undefined && { payment_remitted: paymentRemitted }),
@@ -715,7 +784,7 @@ export function useUpdatePurchaseOrderStatus() {
       await queryClient.cancelQueries({ queryKey: ["purchase-orders"] });
       const previous = queryClient.getQueryData<PurchaseOrder[]>(["purchase-orders"]);
       patchPOCache(queryClient, id, {
-        status,
+        ...(status !== undefined && { status }),
         ...(invoiceNumber !== undefined && { invoiceNumber }),
         ...(paymentSubmittedToAP !== undefined && { paymentSubmittedToAP }),
         ...(paymentRemitted !== undefined && { paymentRemitted }),
@@ -723,7 +792,7 @@ export function useUpdatePurchaseOrderStatus() {
         ...(checkNumber !== undefined && { checkNumber }),
         ...(paymentBookedInQB !== undefined && { paymentBookedInQB }),
       });
-      return { previous };
+      return { previous, previousStatus: previous?.find((po) => po.id === id)?.status };
     },
     onError: (_err, _vars, context) => {
       if (context?.previous) {
@@ -735,7 +804,12 @@ export function useUpdatePurchaseOrderStatus() {
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
       queryClient.invalidateQueries({ queryKey: ["purchase-orders", id] });
     },
-    onSuccess: (_, { id, status }) => {
+    onSuccess: (_, { id, status }, context) => {
+      // Payment-tracking toggles and the check-number save reuse this mutation
+      // with the PO's CURRENT status — that isn't a status change, and firing
+      // "PO became <status>" automations again on every checkbox would repeat
+      // their actions (emails, work orders, requisitions) each time.
+      if (status === undefined || context?.previousStatus === status) return;
       // Fire any po_status_change automations configured for this target status (best-effort)
       fetch("/api/automations/run", {
         method: "POST",
@@ -1000,33 +1074,43 @@ export function useDeletePOLineItem() {
 
 
       try {
-      if (totalReceived > 0) {
+      // A project-assigned line was received straight to its job, and a
+      // non-maintenance product with Track inventory off keeps no stock — in
+      // neither case did the receipt add units, so there is nothing to take
+      // back (ReceiveGoodsDialog / useUpdateGoodsReceipt skip them the same
+      // way). Reversing anyway would subtract the quantity from stock that
+      // came from OTHER receipts of the same product.
+      const receiptAddedNoStock = !!lineItem.project_id;
+      if (totalReceived > 0 && !receiptAddedNoStock) {
         // Resolve the catalog product the same way ReceiveGoodsDialog does:
         // by product_item_id first, then part number, then exact name.
         const { data: matchedProduct } = lineItem.product_item_id
-          ? await supabase.from("product_items").select("id, category").eq("id", lineItem.product_item_id).maybeSingle()
-          : { data: null as { id: string; category: string } | null };
+          ? await supabase.from("product_items").select("id, category, is_inventory").eq("id", lineItem.product_item_id).maybeSingle()
+          : { data: null as { id: string; category: string; is_inventory: boolean | null } | null };
         let productId = matchedProduct?.id ?? null;
         let productCategory = matchedProduct?.category ?? null;
+        let productIsInventory = matchedProduct?.is_inventory ?? null;
         if (!productId && lineItem.part_number) {
           const { data: byPartNumber } = await supabase
             .from("product_items")
-            .select("id, category")
+            .select("id, category, is_inventory")
             .eq("part_number", lineItem.part_number)
             .is("deleted_at", null)
             .maybeSingle();
           productId = byPartNumber?.id ?? null;
           productCategory = byPartNumber?.category ?? null;
+          productIsInventory = byPartNumber?.is_inventory ?? null;
         }
         if (!productId && lineItem.product_item_name) {
           const { data: byName } = await supabase
             .from("product_items")
-            .select("id, category")
+            .select("id, category, is_inventory")
             .eq("name", lineItem.product_item_name)
             .is("deleted_at", null)
             .maybeSingle();
           productId = byName?.id ?? null;
           productCategory = byName?.category ?? null;
+          productIsInventory = byName?.is_inventory ?? null;
         }
 
         if (!productId) {
@@ -1035,6 +1119,8 @@ export function useDeletePOLineItem() {
           );
         }
 
+        const untracked = productCategory !== "maintenance_part" && productIsInventory === false;
+        if (!untracked) {
         if (isMaintPart || productCategory === "maintenance_part") {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: linkedPart } = await (supabase as any)
@@ -1074,6 +1160,7 @@ export function useDeletePOLineItem() {
           if (prodAdjustErr) throw prodAdjustErr;
           reversedProductId = productId;
           reversedProductQty = -productDelta;
+        }
         }
       }
       } catch (reverseErr) {

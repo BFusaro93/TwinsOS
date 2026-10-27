@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { sanitizeStorageFileName } from "@/lib/hooks/use-attachments";
 import { mapPortalDocument, type PortalDocument } from "@/types/portal-document";
 
 const BUCKET = "portal-documents";
@@ -43,7 +44,8 @@ export function useUploadPortalDocument() {
         .eq("id", authData.user!.id)
         .single();
 
-      const storagePath = `${prof!.org_id}/${Date.now()}-${input.file.name}`;
+      // Storage keys reject spaces/unicode/brackets; file_name below keeps the original for display.
+      const storagePath = `${prof!.org_id}/${Date.now()}-${sanitizeStorageFileName(input.file.name)}`;
 
       const { error: uploadError } = await supabase.storage
         .from(BUCKET)

@@ -262,7 +262,9 @@ export function BulkServicePriceDialog({ open, onOpenChange, services }: Props) 
           toast.success(`Catalog prices updated — ${parts.join(", ")}.`);
           onOpenChange(false);
         },
-        onError: () => toast.error("Failed to update catalog prices. No changes were saved."),
+        // The writes run one at a time (see useBulkUpdateCatalogPrices), so a failure
+        // part-way leaves the earlier ones applied — never claim nothing was saved.
+        onError: () => toast.error("Failed to update all catalog prices. Some prices may already have been saved — reopen this dialog to review."),
       }
     );
   }

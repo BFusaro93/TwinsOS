@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { planIncludesAddon } from "@/lib/stripe/plans";
+import { orgHasAddon } from "@/lib/stripe/addon-access";
 
 /**
  * Resolves the Google Maps API key an org actually uses, honoring the
@@ -22,22 +22,15 @@ export async function resolveGoogleMapsKey(
 ): Promise<{ apiKey: string } | { error: string; status: number }> {
   const { data: org } = await sb
     .from("organizations")
-    .select("customizations, plan")
+    .select("customizations")
     .eq("id", orgId)
     .single();
 
-  let entitled = planIncludesAddon(org?.plan ?? "", "route_optimization");
-  if (!entitled) {
-    const { data: addon } = await sb
-      .from("organization_addons")
-      .select("enabled")
-      .eq("org_id", orgId)
-      .eq("addon_key", "route_optimization")
-      .eq("enabled", true)
-      .not("stripe_subscription_item_id", "is", null)
-      .maybeSingle();
-    entitled = !!addon;
-  }
+  // Same entitlement rule the API-access gate uses: a trial only bundles the
+  // add-on until it ends, and a canceled org gets nothing. (planIncludesAddon
+  // alone treats an EXPIRED trial as entitled forever, so a lapsed trial kept
+  // spending our platform Maps key on every address check and geocode.)
+  const entitled = await orgHasAddon(sb, orgId, "route_optimization");
 
   const orgApiKey = (org?.customizations as Record<string, unknown> | null)
     ?.google_maps_api_key as string | undefined;

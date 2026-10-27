@@ -30,11 +30,16 @@ export async function POST(request: Request) {
 
   const { data: callerProfile, error: profileErr } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, status")
     .eq("id", user.id)
     .single();
   if (profileErr || !callerProfile) {
     return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  }
+  // A deactivated admin's access token stays valid for up to an hour after
+  // the ban; these routes use the service role, so RLS can't stop them.
+  if (callerProfile.status === "inactive") {
+    return NextResponse.json({ error: "Account is deactivated" }, { status: 403 });
   }
   if (callerProfile.role !== "admin") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
@@ -57,7 +62,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { email, name, role } = body;
+  const { email: rawEmail, name, role } = body;
+  // Trimmed once and used everywhere: the untrimmed value (a pasted address with
+  // a trailing space passes the format check below) was sent to the auth API and
+  // to Resend, which reject it, so the invite failed with a generic 500.
+  const email = typeof rawEmail === "string" ? rawEmail.trim() : rawEmail;
   if (typeof email !== "string" || typeof name !== "string" || typeof role !== "string" || !email.trim() || !name.trim() || !role) {
     return NextResponse.json({ error: "email, name, and role are required" }, { status: 400 });
   }
@@ -133,6 +142,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "A user with that email already exists" }, { status: 409 });
     }
     existingStatus = existingProfile?.status ?? null;
+    // A deactivated teammate is banned at the auth layer. Re-inviting would
+    // email a link that can't sign in and relabel them "invited" while the ban
+    // stays — Reactivate is the path that lifts the ban.
+    if (existingStatus === "inactive") {
+      return NextResponse.json(
+        { error: "That user was deactivated. Use Reactivate on the Users page instead of inviting them again." },
+        { status: 409 }
+      );
+    }
   }
 
   // Build the URL directly so the user lands on /reset-password without
@@ -177,7 +195,7 @@ export async function POST(request: Request) {
         id: linkData.user.id,
         org_id: callerProfile.org_id,
         name,
-        email: email.trim(),
+        email,
         role,
         status: "invited",
       },

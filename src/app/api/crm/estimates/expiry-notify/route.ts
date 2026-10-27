@@ -5,6 +5,7 @@ import { escapeHtml } from "@/lib/utils/escape-html";
 import { orgEmailFrom } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 // Called daily by Vercel Cron (see vercel.json) — Vercel Cron always sends a
 // GET request, so this must be GET, not POST, or it silently never fires.
@@ -58,10 +59,12 @@ export async function GET(req: NextRequest) {
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   let notified = 0;
+  const orgCanceled = createOrgCanceledResolver(supabase);
 
   for (const est of expiring as Record<string, unknown>[]) {
     const createdBy = est.created_by as string | null;
     if (!createdBy) continue;
+    if (await orgCanceled(est.org_id as string)) continue; // canceled orgs get no automated reminders
 
     // Re-filter against the org's calendar — the SQL bounds above are
     // deliberately a day wider than the real window.
@@ -76,7 +79,9 @@ export async function GET(req: NextRequest) {
       .from("profiles")
       .select("email, name, notification_prefs")
       .eq("id", createdBy)
-      .single();
+      // A deactivated rep must not keep getting expiry emails.
+      .neq("status", "inactive")
+      .maybeSingle();
 
     if (!profile?.email) continue;
     const prefs = (profile.notification_prefs ?? {}) as Record<string, unknown>;
@@ -106,12 +111,17 @@ export async function GET(req: NextRequest) {
     });
 
     try {
-      await resend.emails.send({
+      const { error: sendErr } = await resend.emails.send({
         from: orgEmailFrom(orgName),
         to: profile.email,
         subject: `Estimate #${estimateNum} ${expiryPhrase(daysLeft)} — ${clientName}`,
         html,
       });
+      // The Resend SDK reports a rejected send (rate limit, bad address) in
+      // `error` rather than throwing. Falling through stamped
+      // expiry_notified_at on a reminder that never went out, so tomorrow's run
+      // skipped it and nobody was ever told the estimate lapsed.
+      if (sendErr) continue;
       notified++;
       await supabase
         .from("estimates")

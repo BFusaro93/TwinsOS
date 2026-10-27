@@ -119,6 +119,8 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <Package className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "injury_reported":
       return <HeartPulse className={cn(cls, "text-red-500 dark:text-red-400")} />;
+    case "payment_disputed":
+      return <CircleAlert className={cn(cls, "text-red-500 dark:text-red-400")} />;
     default:
       return <Bell className={cn(cls, "text-slate-400 dark:text-neutral-500")} />;
   }
@@ -214,7 +216,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "injury_reported", "part_stock_short"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "injury_reported", "part_stock_short", "payment_disputed"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -389,6 +391,27 @@ export function NotificationsBell() {
       return true;
     }).forEach((n) => {
       const id = `db-notif-${n.id}`;
+
+      // payment_disputed is written by the card-dispute webhook against either
+      // the invoice or (when the payment had none) the client, so its target
+      // depends on entity_type. It was inserted but never in the fetch
+      // allowlist above, so these alerts never reached the bell.
+      if (n.type === "payment_disputed") {
+        items.push({
+          id,
+          type: "payment_disputed",
+          title: n.title ?? "Payment Disputed",
+          body: n.message,
+          href: n.entity_id
+            ? (n.entity_type === "invoice" ? `/crm/accounting/invoices?open=${n.entity_id}` : `/crm/clients/${n.entity_id}`)
+            : "/crm/accounting/invoices",
+          entityId: n.entity_id,
+          entityType: null,
+          createdAt: n.created_at,
+          readAt: readIds.has(id) ? new Date().toISOString() : null,
+        });
+        return;
+      }
 
       // comment_mention's href/entityType depend on WHICH record type the
       // comment was on, unlike every other DB_NOTIF_META entry which always

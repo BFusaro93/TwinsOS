@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { downscaleImage } from "@/lib/utils/downscale-image";
 import { groupVisitsIntoStops, type Stop, type VisitWithNotesStamp } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
@@ -311,7 +312,15 @@ export function useMyCrewVisits(date: string, includeCarryOver = false) {
       // Remembered route order as the tiebreaker after priority — same rule as
       // the dispatch board and /api/crm/crew/visits.
       const cmp = crewVisitComparator(await fetchRememberedRouteOrder(supabase, membership.crew_id, [date]));
-      return [...carried.sort(cmp), ...[...data].sort(cmp)].map(mapVisit);
+      // A cancelled or on-hold job's leftover visits must not show on the crew's day
+      // (GET /api/crm/crew/visits already hides them) — except one the crew is
+      // clocked into right now, which they still need to clock out of.
+      const visible = (row: Record<string, unknown>) => {
+        const jobStatus = (row.crm_jobs as { status?: string | null } | null)?.status;
+        if (jobStatus !== "cancelled" && jobStatus !== "hold") return true;
+        return !!row.clocked_in_at && !row.clocked_out_at;
+      };
+      return [...carried.sort(cmp), ...[...data].sort(cmp)].filter(visible).map(mapVisit);
     },
   });
 }
@@ -417,6 +426,14 @@ export function useStopDetail(anchorVisitId: string) {
 
       const crewId = anchor.crewId;
       const siblings = (siblingRows as Record<string, unknown>[])
+        // A held / cancelled job's visit isn't on the crew's list or part of the
+        // stop the clock-in/out routes act on — unless it's already started.
+        .filter((row) => {
+          if (row.id === anchorVisitId) return true;
+          const jobStatus = (row.crm_jobs as { status?: string | null } | null)?.status;
+          if (jobStatus !== "cancelled" && jobStatus !== "hold") return true;
+          return !!row.clocked_in_at && !row.clocked_out_at;
+        })
         .map(mapVisit)
         .filter((v) => (v.crewId ?? null) === (crewId ?? null));
 
@@ -808,6 +825,9 @@ export function useStopClockIn() {
       // stops/[visitId]/clock-in/route.ts) — refresh so the home screen
       // stops showing "Driving" the moment a job actually starts.
       qc.invalidateQueries({ queryKey: ["crew-drive-today"] });
+      // Starting a never-dispatched stop preloads its chemicals server-side.
+      qc.invalidateQueries({ queryKey: ["crew-app-chemicals"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-chemical-confirmation"] });
     },
     onError: (err, anchorVisitId) => {
       toast.error(err instanceof Error ? err.message : "Failed to start job");
@@ -1046,7 +1066,9 @@ export function useUploadVisitPhoto() {
   return useMutation({
     mutationFn: async ({ visitId, file, caption }: { visitId: string; file: File; caption?: string }) => {
       const form = new FormData();
-      form.append("file", file);
+      // Vercel rejects request bodies over ~4.5MB (413, HTML body), and a phone
+      // photo is routinely 3-8MB — downscale first, like the invoice photos do.
+      form.append("file", await downscaleImage(file));
       if (caption) form.append("caption", caption);
       const res = await fetch(`/api/crm/crew/visits/${visitId}/photos`, {
         method: "POST",
@@ -1266,7 +1288,7 @@ export function useSubmitFieldUpsell() {
       const form = new FormData();
       form.append("serviceId", serviceId);
       form.append("note", note);
-      if (file) form.append("file", file);
+      if (file) form.append("file", await downscaleImage(file));
       const res = await fetch(`/api/crm/crew/visits/${visitId}/upsell`, {
         method: "POST",
         body: form,

@@ -25,9 +25,13 @@ export async function POST(
 
   const { data: callerProfile } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, status")
     .eq("id", user.id)
     .single();
+  // Deactivated admin with a not-yet-expired token: service role below.
+  if (callerProfile?.status === "inactive") {
+    return NextResponse.json({ error: "Account is deactivated" }, { status: 403 });
+  }
   if (!callerProfile || callerProfile.role !== "admin") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }

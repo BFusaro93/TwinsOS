@@ -68,10 +68,10 @@ export function inputsEqual(a: Inputs, b: Inputs): boolean {
 
 // ── Core calculation engine ───────────────────────────────────────────────────
 // Formula:
-//   1. Blended wage  = OT_wage × (OT_hrs/Reg_hrs) + Reg_wage × (1 − OT_hrs/Reg_hrs)
+//   1. Blended wage  = OT_wage × (OT_hrs/Total_hrs) + Reg_wage × (1 − OT_hrs/Total_hrs)  ← each wage weighted by the hours worked at it
 //   2. Labor/hr      = blended_wage × (1 + burden%)
 //   3. OH total      = ohPayroll + otherOH + liabilities + ohPayroll × burden%
-//   4. OH/hr         = OH total ÷ (reg_hrs + OT_hrs)
+//   4. OH/hr         = OH total ÷ reg_hrs  (regular hours only; OT doesn't dilute fixed overhead)
 //   5. Break-even    = (OH/hr + Labor/hr) ÷ (1 − nonBillable%)  ← true cost coverage
 //   6. Bid rate      = break-even ÷ (1 − profit%)               ← true profit margin
 
@@ -111,8 +111,12 @@ export function compute(i: Inputs): Computed {
   const totalHours = totalRegHours + totalOTHours;
   const billableHours = totalHours * (1 - i.nonBillablePct / 100); // for display only
 
-  // Blended wage: weight OT and regular rates by OT_hrs/Reg_hrs (Excel B11/B12 formula)
-  const otPct  = totalRegHours > 0 ? totalOTHours / totalRegHours : 0;
+  // Blended wage: a true weighted average — each wage is weighted by the share of
+  // ALL hours worked at it (OT_hrs / total hrs). This used to divide by regular
+  // hours (the Excel B11/B12 shortcut), which overweighted OT and made the blended
+  // wage x total hours overstate payroll; the owner chose the weighted average
+  // (2026-10-27, about -2% on the labor rate at a 25% OT/Reg budget mix).
+  const otPct  = totalHours > 0 ? totalOTHours / totalHours : 0;
   const regPct = 1 - otPct;
   const blendedWage = i.fieldEmpWage * 1.5 * otPct + i.fieldEmpWage * regPct;
 

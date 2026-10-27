@@ -558,7 +558,10 @@ export function WaitingList() {
           if (service.startDate && service.startDate > endDate) continue;
           rows.push({ key: `${job.id}-${service.id}`, job, service });
         }
-      } else if (services.length > 1) {
+      } else if (services.length > 1 || (job.visits ?? []).some((v) => v.jobServiceId)) {
+        // (Also a job already split per service whose other services are done:
+        // the one left must still dispatch as ITS service — an unlinked visit
+        // would bill every service on the job again.)
         for (const service of services) {
           rows.push({ key: `${job.id}-${service.id}`, job, service });
         }

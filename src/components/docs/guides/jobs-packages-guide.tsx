@@ -393,6 +393,23 @@ export function JobsPackagesGuide() {
             <strong>Season window.</strong> Season Start and Season End each have a{" "}
             <strong>Clear</strong> link, so you can go back to year-round after setting one.
           </li>
+          <li>
+            <strong>Rescheduling existing visits.</strong> After you save a change to a
+            schedule&apos;s day, frequency, week pattern, season, custom dates or skip dates
+            (holidays), you&apos;re asked <strong>&quot;Reschedule N upcoming visits on this
+            schedule?&quot;</strong> Yes replaces the upcoming visits that are still untouched —
+            scheduled, not dispatched, not clocked in, not invoiced and not dragged to another day by
+            hand — with new ones on the new rules. In-progress, completed, dispatched and hand-moved
+            visits are left exactly where they are. Choose Keep existing visits to leave them; new
+            visits still follow the new schedule.
+          </li>
+          <li>
+            <strong>Names are unique, and Active means active.</strong> Two live schedules can&apos;t
+            share a name (case doesn&apos;t matter) — creating, renaming or importing one that
+            clashes is refused with a message, and a duplicate row in a CSV import is skipped.
+            Switching a schedule off stops any new visits being generated for the jobs on it
+            (including the per-job Generate Visits button); visits that already exist are kept.
+          </li>
         </ul>
       </Section>
 

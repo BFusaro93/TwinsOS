@@ -714,10 +714,19 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
   const { byPart: shortfallsByPart } = useWOPartShortfalls();
 
   const activePoStatusesForReceipts = new Set(["requested", "pending", "approved", "ordered", "partially_fulfilled"]);
+  // Match by the catalog link / part id first and by part number only when the
+  // part HAS one: a bare `li.partNumber === part.partNumber` made every blank
+  // part number match every other blank-numbered line (and the API / product
+  // mirror allow blank part numbers), inflating "on order" with unrelated lines.
+  const lineIsForPart = (li: { partNumber: string; productItemId?: string | null; partId?: string | null }) =>
+    !!part &&
+    ((!!part.productItemId && li.productItemId === part.productItemId) ||
+      li.partId === part.id ||
+      (!!part.partNumber && li.partNumber === part.partNumber));
   const activePoLineItemsForPart = (purchaseOrders ?? [])
     .filter((po) => activePoStatusesForReceipts.has(po.status))
     .flatMap((po) => po.lineItems)
-    .filter((li) => li.partNumber === part?.partNumber);
+    .filter(lineIsForPart);
   const activePoLineItemIdsForPart = activePoLineItemsForPart.map((li) => li.id);
 
   // "On order" for a partially_fulfilled PO must reflect only what's still
@@ -787,7 +796,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
     (products ?? []).find(
       (p) =>
         p.category === "maintenance_part" &&
-        (p.id === livePart.productItemId || p.partNumber === livePart.partNumber)
+        (p.id === livePart.productItemId || (!!livePart.partNumber && p.partNumber === livePart.partNumber))
     ) ?? null;
   const linkedProductName = linkedProduct?.name ?? null;
 
@@ -797,7 +806,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
     (requisitions ?? [])
       .filter((r) => activeReqStatuses.has(r.status))
       .flatMap((r) => r.lineItems)
-      .filter((li) => li.partNumber === livePart.partNumber)
+      .filter(lineIsForPart)
       .reduce((sum, li) => sum + li.quantity, 0) +
     activePoLineItemsForPart.reduce(
       (sum, li) => sum + Math.max(0, li.quantity - (receivedByLineItemId[li.id] ?? 0)),

@@ -17,6 +17,9 @@ export async function GET(request: Request) {
     .eq("org_id", auth.orgId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
+    // created_at ties are routine (a bulk insert shares one transaction time), so
+    // offset paging needs a total order or pages repeat / skip rows.
+    .order("id", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) return jsonServerError("GET /api/v1/assets", error);
@@ -53,6 +56,9 @@ export async function POST(request: Request) {
     .select(ASSET_SELECT)
     .single();
 
+  // uq_assets_org_asset_tag: an assetTag must be unique per org. Say so rather
+  // than a bare 500 (which is what a duplicate tag used to return).
+  if (error?.code === "23505") return jsonError("Another asset already uses that assetTag", 409);
   if (error || !data) return jsonServerError("POST /api/v1/assets", error);
   return NextResponse.json(shapeAsset(data), { status: 201 });
 }

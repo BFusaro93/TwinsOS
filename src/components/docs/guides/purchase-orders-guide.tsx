@@ -292,7 +292,8 @@ export function PurchaseOrdersGuide() {
           re-submitting to avoid double-counting.
         </Callout>
         <p>
-          Once every line on a PO is fully received, its status automatically moves to{" "}
+          The status changes the moment the receipt is recorded — you don&apos;t have to click Done
+          or keep the page open. Once every line on a PO is fully received, its status automatically moves to{" "}
           <strong>Completed</strong>; if only some lines are fully received, it moves to{" "}
           <strong>Partially Fulfilled</strong> instead. You can correct a receipt you already
           recorded by editing its quantities — the system applies the difference to inventory rather

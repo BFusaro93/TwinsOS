@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
     .select(`
       *,
       clients(
-        display_name, first_name, last_name, primary_email, email_bounced_at, phones, account_number,
+        display_name, first_name, last_name, primary_email, billing_email, email_bounced_at, phones, account_number,
         invoice_delivery, balance_outstanding_cents, referred_by, referred_by_client_id,
         billing_address, billing_city, billing_state, billing_zip,
         service_address, service_city, service_state, service_zip,
@@ -139,7 +139,12 @@ export async function POST(req: NextRequest) {
 
   const toEmails = (body.to && body.to.length > 0)
     ? body.to.map((e) => e.trim())
-    : (inv.clients?.primary_email ? [inv.clients.primary_email as string] : []);
+    : (() => {
+      // The client form promises "If blank, invoices will be sent to the primary
+      // email" — i.e. a Billing Email, when set, is where invoices go.
+      const stored = ((inv.clients?.billing_email as string | null)?.trim() || (inv.clients?.primary_email as string | null)) ?? null;
+      return stored ? [stored] : [];
+    })();
   if (toEmails.length === 0) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
   }
@@ -147,7 +152,15 @@ export async function POST(req: NextRequest) {
   // damages sending-domain reputation, so it is blocked for transactional mail
   // too (see the Resend webhook that sets email_bounced_at). An explicit `to`
   // override is how staff send to a corrected address, so it is not blocked.
-  const usingStoredInvoiceEmail = !(body.to && body.to.length > 0);
+  // The send dialog always submits its pre-filled recipients as `to`, so "no
+  // `to` given" alone never matched and the guard below never ran for a
+  // single-invoice send: staff could keep emailing a dead address. Sending to
+  // exactly the stored (bounced) address counts as using it; only a different
+  // address is the "corrected address" override.
+  const storedEmail = ((inv.clients?.primary_email as string | null) ?? "").trim().toLowerCase();
+  const usingStoredInvoiceEmail =
+    !(body.to && body.to.length > 0) ||
+    (storedEmail !== "" && body.to.every((e) => e.trim().toLowerCase() === storedEmail));
   if (usingStoredInvoiceEmail && inv.clients?.email_bounced_at) {
     return NextResponse.json(
       { error: "Client's email address has hard-bounced. Update it, or send to a different address." },
@@ -460,9 +473,15 @@ export async function POST(req: NextRequest) {
   // Update invoice status to "sent" if it hasn't been emailed yet. "printed" is
   // included so a "both" delivery-method client's invoice — printed first, then
   // emailed — correctly progresses instead of staying stuck at "printed" forever.
+  // The invoice is also locked here, in the same write: a sent invoice must not
+  // keep silently-editable amounts. The single-invoice dialog locks from the
+  // client after a send, but the Invoices list's bulk "Email" runs this route
+  // directly per invoice and never did — every invoice emailed in bulk stayed
+  // editable (and re-priceable) after the client had received it.
+  const lockPatch = inv.locked ? {} : { locked: true, locked_at: new Date().toISOString() };
   if (inv.status === "draft" || inv.status === "printed") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: statusErr } = await (supabase as any).from("crm_invoices").update({ status: "sent" }).eq("id", invoiceId);
+    const { error: statusErr } = await (supabase as any).from("crm_invoices").update({ status: "sent", ...lockPatch }).eq("id", invoiceId);
     if (statusErr) {
       // The email already went out; surface the failed status flip rather than
       // silently leaving the invoice in draft/printed.
@@ -471,6 +490,12 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+  } else if (!inv.locked) {
+    // Re-sending an already-issued invoice: lock it too. Best-effort — the
+    // email is out, and a failed lock must not turn this into an error.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: lockErr } = await (supabase as any).from("crm_invoices").update(lockPatch).eq("id", invoiceId);
+    if (lockErr) log.error("could not lock an invoice after emailing it", { invoiceId, error: lockErr.message });
   }
 
   // Push to QuickBooks now that the invoice has gone out — never throws, so

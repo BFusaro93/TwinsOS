@@ -216,6 +216,9 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
   const to = job.recurrence_end && job.recurrence_end < horizonEnd ? job.recurrence_end : horizonEnd;
   if (to < from) return out;
 
+  // A schedule switched off in Settings stops NEW generation for its jobs.
+  // Existing visits are left exactly where they are.
+  if (job.schedule && schedulesByName.get(job.schedule)?.is_active === false) return out;
   const rules = rulesForJob(job.schedule, job.schedule_days, schedulesByName);
   if (rules.length === 0) return out;
   const dates = occurrencesForRules(rules, from, to, { fallbackAnchor: jobStart });
@@ -437,7 +440,7 @@ export async function generateVisitsForJobs(
 
   const { rows: scheduleRows, error: schedErr } = await selectAllRows<ScheduleRow & { org_id: string | null }>(() => supabase
     .from("crm_schedules")
-    .select("org_id, name, frequency, day_of_week, week_pattern, anchor_date, week_of_month, season_start, season_end, custom_dates, excluded_dates")
+    .select("org_id, name, frequency, day_of_week, week_pattern, anchor_date, week_of_month, season_start, season_end, custom_dates, excluded_dates, is_active")
     .is("deleted_at", null));
   if (schedErr) { result.errors.push(schedErr); return result; }
   const schedulesByOrg = new Map<string, Map<string, ScheduleRow>>();

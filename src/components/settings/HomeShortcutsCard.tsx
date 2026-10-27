@@ -13,7 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
-import { parseHomeShortcuts, HOME_SHORTCUT_ICONS, type HomeShortcut } from "@/lib/home-shortcuts";
+import { parseHomeShortcuts, normalizeShortcutUrl, HOME_SHORTCUT_ICONS, type HomeShortcut } from "@/lib/home-shortcuts";
+import { toast } from "sonner";
 
 function blankShortcut(): HomeShortcut {
   return { id: crypto.randomUUID(), name: "", subtitle: "", icon: "Link2", url: "" };
@@ -50,7 +51,16 @@ export function HomeShortcutsCard() {
   }
 
   function handleSave() {
-    const cleaned = rows.filter((r) => r.name.trim() !== "" && r.url.trim() !== "");
+    const filled = rows.filter((r) => r.name.trim() !== "" && r.url.trim() !== "");
+    const cleaned: HomeShortcut[] = [];
+    for (const r of filled) {
+      const url = normalizeShortcutUrl(r.url);
+      if (!url) {
+        toast.error(`"${r.name.trim()}" needs a web address that starts with http:// or https://`);
+        return;
+      }
+      cleaned.push({ ...r, url });
+    }
     updateOrgSettings(
       { customizations: { homeShortcuts: cleaned } },
       { onSuccess: () => { setRows(cleaned); setSaved(true); } }

@@ -309,7 +309,12 @@ function AnalysisTab({ project }: { project: Project }) {
     .reduce((s, inv) => s + inv.totalCents, 0);
   const totalPayments = (payments ?? []).reduce((s, p) => s + p.amountCents, 0);
   const amountDue = totalInvoiced - totalPayments;
-  const remainingToBill = project.contractPrice - totalInvoiced;
+  // The contract price is pre-tax, so what's left to bill is measured against
+  // billed amounts excluding tax (same as rpt_projects_wip's billed_cents).
+  const billedExTax = (invoices ?? [])
+    .filter((inv) => inv.status !== "void")
+    .reduce((s, inv) => s + inv.totalCents - (inv.taxCents ?? 0), 0);
+  const remainingToBill = project.contractPrice - billedExTax;
 
   // Budgeted labor cost = budgeted hours × the fully-loaded (burdened) rate
   // captured on the project, falling back to the plain labor rate. Never the
@@ -722,7 +727,7 @@ function NewProjectDialog({
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>{isEditing ? "Original Contract Price ($)" : "Contract Price ($)"}</Label>
+            <Label>{isEditing ? "Original Contract Price, before tax ($)" : "Contract Price, before tax ($)"}</Label>
             <Input
               type="number" step="0.01" min="0"
               value={contractPrice}

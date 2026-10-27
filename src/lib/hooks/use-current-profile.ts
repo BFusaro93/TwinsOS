@@ -25,7 +25,15 @@ async function fetchCurrentProfileRaw(): Promise<CurrentProfile | null> {
     .single();
   if (error) throw error;
 
-  return { userId: user.id, orgId: profile.org_id, role: profile.role ?? null };
+  // The org every RLS policy resolves to: my_org_id() is the staff member's
+  // impersonation target while a grant is active, and profiles.org_id (their
+  // HOME org) otherwise. Hooks filter with this orgId (organizations.id =
+  // orgId etc.), and during impersonation the home org is invisible to RLS —
+  // org settings/plan/trial reads came back empty, so the org timezone fell
+  // back to Eastern for a Pacific customer and the settings page errored.
+  const { data: effectiveOrgId } = await supabase.rpc("my_org_id");
+
+  return { userId: user.id, orgId: effectiveOrgId ?? profile.org_id, role: profile.role ?? null };
 }
 
 /**

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 /**
  * GET /api/cron/ticket-past-due — called daily by Vercel Cron.
@@ -68,7 +69,9 @@ export async function GET(request: Request) {
   }
 
   let fired = 0;
+  const orgCanceled = createOrgCanceledResolver(supabase);
   for (const [orgId, rows] of byOrg) {
+    if (await orgCanceled(orgId)) continue; // canceled orgs get no automated reminders
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { count: triggerCount } = await (supabase as any)
       .from("crm_sequence_triggers")

@@ -46,6 +46,8 @@ export interface ScheduleRow {
   season_end?: string | null;
   custom_dates?: string[] | null;
   excluded_dates?: string[] | null;
+  /** false = the schedule is switched off: its jobs generate no new visits. */
+  is_active?: boolean | null;
 }
 
 export const DAY_INDEX: Record<string, number> = {

@@ -14,6 +14,7 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { BulkImportResult } from "@/lib/csv";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { cancelClientVisitsRemote } from "@/lib/client-visits-api";
 import type {
   Client,
   ClientContact,
@@ -370,13 +371,18 @@ export function useClientActivity(clientId: string) {
       const childNameById = new Map((children ?? []).map((c) => [c.id, c.display_name as string]));
       const activityClientIds = [clientId, ...childIds];
 
+      // Paged: PostgREST caps a response at 1000 rows, and a long-lived client
+      // (or a parent rolling up its children) passes that — the oldest history
+      // silently vanished from the timeline.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("client_activity")
-        .select("*, profiles(name)")
-        .in("client_id", activityClientIds)
-        .order("occurred_at", { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllRows<any>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("client_activity")
+          .select("*, profiles(name)")
+          .in("client_id", activityClientIds)
+          .order("occurred_at", { ascending: false })
+      );
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data.map((row: any) => {
         const activity = mapActivity(row);
@@ -1319,8 +1325,8 @@ export function useDeleteClient() {
   const qc = useQueryClient();
   const orgTimeZone = useOrgTimeZone();
   return useMutation({
-    mutationFn: async (input: string | { id: string; confirmed?: boolean }) => {
-      const { id, confirmed = false } = typeof input === "string" ? { id: input } : input;
+    mutationFn: async (input: string | { id: string; confirmed?: boolean; cancelVisits?: boolean }) => {
+      const { id, confirmed = false, cancelVisits = false } = typeof input === "string" ? { id: input } : input;
       if (!confirmed) {
         const blockers = await fetchClientDeletionBlockers(id, orgTimeZone);
         if (hasClientDeletionBlockers(blockers)) {
@@ -1342,9 +1348,15 @@ export function useDeleteClient() {
         .update({ deleted_at: nowIso })
         .eq("client_id", id)
         .is("deleted_at", null);
+      // The caller asked "Cancel their N upcoming visits?" (see
+      // clientVisitsConfirmOptions) and the answer was Yes. After the delete so
+      // a failed delete never cancels anything; a failure here is reported to
+      // the caller because the visits would otherwise silently stay on the board.
+      if (cancelVisits) await cancelClientVisitsRemote([id]);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
   });
 }
@@ -1823,13 +1835,22 @@ export function useBulkAddTag() {
     mutationFn: async ({ clientIds, tag }: { clientIds: string[]; tag: string }) => {
       const supabase = createClient();
       const rows = clientIds.map((client_id) => ({ client_id, tag }));
-      const { error } = await supabase
+      // ignoreDuplicates returns only the rows actually inserted, so clients that
+      // already had the tag aren't reported (or re-triggered) as newly tagged.
+      const { data, error } = await supabase
         .from("client_tags")
-        .upsert(rows, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true });
+        .upsert(rows, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true })
+        .select("client_id");
       if (error) throw error;
+      return { addedClientIds: (data ?? []).map((r) => r.client_id as string) };
     },
-    onSuccess: () => {
+    onSuccess: (result, { tag }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      // The single-client add fires tag_added; a bulk add silently skipped every
+      // "when tag X is added" automation for the whole selection.
+      for (const clientId of result?.addedClientIds ?? []) {
+        fireAutomationTrigger({ triggerType: "tag_added", clientId, matchValues: [tag] });
+      }
     },
   });
 }
@@ -1840,15 +1861,21 @@ export function useBulkRemoveTag() {
   return useMutation({
     mutationFn: async ({ clientIds, tag }: { clientIds: string[]; tag: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("client_tags")
         .delete()
         .in("client_id", clientIds)
-        .eq("tag", tag);
+        .eq("tag", tag)
+        .select("client_id");
       if (error) throw error;
+      return { removedClientIds: (data ?? []).map((r) => r.client_id as string) };
     },
-    onSuccess: () => {
+    onSuccess: (result, { tag }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      // Mirrors the single-client remove, which fires tag_removed.
+      for (const clientId of result?.removedClientIds ?? []) {
+        fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
+      }
     },
   });
 }
@@ -1971,15 +1998,48 @@ export function useBulkUpdateClients() {
   return useMutation({
     mutationFn: async ({ clientIds, patch }: { clientIds: string[]; patch: Record<string, unknown> }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // The single-client edit fires client_source_updated / has_opted_in_emails
+      // when those values actually change; the bulk path has to do the same, per
+      // client, so it needs the prior values.
+      const watchSource = "source" in patch;
+      const watchEmail = patch.ok_to_email === true;
+      let before: { id: string; source: string | null; ok_to_email: boolean | null }[] = [];
+      if (watchSource || watchEmail) {
+        const { data, error: readErr } = await supabase
+          .from("clients")
+          .select("id, source, ok_to_email")
+          .in("id", clientIds);
+        if (readErr) throw readErr;
+        before = data ?? [];
+      }
+      const { data: updated, error } = await supabase
         .from("clients")
         // `as never`: postgrest rejects excess properties on a dynamically-built patch.
         .update(patch as never)
-        .in("id", clientIds);
+        .in("id", clientIds)
+        .select("id");
       if (error) throw error;
+      const updatedIds = new Set((updated ?? []).map((u) => u.id));
+      const changed = before.filter((b) => updatedIds.has(b.id));
+      const newSource = (patch.source as string | null | undefined) ?? null;
+      return {
+        sourceChangedIds: watchSource ? changed.filter((b) => b.source !== newSource).map((b) => b.id) : [],
+        newSource,
+        emailsOptedInIds: watchEmail ? changed.filter((b) => b.ok_to_email !== true).map((b) => b.id) : [],
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      for (const id of result.sourceChangedIds) {
+        fireAutomationTrigger({
+          triggerType: "client_source_updated",
+          clientId: id,
+          matchValues: result.newSource ? [result.newSource] : undefined,
+        });
+      }
+      for (const id of result.emailsOptedInIds) {
+        fireAutomationTrigger({ triggerType: "has_opted_in_emails", clientId: id });
+      }
     },
   });
 }

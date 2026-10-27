@@ -51,6 +51,7 @@ export async function submitEstimateChangeRequest(
     .from("profiles")
     .select("id, notification_prefs")
     .eq("org_id", orgId)
+    .neq("status", "inactive")
     .in("role", ["admin", "manager"]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery } from "@/lib/hooks/use-query";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { createClient } from "@/lib/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -137,20 +138,29 @@ function useEstimatesReportData(rangeStart: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sb = supabase as any;
 
-      const [estRes, liRes] = await Promise.all([
-        sb
-          .from("estimates")
-          .select("id, estimate_number, stage, total_price_cents:total_cents, created_at, description, clients(display_name)")
-          .is("deleted_at", null)
-          .gte("created_at", rangeStart),
-        sb
-          .from("estimate_line_items")
-          .select("id, estimate_id, service_name, status, qty, rate_cents, total_cents, direct_cost_cents:total_cost_cents, estimates(stage, created_at)")
-          .is("deleted_at", null),
+      // Paged (PostgREST caps one response at 1000 rows without an error), and
+      // the line-item range is applied in the database through an inner join:
+      // fetching every line item ever and filtering by estimate date here meant
+      // the 1000-row cap was spent on rows the filter then threw away.
+      const [estimatesAll, lineItemsAll] = await Promise.all([
+        fetchAllRows<RawEstimate>(() =>
+          sb
+            .from("estimates")
+            .select("id, estimate_number, stage, total_price_cents:total_cents, created_at, description, clients(display_name)")
+            .is("deleted_at", null)
+            .gte("created_at", rangeStart)
+        ),
+        fetchAllRows<RawLineItem>(() =>
+          sb
+            .from("estimate_line_items")
+            .select("id, estimate_id, service_name, status, qty, rate_cents, total_cents, direct_cost_cents:total_cost_cents, estimates!inner(stage, created_at)")
+            .is("deleted_at", null)
+            .gte("estimates.created_at", rangeStart)
+        ),
       ]);
 
-      const estimates: RawEstimate[] = estRes.data ?? [];
-      const lineItems: RawLineItem[] = (liRes.data ?? []).filter(
+      const estimates: RawEstimate[] = estimatesAll;
+      const lineItems: RawLineItem[] = lineItemsAll.filter(
         (li: RawLineItem) => li.estimates && li.estimates.created_at >= rangeStart
       );
 
@@ -329,7 +339,10 @@ function WonByServiceReport({ lineItems }: { lineItems: RawLineItem[] }) {
   const rows = useMemo(() => {
     const wonItems = lineItems.filter(
       (li) =>
-        li.status === "won" &&
+        // An estimate the office marks Accepted (rather than the client accepting a
+        // proposal) leaves its lines at "quote" — only per-line acceptance writes
+        // "won" — so an accepted/invoiced estimate's live lines are won either way.
+        (li.status === "won" || li.status === "quote") &&
         (li.estimates?.stage === "accepted" || li.estimates?.stage === "invoiced")
     );
     const map = new Map<string, { qty: number; revenue: number; estimateIds: Set<string> }>();
@@ -400,7 +413,7 @@ function WonServiceProductsReport({ lineItems }: { lineItems: RawLineItem[] }) {
       lineItems
         .filter(
           (li) =>
-            li.status === "won" &&
+            (li.status === "won" || li.status === "quote") &&
             (li.estimates?.stage === "accepted" || li.estimates?.stage === "invoiced")
         )
         .sort((a, b) => (b.total_cents ?? 0) - (a.total_cents ?? 0)),

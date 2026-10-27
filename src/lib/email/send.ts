@@ -88,6 +88,28 @@ export function mapSendError(
   return { status: 502, error: `Email provider error — ${subject} was not sent. Please try again.` };
 }
 
+/**
+ * `resend.emails.send` for the staff-notification fan-outs (one email per
+ * recipient in a loop). The provider's default limit is 2 requests/second, and
+ * a rate-limited call RESOLVES with `{ error }` rather than throwing — so the
+ * loops' `.catch(() => {})` never fired and the 3rd, 4th… recipient of a
+ * notification silently never got the email. Retries a rate-limited send with
+ * a short backoff (the campaign sender does the same) and hands back the final
+ * `{ data, error }` for the caller to inspect.
+ */
+export async function sendEmailRetryingRateLimit(
+  resend: Resend,
+  payload: Parameters<Resend["emails"]["send"]>[0]
+): Promise<Awaited<ReturnType<Resend["emails"]["send"]>>> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await resend.emails.send(payload);
+    const err = res.error as { name?: string; statusCode?: number | null } | null;
+    const rateLimited = !!err && (err.name === "rate_limit_exceeded" || err.statusCode === 429);
+    if (!rateLimited || attempt >= 2) return res;
+    await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+  }
+}
+
 interface ClientForMergeVars {
   displayName: string | null;
   balanceOutstandingCents?: number | null;
@@ -285,7 +307,9 @@ export async function sendClientEmail(opts: SendClientEmailOpts): Promise<{ rese
   const { data, error } = await resend.emails.send({
     from: opts.from ?? EMAIL_FROM,
     to: opts.to,
-    subject: opts.subject,
+    // A merge value with a line break (e.g. [notestocrew] in a subject) would put
+    // a raw newline in the Subject header, which the provider rejects.
+    subject: opts.subject.replace(/[\r\n]+/g, " ").trim(),
     html: opts.html,
     ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
     ...(opts.unsubscribeUrl

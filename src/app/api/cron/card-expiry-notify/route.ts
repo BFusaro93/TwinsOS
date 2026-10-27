@@ -4,6 +4,7 @@ import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/l
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 const log = logger.child("card-expiry-notify cron");
 
@@ -75,8 +76,10 @@ export async function GET(request: Request) {
 
   let checked = 0;
   let fired = 0;
+  const orgCanceled = createOrgCanceledResolver(supabase);
 
   for (const client of clients) {
+    if (await orgCanceled(client.org_id)) continue; // canceled orgs get no automated reminders
     const connectAccountId = client.organizations?.stripe_connect_account_id;
     if (!connectAccountId) continue;
     checked++;

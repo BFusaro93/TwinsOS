@@ -8,7 +8,7 @@ import { allocateStopHours } from "@/lib/utils/visit-hours";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
-import { sumPunchLaborCents } from "@/lib/crew/visit-labor";
+import { sumPunchLaborCents, sumPunchManHours } from "@/lib/crew/visit-labor";
 import { closeStopPunches } from "@/lib/crew/stop-punches";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -46,11 +46,17 @@ interface VisitRow {
   start_time: string | null;
   crm_jobs: {
     crew_id?: string | null;
+    status?: string | null;
     property_id: string | null;
     service_address: string | null;
     service_city: string | null;
     crm_job_services: { id: string; budgeted_hours: number; team_size: number }[] | null;
   } | null;
+}
+
+/** A visit whose job is on hold / cancelled isn't on the crew's list (see GET /api/crm/crew/visits). */
+function jobIsPaused(row: VisitRow): boolean {
+  return row.crm_jobs?.status === "hold" || row.crm_jobs?.status === "cancelled";
 }
 
 function toStopKeyInput(row: VisitRow): StopKeyInput {
@@ -67,7 +73,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 const VISIT_SELECT = `
   id, org_id, job_id, client_id, scheduled_date, crew_id, crew_unassigned, job_service_id, status,
   men_count, clocked_in_at, clocked_out_at, paused_at, break_minutes, start_time,
-  crm_jobs(crew_id, property_id, service_address, service_city, crm_job_services(id, budgeted_hours, team_size))
+  crm_jobs(crew_id, status, property_id, service_address, service_city, crm_job_services(id, budgeted_hours, team_size))
 `;
 
 /**
@@ -136,7 +142,10 @@ export async function POST(
   // resolve) rather than letting the caller mutate another crew's visit.
   const allRows = candidateRows as VisitRow[];
   const stopRows = allRows.filter((r) =>
-    effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor)
+    // A held / cancelled job's leftover visit the crew never started isn't part
+    // of the work they did — completing it here would invoice it.
+    (r.id === anchor.id || !!r.clocked_in_at || !jobIsPaused(r))
+    && effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor)
     && (
       stopKeyForVisit(toStopKeyInput(r)) === anchorKey
       || (anchor.clocked_in_at && r.clocked_in_at === anchor.clocked_in_at)
@@ -151,6 +160,13 @@ export async function POST(
   // effects (invoice line, timeline row, automations).
   const openRows = stopRows.filter((r) => !r.clocked_out_at && r.status !== "completed");
   if (openRows.length === 0) {
+    // Every visit of the stop is already finished: this is a replay of a
+    // clock-out that landed (the offline queue retries after a lost response,
+    // or a double tap). Answer success, as the concurrent-race path below does —
+    // a 400 here left a failed "didn't sync" card for work that had saved.
+    if (stopRows.length > 0) {
+      return NextResponse.json({ visitIds: stopRows.map((r) => r.id), visits: stopRows, alreadyClockedOut: true });
+    }
     return NextResponse.json({ error: "Nothing to clock out for this stop" }, { status: 400 });
   }
 
@@ -289,6 +305,57 @@ export async function POST(
   // total below is summed from the punches.
   await closeStopPunches(supabase, anchor.id, now);
 
+  // Hours follow the ACTUAL punches when they exist: span × men_count above is
+  // only a guess at how many people were on site, and a member who arrived
+  // late or left early made visit hours disagree with the Timesheet, Job
+  // Costing and the dispatch board's mismatch flag. Same figure the punch
+  // editors use (sumPunchManHours: Σ per member of out − in − breaks), split
+  // across the visits closing now in the proportions the span allocation
+  // gave them. Hours already credited to siblings closed EARLIER are taken off
+  // first (same remainder rule as the labor split below). Only when the anchor
+  // itself was clocked out now: if it finished earlier, its punches describe
+  // that earlier work, not the visits closing here, so the span estimate stays.
+  // The write goes through the same UPDATE OF actual_hours path as above, so
+  // the job-level actual_hours rollup trigger fires again.
+  let punchAllocation: Map<string, number> | null = null;
+  if (anchorIsOpen) {
+    try {
+      const punchHours = await sumPunchManHours(supabase, anchor.id);
+      if (punchHours != null) {
+        const openIdsSet = new Set(openIds);
+        const earlierRowIds = stopRows.filter((r) => !openIdsSet.has(r.id)).map((r) => r.id);
+        let earlierHours = 0;
+        if (earlierRowIds.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: earlier } = await (supabase as any)
+            .from("crm_job_visits")
+            .select("actual_hours")
+            .in("id", earlierRowIds);
+          earlierHours = ((earlier ?? []) as { actual_hours: number | null }[])
+            .reduce((sum, v) => sum + Number(v.actual_hours ?? 0), 0);
+        }
+        const remaining = Math.max(0, punchHours - earlierHours);
+        const weights = openRows.map((r) => Math.max(0, allocation?.get(r.id) ?? 0));
+        const wSum = weights.reduce((a, b) => a + b, 0);
+        const shares = openRows.map((_, i) => Math.round(remaining * (wSum > 0 ? weights[i] / wSum : 1 / openRows.length) * 100) / 100);
+        const diff = Math.round((remaining - shares.reduce((a, b) => a + b, 0)) * 100) / 100;
+        if (diff !== 0) shares[weights.indexOf(Math.max(...weights))] += diff;
+        punchAllocation = new Map(openRows.map((r, i) => [r.id, shares[i]]));
+        for (const row of transitionedRows) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from("crm_job_visits")
+            .update({ actual_hours: punchAllocation.get(row.id) ?? 0 })
+            .eq("id", row.id);
+        }
+      }
+    } catch (err) {
+      punchAllocation = null;
+      log.error("punch-based hours failed; keeping span estimate", { visitId: anchor.id, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  const hoursFor = (id: string) => (punchAllocation ?? allocation)?.get(id) ?? 0;
+
   // Labor cost: crew member punches are only ever recorded against the
   // anchor visit (the crew clocks in once, for the stop) — compute the total
   // from there, then allocate it across siblings with the same weights as
@@ -317,9 +384,9 @@ export async function POST(
 
     // Shares are still computed over every open row (the labor total covers
     // the whole stop); only the rows this request closed get written.
-    const totalAllocHours = openRows.reduce((s, r) => s + (allocation?.get(r.id) ?? 0), 0);
+    const totalAllocHours = openRows.reduce((s, r) => s + hoursFor(r.id), 0);
     for (const row of transitionedRows) {
-      const share = totalAllocHours > 0 ? (allocation?.get(row.id) ?? 0) / totalAllocHours : 1 / openRows.length;
+      const share = totalAllocHours > 0 ? hoursFor(row.id) / totalAllocHours : 1 / openRows.length;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any)
         .from("crm_job_visits")

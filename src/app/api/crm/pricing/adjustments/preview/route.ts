@@ -29,18 +29,33 @@ export async function POST(request: Request) {
   }
   const { method, amount, rounding, scope, targets } = parsed.data;
 
+  // PostgREST caps a set-returning RPC at max_rows (1000) with no error, so a
+  // run matching more lines (a few hundred clients with several services each)
+  // previewed — and, because Apply only touches the previewed rows, repriced —
+  // an arbitrary first 1000 while every count and total on screen read as the
+  // whole run. Page through a stable order until the set is exhausted.
+  const PAGE_SIZE = 1000;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase.rpc as any)("crm_price_adjustment_candidates", {
-    p_method: method,
-    p_amount: amount,
-    p_rounding: rounding,
-    p_scope: scope,
-    p_targets: targets,
-  });
+  const data: any[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: page, error } = await (supabase.rpc as any)("crm_price_adjustment_candidates", {
+      p_method: method,
+      p_amount: amount,
+      p_rounding: rounding,
+      p_scope: scope,
+      p_targets: targets,
+    })
+      .order("entity_type", { ascending: true })
+      .order("entity_id", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
 
-  if (error) {
-    logger.error("[pricing/adjustments/preview] failed", { error: error.message });
-    return NextResponse.json({ error: "Failed to build the preview" }, { status: 500 });
+    if (error) {
+      logger.error("[pricing/adjustments/preview] failed", { error: error.message });
+      return NextResponse.json({ error: "Failed to build the preview" }, { status: 500 });
+    }
+    data.push(...(page ?? []));
+    if (!page || page.length < PAGE_SIZE) break;
   }
 
   const emptyByTarget = () =>

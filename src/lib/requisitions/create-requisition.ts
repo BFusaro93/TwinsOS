@@ -85,7 +85,10 @@ export async function createRequisitionRecord(
       part_number: product.part_number ?? "",
       quantity: li.quantity,
       unit_cost: unitCost,
-      total_cost: unitCost * li.quantity,
+      // total_cost / subtotal are integer cents columns: a fractional quantity
+      // (2.5 bags x 333c = 832.5) must be rounded here or the insert fails
+      // with "invalid input syntax for type integer" (the PO route rounds too).
+      total_cost: Math.round(unitCost * li.quantity),
       project_id: li.projectId ?? null,
       notes: li.notes ?? null,
     };

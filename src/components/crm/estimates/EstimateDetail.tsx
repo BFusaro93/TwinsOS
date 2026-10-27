@@ -58,7 +58,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn, formatCurrency, todayLocalISODate } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { toast } from "sonner";
@@ -373,7 +374,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const unconvertedLineCount = convertedInfo?.legacyConverted
     ? 0
     : (estimate?.lineItems ?? []).filter(
-        (li) => !li.deletedAt && li.rowType !== "section" && li.status !== "lost" &&
+        (li) => !li.deletedAt && li.rowType !== "section" && li.status !== "lost" && li.status !== "draft" &&
           !(convertedInfo?.convertedLineIds.has(li.id))
       ).length;
   const canConvertMore = !!convertedInfo && unconvertedLineCount > 0;
@@ -388,6 +389,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { mutateAsync: saveFinancials } = useSaveEstimateFinancials();
   const { data: overheadSettings } = useOverheadSettings();
   const { data: orgSettings } = useOrgSettings();
+  const { today: orgToday } = useOrgDates();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
   const { data: crmServices } = useCRMServices();
   const { mutateAsync: upsertLineItem } = useUpsertLineItem();
@@ -947,7 +949,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             onClick={async () => {
               if (!estimate) return;
               try {
-                const today = todayLocalISODate();
+                // The org's calendar day, not the browser's — the invoice date
+                // feeds due-date terms and every dated report.
+                const today = orgToday();
                 const taxRateBps = estimate.taxRateBps ?? 0;
                 // recalcEstimateTotals taxes the whole discounted subtotal —
                 // estimate lines carry no per-line taxability — so every
@@ -959,8 +963,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 // non-section lines of the chosen (or basis) tier. On a
                 // Good/Better/Best estimate, invoicing every open tier billed
                 // all the mutually exclusive options at once.
+                // 'draft' lines are "not yet part of the quote" (recalc and the
+                // proposal both exclude them), so they aren't billed either.
                 const liveLines = (estimate.lineItems ?? []).filter(
-                  (li) => !li.deletedAt && li.status !== "lost" && li.rowType !== "section"
+                  (li) => !li.deletedAt && li.status !== "lost" && li.status !== "draft" && li.rowType !== "section"
                 );
                 const basis = tierBasis(
                   !!estimate.tiersEnabled,
@@ -1590,6 +1596,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           ? [updateEstimate({ id: estimate.id, patch: { display_settings: tpl.displaySettings } })]
                           : []),
                       ]);
+                      // Each concurrent upsert recalculates the rollup from its own
+                      // read of the lines; the last write to land can be one that
+                      // saw only some of the new lines. One authoritative pass after
+                      // they've all settled (same as the AI-draft path).
+                      await refreshEstimateTotals();
                       toast.success(`Applied bundle "${tpl.name}"`);
                     } catch {
                       toast.error("Failed to apply template");

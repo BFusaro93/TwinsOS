@@ -36,6 +36,8 @@ interface PublicInvoice {
 interface CreateIntentResult {
   clientSecret: string;
   connectedAccountId: string;
+  /** The org's Connect mode — Stripe.js must be loaded with the matching publishable key. */
+  livemode?: boolean;
   balanceCents: number;
   feeCents: number;
   totalChargeCents: number;
@@ -93,6 +95,9 @@ export default function PublicInvoicePage() {
   const [intent, setIntent] = useState<CreateIntentResult | null>(null);
   const [creatingIntent, setCreatingIntent] = useState(false);
   const [paySucceeded, setPaySucceeded] = useState(false);
+  // A failed "start payment" is shown next to the button. It must NOT reuse
+  // loadError, which replaces the whole page — the invoice itself loaded fine.
+  const [payError, setPayError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/public/invoices/${token}`)
@@ -106,6 +111,7 @@ export default function PublicInvoicePage() {
 
   async function handleStartPay() {
     setCreatingIntent(true);
+    setPayError(null);
     try {
       const res = await fetch(`/api/public/invoices/${token}/create-intent`, { method: "POST" });
       const data = await res.json();
@@ -113,7 +119,7 @@ export default function PublicInvoicePage() {
       setIntent(data);
       setPayOpen(true);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Failed to start payment");
+      setPayError(err instanceof Error ? err.message : "Failed to start payment");
     } finally {
       setCreatingIntent(false);
     }
@@ -135,8 +141,22 @@ export default function PublicInvoicePage() {
     );
   }
 
-  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
-  const canPay = invoice.balanceCents > 0 && invoice.status !== "void" && hasPublishableKey();
+  // Pass the org's mode: a test-mode org's client secret can only be confirmed
+  // by Stripe.js loaded with the TEST publishable key — without it this page
+  // initialized the live key and the payment form never worked for them.
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId, intent.livemode) : null;
+  // Only an issued invoice with a balance can be paid: a draft isn't ready yet
+  // (create-intent refuses it), and void/paid have nothing to pay. For those
+  // the invoice still shows, with a status note instead of a Pay button.
+  const payBlockedNote =
+    invoice.status === "void"
+      ? "This invoice has been voided — no payment is needed."
+      : invoice.status === "draft"
+        ? "This invoice isn't ready for payment yet."
+        : invoice.balanceCents <= 0
+          ? "This invoice has no balance due."
+          : null;
+  const canPay = payBlockedNote === null && hasPublishableKey();
 
   return (
     <div className="min-h-dvh bg-slate-50 py-10">
@@ -235,8 +255,12 @@ export default function PublicInvoicePage() {
             <p className="text-sm font-medium text-green-800">Payment submitted</p>
             <p className="text-xs text-green-700">The balance above will update in a few seconds once it&apos;s confirmed.</p>
           </div>
+        ) : payBlockedNote ? (
+          <p className="mt-8 rounded-md border bg-slate-50 px-4 py-3 text-center text-sm text-slate-600">{payBlockedNote}</p>
         ) : canPay ? (
           !payOpen ? (
+            <>
+            {payError && <p className="mt-8 text-center text-sm text-red-600">{payError}</p>}
             <button
               onClick={handleStartPay}
               disabled={creatingIntent}
@@ -245,6 +269,7 @@ export default function PublicInvoicePage() {
               {creatingIntent && <Loader2 className="h-4 w-4 animate-spin" />}
               Pay Now
             </button>
+            </>
           ) : intent ? (
             <div className="mt-8 border-t pt-6">
               {intent.feeCents > 0 && (

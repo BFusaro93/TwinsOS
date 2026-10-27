@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeExternalUrl } from "@/lib/utils/external-url";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Plus, Search, Trash2, Check } from "lucide-react";
@@ -123,7 +124,7 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
           value={
             vendor.website ? (
               <a
-                href={vendor.website}
+                href={normalizeExternalUrl(vendor.website) ?? undefined}
                 target="_blank"
                 rel="noreferrer"
                 className="text-brand-600 dark:text-brand-400 hover:underline"

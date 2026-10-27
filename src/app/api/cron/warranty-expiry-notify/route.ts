@@ -6,6 +6,8 @@ import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
 import { EMAIL_FROM } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { logger } from "@/lib/logger";
+import { resolveReminderRecipients } from "@/lib/notifications/reminder-recipients";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 const log = logger.child("warranty-expiry-notify cron");
 
@@ -57,10 +59,12 @@ export async function GET(request: Request) {
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
   let notified = 0;
+  const orgCanceled = createOrgCanceledResolver(supabase);
 
   for (const w of expiring as Record<string, unknown>[]) {
     const endDate = w.end_date as string;
     const orgId = w.org_id as string;
+    if (await orgCanceled(orgId)) continue; // canceled orgs get no automated reminders
     const orgToday = todayInZone(await getOrgTimeZone(supabase, orgId));
     if (endDate < orgToday || endDate > shiftYmd(orgToday, REMINDER_WINDOW_DAYS)) continue;
 
@@ -101,50 +105,27 @@ export async function GET(request: Request) {
     const link = `${siteUrl}/crm/warranties`;
 
     try {
-      // clients.sales_rep_id references crm_employees, whose email lives on the
-      // employee row; the notification needs the linked login (user_id).
-      let rep: { user_id: string | null; email: string | null; first_name: string | null } | null = null;
-      if (client?.sales_rep_id) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data } = await (supabase as any)
-          .from("crm_employees")
-          .select("user_id, email, first_name")
-          .eq("id", client.sales_rep_id)
-          .is("deleted_at", null)
-          .maybeSingle();
-        rep = data ?? null;
-      }
+      // clients.sales_rep_id references crm_employees. If that rep is gone
+      // (deleted/deactivated) or has no reachable login or email, the reminder
+      // falls through to org admins — in-app AND email, per their prefs — so
+      // it is never dropped (see resolveReminderRecipients).
+      const { recipients } = await resolveReminderRecipients(supabase, {
+        orgId,
+        repEmployeeId: client?.sales_rep_id ?? null,
+        clientId: (w.client_id as string | null) ?? null,
+      });
 
       const inAppUserIds: string[] = [];
-      let emailTo: string | null = null;
-      let prefs: Record<string, unknown> = {};
-
-      // A rep with neither a linked login nor an email can't be reached at all;
-      // treat that like having no rep so org admins hear about it instead.
-      const repReachable = !!rep && (!!rep.user_id || !!rep.email);
-
-      if (rep && repReachable) {
-        if (rep.user_id) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: profile } = await (supabase as any)
-            .from("profiles").select("notification_prefs").eq("id", rep.user_id).maybeSingle();
-          prefs = (profile?.notification_prefs ?? {}) as Record<string, unknown>;
-          if (prefs.inAppWarrantyExpiring !== false) inAppUserIds.push(rep.user_id);
-        }
-        if (rep.email && prefs.emailWarrantyExpiring !== false) emailTo = rep.email;
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: admins } = await (supabase as any)
-          .from("profiles").select("id, notification_prefs").eq("org_id", orgId).eq("role", "admin");
-        for (const a of (admins ?? []) as { id: string; notification_prefs: Record<string, unknown> | null }[]) {
-          if (a.notification_prefs?.inAppWarrantyExpiring !== false) inAppUserIds.push(a.id);
-        }
-        if (inAppUserIds.length === 0) {
-          // Nobody could be told: don't consume the claim, so a later run (after
-          // a rep or admin is set up) can still send it.
-          await releaseClaim("no reachable recipient");
-          continue;
-        }
+      const emailTargets: { email: string; firstName: string }[] = [];
+      for (const r of recipients) {
+        if (r.userId && r.prefs.inAppWarrantyExpiring !== false) inAppUserIds.push(r.userId);
+        if (r.email && r.prefs.emailWarrantyExpiring !== false) emailTargets.push({ email: r.email, firstName: r.firstName });
+      }
+      if (recipients.length === 0) {
+        // Nobody could be told: don't consume the claim, so a later run (after
+        // a rep or admin is set up) can still send it.
+        await releaseClaim("no reachable recipient");
+        continue;
       }
 
       // The in-app row is inserted before the email, so a failed email releases
@@ -180,23 +161,26 @@ export async function GET(request: Request) {
         if (notifErr) throw notifErr;
       }
 
-      if (emailTo) {
+      let emailFailed = false;
+      for (const target of emailTargets) {
         const { error: sendErr } = await resend.emails.send({
           from: EMAIL_FROM,
-          to: emailTo,
+          to: target.email,
           subject: title,
           html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
             <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Warranty Expiring Soon</h2>
-            <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(rep?.first_name || "there")},</p>
+            <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(target.firstName || "there")},</p>
             <p style="margin:0 0 24px;color:#475569">${escapeHtml(message)}</p>
             <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Warranties</a>
           </div>`,
         });
         if (sendErr) {
           await releaseClaim("email send failed", sendErr.message);
-          continue;
+          emailFailed = true;
+          break;
         }
       }
+      if (emailFailed) continue;
       notified++;
     } catch (err) {
       await releaseClaim("notification threw", err);

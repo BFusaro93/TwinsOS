@@ -45,6 +45,7 @@ export function ContractsGuide() {
           <TOCLink href="#status-lifecycle">Status lifecycle &amp; signing</TOCLink>
           <TOCLink href="#billing-mechanics">Billing mechanics</TOCLink>
           <TOCLink href="#billing-frequency">Billing frequency options</TOCLink>
+          <TOCLink href="#ending-contracts">Ending or cancelling a contract</TOCLink>
           <TOCLink href="#templates">Contract templates</TOCLink>
           <TOCLink href="#multi-property-example">Worked example: multi-property commercial contract</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
@@ -113,15 +114,16 @@ export function ContractsGuide() {
           </tbody>
         </Table>
         <Callout>
-          <strong>Changing a signed contract&apos;s terms un-signs it.</strong> If you actually
-          change the monthly amount, the monthly-amounts grid, the invoice line items, the
-          start/end dates, the client, or the billing day / frequency on a contract that&apos;s
-          already Signed, the app automatically reverts its status to Sent and clears signed_at /
-          signed_by. The idea: the daily invoicing cron bills off those exact fields, so a
-          client&apos;s signature shouldn&apos;t stay attached to terms they never actually agreed
-          to. Re-confirm (mark Signed again) after making the change. Saving without changing any of
-          those values &mdash; say, editing only the title, PO number or sales rep &mdash; leaves the
-          contract Signed and billing.
+          <strong>Changing a signed contract&apos;s terms flags it &mdash; billing keeps running.</strong>{" "}
+          If you actually change the monthly amount, the monthly-amounts grid, the invoice line
+          items, the start/end dates, the client, the billing day / frequency or the
+          mid-cycle start setting on a contract that&apos;s already Signed or Active, the contract
+          stays Signed/Active and the daily invoicing cron bills the new terms from then on. A
+          &quot;Changed since signed &mdash; needs client approval&quot; banner appears on the
+          contract until you click <em>Client approved &mdash; clear flag</em> (which re-stamps the
+          signed date). The edit itself is recorded in the Audit Trail tab. Saving without changing
+          any of those values &mdash; say, editing only the title, PO number or sales rep &mdash;
+          doesn&apos;t flag anything.
         </Callout>
         <p>
           Because the signed-date is a tracked field, it&apos;s also one of the Zapier/automation
@@ -166,6 +168,18 @@ export function ContractsGuide() {
             never double-bill.
           </li>
         </ul>
+        <p>
+          <strong>Starting mid-cycle.</strong> Each contract has an <em>If Start Is Mid-Cycle</em>{" "}
+          setting. <em>Start on first full cycle</em> (the default) simply begins at the next
+          regular billing day. <em>Prorate first period</em> also bills the partial stretch from
+          the start date to the day before that first billing day, as its own invoice: the
+          period&apos;s amount &times; days in the stub &divide; days in the full cycle, rounded to the
+          cent (a contract at $1,000 a month starting Oct 20 with billing day 1 bills $387.10 for
+          Oct 20&ndash;31, then $1,000 from Nov 1). The invoice line names the stub period and shows
+          the formula. It&apos;s generated once &mdash; by the cron or Create Invoices, whichever
+          comes first &mdash; and applies to Monthly, Quarterly and Annual contracts (a contract
+          starting exactly on a billing day has no stub).
+        </p>
         <Callout>
           <strong>Why bill a month in advance?</strong> For recurring service, invoicing after the
           work is done means chasing payment on a moving target — the crew has already spent the
@@ -220,6 +234,17 @@ export function ContractsGuide() {
           Invoices click mid-period bills that period and the cron then skips it. Bill 1 Month in
           Advance only applies to monthly, quarterly, and annual contracts.
         </Callout>
+      </Section>
+
+      <Section id="ending-contracts" title="Ending or cancelling a contract">
+        <p>
+          While a contract is Signed/Active its jobs&apos; visits are billed inside the contract
+          price and don&apos;t auto-invoice. Once the contract is Cancelled, Expired, switched
+          inactive or past its end date, completed visits on its linked jobs bill like normal
+          per-visit work, on the client&apos;s usual invoicing frequency. When you cancel or end a
+          contract that has linked jobs, the app tells you how many will now bill per visit before
+          you confirm.
+        </p>
       </Section>
 
       <Section id="templates" title="Contract templates">

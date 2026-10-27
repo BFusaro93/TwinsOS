@@ -117,8 +117,16 @@ export function useBulkImportVendors() {
   return useMutation({
     mutationFn: async (rows: Record<string, string>[]) => {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+
+      const hasActiveFlag = new Set<string>();
       const inserts = rows
         .filter((r) => r.name?.trim())
+        .map((r) => {
+          if (r.isActive?.trim()) hasActiveFlag.add(r.name.trim().toLowerCase());
+          return r;
+        })
         .map((r) => ({
           name: r.name.trim(),
           contact_name: r.contactName?.trim() || "",
@@ -128,29 +136,49 @@ export function useBulkImportVendors() {
           website: r.website?.trim() || null,
           notes: r.notes?.trim() || null,
           vendor_type: r.vendorType?.trim() || null,
-          is_active: r.isActive?.toLowerCase() !== "false",
+          // The export writes "Active" / "Inactive"; anything that reads as
+          // "no" must stay inactive on a round trip (only "false" used to).
+          is_active: !["false", "inactive", "no", "n", "0"].includes(r.isActive?.trim().toLowerCase() ?? ""),
         }));
       if (inserts.length === 0) return 0;
 
-      // Insert one-by-one; on duplicate name, update the existing row
+      // vendors has no unique index on name, so a duplicate never raised
+      // 23505 and re-importing a list (or repeating a name inside one file)
+      // silently created a second vendor per row. Match existing vendors by
+      // trimmed, case-insensitive name and update them instead — the same
+      // normalization NewVendorDialog's duplicate check uses.
+      const { data: existing } = await supabase.from("vendors").select("id, name").eq("org_id", profile!.org_id).is("deleted_at", null);
+      const idByName = new Map<string, string>();
+      for (const v of existing ?? []) {
+        const key = v.name.trim().toLowerCase();
+        if (!idByName.has(key)) idByName.set(key, v.id as string);
+      }
+
       let count = 0;
       for (const row of inserts) {
-        const { error } = await supabase.from("vendors").insert(row);
-        if (error?.code === "23505") {
-          const { data: { user } } = await supabase.auth.getUser();
-          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
-          await supabase.from("vendors").update({
-            contact_name: row.contact_name,
-            email: row.email,
-            phone: row.phone,
-            address: row.address,
-            website: row.website,
-            notes: row.notes,
-            vendor_type: row.vendor_type,
-            is_active: row.is_active,
-          }).eq("name", row.name).eq("org_id", profile!.org_id).is("deleted_at", null);
-        } else if (error) {
-          throw error;
+        const key = row.name.toLowerCase();
+        const existingId = idByName.get(key);
+        if (existingId) {
+          // Only the cells the CSV filled in: a name-only (or partial) file
+          // must not blank an existing vendor's contact details or
+          // reactivate an inactive one.
+          const patch = {
+            ...(row.contact_name && { contact_name: row.contact_name }),
+            ...(row.email && { email: row.email }),
+            ...(row.phone && { phone: row.phone }),
+            ...(row.address && { address: row.address }),
+            ...(row.website && { website: row.website }),
+            ...(row.notes && { notes: row.notes }),
+            ...(row.vendor_type && { vendor_type: row.vendor_type }),
+            ...(hasActiveFlag.has(key) && { is_active: row.is_active }),
+          };
+          if (Object.keys(patch).length === 0) { count++; continue; }
+          const { error } = await supabase.from("vendors").update(patch).eq("id", existingId);
+          if (error) throw error;
+        } else {
+          const { data: created, error } = await supabase.from("vendors").insert(row).select("id").single();
+          if (error) throw error;
+          idByName.set(key, created.id as string);
         }
         count++;
       }

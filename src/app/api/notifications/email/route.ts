@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
-import { EMAIL_FROM_EQUIPT, escapeHtml } from "@/lib/email/send";
+import { EMAIL_FROM_EQUIPT, escapeHtml, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { sendPushToUser } from "@/lib/notifications/send-push";
 
 type NotifType =
@@ -218,9 +218,11 @@ export async function POST(request: Request) {
     // (repointed from profiles.id) — resolve through crm_employees.user_id
     // to get the login user(s) to notify, same as resolveAssigneeId() in
     // ticket-notify.ts. Employees with no linked login are silently skipped.
-    const employeeIds: string[] = Array.isArray(entity.assigned_to_ids)
-      ? (entity.assigned_to_ids as string[])
-      : entity.assigned_to_id ? [entity.assigned_to_id as string] : [];
+    // The array wins when it has entries; an EMPTY array with a primary
+    // assignee set (older rows) used to notify nobody, so fall back to it.
+    const assignedArray = Array.isArray(entity.assigned_to_ids) ? (entity.assigned_to_ids as string[]) : [];
+    const employeeIds: string[] =
+      assignedArray.length > 0 ? assignedArray : entity.assigned_to_id ? [entity.assigned_to_id as string] : [];
     let ids: string[] = [];
     if (employeeIds.length > 0) {
       const { data: assignedEmployees } = await adminClient
@@ -264,6 +266,7 @@ export async function POST(request: Request) {
       .select("id")
       .eq("org_id", callerProfile.org_id)
       .in("role", ["admin", "manager"])
+      .neq("status", "inactive")
       .neq("id", user.id);
     directRecipientIds.push(...(managers ?? []).map((p: { id: string }) => p.id));
   }
@@ -279,6 +282,7 @@ export async function POST(request: Request) {
       .select("id, notification_prefs")
       .eq("org_id", callerProfile.org_id)
       .eq("role", "admin")
+      .neq("status", "inactive")
       .neq("id", user.id);
 
     adminRecipientIds = (admins ?? [])
@@ -301,6 +305,8 @@ export async function POST(request: Request) {
       const { data: inAppProfiles } = await adminClient
         .from("profiles")
         .select("id, notification_prefs")
+        // A deactivated login (e.g. an assignee who has left) gets nothing.
+        .neq("status", "inactive")
         .in("id", inAppIds);
 
       const inAppEligible = (inAppProfiles ?? [])
@@ -359,6 +365,7 @@ export async function POST(request: Request) {
   const { data: profiles } = await adminClient
     .from("profiles")
     .select("id, email, name, notification_prefs, role")
+    .neq("status", "inactive")
     .in("id", allEmailIds);
 
   const userPrefKey = resolveApprovalPrefKey(notifType, entityType);
@@ -497,7 +504,7 @@ export async function POST(request: Request) {
   for (const profile of eligible) {
     const isAdminBroadcast = adminRecipientIds.includes(profile.id);
     const { subject, html } = buildEmail((profile as { name?: string | null }).name ?? null, isAdminBroadcast);
-    const result = await resend.emails.send({ from: FROM, to: profile.email as string, subject, html });
+    const result = await sendEmailRetryingRateLimit(resend, { from: FROM, to: profile.email as string, subject, html });
     if (!result.error) sent++;
   }
 

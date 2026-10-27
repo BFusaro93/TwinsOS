@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
-import { EMAIL_FROM } from "@/lib/email/send";
+import { EMAIL_FROM, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { renderEstimatePDF } from "@/lib/estimate-pdf";
 import { escapeHtml } from "@/lib/utils/escape-html";
 
@@ -43,7 +43,9 @@ export async function notifyStaffOfEstimateDecision(
         .from("profiles")
         .select("id, email, name, notification_prefs")
         .eq("id", repUserId)
-        .single();
+        // A deactivated login must not keep getting client-decision emails.
+        .neq("status", "inactive")
+        .maybeSingle();
       if (rep) recipients = [...recipients, rep];
     }
   }
@@ -101,7 +103,7 @@ export async function notifyStaffOfEstimateDecision(
   }
 
   for (const p of emailEligible) {
-    await resend.emails.send({
+    await sendEmailRetryingRateLimit(resend, {
       from: EMAIL_FROM,
       to: p.email,
       subject: title,

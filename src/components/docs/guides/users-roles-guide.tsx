@@ -266,8 +266,10 @@ export function UsersRolesGuide() {
           shared login for a field crew team rather than an individual — you set a team name and a
           password directly, and the credentials are shown once, at creation time. If that password
           is lost or needs changing later, an Admin can set a new one for the account directly from
-          the Users table — crew accounts use auto-generated addresses and can&apos;t receive a
-          normal password-reset email.
+          the Users table. If you leave the optional Login Email blank, the login gets an
+          auto-generated address ending in <code>@crew.landscapt.com</code>; those aren&apos;t real
+          mailboxes, so they can&apos;t receive a normal password-reset email. Type a real email
+          instead if you want one.
         </p>
         <p>
           Creating a crew account also creates a matching Landscapt crew and links the login to it,

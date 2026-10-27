@@ -818,12 +818,22 @@ function EmployeeDialog({
       toast.error("First and last name are required");
       return;
     }
+    // Terminated and Deactivated are one state in the lists ("Show terminated"
+    // filters on is_active), so changing the Employment Status keeps is_active
+    // in step — otherwise a terminated employee stayed active on crew rosters,
+    // pickers and payroll until someone also found the Deactivate action.
+    const payload = { ...form };
+    const statusChanged = !employee || employee.employmentStatus !== form.employment_status;
+    if (statusChanged) {
+      if (form.employment_status === "terminated") payload.is_active = false;
+      else if (employee?.employmentStatus === "terminated") payload.is_active = true;
+    }
     try {
       if (isNew) {
-        await create(form);
+        await create(payload);
         toast.success("Employee created");
       } else {
-        await update({ id: employee!.id, updates: form });
+        await update({ id: employee!.id, updates: payload });
         toast.success("Employee saved");
       }
       onOpenChange(false);

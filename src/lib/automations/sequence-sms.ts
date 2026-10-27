@@ -1,6 +1,7 @@
 import { sendClientSms } from "@/lib/sms/send";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 import type { CardExpiryContext } from "./card-expiry-context";
 import { buildAutomationMergeVars, loadAutomationClient } from "./client-merge-vars";
 
@@ -10,6 +11,28 @@ type AnyClient = any;
 interface ResolvedSmsContent {
   toPhone: string;
   bodyText: string;
+}
+
+/**
+ * TCPA quiet hours for automated texts: nothing before 8am or from 9pm. The
+ * client's own zone isn't stored, so the org's zone is used (service area is
+ * roughly the org's zone). Returns null when sending is allowed right now, or
+ * the next 8:00 AM org-time instant when it is not. Shared by the processor
+ * (before queuing/sending) and the approval route (so approving at night
+ * defers instead of texting immediately).
+ */
+export async function nextSmsSendTime(
+  supabase: AnyClient,
+  orgId: string,
+  now: Date = new Date()
+): Promise<{ tz: string; sendAt: Date } | null> {
+  const tz = await getOrgTimeZone(supabase, orgId);
+  const wall = instantToZoneWallClock(now, tz);
+  const hour = Number(wall.time.slice(0, 2));
+  if (hour >= 8 && hour < 21) return null;
+  const sendDate = hour < 8 ? wall.date : shiftYmd(wall.date, 1);
+  const sendAt = zoneWallClockToInstant(sendDate, "08:00", tz) ?? new Date(now.getTime() + 3_600_000);
+  return { tz, sendAt };
 }
 
 /** Resolves a text-message step's [mergetag] placeholders against the client/org context. */

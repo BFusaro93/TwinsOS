@@ -145,6 +145,7 @@ import { useVerifyAddress } from "@/lib/hooks/use-verify-address";
 import { AddressSuggestion } from "@/components/shared/AddressSuggestion";
 import type { CRMJob, CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { previewClientVisits, cancelClientVisitsRemote, clientVisitsConfirmOptions } from "@/lib/client-visits-api";
 import { SearchInput } from "@/components/shared/SearchInput";
 
 // Contact types — configurable via Settings in a future sprint
@@ -554,6 +555,8 @@ function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
   clientId: string; clientName: string; open: boolean; onOpenChange: (o: boolean) => void;
 }) {
   const { mutateAsync: cancel, isPending } = useCancelClient();
+  const [askConfirm, askConfirmDialog] = useConfirm();
+  const qc = useQueryClient();
   const [reason, setReason] = useState("");
   const [custom, setCustom] = useState("");
 
@@ -572,13 +575,33 @@ function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
     const finalReason = reason === "Other" ? custom.trim() : reason;
     if (!finalReason) { toast.error("Select a cancellation reason"); return; }
     try {
+      // Ask about their upcoming visits first (count computed server-side), act
+      // on the answer only once the client itself is cancelled.
+      let cancelVisits = false;
+      try {
+        const n = await previewClientVisits([clientId]);
+        if (n > 0) cancelVisits = await askConfirm(clientVisitsConfirmOptions(n));
+      } catch { toast.warning("Couldn't check this client's upcoming visits — they were left as they are."); }
       await cancel({ clientId, reason: finalReason });
-      toast.success(`${clientName} cancelled`);
+      if (cancelVisits) {
+        try {
+          const done = await cancelClientVisitsRemote([clientId]);
+          toast.success(`${clientName} cancelled — ${done} upcoming visit${done !== 1 ? "s" : ""} cancelled`);
+        } catch {
+          toast.error(`${clientName} cancelled, but their upcoming visits couldn't be cancelled — remove them from the dispatch board.`);
+        }
+        await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+        await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      } else {
+        toast.success(`${clientName} cancelled`);
+      }
       onOpenChange(false);
     } catch { toast.error("Failed to cancel client"); }
   }
 
   return (
+    <>
+    {askConfirmDialog}
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Cancel Client</DialogTitle></DialogHeader>
@@ -612,6 +635,7 @@ function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -4149,7 +4173,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
       <AccountStatementDialog
         clientId={clientId}
         clientName={client.displayName}
-        clientEmail={client.primaryEmail}
+        clientEmail={client.billingEmail?.trim() || client.primaryEmail}
         open={accountStatementOpen}
         onClose={() => setAccountStatementOpen(false)}
       />

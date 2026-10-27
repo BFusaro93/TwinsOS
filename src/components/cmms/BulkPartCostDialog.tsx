@@ -90,11 +90,14 @@ export function BulkPartCostDialog({
     const pct = parseFloat(adjustPct);
     if (isNaN(pct)) return;
     const mult = 1 + pct / 100;
+    // "Applies to all visible rows": leave rows hidden by the search filter alone.
+    const visibleIds = new Set(filtered.map((r) => r.id));
     setRows((prev) =>
-      prev.map((r) => ({
-        ...r,
-        unitCost: ((parseFloat(r.unitCost) || 0) * mult).toFixed(2),
-      }))
+      prev.map((r) =>
+        visibleIds.has(r.id)
+          ? { ...r, unitCost: ((parseFloat(r.unitCost) || 0) * mult).toFixed(2) }
+          : r
+      )
     );
     setAdjustPct("");
   }

@@ -231,12 +231,22 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
         return st === "completed" || st === "in_progress";
       };
       if (visitStatus.size > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: visitCosts } = await (supabase as any)
-          .from("rpt_job_visits")
-          .select("id, revenue_cents, man_hours, budgeted_hours, actual_labor_cost_cents, labor_cost_source")
-          .in("id", [...visitStatus.keys()]);
-        for (const vc of (visitCosts ?? []) as {
+        // Chunked: a long-running job (a daily snow or weekly route over seasons)
+        // can have hundreds of visits, and one `.in()` of that many uuids blows the
+        // URL limit — the request failed, `visitCosts` came back null and the whole
+        // costing panel read 0 hours / $0 labor with no error.
+        const visitIds = [...visitStatus.keys()];
+        const visitCosts: unknown[] = [];
+        for (let i = 0; i < visitIds.length; i += 100) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: chunk, error: chunkErr } = await (supabase as any)
+            .from("rpt_job_visits")
+            .select("id, revenue_cents, man_hours, budgeted_hours, actual_labor_cost_cents, labor_cost_source")
+            .in("id", visitIds.slice(i, i + 100));
+          if (chunkErr) throw new Error(chunkErr.message);
+          visitCosts.push(...(chunk ?? []));
+        }
+        for (const vc of visitCosts as {
           id: string;
           revenue_cents: number | null;
           man_hours: number | string | null;
@@ -311,6 +321,10 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
           .select("service_name, budgeted_hours, cost_cents, total_cost_cents, total_cents, row_type")
           .eq("estimate_id", estimateId)
           .is("deleted_at", null)
+          // Only lines that are part of the agreed quote: a lost tier / unticked
+          // option or a never-quoted draft isn't work this job was sold to do, but
+          // its revenue and cost were summed into the "estimated" side.
+          .not("status", "in", "(lost,draft)")
           .eq("row_type", "item")
           .order("sort_order", { ascending: true });
 

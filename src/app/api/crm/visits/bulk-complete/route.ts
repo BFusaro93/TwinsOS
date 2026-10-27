@@ -38,15 +38,19 @@ export async function POST(request: Request) {
   // running those concurrently had each visit miss the others' draft and
   // create its own. Different clients never share an invoice, so they still
   // run in parallel.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: visitRows } = await (supabase as any)
-    .from("crm_job_visits")
-    .select("id, client_id")
-    .in("id", ids)
-    .is("deleted_at", null);
-  const clientById = new Map<string, string>(
-    ((visitRows ?? []) as { id: string; client_id: string | null }[]).map((r) => [r.id, r.client_id ?? `visit:${r.id}`])
-  );
+  // Chunked so a few hundred ids don't overflow the request URL.
+  const clientById = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 100) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: visitRows } = await (supabase as any)
+      .from("crm_job_visits")
+      .select("id, client_id")
+      .in("id", ids.slice(i, i + 100))
+      .is("deleted_at", null);
+    for (const r of (visitRows ?? []) as { id: string; client_id: string | null }[]) {
+      clientById.set(r.id, r.client_id ?? `visit:${r.id}`);
+    }
+  }
   const byClient = new Map<string, string[]>();
   for (const id of ids) {
     const key = clientById.get(id) ?? `visit:${id}`;

@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
+import { downscaleImage } from "@/lib/utils/downscale-image";
 
 export interface EstimatePhoto {
   id: string;
@@ -53,7 +54,7 @@ export function useUploadEstimatePhoto(estimateId: string) {
       const results = await Promise.all(
         files.map(async (file) => {
           const formData = new FormData();
-          formData.append("file", file);
+          formData.append("file", await downscaleImage(file));
           const res = await fetch(`/api/crm/estimates/${estimateId}/photos`, {
             method: "POST",
             body: formData,

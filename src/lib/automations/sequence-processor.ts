@@ -1,5 +1,5 @@
 import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "./sequence-email";
-import { resolveSmsStepContent, sendResolvedSequenceSms } from "./sequence-sms";
+import { resolveSmsStepContent, sendResolvedSequenceSms, nextSmsSendTime } from "./sequence-sms";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
 import { shouldStopSequence, logSequenceExecution, evaluateConditionSet, computeWaitFireAt } from "./sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -40,6 +40,44 @@ const CLAIM_LEASE_MS = 10 * 60 * 1000;
 const MAX_SEND_ATTEMPTS = 5;
 /** First retry delay; doubles each attempt (15m, 30m, 1h, 2h). */
 const SEND_RETRY_BASE_MS = 15 * 60 * 1000;
+
+/**
+ * When an email step has a "Send Between" window and `now` (on the org's
+ * clock) is outside it, the instant the window next opens; null when the step
+ * may go out now (no/invalid/zero-width window, or already inside it). A window
+ * whose start is after its end ("22:00" → "06:00") runs overnight.
+ */
+function emailWindowFireAt(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  config: Record<string, any>,
+  now: Date,
+  timeZone: string
+): Date | null {
+  const toMinutes = (v: unknown): number | null => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(typeof v === "string" ? v.trim() : "");
+    if (!m) return null;
+    const h = Number(m[1]);
+    const min = Number(m[2]);
+    return h <= 23 && min <= 59 ? h * 60 + min : null;
+  };
+  const start = toMinutes(config.between_start);
+  const end = toMinutes(config.between_end);
+  if (start === null || end === null || start === end) return null;
+
+  const wall = instantToZoneWallClock(now, timeZone);
+  const nowMin = Number(wall.time.slice(0, 2)) * 60 + Number(wall.time.slice(3, 5));
+  const overnight = start > end;
+  const inside = overnight ? nowMin >= start || nowMin < end : nowMin >= start && nowMin < end;
+  if (inside) return null;
+
+  // Outside the window: next opening is today's start if it hasn't passed yet
+  // (daytime window before it opens, or an overnight window's daytime gap),
+  // otherwise tomorrow's.
+  const opensToday = nowMin < start;
+  const date = opensToday ? wall.date : shiftYmd(wall.date, 1);
+  const hhmm = `${String(Math.floor(start / 60)).padStart(2, "0")}:${String(start % 60).padStart(2, "0")}`;
+  return zoneWallClockToInstant(date, hhmm, timeZone) ?? new Date(now.getTime() + 3_600_000);
+}
 
 /**
  * Atomically claims the enrollment's current step: only one caller can move
@@ -350,6 +388,21 @@ async function runClaimedStep(
       }
     }
 
+    // "Send Between" window (Email event dialog, default 08:00–18:00): it was
+    // saved on every email step but never read, so a step that came due at 11pm
+    // (a visit completed in the evening, a wait that ended overnight) went out
+    // at 11pm. Defer to the next window start on the ORG's clock instead.
+    {
+      const windowFireAt = emailWindowFireAt(eventConfig, new Date(), await getOrgTimeZone(adminClient, orgId));
+      if (windowFireAt) {
+        await adminClient
+          .from("crm_sequence_enrollments")
+          .update({ next_fire_at: windowFireAt.toISOString(), updated_at: nowIso })
+          .eq("id", enrollId);
+        return { skipped: { enrollmentId: enrollId, reason: `email held until its send window opens at ${windowFireAt.toISOString()}` } };
+      }
+    }
+
     const built = await resolveEmailStepContent(adminClient, {
       orgId,
       clientId: client_id!,
@@ -476,17 +529,12 @@ async function runClaimedStep(
     }
 
     // TCPA quiet hours: no marketing/automated texts before 8am or from 9pm in the
-    // recipient's local time. The client's own zone isn't stored, so the org's is
-    // used (service area ≈ the org's zone). The step is pushed to the next 8am
+    // org's local time (see nextSmsSendTime). The step is pushed to the next 8am
     // window instead of failing, so it still goes out once and in order.
     {
-      const tz = await getOrgTimeZone(adminClient, orgId);
-      const now = new Date();
-      const wall = instantToZoneWallClock(now, tz);
-      const hour = Number(wall.time.slice(0, 2));
-      if (hour < 8 || hour >= 21) {
-        const sendDate = hour < 8 ? wall.date : shiftYmd(wall.date, 1);
-        const fireAt = zoneWallClockToInstant(sendDate, "08:00", tz) ?? new Date(now.getTime() + 3_600_000);
+      const deferred = await nextSmsSendTime(adminClient, orgId);
+      if (deferred) {
+        const fireAt = deferred.sendAt;
         await adminClient
           .from("crm_sequence_enrollments")
           .update({ next_fire_at: fireAt.toISOString(), updated_at: nowIso })
@@ -495,8 +543,28 @@ async function runClaimedStep(
       }
     }
 
-    // "Requires approval" — same park-in-the-queue pattern as email.
+    // An approval granted outside quiet hours is parked as "approved" with the
+    // enrollment rescheduled to the next 8am; when the processor comes back
+    // for that step it must send the approved text rather than queue a second
+    // approval. The text a human approved is what goes out.
+    let approvedText: { bodyText: string; toPhone: string } | null = null;
     if (eventConfig.require_approval) {
+      const { data: approvedRow } = await adminClient
+        .from("crm_sequence_step_approvals")
+        .select("body_text, to_phone")
+        .eq("enrollment_id", enrollId)
+        .eq("event_id", currentEvent.id)
+        .eq("status", "approved")
+        .order("decided_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (approvedRow?.body_text && approvedRow?.to_phone) {
+        approvedText = { bodyText: approvedRow.body_text as string, toPhone: approvedRow.to_phone as string };
+      }
+    }
+
+    // "Requires approval" — same park-in-the-queue pattern as email.
+    if (eventConfig.require_approval && !approvedText) {
       const { error: approvalErr } = await adminClient
         .from("crm_sequence_step_approvals")
         .insert({
@@ -539,8 +607,8 @@ async function runClaimedStep(
     const sendResult = await sendResolvedSequenceSms(adminClient, {
       orgId,
       clientId: client_id ?? null,
-      toPhone: built.toPhone,
-      bodyText: built.bodyText,
+      toPhone: approvedText?.toPhone ?? built.toPhone,
+      bodyText: approvedText?.bodyText ?? built.bodyText,
     });
     if (!sendResult.ok) {
       return handleSendFailure(adminClient, failureCtx, sendResult.reason, sendResult.permanent === true);
@@ -549,7 +617,7 @@ async function runClaimedStep(
     await logSequenceExecution(adminClient, {
       orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
       eventId: currentEvent.id, eventType: "text_message", action: "sms_sent",
-      detail: `${built.bodyText} → ${built.toPhone}`,
+      detail: `${approvedText?.bodyText ?? built.bodyText} → ${approvedText?.toPhone ?? built.toPhone}`,
     });
     const action = await advanceEnrollmentPastStep(adminClient, {
       enrollmentId: enrollId,
@@ -701,7 +769,8 @@ async function runClaimedStep(
           client_id,
           field_def_id: customFieldId,
           value_text: isNumber ? null : value,
-          value_number: isNumber ? (Number(value) || null) : null,
+          // `Number(value) || null` turned a legitimate 0 into NULL.
+          value_number: isNumber && value.trim() !== "" && Number.isFinite(Number(value)) ? Number(value) : null,
         }, { onConflict: "client_id,field_def_id" }));
       detail = `${def?.name ?? "custom field"} → ${value}`;
     } else {

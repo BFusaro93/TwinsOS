@@ -212,11 +212,32 @@ async function syncOrg(
     }
 
     for (const meter of vehicleMeters) {
-      // Skip only if the reading has gone backwards (odometers never decrease).
-      // Equal values are logged so we have a daily record even with no movement.
-      if (miles < (meter.current_value ?? 0)) {
-        detail.push(`Vehicle "${dbVehicle.name}" reading ${miles} mi is less than current ${meter.current_value} mi — skipped`);
-        continue;
+      // Reconciling a Samsara reading with meters.current_value:
+      //   * Every Samsara reading is recorded as a meter_readings row (equal
+      //     values too, so there is a daily record even with no movement).
+      //   * last_reading_at is always refreshed, so the meter never looks
+      //     stale while sync is healthy.
+      //   * current_value moves when the reading is higher (normal case), OR
+      //     when the reading is LOWER but the meter's latest reading is a
+      //     manual entry: telematics is the source of truth, and one fat-
+      //     fingered high manual value used to block this meter's sync
+      //     forever (every later reading looked like the odometer going
+      //     backwards). A lower reading after a Samsara reading is a
+      //     telematics glitch — odometers never decrease — so it is kept in
+      //     the history, flagged in the note, and does not lower the value.
+      const currentValue = meter.current_value ?? 0;
+      const wentBackwards = miles < currentValue;
+      let overridesManual = false;
+      if (wentBackwards) {
+        const { data: latest } = await adminClient
+          .from("meter_readings")
+          .select("source")
+          .eq("meter_id", meter.id)
+          .is("deleted_at", null)
+          .order("reading_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        overridesManual = latest?.source === "manual";
       }
 
       const readingAt = new Date().toISOString();
@@ -228,6 +249,12 @@ async function syncOrg(
         reading_at: readingAt,
         source: "samsara",
         recorded_by_name: `Samsara (${source})`,
+        notes:
+          wentBackwards && !overridesManual
+            ? `Below the meter's current value (${currentValue} mi) — current value not changed`
+            : wentBackwards
+              ? `Replaces a higher manual value (${currentValue} mi) with the telematics reading`
+              : null,
       });
 
       if (readingErr) {
@@ -236,21 +263,32 @@ async function syncOrg(
         continue;
       }
 
-      // Update current_value only when mileage actually increased — conditioned
-      // on the DB row's CURRENT value (not the in-memory snapshot fetched at
-      // the top of this sync) so a concurrent sync run (this route can fire
-      // from both Vercel Cron and a manual admin POST) can't clobber a higher
-      // value with a lower one based on a stale read.
-      if (miles > (meter.current_value ?? 0)) {
+      // Each write is conditioned on the DB row's CURRENT value (not the
+      // in-memory snapshot fetched at the top of this sync) so a concurrent
+      // sync run (Vercel Cron and a manual admin POST can overlap) can't
+      // clobber a newer value based on a stale read.
+      if (miles > currentValue) {
         await adminClient
           .from("meters")
           .update({ current_value: miles, last_reading_at: readingAt })
           .eq("id", meter.id)
           .lt("current_value", miles);
+      } else if (wentBackwards && overridesManual) {
+        await adminClient
+          .from("meters")
+          .update({ current_value: miles, last_reading_at: readingAt })
+          .eq("id", meter.id)
+          .eq("current_value", currentValue);
+      } else {
+        // Equal (or an ignored glitch): value untouched, freshness refreshed.
+        await adminClient
+          .from("meters")
+          .update({ last_reading_at: readingAt })
+          .eq("id", meter.id);
       }
 
       readings++;
-      detail.push(`✓ "${dbVehicle.name}" → ${miles} mi (${source})`);
+      detail.push(`✓ "${dbVehicle.name}" → ${miles} mi (${source})${wentBackwards ? (overridesManual ? " — replaced a higher manual value" : " — below current value, value kept") : ""}`);
     }
   }
 

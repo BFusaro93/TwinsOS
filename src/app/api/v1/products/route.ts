@@ -17,6 +17,9 @@ export async function GET(request: Request) {
     .eq("org_id", auth.orgId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
+    // created_at ties are routine (a bulk insert shares one transaction time), so
+    // offset paging needs a total order or pages repeat / skip rows.
+    .order("id", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) return jsonServerError("GET /api/v1/products", error);
@@ -78,27 +81,9 @@ export async function POST(request: Request) {
       // import or manual CMMS entry) is the same physical part — adopt it
       // rather than failing on the unique index.
       if (existingPart) linkExistingPartId = existingPart.id as string;
-    } else {
-      // No part number to match on: an empty string can't identify "the same
-      // physical part", so adoption isn't possible. Refuse up front if the
-      // org already holds a blank-part-number parts row, since the insert
-      // below would violate uq_parts_org_part_number.
-      const { data: blankPart, error: blankError } = await db
-        .from("parts")
-        .select("id")
-        .eq("org_id", auth.orgId)
-        .eq("part_number", "")
-        .is("deleted_at", null)
-        .limit(1)
-        .maybeSingle();
-      if (blankError) return jsonServerError("POST /api/v1/products (parts lookup)", blankError);
-      if (blankPart) {
-        return jsonError(
-          "partNumber is required for a maintenance_part: this organization already has a part with a blank part number, and CMMS parts must have unique part numbers",
-          409
-        );
-      }
     }
+    // No part number: nothing to adopt, and uq_parts_org_part_number only
+    // covers non-blank part numbers (20260918180000), so a blank is fine.
   }
 
   const { data, error } = await db
@@ -127,6 +112,7 @@ export async function POST(request: Request) {
     .select(PRODUCT_SELECT)
     .single();
 
+  if (error?.code === "23505") return jsonError("Another product already uses that partNumber", 409);
   if (error || !data) return jsonServerError("POST /api/v1/products", error);
 
   // Mirror into the CMMS parts inventory, same as the app's own "New

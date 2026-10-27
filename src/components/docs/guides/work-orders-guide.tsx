@@ -13,7 +13,7 @@ const WO_STATUSES: [string, string][] = [
   ["In Progress", "Work has started."],
   ["On Hold", "Paused — reachable from Open or In Progress."],
   ["Done", "Complete. A parent work order can't reach Done until every sub-work order is Done or Skipped."],
-  ["Skipped", "Sub-work orders only — this asset's portion of the job was intentionally not done."],
+  ["Skipped", "Sub-work orders only — this asset's portion of the job was intentionally not done. Any parts the work order had already deducted go back to inventory (once); reopening it deducts them again."],
 ];
 
 const REQUEST_STATUSES: [string, string][] = [
@@ -112,10 +112,15 @@ export function WorkOrdersGuide() {
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Due date:</strong> the previous Due Date plus one interval (a monthly work order
-            due Mar 15 produces one due Apr 15). If the previous one had no Due Date, the interval
-            counts from the day it was completed, in your organization&apos;s timezone. A Scheduled
-            Date moves forward by the same interval.
+            <strong>Due date:</strong> follows a fixed calendar set by the series&apos; first due
+            date, so it never drifts. A monthly series first due on the 31st stays on the 31st
+            (clamped to Feb 28/29 in short months and back to the 31st afterwards). Completing late
+            doesn&apos;t move the schedule, and any occurrence that has already passed in your
+            organization&apos;s timezone is skipped rather than creating a work order that is
+            overdue the moment it appears. If you deliberately change a work order&apos;s Due Date
+            to a different day, the series follows the new day from there. If the first one had no
+            Due Date, the schedule starts from the day it was completed. The Scheduled Date keeps its
+            original lead time before the new Due Date.
           </li>
           <li>
             <strong>What carries over:</strong> title, description, priority, type, categories,

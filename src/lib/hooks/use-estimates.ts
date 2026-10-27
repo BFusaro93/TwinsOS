@@ -16,6 +16,7 @@ import { recalcEstimateTotals as recalcEstimateTotalsShared } from "@/lib/estima
 import { toDisplaySettings, type DisplaySettings } from "@/lib/estimate-display-settings";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -354,6 +355,13 @@ export function useBulkImportEstimates() {
         const description = r.description?.trim();
         if (!clientId || !description) { skipped++; continue; }
 
+        // M/D/YYYY (Excel's default) isn't a valid Postgres date literal and
+        // used to make the whole row a silent skip; normalize it, and skip only
+        // a value that genuinely isn't a date.
+        const estimateDate = r.estimateDate?.trim() ? normalizeCsvDate(r.estimateDate) : todayInZone(orgTimeZone);
+        const validUntilDate = r.validUntilDate?.trim() ? normalizeCsvDate(r.validUntilDate) : null;
+        if (!estimateDate || (r.validUntilDate?.trim() && !validUntilDate)) { skipped++; continue; }
+
         const repMatches = r.salesperson?.trim() ? repIdsByName.get(normName(r.salesperson)) ?? [] : [];
         const probabilityPct = Number.parseFloat((r.probability ?? "").replace("%", ""));
         const externalRef = r.externalRef?.trim();
@@ -363,8 +371,8 @@ export function useBulkImportEstimates() {
           created_by: user?.id ?? null,
           client_id: clientId,
           description,
-          estimate_date: r.estimateDate?.trim() || todayInZone(orgTimeZone),
-          valid_until_date: r.validUntilDate?.trim() || null,
+          estimate_date: estimateDate,
+          valid_until_date: validUntilDate,
           po_number: r.poNumber?.trim() || null,
           stage: (r.stage?.trim().toLowerCase() as Estimate['stage']) || "draft",
           ...(repMatches.length === 1 && { sales_rep_id: repMatches[0] }),

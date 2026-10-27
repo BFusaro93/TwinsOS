@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapProductItem } from "@/lib/supabase/mappers";
 import { setProducts } from "@/lib/hooks/cost-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -13,12 +14,17 @@ export function useProducts() {
     queryKey: ["products"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("product_items")
-        .select("*")
-        .is("deleted_at", null)
-        .order("name");
-      if (error) throw error;
+      // Paged: PostgREST silently caps a plain select at 1000 rows, and the
+      // catalog already sits near that (918 products in the largest org) —
+      // past it, products would vanish from every picker, PO line and the
+      // cost store with no error.
+      const data = await fetchAllRows<Parameters<typeof mapProductItem>[0]>(() =>
+        supabase
+          .from("product_items")
+          .select("*")
+          .is("deleted_at", null)
+          .order("name")
+      );
       const products = data.map(mapProductItem);
       setProducts(products);
       return products;
@@ -121,7 +127,9 @@ export function useBulkUpdateProducts() {
     ) => {
       const supabase = createClient();
 
-      await Promise.all(
+      // Supabase reports failures as { error } rather than rejecting, so an
+      // unchecked Promise.all told the user "saved" when writes were refused.
+      const productResults = await Promise.all(
         updates.map(({ id, unitCost, price }) =>
           supabase
             .from("product_items")
@@ -129,9 +137,11 @@ export function useBulkUpdateProducts() {
             .eq("id", id)
         )
       );
+      const productFailed = productResults.find((r) => r.error);
+      if (productFailed?.error) throw productFailed.error;
 
       // Mirror unit cost to any parts linked via product_item_id
-      await Promise.all(
+      const partResults = await Promise.all(
         updates.map(({ id, unitCost }) =>
           supabase
             .from("parts")
@@ -140,6 +150,8 @@ export function useBulkUpdateProducts() {
             .is("deleted_at", null)
         )
       );
+      const partFailed = partResults.find((r) => r.error);
+      if (partFailed?.error) throw partFailed.error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
@@ -232,6 +244,11 @@ export function useUpdateProduct() {
   return useMutation({
     mutationFn: async ({ id, ...input }: ProductUpdateInput) => {
       const supabase = createClient();
+      // The category BEFORE this edit: moving a product into / out of
+      // maintenance_part has to create / retire its CMMS Parts mirror (below).
+      const { data: beforeRow } = input.category !== undefined
+        ? await supabase.from("product_items").select("category").eq("id", id).maybeSingle()
+        : { data: null };
       const { data, error } = await supabase
         .from("product_items")
         .update({
@@ -263,6 +280,63 @@ export function useUpdateProduct() {
         .select()
         .single();
       if (error) throw error;
+
+      // Category moved INTO maintenance_part: the product needs its CMMS parts
+      // row, or goods receiving updates the catalog stock but nothing shows in
+      // Parts / on work orders. Moved OUT: retire the mirror so a live part
+      // doesn't keep claiming stock for a product that is no longer a part.
+      // (The public API's PATCH /products does the same.)
+      const wasMaint = beforeRow?.category === "maintenance_part";
+      const isMaint = data.category === "maintenance_part";
+      if (beforeRow && isMaint && !wasMaint) {
+        const { data: existingPart } = await supabase
+          .from("parts")
+          .select("id")
+          .eq("product_item_id", id)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (!existingPart) {
+          // An unlinked part with the same part number is the same physical part — adopt it.
+          const { data: samePart } = data.part_number
+            ? await supabase
+                .from("parts")
+                .select("id, product_item_id")
+                .eq("org_id", data.org_id)
+                .eq("part_number", data.part_number)
+                .is("deleted_at", null)
+                .maybeSingle()
+            : { data: null };
+          const { error: mirrorErr } = samePart
+            ? samePart.product_item_id
+              ? { error: { message: `part number "${data.part_number}" already belongs to a different product` } }
+              : await supabase.from("parts").update({ product_item_id: id }).eq("id", samePart.id)
+            : await supabase.from("parts").insert({
+                name: data.name,
+                part_number: data.part_number || "",
+                description: data.description || "",
+                category: data.part_category || "maintenance_part",
+                unit_cost: data.unit_cost,
+                quantity_on_hand: Math.max(0, Math.round(Number(data.quantity_on_hand ?? 0))),
+                minimum_stock: data.minimum_stock ?? 0,
+                vendor_id: data.vendor_id,
+                vendor_name: data.vendor_name || "",
+                product_item_id: id,
+                is_inventory: data.is_inventory,
+              });
+          if (mirrorErr) {
+            toast.warning(`Product saved, but its CMMS part could not be created: ${mirrorErr.message}`);
+          }
+        }
+      } else if (beforeRow && wasMaint && !isMaint) {
+        const { error: retireErr } = await supabase
+          .from("parts")
+          .update({ deleted_at: new Date().toISOString(), product_item_id: null })
+          .eq("product_item_id", id)
+          .is("deleted_at", null);
+        if (retireErr) {
+          toast.warning(`Product saved, but its CMMS part could not be retired: ${retireErr.message}`);
+        }
+      }
 
       // Sync relevant fields to the linked Part record (if maintenance_part)
       const syncFields: Record<string, unknown> = {};
@@ -395,6 +469,13 @@ export function useBulkImportProducts() {
       let succeeded = 0;
       const failed: BulkImportResult["failed"] = [];
 
+      const { data: vendorRows } = await supabase.from("vendors").select("id, name").is("deleted_at", null);
+      const vendorsByName = new Map<string, { id: string; name: string } | null>();
+      for (const v of vendorRows ?? []) {
+        const key = v.name.trim().toLowerCase();
+        vendorsByName.set(key, vendorsByName.has(key) ? null : { id: v.id, name: v.name });
+      }
+
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i];
         const rowNum = i + 1;
@@ -417,8 +498,30 @@ export function useBulkImportProducts() {
             continue;
           }
 
-          const qoh = parseInt(r.quantityOnHand) || 0;
-          const isInventory = r.isInventory?.trim().toLowerCase() === "yes" || qoh > 0;
+          // Quantity: blank column = "not provided" (an existing product's stock
+          // must survive a cost/price-only re-import); otherwise a non-negative
+          // number — fractional is legitimate for materials (numeric(10,2)),
+          // not for a maintenance part (whole units).
+          const qohRaw = r.quantityOnHand?.trim() ?? "";
+          let qoh = 0;
+          if (qohRaw !== "") {
+            qoh = Number(qohRaw);
+            if (!Number.isFinite(qoh) || qoh < 0) {
+              failed.push({ row: rowNum, error: `"${name}": invalid quantity on hand ("${r.quantityOnHand}") — must be a number of 0 or more` });
+              continue;
+            }
+            if (category === "maintenance_part" && !Number.isInteger(qoh)) {
+              failed.push({ row: rowNum, error: `"${name}": maintenance parts are counted in whole units ("${r.quantityOnHand}")` });
+              continue;
+            }
+            qoh = Math.round(qoh * 100) / 100;
+          }
+          const isInventoryCell = r.isInventory?.trim().toLowerCase() ?? "";
+          const isInventory = isInventoryCell === "yes" || qoh > 0;
+          // Link a CSV vendor name to the existing vendor record (unique,
+          // case-insensitive match) so vendor_id and vendor_name agree.
+          const csvVendor = r.vendorName?.trim() || "";
+          const matchedVendor = csvVendor ? vendorsByName.get(csvVendor.toLowerCase()) ?? null : null;
           const row = {
             name,
             part_number: r.partNumber?.trim() || "",
@@ -426,7 +529,8 @@ export function useBulkImportProducts() {
             category,
             unit_cost: unitCostCents ?? 0,
             price: salePriceCents ?? unitCostCents ?? 0,
-            vendor_name: r.vendorName?.trim() || undefined,
+            vendor_id: matchedVendor?.id ?? null,
+            vendor_name: matchedVendor?.name ?? (csvVendor || undefined),
             is_inventory: isInventory,
             // Blank/omitted column -> catalog default (taxable). Only an explicit "no" opts out.
             is_taxable: parseTaxableCell(r.taxable),
@@ -441,21 +545,34 @@ export function useBulkImportProducts() {
             .select()
             .single();
           let productId: string | undefined = created?.id;
+          // Fields to carry onto the mirrored CMMS part for an EXISTING product.
+          // Only what the CSV actually provided: the defaults in `row` (cost 0,
+          // quantity 0, no vendor...) must never overwrite a live record.
+          const providedPatch: Record<string, unknown> = {};
+          let existingProduct = false;
 
           if (error?.code === "23505" && row.part_number) {
-            // Duplicate part_number — update the existing record instead
+            // Duplicate part_number — update the existing record instead.
+            existingProduct = true;
+            // Only columns the CSV carries are written: a re-import that has
+            // just name/part number/category/cost used to zero the product's
+            // stock, reset its price to its cost, and blank its vendor.
+            if (r.description?.trim()) providedPatch.description = row.description;
+            if (unitCostCents !== null) providedPatch.unit_cost = row.unit_cost;
+            if (salePriceCents !== null) providedPatch.price = row.price;
+            if (csvVendor) {
+              providedPatch.vendor_id = row.vendor_id;
+              providedPatch.vendor_name = row.vendor_name;
+            }
+            if (isInventoryCell !== "") providedPatch.is_inventory = isInventoryCell === "yes";
+            else if (qoh > 0) providedPatch.is_inventory = true;
+            // Only overwrite the flag on a re-import when the CSV actually carries the column.
+            if (r.taxable?.trim()) providedPatch.is_taxable = row.is_taxable;
             const { data: updated, error: updateError } = await supabase.from("product_items").update({
               name: row.name,
-              description: row.description,
               category: row.category,
-              unit_cost: row.unit_cost,
-              price: row.price,
-              vendor_name: row.vendor_name,
-              is_inventory: row.is_inventory,
-              // Only overwrite the flag on a re-import when the CSV actually carries the column.
-              ...(r.taxable?.trim() ? { is_taxable: row.is_taxable } : {}),
-              quantity_on_hand: row.quantity_on_hand,
-            }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null)
+              ...providedPatch,
+            } as never).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null)
               .select()
               .single();
             if (updateError) {
@@ -463,6 +580,21 @@ export function useBulkImportProducts() {
               continue;
             }
             productId = updated?.id;
+            // Stock moves through the audited RPC so cost layers and the audit
+            // trail follow, and only when the CSV carries a value.
+            if (productId && qohRaw !== "" && Number(updated?.quantity_on_hand ?? 0) !== qoh) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const { error: qtyErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
+                p_org_id: profile!.org_id,
+                p_product_id: productId,
+                p_delta: qoh - Number(updated?.quantity_on_hand ?? 0),
+                p_reason: "CSV import",
+              });
+              if (qtyErr) {
+                failed.push({ row: rowNum, error: `"${name}": ${qtyErr.message}` });
+                continue;
+              }
+            }
           } else if (error) {
             failed.push({ row: rowNum, error: `"${name}": ${error.message}` });
             continue;
@@ -475,20 +607,33 @@ export function useBulkImportProducts() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: existingPart } = await (supabase as any)
               .from("parts")
-              .select("id")
+              .select("id, quantity_on_hand")
               .eq("product_item_id", productId)
+              .is("deleted_at", null)
               .maybeSingle();
 
             if (existingPart) {
-              await supabase.from("parts").update({
-                name: row.name,
-                part_number: row.part_number || "",
-                description: row.description || "",
-                unit_cost: row.unit_cost,
-                quantity_on_hand: row.quantity_on_hand,
-                vendor_name: row.vendor_name || "",
-                is_inventory: row.is_inventory,
-              }).eq("id", existingPart.id);
+              const partPatch: Record<string, unknown> = { name: row.name, part_number: row.part_number || "" };
+              if ("description" in providedPatch || !existingProduct) partPatch.description = row.description || "";
+              if ("unit_cost" in providedPatch || !existingProduct) partPatch.unit_cost = row.unit_cost;
+              if ("vendor_name" in providedPatch || !existingProduct) {
+                partPatch.vendor_id = row.vendor_id;
+                partPatch.vendor_name = row.vendor_name || "";
+              }
+              if ("is_inventory" in providedPatch || !existingProduct) partPatch.is_inventory = row.is_inventory;
+              await supabase.from("parts").update(partPatch as never).eq("id", existingPart.id);
+              if (qohRaw !== "" && existingPart.quantity_on_hand !== qoh) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const { error: partQtyErr } = await (supabase.rpc as any)("adjust_part_quantity_manual", {
+                  p_part_id: existingPart.id,
+                  p_new_qty: qoh,
+                  p_reason: "CSV import",
+                });
+                if (partQtyErr) {
+                  failed.push({ row: rowNum, error: `"${name}": ${partQtyErr.message}` });
+                  continue;
+                }
+              }
             } else {
               await supabase.from("parts").insert({
                 name: row.name,
@@ -498,6 +643,7 @@ export function useBulkImportProducts() {
                 unit_cost: row.unit_cost,
                 quantity_on_hand: row.quantity_on_hand,
                 minimum_stock: 0,
+                vendor_id: row.vendor_id,
                 vendor_name: row.vendor_name || "",
                 product_item_id: productId,
                 is_inventory: row.is_inventory,
@@ -567,14 +713,39 @@ export function useDeleteProduct() {
         throw new Error(`Cannot delete product — it has ${blockers.join(" and ")}`);
       }
 
+      const deletedAt = new Date().toISOString();
       const { error } = await supabase
         .from("product_items")
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: deletedAt })
         .eq("id", id);
       if (error) throw error;
+
+      // A maintenance_part product is mirrored by a CMMS part (the same item).
+      // Leaving that part live kept it in the Parts list AND in the PO part
+      // picker, where a line now pointed at a deleted catalog product —
+      // goods receiving then failed with "No catalog product found". Retire
+      // the part with it (soft delete, history stays), and its asset links
+      // the way removing a part does.
+      const { data: retiredParts, error: partErr } = await supabase
+        .from("parts")
+        .update({ deleted_at: deletedAt })
+        .eq("product_item_id", id)
+        .is("deleted_at", null)
+        .select("id");
+      if (partErr) {
+        toast.warning(`Product deleted, but its CMMS part could not be retired: ${partErr.message}`);
+      } else if ((retiredParts ?? []).length > 0) {
+        await supabase
+          .from("asset_parts")
+          .update({ deleted_at: deletedAt })
+          .in("part_id", (retiredParts ?? []).map((p) => p.id as string))
+          .is("deleted_at", null);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-parts"] });
     },
   });
 }

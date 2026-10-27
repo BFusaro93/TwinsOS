@@ -24,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import {
   Table,
   TableBody,
@@ -138,6 +139,7 @@ interface ProjectLineItem {
 }
 
 function MaterialsTab({ project }: { project: Project }) {
+  const { canWriteEquipt } = useRoleCapabilities();
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
   const { data: products = [] } = useProducts();
@@ -341,7 +343,9 @@ function MaterialsTab({ project }: { project: Project }) {
           await addReqLineItem({
             requisitionId: req.id,
             lineItem: {
-              productItemId: isPart ? "" : rawId,
+              // A part's line references the catalog product it mirrors (every
+              // PO/requisition line must reference a product_items row).
+              productItemId: isPart ? (parts.find((p) => p.id === rawId)?.productItemId ?? "") : rawId,
               partId: isPart ? rawId : null,
               productItemName: i.productName,
               partNumber: i.partNumber,
@@ -377,7 +381,7 @@ function MaterialsTab({ project }: { project: Project }) {
           const unitCostCents = Math.round(i.unitCost * 100);
           const newItem = {
             id: crypto.randomUUID(),
-            productItemId: isPart ? "" : rawId,
+            productItemId: isPart ? (parts.find((p) => p.id === rawId)?.productItemId ?? "") : rawId,
             partId: isPart ? rawId : null,
             productItemName: i.productName,
             partNumber: i.partNumber,
@@ -467,10 +471,12 @@ function MaterialsTab({ project }: { project: Project }) {
     <div className="flex flex-col gap-4 p-6">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Materials</p>
-        <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="h-7 gap-1 text-xs">
-          <Plus className="h-3 w-3" />
-          Add Material
-        </Button>
+        {canWriteEquipt && (
+          <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="h-7 gap-1 text-xs">
+            <Plus className="h-3 w-3" />
+            Add Material
+          </Button>
+        )}
       </div>
 
       {items.length === 0 ? (
@@ -539,14 +545,16 @@ function MaterialsTab({ project }: { project: Project }) {
                       )}
                     </TableCell>
                     <TableCell className="px-2 text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button onClick={() => openEdit(li)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-600 dark:hover:text-neutral-400" title="Edit">
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button onClick={() => deleteItem(li)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400" title={li.sourceType !== "direct" ? "Remove from view only (edit via source document)" : "Delete"} disabled={li.sourceType !== "direct"}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      {canWriteEquipt && (
+                        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <button onClick={() => openEdit(li)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-600 dark:hover:text-neutral-400" title="Edit">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => deleteItem(li)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400" title={li.sourceType !== "direct" ? "Remove from view only (edit via source document)" : "Delete"} disabled={li.sourceType !== "direct"}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -688,6 +696,7 @@ const BLANK_FORM = {
 };
 
 function SubcontractsTab({ project }: { project: Project }) {
+  const { canWriteEquipt } = useRoleCapabilities();
   const { data: costsRaw = [], isLoading } = useProjectSubcontractCosts(project.id);
   const costs: import("@/types").ProjectSubcontractCost[] = costsRaw;
   const { data: vendors = [] } = useVendors();
@@ -760,10 +769,12 @@ function SubcontractsTab({ project }: { project: Project }) {
     <div className="flex flex-col gap-4 p-6">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Other Costs</p>
-        <Button size="sm" variant="outline" onClick={openAdd} className="h-7 gap-1 text-xs">
-          <Plus className="h-3 w-3" />
-          Add Cost
-        </Button>
+        {canWriteEquipt && (
+          <Button size="sm" variant="outline" onClick={openAdd} className="h-7 gap-1 text-xs">
+            <Plus className="h-3 w-3" />
+            Add Cost
+          </Button>
+        )}
       </div>
 
       {isLoading ? (
@@ -772,9 +783,11 @@ function SubcontractsTab({ project }: { project: Project }) {
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-10 text-center">
           <Building2 className="h-8 w-8 text-slate-300 dark:text-neutral-500" />
           <p className="text-sm text-slate-400 dark:text-neutral-500">No other costs yet.</p>
-          <Button size="sm" variant="outline" onClick={openAdd} className="mt-1 gap-1 text-xs">
-            <Plus className="h-3 w-3" /> Add First Cost
-          </Button>
+          {canWriteEquipt && (
+            <Button size="sm" variant="outline" onClick={openAdd} className="mt-1 gap-1 text-xs">
+              <Plus className="h-3 w-3" /> Add First Cost
+            </Button>
+          )}
         </div>
       ) : (
         <>
@@ -805,14 +818,16 @@ function SubcontractsTab({ project }: { project: Project }) {
                     </TableCell>
                     <TableCell className="text-right font-medium">{formatCurrency(cost.amount)}</TableCell>
                     <TableCell className="px-2 text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button onClick={() => openEdit(cost)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-600 dark:hover:text-neutral-400" title="Edit">
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button onClick={() => setDeleteConfirmId(cost.id)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400" title="Delete">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      {canWriteEquipt && (
+                        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <button onClick={() => openEdit(cost)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted hover:text-slate-600 dark:hover:text-neutral-400" title="Edit">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => setDeleteConfirmId(cost.id)} className="rounded p-1 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400" title="Delete">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -974,6 +989,7 @@ function HoursField({
   value: number | null;
   onSave: (v: number | null) => void;
 }) {
+  const { canWriteEquipt } = useRoleCapabilities();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
 
@@ -986,6 +1002,14 @@ function HoursField({
     const parsed = parseFloat(draft);
     onSave(parsed > 0 ? parsed : null);
     setEditing(false);
+  }
+
+  if (!canWriteEquipt) {
+    return (
+      <span className="px-1 text-sm font-medium text-slate-900 dark:text-neutral-100">
+        {value != null ? `${value} hrs` : <span className="italic text-slate-400 dark:text-neutral-500">—</span>}
+      </span>
+    );
   }
 
   if (editing) {
@@ -1032,6 +1056,7 @@ function RateField({
   /** Completed projects: rates are frozen (also enforced by a DB trigger). */
   locked?: boolean;
 }) {
+  const { canWriteEquipt } = useRoleCapabilities();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
 
@@ -1044,6 +1069,14 @@ function RateField({
     const cents = Math.round((parseFloat(draft) || 0) * 100);
     if (cents > 0) onSave(cents);
     setEditing(false);
+  }
+
+  if (!canWriteEquipt) {
+    return (
+      <span className="px-1 text-sm font-medium text-slate-900 dark:text-neutral-100">
+        {formatCurrency(valueCents)}/hr
+      </span>
+    );
   }
 
   if (editing) {
@@ -1107,6 +1140,7 @@ function DetailsTab({
   onUpdateRates: (laborRateCents: number, burdenedRateCents: number) => void;
 }) {
   const router = useRouter();
+  const { canWriteEquipt } = useRoleCapabilities();
   const { data: linkedPhotoJob } = usePhotoJobByProjectId(project.id);
   const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
   // Use project-level snapshot if set; fall back to org settings for old projects
@@ -1140,7 +1174,7 @@ function DetailsTab({
           currentIndex={PROJECT_STATUS_INDEX[status]}
           isTerminalError={status === "canceled"}
         />
-        <div className="mt-3 flex flex-wrap gap-2">
+        {canWriteEquipt && <div className="mt-3 flex flex-wrap gap-2">
           {status === "sold" && (<>
             <Button size="sm" onClick={() => onStatusChange("scheduled")}>Mark Scheduled</Button>
             <Button size="sm" variant="outline" onClick={() => onStatusChange("canceled")}>Cancel Project</Button>
@@ -1165,7 +1199,7 @@ function DetailsTab({
           {status === "canceled" && (
             <Button size="sm" variant="outline" onClick={() => onStatusChange("sold")}>Reopen</Button>
           )}
-        </div>
+        </div>}
       </div>
 
       <Separator />
@@ -1411,6 +1445,7 @@ function FilesTab({ project }: { project: Project }) {
 }
 
 export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
+  const { canWriteEquipt } = useRoleCapabilities();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [status, setStatus] = useState<ProjectStatus>(project.status);
@@ -1519,9 +1554,11 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
             <Download className="h-3.5 w-3.5" />
             PDF
           </Button>
-          <EditButton onClick={() => setEditOpen(true)} />
+          {canWriteEquipt && <EditButton onClick={() => setEditOpen(true)} />}
           {/* Matches the Job Photos archive button (JobPhotosPage) — outline
               with an Archive/ArchiveRestore icon, brand-colored when archived. */}
+          {canWriteEquipt && (
+            <>
           <Button
             variant="outline"
             size="sm"
@@ -1543,6 +1580,8 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
           >
             <Trash2 className="h-4 w-4" />
           </Button>
+            </>
+          )}
         </div>
       </div>
 

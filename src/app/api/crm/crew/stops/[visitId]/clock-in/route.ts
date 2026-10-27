@@ -6,6 +6,8 @@ import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib
 import { closeOpenDriveSegment } from "@/lib/crew/drive-time";
 import { openStopPunches } from "@/lib/crew/stop-punches";
 import { startCrewDay } from "@/lib/crew/day-shifts";
+import { createServiceClient } from "@/lib/supabase/server";
+import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
@@ -37,12 +39,18 @@ interface VisitRow {
   acknowledged_notes_at: string | null;
   crm_jobs: {
     crew_id?: string | null;
+    status?: string | null;
     property_id: string | null;
     service_address: string | null;
     service_city: string | null;
     notes_to_crew: string | null;
     notes_to_crew_updated_at: string | null;
   } | null;
+}
+
+/** A visit whose job is on hold / cancelled isn't on the crew's list (see GET /api/crm/crew/visits), so a stop-wide action must not sweep it up. */
+function jobIsPaused(row: VisitRow): boolean {
+  return row.crm_jobs?.status === "hold" || row.crm_jobs?.status === "cancelled";
 }
 
 function toStopKeyInput(row: VisitRow): StopKeyInput {
@@ -59,7 +67,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 const VISIT_SELECT = `
   id, org_id, client_id, scheduled_date, crew_id, crew_unassigned, status, clocked_in_at,
   notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
-  crm_jobs(crew_id, property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at)
+  crm_jobs(crew_id, status, property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at)
 `;
 
 /** The notes-to-crew this visit contributes to its stop, visit-level overriding job-level (same rule as groupVisitsIntoStops). */
@@ -130,6 +138,10 @@ export async function POST(
   const anchorKey = stopKeyForVisit(toStopKeyInput(anchor));
   const stopRows = (candidateRows as VisitRow[])
     .filter((r) => stopKeyForVisit(toStopKeyInput(r)) === anchorKey)
+    // Held / cancelled jobs' leftover visits are hidden from the crew, so
+    // clocking the stop in must not start them (they'd be completed and
+    // invoiced at clock-out for work nobody was asked to do).
+    .filter((r) => r.id === anchor.id || !jobIsPaused(r))
     // Defense in depth: stopKeyForVisit already encodes crew_id, so a match
     // on anchorKey mathematically implies effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor) (the
     // crew whose ownership was just verified above) — this filter makes that
@@ -169,6 +181,12 @@ export async function POST(
     .map((r) => r.id);
 
   if (siblingIds.length === 0) {
+    // The whole stop is already clocked in: a replay of a clock-in that landed
+    // (offline-queue retry after a lost response, double tap) — success, not a
+    // 400 that parks a "didn't sync" card on work that saved.
+    if (stopRows.length > 0) {
+      return NextResponse.json({ visitIds: stopRows.map((r) => r.id), visits: stopRows, alreadyClockedIn: true });
+    }
     return NextResponse.json({ error: "Nothing to clock in for this stop" }, { status: 400 });
   }
 
@@ -191,6 +209,25 @@ export async function POST(
     .select();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // A concurrent request (double tap, or an offline replay racing the live tap)
+  // already clocked this stop in: nothing transitioned here. Stop before the
+  // day / punch / drive side effects below — openStopPunches upserts with this
+  // request's own timestamp, which moved every member's punch-in off the real
+  // clock-in instant.
+  if (!data || (data as unknown[]).length === 0) {
+    return NextResponse.json({ visitIds: siblingIds, visits: [], alreadyClockedIn: true });
+  }
+
+  // A visit the crew starts without the office ever dispatching it has no
+  // chemical records (preloading happens on dispatch), so the Chemical Mix card,
+  // the confirmation gate, stock depletion and the compliance report would all
+  // silently skip it. Load them now; a no-op when dispatch already did. The
+  // crew login can't write chemical applications, so this uses the service role
+  // (ownership of the stop was proven above). Best-effort.
+  for (const id of siblingIds) {
+    await loadServiceChemicalsForVisit(createServiceClient(), id).catch(() => 0);
+  }
 
   // If nobody tapped Start Day, the first job opens the day so payroll still
   // has a shift (flagged auto_first_job — the true start was earlier, at the shop).
@@ -224,7 +261,10 @@ export async function POST(
   try {
     // Ownership was proven above, so the effective crew IS the caller's crew.
     const driveCrewId = effectiveVisitCrewId(anchor);
-    if (driveCrewId) await closeOpenDriveSegment(supabase, driveCrewId, anchor.org_id);
+    // Closed at the moment of the tap, not the server's clock: a queued offline
+    // Clock In replaying hours later would otherwise credit every hour until the
+    // sync as driving (see crew/occurred-at.ts).
+    if (driveCrewId) await closeOpenDriveSegment(supabase, driveCrewId, anchor.org_id, new Date(now));
   } catch (err) {
     log.error("auto-close drive segment failed", {
       crewId: effectiveVisitCrewId(anchor),

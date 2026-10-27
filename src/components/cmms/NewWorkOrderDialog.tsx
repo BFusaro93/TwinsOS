@@ -260,7 +260,11 @@ export function NewWorkOrderDialog({ open, onOpenChange, initialData, onCreated,
     };
     if (isEditing && initialData) {
       updateWO.mutate(
-        { id: initialData.id, ...commonFields, ...buildEntityFields(entityKey) },
+        // status: undefined — the edit form never changes status, and sending the
+        // value captured when the dialog opened would overwrite a status change
+        // made meanwhile (a technician marking the WO done, another user
+        // reopening it) with the stale one.
+        { id: initialData.id, ...commonFields, status: undefined, ...buildEntityFields(entityKey) },
         {
           onSuccess: () => {
             // Update linked asset/vehicle status if changed

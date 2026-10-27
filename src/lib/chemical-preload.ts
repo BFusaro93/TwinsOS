@@ -68,7 +68,7 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
   const { data: visit } = await supabase
     .from("crm_job_visits")
     .select(
-      "id, job_id, scheduled_date, status, job_service_id, crew_group_secondary, crm_jobs(client_id, property_id, crm_job_services(id, service_id, included))"
+      "id, org_id, job_id, scheduled_date, status, job_service_id, crew_group_secondary, crm_jobs(client_id, property_id, crm_job_services(id, service_id, included))"
     )
     .eq("id", visitId)
     .is("deleted_at", null)
@@ -78,6 +78,7 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
   // is logged and confirmed once, on the lead crew's visit, so estimated
   // amounts and inventory depletion aren't counted twice.
   if ((visit as { crew_group_secondary?: boolean | null }).crew_group_secondary) return 0;
+  const visitOrgId = (visit as unknown as { org_id: string }).org_id;
   const job = visit.crm_jobs as unknown as {
     client_id: string | null;
     property_id: string | null;
@@ -121,8 +122,12 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
       .eq("track_chemicals", true)
       .is("deleted_at", null),
     supabase.from("crm_chemical_application_rates").select("*").in("product_id", missing),
-    supabase.from("crm_chemical_lookup_items").select("*").is("deleted_at", null),
-    supabase.from("crm_chemical_settings").select("auto_calc_quantity, area_custom_field_id").maybeSingle(),
+    // Scoped to the visit's org explicitly: callers using a user session were
+    // narrowed by RLS, but the crew clock-in path runs this with the service
+    // role, where an unscoped .maybeSingle() over every org's settings rows
+    // errors out and silently dropped the estimated amounts.
+    supabase.from("crm_chemical_lookup_items").select("*").eq("org_id", visitOrgId).is("deleted_at", null),
+    supabase.from("crm_chemical_settings").select("auto_calc_quantity, area_custom_field_id").eq("org_id", visitOrgId).maybeSingle(),
   ]);
 
   const unitsById = new Map((unitRows ?? []).map((r) => [r.id, mapLookupItem(r)]));

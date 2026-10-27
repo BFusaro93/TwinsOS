@@ -6,6 +6,7 @@ import { notifyVisitAssigned, notifyVisitNote } from "@/lib/notifications/visit-
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { formatMonthDay } from "@/lib/utils";
+import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
 import {
   INVOICED_VISIT_LOCKED_CODE,
   INVOICED_VISIT_LOCKED_MESSAGE,
@@ -109,6 +110,7 @@ export async function PATCH(
       // An explicit crew and "unassigned" are mutually exclusive.
       ...(patch.crew_id ? { crew_unassigned: false } : {}),
       ...(patch.crew_unassigned ? { crew_id: null } : {}),
+      ...(patch.status === "dispatched" && prev?.status !== "dispatched" ? { dispatched_at: new Date().toISOString() } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", visitId)
@@ -124,6 +126,13 @@ export async function PATCH(
   }
 
   if (prev) await reopenOneTimeJobsForVisits(supabase, [{ id: visitId, job_id: prev.job_id, status: prev.status }], parsed.data.status);
+
+  // Dispatching pre-loads the service's chemicals (crew Chemical Mix card,
+  // confirmation gate, stock depletion, compliance report). The client hook
+  // does this; this route — the board's Change Status — did not. Best-effort.
+  if (parsed.data.status === "dispatched" && prev && prev.status !== "dispatched") {
+    await loadServiceChemicalsForVisit(supabase, visitId).catch(() => 0);
+  }
 
   // Lightweight client-timeline rows (no notifications) for a reschedule
   // and for the transition into "dispatched" — the dispatch board's bulk

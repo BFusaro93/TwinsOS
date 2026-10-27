@@ -124,7 +124,11 @@ export async function sendCampaignEmails(
     return { ok: false, error: "Campaign needs a subject and body before sending" };
   }
 
-  const buildRecipientQuery = () => {
+  // A custom audience is a list of client ids that goes into the request URL
+  // (`id=in.(...)`); a few hundred UUIDs exceeds the API gateway's URL limit and
+  // the whole send failed. Query it in chunks instead.
+  const AUDIENCE_ID_CHUNK = 100;
+  const buildRecipientQuery = (audienceIds?: string[]) => {
   let query = db
     .from("clients")
     .select(`
@@ -155,7 +159,7 @@ export async function sendCampaignEmails(
     .not("primary_email", "is", null);
 
   if (campaign.target_segment === "custom") {
-    query = query.in("id", campaign.audience_client_ids ?? []);
+    query = query.in("id", audienceIds ?? []);
   } else if (campaign.target_segment === "active_clients") {
     query = query.eq("status", "active");
   } else if (campaign.target_segment === "leads") {
@@ -170,16 +174,46 @@ export async function sendCampaignEmails(
   // Ordered by id so the pages split stably.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recipients: any[] = [];
-  for (let from = 0; ; ) {
-    const { data: page, error: recipErr } = await buildRecipientQuery()
-      .order("id")
-      .range(from, from + 999);
-    if (recipErr) return { ok: false, error: recipErr.message };
-    if (!page || page.length === 0) break;
-    recipients.push(...page);
-    from += page.length;
+  const audienceChunks: (string[] | undefined)[] = [];
+  if (campaign.target_segment === "custom") {
+    // De-duplicated: a repeated id must not mail the same client twice.
+    const ids = [...new Set(campaign.audience_client_ids ?? [])];
+    for (let i = 0; i < ids.length; i += AUDIENCE_ID_CHUNK) audienceChunks.push(ids.slice(i, i + AUDIENCE_ID_CHUNK));
+  } else {
+    audienceChunks.push(undefined);
+  }
+  for (const chunk of audienceChunks) {
+    for (let from = 0; ; ) {
+      const { data: page, error: recipErr } = await buildRecipientQuery(chunk)
+        .order("id")
+        .range(from, from + 999);
+      if (recipErr) return { ok: false, error: recipErr.message };
+      if (!page || page.length === 0) break;
+      recipients.push(...page);
+      from += page.length;
+    }
   }
   if (recipients.length === 0) {
+    // The scheduled-send cron (createdBy === null) retried an empty audience
+    // every hour forever, logging an error each time. Nothing will ever send:
+    // close it out as completed with 0 recipients. A person pressing "Send
+    // Now" still gets the explanatory error so they can fix the audience, and
+    // a stale "sending" campaign is left alone (it may have partial history).
+    if (createdBy === null && campaign.status !== "sending") {
+      const { error: closeErr } = await db
+        .from("crm_campaigns")
+        .update({
+          status: "completed",
+          sent_at: new Date().toISOString(),
+          total_recipients: 0,
+          delivered_count: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", campaign.id)
+        .in("status", ["draft", "scheduled"]);
+      if (closeErr) return { ok: false, error: closeErr.message };
+      return { ok: true, totalRecipients: 0, delivered: 0, failed: 0 };
+    }
     return { ok: false, error: "No eligible recipients (check Do Not Market / missing emails)" };
   }
 

@@ -75,6 +75,13 @@ export function ApiMcpGuide() {
           don&apos;t choose one or the other when you create it.
         </p>
         <p>
+          Updating a job through the API behaves like editing it in the app: changing the crew moves
+          the job&apos;s upcoming visits that follow the job&apos;s crew (visits pinned to another
+          crew or already started are left alone), putting a recurring job on hold or cancelling it
+          removes its untouched upcoming visits, and resuming a held or cancelled recurring job
+          regenerates them.
+        </p>
+        <p>
           This page explains the concepts and walks through a real setup. For the exhaustive,
           endpoint-by-endpoint reference — every route, request/response shape, required scope, and
           the exact MCP tool name it maps to — see{" "}

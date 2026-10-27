@@ -21,9 +21,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateProject, useUpdateProject } from "@/lib/hooks/use-projects";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import { useClients } from "@/lib/hooks/use-clients";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useSettingsStore } from "@/stores/settings-store";
+import { formatCurrency } from "@/lib/utils";
 import type { Project } from "@/types";
 
 interface NewProjectDialogProps {
@@ -34,7 +36,7 @@ interface NewProjectDialogProps {
   defaultClientId?: string;
   /** Called with the created project after a successful create (not fired on edit). */
   onCreated?: (project: Project) => void;
-  /** Pre-fills Contract Price on create (e.g. the accepted estimate's total when converting an estimate to a project job). */
+  /** Pre-fills Contract Price on create (e.g. the accepted estimate pre-tax revenue when converting an estimate to a project job). */
   defaultContractPriceCents?: number;
   /** Pre-fills the project name on create. */
   defaultName?: string;
@@ -42,6 +44,8 @@ interface NewProjectDialogProps {
 
 export function NewProjectDialog({ open, onOpenChange, initialData, defaultClientId, onCreated, defaultContractPriceCents, defaultName }: NewProjectDialogProps) {
   const isEditing = !!initialData;
+  // Viewers/requestors are read-only on projects (DB guard: 20261111040200).
+  const { canWriteEquipt } = useRoleCapabilities();
   const [name, setName] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [address, setAddress] = useState("");
@@ -72,7 +76,12 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
       setStatus(initialData.status);
       setStartDate(initialData.startDate ?? "");
       setEndDate(initialData.endDate ?? "");
-      setContractPrice(initialData.contractPrice > 0 ? (initialData.contractPrice / 100).toFixed(2) : "");
+      // The form edits the ORIGINAL contract price. initialData.contractPrice is
+      // the derived revised figure (original + approved change orders); saving
+      // it back into original_contract_price made the DB re-add every approved
+      // change order on top, double-counting them on any edit of the project.
+      const originalCents = initialData.originalContractPrice ?? initialData.contractPrice;
+      setContractPrice(originalCents > 0 ? (originalCents / 100).toFixed(2) : "");
       setLaborHours(initialData.laborHours != null ? String(initialData.laborHours) : "");
       setBudgetHours(initialData.budgetHours != null ? String(initialData.budgetHours) : "");
       setNotes(initialData.notes ?? "");
@@ -147,7 +156,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
   const saving = createProject.isPending || updateProject.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open && canWriteEquipt} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Project" : "New Project"}</DialogTitle>
@@ -266,7 +275,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
 
             {/* Contract Price — half width */}
             <div className="grid gap-1.5">
-              <Label htmlFor="project-contract-price">Contract Price ($)</Label>
+              <Label htmlFor="project-contract-price">{isEditing ? "Original Contract Price, before tax ($)" : "Contract Price, before tax ($)"}</Label>
               <Input
                 id="project-contract-price"
                 type="number"
@@ -276,6 +285,11 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
                 onChange={(e) => setContractPrice(e.target.value)}
                 placeholder="0.00"
               />
+              {isEditing && initialData && initialData.contractPrice !== (initialData.originalContractPrice ?? initialData.contractPrice) && (
+                <p className="text-[11px] text-muted-foreground">
+                  Revised contract is {formatCurrency(initialData.contractPrice)} after approved change orders.
+                </p>
+              )}
             </div>
 
             {/* Budget Hours — half width */}

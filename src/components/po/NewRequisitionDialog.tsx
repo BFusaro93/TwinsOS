@@ -221,7 +221,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
     0
   );
   const taxRate = parseFloat(taxRatePercent) || 0;
-  const discountDollars = parseFloat(discountCost) || 0;
+  const discountDollars = Math.min(parseFloat(discountCost) || 0, Math.max(0, subtotalDollars));
   const taxDollars = discountReducesTax
     ? Math.max(0, subtotalDollars - discountDollars) * (taxRate / 100)
     : subtotalDollars * (taxRate / 100);
@@ -321,11 +321,14 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
     const resolvedVendorId = vendorId !== "none" ? vendorId : null;
     const taxRate = parseFloat(taxRatePercent) || 0;
     const shippingCents = Math.round((parseFloat(shippingCost) || 0) * 100);
-    const discountCents = Math.round((parseFloat(discountCost) || 0) * 100);
+    // A discount can't exceed what is being bought (see NewPODialog).
+    const rawDiscountCents = Math.round((parseFloat(discountCost) || 0) * 100);
+    const clampDiscount = (subtotalCents: number) => Math.min(rawDiscountCents, Math.max(0, subtotalCents));
 
     if (isEditing && initialData) {
       // In edit mode, line items aren't shown — preserve the existing subtotal
       // and only recalculate sales tax and grand total from the updated rates.
+      const discountCents = clampDiscount(initialData.subtotal);
       const salesTaxCents = computeSalesTax({
         taxableSubtotal: initialData.subtotal,
         taxRatePercent: taxRate,
@@ -354,6 +357,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
     const subtotalCents = Math.round(
       lineItems.reduce((sum, li) => sum + li.quantity * li.unitCost, 0) * 100
     );
+    const discountCents = clampDiscount(subtotalCents);
     const salesTaxCents = computeSalesTax({
       taxableSubtotal: subtotalCents,
       taxRatePercent: taxRate,

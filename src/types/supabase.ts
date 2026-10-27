@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.4"
   }
   graphql_public: {
     Tables: {
@@ -3459,6 +3459,7 @@ export type Database = {
           bill_month_in_advance: boolean
           billing_day_of_month: number
           billing_frequency: string
+          changed_since_signed_at: string | null
           client_id: string
           created_at: string
           created_by: string | null
@@ -3467,6 +3468,7 @@ export type Database = {
           end_date: string | null
           estimate_id: string | null
           expiry_notified_for: string | null
+          first_period_prorated_at: string | null
           id: string
           include_sub_properties: boolean
           invoice_line_items: Json
@@ -3484,6 +3486,7 @@ export type Database = {
           signed_at: string | null
           signed_by: string | null
           source: string | null
+          start_billing_mode: string
           start_date: string | null
           status: string
           title: string
@@ -3495,6 +3498,7 @@ export type Database = {
           bill_month_in_advance?: boolean
           billing_day_of_month?: number
           billing_frequency?: string
+          changed_since_signed_at?: string | null
           client_id: string
           created_at?: string
           created_by?: string | null
@@ -3503,6 +3507,7 @@ export type Database = {
           end_date?: string | null
           estimate_id?: string | null
           expiry_notified_for?: string | null
+          first_period_prorated_at?: string | null
           id?: string
           include_sub_properties?: boolean
           invoice_line_items?: Json
@@ -3520,6 +3525,7 @@ export type Database = {
           signed_at?: string | null
           signed_by?: string | null
           source?: string | null
+          start_billing_mode?: string
           start_date?: string | null
           status?: string
           title: string
@@ -3531,6 +3537,7 @@ export type Database = {
           bill_month_in_advance?: boolean
           billing_day_of_month?: number
           billing_frequency?: string
+          changed_since_signed_at?: string | null
           client_id?: string
           created_at?: string
           created_by?: string | null
@@ -3539,6 +3546,7 @@ export type Database = {
           end_date?: string | null
           estimate_id?: string | null
           expiry_notified_for?: string | null
+          first_period_prorated_at?: string | null
           id?: string
           include_sub_properties?: boolean
           invoice_line_items?: Json
@@ -3556,6 +3564,7 @@ export type Database = {
           signed_at?: string | null
           signed_by?: string | null
           source?: string | null
+          start_billing_mode?: string
           start_date?: string | null
           status?: string
           title?: string
@@ -4069,6 +4078,7 @@ export type Database = {
           created_at: string
           crew_id: string
           days_of_week: number[]
+          deleted_at: string | null
           employee_id: string | null
           id: string
           is_foreman: boolean
@@ -4081,6 +4091,7 @@ export type Database = {
           created_at?: string
           crew_id: string
           days_of_week?: number[]
+          deleted_at?: string | null
           employee_id?: string | null
           id?: string
           is_foreman?: boolean
@@ -4093,6 +4104,7 @@ export type Database = {
           created_at?: string
           crew_id?: string
           days_of_week?: number[]
+          deleted_at?: string | null
           employee_id?: string | null
           id?: string
           is_foreman?: boolean
@@ -4217,6 +4229,7 @@ export type Database = {
           map_icon_color: string | null
           name: string
           org_id: string
+          personal_employee_id: string | null
           route_sheet_format: string | null
           show_in_calendar: boolean
           starting_address: string | null
@@ -4244,6 +4257,7 @@ export type Database = {
           map_icon_color?: string | null
           name: string
           org_id?: string
+          personal_employee_id?: string | null
           route_sheet_format?: string | null
           show_in_calendar?: boolean
           starting_address?: string | null
@@ -4271,6 +4285,7 @@ export type Database = {
           map_icon_color?: string | null
           name?: string
           org_id?: string
+          personal_employee_id?: string | null
           route_sheet_format?: string | null
           show_in_calendar?: boolean
           starting_address?: string | null
@@ -4318,6 +4333,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crews_personal_employee_id_fkey"
+            columns: ["personal_employee_id"]
+            isOneToOne: false
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crews_personal_employee_id_fkey"
+            columns: ["personal_employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_crews_personal_employee_id_fkey"
+            columns: ["personal_employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
           },
         ]
       }
@@ -4686,6 +4722,7 @@ export type Database = {
         Row: {
           address: string | null
           applicator_license: string | null
+          assignable_to_jobs: boolean
           birth_date: string | null
           cell_phone: string | null
           citizenship: string | null
@@ -4763,6 +4800,7 @@ export type Database = {
         Insert: {
           address?: string | null
           applicator_license?: string | null
+          assignable_to_jobs?: boolean
           birth_date?: string | null
           cell_phone?: string | null
           citizenship?: string | null
@@ -4840,6 +4878,7 @@ export type Database = {
         Update: {
           address?: string | null
           applicator_license?: string | null
+          assignable_to_jobs?: boolean
           birth_date?: string | null
           cell_phone?: string | null
           citizenship?: string | null
@@ -5327,6 +5366,7 @@ export type Database = {
           hours: number | null
           id: string
           invoice_id: string
+          is_other_charge: boolean
           is_taxable: boolean
           men: number | null
           name: string | null
@@ -5351,6 +5391,7 @@ export type Database = {
           hours?: number | null
           id?: string
           invoice_id: string
+          is_other_charge?: boolean
           is_taxable?: boolean
           men?: number | null
           name?: string | null
@@ -5375,6 +5416,7 @@ export type Database = {
           hours?: number | null
           id?: string
           invoice_id?: string
+          is_other_charge?: boolean
           is_taxable?: boolean
           men?: number | null
           name?: string | null
@@ -5485,6 +5527,7 @@ export type Database = {
           org_id: string
           show_chemical_applications: boolean
           show_notes: boolean
+          show_visit_notes: boolean
           updated_at: string
         }
         Insert: {
@@ -5502,6 +5545,7 @@ export type Database = {
           org_id?: string
           show_chemical_applications?: boolean
           show_notes?: boolean
+          show_visit_notes?: boolean
           updated_at?: string
         }
         Update: {
@@ -5519,6 +5563,7 @@ export type Database = {
           org_id?: string
           show_chemical_applications?: boolean
           show_notes?: boolean
+          show_visit_notes?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -5571,6 +5616,8 @@ export type Database = {
           po_number: string | null
           preferred_payment_method: string | null
           project_id: string | null
+          proration_period_end: string | null
+          proration_period_start: string | null
           qbo_invoice_id: string | null
           qbo_sync_attempted_at: string | null
           qbo_sync_error: string | null
@@ -5617,6 +5664,8 @@ export type Database = {
           po_number?: string | null
           preferred_payment_method?: string | null
           project_id?: string | null
+          proration_period_end?: string | null
+          proration_period_start?: string | null
           qbo_invoice_id?: string | null
           qbo_sync_attempted_at?: string | null
           qbo_sync_error?: string | null
@@ -5663,6 +5712,8 @@ export type Database = {
           po_number?: string | null
           preferred_payment_method?: string | null
           project_id?: string | null
+          proration_period_end?: string | null
+          proration_period_start?: string | null
           qbo_invoice_id?: string | null
           qbo_sync_attempted_at?: string | null
           qbo_sync_error?: string | null
@@ -6953,6 +7004,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "crm_list_options_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_other_charges: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string
+          id: string
+          is_active: boolean
+          is_taxable: boolean
+          name: string
+          org_id: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          amount_cents?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          is_active?: boolean
+          is_taxable?: boolean
+          name: string
+          org_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          is_active?: boolean
+          is_taxable?: boolean
+          name?: string
+          org_id?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_other_charges_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -9174,6 +9278,7 @@ export type Database = {
           type: string
           updated_at: string
           upsell_service_id: string | null
+          upsell_visit_id: string | null
           visible_to_client: boolean
         }
         Insert: {
@@ -9197,6 +9302,7 @@ export type Database = {
           type?: string
           updated_at?: string
           upsell_service_id?: string | null
+          upsell_visit_id?: string | null
           visible_to_client?: boolean
         }
         Update: {
@@ -9220,6 +9326,7 @@ export type Database = {
           type?: string
           updated_at?: string
           upsell_service_id?: string | null
+          upsell_visit_id?: string | null
           visible_to_client?: boolean
         }
         Relationships: [
@@ -9277,6 +9384,27 @@ export type Database = {
             columns: ["upsell_service_id"]
             isOneToOne: false
             referencedRelation: "rpt_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_tickets_upsell_visit_id_fkey"
+            columns: ["upsell_visit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_tickets_upsell_visit_id_fkey"
+            columns: ["upsell_visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["visit_id"]
+          },
+          {
+            foreignKeyName: "crm_tickets_upsell_visit_id_fkey"
+            columns: ["upsell_visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_visits"
             referencedColumns: ["id"]
           },
         ]
@@ -9757,6 +9885,60 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      equipt_alert_email_claims: {
+        Row: {
+          alert_type: string
+          created_at: string
+          created_by: string | null
+          entity_id: string
+          entity_type: string
+          event_key: string
+          id: string
+          org_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string
+          created_by?: string | null
+          entity_id: string
+          entity_type: string
+          event_key?: string
+          id?: string
+          org_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string
+          entity_type?: string
+          event_key?: string
+          id?: string
+          org_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipt_alert_email_claims_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipt_alert_email_claims_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -11088,6 +11270,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      financial_periods_bak_20260915: {
+        Row: {
+          created_at: string | null
+          data: Json | null
+          id: string | null
+          org_id: string | null
+          period_month: string | null
+          record_type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          data?: Json | null
+          id?: string | null
+          org_id?: string | null
+          period_month?: string | null
+          record_type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          data?: Json | null
+          id?: string | null
+          org_id?: string | null
+          period_month?: string | null
+          record_type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       goods_receipt_lines: {
         Row: {
@@ -13890,6 +14102,42 @@ export type Database = {
           },
         ]
       }
+      product_merge_log_20261029: {
+        Row: {
+          action: string | null
+          created_at: string | null
+          id: number
+          keeper_part: string | null
+          keeper_product: string | null
+          loser_part: string | null
+          loser_product: string | null
+          row_id: string | null
+          tbl: string | null
+        }
+        Insert: {
+          action?: string | null
+          created_at?: string | null
+          id?: number
+          keeper_part?: string | null
+          keeper_product?: string | null
+          loser_part?: string | null
+          loser_product?: string | null
+          row_id?: string | null
+          tbl?: string | null
+        }
+        Update: {
+          action?: string | null
+          created_at?: string | null
+          id?: number
+          keeper_part?: string | null
+          keeper_product?: string | null
+          loser_part?: string | null
+          loser_product?: string | null
+          row_id?: string | null
+          tbl?: string | null
+        }
+        Relationships: []
+      }
       product_untracked_stock_cleanup: {
         Row: {
           cost_layers: Json | null
@@ -14266,6 +14514,7 @@ export type Database = {
           city: string
           client_id: string | null
           contract_price: number
+          contract_price_is_pretax: boolean
           created_at: string
           created_by: string | null
           customer_name: string
@@ -14295,6 +14544,7 @@ export type Database = {
           city?: string
           client_id?: string | null
           contract_price?: number
+          contract_price_is_pretax?: boolean
           created_at?: string
           created_by?: string | null
           customer_name?: string
@@ -14324,6 +14574,7 @@ export type Database = {
           city?: string
           client_id?: string | null
           contract_price?: number
+          contract_price_is_pretax?: boolean
           created_at?: string
           created_by?: string | null
           customer_name?: string
@@ -15063,6 +15314,7 @@ export type Database = {
           status: string
           status_changed_at: string
           status_changed_by: string | null
+          thread_user_id: string | null
           updated_at: string
         }
         Insert: {
@@ -15072,6 +15324,7 @@ export type Database = {
           status?: string
           status_changed_at?: string
           status_changed_by?: string | null
+          thread_user_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -15081,19 +15334,27 @@ export type Database = {
           status?: string
           status_changed_at?: string
           status_changed_by?: string | null
+          thread_user_id?: string | null
           updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "support_conversations_org_id_fkey"
             columns: ["org_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "support_conversations_status_changed_by_fkey"
             columns: ["status_changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_conversations_thread_user_id_fkey"
+            columns: ["thread_user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -16749,6 +17010,7 @@ export type Database = {
       }
     }
     Functions: {
+      _acct_permitted: { Args: { p_keys: string[] }; Returns: boolean }
       _approval_actor_is_privileged: { Args: never; Returns: boolean }
       _approval_set_entity_status: {
         Args: { p_entity_id: string; p_entity_type: string; p_status: string }
@@ -16937,6 +17199,14 @@ export type Database = {
         Args: { p_secret: string }
         Returns: string
       }
+      crew_day_member_in: {
+        Args: { p_at: string; p_member: string; p_work_date: string }
+        Returns: undefined
+      }
+      crew_day_member_is_mine: {
+        Args: { p_member: string; p_work_date: string }
+        Returns: boolean
+      }
       crm_add_visit_crew: {
         Args: { p_crew_id: string; p_visit_id: string }
         Returns: string
@@ -16986,25 +17256,6 @@ export type Database = {
         Args: { p_employee_id: string; p_from: string; p_to: string }
         Returns: string
       }
-      crm_commission_pending_clawbacks: {
-        Args: { p_employee_id?: string }
-        Returns: {
-          basis_cents: number
-          category: string
-          claw_ev_key: string
-          client_name: string
-          commission_cents: number
-          earned_on: string
-          employee_id: string
-          invoice_id: string
-          invoice_number: number
-          plan_name: string
-          rate_bps: number
-          sale_type: string
-          service_name: string
-          source_ev_key: string
-        }[]
-      }
       crm_commission_lines: {
         Args: { p_employee_id?: string; p_from: string; p_to: string }
         Returns: {
@@ -17026,6 +17277,32 @@ export type Database = {
           sale_type: string
           service_name: string
           statement_id: string
+        }[]
+      }
+      crm_commission_live_basis: {
+        Args: { p_org: string }
+        Returns: {
+          basis: number
+          ev_key: string
+        }[]
+      }
+      crm_commission_pending_clawbacks: {
+        Args: { p_employee_id?: string }
+        Returns: {
+          basis_cents: number
+          category: string
+          claw_ev_key: string
+          client_name: string
+          commission_cents: number
+          earned_on: string
+          employee_id: string
+          invoice_id: string
+          invoice_number: number
+          plan_name: string
+          rate_bps: number
+          sale_type: string
+          service_name: string
+          source_ev_key: string
         }[]
       }
       crm_commission_void_statement: {
@@ -17072,6 +17349,7 @@ export type Database = {
         Returns: {
           address: string | null
           applicator_license: string | null
+          assignable_to_jobs: boolean
           birth_date: string | null
           cell_phone: string | null
           citizenship: string | null
@@ -17384,6 +17662,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      merge_org_customizations: { Args: { p_changes: Json }; Returns: boolean }
       my_crew_ids: { Args: never; Returns: string[] }
       my_org_id: { Args: never; Returns: string }
       my_org_is_read_only: { Args: never; Returns: boolean }
@@ -17545,6 +17824,10 @@ export type Database = {
           rate: number
         }[]
       }
+      save_storm_order_to_snow_routes: {
+        Args: { p_storm_event_id: string }
+        Returns: number
+      }
       seed_default_crm_roles: { Args: { p_org_id: string }; Returns: undefined }
       server_insert_audit: {
         Args: {
@@ -17649,6 +17932,19 @@ export type Database = {
       }
       wo_recurrence_advance: {
         Args: { p_date: string; p_frequency: string }
+        Returns: string
+      }
+      wo_recurrence_next_due: {
+        Args: {
+          p_after: string
+          p_anchor: string
+          p_frequency: string
+          p_not_before: string
+        }
+        Returns: string
+      }
+      wo_recurrence_occurrence: {
+        Args: { p_anchor: string; p_frequency: string; p_k: number }
         Returns: string
       }
       zapier_rate_limit_hit: {

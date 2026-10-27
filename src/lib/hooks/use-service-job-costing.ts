@@ -32,30 +32,38 @@ export function useServiceJobCosting(serviceId: string) {
     queryKey: ["service-job-costing", serviceId],
     queryFn: async (): Promise<ServiceJobCostRow[]> => {
       const supabase = createClient();
-      const [viewRes, rateRes] = await Promise.all([
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const viewRes = await (supabase as any)
+        .from("rpt_job_services")
+        .select("*")
+        .eq("service_id", serviceId)
+        // Per-visit status: a recurring job's master status stays
+        // 'scheduled' while its visits complete one by one.
+        .eq("visit_status", "completed")
+        .order("scheduled_date", { ascending: false })
+        .limit(1000);
+      if (viewRes.error) throw viewRes.error;
+
+      // Rates are looked up for exactly the job services the view returned
+      // (in chunks, to keep the URL short). Reading every crm_job_services row
+      // of the service instead stops at PostgREST's 1000-row cap, so for a
+      // widely-sold service the rows past it came back with no rate and showed
+      // $0 revenue.
+      const jobServiceIds = [
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any)
-          .from("rpt_job_services")
-          .select("*")
-          .eq("service_id", serviceId)
-          // Per-visit status: a recurring job's master status stays
-          // 'scheduled' while its visits complete one by one.
-          .eq("visit_status", "completed")
-          .order("scheduled_date", { ascending: false })
-          .limit(1000),
+        ...new Set<string>((viewRes.data ?? []).map((r: any) => r.job_service_id as string).filter(Boolean)),
+      ];
+      const rateCentsById = new Map<string, number>();
+      for (let i = 0; i < jobServiceIds.length; i += 200) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any)
+        const rateRes = await (supabase as any)
           .from("crm_job_services")
           .select("id, rate_cents")
-          .eq("service_id", serviceId),
-      ]);
-      if (viewRes.error) throw viewRes.error;
-      if (rateRes.error) throw rateRes.error;
-
-      const rateCentsById = new Map<string, number>(
+          .in("id", jobServiceIds.slice(i, i + 200));
+        if (rateRes.error) throw rateRes.error;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (rateRes.data ?? []).map((r: any) => [r.id as string, (r.rate_cents ?? 0) as number])
-      );
+        for (const r of (rateRes.data ?? []) as any[]) rateCentsById.set(r.id as string, (r.rate_cents ?? 0) as number);
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (viewRes.data ?? []).map((r: any) => {

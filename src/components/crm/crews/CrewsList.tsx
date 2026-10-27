@@ -152,10 +152,15 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
     const emp = (allEmployees ?? []).find((e) => e.id === newEmployeeId);
     const name = emp ? `${emp.firstName} ${emp.lastName}` : newEmployeeId;
     try {
-      await removeMember({ crewId: crew.id, employeeId: member.employeeId });
+      // Add the replacement FIRST: the database refuses someone already on
+      // another crew for the same days, and removing the current person before
+      // that refusal left the slot empty — they silently vanished from the
+      // crew's roster (and from the next Start Day) with only a failure toast.
       await addMember({ crewId: crew.id, employeeId: newEmployeeId, name, daysOfWeek: member.daysOfWeek });
-    } catch {
-      toast.error("Failed to update assignment");
+      await removeMember({ crewId: crew.id, employeeId: member.employeeId });
+    } catch (err) {
+      const msg = (err as { message?: string })?.message;
+      toast.error(msg ? `Failed to update assignment: ${msg}` : "Failed to update assignment");
     }
   }
 
@@ -727,16 +732,22 @@ export function CrewsList() {
     const supabase = createClient();
     // Org calendar day, not UTC (UTC flips at 8 PM Eastern and would hide tonight's visits).
     const today = orgToday();
-    const [jobsRes, visitsRes] = await Promise.all([
+    const [jobsRes, visitsRes, inheritedVisitsRes] = await Promise.all([
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (supabase as any).from("crm_jobs").select("id", { count: "exact", head: true })
         .eq("crew_id", id).is("deleted_at", null).in("status", ["scheduled", "in_progress", "hold"]),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (supabase as any).from("crm_job_visits").select("id", { count: "exact", head: true })
         .eq("crew_id", id).is("deleted_at", null).gte("scheduled_date", today).in("status", ["scheduled", "dispatched", "in_progress"]),
+      // Most visits carry crew_id NULL and inherit the job's crew — they belong to
+      // this crew too (same effective-crew rule as the board and the crew app).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).from("crm_job_visits").select("id, crm_jobs!inner(crew_id)", { count: "exact", head: true })
+        .is("crew_id", null).eq("crew_unassigned", false).eq("crm_jobs.crew_id", id)
+        .is("deleted_at", null).gte("scheduled_date", today).in("status", ["scheduled", "dispatched", "in_progress"]),
     ]);
     const jobCount = jobsRes.count ?? 0;
-    const visitCount = visitsRes.count ?? 0;
+    const visitCount = (visitsRes.count ?? 0) + (inheritedVisitsRes.count ?? 0);
     const leftBehind = jobCount > 0 || visitCount > 0
       ? ` It still has ${jobCount} active job${jobCount === 1 ? "" : "s"} and ${visitCount} upcoming visit${visitCount === 1 ? "" : "s"} assigned to it. They will stay on this crew, hidden from the crew dropdowns, and its crew login will see nothing — reassign them first.`
       : "";

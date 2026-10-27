@@ -7,6 +7,8 @@ import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { EMAIL_FROM } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { logger } from "@/lib/logger";
+import { resolveReminderRecipients } from "@/lib/notifications/reminder-recipients";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 const log = logger.child("contract-expiry-notify cron");
 
@@ -69,10 +71,12 @@ export async function GET(request: Request) {
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   let notified = 0;
+  const orgCanceled = createOrgCanceledResolver(supabase);
 
   for (const contract of expiring as Record<string, unknown>[]) {
     // Re-filter on the org's calendar — the SQL bounds above are deliberately
     // a day wider than the real window.
+    if (await orgCanceled(contract.org_id as string)) continue; // canceled orgs get no automated reminders
     const orgToday = todayInZone(await getOrgTimeZone(supabase, contract.org_id as string));
     const endDate = contract.end_date as string | null;
     if (!endDate) continue;
@@ -121,33 +125,19 @@ export async function GET(request: Request) {
       }
     }
 
-    const repId = contract.sales_rep_id as string | null;
-    if (!repId) continue;
-
-    // contracts.sales_rep_id references crm_employees, not profiles — an
-    // employee's email/name live there directly regardless of whether they
-    // have a login. notification_prefs (and the notifications table's
-    // user_id) only exist for a linked profiles row, so those are looked up
-    // separately via crm_employees.user_id when present.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: rep } = await (supabase as any)
-      .from("crm_employees")
-      .select("user_id, email, first_name, last_name")
-      .eq("id", repId)
-      .single();
-    if (!rep) continue;
-
-    let prefs: Record<string, unknown> = {};
-    if (rep.user_id) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: profile } = await (supabase as any)
-        .from("profiles")
-        .select("notification_prefs")
-        .eq("id", rep.user_id)
-        .single();
-      prefs = (profile?.notification_prefs ?? {}) as Record<string, unknown>;
+    // contracts.sales_rep_id references crm_employees. A rep who has since been
+    // deleted/deactivated (or has no reachable login or email) is skipped: the
+    // reminder goes to the client's account manager, then to org admins, so it
+    // is never silently dropped. notification_prefs live on the linked login.
+    const { recipients } = await resolveReminderRecipients(supabase, {
+      orgId: contract.org_id as string,
+      repEmployeeId: contract.sales_rep_id as string | null,
+      clientId: contractClientId,
+    });
+    if (recipients.length === 0) {
+      await releaseClaim("no reachable recipient");
+      continue;
     }
-    const repName = `${rep.first_name ?? ""} ${rep.last_name ?? ""}`.trim();
 
     const clientName = (contract.clients as Record<string, unknown> | null)?.display_name as string ?? "the client";
     const contractTitle = (contract.title as string | null) ?? "Contract";
@@ -155,7 +145,6 @@ export async function GET(request: Request) {
     // (the in-app notification and subject stay raw text).
     const safeTitle = escapeHtml(contractTitle);
     const safeClientName = escapeHtml(clientName);
-    const safeRepName = escapeHtml(repName || "there");
     // Whole calendar days on the org's clock — a UTC-midnight parse minus the
     // current instant floored to 0 for a contract ending today.
     const daysLeft = Math.round(
@@ -163,43 +152,52 @@ export async function GET(request: Request) {
     );
     const contractUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com"}/crm/accounting/contracts`;
 
-    if (rep.user_id && prefs.inAppContractExpiring !== false) {
-      await supabase
-        .from("notifications")
-        .insert({
-          org_id: contract.org_id,
-          user_id: rep.user_id,
-          type: "contract_expiring",
-          title: `Contract Expiring Soon — ${contract.title}`,
-          message: `${contract.title} for ${clientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. Renew it or follow up with the client before it lapses.`,
-          entity_id: contract.id,
-          entity_type: "contract",
-        });
+    let emailFailed = false;
+    let emailedAny = false;
+    for (const r of recipients) {
+      if (r.userId && r.prefs.inAppContractExpiring !== false) {
+        await supabase
+          .from("notifications")
+          .insert({
+            org_id: contract.org_id,
+            user_id: r.userId,
+            type: "contract_expiring",
+            title: `Contract Expiring Soon — ${contract.title}`,
+            message: `${contract.title} for ${clientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. Renew it or follow up with the client before it lapses.`,
+            entity_id: contract.id,
+            entity_type: "contract",
+          });
+      }
     }
 
-    if (!rep.email || prefs.emailContractExpiring === false) continue;
-
-    try {
-      const { error: sendErr } = await resend.emails.send({
-        from: EMAIL_FROM,
-        to: rep.email,
-        subject: `Contract ${expiryPhrase(daysLeft)} — ${contract.title}`,
-        html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+    for (const r of recipients) {
+      if (!r.email || r.prefs.emailContractExpiring === false) continue;
+      try {
+        const { error: sendErr } = await resend.emails.send({
+          from: EMAIL_FROM,
+          to: r.email,
+          subject: `Contract ${expiryPhrase(daysLeft)} — ${contract.title}`,
+          html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Contract Expiring Soon</h2>
-          <p style="margin:0 0 4px;color:#475569">Hi ${safeRepName},</p>
+          <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(r.firstName || "there")},</p>
           <p style="margin:0 0 24px;color:#475569"><strong>${safeTitle}</strong> for ${safeClientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. Renew it or follow up with the client before it lapses.</p>
           <a href="${contractUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Contracts</a>
         </div>`,
-      });
-      if (sendErr) {
-        await releaseClaim("email send failed", sendErr.message);
-        continue;
+        });
+        if (sendErr) {
+          await releaseClaim("email send failed", sendErr.message);
+          emailFailed = true;
+          break;
+        }
+        emailedAny = true;
+      } catch (err) {
+        // continue to next contract if one email fails
+        await releaseClaim("email send threw", err);
+        emailFailed = true;
+        break;
       }
-      notified++;
-    } catch (err) {
-      // continue to next contract if one email fails
-      await releaseClaim("email send threw", err);
     }
+    if (!emailFailed && emailedAny) notified++;
   }
 
   return NextResponse.json({ notified });

@@ -21,6 +21,7 @@ import {
   Fuel,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { normalizeExternalUrl } from "@/lib/utils/external-url";
 
 // Home-page "external app shortcut" tiles (e.g. Samsara, Gusto) are stored per-org
 // in organizations.customizations.homeShortcuts — no dedicated table needed for a
@@ -64,15 +65,24 @@ export function getHomeShortcutIcon(key: string): LucideIcon {
   return ICON_BY_KEY.get(key) ?? Link2;
 }
 
+export const normalizeShortcutUrl = (raw: string): string | null => normalizeExternalUrl(raw);
+
 export function parseHomeShortcuts(customizations: Record<string, unknown> | undefined | null): HomeShortcut[] {
   const raw = customizations?.homeShortcuts;
   if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (item): item is HomeShortcut =>
-      !!item &&
-      typeof item === "object" &&
-      typeof (item as HomeShortcut).id === "string" &&
-      typeof (item as HomeShortcut).name === "string" &&
-      typeof (item as HomeShortcut).url === "string"
-  );
+  return raw
+    .filter(
+      (item): item is HomeShortcut =>
+        !!item &&
+        typeof item === "object" &&
+        typeof (item as HomeShortcut).id === "string" &&
+        typeof (item as HomeShortcut).name === "string" &&
+        typeof (item as HomeShortcut).url === "string"
+    )
+    // Rows saved before the scheme check may be relative: normalize on read and
+    // drop anything that is not an http(s) link.
+    .flatMap((item) => {
+      const url = normalizeShortcutUrl(item.url);
+      return url ? [{ ...item, url }] : [];
+    });
 }

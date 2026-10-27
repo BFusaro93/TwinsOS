@@ -195,6 +195,7 @@ export function useBulkImportAssets() {
         .filter((r) => r.name?.trim() && r.assetTag?.trim())
         .map((r) => ({
           statusProvided: !!r.status?.trim(),
+          rawTypeProvided: !!r.assetType?.trim(),
           name: r.name.trim(),
           asset_tag: r.assetTag.trim(),
           equipment_number: r.equipmentNumber?.trim() || null,
@@ -216,27 +217,31 @@ export function useBulkImportAssets() {
 
       // Insert one-by-one; on duplicate asset_tag, update the existing row
       let count = 0;
-      for (const { statusProvided, ...row } of inserts) {
+      for (const { statusProvided, rawTypeProvided, ...row } of inserts) {
         const { error } = await supabase.from("assets").insert(row);
         if (error?.code === "23505") {
           const { data: { user } } = await supabase.auth.getUser();
           const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+          // Only the cells the CSV filled in are written: `row` fills every
+          // blank with null / the "equipment" default, and writing those back
+          // wiped make, model, serial, location, purchase info... on each
+          // matched asset when a CSV was re-imported to update one field.
           const { error: updateErr } = await supabase.from("assets").update({
             name: row.name,
-            equipment_number: row.equipment_number,
-            asset_type: row.asset_type,
-            make: row.make,
-            model: row.model,
-            year: row.year,
-            serial_number: row.serial_number,
-            license_plate: row.license_plate,
-            location: row.location,
+            ...(row.equipment_number ? { equipment_number: row.equipment_number } : {}),
+            ...(rawTypeProvided ? { asset_type: row.asset_type } : {}),
+            ...(row.make ? { make: row.make } : {}),
+            ...(row.model ? { model: row.model } : {}),
+            ...(row.year ? { year: row.year } : {}),
+            ...(row.serial_number ? { serial_number: row.serial_number } : {}),
+            ...(row.license_plate ? { license_plate: row.license_plate } : {}),
+            ...(row.location ? { location: row.location } : {}),
             // A blank status cell must not reset an in_shop/out_of_service
             // asset to "active" when a CSV is re-imported to update other fields.
             ...(statusProvided ? { status: row.status } : {}),
-            purchase_vendor_name: row.purchase_vendor_name,
-            purchase_date: row.purchase_date,
-            purchase_price: row.purchase_price,
+            ...(row.purchase_vendor_name ? { purchase_vendor_name: row.purchase_vendor_name } : {}),
+            ...(row.purchase_date ? { purchase_date: row.purchase_date } : {}),
+            ...(row.purchase_price ? { purchase_price: row.purchase_price } : {}),
             // A blank financing cell must not wipe saved financing details when a
             // CSV is re-imported to update other fields (e.g. mileage/VIN).
             ...(row.payment_method ? { payment_method: row.payment_method } : {}),

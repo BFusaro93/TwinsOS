@@ -156,43 +156,80 @@
     ]
   },
   {
+    "key": "audit-log",
+    "section": "audits",
+    "name": "Audit Log",
+    "description": "Every recorded change across Equipt and Landscapt — who changed what, when, and from what value to what.",
+    "notes": [
+      "Entries are written by database triggers, not by the app, so they cover every path a change can arrive through — the UI, the API, an automation or an import.",
+      "Changed By reads \"system\" when the change came from a background job (a contract renewal, a scheduled invoice run) rather than a signed-in person."
+    ],
+    "dataset": "rpt_audit_log",
+    "columns": [
+      "occurred_at",
+      "category",
+      "record_label",
+      "action",
+      "changed_by",
+      "description"
+    ]
+  },
+  {
+    "key": "security-audit",
+    "section": "audits",
+    "name": "Security & Access Audit",
+    "description": "Permission, user, credential and approval-chain changes only — the review you want before an audit or after someone leaves.",
+    "notes": [
+      "Covers user profiles and roles, permission sets, API keys, third-party integrations, OAuth tokens and approval flows.",
+      "Secret values (API keys, hashes, tokens) are never recorded — an entry says the credential changed, never what it changed to.",
+      "A user moving between organizations is recorded against the organization they LEFT, so it stays visible here."
+    ],
+    "dataset": "rpt_audit_log",
+    "columns": [
+      "occurred_at",
+      "record_label",
+      "action",
+      "changed_by",
+      "changed_by_email",
+      "description"
+    ]
+  },
+  {
+    "key": "audit-activity-by-user",
+    "section": "audits",
+    "name": "Change Activity by User",
+    "description": "How many changes each person made, broken down by record type — useful for spotting an unexpected burst of edits.",
+    "dataset": "rpt_audit_log",
+    "columns": []
+  },
+  {
     "key": "chemical-tracking-report",
     "section": "service",
     "name": "Chemical Tracking Report",
     "description": "Post-application compliance record of chemicals actually applied — date, EPA #, quantities, conditions, applicator, and license number.",
     "notes": [
-      "Only chemicals marked as applied (Used) are included — planned applications that were never made are excluded. Service Date is the visit date when the application is tied to a visit.",
-      "Applicator Name populates whenever an applicator is assigned to the application. Applicator License Number only populates if that employee had a license on file at the time. Application Start/End Time populate only when entered on the application record, independent of licensing.",
-      "Chemical Amount is the concentrate used; Solution Amount is the total mixed solution actually applied. The two can be in different units (e.g. Chemical Amount in ounces, Solution Amount in gallons) — see Unit of Measure vs. Solution Unit of Measure."
+      "Only chemicals marked as applied (Used) are included. Service Date is the date the application was made (its start time, else the visit date).",
+      "Applications count once their visit is in progress or completed — scheduled, dispatched, cancelled and skipped visits are excluded, so the report never lists a lawn as sprayed before the crew has been there.",
+      "Applicator shows the name with the license number the employee had on file when the application was saved. Applied (Time) is the application start–end entered on the record (pre-filled from the crew's clock-in/out).",
+      "Chemical Applied is the concentrate used; Solution Applied is the total mixed solution actually applied — they can be in different units (e.g. ounces of chemical, gallons of solution)."
     ],
     "dataset": "rpt_chemical_applications",
     "columns": [
       "service_date",
       "client_name",
-      "service_address",
-      "service_city",
+      "service_location",
       "chemical_name",
       "epa_registration_number",
-      "re_entry_interval",
       "restricted_product",
-      "chemical_amount",
-      "solution_amount",
-      "unit_of_measure",
-      "solution_unit_of_measure",
+      "re_entry_interval",
+      "chemical_applied",
+      "solution_applied",
+      "application_method",
       "targets",
       "areas_treated",
-      "application_method",
-      "application_rate_label",
-      "temperature",
-      "wind_speed",
-      "wind_direction",
-      "ph_level",
-      "applicator_name",
-      "applicator_license_number",
-      "application_start_time",
-      "application_end_time",
-      "budgeted_concentrate_amount",
-      "used"
+      "conditions",
+      "applicator",
+      "application_window"
     ]
   },
   {
@@ -365,7 +402,7 @@
     "key": "client-contracts",
     "section": "client",
     "name": "Client Contracts",
-    "description": "Shows a single-line summary of all client contracts including billing day and monthly amounts."
+    "description": "Shows a single-line summary of all client contracts including billing frequency, billing day, and the amount billed in each month."
   },
   {
     "key": "clients-leads-monthly-matrix",
@@ -383,6 +420,24 @@
     "description": "New leads, converted leads, average days to convert, and cancellations for a date range, plus current totals.",
     "notes": [
       "New Leads = accounts created in range that are still leads (open or lost). Converted Leads = accounts whose Client Since date falls in range. Avg Days to Convert = created → Client Since, over converted accounts whose Client Since is after their created date (accounts created directly as clients are excluded). Total Clients = active + inactive + cancelled; Total Leads = open leads only."
+    ]
+  },
+  {
+    "key": "address-verification",
+    "section": "client",
+    "name": "Address Verification",
+    "description": "Shows every service address a crew could be sent to and whether Google has confirmed it. Defaults to the ones that still need a look.",
+    "dataset": "rpt_address_verification",
+    "columns": [
+      "record_kind",
+      "client_name",
+      "label",
+      "address",
+      "city",
+      "state",
+      "zip",
+      "address_verdict",
+      "address_verified_at"
     ]
   },
   {

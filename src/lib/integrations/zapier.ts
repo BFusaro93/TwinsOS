@@ -110,6 +110,14 @@ export async function authenticateZapierRequest(
     .maybeSingle();
 
   if (!data) return null;
+
+  // These routes write through the service role, which bypasses the RESTRICTIVE
+  // read_only_when_canceled_* RLS policies — so a canceled org's Zap would keep
+  // creating clients, jobs and work orders in an account that is supposed to be
+  // read-only. (The public v1 API already stops at orgHasAddon for the same case.)
+  const { data: org } = await db.from("organizations").select("plan").eq("id", data.org_id).maybeSingle();
+  if (org?.plan === "canceled") return null;
+
   return { orgId: data.org_id as string, integrationId: data.id as string };
 }
 

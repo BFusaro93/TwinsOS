@@ -4,6 +4,7 @@ import type { Database } from "@/types/supabase";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 import {
   GENERATOR_JOB_COLUMNS,
   NON_GENERATING_JOB_STATUSES,
@@ -44,7 +45,7 @@ export async function GET(request: Request) {
   );
 
   // Paginated — every org's active jobs can exceed PostgREST's 1000-row cap.
-  const { rows: jobs, error: jobsErr } = await selectAllRows<GeneratorJob>(() =>
+  const { rows: allJobs, error: jobsErr } = await selectAllRows<GeneratorJob>(() =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("crm_jobs")
@@ -57,6 +58,15 @@ export async function GET(request: Request) {
   if (jobsErr) {
     log.error("job fetch failed", { error: jobsErr });
     return NextResponse.json({ error: jobsErr }, { status: 500 });
+  }
+
+  // Canceled orgs get no automated visit generation (resolved per job's org;
+  // the resolver caches per org for this run).
+  const orgCanceled = createOrgCanceledResolver(supabase);
+  const jobs: GeneratorJob[] = [];
+  for (const job of allJobs) {
+    if (await orgCanceled(job.org_id)) continue;
+    jobs.push(job);
   }
   if (jobs.length === 0) {
     return NextResponse.json({ generated: 0, message: "No recurring jobs found." });
