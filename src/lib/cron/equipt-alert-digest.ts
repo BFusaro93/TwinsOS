@@ -78,7 +78,12 @@ export async function loadEquiptOrgIds(supabase: AnyClient, orgIds: string[]): P
     if (error) throw error;
     return (data ?? []) as { id: string; plan: string | null }[];
   });
-  return new Set(rows.filter((o) => planIncludesModule(o.plan ?? "", "equipt")).map((o) => o.id));
+  // A canceled org gets no background work (no digests), same rule as the other crons
+  // (see src/lib/orgs/org-canceled.ts). planIncludesModule is checked first; canceled
+  // plans are excluded explicitly rather than relying on that table's handling.
+  return new Set(
+    rows.filter((o) => o.plan !== "canceled" && planIncludesModule(o.plan ?? "", "equipt")).map((o) => o.id)
+  );
 }
 
 export interface OrgUser {
