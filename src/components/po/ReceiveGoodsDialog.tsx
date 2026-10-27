@@ -409,12 +409,14 @@ export function ReceiveGoodsDialog({
     setApplyingInventory(false);
     setSubmittedFully(allFullyReceived);
     setSubmitted(true);
+    // Move the PO's status as soon as the receipt is recorded and stock is
+    // applied — not when the confirmation dialog is closed. A reload (or
+    // closing the tab) before "Done" used to leave the PO 'ordered' with
+    // receipts on file. The parent's status write is idempotent.
+    onReceiptSubmit?.(allFullyReceived);
   }
 
   function handleClose() {
-    if (submitted) {
-      onReceiptSubmit?.(submittedFully);
-    }
     onOpenChange(false);
     setSubmitted(false);
   }
