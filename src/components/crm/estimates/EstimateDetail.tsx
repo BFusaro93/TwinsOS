@@ -58,7 +58,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn, formatCurrency, todayLocalISODate } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { toast } from "sonner";
@@ -388,6 +389,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { mutateAsync: saveFinancials } = useSaveEstimateFinancials();
   const { data: overheadSettings } = useOverheadSettings();
   const { data: orgSettings } = useOrgSettings();
+  const { today: orgToday } = useOrgDates();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
   const { data: crmServices } = useCRMServices();
   const { mutateAsync: upsertLineItem } = useUpsertLineItem();
@@ -947,7 +949,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             onClick={async () => {
               if (!estimate) return;
               try {
-                const today = todayLocalISODate();
+                // The org's calendar day, not the browser's — the invoice date
+                // feeds due-date terms and every dated report.
+                const today = orgToday();
                 const taxRateBps = estimate.taxRateBps ?? 0;
                 // recalcEstimateTotals taxes the whole discounted subtotal —
                 // estimate lines carry no per-line taxability — so every

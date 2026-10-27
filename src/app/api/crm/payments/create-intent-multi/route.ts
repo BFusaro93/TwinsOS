@@ -100,6 +100,63 @@ export async function POST(request: Request) {
     }
   }
 
+  // stripe_connect_livemode isn't in the generated Supabase types yet (added
+  // by a migration this session wrote but did not apply/regenerate types for).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: org } = await (supabase.from("organizations") as any)
+    .select(
+      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
+    )
+    .eq("id", profile.org_id)
+    .single();
+  if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  if (!org.stripe_connect_account_id || !org.stripe_connect_charges_enabled) {
+    return NextResponse.json(
+      { error: "Connect your Stripe account in Settings before accepting card payments." },
+      { status: 400 }
+    );
+  }
+
+  const stripe = getStripeForOrg(org.stripe_connect_livemode);
+
+  if (paymentMethod === "us_bank_account") {
+    if (!org.ach_payments_enabled || !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
+      return NextResponse.json({ error: "ACH payments aren't enabled — turn them on in Settings first." }, { status: 400 });
+    }
+  }
+
+  // Carry the client's Stripe customer so the duplicate lookup can see this
+  // intent, and refuse while a payment for any of these invoices is in flight.
+  const service = createServiceClient();
+  const customerId = await ensureIntentCustomer({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    serviceDb: service,
+    orgId: profile.org_id,
+    clientId,
+  });
+  const refusal = await refuseIfChargeInFlight({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    db: service,
+    invoiceIds,
+    customerId,
+    isAch: paymentMethod === "us_bank_account",
+    plural: true,
+  });
+  if (refusal) return NextResponse.json(refusal.body, { status: refusal.status });
+
+  // The credit step below can only shrink the allocation list, so a list that is
+  // already too long is refused here, before any credit is consumed.
+  if (encodeAllocations(allocations).length > MAX_ALLOCATION_METADATA_LENGTH) {
+    return NextResponse.json(
+      { error: "Too many invoices selected for a single charge — split into two payments" },
+      { status: 400 }
+    );
+  }
+
+  // Every check above can refuse; only now is it safe to consume the client's
+  // credit, so a refused attempt never leaves invoices quietly changed.
   // Settle each invoice with any deposit/credit the client already holds, then
   // charge only what is still owed. Otherwise the card pays money the client has
   // already paid and the deposit sits unused.
@@ -126,31 +183,6 @@ export async function POST(request: Request) {
       { error: "Too many invoices selected for a single charge — split into two payments" },
       { status: 400 }
     );
-  }
-
-  // stripe_connect_livemode isn't in the generated Supabase types yet (added
-  // by a migration this session wrote but did not apply/regenerate types for).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: org } = await (supabase.from("organizations") as any)
-    .select(
-      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
-    )
-    .eq("id", profile.org_id)
-    .single();
-  if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
-  if (!org.stripe_connect_account_id || !org.stripe_connect_charges_enabled) {
-    return NextResponse.json(
-      { error: "Connect your Stripe account in Settings before accepting card payments." },
-      { status: 400 }
-    );
-  }
-
-  const stripe = getStripeForOrg(org.stripe_connect_livemode);
-
-  if (paymentMethod === "us_bank_account") {
-    if (!org.ach_payments_enabled || !(await achEnabledForAccount(stripe, org.stripe_connect_account_id))) {
-      return NextResponse.json({ error: "ACH payments aren't enabled — turn them on in Settings first." }, { status: 400 });
-    }
   }
 
   const balanceCents = allocations.reduce((sum, a) => sum + a.amountCents, 0);
@@ -181,26 +213,6 @@ export async function POST(request: Request) {
         )
       : { feeCents: 0, totalChargeCents: balanceCents };
 
-  // Carry the client's Stripe customer so the duplicate lookup can see this
-  // intent, and refuse while a payment for any of these invoices is in flight.
-  const service = createServiceClient();
-  const customerId = await ensureIntentCustomer({
-    stripe,
-    connectedAccountId: org.stripe_connect_account_id,
-    serviceDb: service,
-    orgId: profile.org_id,
-    clientId,
-  });
-  const refusal = await refuseIfChargeInFlight({
-    stripe,
-    connectedAccountId: org.stripe_connect_account_id,
-    db: service,
-    invoiceIds,
-    customerId,
-    isAch: paymentMethod === "us_bank_account",
-    plural: true,
-  });
-  if (refusal) return NextResponse.json(refusal.body, { status: refusal.status });
 
   try {
   const paymentIntent = await stripe.paymentIntents.create(
