@@ -174,30 +174,37 @@ export function useUpdateOrgSettings() {
         };
       }
 
-      if (input.customizations !== undefined) {
-        const { data: existing } = await supabase
-          .from("organizations")
-          .select("customizations")
-          .eq("id", profile.orgId)
-          .single();
-        const prev = (existing?.customizations as Record<string, unknown>) ?? {};
-        patch.customizations = { ...prev, ...input.customizations };
-      }
-
       // RLS (settings_permission_update_org) silently filters the row out for
       // a user without company_settings/crm_settings — PostgREST then reports
       // success with zero rows and the UI used to toast "saved" while nothing
       // changed (D-20: Google Maps key "saved" but badge stayed Not Connected).
       // Select the updated row back so a blocked write is a real error.
-      const { data: updated, error } = await supabase
-        .from("organizations")
-        // `as never`: postgrest rejects excess properties on a dynamically-built patch.
-        .update(patch as never)
-        .eq("id", profile.orgId)
-        .select("id");
-      if (error) throw error;
-      if (!updated || updated.length === 0) {
-        throw new Error("Save was blocked — you don't have permission to change organization settings.");
+      const blocked = () =>
+        new Error("Save was blocked — you don't have permission to change organization settings.");
+
+      if (Object.keys(patch).length > 0) {
+        const { data: updated, error } = await supabase
+          .from("organizations")
+          // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+          .update(patch as never)
+          .eq("id", profile.orgId)
+          .select("id");
+        if (error) throw error;
+        if (!updated || updated.length === 0) throw blocked();
+      }
+
+      // customizations is a shared jsonb bag. It used to be read, merged in
+      // the browser and written back whole, so two tabs saving at once lost
+      // each other's keys. merge_org_customizations() merges only the keys sent
+      // inside a single UPDATE (jsonb ||), so concurrent saves serialize and
+      // never clobber keys they didn't touch. Runs under the caller's RLS.
+      if (input.customizations !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: merged, error: mergeErr } = await (supabase.rpc as any)("merge_org_customizations", {
+          p_changes: input.customizations,
+        });
+        if (mergeErr) throw mergeErr;
+        if (merged !== true) throw blocked();
       }
     },
     onSuccess: (_data, input) => {
