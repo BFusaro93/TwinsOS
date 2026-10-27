@@ -30,11 +30,16 @@ export async function POST(request: Request) {
 
   const { data: callerProfile, error: profileErr } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, status")
     .eq("id", user.id)
     .single();
   if (profileErr || !callerProfile) {
     return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  }
+  // A deactivated admin's access token stays valid for up to an hour after
+  // the ban; these routes use the service role, so RLS can't stop them.
+  if (callerProfile.status === "inactive") {
+    return NextResponse.json({ error: "Account is deactivated" }, { status: 403 });
   }
   if (callerProfile.role !== "admin") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
@@ -133,6 +138,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "A user with that email already exists" }, { status: 409 });
     }
     existingStatus = existingProfile?.status ?? null;
+    // A deactivated teammate is banned at the auth layer. Re-inviting would
+    // email a link that can't sign in and relabel them "invited" while the ban
+    // stays — Reactivate is the path that lifts the ban.
+    if (existingStatus === "inactive") {
+      return NextResponse.json(
+        { error: "That user was deactivated. Use Reactivate on the Users page instead of inviting them again." },
+        { status: 409 }
+      );
+    }
   }
 
   // Build the URL directly so the user lands on /reset-password without
