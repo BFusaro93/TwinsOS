@@ -80,3 +80,25 @@ create trigger trg_vendors_sync_name_to_records
   for each row
   when (old.name is distinct from new.name)
   execute function public.sync_vendor_name_to_records();
+
+-- One-time backfill for renames that happened before the trigger existed
+-- (PROD had stale copies on parts, products and POs). Same scope as the trigger.
+select set_config('app.approval_rpc', 'on', true);
+
+update public.parts t set vendor_name = v.name
+  from public.vendors v
+  where v.id = t.vendor_id and v.org_id = t.org_id and t.deleted_at is null and t.vendor_name is distinct from v.name;
+update public.product_items t set vendor_name = v.name
+  from public.vendors v
+  where v.id = t.vendor_id and v.org_id = t.org_id and t.deleted_at is null and t.vendor_name is distinct from v.name;
+update public.wo_vendor_charges t set vendor_name = v.name
+  from public.vendors v
+  where v.id = t.vendor_id and v.org_id = t.org_id and t.deleted_at is null and t.vendor_name is distinct from v.name;
+update public.requisitions t set vendor_name = v.name
+  from public.vendors v
+  where v.id = t.vendor_id and v.org_id = t.org_id and t.deleted_at is null and t.vendor_name is distinct from v.name;
+update public.purchase_orders t set vendor_name = v.name
+  from public.vendors v
+  where v.id = t.vendor_id and v.org_id = t.org_id and t.deleted_at is null and t.vendor_name is distinct from v.name;
+
+select set_config('app.approval_rpc', '', true);
