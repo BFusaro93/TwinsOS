@@ -13,6 +13,7 @@ import {
   useCreateOtherCharge,
   useUpdateOtherCharge,
   useDeleteOtherCharge,
+  useSeedCommonOtherCharges,
 } from "@/lib/hooks/use-other-charges";
 
 interface Draft {
@@ -83,6 +84,7 @@ export function OtherChargesEditor() {
   const { mutateAsync: createCharge, isPending: creating } = useCreateOtherCharge();
   const { mutateAsync: updateCharge, isPending: updating } = useUpdateOtherCharge();
   const { mutateAsync: deleteCharge } = useDeleteOtherCharge();
+  const { mutateAsync: seedCharges, isPending: seeding } = useSeedCommonOtherCharges();
 
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -118,6 +120,15 @@ export function OtherChargesEditor() {
       setDraft(EMPTY_DRAFT);
     } catch (err) {
       toast.error(`Failed to save: ${err instanceof Error ? err.message : "Unknown error"}`);
+    }
+  }
+
+  async function handleSeed() {
+    try {
+      const n = await seedCharges(charges.map((c) => c.name));
+      toast.success(n > 0 ? `Added ${n} common charge${n === 1 ? "" : "s"} at $0.00. Set the amounts you charge.` : "You already have them all");
+    } catch (err) {
+      toast.error(`Failed to add: ${err instanceof Error ? err.message : "Unknown error"}`);
     }
   }
 
@@ -187,7 +198,13 @@ export function OtherChargesEditor() {
       )}
 
       {charges.length === 0 && !adding && (
-        <p className="py-3 text-sm text-slate-400 dark:text-neutral-500">No other charges yet.</p>
+        <div className="flex flex-wrap items-center gap-3 py-3">
+          <p className="text-sm text-slate-400 dark:text-neutral-500">No other charges yet.</p>
+          <Button size="sm" variant="outline" onClick={() => void handleSeed()} disabled={seeding}>
+            {seeding ? "Adding…" : "Add common charges"}
+          </Button>
+          <span className="text-xs text-slate-400 dark:text-neutral-500">Late fee, trip charge, fuel surcharge and more, at $0.00 for you to price.</span>
+        </div>
       )}
 
       {adding ? (

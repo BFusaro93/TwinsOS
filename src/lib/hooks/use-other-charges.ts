@@ -61,6 +61,42 @@ export function useCreateOtherCharge() {
   });
 }
 
+/** Standard fees offered by the "Add common charges" button; amounts start at $0 so each org sets its own. */
+export const COMMON_OTHER_CHARGES: { name: string; description: string }[] = [
+  { name: "Bond Fee", description: "Bond Fee" },
+  { name: "Credit Card Processing Fee", description: "Credit Card Processing Fee" },
+  { name: "Fuel Surcharge", description: "Fuel Surcharge" },
+  { name: "Interest", description: "Interest" },
+  { name: "Late Fee", description: "Late Fee" },
+  { name: "Local Agency Fee", description: "Local Agency Fee" },
+  { name: "Permit Fee", description: "Permit Fee" },
+  { name: "Returned Check Fee", description: "Returned Check Fee" },
+  { name: "Trip Charge", description: "Trip Charge" },
+];
+
+/** Inserts the common charges this org doesn't already have (matched by name, case-insensitive). Returns how many were added. */
+export function useSeedCommonOtherCharges() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (existingNames: string[]) => {
+      const have = new Set(existingNames.map((n) => n.trim().toLowerCase()));
+      const rows = COMMON_OTHER_CHARGES.filter((c) => !have.has(c.name.toLowerCase())).map((c, i) => ({
+        name: c.name,
+        description: c.description,
+        amount_cents: 0,
+        is_taxable: false,
+        sort_order: i,
+      }));
+      if (rows.length === 0) return 0;
+      const db = createClient() as any;
+      const { error } = await db.from("crm_other_charges").insert(rows);
+      if (error) throw error;
+      return rows.length;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-other-charges"] }),
+  });
+}
+
 export function useUpdateOtherCharge() {
   const qc = useQueryClient();
   return useMutation({

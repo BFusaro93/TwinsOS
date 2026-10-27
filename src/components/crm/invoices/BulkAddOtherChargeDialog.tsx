@@ -42,7 +42,7 @@ export function BulkAddOtherChargeDialog({ invoiceIds, open, onClose, onDone }: 
   async function handleAdd() {
     if (!charge) return;
     const amount = parseFloat(amountStr);
-    if (!Number.isFinite(amount) || amount < 0) { toast.error("Enter a valid amount"); return; }
+    if (!Number.isFinite(amount) || amount <= 0) { toast.error("Enter an amount greater than $0"); return; }
     try {
       const res = await addCharge({
         invoiceIds,
@@ -102,7 +102,7 @@ export function BulkAddOtherChargeDialog({ invoiceIds, open, onClose, onDone }: 
         </div>
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={close}>Cancel</Button>
-          <Button size="sm" onClick={() => void handleAdd()} disabled={!charge || isPending}>
+          <Button size="sm" onClick={() => void handleAdd()} disabled={!charge || isPending || !(parseFloat(amountStr) > 0)}>
             {isPending ? "Adding…" : "Add Charge"}
           </Button>
         </DialogFooter>
