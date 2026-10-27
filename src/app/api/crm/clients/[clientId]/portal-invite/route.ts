@@ -44,13 +44,22 @@ export async function POST(
 
   const { data: client } = await supabase
     .from("clients")
-    .select("id, display_name")
+    .select("id, display_name, email_bounced_at")
     .eq("id", clientId)
     .eq("org_id", profile.org_id)
     .is("deleted_at", null)
     .single();
 
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
+
+  // A hard-bounced address is dead — an invite to it can't arrive, and sending
+  // anyway only hurts the sending domain's reputation.
+  if (client.email_bounced_at) {
+    return NextResponse.json(
+      { error: "This client's email address has bounced, so an invite can't be delivered. Update the client's email address first, then send the invite again." },
+      { status: 409 }
+    );
+  }
 
   // Block if portal account already exists for this client
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,25 +75,27 @@ export async function POST(
     return NextResponse.json({ error: "Client already has a portal account" }, { status: 409 });
   }
 
-  // Revoke any existing pending invites
+  // Create the new invite FIRST: revoking the old links before a failed insert
+  // would leave the client with no working invite at all.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: invite, error: inviteErr } = await (supabase as any)
+    .from("client_portal_invites")
+    .insert({ org_id: profile.org_id, client_id: clientId, email, created_by: user.id })
+    .select("id, token")
+    .single() as { data: Pick<PortalInviteRow, "id" | "token"> | null; error: unknown };
+
+  if (inviteErr || !invite) {
+    return NextResponse.json({ error: "Failed to create invite" }, { status: 500 });
+  }
+
+  // Now revoke every OTHER pending invite for this client.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any)
     .from("client_portal_invites")
     .update({ accepted_at: new Date().toISOString() })
     .eq("client_id", clientId)
-    .is("accepted_at", null);
-
-  // Create new invite
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: invite, error: inviteErr } = await (supabase as any)
-    .from("client_portal_invites")
-    .insert({ org_id: profile.org_id, client_id: clientId, email, created_by: user.id })
-    .select("token")
-    .single() as { data: Pick<PortalInviteRow, "token"> | null; error: unknown };
-
-  if (inviteErr || !invite) {
-    return NextResponse.json({ error: "Failed to create invite" }, { status: 500 });
-  }
+    .is("accepted_at", null)
+    .neq("id", invite.id);
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com";
   const portalUrl = `${appUrl}/portal/register/${invite.token}`;

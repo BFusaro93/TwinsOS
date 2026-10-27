@@ -1082,6 +1082,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "CRM > Communication > Automations. Each automation contains one or more Sequences; a sequence has Triggers (with optional Trigger Conditions), Stop Conditions, and an ordered list of Events that run once triggered.",
           },
           {
+            step: "Custom field conditions",
+            detail:
+              "Trigger conditions, stop conditions, and If Branches can check a client custom field: pick the field, then compare it (text: equals, not equals, contains, does not contain, is set, is not set; number: also greater/less than). The condition reads the client's saved value at trigger time and at each stop/If check. A client with no value only matches 'is not set'. If the field is later deleted, the condition is never met and the editor shows 'Field deleted'.",
+          },
+          {
             step: "What can trigger a sequence",
             detail:
               "Client/lead events (created, cancelled, converted, card charge failed), dates (a specific date, day of week, or an anniversary of the client's start date), estimate events (sent, won, lost, expiring, no response), form submissions, invoice events (past due, paid), job/visit events (created, cancelled, completed, dispatched, skipped, moved to waiting list), tag added/removed, and ticket events (created, past due, closed, reopened).",

@@ -44,6 +44,18 @@
       "schedule": "15 8 * * *"
     },
     {
+      "path": "/api/cron/low-stock-notify",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/pm-due-notify",
+      "schedule": "10 10 * * *"
+    },
+    {
+      "path": "/api/cron/work-order-overdue-notify",
+      "schedule": "20 10 * * *"
+    },
+    {
       "path": "/api/crm/estimates/automation-date-triggers",
       "schedule": "0 9 * * *"
     },

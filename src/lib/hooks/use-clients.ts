@@ -1998,15 +1998,48 @@ export function useBulkUpdateClients() {
   return useMutation({
     mutationFn: async ({ clientIds, patch }: { clientIds: string[]; patch: Record<string, unknown> }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // The single-client edit fires client_source_updated / has_opted_in_emails
+      // when those values actually change; the bulk path has to do the same, per
+      // client, so it needs the prior values.
+      const watchSource = "source" in patch;
+      const watchEmail = patch.ok_to_email === true;
+      let before: { id: string; source: string | null; ok_to_email: boolean | null }[] = [];
+      if (watchSource || watchEmail) {
+        const { data, error: readErr } = await supabase
+          .from("clients")
+          .select("id, source, ok_to_email")
+          .in("id", clientIds);
+        if (readErr) throw readErr;
+        before = data ?? [];
+      }
+      const { data: updated, error } = await supabase
         .from("clients")
         // `as never`: postgrest rejects excess properties on a dynamically-built patch.
         .update(patch as never)
-        .in("id", clientIds);
+        .in("id", clientIds)
+        .select("id");
       if (error) throw error;
+      const updatedIds = new Set((updated ?? []).map((u) => u.id));
+      const changed = before.filter((b) => updatedIds.has(b.id));
+      const newSource = (patch.source as string | null | undefined) ?? null;
+      return {
+        sourceChangedIds: watchSource ? changed.filter((b) => b.source !== newSource).map((b) => b.id) : [],
+        newSource,
+        emailsOptedInIds: watchEmail ? changed.filter((b) => b.ok_to_email !== true).map((b) => b.id) : [],
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      for (const id of result.sourceChangedIds) {
+        fireAutomationTrigger({
+          triggerType: "client_source_updated",
+          clientId: id,
+          matchValues: result.newSource ? [result.newSource] : undefined,
+        });
+      }
+      for (const id of result.emailsOptedInIds) {
+        fireAutomationTrigger({ triggerType: "has_opted_in_emails", clientId: id });
+      }
     },
   });
 }

@@ -22,6 +22,12 @@ import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { useForms } from "@/lib/hooks/use-crm-forms";
 import { usePackages } from "@/lib/hooks/use-packages";
 import { useEstimateStages } from "@/lib/hooks/use-estimate-stages";
+import { useCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import {
+  CUSTOM_FIELD_OPERATORS,
+  decodeCustomFieldCondition,
+  encodeCustomFieldCondition,
+} from "@/lib/automations/custom-field-condition";
 import {
   CONDITION_GROUPS,
   CONDITION_OPERATORS,
@@ -83,6 +89,7 @@ export function ConditionListEditor({
   const { data: clientSources } = useOrgList("client_sources");
   const { data: cancellationReasons } = useOrgList("cancellation_reasons");
   const { data: estimateStages } = useEstimateStages();
+  const { data: customFieldDefs } = useCustomFieldDefs();
 
   /** Resolves the multi-select options + placeholder for a field, or null if it should render as a plain text Input. */
   function multiSelectConfigFor(field: ConditionField): { options: MultiSelectOption[]; placeholder: string } | null {
@@ -153,6 +160,86 @@ export function ConditionListEditor({
             </SelectContent>
           </Select>
 
+          {c.field === "custom_field" ? (
+            (() => {
+              const decoded = decodeCustomFieldCondition(c.value);
+              const def = decoded ? (customFieldDefs ?? []).find((d) => d.id === decoded.d) : undefined;
+              const deleted = !!decoded && !def && customFieldDefs !== undefined;
+              const ops = CUSTOM_FIELD_OPERATORS[def?.fieldType ?? "text"];
+              // A type change can leave an operator the new type doesn't offer.
+              const operator = ops.includes(c.operator) ? c.operator : null;
+              const noValue = operator === "is_set" || operator === "is_not_set";
+              return (
+                <>
+                  <Select
+                    value={decoded?.d ?? ""}
+                    onValueChange={(id) => {
+                      const next = (customFieldDefs ?? []).find((d) => d.id === id);
+                      const nextOps = CUSTOM_FIELD_OPERATORS[next?.fieldType ?? "text"];
+                      updateCondition(i, {
+                        operator: nextOps.includes(c.operator) ? c.operator : "equals",
+                        value: encodeCustomFieldCondition(id, decoded?.v ?? ""),
+                      });
+                    }}
+                  >
+                    <SelectTrigger className={`w-44 shrink-0 ${deleted || !decoded ? "border-red-300" : ""}`}>
+                      <SelectValue placeholder="Pick a field" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {deleted && decoded && (
+                        <SelectItem value={decoded.d} disabled>
+                          Field deleted
+                        </SelectItem>
+                      )}
+                      {(customFieldDefs ?? []).map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                          {d.unit ? ` (${d.unit})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={operator ?? ""}
+                    onValueChange={(v) =>
+                      updateCondition(i, {
+                        operator: v as ConditionOperator,
+                        value: decoded ? encodeCustomFieldCondition(decoded.d, decoded.v) : c.value,
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-40 shrink-0">
+                      <SelectValue placeholder="Operator" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CONDITION_OPERATORS.filter((o) => ops.includes(o.value)).map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {deleted ? (
+                    <p className="flex-1 min-w-0 self-center text-xs text-red-500 italic">
+                      Field deleted — this condition is never met. Pick another field or remove it.
+                    </p>
+                  ) : noValue ? (
+                    <div className="flex-1" />
+                  ) : (
+                    <Input
+                      type={def?.fieldType === "number" ? "number" : "text"}
+                      placeholder={def?.fieldType === "number" ? "Number" : "Value"}
+                      className="flex-1 min-w-0"
+                      disabled={!decoded}
+                      value={decoded?.v ?? ""}
+                      onChange={(e) => decoded && updateCondition(i, { value: encodeCustomFieldCondition(decoded.d, e.target.value) })}
+                    />
+                  )}
+                </>
+              );
+            })()
+          ) : (
+          <>
           <Select value={c.operator} onValueChange={(v) => updateCondition(i, { operator: v as ConditionOperator })}>
             <SelectTrigger className="w-40 shrink-0">
               <SelectValue />
@@ -193,6 +280,8 @@ export function ConditionListEditor({
                 />
               );
             })()
+          )}
+          </>
           )}
 
           <Button
