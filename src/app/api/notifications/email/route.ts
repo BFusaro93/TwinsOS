@@ -218,9 +218,11 @@ export async function POST(request: Request) {
     // (repointed from profiles.id) — resolve through crm_employees.user_id
     // to get the login user(s) to notify, same as resolveAssigneeId() in
     // ticket-notify.ts. Employees with no linked login are silently skipped.
-    const employeeIds: string[] = Array.isArray(entity.assigned_to_ids)
-      ? (entity.assigned_to_ids as string[])
-      : entity.assigned_to_id ? [entity.assigned_to_id as string] : [];
+    // The array wins when it has entries; an EMPTY array with a primary
+    // assignee set (older rows) used to notify nobody, so fall back to it.
+    const assignedArray = Array.isArray(entity.assigned_to_ids) ? (entity.assigned_to_ids as string[]) : [];
+    const employeeIds: string[] =
+      assignedArray.length > 0 ? assignedArray : entity.assigned_to_id ? [entity.assigned_to_id as string] : [];
     let ids: string[] = [];
     if (employeeIds.length > 0) {
       const { data: assignedEmployees } = await adminClient

@@ -209,6 +209,20 @@ export function useUpdateWorkOrder() {
   return useMutation({
     mutationFn: async ({ id, ...input }: Partial<WorkOrder> & { id: string }) => {
       const supabase = createClient();
+      // The assignee set BEFORE this edit, so the "assigned" email goes out
+      // only when assignment actually changed — the edit form always submits
+      // the assignee fields, and every title / due-date fix used to re-email
+      // every assignee.
+      const assignmentTouched = input.assignedToIds !== undefined || input.assignedToId !== undefined;
+      const { data: beforeAssign } = assignmentTouched
+        ? await supabase.from("work_orders").select("assigned_to_id, assigned_to_ids").eq("id", id).maybeSingle()
+        : { data: null };
+      const assigneeSet = (primary: string | null | undefined, ids: unknown): string => {
+        const set = new Set<string>(Array.isArray(ids) ? (ids as string[]) : []);
+        if (primary) set.add(primary);
+        return [...set].sort().join(",");
+      };
+      const beforeAssignees = beforeAssign ? assigneeSet(beforeAssign.assigned_to_id, beforeAssign.assigned_to_ids) : null;
       const { data, error } = await supabase.from("work_orders").update({
         ...(input.title !== undefined && { title: input.title }),
         ...(input.description !== undefined && { description: input.description }),
@@ -233,15 +247,17 @@ export function useUpdateWorkOrder() {
         ...(input.recurrenceFrequency !== undefined && { recurrence_frequency: input.recurrenceFrequency }),
       }).eq("id", id).select().single();
       if (error) throw error;
-      return mapWorkOrder(data);
+      const assigneesChanged =
+        assignmentTouched && (beforeAssignees === null || beforeAssignees !== assigneeSet(data.assigned_to_id, data.assigned_to_ids));
+      return { ...mapWorkOrder(data), assigneesChanged };
     },
-    onSuccess: (data, { id, assignedToIds, assignedToId }) => {
+    onSuccess: (data, { id }) => {
       if (data) patchWOCache(queryClient, id, data);
       queryClient.invalidateQueries({ queryKey: ["work-orders"] });
       queryClient.invalidateQueries({ queryKey: ["work-orders", id] });
       queryClient.invalidateQueries({ queryKey: ["audit-log", "work_order", id] });
       // Fire assignment email when assignees are changed on an existing WO (best-effort)
-      if (assignedToIds !== undefined || assignedToId !== undefined) {
+      if (data?.assigneesChanged) {
         fetch("/api/notifications/email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
