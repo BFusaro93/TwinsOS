@@ -12131,6 +12131,8 @@ export type Database = {
       }
       maintenance_requests: {
         Row: {
+          assigned_to_id: string | null
+          assigned_to_name: string | null
           asset_id: string | null
           asset_name: string | null
           automation_id: string | null
@@ -12154,6 +12156,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          assigned_to_id?: string | null
+          assigned_to_name?: string | null
           asset_id?: string | null
           asset_name?: string | null
           automation_id?: string | null
@@ -12177,6 +12181,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          assigned_to_id?: string | null
+          assigned_to_name?: string | null
           asset_id?: string | null
           asset_name?: string | null
           automation_id?: string | null
