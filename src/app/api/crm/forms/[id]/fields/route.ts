@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
 
 // PUT /api/crm/forms/[id]/fields — replace all fields for a form
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -16,6 +17,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
+  {
+    const denied = await rejectWithoutFormsPermission(supabase, "edit");
+    if (denied) return denied;
+  }
 
   const { data: form } = await db
     .from("crm_forms")

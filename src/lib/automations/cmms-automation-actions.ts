@@ -196,7 +196,9 @@ export async function executeAction(
     const recipientRole = (ac.recipient_role as string) ?? "all";
     const message = (ac.message as string) ?? `Automation "${auto.name}" triggered.`;
 
-    let profileQuery = adminClient.from("profiles").select("id").eq("org_id", orgId);
+    // Deactivated logins are never recipients (every other notifier excludes them);
+    // "invited" users who haven't accepted yet stay in so the alert is waiting for them.
+    let profileQuery = adminClient.from("profiles").select("id").eq("org_id", orgId).neq("status", "inactive");
     if (recipientRole !== "all") profileQuery = profileQuery.eq("role", recipientRole);
     // Never notify the actor about their own action.
     if (ctx.actorUserId) profileQuery = profileQuery.neq("id", ctx.actorUserId);
