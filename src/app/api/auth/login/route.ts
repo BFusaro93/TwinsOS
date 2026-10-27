@@ -23,7 +23,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { email, password } = body;
+  const { password } = body;
+  // Trimmed: a trailing space from paste/autofill fails sign-in as "Invalid
+  // login credentials", which reads as a wrong password.
+  const email = typeof body.email === "string" ? body.email.trim() : "";
   if (!email || !password) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
   }
