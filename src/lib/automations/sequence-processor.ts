@@ -1,5 +1,5 @@
 import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "./sequence-email";
-import { resolveSmsStepContent, sendResolvedSequenceSms } from "./sequence-sms";
+import { resolveSmsStepContent, sendResolvedSequenceSms, nextSmsSendTime } from "./sequence-sms";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
 import { shouldStopSequence, logSequenceExecution, evaluateConditionSet, computeWaitFireAt } from "./sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -529,17 +529,12 @@ async function runClaimedStep(
     }
 
     // TCPA quiet hours: no marketing/automated texts before 8am or from 9pm in the
-    // recipient's local time. The client's own zone isn't stored, so the org's is
-    // used (service area ≈ the org's zone). The step is pushed to the next 8am
+    // org's local time (see nextSmsSendTime). The step is pushed to the next 8am
     // window instead of failing, so it still goes out once and in order.
     {
-      const tz = await getOrgTimeZone(adminClient, orgId);
-      const now = new Date();
-      const wall = instantToZoneWallClock(now, tz);
-      const hour = Number(wall.time.slice(0, 2));
-      if (hour < 8 || hour >= 21) {
-        const sendDate = hour < 8 ? wall.date : shiftYmd(wall.date, 1);
-        const fireAt = zoneWallClockToInstant(sendDate, "08:00", tz) ?? new Date(now.getTime() + 3_600_000);
+      const deferred = await nextSmsSendTime(adminClient, orgId);
+      if (deferred) {
+        const fireAt = deferred.sendAt;
         await adminClient
           .from("crm_sequence_enrollments")
           .update({ next_fire_at: fireAt.toISOString(), updated_at: nowIso })
@@ -548,8 +543,28 @@ async function runClaimedStep(
       }
     }
 
-    // "Requires approval" — same park-in-the-queue pattern as email.
+    // An approval granted outside quiet hours is parked as "approved" with the
+    // enrollment rescheduled to the next 8am; when the processor comes back
+    // for that step it must send the approved text rather than queue a second
+    // approval. The text a human approved is what goes out.
+    let approvedText: { bodyText: string; toPhone: string } | null = null;
     if (eventConfig.require_approval) {
+      const { data: approvedRow } = await adminClient
+        .from("crm_sequence_step_approvals")
+        .select("body_text, to_phone")
+        .eq("enrollment_id", enrollId)
+        .eq("event_id", currentEvent.id)
+        .eq("status", "approved")
+        .order("decided_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (approvedRow?.body_text && approvedRow?.to_phone) {
+        approvedText = { bodyText: approvedRow.body_text as string, toPhone: approvedRow.to_phone as string };
+      }
+    }
+
+    // "Requires approval" — same park-in-the-queue pattern as email.
+    if (eventConfig.require_approval && !approvedText) {
       const { error: approvalErr } = await adminClient
         .from("crm_sequence_step_approvals")
         .insert({
@@ -592,8 +607,8 @@ async function runClaimedStep(
     const sendResult = await sendResolvedSequenceSms(adminClient, {
       orgId,
       clientId: client_id ?? null,
-      toPhone: built.toPhone,
-      bodyText: built.bodyText,
+      toPhone: approvedText?.toPhone ?? built.toPhone,
+      bodyText: approvedText?.bodyText ?? built.bodyText,
     });
     if (!sendResult.ok) {
       return handleSendFailure(adminClient, failureCtx, sendResult.reason, sendResult.permanent === true);
@@ -602,7 +617,7 @@ async function runClaimedStep(
     await logSequenceExecution(adminClient, {
       orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
       eventId: currentEvent.id, eventType: "text_message", action: "sms_sent",
-      detail: `${built.bodyText} → ${built.toPhone}`,
+      detail: `${approvedText?.bodyText ?? built.bodyText} → ${approvedText?.toPhone ?? built.toPhone}`,
     });
     const action = await advanceEnrollmentPastStep(adminClient, {
       enrollmentId: enrollId,

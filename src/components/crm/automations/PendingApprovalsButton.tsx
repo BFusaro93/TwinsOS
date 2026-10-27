@@ -24,8 +24,10 @@ export function PendingApprovalsButton() {
 
   async function handleDecide(id: string, action: "approve" | "reject") {
     try {
-      await decide.mutateAsync({ id, action });
-      toast.success(action === "approve" ? "Sent" : "Step rejected — sequence stopped");
+      const result = (await decide.mutateAsync({ id, action })) as { deferred?: boolean; message?: string };
+      toast.success(
+        action !== "approve" ? "Step rejected — sequence stopped" : result?.deferred && result.message ? result.message : "Sent"
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to record decision");
     }

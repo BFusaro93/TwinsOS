@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "@/lib/automations/sequence-email";
-import { sendResolvedSequenceSms } from "@/lib/automations/sequence-sms";
+import { sendResolvedSequenceSms, nextSmsSendTime } from "@/lib/automations/sequence-sms";
+import { instantToZoneWallClock } from "@/lib/time/zone";
 import { logSequenceExecution } from "@/lib/automations/sequence-enrollment";
 
 /**
@@ -111,6 +112,38 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .select("id");
   if (!claimed || claimed.length === 0) {
     return NextResponse.json({ error: "Already decided" }, { status: 409 });
+  }
+
+  // Texts approved outside quiet hours (8am-9pm org time) must not go out
+  // now: the processor checked quiet hours when the step was queued, but the
+  // approval can land at any hour. Keep the approval as approved, release the
+  // enrollment and schedule it for the next 8:00 AM; the processor sends the
+  // approved text then (re-checking consent at the actual send).
+  if (approval.channel === "sms") {
+    const deferred = await nextSmsSendTime(db, approval.org_id);
+    if (deferred) {
+      const sendAtIso = deferred.sendAt.toISOString();
+      await db
+        .from("crm_sequence_enrollments")
+        .update({ awaiting_approval: false, next_fire_at: sendAtIso, updated_at: nowIso })
+        .eq("id", approval.enrollment_id);
+      const wallNow = instantToZoneWallClock(new Date(), deferred.tz);
+      const wallSend = instantToZoneWallClock(deferred.sendAt, deferred.tz);
+      const when = wallSend.date === wallNow.date ? "today" : "tomorrow";
+      await logSequenceExecution(db, {
+        orgId: approval.org_id, enrollmentId: approval.enrollment_id, sequenceId: approval.sequence_id,
+        clientId: approval.client_id, eventId: approval.event_id, eventType: approval.channel,
+        action: "approval_approved",
+        detail: `${approval.body_text} → ${approval.to_phone} — approved by ${user.id}, held for quiet hours until ${sendAtIso}`,
+      });
+      return NextResponse.json({
+        ok: true,
+        action: "approved",
+        deferred: true,
+        sendAt: sendAtIso,
+        message: `Approved — will send ${when} at 8:00 AM`,
+      });
+    }
   }
 
   // Approve: send the already-resolved content, then advance the enrollment
