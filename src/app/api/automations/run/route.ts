@@ -15,6 +15,7 @@ import {
   fireEventAutomations,
   type AdminClient,
 } from "@/lib/automations/cmms-automation-actions";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 const log = logger.child("crm-processor");
 
@@ -284,9 +285,17 @@ async function handleRun(request: Request) {
   const skipped: { automationId: string; reason: string }[] = [];
   const now = new Date().toISOString();
 
+  const orgCanceled = createOrgCanceledResolver(adminClient);
   for (const auto of automations ?? []) {
     const tc = (auto.trigger_config ?? {}) as Record<string, unknown>;
     const orgId = auto.org_id as string;
+
+    // A canceled org is read-only: its poll automations pause (and resume on
+    // resubscribe, with no backfill) — same rule the sequence sweep applies.
+    if (await orgCanceled(orgId)) {
+      skipped.push({ automationId: auto.id, reason: "org subscription is canceled" });
+      continue;
+    }
 
     if (auto.trigger_type === "meter_threshold") {
       const meterId = tc.meter_id as string | undefined;

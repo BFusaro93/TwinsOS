@@ -4,6 +4,7 @@ import type { Database } from "@/types/supabase";
 import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet } from "@/lib/automations/sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, shiftYmd } from "@/lib/time/zone";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 /**
  * GET  /api/crm/estimates/automation-date-triggers — called by Vercel Cron
@@ -44,6 +45,7 @@ async function handleRun(request: Request) {
     .in("trigger_type", ["estimate_expiring", "estimate_no_response"]);
 
   let enrolled = 0;
+  const orgCanceled = createOrgCanceledResolver(supabase);
 
   for (const trigger of triggers ?? []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,6 +55,7 @@ async function handleRun(request: Request) {
     if (!seq?.is_active || !auto?.is_active) continue;
 
     const orgId = auto.org_id as string;
+    if (await orgCanceled(orgId)) continue; // canceled orgs get no automated enrollments
     const days = (trigger.config as { days?: number } | null)?.days;
     if (!days || days <= 0) continue;
 

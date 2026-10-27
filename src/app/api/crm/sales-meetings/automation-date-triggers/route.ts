@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet, logSequenceExecution } from "@/lib/automations/sequence-enrollment";
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 /**
  * GET  /api/crm/sales-meetings/automation-date-triggers — called every 15
@@ -76,6 +77,7 @@ async function handleRun(request: Request) {
   }
 
   let enrolled = 0;
+  const orgCanceled = createOrgCanceledResolver(supabase);
 
   for (const trigger of triggers ?? []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -85,6 +87,7 @@ async function handleRun(request: Request) {
     if (!seq?.is_active || !auto?.is_active || seq.deleted_at || auto.deleted_at) continue;
 
     const orgId = auto.org_id as string;
+    if (await orgCanceled(orgId)) continue; // canceled orgs get no automated enrollments
     const configured = Number((trigger.config as { minutes?: number } | null)?.minutes);
     const minutes = Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_LEAD_MINUTES;
 

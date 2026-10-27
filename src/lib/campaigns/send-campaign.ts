@@ -194,6 +194,26 @@ export async function sendCampaignEmails(
     }
   }
   if (recipients.length === 0) {
+    // The scheduled-send cron (createdBy === null) retried an empty audience
+    // every hour forever, logging an error each time. Nothing will ever send:
+    // close it out as completed with 0 recipients. A person pressing "Send
+    // Now" still gets the explanatory error so they can fix the audience, and
+    // a stale "sending" campaign is left alone (it may have partial history).
+    if (createdBy === null && campaign.status !== "sending") {
+      const { error: closeErr } = await db
+        .from("crm_campaigns")
+        .update({
+          status: "completed",
+          sent_at: new Date().toISOString(),
+          total_recipients: 0,
+          delivered_count: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", campaign.id)
+        .in("status", ["draft", "scheduled"]);
+      if (closeErr) return { ok: false, error: closeErr.message };
+      return { ok: true, totalRecipients: 0, delivered: 0, failed: 0 };
+    }
     return { ok: false, error: "No eligible recipients (check Do Not Market / missing emails)" };
   }
 

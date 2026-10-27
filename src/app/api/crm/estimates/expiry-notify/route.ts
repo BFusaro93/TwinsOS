@@ -5,6 +5,7 @@ import { escapeHtml } from "@/lib/utils/escape-html";
 import { orgEmailFrom } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 // Called daily by Vercel Cron (see vercel.json) — Vercel Cron always sends a
 // GET request, so this must be GET, not POST, or it silently never fires.
@@ -58,10 +59,12 @@ export async function GET(req: NextRequest) {
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   let notified = 0;
+  const orgCanceled = createOrgCanceledResolver(supabase);
 
   for (const est of expiring as Record<string, unknown>[]) {
     const createdBy = est.created_by as string | null;
     if (!createdBy) continue;
+    if (await orgCanceled(est.org_id as string)) continue; // canceled orgs get no automated reminders
 
     // Re-filter against the org's calendar — the SQL bounds above are
     // deliberately a day wider than the real window.
