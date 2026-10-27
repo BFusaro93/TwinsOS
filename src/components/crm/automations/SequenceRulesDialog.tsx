@@ -29,6 +29,7 @@ import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { ConditionListEditor, type ConditionRow } from "./ConditionListEditor";
+import { validateConditionRows } from "@/lib/automations/custom-field-condition";
 import { MultiSelectDropdown } from "@/components/shared/MultiSelectDropdown";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { useOrgTags } from "@/lib/hooks/use-clients";
@@ -374,6 +375,11 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
 
   async function handleSave() {
     if (!name.trim()) return;
+    const conditionError = validateConditionRows([...stopConditions, ...triggers.flatMap((t) => t.conditions)]);
+    if (conditionError) {
+      toast.error(conditionError);
+      return;
+    }
     setSaving(true);
     try {
       const supabase = db();

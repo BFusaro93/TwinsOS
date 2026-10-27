@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import { ConditionListEditor, type ConditionRow } from "./ConditionListEditor";
+import { validateConditionRows } from "@/lib/automations/custom-field-condition";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
 
@@ -33,6 +34,11 @@ export function IfBranchEventDialog({ open, onOpenChange, event }: Props) {
   }, [open, event]);
 
   async function handleSave() {
+    const conditionError = validateConditionRows(conditions);
+    if (conditionError) {
+      toast.error(conditionError);
+      return;
+    }
     setSaving(true);
     try {
       await updateEvent.mutateAsync({

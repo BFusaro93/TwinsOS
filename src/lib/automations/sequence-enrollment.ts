@@ -1,4 +1,10 @@
 import type { ConditionField, ConditionOperator, TriggerConfig, TriggerType } from "@/types/crm-automations";
+import {
+  compareCustomField,
+  decodeCustomFieldCondition,
+  readCustomFieldValue,
+  type CustomFieldType,
+} from "./custom-field-condition";
 import { isZapierTriggerType, notifyZapierSubscribers } from "@/lib/integrations/zapier";
 import { logger } from "@/lib/logger";
 
@@ -263,9 +269,9 @@ interface ConditionRow {
   value: string | null;
 }
 
-// Fields with a direct, unambiguous DB column to check against today. Fields
-// left out (custom_field — schemaless) have no backing lookup wired up yet;
-// conditions on those fields are evaluated as "not met" rather than
+// Fields with a direct, unambiguous DB column to check against today.
+// custom_field is resolved separately (see getClientCustomFieldFacts); any
+// other field without a lookup is evaluated as "not met" rather than
 // throwing, so an unsupported condition just never matches.
 const CLIENT_FIELD_GETTERS: Partial<Record<ConditionField, (client: Record<string, unknown>) => unknown>> = {
   account_type: (c) => c.account_type,
@@ -418,6 +424,45 @@ async function getClientServiceSets(
   return { scheduled, completed };
 }
 
+/**
+ * Definitions (non-deleted only) and this client's stored values for the
+ * custom fields referenced by the given conditions. A deleted or unknown
+ * definition is simply absent from `defs`, which makes its condition "not met".
+ */
+async function getClientCustomFieldFacts(
+  supabase: AnyClient,
+  clientId: string,
+  conditions: ConditionRow[]
+): Promise<{ defs: Map<string, CustomFieldType>; values: Map<string, { value_text: string | null; value_number: number | null }> }> {
+  const defIds = Array.from(
+    new Set(
+      conditions
+        .filter((c) => c.field === "custom_field")
+        .map((c) => decodeCustomFieldCondition(c.value)?.d)
+        .filter((d): d is string => !!d)
+    )
+  );
+  const defs = new Map<string, CustomFieldType>();
+  const values = new Map<string, { value_text: string | null; value_number: number | null }>();
+  if (defIds.length === 0) return { defs, values };
+
+  const [{ data: defRows }, { data: valueRows }] = await Promise.all([
+    supabase.from("crm_custom_field_defs").select("id, field_type").in("id", defIds).is("deleted_at", null),
+    supabase
+      .from("crm_client_custom_field_values")
+      .select("field_def_id, value_text, value_number")
+      .eq("client_id", clientId)
+      .in("field_def_id", defIds),
+  ]);
+  ((defRows ?? []) as { id: string; field_type: string }[]).forEach((d) => {
+    defs.set(d.id, d.field_type === "number" ? "number" : "text");
+  });
+  ((valueRows ?? []) as { field_def_id: string; value_text: string | null; value_number: number | null }[]).forEach((v) => {
+    values.set(v.field_def_id, { value_text: v.value_text, value_number: v.value_number });
+  });
+  return { defs, values };
+}
+
 function compare(fieldValue: unknown, operator: ConditionOperator, condValue: string): boolean {
   if (operator === "is_set") return fieldValue !== null && fieldValue !== undefined && fieldValue !== "";
   if (operator === "is_not_set") return fieldValue === null || fieldValue === undefined || fieldValue === "";
@@ -536,6 +581,10 @@ export async function evaluateConditionSet(
       : Promise.resolve(new Set<string>()),
   ]);
 
+  const customFieldFacts = conditions.some((c) => c.field === "custom_field") && clientId
+    ? await getClientCustomFieldFacts(supabase, clientId, conditions)
+    : null;
+
   const invoiceWithPayment = invoice ? { ...invoice, last_payment_date: lastPaymentDate } : null;
 
   // These fields are rendered with the multi-select checkbox picker (see
@@ -545,6 +594,14 @@ export async function evaluateConditionSet(
   const csvValues = (v: string | null) => (v ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
   const results = conditions.map((c) => {
+    if (c.field === "custom_field") {
+      const decoded = decodeCustomFieldCondition(c.value);
+      if (!decoded || !customFieldFacts) return false;
+      const type = customFieldFacts.defs.get(decoded.d);
+      if (!type) return false; // definition deleted or never existed
+      const fieldValue = readCustomFieldValue(type, customFieldFacts.values.get(decoded.d) ?? null);
+      return compareCustomField(type, fieldValue, c.operator, decoded.v);
+    }
     if (c.field === "has_tag") { const vs = csvValues(c.value); return vs.length > 0 && vs.some((v) => tags.includes(v)); }
     if (c.field === "does_not_have_tag") { const vs = csvValues(c.value); return vs.length > 0 && vs.every((v) => !tags.includes(v)); }
     if (c.field === "scheduled_service") { const vs = csvValues(c.value); return vs.length > 0 && vs.some((v) => serviceSets.scheduled.has(v)); }
