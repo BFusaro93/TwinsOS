@@ -360,11 +360,18 @@ export async function POST(
   }
 
   // 3c. A deposit is a down payment on the accepted scope; it can never
-  // exceed it. Checked against the post-split total, and the acceptance is
-  // undone (not half-recorded) so the client can correct the amount.
+  // exceed it. Checked against the post-split total.
+  //
+  // The proposal page never lets the client type this amount: it sends the
+  // estimate's deposit_required_cents verbatim. When the client unticks lines
+  // (or picks a cheaper Good/Better/Best tier) the accepted total can fall
+  // below that fixed deposit, and rejecting then made it impossible to accept
+  // with a manual deposit method at all ("Deposit amount exceeds the proposal
+  // total" for a number the client didn't choose). Clamp to the accepted total
+  // — same rule deposit-intent applies for the online deposit — and record
+  // nothing when nothing was accepted for a price.
   if (depositAmountCents !== null && depositAmountCents > acceptedTotalCents) {
-    await rollbackAcceptance([...wonIds, ...lostIds]);
-    return NextResponse.json({ error: "Deposit amount exceeds the proposal total" }, { status: 400 });
+    depositAmountCents = acceptedTotalCents > 0 ? acceptedTotalCents : null;
   }
 
   // 3d. Record the deposit the client says they are sending.
