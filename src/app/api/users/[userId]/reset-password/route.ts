@@ -10,7 +10,7 @@ const log = logger.child("users-reset-password");
 /**
  * POST /api/users/[userId]/reset-password
  * Admin-only. Directly sets a new password for a user via the service role
- * Admin API — needed for crew accounts, which use fake @crew.equipt.app
+ * Admin API — needed for crew accounts, which use fake @crew.landscapt.com
  * addresses and can't receive a normal password-reset email.
  * Body: { password: string }
  */

@@ -40,6 +40,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "sonner";
 import type { CRMCrew, CRMCrewMember } from "@/types/crm-employees";
 import { FALLBACK_CREW_COLORS } from "@/components/crm/dispatch/crew-color";
+import { createClient } from "@/lib/supabase/client";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { SearchInput } from "@/components/shared/SearchInput";
 
@@ -326,12 +327,13 @@ function TeamDetailsTab({
 
   // A crew login should only ever resolve to one team's Crew App view — exclude
   // logins already linked to a different team, but keep this crew's own pick available.
-  const linkedElsewhere = new Set(
+  // Shown but disabled (not hidden), with the crew that holds it, so a login that
+  // "isn't in the list" is explained instead of mysterious.
+  const linkedElsewhere = new Map(
     (allCrews ?? [])
       .filter((c) => c.id !== crewId && c.userId)
-      .map((c) => c.userId)
+      .map((c) => [c.userId as string, c.name] as const)
   );
-  const availableLogins = logins.filter((l) => !linkedElsewhere.has(l.id));
 
   // Was a silent Nominatim (OpenStreetMap) lookup that only wrote lat/lng and
   // swallowed every failure - the one place in the app on a non-Google provider,
@@ -419,11 +421,15 @@ function TeamDetailsTab({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  {availableLogins.map((l) => (
-                    <SelectItem key={l.id} value={l.id}>
-                      {l.role === "crew" ? l.name : `${l.name} (${l.role.charAt(0).toUpperCase()}${l.role.slice(1)})`}
-                    </SelectItem>
-                  ))}
+                  {logins.map((l) => {
+                    const heldBy = linkedElsewhere.get(l.id);
+                    return (
+                      <SelectItem key={l.id} value={l.id} disabled={!!heldBy}>
+                        {l.role === "crew" ? l.name : `${l.name} (${l.role.charAt(0).toUpperCase()}${l.role.slice(1)})`}
+                        {heldBy ? ` — already on ${heldBy}` : ""}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">
@@ -714,9 +720,26 @@ export function CrewsList() {
   });
 
   async function handleDeactivate(id: string, name: string) {
+    // Jobs and upcoming visits left on a crew that's then made inactive keep pointing
+    // at it: they can't be picked in dropdowns and the crew's login sees nothing.
+    const supabase = createClient();
+    const today = new Date().toISOString().slice(0, 10);
+    const [jobsRes, visitsRes] = await Promise.all([
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).from("crm_jobs").select("id", { count: "exact", head: true })
+        .eq("crew_id", id).is("deleted_at", null).in("status", ["scheduled", "in_progress", "hold"]),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).from("crm_job_visits").select("id", { count: "exact", head: true })
+        .eq("crew_id", id).is("deleted_at", null).gte("scheduled_date", today).in("status", ["scheduled", "dispatched", "in_progress"]),
+    ]);
+    const jobCount = jobsRes.count ?? 0;
+    const visitCount = visitsRes.count ?? 0;
+    const leftBehind = jobCount > 0 || visitCount > 0
+      ? ` It still has ${jobCount} active job${jobCount === 1 ? "" : "s"} and ${visitCount} upcoming visit${visitCount === 1 ? "" : "s"} assigned to it. They will stay on this crew, hidden from the crew dropdowns, and its crew login will see nothing — reassign them first.`
+      : "";
     if (!(await confirm({
       title: `Deactivate crew "${name}"?`,
-      description: "The crew stops appearing on the dispatch board. Its history is preserved.",
+      description: `The crew stops appearing on the dispatch board. Its history is preserved.${leftBehind}`,
       confirmLabel: "Deactivate",
       destructive: true,
     }))) return;
