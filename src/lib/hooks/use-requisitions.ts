@@ -549,9 +549,29 @@ export function useDeleteRequisition() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
+      // A requisition that already produced purchase orders can't be deleted:
+      // the POs would be orphaned from their source. Cancel/close it instead.
+      const { data: req, error: reqErr } = await supabase
+        .from("requisitions")
+        .select("status")
+        .eq("id", id)
+        .maybeSingle();
+      if (reqErr) throw reqErr;
+      const { count: poCount, error: poErr } = await supabase
+        .from("purchase_orders")
+        .select("id", { count: "exact", head: true })
+        .eq("requisition_id", id)
+        .is("deleted_at", null);
+      if (poErr) throw poErr;
+      if (req?.status === "ordered" || (poCount ?? 0) > 0) {
+        throw new Error("This requisition already has purchase orders created from it and can't be deleted. Cancel or close it instead.");
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("requisitions").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
+    },
+    onError: (err) => {
+      toast.error(serializeError(err));
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["requisitions"] }),
   });
