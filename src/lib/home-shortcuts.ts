@@ -21,6 +21,7 @@ import {
   Fuel,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { normalizeExternalUrl } from "@/lib/utils/external-url";
 
 // Home-page "external app shortcut" tiles (e.g. Samsara, Gusto) are stored per-org
 // in organizations.customizations.homeShortcuts — no dedicated table needed for a
@@ -64,25 +65,7 @@ export function getHomeShortcutIcon(key: string): LucideIcon {
   return ICON_BY_KEY.get(key) ?? Link2;
 }
 
-/**
- * A tile URL that is safe to put in an href: http(s) only. Typing "app.gusto.com"
- * (no scheme) used to produce a RELATIVE link that opened /home/app.gusto.com
- * (a 404), and nothing stopped javascript:/data: URLs from being stored.
- * Returns the normalized absolute URL, or null when it can't be made safe.
- */
-export function normalizeShortcutUrl(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  // "host:8080/path" looks like a scheme to the regex but is a host:port.
-  const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !/^[^/:]+:\d+(\/|$)/.test(trimmed);
-  const withScheme = hasScheme ? trimmed : `https://${trimmed.replace(/^\/\//, "")}`;
-  try {
-    const parsed = new URL(withScheme);
-    return parsed.protocol === "https:" || parsed.protocol === "http:" ? parsed.toString() : null;
-  } catch {
-    return null;
-  }
-}
+export const normalizeShortcutUrl = (raw: string): string | null => normalizeExternalUrl(raw);
 
 export function parseHomeShortcuts(customizations: Record<string, unknown> | undefined | null): HomeShortcut[] {
   const raw = customizations?.homeShortcuts;

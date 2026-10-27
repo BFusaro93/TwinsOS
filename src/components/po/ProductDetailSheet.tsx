@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeExternalUrl } from "@/lib/utils/external-url";
 import { toast } from "sonner";
 import {
   LineChart,
@@ -429,7 +430,7 @@ function ChemicalTab({ product }: { product: ProductItem }) {
           value={
             product.epaUrl ? (
               <a
-                href={product.epaUrl}
+                href={normalizeExternalUrl(product.epaUrl) ?? undefined}
                 target="_blank"
                 rel="noreferrer"
                 className="text-brand-600 dark:text-brand-400 hover:underline"
