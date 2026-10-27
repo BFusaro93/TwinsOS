@@ -17,6 +17,8 @@ export async function GET(request: Request) {
     .eq("org_id", auth.orgId)
     .is("deleted_at", null)
     .order("next_due_date", { ascending: true })
+    // id tie-break: many schedules share a due date, and offset paging over ties skips/repeats rows.
+    .order("id", { ascending: true })
     .range(offset, offset + limit - 1);
 
   if (error) return jsonServerError("GET /api/v1/pm-schedules", error);

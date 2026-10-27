@@ -17,6 +17,8 @@ export async function GET(request: Request) {
     .eq("org_id", auth.orgId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
+    // id tie-break: offset paging over equal created_at values skips/repeats rows.
+    .order("id", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) return jsonServerError("GET /api/v1/projects", error);
