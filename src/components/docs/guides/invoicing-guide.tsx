@@ -46,6 +46,7 @@ export function InvoicingGuide() {
           <TOCLink href="#where-invoices-come-from">Where invoices come from</TOCLink>
           <TOCLink href="#tax-on-auto-invoices">Sales tax on invoices generated from jobs</TOCLink>
           <TOCLink href="#editing-and-sending">Editing and sending an invoice</TOCLink>
+          <TOCLink href="#invoice-template-options">Chemical record and technician notes on invoices</TOCLink>
           <TOCLink href="#invoice-photos">Photos on an invoice</TOCLink>
           <TOCLink href="#other-charges">Other charges (late fees, trip charges, surcharges)</TOCLink>
           <TOCLink href="#invoice-list">The Invoices list: columns and filters</TOCLink>
@@ -208,6 +209,28 @@ export function InvoicingGuide() {
         </ul>
       </Section>
 
+      <Section id="invoice-template-options" title="Chemical record and technician notes on invoices">
+        <p>
+          In Settings &gt; Accounting &gt; <em>Invoice Templates</em>, each template has two optional
+          checkboxes:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Add chemical application record</strong> adds a Chemical Application Record page
+            to the invoice PDF: product, EPA #, ratio, areas, amount, method, targets, re-entry and
+            applicator for the visits the invoice bills. Only applications that count as applied
+            appear &mdash; a chemical preloaded at the planned amount stays out until the crew or
+            office confirms it. Used on the emailed PDF too.
+          </li>
+          <li>
+            <strong>Include technician completion notes</strong> puts the notes the crew wrote when
+            completing each billed visit into the invoice&apos;s Notes section (several visits are
+            prefixed with the visit date). Customers will see exactly what the crew wrote, so leave
+            it off unless your crews write customer-ready notes.
+          </li>
+        </ul>
+      </Section>
+
       <Section id="invoice-photos" title="Photos on an invoice">
         <p>
           You can attach photos to an invoice — a before/after of the work, a damaged item, proof
@@ -259,6 +282,13 @@ export function InvoicingGuide() {
             Turn a charge off to stop offering it without losing the invoices it&apos;s already on.
           </li>
           <li>
+            <strong>Starting from scratch?</strong> While the list is empty, click{" "}
+            <em>Add common charges</em> to add nine standard fees (Bond Fee, Credit Card Processing
+            Fee, Fuel Surcharge, Interest, Late Fee, Local Agency Fee, Permit Fee, Returned Check Fee,
+            Trip Charge) at $0.00, not taxable. Set the amounts you actually charge and delete or
+            turn off the ones you don&apos;t.
+          </li>
+          <li>
             <strong>On one invoice</strong>, open <em>Add Line Item</em>; active charges are listed under
             an <em>Other Charges</em> heading below your services. The line is a normal line &mdash; edit
             its amount, quantity or taxable flag like any other. Changing the catalog later never
@@ -267,7 +297,7 @@ export function InvoicingGuide() {
           <li>
             <strong>On many invoices at once</strong>, tick them in the Invoices list and choose
             Actions &gt; <em>Add Other Charge&hellip;</em>. Pick the charge, adjust the amount if this
-            run needs a different one, and it&apos;s added to every selected invoice and their totals
+            run needs a different one (it must be more than $0), and it&apos;s added to every selected invoice and their totals
             recalculated. Locked and void invoices are skipped, and the result tells you how many were.
             You need the <em>Add / modify invoices</em> permission.
           </li>
@@ -316,7 +346,10 @@ export function InvoicingGuide() {
         </ul>
         <p>
           The Payments page uses the same range filter: filter by <strong>Date</strong> with a
-          from/to range.
+          from/to range. It opens on <strong>Last 30 Days</strong>; the <strong>All</strong> tab
+          shows every payment regardless of age, and <strong>Deleted</strong> shows removed
+          payments. Searching or filtering on a column also looks past the 30-day window, so an
+          older payment is never hidden from a search.
         </p>
       </Section>
 

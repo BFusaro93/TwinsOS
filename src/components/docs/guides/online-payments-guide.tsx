@@ -62,6 +62,15 @@ export function OnlinePaymentsGuide() {
           account in every sense, Landscapt is never the merchant of record and never touches the
           funds.
         </p>
+        <p>
+          <strong>Already have a Stripe account</strong> (for example one you use with another
+          system)? Until you&apos;re connected, the same Card Payments card shows{" "}
+          <em>Connect your existing account</em>. It sends you to Stripe to approve the link, then
+          returns you to Settings &gt; Accounting. The account stays yours and keeps working
+          everywhere else. Only an admin can do this, one Stripe account can be connected to one
+          Landscapt organization only, and if you reconnect a different account, cards clients
+          saved on the old one are cleared and need to be re-saved.
+        </p>
       </Section>
 
       <Section id="ach" title="Enabling bank transfer (ACH)">

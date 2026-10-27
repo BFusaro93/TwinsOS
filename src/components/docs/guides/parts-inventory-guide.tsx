@@ -46,6 +46,7 @@ export function PartsInventoryGuide() {
           <TOCLink href="#adding-a-part">Adding a part</TOCLink>
           <TOCLink href="#assets-many-to-many">Parts ↔ Assets: why it’s many-to-many</TOCLink>
           <TOCLink href="#vendors">Vendors on a part</TOCLink>
+          <TOCLink href="#copy-part">Copy a part</TOCLink>
           <TOCLink href="#lifecycle-example">Worked example: one part, start to finish</TOCLink>
           <TOCLink href="#interchangeable-parts">Interchangeable parts: split vs. alternate vendor</TOCLink>
           <TOCLink href="#replenishing">Replenishing stock</TOCLink>
@@ -120,6 +121,24 @@ export function PartsInventoryGuide() {
           does not change which Products entry a PO line item points at. Use it when the exact same
           physical part is available from more than one supplier and you just want the options on
           hand when it’s time to reorder.
+        </p>
+        <p>
+          A vendor name that arrives from a CSV import is matched to your existing vendor by name
+          (not case-sensitive, and only when exactly one vendor has that name), so the part is
+          linked to the real vendor record. Re-importing with a blank vendor column leaves a
+          part&apos;s vendor alone. If a part still shows a vendor name but &ldquo;No vendor&rdquo; in
+          the picker, opening Edit Part links it to the vendor with the same name; pick &ldquo;No
+          vendor&rdquo; to clear it on purpose.
+        </p>
+      </Section>
+
+      <Section id="copy-part" title="Copy a part">
+        <p>
+          On a part&apos;s detail, click <strong>Copy</strong> (needs the permission to manage
+          inventory) to start a new part from it. The form opens titled <em>Copy Part</em> with the
+          name set to &ldquo;&lt;name&gt; (Copy)&rdquo;, the part number blank (give it its own),
+          quantity on hand at 0, and everything else &mdash; category, unit cost, minimum stock,
+          location, vendor, description, parent part &mdash; carried over to adjust.
         </p>
       </Section>
 

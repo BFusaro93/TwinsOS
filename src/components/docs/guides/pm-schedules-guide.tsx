@@ -177,8 +177,10 @@ export function PMSchedulesGuide() {
             <strong>Single asset</strong> — one flat work order, with that asset attached directly.
           </li>
           <li>
-            <strong>Multiple assets</strong> — one parent work order plus a sub-work order per
-            asset, each carrying its own asset and its own copied-over parts list.
+            <strong>Multiple assets</strong> — one parent (master) work order plus a sub-work order
+            per asset, each carrying its own asset and that asset&apos;s own parts. Parts from the
+            schedule&apos;s Parts tab are shared, so they go on the master work order once (one stock
+            deduction), not on every sub-work order.
           </li>
         </ul>
         <p>
@@ -304,7 +306,8 @@ export function PMSchedulesGuide() {
               <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Parts tab on the schedule itself</td>
               <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 Parts expected for the routine in general, shared across every asset on the
-                schedule.
+                schedule. On generation they land once on the master work order (or the lone work
+                order of a single-asset schedule), with a single stock deduction.
               </td>
             </tr>
             <tr>
@@ -312,8 +315,8 @@ export function PMSchedulesGuide() {
               <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Assets tab, expand a specific asset row</td>
               <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">
                 A parts template scoped to just that one asset — quantity and unit cost included.
-                This is what gets copied onto that asset&apos;s work order (or sub-work order) when
-                the schedule generates.
+                This is what gets copied onto that asset&apos;s own work order (or sub-work order) when
+                the schedule generates, once per asset.
               </td>
             </tr>
           </tbody>

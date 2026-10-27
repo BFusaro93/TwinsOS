@@ -22,7 +22,7 @@ const EQUIPT_ENTITIES: [string, string, string][] = [
 const LANDSCAPT_ENTITIES: [string, string, string][] = [
   ["Clients", "displayName", "accountType, primaryPhone, primaryEmail, billingAddress/City/State/Zip, serviceAddress/City/State/Zip, source, accountNumber"],
   ["Leads", "displayName", "accountType, primaryPhone, primaryEmail, billingAddress/City/State/Zip, source"],
-  ["Estimates", "clientName, description", "estimateDate, validUntilDate, poNumber, stage"],
+  ["Estimates", "clientName, description", "estimateDate, validUntilDate, poNumber, stage, amount, salesperson, probability, externalRef"],
   ["Invoices", "clientName, service, description, amount", "invoiceDate, dueDate, poNumber, status, taxAmount"],
   ["Contracts", "clientName, title", "status, startDate, endDate, monthlyAmount, billingFrequency, billingDayOfMonth, billMonthInAdvance, paymentType, poNumber, autoGenerate, isActive, includeSubProperties, defaultService, invoiceLineItems (separate lines with |), janAmount … decAmount (optional seasonal amounts)"],
   ["Payments", "clientName, amount", "paymentDate, method, reference, memo, invoiceNumber"],
@@ -263,6 +263,15 @@ export function ImportExportGuide() {
             if its amount or date can&apos;t be read, if no client matches, or if two clients share
             the name on the row (add an <code>accountNumber</code> column to say which one). Re-importing
             the same file creates the records again, so import each file once.
+          </li>
+          <li>
+            <strong>Estimate import extras.</strong> <code>amount</code> adds one editable line,
+            &ldquo;Imported estimate total&rdquo;, so the estimate carries its old total instead of
+            $0. <code>salesperson</code> is matched to an employee by full name (a blank, unknown or
+            duplicated name just leaves the rep empty). <code>probability</code> takes a percent such
+            as <code>60</code> or <code>60%</code>. <code>externalRef</code> is the estimate number
+            in the old system; it is saved in the estimate&apos;s notes as &ldquo;original estimate
+            #&rdquo;.
           </li>
         </ul>
         <Table>
