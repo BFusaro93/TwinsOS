@@ -4,7 +4,6 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@/lib/hooks/use-query";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { createClient } from "@/lib/supabase/client";
-import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
