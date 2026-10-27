@@ -19,6 +19,10 @@ const log = logger.child("stripe webhook");
 // still-active or still-retrying states, not a final "not paying" outcome.
 const DOWNGRADE_STATUSES = new Set(["canceled", "unpaid", "incomplete_expired", "paused"]);
 
+/** Event types that overwrite subscription state — the only ones the
+ * out-of-order guard compares against each other. */
+const STATE_EVENT_TYPES = ["checkout.session.completed", "customer.subscription.updated", "customer.subscription.deleted"];
+
 /** How long a canceled org keeps read-only access before it's locked out. */
 const CANCELED_ACCESS_DAYS = 90;
 
@@ -86,11 +90,18 @@ export async function POST(request: Request) {
   // has already been processed, this one arrived late (Stripe doesn't
   // guarantee delivery order) — applying it now would revert already-current
   // state back to something older. ──────────────────────────────────────────
-  if (subscriptionId) {
+  //
+  // Only STATE-bearing events take part. invoice.payment_failed carries no
+  // subscription state — it's a notification — so it must neither be dropped
+  // because a later customer.subscription.updated (status -> past_due, which
+  // Stripe emits within a second of the failure) landed first, nor count as the
+  // "newer" event that makes a genuine plan change look stale.
+  if (subscriptionId && STATE_EVENT_TYPES.includes(event.type)) {
     const { data: newerEvent } = await db
       .from("stripe_webhook_events")
       .select("event_id")
       .eq("subscription_id", subscriptionId)
+      .in("event_type", STATE_EVENT_TYPES)
       .neq("event_id", event.id)
       .gt("event_created", eventCreated)
       .limit(1)

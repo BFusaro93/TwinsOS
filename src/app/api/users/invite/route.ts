@@ -141,7 +141,16 @@ export async function POST(request: Request) {
     if (existingProfile && existingProfile.org_id !== callerProfile.org_id) {
       return NextResponse.json({ error: "A user with that email already exists" }, { status: 409 });
     }
-    existingStatus = existingProfile?.status ?? null;
+    // An existing auth user with NO profiles row is not staff of any org -
+    // typically a client portal login. Never mint a staff profile in the
+    // caller's org for it (and never email it a staff recovery link).
+    if (!existingProfile) {
+      return NextResponse.json(
+        { error: "That email is already tied to a different type of account (such as a client portal login). Use a different email." },
+        { status: 409 }
+      );
+    }
+    existingStatus = existingProfile.status ?? null;
     // A deactivated teammate is banned at the auth layer. Re-inviting would
     // email a link that can't sign in and relabel them "invited" while the ban
     // stays — Reactivate is the path that lifts the ban.

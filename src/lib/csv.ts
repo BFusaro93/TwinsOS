@@ -176,6 +176,15 @@ function splitCSVRows(text: string): string[] {
   return rows;
 }
 
+/**
+ * Inverse of the export-side formula guard: drop the single leading `'` that
+ * escapeCsvCell adds, but only when what follows starts with = + - @. A
+ * legitimate leading apostrophe (e.g. "'Tis") is left untouched.
+ */
+function unescapeCsvCell(val: string): string {
+  return /^'[=+\-@]/.test(val) ? val.slice(1) : val;
+}
+
 export function parseCSV(text: string): Record<string, string>[] {
   // Strip BOM (Excel UTF-8 CSVs often start with \uFEFF)
   const cleaned = text.replace(/^\uFEFF/, "");
@@ -189,10 +198,16 @@ export function parseCSV(text: string): Record<string, string>[] {
     seen.set(h, count);
     return count > 1 ? `${h} (${count})` : h;
   });
-  return lines.slice(1).map((line) => {
-    const values = parseRow(line);
-    return Object.fromEntries(headers.map((h, i) => [h, (values[i] ?? "").trim()]));
-  });
+  return lines
+    .slice(1)
+    .map((line) => parseRow(line))
+    // Spreadsheet exports pad the sheet with rows of bare delimiters (",,,,").
+    // They pass the non-blank-line check in splitCSVRows, so each one used to
+    // reach the importer as an empty record and be reported as a failed row
+    // ("Missing required field") or, for importers with no required field,
+    // create an empty record.
+    .filter((values) => values.some((v) => v.trim() !== ""))
+    .map((values) => Object.fromEntries(headers.map((h, i) => [h, unescapeCsvCell((values[i] ?? "").trim())])));
 }
 
 /**

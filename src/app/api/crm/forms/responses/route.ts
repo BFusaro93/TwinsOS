@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
 
 // GET /api/crm/forms/responses?formId=<uuid>
 export async function GET(req: Request) {
@@ -15,6 +16,10 @@ export async function GET(req: Request) {
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
+  {
+    const denied = await rejectWithoutFormsPermission(supabase, "view");
+    if (denied) return denied;
+  }
 
   const { searchParams } = new URL(req.url);
   const formId = searchParams.get("formId");
@@ -73,6 +78,10 @@ export async function PATCH(req: Request) {
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
+  {
+    const denied = await rejectWithoutFormsPermission(supabase, "view");
+    if (denied) return denied;
+  }
 
   const body = await req.json().catch(() => ({}));
   const { id, isRead } = body as { id?: string; isRead?: boolean };

@@ -7543,6 +7543,7 @@ export type Database = {
           new_rate_cents: number
           old_rate_cents: number
           org_id: string
+          quantity: number
           revert_skipped: boolean
         }
         Insert: {
@@ -7557,6 +7558,7 @@ export type Database = {
           new_rate_cents: number
           old_rate_cents: number
           org_id?: string
+          quantity?: number
           revert_skipped?: boolean
         }
         Update: {
@@ -7571,6 +7573,7 @@ export type Database = {
           new_rate_cents?: number
           old_rate_cents?: number
           org_id?: string
+          quantity?: number
           revert_skipped?: boolean
         }
         Relationships: [
@@ -12128,10 +12131,10 @@ export type Database = {
       }
       maintenance_requests: {
         Row: {
-          assigned_to_id: string | null
-          assigned_to_name: string | null
           asset_id: string | null
           asset_name: string | null
+          assigned_to_id: string | null
+          assigned_to_name: string | null
           automation_id: string | null
           created_at: string
           created_by: string | null
@@ -12153,10 +12156,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          assigned_to_id?: string | null
-          assigned_to_name?: string | null
           asset_id?: string | null
           asset_name?: string | null
+          assigned_to_id?: string | null
+          assigned_to_name?: string | null
           automation_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -12178,10 +12181,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          assigned_to_id?: string | null
-          assigned_to_name?: string | null
           asset_id?: string | null
           asset_name?: string | null
+          assigned_to_id?: string | null
+          assigned_to_name?: string | null
           automation_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -12203,6 +12206,27 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "maintenance_requests_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_assigned_to_id_fkey"
+            columns: ["assigned_to_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
+          },
           {
             foreignKeyName: "maintenance_requests_automation_id_fkey"
             columns: ["automation_id"]
@@ -17477,6 +17501,7 @@ export type Database = {
           label: string
           new_rate_cents: number
           old_rate_cents: number
+          quantity: number
         }[]
       }
       crm_recompute_job_actual_hours: {

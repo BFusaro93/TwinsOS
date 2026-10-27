@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
 
 async function getOrgId(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data } = await supabase.from("profiles").select("org_id").eq("id", userId).single();
@@ -88,6 +89,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const orgId = await getOrgId(supabase, user.id);
   if (!orgId) return NextResponse.json({ error: "No profile" }, { status: 403 });
+  {
+    const denied = await rejectWithoutFormsPermission(supabase, "edit");
+    if (denied) return denied;
+  }
 
   const body = await req.json();
   const allowed: Record<string, unknown> = {};
@@ -149,6 +154,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   const orgId = await getOrgId(supabase, user.id);
   if (!orgId) return NextResponse.json({ error: "No profile" }, { status: 403 });
+  {
+    const denied = await rejectWithoutFormsPermission(supabase, "edit");
+    if (denied) return denied;
+  }
 
   const { error } = await db
     .from("crm_forms")

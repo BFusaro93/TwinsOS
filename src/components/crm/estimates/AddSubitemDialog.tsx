@@ -105,7 +105,11 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
     }));
   }
 
-  const totalCents = Math.round(form.qty * form.rateDollars * 100);
+  // Price off the ROUNDED per-unit rate that is stored, not the raw dollar
+  // input: a rate typed as $0.145 saves as 15c (rateCents), so a total of
+  // qty x 14.5c disagreed with the qty x rate printed beside it.
+  const rateCents = Math.round(form.rateDollars * 100);
+  const totalCents = Math.round(form.qty * rateCents);
 
   async function handleSave() {
     if (!form.name.trim()) {
@@ -121,7 +125,7 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
           productId: form.productId,
           name: form.name.trim(),
           qty: form.qty,
-          rateCents: Math.round(form.rateDollars * 100),
+          rateCents,
           costCents: Math.round(form.costDollars * 100),
           totalCents,
           confirmQty: form.confirmQty,

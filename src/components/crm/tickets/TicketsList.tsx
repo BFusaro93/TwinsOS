@@ -59,6 +59,9 @@ import type {
   NewTicketFormValues,
 } from "@/types/crm-tickets";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { DateRangeFilter } from "@/components/shared/DateRangeFilter";
+import { inDateRange } from "@/lib/utils/column-filters";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 
 const STATUS_CLASS: Record<TicketStatus, string> = {
   open:    "border border-red-400 text-red-600 dark:text-red-400",
@@ -443,7 +446,7 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
 
 // ── column filter config ──────────────────────────────────────────────────────
 
-type ColFilterKey = "subject" | "client" | "category" | "assigned" | "priority";
+type ColFilterKey = "subject" | "client" | "category" | "assigned" | "priority" | "created" | "due";
 
 const COL_FILTERS: { key: ColFilterKey; label: string }[] = [
   { key: "subject",  label: "Subject" },
@@ -451,6 +454,8 @@ const COL_FILTERS: { key: ColFilterKey; label: string }[] = [
   { key: "category", label: "Category" },
   { key: "assigned", label: "Assignment" },
   { key: "priority", label: "Priority" },
+  { key: "created",  label: "Created" },
+  { key: "due",      label: "Due Date" },
 ];
 
 // ── TicketsList ───────────────────────────────────────────────────────────────
@@ -495,6 +500,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
   const [search, setSearch] = useState("");
   const [activeColFilter, setActiveColFilter] = useState<ColFilterKey | null>(null);
   const [colFilterValue, setColFilterValue] = useState("");
+  const { toISODate } = useOrgDates();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -573,6 +579,9 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
           case "category": return (t.category ?? "") === colFilterValue;
           case "assigned": return colFilterValue === "unassigned" ? !t.assignedToId : t.assignedToId === colFilterValue;
           case "priority": return t.priority === colFilterValue;
+          // created_at is a UTC instant — compare its org-local day so an evening ticket lands on the day staff saw.
+          case "created":  return inDateRange(t.createdAt ? toISODate(new Date(t.createdAt)) : null, colFilterValue);
+          case "due":      return inDateRange(t.dueDate, colFilterValue);
           default:         return true;
         }
       });
@@ -587,7 +596,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
     }
 
     return list;
-  }, [all, statusFilter, priorityFilter, categoryFilter, activeColFilter, colFilterValue, search]);
+  }, [all, statusFilter, priorityFilter, categoryFilter, activeColFilter, colFilterValue, search, toISODate]);
 
   const colCount = clientId ? 9 : 10; // +1 for checkbox
 
@@ -769,6 +778,12 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
+              ) : activeColFilter === "created" || activeColFilter === "due" ? (
+                <DateRangeFilter
+                  value={colFilterValue}
+                  onChange={setColFilterValue}
+                  label={activeColFilter === "created" ? "Created" : "Due date"}
+                />
               ) : (
                 <Input
                   autoFocus

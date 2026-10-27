@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
 import { submitFormResponse } from "@/lib/forms/submit-form-response";
 
 // POST /api/crm/forms/[id]/test-submit — internal "Fill Out Form" test dialog.
@@ -20,6 +21,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { data: profile } = await supabase
     .from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
+  {
+    const denied = await rejectWithoutFormsPermission(supabase, "view");
+    if (denied) return denied;
+  }
 
   const { data: form, error: formError } = await db
     .from("crm_forms")

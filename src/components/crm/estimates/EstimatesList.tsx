@@ -86,6 +86,8 @@ const FALLBACK_STAGE_TABS: { value: StageFilter; label: string }[] = [
   { value: "invoiced", label: "Invoiced" },
 ];
 
+const UNASSIGNED_REP = "__unassigned__";
+
 type FilterKey = "description" | "client" | "stage" | "date" | "sales_rep";
 
 const FILTER_BUTTONS: { key: FilterKey; label: string }[] = [
@@ -197,6 +199,15 @@ export function EstimatesList({ clientId }: Props) {
     return c;
   }, [allEstimates, stageTabs]);
 
+  const clientFilterOptions = useMemo(
+    () => Array.from(new Set(allEstimates.map((e) => e.clientName).filter((n): n is string => !!n))).sort((a, b) => a.localeCompare(b)),
+    [allEstimates]
+  );
+  const repFilterOptions = useMemo(
+    () => Array.from(new Set(allEstimates.map((e) => e.salesRepName).filter((n): n is string => !!n))).sort((a, b) => a.localeCompare(b)),
+    [allEstimates]
+  );
+
   const filtered = useMemo(() => {
     let list = stageSet
       ? allEstimates.filter((e) => stageSet.includes(e.stage))
@@ -214,10 +225,11 @@ export function EstimatesList({ clientId }: Props) {
       list = list.filter((e) => {
         switch (activeFilterKey) {
           case "description": return (e.description ?? "").toLowerCase().includes(fv);
-          case "client":      return (e.clientName ?? "").toLowerCase().includes(fv);
-          case "stage":       return e.stage.toLowerCase().includes(fv);
+          // Client, Stage and Sales Rep are picked from a list (exact match).
+          case "client":      return (e.clientName ?? "") === filterValue;
+          case "stage":       return e.stage === filterValue;
           case "date":        return inDateRange(e.estimateDate, filterValue);
-          case "sales_rep":   return (e.salesRepName ?? "").toLowerCase().includes(fv);
+          case "sales_rep":   return filterValue === UNASSIGNED_REP ? !e.salesRepName : e.salesRepName === filterValue;
           default:            return true;
         }
       });
@@ -423,6 +435,26 @@ export function EstimatesList({ clientId }: Props) {
             <>
               {activeFilterKey === "date" ? (
                 <DateRangeFilter value={filterValue} onChange={setFilterValue} label="Estimate date" />
+              ) : activeFilterKey === "client" || activeFilterKey === "stage" || activeFilterKey === "sales_rep" ? (
+                <select
+                  autoFocus
+                  value={filterValue}
+                  onChange={(e) => setFilterValue(e.target.value)}
+                  aria-label={`Filter by ${FILTER_BUTTONS.find((f) => f.key === activeFilterKey)?.label}`}
+                  className="ml-2 h-6 w-48 rounded-md border border-input bg-background px-1 text-xs"
+                >
+                  <option value="">Select…</option>
+                  {activeFilterKey === "client" && clientFilterOptions.map((n) => <option key={n} value={n}>{n}</option>)}
+                  {activeFilterKey === "stage" && stageTabs.filter((t) => t.value !== "all").map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                  {activeFilterKey === "sales_rep" && (
+                    <>
+                      <option value={UNASSIGNED_REP}>Unassigned</option>
+                      {repFilterOptions.map((n) => <option key={n} value={n}>{n}</option>)}
+                    </>
+                  )}
+                </select>
               ) : (
                 <Input
                   autoFocus

@@ -367,7 +367,7 @@ export async function POST(request: Request) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: payment } = await (db as any)
         .from("crm_payments")
-        .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, processing_fee_cents")
+        .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, processing_fee_cents, method")
         .eq("stripe_payment_intent_id", paymentIntentId)
         .maybeSingle();
       if (!payment || !(await eventAccountOwnedByOrg(db, payment.org_id, event.account))) break;
@@ -440,17 +440,24 @@ export async function POST(request: Request) {
           org_id: payment.org_id,
           client_id: payment.client_id,
           activity_type: "payment",
-          subject: `Payment reversed: $${(deltaCents / 100).toFixed(2)} (returned by bank/card issuer)`,
+          subject: `Payment reversed: $${(deltaCents / 100).toFixed(2)} (${payment.method === "ACH/E-Check" ? "returned by bank" : "refunded"})`,
           ref_id: payment.id,
           ref_table: "crm_payments",
           amount_cents: -deltaCents,
         });
 
-        await fireSimpleTrigger(supabase, {
-          orgId: payment.org_id,
-          clientId: payment.client_id,
-          triggerType: "credit_card_charge_failed",
-        });
+        // Only a bank-returned ACH debit is a "failed charge" from the
+        // customer's side. A card refund is deliberate — issued from the Stripe
+        // dashboard, or from our own refund route when this webhook wins the
+        // race with it (delta > 0 here) — and must never send the customer a
+        // "your card payment failed, update your card" automation.
+        if (payment.method === "ACH/E-Check") {
+          await fireSimpleTrigger(supabase, {
+            orgId: payment.org_id,
+            clientId: payment.client_id,
+            triggerType: "credit_card_charge_failed",
+          });
+        }
       } catch (err) {
         // The reversal itself is already committed (and a retry would be a
         // no-op for it), so a failed follow-up must not 500 the event.

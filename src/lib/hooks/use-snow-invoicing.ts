@@ -41,6 +41,47 @@ export function billingGroupKey(visit: CRMJobVisit): string {
   return `${visit.jobId}::${visit.stormEventId ?? `date:${visit.scheduledDate}`}`;
 }
 
+export interface SnowContractRow {
+  id: string;
+  status: string | null;
+  is_active: boolean | null;
+  deleted_at: string | null;
+  end_date: string | null;
+}
+
+/** The "ended" test shared with complete-visit-side-effects: a contract that is
+ *  missing, cancelled, expired, inactive, deleted or past its end date no longer
+ *  covers the visit. Draft/sent contracts are NOT ended. */
+export function isSnowContractEnded(c: SnowContractRow | undefined, day: string | null | undefined): boolean {
+  return (
+    !c ||
+    c.deleted_at != null ||
+    c.is_active === false ||
+    c.status === "cancelled" ||
+    c.status === "expired" ||
+    (c.end_date != null && !!day && c.end_date < day)
+  );
+}
+
+export async function loadContractsById(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  contractIds: string[]
+): Promise<Map<string, SnowContractRow>> {
+  const out = new Map<string, SnowContractRow>();
+  for (const ids of chunkIds(contractIds)) {
+    const rows = await fetchAllRows<SnowContractRow>(() =>
+      supabase
+        .from("crm_contracts")
+        .select("id, status, is_active, deleted_at, end_date")
+        .in("id", ids)
+        .order("id", { ascending: true })
+    );
+    for (const c of rows) out.set(c.id, c);
+  }
+  return out;
+}
+
 // ── uninvoiced snow visits ────────────────────────────────────────────────────
 
 /** A queued visit, flagged when its job already has an unlinked invoice line
@@ -75,7 +116,6 @@ export function useUninvoicedSnowVisits(filters: {
           `)
           .eq("status", "completed")
           .eq("crm_jobs.job_type", "snow")
-          .is("crm_jobs.contract_id", null)
           .is("deleted_at", null);
 
         if (filters.stormEventId) q = q.eq("storm_event_id", filters.stormEventId);
@@ -90,8 +130,21 @@ export function useUninvoicedSnowVisits(filters: {
       // here client-side (a plain .neq() would silently drop jobs where
       // invoice_type is NULL, per SQL's three-valued NULL comparison logic —
       // those should default to per-event billing, not be excluded).
+      // Contract-linked snow jobs are billed on the contract's cycle only while
+      // that contract is in force. Once it is cancelled / expired / inactive /
+      // deleted / past its end date nothing else bills the visit (the auto-invoice
+      // path skips snow jobs, the contract cron has stopped) — it used to vanish
+      // from this queue too, so those storms were never invoiced. Mirrors the
+      // "ended" test in complete-visit-side-effects.
+      const contractIds = [...new Set(
+        ((data.map(mapVisit)) as CRMJobVisit[]).map((v) => v.job?.contractId).filter((c): c is string => !!c)
+      )];
+      const contractById = await loadContractsById(supabase, contractIds);
+      const contractEnded = (v: CRMJobVisit): boolean =>
+        isSnowContractEnded(v.job?.contractId ? contractById.get(v.job.contractId) : undefined, v.scheduledDate);
       const visits = ((data.map(mapVisit)) as CRMJobVisit[])
-        .filter((v) => v.job?.invoiceType !== "monthly_flat_rate");
+        .filter((v) => v.job?.invoiceType !== "monthly_flat_rate")
+        .filter((v) => !v.job?.contractId || contractEnded(v));
 
       if (visits.length === 0) return [];
 
@@ -129,6 +182,46 @@ export function useUninvoicedSnowVisits(filters: {
       const groupsWithExistingInvoice = new Set(
         visits.filter((v) => invoicedVisitIds.has(v.id)).map((v) => billingGroupKey(v))
       );
+
+      // With a date range set, the group's other members can sit OUTSIDE it (a
+      // per-event storm spanning midnight: yesterday's push already invoiced, today's
+      // push in range), so the check above can't see them and the storm would be
+      // priced twice. Re-run the "already invoiced" group check without the date
+      // filter for the jobs in play.
+      if (filters.fromDate || filters.toDate) {
+        const perEventJobIds = [...new Set(visits.filter((v) => isPerEventBilling(v.job?.invoiceType ?? "per_event")).map((v) => v.jobId))];
+        for (const jobIds of chunkIds(perEventJobIds)) {
+          const allVisits = await fetchAllRows<{ id: string }>(() =>
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (supabase as any)
+              .from("crm_job_visits")
+              .select("*, crm_jobs!inner(job_type, invoice_type)")
+              .eq("status", "completed")
+              .eq("crm_jobs.job_type", "snow")
+              .in("job_id", jobIds)
+              .is("deleted_at", null)
+              .order("id", { ascending: true })
+          );
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const mapped = (allVisits as any[]).map((r) => ({ ...mapVisit({ ...r, crm_jobs: { ...r.crm_jobs } }) }));
+          const wantedKeys = new Set(visits.map((v) => billingGroupKey(v)));
+          const checkIds = mapped.filter((v) => wantedKeys.has(billingGroupKey(v)) && !invoicedVisitIds.has(v.id)).map((v) => v.id);
+          for (const ids of chunkIds(checkIds)) {
+            const lines = await fetchAllRows<{ visit_id: string | null }>(() =>
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (supabase as any)
+                .from("crm_invoice_line_items")
+                .select("id, visit_id, crm_invoices!inner(deleted_at)")
+                .in("visit_id", ids)
+                .is("crm_invoices.deleted_at", null)
+                .neq("crm_invoices.status", "void")
+                .order("id", { ascending: true })
+            );
+            const hit = new Set(lines.map((l) => l.visit_id).filter((x): x is string => !!x));
+            for (const v of mapped) if (hit.has(v.id)) groupsWithExistingInvoice.add(billingGroupKey(v));
+          }
+        }
+      }
 
       const queue = visits.filter(
         (v) => !invoicedVisitIds.has(v.id) && !groupsWithExistingInvoice.has(billingGroupKey(v))

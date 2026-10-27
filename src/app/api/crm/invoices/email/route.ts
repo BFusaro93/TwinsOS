@@ -157,10 +157,16 @@ export async function POST(req: NextRequest) {
   // single-invoice send: staff could keep emailing a dead address. Sending to
   // exactly the stored (bounced) address counts as using it; only a different
   // address is the "corrected address" override.
-  const storedEmail = ((inv.clients?.primary_email as string | null) ?? "").trim().toLowerCase();
+  // Both stored addresses count: the default recipient is the Billing Email
+  // when one is set, so a pre-filled `to` carrying it is the stored address too.
+  const storedEmails = new Set(
+    [inv.clients?.billing_email, inv.clients?.primary_email]
+      .map((v) => ((v as string | null) ?? "").trim().toLowerCase())
+      .filter((v) => v !== "")
+  );
   const usingStoredInvoiceEmail =
     !(body.to && body.to.length > 0) ||
-    (storedEmail !== "" && body.to.every((e) => e.trim().toLowerCase() === storedEmail));
+    (storedEmails.size > 0 && body.to.every((e) => storedEmails.has(e.trim().toLowerCase())));
   if (usingStoredInvoiceEmail && inv.clients?.email_bounced_at) {
     return NextResponse.json(
       { error: "Client's email address has hard-bounced. Update it, or send to a different address." },

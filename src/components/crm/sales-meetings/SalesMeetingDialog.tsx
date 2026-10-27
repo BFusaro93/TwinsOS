@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useTickets } from "@/lib/hooks/use-tickets";
 import {
@@ -101,6 +101,7 @@ export function SalesMeetingDialog({
     handleSubmit,
     watch,
     setValue,
+    getValues,
     control,
     reset,
     formState: { errors, isSubmitting },
@@ -167,6 +168,9 @@ export function SalesMeetingDialog({
   }, [open, meeting, defaultSalesRepId, defaultDate, defaultTime]);
 
   const clientId = watch("clientId");
+  const location = watch("location");
+  const meetingType = watch("meetingType");
+  const { data: clientProperties } = useClientProperties(clientId);
   const { data: clientEstimates } = useEstimates(clientId || undefined);
   const { data: clientTickets } = useTickets(clientId ? { clientId } : undefined);
 
@@ -202,6 +206,29 @@ export function SalesMeetingDialog({
       }) ?? null
     );
   }
+
+  // Picking a client fills an empty Location with where they actually are (the
+  // master property, else billing) so staff don't retype it. Runs once per
+  // client and only for an empty field, so it never overwrites typed text or an
+  // existing meeting's saved location.
+  const prefilledForRef = useRef<string>("");
+  useEffect(() => {
+    if (!open || !clientId || prefilledForRef.current === clientId) return;
+    if (meetingType !== "in_person") return;
+    const client = (clients ?? []).find((c) => c.id === clientId);
+    if (!client || clientProperties === undefined) return;
+    prefilledForRef.current = clientId;
+    if (getValues("location")?.trim()) return;
+    const join = (a: string | null | undefined, c: string | null | undefined, st: string | null | undefined, z: string | null | undefined) =>
+      [a, [c, st].filter(Boolean).join(", "), z].filter((x) => x && String(x).trim()).join(" ").trim();
+    const prop = clientProperties.find((pr) => pr.address?.trim());
+    const addr = prop
+      ? join(prop.address, prop.city, prop.state, prop.zip)
+      : client.billingAddress?.trim()
+        ? join(client.billingAddress, client.billingCity, client.billingState, client.billingZip)
+        : "";
+    if (addr) setValue("location", addr, { shouldDirty: true });
+  }, [open, clientId, clients, clientProperties, meetingType, getValues, setValue]);
 
   const selectableClients = useMemo(
     () => (clients ?? []).map((c) => ({
@@ -355,7 +382,23 @@ export function SalesMeetingDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>Location</Label>
+            <div className="flex items-center justify-between">
+              <Label>Location</Label>
+              {location?.trim() && (
+                <a
+                  href={
+                    /^https?:\/\//i.test(location.trim())
+                      ? location.trim()
+                      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.trim())}`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-brand-600 hover:underline"
+                >
+                  {/^https?:\/\//i.test(location.trim()) ? "Open link" : "Open in Maps"}
+                </a>
+              )}
+            </div>
             <Input {...register("location")} placeholder="Address or meeting link" />
           </div>
 

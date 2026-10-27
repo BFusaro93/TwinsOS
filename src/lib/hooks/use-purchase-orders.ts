@@ -905,6 +905,24 @@ export function useUpdatePOLineItem() {
         .eq("id", item.id)
         .single();
       if (fetchErr) throw fetchErr;
+      // An admin can edit a line on an ordered / completed PO. Cutting its
+      // quantity below what goods receipts already recorded would leave the
+      // line "over-received" (negative pending) while stock already includes
+      // the extra units, so refuse — correct the receipt first.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: receivedRows, error: receivedErr } = await (supabase as any)
+        .from("goods_receipt_lines")
+        .select("quantity_received, goods_receipts!inner(deleted_at)")
+        .eq("po_line_item_id", item.id)
+        .is("goods_receipts.deleted_at", null);
+      if (receivedErr) throw receivedErr;
+      const alreadyReceived = ((receivedRows ?? []) as { quantity_received: number | null }[])
+        .reduce((sum, r) => sum + (r.quantity_received ?? 0), 0);
+      if (item.quantity < alreadyReceived) {
+        throw new Error(
+          `${alreadyReceived} of this line has already been received — the quantity can't be lowered below that. Correct the goods receipt first.`
+        );
+      }
       // Sequential, not Promise.all — see useAddPOLineItem for why.
       const { data: lineData, error: lineErr } = await supabase
         .from("po_line_items")
@@ -1256,9 +1274,22 @@ export function useDeletePurchaseOrder() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
+      // Deleting a PO that already received goods would orphan the receipts
+      // while the stock they added stays on hand with nothing to trace it to.
+      // Receipts are never soft-deleted by the app, so any row means stock moved.
+      const { count: receiptCount, error: receiptErr } = await supabase
+        .from("goods_receipts")
+        .select("id", { count: "exact", head: true })
+        .eq("purchase_order_id", id)
+        .is("deleted_at", null);
+      if (receiptErr) throw receiptErr;
+      if ((receiptCount ?? 0) > 0) {
+        throw new Error("This PO has goods receipts recorded against it, so it can't be deleted. Cancel it instead.");
+      }
       const { error } = await supabase.from("purchase_orders").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
     },
+    onError: (err) => toast.error(`Failed to delete PO: ${serializeError(err)}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
   });
 }
