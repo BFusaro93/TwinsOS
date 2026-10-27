@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     // Short org id keeps auto emails unique per tenant (a bare slug collided
     // across orgs and revealed that another org used the same team name).
     const orgTag = String(callerProfile.org_id).replace(/-/g, "").slice(0, 8);
-    loginEmail = `${slug || "crew"}-${orgTag}@crew.equipt.app`;
+    loginEmail = `${slug || "crew"}-${orgTag}@crew.landscapt.com`;
   }
 
   // 4. Create the auth user with the service role client (no email confirmation needed)

@@ -1224,6 +1224,11 @@ function JobDetailSheet({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unassigned" className="text-xs">Unassigned</SelectItem>
+                      {/* The visit's current crew may have been made inactive since; keep it
+                          visible instead of rendering a blank field. */}
+                      {crewId && !crews.some((c) => c.id === crewId) && (
+                        <SelectItem value={crewId} className="text-xs">{visit.crewName ?? job?.crewName ?? "Previous crew"} (inactive)</SelectItem>
+                      )}
                       {crews.map((c) => (
                         <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>
                       ))}

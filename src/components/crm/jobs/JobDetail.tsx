@@ -956,6 +956,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="unassigned">Unassigned</SelectItem>
+                          {/* A job's crew can be one that was since made inactive; the list
+                              only offers active crews, which left the field looking blank. */}
+                          {job.crewId && !crews.some((c) => c.id === job.crewId) && (
+                            <SelectItem value={job.crewId}>{job.crewName ?? "Previous crew"} (inactive)</SelectItem>
+                          )}
                           {crews.map((c) => (
                             <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                           ))}
