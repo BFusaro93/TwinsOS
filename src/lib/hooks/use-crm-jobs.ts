@@ -914,6 +914,8 @@ export function useCreateVisit() {
       clientId: string;
       scheduledDate: string;
       crewId?: string | null;
+      /** Pin the visit to NO crew (wins over the job's crew). */
+      crewUnassigned?: boolean;
       startTime?: string | null;
       endTime?: string | null;
       priority?: number;
@@ -934,6 +936,22 @@ export function useCreateVisit() {
       status?: VisitStatus;
     }) => {
       const supabase = createClient();
+      // The crew size when the caller didn't say: the visit's own service's team
+      // size, else the job's man_count — every caller that left it out (waiting-list
+      // dispatch, Add Visit, "add nearby job") landed the visit at 1 man on a
+      // multi-man job, understating crew size, actual hours and labor.
+      let menCount = values.menCount ?? null;
+      if (menCount == null) {
+        const [{ data: jobRow }, { data: svcRow }] = await Promise.all([
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any).from('crm_jobs').select('man_count').eq('id', values.jobId).maybeSingle(),
+          values.jobServiceId
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ? (supabase as any).from('crm_job_services').select('team_size').eq('id', values.jobServiceId).maybeSingle()
+            : Promise.resolve({ data: null }),
+        ]);
+        menCount = Number(svcRow?.team_size) || Number(jobRow?.man_count) || 1;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits')
@@ -942,7 +960,8 @@ export function useCreateVisit() {
           client_id: values.clientId,
           scheduled_date: values.scheduledDate,
           crew_id: values.crewId ?? null,
-          men_count: values.menCount ?? 1,
+          ...(values.crewUnassigned && !values.crewId ? { crew_unassigned: true } : {}),
+          men_count: Math.max(1, Math.round(menCount)),
           start_time: values.startTime ?? null,
           end_time: values.endTime ?? null,
           priority: values.priority ?? 1,
@@ -1337,7 +1356,7 @@ export function useUpdateVisit() {
       let before: { client_id: string; scheduled_date: string; job_id: string; job_service_id: string | null; status: string; crew_id: string | null; notes_to_crew: string | null; clocked_in_at: string | null; clocked_out_at: string | null } | null = null;
       if (
         updates.scheduled_date !== undefined ||
-        (updates.status && updates.status !== 'completed') ||
+        updates.status ||
         updates.crew_id !== undefined ||
         updates.notes_to_crew !== undefined
       ) {
@@ -1399,7 +1418,11 @@ export function useUpdateVisit() {
       // completed transition itself is excluded from this raw update; every
       // other field in `updates` (e.g. completion_notes, actual_hours) still
       // writes directly, same as before.
-      const isCompleting = updates.status === 'completed';
+      // An already-completed visit saved again with its status unchanged (every field
+      // edit on the visit sheet sends the status along) is NOT a completion —
+      // re-running /complete would repair-invoice a visit whose invoice was
+      // deliberately voided.
+      const isCompleting = updates.status === 'completed' && before?.status !== 'completed';
       const { status: _statusOmittedForCompletion, ...updatesWithoutStatus } = updates;
       const dbUpdates = { ...(isCompleting ? updatesWithoutStatus : updates) };
       // An explicit crew and "unassigned" are mutually exclusive (the DB

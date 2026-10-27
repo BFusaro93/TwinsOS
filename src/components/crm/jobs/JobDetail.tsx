@@ -505,7 +505,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         jobId: job.id,
         clientId: job.clientId,
         scheduledDate: newVisitDate,
-        crewId: newVisitCrew || null,
+        // "__unassigned__" is the picker's explicit "no crew" item, not a crew id —
+        // sending it as crew_id failed the insert (invalid uuid). It pins the visit
+        // to no crew so it doesn't fall back to the job's.
+        crewId: newVisitCrew && newVisitCrew !== "__unassigned__" ? newVisitCrew : null,
+        crewUnassigned: newVisitCrew === "__unassigned__",
         jobServiceId: newVisitServiceId || null,
         invoiceDescription: newVisitInvoiceDesc || null,
         jobType: job.jobType,

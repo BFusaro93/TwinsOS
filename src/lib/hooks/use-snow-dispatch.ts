@@ -424,10 +424,22 @@ export function useAddJobsToStormEvent() {
         .maybeSingle();
       const startOrder = maxRow?.order_num != null ? Number(maxRow.order_num) + 1 : 0;
 
+      // Crew size from each job (the column defaults to 1, which understated actual
+      // hours / labor on a multi-man snow route).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: jobSizes } = await (supabase as any)
+        .from("crm_jobs")
+        .select("id, man_count")
+        .in("id", newJobs.map((j) => j.jobId));
+      const menByJob = new Map<string, number>(
+        ((jobSizes ?? []) as { id: string; man_count: number | null }[]).map((r) => [r.id, Math.max(1, Number(r.man_count) || 1)])
+      );
+
       const rows = newJobs.map((j, i) => ({
         job_id: j.jobId,
         client_id: j.clientId,
         scheduled_date: date,
+        men_count: menByJob.get(j.jobId) ?? 1,
         crew_id: j.crewId ?? null,
         storm_event_id: stormEventId,
         order_num: startOrder + i,
