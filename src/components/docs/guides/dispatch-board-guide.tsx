@@ -200,6 +200,23 @@ export function DispatchBoardGuide() {
           assigns in a single tap, and each assigned card has a ✕ in its corner that sends it straight
           back to Unassigned.
         </p>
+        <p>
+          <strong>Assigning to a person.</strong> On an employee&apos;s record
+          (Team → Employees → Edit → User Settings), tick <strong>Schedule Jobs Directly</strong> and
+          that person appears by name in every crew dropdown &mdash; new job, Edit Job, the visit
+          panel and this board &mdash; and in Team Assignment as their own column. They get a
+          one-person crew behind the scenes, so everything else (the crew app, payroll, job costing)
+          works the same. Unticking it, or deactivating the employee, retires that crew without
+          touching past jobs. If their login is linked to the employee and not already attached to
+          another crew, it&apos;s attached to this one so they see the jobs in the crew app. A person
+          who is already on a regular crew can&apos;t also sit on a second crew&apos;s standing roster
+          on the same days; add them to their own crew for a given day with Team Assignment instead.
+        </p>
+        <p>
+          Every crew change is recorded in the Audit tab as{" "}
+          <em>crew: Old crew → New crew</em> (<em>Unassigned</em> when a side was empty), with who made
+          it and when.
+        </p>
         <Callout>
           <strong>On a tablet, use tap-to-place.</strong> iPads and other touch devices don&apos;t
           support the kind of dragging this dialog uses, so a drag gesture will simply do nothing
