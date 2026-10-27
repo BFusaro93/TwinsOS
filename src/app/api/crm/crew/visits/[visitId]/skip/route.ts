@@ -4,6 +4,7 @@ import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { formatMonthDay } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
+import { closeStopPunches } from "@/lib/crew/stop-punches";
 
 const log = logger.child("crew/skip");
 
@@ -26,7 +27,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("org_id, crew_group_id, crew_id, crew_unassigned, client_id, job_id, scheduled_date, status, crm_jobs(crew_id)")
+    .select("org_id, crew_group_id, crew_id, crew_unassigned, client_id, job_id, scheduled_date, status, clocked_in_at, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -75,6 +76,34 @@ export async function POST(
       { error: "This service was closed out while the skip was being sent — refresh to see its current state." },
       { status: 409 }
     );
+  }
+
+  // Skipping a stop the crew had already started (Start Job punched the whole
+  // crew in) must stop their clocks too. Nothing else closes those punches —
+  // Stop Job is never reached for a skipped visit — so they stayed open forever,
+  // hiding the crew's hours from Job Costing and the Timesheet. Only when no
+  // other visit of the stop is still running (same client/day/clock-in): the
+  // punches hang off the stop's anchor visit, which may be a sibling.
+  if (existing.clocked_in_at) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: stopMates } = await (supabase as any)
+        .from("crm_job_visits")
+        .select("id, status")
+        .eq("client_id", existing.client_id)
+        .eq("scheduled_date", existing.scheduled_date)
+        .eq("clocked_in_at", existing.clocked_in_at)
+        .is("deleted_at", null);
+      const mates = ((stopMates ?? []) as { id: string; status: string }[]);
+      const stillRunning = mates.some((m) => m.id !== visitId && !["completed", "cancelled", "skipped"].includes(m.status));
+      if (!stillRunning) {
+        for (const id of new Set([visitId, ...mates.map((m) => m.id)])) {
+          await closeStopPunches(supabase, id, now);
+        }
+      }
+    } catch (err) {
+      log.error("closing punches on skip failed", { visitId, error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
   // Multi-crew stop: skipping the lead makes the DB hand the lead role (and the

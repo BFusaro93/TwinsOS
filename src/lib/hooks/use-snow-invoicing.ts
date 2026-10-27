@@ -75,7 +75,6 @@ export function useUninvoicedSnowVisits(filters: {
           `)
           .eq("status", "completed")
           .eq("crm_jobs.job_type", "snow")
-          .is("crm_jobs.contract_id", null)
           .is("deleted_at", null);
 
         if (filters.stormEventId) q = q.eq("storm_event_id", filters.stormEventId);
@@ -90,8 +89,41 @@ export function useUninvoicedSnowVisits(filters: {
       // here client-side (a plain .neq() would silently drop jobs where
       // invoice_type is NULL, per SQL's three-valued NULL comparison logic —
       // those should default to per-event billing, not be excluded).
+      // Contract-linked snow jobs are billed on the contract's cycle only while
+      // that contract is in force. Once it is cancelled / expired / inactive /
+      // deleted / past its end date nothing else bills the visit (the auto-invoice
+      // path skips snow jobs, the contract cron has stopped) — it used to vanish
+      // from this queue too, so those storms were never invoiced. Mirrors the
+      // "ended" test in complete-visit-side-effects.
+      const contractIds = [...new Set(
+        ((data.map(mapVisit)) as CRMJobVisit[]).map((v) => v.job?.contractId).filter((c): c is string => !!c)
+      )];
+      const contractById = new Map<string, { status: string | null; is_active: boolean | null; deleted_at: string | null; end_date: string | null }>();
+      for (const ids of chunkIds(contractIds)) {
+        const rows = await fetchAllRows<{ id: string; status: string | null; is_active: boolean | null; deleted_at: string | null; end_date: string | null }>(() =>
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from("crm_contracts")
+            .select("id, status, is_active, deleted_at, end_date")
+            .in("id", ids)
+            .order("id", { ascending: true })
+        );
+        for (const c of rows) contractById.set(c.id, c);
+      }
+      const contractEnded = (v: CRMJobVisit): boolean => {
+        const c = v.job?.contractId ? contractById.get(v.job.contractId) : undefined;
+        return (
+          !c ||
+          c.deleted_at != null ||
+          c.is_active === false ||
+          c.status === "cancelled" ||
+          c.status === "expired" ||
+          (c.end_date != null && !!v.scheduledDate && c.end_date < v.scheduledDate)
+        );
+      };
       const visits = ((data.map(mapVisit)) as CRMJobVisit[])
-        .filter((v) => v.job?.invoiceType !== "monthly_flat_rate");
+        .filter((v) => v.job?.invoiceType !== "monthly_flat_rate")
+        .filter((v) => !v.job?.contractId || contractEnded(v));
 
       if (visits.length === 0) return [];
 
