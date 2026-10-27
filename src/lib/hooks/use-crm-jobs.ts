@@ -3138,6 +3138,23 @@ export function useSetJobProductStatus() {
       invoiceLineItemId?: string | null;
     }) => {
       const supabase = createClient();
+      // Reopening a billed material removes its invoice line afterwards. A
+      // locked invoice rejects that delete, so check BEFORE flipping the status:
+      // the flip restores stock and frees the material, and doing it first left
+      // the line on the (locked) invoice with the material back at pending —
+      // billable a second time.
+      if (p.newStatus !== "invoiced" && p.invoiceLineItemId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: lineInv } = await (supabase as any)
+          .from("crm_invoice_line_items")
+          .select("crm_invoices(locked)")
+          .eq("id", p.invoiceLineItemId)
+          .maybeSingle();
+        const lockedInvoice = Array.isArray(lineInv?.crm_invoices) ? lineInv.crm_invoices[0] : lineInv?.crm_invoices;
+        if (lockedInvoice?.locked) {
+          throw new Error("This material is on a locked invoice. Unlock the invoice before changing it.");
+        }
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.rpc as any)("set_job_product_status", {
         p_job_product_id: p.id,

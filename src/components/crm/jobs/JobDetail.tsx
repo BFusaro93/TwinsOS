@@ -47,7 +47,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn, formatCurrency, formatHours, todayLocalISODate } from "@/lib/utils";
+import { cn, formatCurrency, formatHours } from "@/lib/utils";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { createClient } from "@/lib/supabase/client";
 import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
@@ -213,7 +213,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const [edits, setEdits] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [addingVisit, setAddingVisit] = useState(false);
-  const [newVisitDate, setNewVisitDate] = useState(() => todayLocalISODate());
+  const [newVisitDate, setNewVisitDate] = useState(() => orgToday());
   const [newVisitCrew, setNewVisitCrew] = useState("");
   const [newVisitServiceId, setNewVisitServiceId] = useState("");
   const [newVisitInvoiceDesc, setNewVisitInvoiceDesc] = useState("");
@@ -444,7 +444,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       // complete — and resolves tax exactly like the server auto-invoice.
       if (status === "completed" && job.jobType === "one_time") {
         try {
-          const today = todayLocalISODate();
+          const today = orgToday();
           const serviceDate = job.scheduledDate ?? today;
           const svcs = job.services ?? [];
           const productLineItems = buildPendingProductLineItems(serviceDate);
@@ -589,7 +589,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     }
     setInvoicing(true);
     try {
-      const today = todayLocalISODate();
+      const today = orgToday();
       const serviceDate = job.scheduledDate ?? today;
       const services = job.services ?? [];
       const productLineItems = buildPendingProductLineItems(serviceDate);

@@ -188,9 +188,11 @@ export function AddPaymentDialog({
   const createMultiIntent = useCreateMultiPaymentIntent();
   const chargeMultiSaved = useChargeMultiSaved();
 
+  // The org's calendar day, not the browser's — a bookkeeper in another
+  // timezone would otherwise date a payment a day off from the books.
+  const orgTimeZone = useOrgTimeZone();
   function todayLocal() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return todayInZone(orgTimeZone);
   }
 
   const [clientId, setClientId] = useState(payment?.clientId ?? defaultClientId ?? "");
@@ -1350,9 +1352,12 @@ export function RefundDialog({ payment, onClose }: { payment: CRMPayment | null;
   const { mutateAsync: refund, isPending } = useRefundPayment();
   const [refundAmount, setRefundAmount] = useState("");
 
+  // Default to what is still refundable, not the original amount — after a
+  // partial refund the original figure exceeds the cap and the first submit
+  // bounced with "Max refundable".
   useEffect(() => {
-    if (payment) setRefundAmount((payment.amountCents / 100).toFixed(2));
-  }, [payment?.id]);
+    if (payment) setRefundAmount((Math.max(0, payment.amountCents - payment.refundedAmountCents) / 100).toFixed(2));
+  }, [payment?.id, payment?.refundedAmountCents]);
 
   if (!payment) return null;
 
@@ -1367,7 +1372,12 @@ export function RefundDialog({ payment, onClose }: { payment: CRMPayment | null;
       await refund({ id: payment.id, clientId: payment.clientId, refundAmountCents: cents, invoiceId: payment.invoiceId });
       toast.success("Refund recorded");
       onClose();
-    } catch { toast.error("Failed to record refund"); }
+    } catch (err) {
+      // The route's message says WHY (Stripe declined it, nothing recorded, or
+      // Stripe refunded but the booking failed) — staff need that to avoid
+      // retrying a refund that already went through.
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to record refund");
+    }
   }
 
   return (

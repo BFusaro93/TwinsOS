@@ -45,6 +45,13 @@ import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
  * Reject anything else.
  */
 
+// Most contracts bill on the 1st, so one run can have hundreds due, each with
+// several sequential queries. Give it the full Pro-plan budget (like
+// invoice-past-due) rather than the default, or a long first-of-the-month run
+// is cut off part-way and the remaining contracts wait for the next day's
+// catch-up.
+export const maxDuration = 300;
+
 function ordinal(n: number) {
   const s = ["th","st","nd","rd"];
   const v = n % 100;

@@ -18,6 +18,7 @@ import {
   voidBlockedMessage,
   useUnappliedPayments,
   useApplyCreditToInvoice,
+  computeInvoiceTotals,
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useOtherCharges } from "@/lib/hooks/use-other-charges";
@@ -187,6 +188,23 @@ function InlineEdit({
 
 // ── line item row ─────────────────────────────────────────────────────────────
 
+/**
+ * A line's discount in cents after its gross total changed (qty or rate edit).
+ * A percent discount stores its percentage (basis points) in discountValue, so
+ * it must follow the new total — keeping the old cents made "10% off" a fixed
+ * dollar amount the moment the quantity changed. A flat discount stays put but
+ * can't exceed the line's (possibly smaller) total.
+ */
+function rescaleLineDiscountCents(
+  line: { discountCents: number; discountType: InvoiceLineItem["discountType"]; discountValue: number | null },
+  totalCents: number
+): number {
+  if (line.discountType === "percent" && line.discountValue != null) {
+    return Math.max(0, Math.min(Math.round(totalCents * (line.discountValue / 10000)), totalCents));
+  }
+  return Math.min(line.discountCents, totalCents);
+}
+
 function LineItemRow({
   item, invoiceId, taxRateBps, discounts, locked = false,
 }: {
@@ -221,8 +239,7 @@ function LineItemRow({
     setRow((p) => {
       const n = { ...p, [k]: v };
       n.totalCents = Math.round(Number(n.qty) * n.rateCents);
-      // A flat discount can't exceed the line's own (possibly now-smaller) total
-      n.discountCents = Math.min(n.discountCents, n.totalCents);
+      n.discountCents = rescaleLineDiscountCents(n, n.totalCents);
       return n;
     });
     editSeq.current += 1;
@@ -445,7 +462,7 @@ function LineItemRow({
             const cents = parseCurrencyToCents(rateStr);
             setRateStr((cents / 100).toFixed(2));
             const totalCents = Math.round(row.qty * cents);
-            const updated = { ...row, rateCents: cents, totalCents, discountCents: Math.min(row.discountCents, totalCents) };
+            const updated = { ...row, rateCents: cents, totalCents, discountCents: rescaleLineDiscountCents(row, totalCents) };
             setRow(updated);
             saveRow(updated);
           }}
@@ -515,6 +532,20 @@ function RecordPaymentDialog({
   const [method, setMethod] = useState<PaymentMethod>("Check");
   const [ref, setRef] = useState("");
   const { mutateAsync: record, isPending } = useRecordPayment();
+
+  // This dialog stays mounted for the life of the invoice page (only `open`
+  // toggles), so its useState seeds above were frozen at first render: after a
+  // partial payment the next "Enter Payment" still offered the ORIGINAL balance,
+  // and the previous check number / method / date carried into the next payment.
+  // Re-seed from the invoice's current state every time it opens.
+  useEffect(() => {
+    if (!open) return;
+    setAmount((balanceCents / 100).toFixed(2));
+    setDate(todayInZone(orgTimeZone));
+    setMethod("Check");
+    setRef("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const amountCents = parseCurrencyToCents(amount);
   // Never apply more than the invoice is owed (D-18: an $80 check on a $55
@@ -774,20 +805,22 @@ export function InvoiceDetail({
   const payments = invoice.payments ?? [];
   const hasTax = taxRateBps > 0;
 
-  // Net of each line's own discount; the document-level discount below
-  // is a separate reduction stacked on top of that.
-  const netLineCents = (li: InvoiceLineItem) => li.totalCents - li.discountCents;
-  const subtotal = lineItems.reduce((s, li) => s + netLineCents(li), 0);
-  // Tax base is net of the document-level discount — see
-  // use-invoices.ts's useUpdateInvoiceFinancials for why (charging tax on
-  // the pre-discount amount overcharges the customer).
-  const taxableSubtotal = lineItems.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
-  // Mirrors the clamp in useUpdateInvoiceFinancials: removing lines after
-  // entering a discount must not push the preview total negative.
-  const appliedDiscountCents = Math.min(Math.max(0, discountCents), Math.max(0, subtotal));
-  const taxableBase = Math.max(0, taxableSubtotal - appliedDiscountCents);
-  const previewTax = hasTax ? Math.round((taxableBase * taxRateBps) / 10000) : 0;
-  const previewTotal = subtotal - appliedDiscountCents + previewTax;
+  // The same arithmetic Save persists (computeInvoiceTotals): subtotal net of
+  // each line's own discount, a PERCENT document discount re-derived from the
+  // current subtotal (the discountCents snapshot goes stale as lines change —
+  // the preview kept showing the old dollar figure while Save stored the new
+  // one), clamped to the subtotal, and tax on the taxable base net of it.
+  const previewTotals = computeInvoiceTotals({
+    lines: lineItems.map((li) => ({ totalCents: li.totalCents, discountCents: li.discountCents, isTaxable: !!li.isTaxable })),
+    discountCents,
+    discountType,
+    discountValue,
+    taxRateBps: hasTax ? taxRateBps : 0,
+  });
+  const subtotal = previewTotals.subtotalCents;
+  const appliedDiscountCents = previewTotals.discountCents;
+  const previewTax = previewTotals.taxCents;
+  const previewTotal = previewTotals.totalCents;
   const previewBalance = Math.max(0, previewTotal - invoice.amountPaidCents);
 
   function applyNamedDiscount(discountId: string) {
@@ -978,7 +1011,7 @@ export function InvoiceDetail({
       toast.success("Invoice deleted");
       setConfirmDeleteOpen(false);
       onDiscard?.();
-    } catch { toast.error("Failed to delete invoice"); }
+    } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to delete invoice"); }
     finally { setDeleting(false); }
   }
 

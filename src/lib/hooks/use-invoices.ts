@@ -352,6 +352,29 @@ export function useInvoice(id: string) {
   });
 }
 
+// ── terms for a hand-created invoice ──────────────────────────────────────────
+
+/**
+ * Terms + due date for an invoice a person creates (from a job, an estimate, or
+ * blank). Every server-side creator resolves these from the client's default
+ * terms, else the org's — but these three inserts wrote neither, so the column
+ * default ("due_on_receipt") won and due_date stayed null: a Net-30 client's
+ * invoice was due on receipt, and the invoice-past-due automation (which skips
+ * a null due_date) never fired for it. An explicit due date from the caller
+ * still wins.
+ */
+async function resolveNewInvoiceTerms(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  clientDefaultTerms: string | null | undefined,
+  invoiceDate: string,
+  explicitDueDate?: string | null
+): Promise<{ terms: string; due_date: string | null }> {
+  const { data: orgRow } = await supabase.from("organizations").select("default_billing_terms").maybeSingle();
+  const terms = resolveInvoiceTerms(clientDefaultTerms, orgRow?.default_billing_terms);
+  return { terms, due_date: explicitDueDate || computeDueDate(invoiceDate, terms) };
+}
+
 // ── create from estimate ──────────────────────────────────────────────────────
 
 export function useCreateInvoiceFromEstimate() {
@@ -434,9 +457,10 @@ export function useCreateInvoiceFromEstimate() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: client } = await (supabase as any)
         .from("clients")
-        .select("default_payment_method")
+        .select("default_payment_method, default_terms")
         .eq("id", clientId)
         .single();
+      const newTerms = await resolveNewInvoiceTerms(supabase, client?.default_terms, invoiceDate, dueDate);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: inv, error: invErr } = await (supabase as any)
         .from("crm_invoices")
@@ -447,7 +471,8 @@ export function useCreateInvoiceFromEstimate() {
           sales_rep_id: salesRepId ?? null,
           description,
           invoice_date: invoiceDate,
-          due_date: dueDate ?? null,
+          terms: newTerms.terms,
+          due_date: newTerms.due_date,
           po_number: poNumber ?? null,
           subtotal_cents: subtotalCents,
           discount_cents: discountCents ?? 0,
@@ -527,9 +552,10 @@ export function useCreateInvoice() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: client } = await (supabase as any)
         .from("clients")
-        .select("default_payment_method")
+        .select("default_payment_method, default_terms")
         .eq("id", values.clientId)
         .single();
+      const newTerms = await resolveNewInvoiceTerms(supabase, client?.default_terms, values.invoiceDate, values.dueDate);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
@@ -540,7 +566,8 @@ export function useCreateInvoice() {
           sales_rep_id: values.salesRepId ?? null,
           description: values.description,
           invoice_date: values.invoiceDate,
-          due_date: values.dueDate ?? null,
+          terms: newTerms.terms,
+          due_date: newTerms.due_date,
           status: "draft",
           invoice_number: null, // number assigned explicitly on save, not on open
           preferred_payment_method: client?.default_payment_method ?? null,
@@ -823,6 +850,29 @@ export function useDeleteInvoice() {
   return useMutation({
     mutationFn: async ({ id, clientId }: { id: string; clientId: string }) => {
       const supabase = createClient();
+      // The soft delete below is rejected by the DB when money is applied to
+      // the invoice — but only AFTER its lines were wiped and its materials
+      // reset, which left a live invoice with a total and no lines (and its
+      // materials free to be billed again). Refuse up front, before anything
+      // is destroyed; the stale-view case (a payment landed while this
+      // invoice was open) is exactly when the UI's own guard has the old data.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: current, error: currentErr } = await (supabase as any)
+        .from("crm_invoices")
+        .select("amount_paid_cents, locked")
+        .eq("id", id)
+        .single();
+      if (currentErr) throw currentErr;
+      if ((current?.amount_paid_cents ?? 0) > 0) {
+        throw new Error("This invoice cannot be deleted: payments are applied to it. Refund or unapply them first.");
+      }
+      // A locked invoice's lines can't be deleted (trigger) — and that failure
+      // used to land AFTER its materials were reset to pending and their stock
+      // restored, leaving the invoice live while the materials were free to be
+      // billed (and counted back into inventory) a second time.
+      if (current?.locked) {
+        throw new Error("This invoice is locked. Unlock it before deleting it.");
+      }
       // Free any materials this draft billed before its lines disappear.
       const { data: lines, error: linesErr } = await supabase
         .from("crm_invoice_line_items")
@@ -947,6 +997,14 @@ export function useUpdateInvoiceStatus() {
       const leavingVoid = current?.status === "void";
       if (leavingVoid) {
         patch.balance_cents = Math.max(0, (current.total_cents ?? 0) - (current.amount_paid_cents ?? 0));
+      }
+      // Issuing a draft that was never numbered (created from a job/estimate and
+      // never saved) must not leave a live invoice with no number — the client
+      // would receive "Invoice #—". Idempotent RPC; a no-op for numbered ones.
+      if (current?.status === "draft" && status !== "draft") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: numErr } = await (supabase.rpc as any)("assign_invoice_number", { p_invoice_id: id });
+        if (numErr) throw numErr;
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
@@ -1357,6 +1415,18 @@ export function computeInvoiceTotals(input: {
 // job product from an invoice deletes its line item the same way).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function deleteInvoiceLineItemAndRecalc(supabase: any, id: string, invoiceId: string) {
+  // Refuse before touching the materials: a locked invoice rejects the line
+  // delete (trigger), and that used to happen AFTER the materials were reset to
+  // pending with their stock restored — the line stayed, the materials were
+  // free to be billed again.
+  const { data: lockRow, error: lockErr } = await supabase
+    .from("crm_invoices")
+    .select("locked")
+    .eq("id", invoiceId)
+    .single();
+  if (lockErr) throw lockErr;
+  if (lockRow?.locked) throw new Error(LOCKED_INVOICE_MESSAGE);
+
   // A material billed by this line is 'invoiced'; deleting the line nulls its
   // link (ON DELETE SET NULL) but leaves the status, so nothing would ever
   // bill it again and its stock stays decremented. Send it back to pending.
@@ -2139,7 +2209,7 @@ export function useCreateInvoiceFromJob() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: job, error: jobErr } = await (supabase as any)
         .from("crm_jobs")
-        .select("sales_rep_id, job_type, estimate_id, clients(default_tax_rate_bps), crm_job_services(id, is_taxable, crm_services(is_taxable))")
+        .select("sales_rep_id, job_type, estimate_id, clients(default_tax_rate_bps, default_terms), crm_job_services(id, is_taxable, crm_services(is_taxable))")
         .eq("id", jobId)
         .single();
       if (jobErr) throw jobErr;
@@ -2147,7 +2217,7 @@ export function useCreateInvoiceFromJob() {
         sales_rep_id: string | null;
         job_type: string;
         estimate_id: string | null;
-        clients: { default_tax_rate_bps: number | null } | null;
+        clients: { default_tax_rate_bps: number | null; default_terms: string | null } | null;
         crm_job_services: { id: string; is_taxable: boolean | null; crm_services: { is_taxable: boolean | null } | null }[] | null;
       };
 
@@ -2232,6 +2302,7 @@ export function useCreateInvoiceFromJob() {
         };
       });
       const { subtotalCents, taxCents, totalCents } = computeAutoInvoiceTotals(lines, taxRateBps);
+      const newTerms = await resolveNewInvoiceTerms(supabase, jobRow.clients?.default_terms, invoiceDate, dueDate);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
@@ -2243,7 +2314,8 @@ export function useCreateInvoiceFromJob() {
           sales_rep_id: jobRow.sales_rep_id ?? null,
           description,
           invoice_date: invoiceDate,
-          due_date: dueDate ?? null,
+          terms: newTerms.terms,
+          due_date: newTerms.due_date,
           po_number: poNumber ?? null,
           status: "draft",
           subtotal_cents: subtotalCents,

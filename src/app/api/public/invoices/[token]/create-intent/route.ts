@@ -83,17 +83,6 @@ export async function POST(
   if (invoice.open_dispute_payment_id) {
     return NextResponse.json({ error: "This invoice can't be paid online right now. Please contact us." }, { status: 409 });
   }
-  // Settle with any credit/deposit already on the account first (service role:
-  // the token holder has no session) so the card only pays what is still owed.
-  try {
-    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice);
-  } catch {
-    return NextResponse.json({ error: "We couldn't apply your account credit. Please try again or contact us." }, { status: 500 });
-  }
-  if (invoice.balance_cents <= 0) {
-    return NextResponse.json({ error: "Your account credit has paid this invoice in full — no card payment needed. Refresh the page to see it." }, { status: 409 });
-  }
-
   const { data: org } = await supabase
     .from("organizations")
     .select(
@@ -105,23 +94,6 @@ export async function POST(
   if (!org.stripe_connect_account_id || !org.stripe_connect_charges_enabled) {
     return NextResponse.json(
       { error: "This organization hasn't finished setting up card payments yet." },
-      { status: 400 }
-    );
-  }
-
-  const { feeCents, totalChargeCents } = computeProcessingFee(
-    {
-      ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
-      ccProcessingFeeBps: org.cc_processing_fee_bps,
-      ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
-    },
-    invoice.balance_cents,
-    false
-  );
-
-  if (totalChargeCents < STRIPE_MIN_CHARGE_CENTS) {
-    return NextResponse.json(
-      { error: "The remaining balance is below the $0.50 minimum for card payments. Please contact us to settle it." },
       { status: 400 }
     );
   }
@@ -148,6 +120,37 @@ export async function POST(
     isAch: false,
   });
   if (refusal) return NextResponse.json({ error: refusal.body.error, code: refusal.body.code }, { status: refusal.status });
+
+  // Every check above can refuse; only now consume the account credit, so a
+  // refused attempt never leaves the invoice quietly changed. Settle with any
+  // credit/deposit already on the account first (service role: the token holder
+  // has no session) so the card only pays what is still owed.
+  try {
+    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice);
+  } catch {
+    return NextResponse.json({ error: "We couldn't apply your account credit. Please try again or contact us." }, { status: 500 });
+  }
+  if (invoice.balance_cents <= 0) {
+    return NextResponse.json({ error: "Your account credit has paid this invoice in full — no card payment needed. Refresh the page to see it." }, { status: 409 });
+  }
+
+  const { feeCents, totalChargeCents } = computeProcessingFee(
+    {
+      ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
+      ccProcessingFeeBps: org.cc_processing_fee_bps,
+      ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+    },
+    invoice.balance_cents,
+    false
+  );
+
+  if (totalChargeCents < STRIPE_MIN_CHARGE_CENTS) {
+    return NextResponse.json(
+      { error: "The remaining balance is below the $0.50 minimum for card payments. Please contact us to settle it." },
+      { status: 400 }
+    );
+  }
+
 
   // Created directly on the org's connected account (a "direct charge") so the
   // funds land in their own Stripe balance/payouts, never the platform's —

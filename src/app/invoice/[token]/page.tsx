@@ -36,6 +36,8 @@ interface PublicInvoice {
 interface CreateIntentResult {
   clientSecret: string;
   connectedAccountId: string;
+  /** The org's Connect mode — Stripe.js must be loaded with the matching publishable key. */
+  livemode?: boolean;
   balanceCents: number;
   feeCents: number;
   totalChargeCents: number;
@@ -135,7 +137,10 @@ export default function PublicInvoicePage() {
     );
   }
 
-  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId) : null;
+  // Pass the org's mode: a test-mode org's client secret can only be confirmed
+  // by Stripe.js loaded with the TEST publishable key — without it this page
+  // initialized the live key and the payment form never worked for them.
+  const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId, intent.livemode) : null;
   const canPay = invoice.balanceCents > 0 && invoice.status !== "void" && hasPublishableKey();
 
   return (

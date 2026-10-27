@@ -39,6 +39,17 @@ async function buildInvoicePDFData(
 
   if (invErr || !inv) return null;
 
+  // An invoice created from a job/estimate has no number until it is saved or
+  // emailed, and Print flips such a draft to "printed" without either — the PDF
+  // then rendered "#00null" and the issued invoice stayed numberless. Number it
+  // now (idempotent + org-guarded RPC). Staff renders only: the portal's
+  // customer session has no profile and cannot call it.
+  if (inv.invoice_number == null && userId) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: assigned } = await (supabase as any).rpc("assign_invoice_number", { p_invoice_id: invoiceId });
+    if (typeof assigned === "number") inv.invoice_number = assigned;
+  }
+
   // Invoice's own pdf_template_id wins; otherwise fall back to the org's default template.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let template: any = inv.crm_invoice_pdf_templates ?? null;
