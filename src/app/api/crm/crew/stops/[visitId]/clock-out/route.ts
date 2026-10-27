@@ -46,11 +46,17 @@ interface VisitRow {
   start_time: string | null;
   crm_jobs: {
     crew_id?: string | null;
+    status?: string | null;
     property_id: string | null;
     service_address: string | null;
     service_city: string | null;
     crm_job_services: { id: string; budgeted_hours: number; team_size: number }[] | null;
   } | null;
+}
+
+/** A visit whose job is on hold / cancelled isn't on the crew's list (see GET /api/crm/crew/visits). */
+function jobIsPaused(row: VisitRow): boolean {
+  return row.crm_jobs?.status === "hold" || row.crm_jobs?.status === "cancelled";
 }
 
 function toStopKeyInput(row: VisitRow): StopKeyInput {
@@ -67,7 +73,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 const VISIT_SELECT = `
   id, org_id, job_id, client_id, scheduled_date, crew_id, crew_unassigned, job_service_id, status,
   men_count, clocked_in_at, clocked_out_at, paused_at, break_minutes, start_time,
-  crm_jobs(crew_id, property_id, service_address, service_city, crm_job_services(id, budgeted_hours, team_size))
+  crm_jobs(crew_id, status, property_id, service_address, service_city, crm_job_services(id, budgeted_hours, team_size))
 `;
 
 /**
@@ -136,7 +142,10 @@ export async function POST(
   // resolve) rather than letting the caller mutate another crew's visit.
   const allRows = candidateRows as VisitRow[];
   const stopRows = allRows.filter((r) =>
-    effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor)
+    // A held / cancelled job's leftover visit the crew never started isn't part
+    // of the work they did — completing it here would invoice it.
+    (r.id === anchor.id || !!r.clocked_in_at || !jobIsPaused(r))
+    && effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor)
     && (
       stopKeyForVisit(toStopKeyInput(r)) === anchorKey
       || (anchor.clocked_in_at && r.clocked_in_at === anchor.clocked_in_at)

@@ -37,12 +37,18 @@ interface VisitRow {
   acknowledged_notes_at: string | null;
   crm_jobs: {
     crew_id?: string | null;
+    status?: string | null;
     property_id: string | null;
     service_address: string | null;
     service_city: string | null;
     notes_to_crew: string | null;
     notes_to_crew_updated_at: string | null;
   } | null;
+}
+
+/** A visit whose job is on hold / cancelled isn't on the crew's list (see GET /api/crm/crew/visits), so a stop-wide action must not sweep it up. */
+function jobIsPaused(row: VisitRow): boolean {
+  return row.crm_jobs?.status === "hold" || row.crm_jobs?.status === "cancelled";
 }
 
 function toStopKeyInput(row: VisitRow): StopKeyInput {
@@ -59,7 +65,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 const VISIT_SELECT = `
   id, org_id, client_id, scheduled_date, crew_id, crew_unassigned, status, clocked_in_at,
   notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
-  crm_jobs(crew_id, property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at)
+  crm_jobs(crew_id, status, property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at)
 `;
 
 /** The notes-to-crew this visit contributes to its stop, visit-level overriding job-level (same rule as groupVisitsIntoStops). */
@@ -130,6 +136,10 @@ export async function POST(
   const anchorKey = stopKeyForVisit(toStopKeyInput(anchor));
   const stopRows = (candidateRows as VisitRow[])
     .filter((r) => stopKeyForVisit(toStopKeyInput(r)) === anchorKey)
+    // Held / cancelled jobs' leftover visits are hidden from the crew, so
+    // clocking the stop in must not start them (they'd be completed and
+    // invoiced at clock-out for work nobody was asked to do).
+    .filter((r) => r.id === anchor.id || !jobIsPaused(r))
     // Defense in depth: stopKeyForVisit already encodes crew_id, so a match
     // on anchorKey mathematically implies effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor) (the
     // crew whose ownership was just verified above) — this filter makes that

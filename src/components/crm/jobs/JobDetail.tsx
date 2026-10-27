@@ -354,6 +354,33 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       }
 
+      // Visits carry a COPY of the job's crew note (generate-visits copies it at
+      // creation) and the visit's own note wins over the job's everywhere the
+      // crew and the board read it — so a new gate code / "dog is loose" on the
+      // job never reached the already-generated visits, which kept showing the
+      // old text (while the crew was made to re-acknowledge a note they couldn't
+      // see changed). Carry the edit onto the upcoming, not-yet-started visits
+      // that still hold an unmodified copy of the previous job note; a note
+      // someone wrote on a single visit is left alone.
+      if ("notes_to_crew" in edits) {
+        const prevNote = job.notesToCrew ?? null;
+        const nextNote = typeof edits.notes_to_crew === "string" && edits.notes_to_crew.trim() ? edits.notes_to_crew : null;
+        if (prevNote && prevNote !== nextNote) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: noteErr } = await (createClient() as any)
+            .from("crm_job_visits")
+            .update({ notes_to_crew: nextNote })
+            .eq("job_id", job.id)
+            .eq("notes_to_crew", prevNote)
+            .gte("scheduled_date", orgToday())
+            .in("status", ["scheduled", "dispatched"])
+            .is("clocked_in_at", null)
+            .is("deleted_at", null);
+          if (noteErr) toast.error("Job saved, but the new crew note couldn't be applied to its upcoming visits — edit them from the Visits tab.");
+          await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+        }
+      }
+
       // Propagate crew change to all future scheduled visits
       if ("crew_id" in edits) {
         // The ORG's today (not the browser's), and the response is checked: a failed
@@ -478,7 +505,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         jobId: job.id,
         clientId: job.clientId,
         scheduledDate: newVisitDate,
-        crewId: newVisitCrew || null,
+        // "__unassigned__" is the picker's explicit "no crew" item, not a crew id —
+        // sending it as crew_id failed the insert (invalid uuid). It pins the visit
+        // to no crew so it doesn't fall back to the job's.
+        crewId: newVisitCrew && newVisitCrew !== "__unassigned__" ? newVisitCrew : null,
+        crewUnassigned: newVisitCrew === "__unassigned__",
         jobServiceId: newVisitServiceId || null,
         invoiceDescription: newVisitInvoiceDesc || null,
         jobType: job.jobType,

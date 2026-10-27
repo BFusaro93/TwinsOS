@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mapJob, mapVisit } from "./use-crm-jobs";
 import type { CRMJob, CRMJobVisit, StormEvent, StormEventStatus, SnowRoute, SnowRouteStop } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -62,31 +63,37 @@ export function useSnowJobs() {
     queryKey: ["crm-jobs", "snow"],
     queryFn: async () => {
       const supabase = createClient();
+      // Paged: PostgREST caps a response at 1000 rows.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_jobs")
-        .select(`
-          *,
-          clients(display_name, status, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
-          client_properties(address, city, state, zip),
-          crm_crews(name),
-          crm_job_services(*)
-        `)
-        .eq("job_type", "snow")
-        .is("deleted_at", null)
-        // Exclude terminal statuses — a cancelled or on-hold snow job
-        // shouldn't keep showing up as a candidate for "Add Jobs to
-        // Dispatch" / Master Routes. Same convention as the activeOnly
-        // filter in useCRMJobs (use-crm-jobs.ts).
-        .neq("status", "cancelled")
-        .neq("status", "hold")
-        .order("priority", { ascending: true });
-      if (error) throw error;
+      const data = await fetchAllRows<any>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("crm_jobs")
+          .select(`
+            *,
+            clients(display_name, status, deleted_at, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
+            client_properties(address, city, state, zip),
+            crm_crews(name),
+            crm_job_services(*)
+          `)
+          .eq("job_type", "snow")
+          .is("deleted_at", null)
+          // Exclude terminal statuses — a cancelled or on-hold snow job
+          // shouldn't keep showing up as a candidate for "Add Jobs to
+          // Dispatch" / Master Routes. Same convention as the activeOnly
+          // filter in useCRMJobs (use-crm-jobs.ts).
+          .neq("status", "cancelled")
+          .neq("status", "hold")
+          .order("priority", { ascending: true })
+      );
       // A lead (or closed-lost lead) can't have jobs — crm_jobs_reject_lead_client
       // blocks new ones — so a job that predates that guard, or whose client
       // was moved back to a lead, must not be offered for dispatch or billed.
+      // Same for a client who has since cancelled or been deleted: the recurring
+      // generator already stops serving them (excludeInactiveParents), so a storm
+      // must not send a crew (and an invoice) there either.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data.filter((row: any) => !["lead", "lost"].includes(row.clients?.status)).map((row: any) => ({
+      return (data.filter((row: any) => !["lead", "lost", "cancelled"].includes(row.clients?.status) && !row.clients?.deleted_at).map((row: any) => ({
         ...mapJob({
           ...row,
           // Same resolution order as the main dispatch board, the crew app and
@@ -362,19 +369,22 @@ export function useStormEventVisits(stormEventId: string) {
     queryKey: ["crm-job-visits", "storm-event", stormEventId],
     queryFn: async () => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_job_visits")
-        .select(`
-          *,
-          clients(display_name, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
-          crm_crews(name),
-          crm_jobs(*, crm_crews(name), crm_job_services(*), client_properties(address, city, state, zip))
-        `)
-        .eq("storm_event_id", stormEventId)
-        .is("deleted_at", null)
-        .order("order_num", { ascending: true, nullsFirst: false });
-      if (error) throw error;
+      // Paged — a large storm can dispatch more than PostgREST's 1000-row cap, and
+      // the stops past it silently never appeared on the board or the route.
+      const data = await fetchAllRows<unknown>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("crm_job_visits")
+          .select(`
+            *,
+            clients(display_name, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
+            crm_crews(name),
+            crm_jobs(*, crm_crews(name), crm_job_services(*), client_properties(address, city, state, zip))
+          `)
+          .eq("storm_event_id", stormEventId)
+          .is("deleted_at", null)
+          .order("order_num", { ascending: true, nullsFirst: false })
+      );
       return (data.map(mapVisit)) as CRMJobVisit[];
     },
     enabled: !!stormEventId,
@@ -400,14 +410,17 @@ export function useAddJobsToStormEvent() {
       // selection must not create a second visit for the same job on the
       // same storm (double dispatch/double billing). The DB also enforces
       // this via a unique index as the authoritative guard.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existing } = await (supabase as any)
-        .from("crm_job_visits")
-        .select("job_id")
-        .eq("storm_event_id", stormEventId)
-        .is("deleted_at", null)
-        .in("job_id", jobs.map((j) => j.jobId));
-      const alreadyAdded = new Set((existing ?? []).map((r: { job_id: string }) => r.job_id));
+      // Read the storm's own visits (paged) rather than `.in(job_id, <every selected
+      // id>)`: a few hundred uuids overflow the request URL and failed the whole add.
+      const existing = await fetchAllRows<{ job_id: string }>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("crm_job_visits")
+          .select("job_id")
+          .eq("storm_event_id", stormEventId)
+          .is("deleted_at", null)
+      );
+      const alreadyAdded = new Set(existing.map((r) => r.job_id));
       const newJobs = jobs.filter((j) => !alreadyAdded.has(j.jobId));
 
       // Append after the event's existing stops — each batch used to restart
@@ -424,10 +437,25 @@ export function useAddJobsToStormEvent() {
         .maybeSingle();
       const startOrder = maxRow?.order_num != null ? Number(maxRow.order_num) + 1 : 0;
 
+      // Crew size from each job (the column defaults to 1, which understated actual
+      // hours / labor on a multi-man snow route).
+      const menByJob = new Map<string, number>();
+      for (let i = 0; i < newJobs.length; i += 100) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: jobSizes } = await (supabase as any)
+          .from("crm_jobs")
+          .select("id, man_count")
+          .in("id", newJobs.slice(i, i + 100).map((j) => j.jobId));
+        for (const r of (jobSizes ?? []) as { id: string; man_count: number | null }[]) {
+          menByJob.set(r.id, Math.max(1, Number(r.man_count) || 1));
+        }
+      }
+
       const rows = newJobs.map((j, i) => ({
         job_id: j.jobId,
         client_id: j.clientId,
         scheduled_date: date,
+        men_count: menByJob.get(j.jobId) ?? 1,
         crew_id: j.crewId ?? null,
         storm_event_id: stormEventId,
         order_num: startOrder + i,

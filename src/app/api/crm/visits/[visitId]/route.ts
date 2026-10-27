@@ -109,6 +109,7 @@ export async function PATCH(
       // An explicit crew and "unassigned" are mutually exclusive.
       ...(patch.crew_id ? { crew_unassigned: false } : {}),
       ...(patch.crew_unassigned ? { crew_id: null } : {}),
+      ...(patch.status === "dispatched" && prev?.status !== "dispatched" ? { dispatched_at: new Date().toISOString() } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", visitId)

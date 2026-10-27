@@ -299,39 +299,51 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
     queryKey: ["crm-jobs", "waiting-list", startDate, endDate],
     queryFn: async () => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q = (supabase as any)
-        .from("crm_jobs")
-        .select(`
-          *,
-          clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
-          crm_crews(name),
-          sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name),
-          client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)),
-          crm_job_services(*),
-          crm_job_visits(id, deleted_at, job_service_id, status, scheduled_date)
-        `)
-        .in("job_type", ["waiting_list", "package"])
-        // Cancelled and on-hold jobs are not waiting to be dispatched.
-        .not("status", "in", '("cancelled","hold")')
-        .is("deleted_at", null)
-        .order("waiting_list_start", { ascending: true });
+      const buildQuery = () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q = (supabase as any)
+          .from("crm_jobs")
+          .select(`
+            *,
+            clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
+            crm_crews(name),
+            sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name),
+            client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)),
+            crm_job_services(*),
+            crm_job_visits(id, deleted_at, job_service_id, status, scheduled_date)
+          `)
+          .in("job_type", ["waiting_list", "package"])
+          // Cancelled and on-hold jobs are not waiting to be dispatched.
+          .not("status", "in", '("cancelled","hold")')
+          .is("deleted_at", null)
+          .order("waiting_list_start", { ascending: true });
 
-      // Include jobs with null dates (not yet scheduled into a window) alongside date-filtered ones
-      if (startDate) q = q.or(`waiting_list_end.is.null,waiting_list_end.gte.${startDate}`);
-      if (endDate)   q = q.or(`waiting_list_start.is.null,waiting_list_start.lte.${endDate}`);
-
+        // Include jobs with null dates (not yet scheduled into a window) alongside date-filtered ones
+        if (startDate) q = q.or(`waiting_list_end.is.null,waiting_list_end.gte.${startDate}`);
+        if (endDate)   q = q.or(`waiting_list_start.is.null,waiting_list_start.lte.${endDate}`);
+        return q;
+      };
+      // Paged: every package job in the org matches this query, so a company with
+      // over 1000 of them silently lost the rest from the Waiting List (PostgREST's
+      // max-rows cap).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await q;
-      if (error) throw error;
+      const data = await fetchAllRows<any>(buildQuery);
 
       // A one-time waiting-list job that's already been dispatched (has an active
       // visit) is done waiting — drop it. Packages keep multiple visits over their
       // lifetime, so they stay until their date window says otherwise.
+      // A waiting-list job with MORE THAN ONE service is dispatched one service at
+      // a time (one visit per service, so each can go to a different crew), so it
+      // is only done waiting once every service has its visit — dropping the whole
+      // job after the first dispatch stranded the other services: no visit and no
+      // longer on this list. A visit with no linked service covers them all.
       const rows = (data as WaitingListRow[]).filter((row) => {
         if (row.job_type !== "waiting_list") return true;
-        const hasActiveVisit = (row.crm_job_visits ?? []).some((v) => !v.deleted_at);
-        return !hasActiveVisit;
+        const live = (row.crm_job_visits ?? []).filter((v) => !v.deleted_at);
+        if (live.length === 0) return true;
+        const services = row.crm_job_services ?? [];
+        if (services.length <= 1 || live.some((v) => !v.job_service_id)) return false;
+        return services.some((s) => !live.some((v) => v.job_service_id === s.id));
       });
 
       // Package jobs' visits are often bulk-generated up front for the whole
@@ -342,10 +354,12 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
       // been dispatched, worked, or resolved); a still-'scheduled' visit means
       // the service is still exactly what the Waiting List is for.
       for (const row of rows) {
-        if (row.job_type !== "package") continue;
+        if (row.job_type !== "package" && row.job_type !== "waiting_list") continue;
+        // A split waiting-list job drops each service once it has ANY live visit
+        // (its visit is created in 'scheduled'); a package keeps the placeholder rule.
         const dispatchedServiceIds = new Set(
           (row.crm_job_visits ?? [])
-            .filter((v) => !v.deleted_at && v.job_service_id && v.status !== "scheduled")
+            .filter((v) => !v.deleted_at && v.job_service_id && (row.job_type === "waiting_list" || v.status !== "scheduled"))
             .map((v) => v.job_service_id)
         );
         row.crm_job_services = (row.crm_job_services ?? []).filter(
@@ -904,6 +918,8 @@ export function useCreateVisit() {
       clientId: string;
       scheduledDate: string;
       crewId?: string | null;
+      /** Pin the visit to NO crew (wins over the job's crew). */
+      crewUnassigned?: boolean;
       startTime?: string | null;
       endTime?: string | null;
       priority?: number;
@@ -924,6 +940,22 @@ export function useCreateVisit() {
       status?: VisitStatus;
     }) => {
       const supabase = createClient();
+      // The crew size when the caller didn't say: the visit's own service's team
+      // size, else the job's man_count — every caller that left it out (waiting-list
+      // dispatch, Add Visit, "add nearby job") landed the visit at 1 man on a
+      // multi-man job, understating crew size, actual hours and labor.
+      let menCount = values.menCount ?? null;
+      if (menCount == null) {
+        const [{ data: jobRow }, { data: svcRow }] = await Promise.all([
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any).from('crm_jobs').select('man_count').eq('id', values.jobId).maybeSingle(),
+          values.jobServiceId
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ? (supabase as any).from('crm_job_services').select('team_size').eq('id', values.jobServiceId).maybeSingle()
+            : Promise.resolve({ data: null }),
+        ]);
+        menCount = Number(svcRow?.team_size) || Number(jobRow?.man_count) || 1;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits')
@@ -932,7 +964,8 @@ export function useCreateVisit() {
           client_id: values.clientId,
           scheduled_date: values.scheduledDate,
           crew_id: values.crewId ?? null,
-          men_count: values.menCount ?? 1,
+          ...(values.crewUnassigned && !values.crewId ? { crew_unassigned: true } : {}),
+          men_count: Math.max(1, Math.round(menCount)),
           start_time: values.startTime ?? null,
           end_time: values.endTime ?? null,
           priority: values.priority ?? 1,
@@ -1324,21 +1357,29 @@ export function useUpdateVisit() {
       // dispatcher actions that previously left no trace on the client:
       // rescheduling a visit and dispatching it.
       const activityRows: { client_id: string; subject: string; ref_id: string }[] = [];
-      let before: { client_id: string; scheduled_date: string; job_id: string; job_service_id: string | null; status: string; crew_id: string | null; notes_to_crew: string | null } | null = null;
+      let before: { client_id: string; scheduled_date: string; job_id: string; job_service_id: string | null; status: string; crew_id: string | null; notes_to_crew: string | null; clocked_in_at: string | null; clocked_out_at: string | null } | null = null;
       if (
         updates.scheduled_date !== undefined ||
-        (updates.status && updates.status !== 'completed') ||
+        updates.status ||
         updates.crew_id !== undefined ||
         updates.notes_to_crew !== undefined
       ) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data } = await (supabase as any)
-          .from('crm_job_visits').select('client_id, scheduled_date, job_id, job_service_id, status, crew_id, notes_to_crew').eq('id', id).single();
+          .from('crm_job_visits').select('client_id, scheduled_date, job_id, job_service_id, status, crew_id, notes_to_crew, clocked_in_at, clocked_out_at').eq('id', id).single();
         before = data ?? null;
       }
       if (updates.scheduled_date !== undefined) {
         dateChanged = !!before && before.scheduled_date !== updates.scheduled_date;
         dateChangeClientId = before?.client_id ?? null;
+        // A stop the crew is working right now can't move to another day: the crew
+        // app only carries over clocked-in stops scheduled BEFORE today, so it would
+        // vanish from their list mid-stop and they couldn't clock out. The visit API
+        // routes already refuse this; the direct write here (calendar drag, visit
+        // list edits, snow board) didn't.
+        if (dateChanged && before?.clocked_in_at && !before.clocked_out_at) {
+          throw new Error("This visit is in progress (the crew has clocked in), so it can't be moved to another day. Have the crew clock out first.");
+        }
         if (dateChanged && before?.job_id) {
           // Package spacing rule (crm_job_services.min_days) — every client
           // reschedule path funnels through here (JobDetail dispatch, sheet
@@ -1381,7 +1422,11 @@ export function useUpdateVisit() {
       // completed transition itself is excluded from this raw update; every
       // other field in `updates` (e.g. completion_notes, actual_hours) still
       // writes directly, same as before.
-      const isCompleting = updates.status === 'completed';
+      // An already-completed visit saved again with its status unchanged (every field
+      // edit on the visit sheet sends the status along) is NOT a completion —
+      // re-running /complete would repair-invoice a visit whose invoice was
+      // deliberately voided.
+      const isCompleting = updates.status === 'completed' && before?.status !== 'completed';
       const { status: _statusOmittedForCompletion, ...updatesWithoutStatus } = updates;
       const dbUpdates = { ...(isCompleting ? updatesWithoutStatus : updates) };
       // An explicit crew and "unassigned" are mutually exclusive (the DB
@@ -1985,33 +2030,38 @@ export function useJobsList(filters?: {
     queryKey: ["crm-jobs", "list", filters],
     queryFn: async () => {
       const supabase = createClient();
+      const buildQuery = () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q = (supabase as any)
+          .from("crm_jobs")
+          .select(`
+            *,
+            clients(display_name, primary_phone),
+            crm_crews(name),
+            crm_job_services(*),
+            crm_job_visits(id, scheduled_date, status, deleted_at, job_service_id, crm_crews(name))
+          `)
+          .is("deleted_at", null)
+          .neq("job_type", "snow")
+          .order("scheduled_date", { ascending: true, nullsFirst: false })
+          .order("created_at", { ascending: false });
+
+        if (filters?.status)     q = q.eq("status", filters.status);
+        if (filters?.activeOnly) q = q.neq("status", "completed").neq("status", "cancelled");
+        if (filters?.jobType)    q = q.eq("job_type", filters.jobType);
+        if (filters?.clientId) q = q.eq("client_id", filters.clientId);
+        // Date-range filtering happens client-side in JobsList against each job's
+        // actual visit occurrences (see mapJob's `visits`) — the job-level
+        // scheduled_date is only meaningful for one-time/snow/project jobs and
+        // goes stale for recurring/package/waiting_list jobs once visits are
+        // generated, so filtering on it here would hide/misplace those jobs.
+        return q;
+      };
+
+      // PostgREST caps a response at 1000 rows and this list is the whole org's
+      // jobs — past 1000 the later-dated ones silently vanished from the page.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q = (supabase as any)
-        .from("crm_jobs")
-        .select(`
-          *,
-          clients(display_name, primary_phone),
-          crm_crews(name),
-          crm_job_services(*),
-          crm_job_visits(id, scheduled_date, status, deleted_at, job_service_id, crm_crews(name))
-        `)
-        .is("deleted_at", null)
-        .neq("job_type", "snow")
-        .order("scheduled_date", { ascending: true, nullsFirst: false })
-        .order("created_at", { ascending: false });
-
-      if (filters?.status)     q = q.eq("status", filters.status);
-      if (filters?.activeOnly) q = q.neq("status", "completed").neq("status", "cancelled");
-      if (filters?.jobType)    q = q.eq("job_type", filters.jobType);
-      if (filters?.clientId) q = q.eq("client_id", filters.clientId);
-      // Date-range filtering happens client-side in JobsList against each job's
-      // actual visit occurrences (see mapJob's `visits`) — the job-level
-      // scheduled_date is only meaningful for one-time/snow/project jobs and
-      // goes stale for recurring/package/waiting_list jobs once visits are
-      // generated, so filtering on it here would hide/misplace those jobs.
-
-      const { data, error } = await q;
-      if (error) throw error;
+      const data = await fetchAllRows<any>(buildQuery);
       return (data.map(mapJob)) as CRMJob[];
     },
   });
@@ -2803,15 +2853,34 @@ export function useUpdateCRMSchedule() {
       if (patch.customDates !== undefined) dbPatch.custom_dates = patch.customDates;
       if (patch.excludedDates !== undefined) dbPatch.excluded_dates = patch.excludedDates;
       if (patch.isActive !== undefined)    dbPatch.is_active = patch.isActive;
+      // Jobs point at their schedule BY NAME (crm_jobs.schedule), so renaming one
+      // has to carry its jobs along — otherwise every job on it stops matching the
+      // schedule row and the generator quietly falls back to parsing the old name
+      // as a legacy "Weekly - Monday" pattern (wrong cadence, or no visits at all).
+      let previousName: string | null = null;
+      if (patch.name !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: current } = await (supabase as any).from('crm_schedules').select('name').eq('id', id).maybeSingle();
+        previousName = (current?.name as string | undefined) ?? null;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('crm_schedules')
         .update(dbPatch)
         .eq('id', id);
       if (error) throw error;
+      if (previousName && patch.name !== undefined && previousName !== patch.name) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: renameErr } = await (supabase as any)
+          .from('crm_jobs')
+          .update({ schedule: patch.name })
+          .eq('schedule', previousName);
+        if (renameErr) throw renameErr;
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['crm-schedules'] });
+      qc.invalidateQueries({ queryKey: ['crm-jobs'] });
     },
   });
 }
