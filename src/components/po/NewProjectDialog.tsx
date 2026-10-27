@@ -35,7 +35,7 @@ interface NewProjectDialogProps {
   defaultClientId?: string;
   /** Called with the created project after a successful create (not fired on edit). */
   onCreated?: (project: Project) => void;
-  /** Pre-fills Contract Price on create (e.g. the accepted estimate's total when converting an estimate to a project job). */
+  /** Pre-fills Contract Price on create (e.g. the accepted estimate pre-tax revenue when converting an estimate to a project job). */
   defaultContractPriceCents?: number;
   /** Pre-fills the project name on create. */
   defaultName?: string;
@@ -272,7 +272,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
 
             {/* Contract Price — half width */}
             <div className="grid gap-1.5">
-              <Label htmlFor="project-contract-price">{isEditing ? "Original Contract Price ($)" : "Contract Price ($)"}</Label>
+              <Label htmlFor="project-contract-price">{isEditing ? "Original Contract Price, before tax ($)" : "Contract Price, before tax ($)"}</Label>
               <Input
                 id="project-contract-price"
                 type="number"

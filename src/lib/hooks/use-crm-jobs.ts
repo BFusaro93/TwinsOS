@@ -2510,10 +2510,25 @@ export function useCreateJobsFromEstimate() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: estTotals } = await (supabase as any)
           .from("estimates")
-          .select("total_cents")
+          .select("revenue_cents, subtotal_cents, discount_cents, tax_cents, total_cents")
           .eq("id", estimateId)
           .maybeSingle();
-        const contractCents = (estTotals as { total_cents: number | null } | null)?.total_cents ?? 0;
+        // The contract price is PRE-tax: subtotal minus discounts, never the tax-
+        // inclusive total. Tax is added when each milestone invoice is created
+        // (create_invoice_from_milestone), so seeding the total made the client
+        // pay tax twice on percent milestones and overstated WIP/over-under-
+        // billing. revenue_cents is exactly subtotal - discount; the fallbacks
+        // cover estimates saved before that column existed.
+        const est = (estTotals ?? {}) as {
+          revenue_cents: number | null; subtotal_cents: number | null; discount_cents: number | null;
+          tax_cents: number | null; total_cents: number | null;
+        };
+        const contractCents =
+          est.revenue_cents && est.revenue_cents > 0
+            ? est.revenue_cents
+            : est.subtotal_cents != null
+              ? Math.max(0, est.subtotal_cents - (est.discount_cents ?? 0))
+              : Math.max(0, (est.total_cents ?? 0) - (est.tax_cents ?? 0));
         if (contractCents > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (supabase as any)
