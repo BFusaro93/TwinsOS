@@ -1590,6 +1590,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           ? [updateEstimate({ id: estimate.id, patch: { display_settings: tpl.displaySettings } })]
                           : []),
                       ]);
+                      // Each concurrent upsert recalculates the rollup from its own
+                      // read of the lines; the last write to land can be one that
+                      // saw only some of the new lines. One authoritative pass after
+                      // they've all settled (same as the AI-draft path).
+                      await refreshEstimateTotals();
                       toast.success(`Applied bundle "${tpl.name}"`);
                     } catch {
                       toast.error("Failed to apply template");
