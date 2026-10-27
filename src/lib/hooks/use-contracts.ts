@@ -79,18 +79,23 @@ export function useContracts(clientId?: string, activeOnly?: boolean) {
     queryKey: ["crm-contracts", clientId ?? "all", activeOnly ?? "any"],
     queryFn: async () => {
       const supabase = createClient();
+      // Paged: PostgREST silently caps a plain select at 1000 rows, so past
+      // 1000 contracts the oldest dropped out of the list, its CSV export and
+      // the bulk "Create Invoices" selection with no error.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q = (supabase as any)
-        .from("crm_contracts")
-        .select("*, clients(display_name, primary_email, primary_phone), sales_rep:crm_employees!crm_contracts_sales_rep_id_fkey(first_name,last_name)")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (clientId) q = q.eq("client_id", clientId);
-      if (activeOnly === true) q = q.eq("is_active", true);
-      if (activeOnly === false) q = q.eq("is_active", false);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data.map(mapContract)) as CRMContract[];
+      const rows = await fetchAllRows<any>(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q = (supabase as any)
+          .from("crm_contracts")
+          .select("*, clients(display_name, primary_email, primary_phone), sales_rep:crm_employees!crm_contracts_sales_rep_id_fkey(first_name,last_name)")
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false });
+        if (clientId) q = q.eq("client_id", clientId);
+        if (activeOnly === true) q = q.eq("is_active", true);
+        if (activeOnly === false) q = q.eq("is_active", false);
+        return q;
+      });
+      return (rows.map(mapContract)) as CRMContract[];
     },
   });
 }
@@ -353,6 +358,17 @@ function sameContractValue(a: unknown, b: unknown): boolean {
   return JSON.stringify(norm(a)) === JSON.stringify(norm(b));
 }
 
+/**
+ * What a contract bills in each calendar month: the month's own override, else
+ * the flat per-invoice amount — the same resolution the invoicing cron uses
+ * (`monthly_amounts[month] ?? monthly_amount_cents`).
+ */
+function effectiveMonthlySchedule(amounts: unknown, flatCents: unknown): (number | null)[] {
+  const map = (amounts && typeof amounts === "object" ? amounts : {}) as Record<string, number | null | undefined>;
+  const flat = typeof flatCents === "number" ? flatCents : 0;
+  return MONTH_KEYS.map((k) => map[k] ?? flat);
+}
+
 export function useUpdateContract() {
   const qc = useQueryClient();
   return useMutation({
@@ -380,9 +396,31 @@ export function useUpdateContract() {
           .select(["status", ...CONTRACT_FINANCIAL_FIELDS].join(", "))
           .eq("id", id)
           .single();
-        const financialsChanged = CONTRACT_FINANCIAL_FIELDS.some(
-          (f) => f in updates && !sameContractValue(updates[f], current?.[f])
-        );
+        // monthly_amount_cents / monthly_amounts are compared as the schedule
+        // they BILL (see effectiveMonthlySchedule), not key by key: the edit
+        // dialog always submits all twelve months, while a contract created
+        // by the API / import / a template can store `{}` (every month falls
+        // back to the flat amount). Key-by-key, editing just the PO number of
+        // such a signed contract looked like a price change and reverted it to
+        // "sent" with its signature cleared, silently stopping its billing.
+        const scheduleChanged =
+          ("monthly_amounts" in updates || "monthly_amount_cents" in updates) &&
+          !sameContractValue(
+            effectiveMonthlySchedule(
+              "monthly_amounts" in updates ? updates.monthly_amounts : current?.monthly_amounts,
+              "monthly_amount_cents" in updates ? updates.monthly_amount_cents : current?.monthly_amount_cents,
+            ),
+            effectiveMonthlySchedule(current?.monthly_amounts, current?.monthly_amount_cents),
+          );
+        const financialsChanged =
+          scheduleChanged ||
+          CONTRACT_FINANCIAL_FIELDS.some(
+            (f) =>
+              f !== "monthly_amounts" &&
+              f !== "monthly_amount_cents" &&
+              f in updates &&
+              !sameContractValue(updates[f], current?.[f])
+          );
         if (financialsChanged && (current?.status === "signed" || current?.status === "active")) {
           // Revert to "sent" and clear the signature — the daily
           // contract-invoices cron bills off these same fields, and treats

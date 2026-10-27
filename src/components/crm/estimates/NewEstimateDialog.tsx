@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
-import { useCreateEstimate, useUpsertLineItem } from "@/lib/hooks/use-estimates";
+import { recalcEstimateTotals, useCreateEstimate, useUpsertLineItem } from "@/lib/hooks/use-estimates";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -238,6 +238,11 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
             });
           })
         );
+        // The concurrent upserts above each recalculate the estimate's rollup
+        // from their own read of the lines, so the write that lands last can
+        // have seen only some of them — leaving the new estimate with a partial
+        // total until someone edits it. One authoritative pass once all settle.
+        await recalcEstimateTotals(estimate.id);
       }
 
       toast.success("Estimate created");

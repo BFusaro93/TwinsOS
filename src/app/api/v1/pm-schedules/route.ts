@@ -17,6 +17,7 @@ export async function GET(request: Request) {
     .eq("org_id", auth.orgId)
     .is("deleted_at", null)
     .order("next_due_date", { ascending: true })
+    .order("id", { ascending: true })
     .range(offset, offset + limit - 1);
 
   if (error) return jsonServerError("GET /api/v1/pm-schedules", error);

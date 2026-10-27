@@ -157,7 +157,11 @@ export async function POST(
           ...liRest,
           org_id: newEst.org_id,
           estimate_id: newEst.id,
-          status: resetStatus ? "quote" : li.status,
+          // Reset won/lost back to open — but a 'draft' line is "not yet part of
+          // the quote" (excluded from totals and hidden from the proposal);
+          // promoting it to 'quote' put it into the copy's price and in front
+          // of the client.
+          status: resetStatus && li.status !== "draft" ? "quote" : li.status,
         })
         .select("id")
         .single();

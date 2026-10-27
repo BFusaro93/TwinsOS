@@ -113,7 +113,9 @@ export function useBulkUpdateCatalogPrices() {
 
       return { serviceCount: servicePatches.size, matrixCount: matrixRows.length };
     },
-    onSuccess: () => {
+    onSettled: () => {
+      // Settled, not success: the sequential writes can fail part-way with the
+      // earlier ones already saved, and the caches must show that.
       qc.invalidateQueries({ queryKey: ["crm-services"] });
       qc.invalidateQueries({ queryKey: ["rate-matrix"] });
     },

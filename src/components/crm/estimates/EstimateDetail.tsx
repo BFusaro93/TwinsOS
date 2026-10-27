@@ -374,7 +374,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const unconvertedLineCount = convertedInfo?.legacyConverted
     ? 0
     : (estimate?.lineItems ?? []).filter(
-        (li) => !li.deletedAt && li.rowType !== "section" && li.status !== "lost" &&
+        (li) => !li.deletedAt && li.rowType !== "section" && li.status !== "lost" && li.status !== "draft" &&
           !(convertedInfo?.convertedLineIds.has(li.id))
       ).length;
   const canConvertMore = !!convertedInfo && unconvertedLineCount > 0;
@@ -963,8 +963,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 // non-section lines of the chosen (or basis) tier. On a
                 // Good/Better/Best estimate, invoicing every open tier billed
                 // all the mutually exclusive options at once.
+                // 'draft' lines are "not yet part of the quote" (recalc and the
+                // proposal both exclude them), so they aren't billed either.
                 const liveLines = (estimate.lineItems ?? []).filter(
-                  (li) => !li.deletedAt && li.status !== "lost" && li.rowType !== "section"
+                  (li) => !li.deletedAt && li.status !== "lost" && li.status !== "draft" && li.rowType !== "section"
                 );
                 const basis = tierBasis(
                   !!estimate.tiersEnabled,
@@ -1594,6 +1596,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           ? [updateEstimate({ id: estimate.id, patch: { display_settings: tpl.displaySettings } })]
                           : []),
                       ]);
+                      // Each concurrent upsert recalculates the rollup from its own
+                      // read of the lines; the last write to land can be one that
+                      // saw only some of the new lines. One authoritative pass after
+                      // they've all settled (same as the AI-draft path).
+                      await refreshEstimateTotals();
                       toast.success(`Applied bundle "${tpl.name}"`);
                     } catch {
                       toast.error("Failed to apply template");

@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -137,20 +138,28 @@ function useEstimatesReportData(rangeStart: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sb = supabase as any;
 
-      const [estRes, liRes] = await Promise.all([
-        sb
-          .from("estimates")
-          .select("id, estimate_number, stage, total_price_cents:total_cents, created_at, description, clients(display_name)")
-          .is("deleted_at", null)
-          .gte("created_at", rangeStart),
-        sb
-          .from("estimate_line_items")
-          .select("id, estimate_id, service_name, status, qty, rate_cents, total_cents, direct_cost_cents:total_cost_cents, estimates(stage, created_at)")
-          .is("deleted_at", null),
+      // Both reads are paged: PostgREST silently caps a plain select at 1000
+      // rows, and the line-item read spans every estimate ever created (the
+      // range is applied to its parent), so past 1000 lines the won-by-service
+      // and cost-breakdown reports were built from an arbitrary slice with no
+      // error. fetchAllRows also throws on a failed page instead of reporting 0.
+      const [estimates, allLineItems] = await Promise.all([
+        fetchAllRows<RawEstimate>(() =>
+          sb
+            .from("estimates")
+            .select("id, estimate_number, stage, total_price_cents:total_cents, created_at, description, clients(display_name)")
+            .is("deleted_at", null)
+            .gte("created_at", rangeStart)
+        ),
+        fetchAllRows<RawLineItem>(() =>
+          sb
+            .from("estimate_line_items")
+            .select("id, estimate_id, service_name, status, qty, rate_cents, total_cents, direct_cost_cents:total_cost_cents, estimates(stage, created_at)")
+            .is("deleted_at", null)
+        ),
       ]);
 
-      const estimates: RawEstimate[] = estRes.data ?? [];
-      const lineItems: RawLineItem[] = (liRes.data ?? []).filter(
+      const lineItems: RawLineItem[] = allLineItems.filter(
         (li: RawLineItem) => li.estimates && li.estimates.created_at >= rangeStart
       );
 
@@ -329,7 +338,10 @@ function WonByServiceReport({ lineItems }: { lineItems: RawLineItem[] }) {
   const rows = useMemo(() => {
     const wonItems = lineItems.filter(
       (li) =>
-        li.status === "won" &&
+        // An estimate the office marks Accepted (rather than the client accepting a
+        // proposal) leaves its lines at "quote" — only per-line acceptance writes
+        // "won" — so an accepted/invoiced estimate's live lines are won either way.
+        (li.status === "won" || li.status === "quote") &&
         (li.estimates?.stage === "accepted" || li.estimates?.stage === "invoiced")
     );
     const map = new Map<string, { qty: number; revenue: number; estimateIds: Set<string> }>();
@@ -400,7 +412,7 @@ function WonServiceProductsReport({ lineItems }: { lineItems: RawLineItem[] }) {
       lineItems
         .filter(
           (li) =>
-            li.status === "won" &&
+            (li.status === "won" || li.status === "quote") &&
             (li.estimates?.stage === "accepted" || li.estimates?.stage === "invoiced")
         )
         .sort((a, b) => (b.total_cents ?? 0) - (a.total_cents ?? 0)),
