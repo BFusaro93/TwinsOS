@@ -8,7 +8,7 @@ import { allocateStopHours } from "@/lib/utils/visit-hours";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
-import { sumPunchLaborCents } from "@/lib/crew/visit-labor";
+import { sumPunchLaborCents, sumPunchManHours } from "@/lib/crew/visit-labor";
 import { closeStopPunches } from "@/lib/crew/stop-punches";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -305,6 +305,57 @@ export async function POST(
   // total below is summed from the punches.
   await closeStopPunches(supabase, anchor.id, now);
 
+  // Hours follow the ACTUAL punches when they exist: span × men_count above is
+  // only a guess at how many people were on site, and a member who arrived
+  // late or left early made visit hours disagree with the Timesheet, Job
+  // Costing and the dispatch board's mismatch flag. Same figure the punch
+  // editors use (sumPunchManHours: Σ per member of out − in − breaks), split
+  // across the visits closing now in the proportions the span allocation
+  // gave them. Hours already credited to siblings closed EARLIER are taken off
+  // first (same remainder rule as the labor split below). Only when the anchor
+  // itself was clocked out now: if it finished earlier, its punches describe
+  // that earlier work, not the visits closing here, so the span estimate stays.
+  // The write goes through the same UPDATE OF actual_hours path as above, so
+  // the job-level actual_hours rollup trigger fires again.
+  let punchAllocation: Map<string, number> | null = null;
+  if (anchorIsOpen) {
+    try {
+      const punchHours = await sumPunchManHours(supabase, anchor.id);
+      if (punchHours != null) {
+        const openIdsSet = new Set(openIds);
+        const earlierRowIds = stopRows.filter((r) => !openIdsSet.has(r.id)).map((r) => r.id);
+        let earlierHours = 0;
+        if (earlierRowIds.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: earlier } = await (supabase as any)
+            .from("crm_job_visits")
+            .select("actual_hours")
+            .in("id", earlierRowIds);
+          earlierHours = ((earlier ?? []) as { actual_hours: number | null }[])
+            .reduce((sum, v) => sum + Number(v.actual_hours ?? 0), 0);
+        }
+        const remaining = Math.max(0, punchHours - earlierHours);
+        const weights = openRows.map((r) => Math.max(0, allocation?.get(r.id) ?? 0));
+        const wSum = weights.reduce((a, b) => a + b, 0);
+        const shares = openRows.map((_, i) => Math.round(remaining * (wSum > 0 ? weights[i] / wSum : 1 / openRows.length) * 100) / 100);
+        const diff = Math.round((remaining - shares.reduce((a, b) => a + b, 0)) * 100) / 100;
+        if (diff !== 0) shares[weights.indexOf(Math.max(...weights))] += diff;
+        punchAllocation = new Map(openRows.map((r, i) => [r.id, shares[i]]));
+        for (const row of transitionedRows) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any)
+            .from("crm_job_visits")
+            .update({ actual_hours: punchAllocation.get(row.id) ?? 0 })
+            .eq("id", row.id);
+        }
+      }
+    } catch (err) {
+      punchAllocation = null;
+      log.error("punch-based hours failed; keeping span estimate", { visitId: anchor.id, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  const hoursFor = (id: string) => (punchAllocation ?? allocation)?.get(id) ?? 0;
+
   // Labor cost: crew member punches are only ever recorded against the
   // anchor visit (the crew clocks in once, for the stop) — compute the total
   // from there, then allocate it across siblings with the same weights as
@@ -333,9 +384,9 @@ export async function POST(
 
     // Shares are still computed over every open row (the labor total covers
     // the whole stop); only the rows this request closed get written.
-    const totalAllocHours = openRows.reduce((s, r) => s + (allocation?.get(r.id) ?? 0), 0);
+    const totalAllocHours = openRows.reduce((s, r) => s + hoursFor(r.id), 0);
     for (const row of transitionedRows) {
-      const share = totalAllocHours > 0 ? (allocation?.get(row.id) ?? 0) / totalAllocHours : 1 / openRows.length;
+      const share = totalAllocHours > 0 ? hoursFor(row.id) / totalAllocHours : 1 / openRows.length;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await (supabase as any)
         .from("crm_job_visits")

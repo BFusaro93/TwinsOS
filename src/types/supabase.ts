@@ -9174,6 +9174,7 @@ export type Database = {
           type: string
           updated_at: string
           upsell_service_id: string | null
+          upsell_visit_id: string | null
           visible_to_client: boolean
         }
         Insert: {
@@ -9197,6 +9198,7 @@ export type Database = {
           type?: string
           updated_at?: string
           upsell_service_id?: string | null
+          upsell_visit_id?: string | null
           visible_to_client?: boolean
         }
         Update: {
@@ -9220,6 +9222,7 @@ export type Database = {
           type?: string
           updated_at?: string
           upsell_service_id?: string | null
+          upsell_visit_id?: string | null
           visible_to_client?: boolean
         }
         Relationships: [

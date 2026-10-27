@@ -30,7 +30,10 @@ function shapeCrewRequisition(row: Record<string, unknown>) {
 
 const Body = z.object({
   productItemId: z.string().uuid(),
-  quantity: z.number().int().positive(),
+  // Stocked / project materials are often fractional (half a yard of mulch):
+  // up to 2 decimals (numeric(10,2)). A maintenance part must still be whole —
+  // enforced below once the product's category is known.
+  quantity: z.number().positive().max(99999999).refine((q) => Math.abs(q * 100 - Math.round(q * 100)) < 1e-6, "At most 2 decimal places"),
   note: z.string().max(2000).optional(),
 });
 
@@ -100,6 +103,9 @@ export async function POST(
   if (productError) return NextResponse.json({ error: productError.message }, { status: 500 });
   if (!product || product.org_id !== visit.org_id) {
     return NextResponse.json({ error: "Product not found" }, { status: 404 });
+  }
+  if (product.category === "maintenance_part" && !Number.isInteger(quantity)) {
+    return NextResponse.json({ error: "Maintenance parts must be ordered in whole units" }, { status: 400 });
   }
   if (product.category === "maintenance_part") {
     return NextResponse.json(

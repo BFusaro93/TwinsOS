@@ -197,12 +197,18 @@ export function useUpdateInjuryCase() {
   return useMutation({
     mutationFn: async ({ id, ...input }: Partial<InjuryCase> & { id: string }) => {
       const supabase = createClient();
+      // A near miss has no severity; switching it to an injury without picking one
+      // defaults to first_aid, exactly as creating an injury does.
+      let severityDefault: InjurySeverity | null = null;
 
       if (SUBSTANTIVE_FIELDS.some((f) => input[f] !== undefined)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: current, error: fetchError } = await (supabase as any)
-          .from("injury_cases").select("status").eq("id", id).single();
+          .from("injury_cases").select("status, severity").eq("id", id).single();
         if (fetchError) throw fetchError;
+        if (input.incidentType !== undefined && input.incidentType !== "near_miss" && input.severity === undefined && !current?.severity) {
+          severityDefault = "first_aid";
+        }
         const reopening = input.status !== undefined && !CLOSED.includes(input.status);
         if (CLOSED.includes(current?.status) && !reopening) {
           throw new Error("This case is resolved/closed. Reopen it before editing its details.");
@@ -234,8 +240,8 @@ export function useUpdateInjuryCase() {
           ...(input.employeeName !== undefined && { employee_name: input.employeeName }),
           ...(input.employeeId !== undefined && { employee_id: input.employeeId }),
           ...(input.dateOfIncident !== undefined && { date_of_incident: input.dateOfIncident }),
-          ...((input.severity !== undefined || input.incidentType === "near_miss") && {
-            severity: input.incidentType === "near_miss" ? null : input.severity,
+          ...((input.severity !== undefined || input.incidentType === "near_miss" || severityDefault) && {
+            severity: input.incidentType === "near_miss" ? null : (input.severity ?? severityDefault),
           }),
           ...(input.location !== undefined && { location: input.location }),
           ...(input.injuryType !== undefined && { injury_type: input.injuryType }),

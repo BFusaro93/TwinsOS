@@ -6,6 +6,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { resolveWorkingMemberIds } from "@/lib/crew/stop-punches";
 import { memberWorksOn } from "@/lib/crew/roster-days";
+import { closeMemberPunchesOnOtherCrews } from "@/lib/crew/member-moves";
 import { startCrewDay, endCrewDay, closeMemberOpenShift, openShiftLookbackDate, MAX_AUTO_CLOSE_SHIFT_MS } from "@/lib/crew/day-shifts";
 
 /**
@@ -129,6 +130,10 @@ export async function POST(request: Request) {
       const admin = createServiceClient();
       const { data: member } = await admin.from("crm_crew_members").select("id").eq("id", crewMemberId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
       if (!member) return NextResponse.json({ error: "That person isn't in your company's crew list" }, { status: 404 });
+      // Mid-day move: end their open job punches on the OLD crew's visits at
+      // this instant first (hours counted once); the day shift keeps running.
+      // Before the move so a failure here leaves them where they were.
+      await closeMemberPunchesOnOtherCrews(admin, { memberId: crewMemberId, newCrewId: crewId, at: now });
       const { error: moveErr } = await admin.from("crm_crew_daily_members").upsert(
         { org_id: orgId, work_date: workDate, crew_id: crewId, member_id: crewMemberId, created_by: user.id },
         { onConflict: "work_date,member_id" }

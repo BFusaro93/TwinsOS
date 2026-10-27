@@ -243,7 +243,10 @@ export function CrewAppGuide() {
           shows people on the company&apos;s other crews who aren&apos;t already on yours today. They
           join your crew for today only (the same one-day move the dispatch board&apos;s Team
           Assignment makes), are clocked in like a late arrival, and join the running job&apos;s
-          punches if a job is in progress. Tomorrow they are back on their usual crew.
+          punches if a job is in progress. Tomorrow they are back on their usual crew. If they were
+          already clocked in on a job with another crew, that job punch is closed at the moment you
+          add them (their day shift keeps running), so their time is counted once — the same
+          happens when the office moves them with Team Assignment on the dispatch board.
         </p>
         <Callout>
           The day clock is for the <strong>crew leader&apos;s login</strong> &mdash; the crew login (or
@@ -332,6 +335,13 @@ export function CrewAppGuide() {
             work that runs past midnight.
           </li>
         </ul>
+        <p>
+          That formula is the starting estimate. When people have actually been clocked in on the stop
+          (Start Job punches the crew in), the visit&apos;s hours follow the real punches instead:
+          each person&apos;s own clock-in to clock-out, minus their breaks, added together — so
+          someone who arrived late or left early is counted for exactly the time they were there. The
+          crew-size multiplication is used only when there are no punches for the stop.
+        </p>
         <Callout>
           Hours on a stop are per <em>crew</em>, multiplied by headcount. Individual start and finish
           times for someone who came late or left early come from two places: the crew leader&apos;s{" "}

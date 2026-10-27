@@ -38,6 +38,9 @@ import {
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { useConfirm } from "@/components/shared/useConfirm";
+import { previewClientVisits, cancelClientVisitsRemote, clientVisitsConfirmOptions } from "@/lib/client-visits-api";
 import type { Client, ClientStatus, AccountType } from "@/types/crm";
 import { ACCOUNT_TYPE_COLOR } from "@/lib/account-type-colors";
 
@@ -258,6 +261,8 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
   const { data: clients, isLoading } = useClients();
   const orgTags = useOrgTags();
   const { mutateAsync: bulkCancel } = useBulkCancelClients();
+  const qc = useQueryClient();
+  const [askConfirm, askConfirmDialog] = useConfirm();
   const { mutateAsync: bulkActivate, isPending: bulkActivating } = useBulkActivateClients();
   const { mutateAsync: bulkUpdate } = useBulkUpdateClients();
   const { can } = usePermissions();
@@ -853,13 +858,30 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
         onOpenChange={(o) => { setBulkTagOpen(o); if (!o) clearSelection(); }}
         clientIds={selectedClientIds}
       />
+      {askConfirmDialog}
       <BulkCancelDialog
         open={bulkCancelOpen}
         onOpenChange={setBulkCancelOpen}
         count={selectedCount}
         onConfirm={async (reason) => {
+          // Ask about their upcoming visits first, act once the clients are cancelled.
+          let cancelVisits = false;
+          try {
+            const n = await previewClientVisits(selectedClientIds);
+            if (n > 0) cancelVisits = await askConfirm(clientVisitsConfirmOptions(n));
+          } catch { toast.warning("Couldn't check upcoming visits — they were left as they are."); }
           await bulkCancel({ clientIds: selectedClientIds, reason });
-          toast.success(`${selectedCount} client${selectedCount !== 1 ? "s" : ""} cancelled`);
+          if (cancelVisits) {
+            try {
+              const done = await cancelClientVisitsRemote(selectedClientIds);
+              toast.success(`${selectedCount} client${selectedCount !== 1 ? "s" : ""} cancelled — ${done} upcoming visit${done !== 1 ? "s" : ""} cancelled`);
+            } catch {
+              toast.error("Clients cancelled, but their upcoming visits couldn't be cancelled — remove them from the dispatch board.");
+            }
+            await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+          } else {
+            toast.success(`${selectedCount} client${selectedCount !== 1 ? "s" : ""} cancelled`);
+          }
           clearSelection();
         }}
       />

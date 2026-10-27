@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useAllCRMSchedules, useCreateCRMSchedule, useUpdateCRMSchedule, useDeleteCRMSchedule, useBulkImportCRMSchedules } from "@/lib/hooks/use-crm-jobs";
+import { useQueryClient } from "@tanstack/react-query";
+import { ScheduleNameTakenError, useAllCRMSchedules, useCreateCRMSchedule, useUpdateCRMSchedule, useDeleteCRMSchedule, useBulkImportCRMSchedules } from "@/lib/hooks/use-crm-jobs";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMSchedule } from "@/types/crm-jobs";
 import { Button } from "@/components/ui/button";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
@@ -394,6 +396,8 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
   const [form, setForm] = useState<ScheduleFormValues>(defaultForm);
   const createSchedule = useCreateCRMSchedule();
   const updateSchedule = useUpdateCRMSchedule();
+  const [confirm, confirmDialog] = useConfirm();
+  const qc = useQueryClient();
   const { data: orgSettings } = useOrgSettings();
   const brandColor = orgSettings?.brandColor ?? "#1e293b";
 
@@ -421,6 +425,36 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
     });
   }
 
+  /** Asks (with the count computed first) before replacing upcoming visits on the edited schedule. */
+  async function offerReschedule(scheduleId: string) {
+    try {
+      const post = async (action: 'preview' | 'apply') => {
+        const res = await fetch(`/api/crm/schedules/${scheduleId}/reschedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action }),
+        });
+        const out = await res.json().catch(() => ({})) as { count?: number; generated?: number; error?: string };
+        if (!res.ok) throw new Error(out.error ?? 'Failed to check upcoming visits');
+        return out;
+      };
+      const { count = 0 } = await post('preview');
+      if (count === 0) return;
+      const ok = await confirm({
+        title: `Reschedule ${count} upcoming visit${count !== 1 ? 's' : ''} on this schedule?`,
+        description: `${count} upcoming visit${count !== 1 ? 's' : ''} that haven't been dispatched, started, moved by hand or invoiced will be removed and regenerated on the new schedule. Choose "Keep existing visits" to leave them where they are; new visits will still follow the new schedule.`,
+        confirmLabel: 'Reschedule visits',
+        cancelLabel: 'Keep existing visits',
+      });
+      if (!ok) return;
+      const out = await post('apply');
+      toast.success(`Visits rescheduled: ${count} replaced, ${out.generated ?? 0} scheduled`);
+      await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+    } catch (e) {
+      toast.error(e instanceof Error ? `Schedule saved, but upcoming visits weren't rescheduled: ${e.message}` : 'Schedule saved, but upcoming visits weren\'t rescheduled');
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const payload = {
@@ -442,12 +476,27 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
     try {
       if (schedule) {
         await updateSchedule.mutateAsync({ id: schedule.id, patch: payload });
+        // Day / frequency / holidays changed: the visits already generated
+        // follow the OLD rules. Offer to move the upcoming untouched ones.
+        const before = scheduleToForm(schedule);
+        const rulesChanged =
+          schedule.isActive &&
+          (payload.frequency !== before.frequency ||
+            payload.dayOfWeek !== before.dayOfWeek ||
+            payload.weekPattern !== before.weekPattern ||
+            (payload.anchorDate ?? '') !== before.anchorDate ||
+            (payload.seasonStart ?? '') !== before.seasonStart ||
+            (payload.seasonEnd ?? '') !== before.seasonEnd ||
+            (payload.weekOfMonth ?? 'first') !== before.weekOfMonth ||
+            JSON.stringify(payload.customDates) !== JSON.stringify(before.customDates) ||
+            JSON.stringify(payload.excludedDates) !== JSON.stringify(before.excludedDates));
+        if (rulesChanged) await offerReschedule(schedule.id);
       } else {
         await createSchedule.mutateAsync(payload);
       }
       onClose();
-    } catch {
-      toast.error(schedule ? "Failed to update schedule" : "Failed to create schedule");
+    } catch (err) {
+      toast.error(err instanceof ScheduleNameTakenError ? err.message : schedule ? "Failed to update schedule" : "Failed to create schedule");
     }
   }
 
@@ -470,6 +519,8 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
   const previewDates = useMemo(() => computeUpcomingDates(previewSched, 12), [form]);
 
   return (
+    <>
+    {confirmDialog}
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
       <DialogContent className="sm:max-w-2xl p-0 gap-0 max-h-[85vh] flex flex-col sm:p-0">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
@@ -617,6 +668,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
         </Tabs>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 

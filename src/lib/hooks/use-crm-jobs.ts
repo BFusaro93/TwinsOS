@@ -2624,14 +2624,15 @@ export function useJobVisits(jobId: string) {
     queryKey: ['crm-job-visits', 'job', jobId],
     queryFn: async () => {
       const supabase = createClient();
+      // Paged: PostgREST truncates at 1000 rows, which silently dropped the
+      // oldest visits of a long-running recurring job / client.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
+      const data = await fetchAllRows<any>(() => (supabase as any)
         .from('crm_job_visits')
         .select('*, crm_crews(name), crm_jobs(crew_id, budgeted_hours, rate_cents, crm_crews(name), crm_job_services(id, rate_cents, budgeted_hours, team_size, qty, service_name, service_id))')
         .eq('job_id', jobId)
         .is('deleted_at', null)
-        .order('scheduled_date', { ascending: true });
-      if (error) throw error;
+        .order('scheduled_date', { ascending: true }));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return splitCrewGroupBudget(data.map((row: any) => applyJobServiceFallback(mapVisit(row), row))) as CRMJobVisit[];
     },
@@ -2644,14 +2645,15 @@ export function useClientAllVisits(clientId: string) {
     queryKey: ['crm-job-visits', 'client', clientId],
     queryFn: async () => {
       const supabase = createClient();
+      // Paged: PostgREST truncates at 1000 rows, which silently dropped the
+      // oldest visits of a long-running recurring job / client.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
+      const data = await fetchAllRows<any>(() => (supabase as any)
         .from('crm_job_visits')
         .select('*, crm_crews(name), crm_jobs(crew_id, budgeted_hours, rate_cents, crm_crews(name), crm_job_services(id, rate_cents, budgeted_hours, team_size, qty, service_name, service_id))')
         .eq('client_id', clientId)
         .is('deleted_at', null)
-        .order('scheduled_date', { ascending: false });
-      if (error) throw error;
+        .order('scheduled_date', { ascending: false }));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return splitCrewGroupBudget(data.map((row: any) => applyJobServiceFallback(mapVisit(row), row))) as CRMJobVisit[];
     },
@@ -2737,6 +2739,35 @@ export function useAllCRMSchedules() {
   });
 }
 
+/** Thrown (with a user-facing message) when a schedule name is already taken. */
+export class ScheduleNameTakenError extends Error {}
+
+const normalizeScheduleName = (n: string) => n.trim().toLowerCase();
+
+/** Live schedule names are unique per org, case-insensitive (DB: crm_schedules_org_lower_name_active_uidx). */
+async function assertScheduleNameFree(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  name: string,
+  excludeId?: string
+) {
+  const { data, error } = await supabase.from('crm_schedules').select('id, name').is('deleted_at', null);
+  if (error) throw error;
+  const wanted = normalizeScheduleName(name);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((data ?? []).some((r: any) => r.id !== excludeId && normalizeScheduleName(r.name) === wanted)) {
+    throw new ScheduleNameTakenError(`A schedule named "${name.trim()}" already exists. Pick a different name.`);
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rethrowScheduleNameConflict(error: any, name: string): never {
+  if (error?.code === '23505') {
+    throw new ScheduleNameTakenError(`A schedule named "${name.trim()}" already exists. Pick a different name.`);
+  }
+  throw error;
+}
+
 export function useCreateCRMSchedule() {
   const qc = useQueryClient();
   return useMutation({
@@ -2753,6 +2784,7 @@ export function useCreateCRMSchedule() {
       excludedDates?: string[];
     }) => {
       const supabase = createClient();
+      await assertScheduleNameFree(supabase, values.name);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_schedules')
@@ -2770,7 +2802,7 @@ export function useCreateCRMSchedule() {
         })
         .select()
         .single();
-      if (error) throw error;
+      if (error) rethrowScheduleNameConflict(error, values.name);
       return mapSchedule(data);
     },
     onSuccess: () => {
@@ -2802,6 +2834,12 @@ export function useBulkImportCRMSchedules() {
 
       let created = 0;
       let skipped = 0;
+      // Names already taken (live schedules + rows imported earlier in this file).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingNames, error: namesErr } = await (supabase as any).from('crm_schedules').select('name').is('deleted_at', null);
+      if (namesErr) throw namesErr;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const takenNames = new Set<string>((existingNames ?? []).map((x: any) => normalizeScheduleName(x.name)));
 
       for (const r of rows) {
         const name = r.name?.trim();
@@ -2810,6 +2848,8 @@ export function useBulkImportCRMSchedules() {
         const dayOfWeek = SCHEDULE_DAYS.find((d) => d.toLowerCase() === r.dayOfWeek?.trim().toLowerCase())
           ?? (frequency === 'custom' ? 'Mon' : undefined);
         if (!name || !SCHEDULE_FREQUENCIES.includes(frequency) || !dayOfWeek) { skipped++; continue; }
+        // Duplicate name (already in the org, or repeated in this file): skip it rather than fail the import.
+        if (takenNames.has(normalizeScheduleName(name))) { skipped++; continue; }
         const customDates = parseScheduleDateList(r.customDates);
         const excludedDates = parseScheduleDateList(r.excludedDates);
         // A custom schedule with no (or an unreadable) date list would generate nothing.
@@ -2828,7 +2868,11 @@ export function useBulkImportCRMSchedules() {
           custom_dates: frequency === 'custom' ? customDates : [],
           excluded_dates: frequency === 'custom' ? [] : excludedDates,
         });
-        if (error) throw error;
+        if (error) {
+          if ((error as { code?: string }).code === '23505') { skipped++; continue; }
+          throw error;
+        }
+        takenNames.add(normalizeScheduleName(name));
         created++;
       }
 
@@ -2881,6 +2925,7 @@ export function useUpdateCRMSchedule() {
       // as a legacy "Weekly - Monday" pattern (wrong cadence, or no visits at all).
       let previousName: string | null = null;
       if (patch.name !== undefined) {
+        await assertScheduleNameFree(supabase, patch.name, id);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: current } = await (supabase as any).from('crm_schedules').select('name').eq('id', id).maybeSingle();
         previousName = (current?.name as string | undefined) ?? null;
@@ -2890,7 +2935,7 @@ export function useUpdateCRMSchedule() {
         .from('crm_schedules')
         .update(dbPatch)
         .eq('id', id);
-      if (error) throw error;
+      if (error) rethrowScheduleNameConflict(error, patch.name ?? '');
       if (previousName && patch.name !== undefined && previousName !== patch.name) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: renameErr } = await (supabase as any)
