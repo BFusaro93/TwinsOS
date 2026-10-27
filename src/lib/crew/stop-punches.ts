@@ -1,3 +1,5 @@
+import { memberWorksOn } from "@/lib/crew/roster-days";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = any;
 
@@ -15,7 +17,7 @@ export async function resolveWorkingMemberIds(
   opts: { includeAbsent?: boolean } = {}
 ): Promise<string[]> {
   const [{ data: defaults }, { data: overrides }, { data: absences }] = await Promise.all([
-    supabase.from("crm_crew_members").select("id, crew_id").eq("org_id", orgId).is("deleted_at", null),
+    supabase.from("crm_crew_members").select("id, crew_id, days_of_week").eq("org_id", orgId).is("deleted_at", null),
     supabase.from("crm_crew_daily_members").select("member_id, crew_id").eq("org_id", orgId).eq("work_date", workDate),
     supabase.from("crm_crew_day_absences").select("crew_member_id").eq("org_id", orgId).eq("work_date", workDate).is("deleted_at", null),
   ]);
@@ -23,8 +25,14 @@ export async function resolveWorkingMemberIds(
     ((overrides ?? []) as { member_id: string; crew_id: string }[]).map((o) => [o.member_id, o.crew_id])
   );
   const absent = new Set(((absences ?? []) as { crew_member_id: string }[]).map((a) => a.crew_member_id));
-  return ((defaults ?? []) as { id: string; crew_id: string }[])
-    .filter((m) => (overrideCrew.get(m.id) ?? m.crew_id) === crewId && (opts.includeAbsent || !absent.has(m.id)))
+  return ((defaults ?? []) as { id: string; crew_id: string; days_of_week: number[] | null }[])
+    .filter((m) => {
+      const moved = overrideCrew.get(m.id);
+      // A same-day move is explicit; otherwise the member is only on their default
+      // crew on the days they're rostered for it.
+      if (moved === undefined && !memberWorksOn(m.days_of_week, workDate)) return false;
+      return (moved ?? m.crew_id) === crewId && (opts.includeAbsent || !absent.has(m.id));
+    })
     .map((m) => m.id);
 }
 

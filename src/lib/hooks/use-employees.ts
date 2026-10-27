@@ -585,7 +585,12 @@ export function useSetCrewDailyMember() {
         .upsert({ member_id: memberId, crew_id: crewId, work_date: workDate }, { onConflict: "work_date,member_id" });
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-crew-daily-members"] }),
+    // The board's multi-day headcount query lives under its own "-range" key,
+    // which a prefix match on the plain key doesn't reach.
+    onSuccess: () => Promise.all([
+      qc.invalidateQueries({ queryKey: ["crm-crew-daily-members"] }),
+      qc.invalidateQueries({ queryKey: ["crm-crew-daily-members-range"] }),
+    ]),
   });
 }
 
@@ -603,6 +608,9 @@ export function useClearCrewDailyMember() {
         .eq("work_date", workDate);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-crew-daily-members"] }),
+    onSuccess: () => Promise.all([
+      qc.invalidateQueries({ queryKey: ["crm-crew-daily-members"] }),
+      qc.invalidateQueries({ queryKey: ["crm-crew-daily-members-range"] }),
+    ]),
   });
 }

@@ -223,9 +223,9 @@ export function DispatchCalendar({
         updates: { scheduled_date: date, crew_id: toUnassigned ? null : crewId, crew_unassigned: toUnassigned },
       },
       {
-        onError: () => {
+        onError: (err) => {
           qc.setQueryData(key, previous);
-          toast.error("Couldn't move that visit");
+          toast.error(err instanceof Error && err.message ? err.message : "Couldn't move that visit");
         },
       }
     );

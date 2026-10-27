@@ -107,6 +107,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { CRMJob, CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
 import { useCrews, useCrewDailyMembers, useCrewDailyMembersRange, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
+import { memberWorksOn } from "@/lib/crew/roster-days";
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
 import { useCurrentUserStore } from "@/stores/current-user-store";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
@@ -216,15 +217,11 @@ const UNASSIGNED_CREW_KEY = "unassigned";
 // instead of a job's own possibly-stale men_count.
 function effectiveCrewSize(
   crewId: string | null,
-  richCrews: { id: string; members?: { id: string; crewId?: string }[] }[],
-  dailyOverrides: { member_id: string; crew_id: string }[]
+  richCrews: { id: string; members?: { id: string; crewId?: string; daysOfWeek?: number[] }[] }[],
+  dailyOverrides: { member_id: string; crew_id: string }[],
+  workDate?: string
 ): number {
-  if (!crewId) return 0;
-  const defaultCrewByMember = new Map<string, string>();
-  richCrews.forEach((c) => (c.members ?? []).forEach((m) => defaultCrewByMember.set(m.id, c.id)));
-  const overrideCrewByMember = new Map(dailyOverrides.map((o) => [o.member_id, o.crew_id]));
-  const allMembers = richCrews.flatMap((c) => c.members ?? []);
-  return allMembers.filter((m) => (overrideCrewByMember.get(m.id) ?? defaultCrewByMember.get(m.id)) === crewId).length;
+  return effectiveCrewMemberIds(crewId, richCrews, dailyOverrides, workDate).length;
 }
 
 // Same roster resolution as effectiveCrewSize, but returning the member ids
@@ -232,8 +229,10 @@ function effectiveCrewSize(
 // row should be written down to in crm_crew_member_times.
 function effectiveCrewMemberIds(
   crewId: string | null,
-  richCrews: { id: string; members?: { id: string; crewId?: string }[] }[],
-  dailyOverrides: { member_id: string; crew_id: string }[]
+  richCrews: { id: string; members?: { id: string; crewId?: string; daysOfWeek?: number[] }[] }[],
+  dailyOverrides: { member_id: string; crew_id: string }[],
+  /** The visit's day — a member rostered off that weekday (days_of_week) isn't on their default crew then. */
+  workDate?: string
 ): string[] {
   if (!crewId) return [];
   const defaultCrewByMember = new Map<string, string>();
@@ -241,7 +240,11 @@ function effectiveCrewMemberIds(
   const overrideCrewByMember = new Map(dailyOverrides.map((o) => [o.member_id, o.crew_id]));
   const allMembers = richCrews.flatMap((c) => c.members ?? []);
   return allMembers
-    .filter((m) => (overrideCrewByMember.get(m.id) ?? defaultCrewByMember.get(m.id)) === crewId)
+    .filter((m) => {
+      const moved = overrideCrewByMember.get(m.id);
+      if (moved === undefined && workDate && !memberWorksOn(m.daysOfWeek, workDate)) return false;
+      return (moved ?? defaultCrewByMember.get(m.id)) === crewId;
+    })
     .map((m) => m.id);
 }
 
@@ -804,7 +807,7 @@ function JobDetailSheet({
       const visitCrewId = effectiveCrewId(visit);
       const targets = memberTimes.length > 0
         ? memberTimes.map((t) => ({ crewMemberId: t.crewMemberId, otherClockedInAt: t.clockedInAt, otherClockedOutAt: t.clockedOutAt }))
-        : effectiveCrewMemberIds(visitCrewId, richCrewsForSheet ?? [], dailyOverridesForSheet)
+        : effectiveCrewMemberIds(visitCrewId, richCrewsForSheet ?? [], dailyOverridesForSheet, visit.scheduledDate)
             .map((id) => ({ crewMemberId: id, otherClockedInAt: null, otherClockedOutAt: null }));
       await Promise.all(targets.map((t) => upsertMemberTimeForSheet.mutateAsync({
         visitId: anchorVisitId,
@@ -2050,6 +2053,12 @@ function TeamAssignDialog({
   }
 
   async function reassign(visitId: string, crewId: string | null, jobId?: string) {
+    // A finished visit keeps the crew that did the work — moving it would shift
+    // the completed labor/history onto another crew.
+    if (visits.find((v) => v.id === visitId)?.status === "completed") {
+      toast.info("A completed visit can't be moved to another crew");
+      return;
+    }
     try {
       // crewId === null means "unassigned": pin the visit to no crew with the
       // per-visit override (crew_id NULL alone would just inherit the job's
@@ -2624,6 +2633,8 @@ function EditJobTimesDialog({
   // labor-costed — while the member borrowed in for the day got nothing.
   const { data: dailyOverridesForTimes = [] } = useCrewDailyMembers(visitDate);
   const effectiveRosterIds = new Set(
+    // No day filter here: this is the picker for who may be given a punch, so a
+    // member rostered off that weekday must stay selectable (an extra day worked).
     effectiveCrewMemberIds(crewId ?? null, crewsWithMembers ?? [], dailyOverridesForTimes)
   );
   const allMembers = (crewsWithMembers ?? [])
@@ -3089,7 +3100,7 @@ function VisitRow({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const extra: Record<string, any> = {};
     if (visitCrewId && !visit.menCount) {
-      const crewSize = effectiveCrewSize(visitCrewId, richCrewsForSize ?? [], dailyOverridesForSize);
+      const crewSize = effectiveCrewSize(visitCrewId, richCrewsForSize ?? [], dailyOverridesForSize, visit.scheduledDate);
       if (crewSize > 0) extra.men_count = crewSize;
     }
     try {
@@ -3112,7 +3123,7 @@ function VisitRow({
       // second, orphaned set of member-time rows for a sibling service.
       const targets = memberTimes.length > 0
         ? memberTimes.map((t) => ({ crewMemberId: t.crewMemberId, otherClockedInAt: t.clockedInAt, otherClockedOutAt: t.clockedOutAt }))
-        : effectiveCrewMemberIds(visitCrewId, richCrewsForSize ?? [], dailyOverridesForSize)
+        : effectiveCrewMemberIds(visitCrewId, richCrewsForSize ?? [], dailyOverridesForSize, visit.scheduledDate)
             .map((id) => ({ crewMemberId: id, otherClockedInAt: null, otherClockedOutAt: null }));
       await Promise.all(targets.map((t) => upsertMemberTime.mutateAsync({
         visitId: anchorVisitId,

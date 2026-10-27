@@ -5,6 +5,7 @@ import { getRouteAuth, resolveCallerCrewId, assertCallerOwnsVisit } from "@/lib/
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { resolveWorkingMemberIds } from "@/lib/crew/stop-punches";
+import { memberWorksOn } from "@/lib/crew/roster-days";
 import { startCrewDay, endCrewDay, closeMemberOpenShift } from "@/lib/crew/day-shifts";
 
 /**
@@ -58,12 +59,14 @@ export async function GET(request: Request) {
   // because a crew login's own RLS shouldn't expose other crews' rosters.
   const admin = createServiceClient();
   const [{ data: everyone }, { data: moves }] = await Promise.all([
-    admin.from("crm_crew_members").select("id, name, role, crew_id").eq("org_id", orgId).is("deleted_at", null).order("name"),
+    admin.from("crm_crew_members").select("id, name, role, crew_id, days_of_week").eq("org_id", orgId).is("deleted_at", null).order("name"),
     admin.from("crm_crew_daily_members").select("member_id, crew_id").eq("org_id", orgId).eq("work_date", workDate),
   ]);
   const movedTo = new Map(((moves ?? []) as { member_id: string; crew_id: string }[]).map((m) => [m.member_id, m.crew_id]));
-  const available = ((everyone ?? []) as { id: string; name: string; role: string | null; crew_id: string }[])
-    .filter((m) => (movedTo.get(m.id) ?? m.crew_id) !== crewId)
+  const available = ((everyone ?? []) as { id: string; name: string; role: string | null; crew_id: string; days_of_week: number[] | null }[])
+    // Not "on a crew today" when rostered off today, so a member of THIS crew who
+    // isn't scheduled today can still be pulled in for the day.
+    .filter((m) => (movedTo.get(m.id) ?? (memberWorksOn(m.days_of_week, workDate) ? m.crew_id : null)) !== crewId)
     .map((m) => ({ id: m.id, name: m.name, role: m.role }));
   return NextResponse.json({
     workDate,

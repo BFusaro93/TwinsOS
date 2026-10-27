@@ -1334,7 +1334,7 @@ export function useUpdateVisit() {
       // dispatcher actions that previously left no trace on the client:
       // rescheduling a visit and dispatching it.
       const activityRows: { client_id: string; subject: string; ref_id: string }[] = [];
-      let before: { client_id: string; scheduled_date: string; job_id: string; job_service_id: string | null; status: string; crew_id: string | null; notes_to_crew: string | null } | null = null;
+      let before: { client_id: string; scheduled_date: string; job_id: string; job_service_id: string | null; status: string; crew_id: string | null; notes_to_crew: string | null; clocked_in_at: string | null; clocked_out_at: string | null } | null = null;
       if (
         updates.scheduled_date !== undefined ||
         (updates.status && updates.status !== 'completed') ||
@@ -1343,12 +1343,20 @@ export function useUpdateVisit() {
       ) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data } = await (supabase as any)
-          .from('crm_job_visits').select('client_id, scheduled_date, job_id, job_service_id, status, crew_id, notes_to_crew').eq('id', id).single();
+          .from('crm_job_visits').select('client_id, scheduled_date, job_id, job_service_id, status, crew_id, notes_to_crew, clocked_in_at, clocked_out_at').eq('id', id).single();
         before = data ?? null;
       }
       if (updates.scheduled_date !== undefined) {
         dateChanged = !!before && before.scheduled_date !== updates.scheduled_date;
         dateChangeClientId = before?.client_id ?? null;
+        // A stop the crew is working right now can't move to another day: the crew
+        // app only carries over clocked-in stops scheduled BEFORE today, so it would
+        // vanish from their list mid-stop and they couldn't clock out. The visit API
+        // routes already refuse this; the direct write here (calendar drag, visit
+        // list edits, snow board) didn't.
+        if (dateChanged && before?.clocked_in_at && !before.clocked_out_at) {
+          throw new Error("This visit is in progress (the crew has clocked in), so it can't be moved to another day. Have the crew clock out first.");
+        }
         if (dateChanged && before?.job_id) {
           // Package spacing rule (crm_job_services.min_days) — every client
           // reschedule path funnels through here (JobDetail dispatch, sheet
