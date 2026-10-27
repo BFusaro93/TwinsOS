@@ -41,6 +41,7 @@ import { toast } from "sonner";
 import type { CRMCrew, CRMCrewMember } from "@/types/crm-employees";
 import { FALLBACK_CREW_COLORS } from "@/components/crm/dispatch/crew-color";
 import { createClient } from "@/lib/supabase/client";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { SearchInput } from "@/components/shared/SearchInput";
 
@@ -702,6 +703,7 @@ export function CrewsList() {
   const { data: crews, isLoading } = useCrews(false);
   const { mutateAsync: update } = useUpdateCrew();
   const { can } = useGate();
+  const { today: orgToday } = useOrgDates();
   const canManageTeams = can("sched_teams");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ActiveFilter>("active");
@@ -723,7 +725,8 @@ export function CrewsList() {
     // Jobs and upcoming visits left on a crew that's then made inactive keep pointing
     // at it: they can't be picked in dropdowns and the crew's login sees nothing.
     const supabase = createClient();
-    const today = new Date().toISOString().slice(0, 10);
+    // Org calendar day, not UTC (UTC flips at 8 PM Eastern and would hide tonight's visits).
+    const today = orgToday();
     const [jobsRes, visitsRes] = await Promise.all([
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (supabase as any).from("crm_jobs").select("id", { count: "exact", head: true })

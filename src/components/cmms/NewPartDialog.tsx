@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { Part, Vendor } from "@/types";
 import {
   Dialog,
@@ -39,12 +39,16 @@ interface NewPartDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialData?: Part | null;
+  /** Pre-fills a new part from an existing one (Copy Part). Part number is left blank; stock starts at 0. */
+  copyFrom?: Part | null;
   /** Called after a new part is saved; receives the created part object. */
   onCreated?: (part: Part) => void;
 }
 
-export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: NewPartDialogProps) {
+export function NewPartDialog({ open, onOpenChange, initialData, copyFrom, onCreated }: NewPartDialogProps) {
   const isEditing = !!initialData;
+  // The part whose field values seed the form: the one being edited, or the one being copied.
+  const seed = initialData ?? copyFrom ?? null;
   const { data: vendors } = useVendors();
 
   const [extraVendors, setExtraVendors] = useState<Vendor[]>([]);
@@ -79,20 +83,34 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
   );
 
   useEffect(() => {
-    if (open && initialData) {
-      setName(initialData.name);
-      setPartNumber(initialData.partNumber);
-      setCategories(initialData.categories?.length ? initialData.categories : initialData.category ? [initialData.category] : []);
-      setQuantityOnHand(String(initialData.quantityOnHand));
-      setMinimumStock(String(initialData.minimumStock));
-      setUnitCost((initialData.unitCost / 100).toFixed(2));
-      setIsInventory(initialData.isInventory);
-      setLocation(initialData.location ?? "");
-      setVendorId(initialData.vendorId ?? "");
-      setDescription(initialData.description);
-      setParentPartId(initialData.parentPartId ?? "none");
+    if (open && seed) {
+      const isCopy = !initialData;
+      setName(isCopy ? `${seed.name} (Copy)` : seed.name);
+      setPartNumber(isCopy ? "" : seed.partNumber);
+      setCategories(seed.categories?.length ? seed.categories : seed.category ? [seed.category] : []);
+      setQuantityOnHand(isCopy ? "0" : String(seed.quantityOnHand));
+      setMinimumStock(String(seed.minimumStock));
+      setUnitCost((seed.unitCost / 100).toFixed(2));
+      setIsInventory(seed.isInventory);
+      setLocation(seed.location ?? "");
+      setVendorId(seed.vendorId ?? "");
+      setDescription(seed.description);
+      setParentPartId(seed.parentPartId ?? "none");
     }
-  }, [open, initialData]);
+  }, [open, seed, initialData]);
+
+  // A part whose vendor is only a typed/imported name (no vendor_id) shows "No vendor".
+  // Link it to the vendor with the same name once, so the picker reflects reality and
+  // saving connects the record. Once per open, so choosing "No vendor" sticks.
+  const vendorAutoLinked = useRef(false);
+  useEffect(() => {
+    if (!open) { vendorAutoLinked.current = false; return; }
+    if (vendorAutoLinked.current || !seed || seed.vendorId || !seed.vendorName || !vendors) return;
+    vendorAutoLinked.current = true;
+    const wanted = seed.vendorName.trim().toLowerCase();
+    const match = vendors.find((v) => v.name.trim().toLowerCase() === wanted);
+    if (match) setVendorId(match.id);
+  }, [open, seed, vendors]);
 
   const isValid = name.trim() !== "" && partNumber.trim() !== "";
 
@@ -125,12 +143,15 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
       minimumStock: parseInt(minimumStock) || 0,
       unitCost: Math.round((parseFloat(unitCost) || 0) * 100),
       vendorId: vendorId || null,
-      vendorName: vendor?.name ?? null,
-      alternateVendors: initialData?.alternateVendors ?? [],
+      // Keep the stored name when the vendor selection is untouched but can't be
+      // resolved from the list: still loading, vendor since deleted, or a free-text
+      // vendor name (bulk import) with no linked vendor record.
+      vendorName: vendor?.name ?? ((vendorId || "") === (seed?.vendorId ?? "") ? seed?.vendorName : null) ?? null,
+      alternateVendors: seed?.alternateVendors ?? [],
       parentPartId: parentPartId === "none" ? null : parentPartId,
       isInventory,
       location: location.trim() || null,
-      pictureUrl: initialData?.pictureUrl ?? null,
+      pictureUrl: seed?.pictureUrl ?? null,
       productItemId: initialData?.productItemId ?? null,
       costLayers: initialData?.costLayers ?? [],
     };
@@ -185,9 +206,9 @@ export function NewPartDialog({ open, onOpenChange, initialData, onCreated }: Ne
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Part" : "New Part"}</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Part" : copyFrom ? "Copy Part" : "New Part"}</DialogTitle>
           <DialogDescription>
-            Add a new part or consumable to the parts inventory.
+            {copyFrom ? `Starts from ${copyFrom.name}. Give it its own part number and adjust anything that differs.` : "Add a new part or consumable to the parts inventory."}
           </DialogDescription>
         </DialogHeader>
 

@@ -445,6 +445,7 @@ export function PMScheduleDetailPanel({ schedule }: PMScheduleDetailPanelProps) 
 
 function PMScheduleWOHistory({ pmScheduleId }: { pmScheduleId: string }) {
   const { setSelectedWorkOrderId } = useCMMSStore();
+  const router = useRouter();
   const { data: allWOs } = useWorkOrders();
 
   const wos = (allWOs ?? [])
@@ -461,7 +462,11 @@ function PMScheduleWOHistory({ pmScheduleId }: { pmScheduleId: string }) {
         <button
           key={wo.id}
           type="button"
-          onClick={() => setSelectedWorkOrderId(wo.id)}
+          onClick={() => {
+            // The WO side panel lives on the Work Orders page; selecting alone did nothing here.
+            setSelectedWorkOrderId(wo.id);
+            router.push("/cmms/work-orders");
+          }}
           className="flex items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-muted/40"
         >
           <span className="font-medium text-slate-800 dark:text-neutral-100">{wo.title}</span>

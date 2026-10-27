@@ -42,7 +42,7 @@ import { useVehicles } from "@/lib/hooks/use-vehicles";
 import { useWorkOrders } from "@/lib/hooks/use-work-orders";
 import { WorkOrderDetailPanel } from "@/components/cmms/WorkOrderDetailPanel";
 import { OverlayLevelContext, overlayZ, useOverlayLevel } from "@/lib/overlay-level";
-import { Plus, Search, ShoppingCart, Wrench, X } from "lucide-react";
+import { Copy, Plus, Search, ShoppingCart, Wrench, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -665,6 +665,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
   // elsewhere (a goods receipt, a work order consuming the part).
   const [qtyOverride, setQtyOverride] = useState<{ partId: string; from: number; to: number } | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
   const [nestedPart, setNestedPart] = useState<Part | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [manageVendorsOpen, setManageVendorsOpen] = useState(false);
@@ -843,6 +844,12 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
                     {livePart.name}
                   </h2>
                   <PartShortfallBadge rows={shortfallsByPart.get(livePart.id)} />
+                  {canManageInventory && (
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCopyOpen(true)} title="Create a new part starting from this one">
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy
+                    </Button>
+                  )}
                   {canManageInventory && <EditButton onClick={() => setEditOpen(true)} />}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -920,6 +927,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
         document.body
       )}
       <NewPartDialog open={editOpen} onOpenChange={setEditOpen} initialData={livePart} />
+      <NewPartDialog open={copyOpen} onOpenChange={setCopyOpen} copyFrom={livePart} />
       <ManageVendorsDialog
         open={manageVendorsOpen}
         onOpenChange={setManageVendorsOpen}

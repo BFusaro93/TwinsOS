@@ -378,6 +378,15 @@ export function useBulkImportParts() {
       let succeeded = 0;
       const failed: BulkImportResult["failed"] = [];
 
+      // Link a CSV vendor name to the existing vendor record (case-insensitive,
+      // unique matches only) so the part gets a vendor_id, not just free text.
+      const { data: vendorRows } = await supabase.from("vendors").select("id, name").is("deleted_at", null);
+      const vendorsByName = new Map<string, { id: string; name: string } | null>();
+      for (const v of vendorRows ?? []) {
+        const key = v.name.trim().toLowerCase();
+        vendorsByName.set(key, vendorsByName.has(key) ? null : { id: v.id, name: v.name });
+      }
+
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i];
         const rowNum = i + 1;
@@ -412,6 +421,8 @@ export function useBulkImportParts() {
           }
           const qoh = qohRaw === "" ? 0 : parseInt(qohRaw, 10);
           const minStock = parseInt(r.minimumStock) || 0;
+          const csvVendor = r.vendorName?.trim() || "";
+          const matchedVendor = csvVendor ? vendorsByName.get(csvVendor.toLowerCase()) ?? null : null;
           const row = {
             name,
             part_number: partNumber,
@@ -421,7 +432,8 @@ export function useBulkImportParts() {
             unit_cost: unitCostCents,
             quantity_on_hand: qoh,
             minimum_stock: minStock,
-            vendor_name: r.vendorName?.trim() || null,
+            vendor_id: matchedVendor?.id ?? null,
+            vendor_name: matchedVendor?.name ?? (csvVendor || null),
             location: r.location?.trim() || null,
             is_inventory: r.quantityOnHand !== undefined || r.minimumStock !== undefined || r.isInventory === "true" || qoh > 0 || minStock > 0,
             cost_layers: [] as unknown as import("@/types/supabase").Json,
@@ -446,7 +458,8 @@ export function useBulkImportParts() {
               categories: row.categories as string[],
               unit_cost: row.unit_cost,
               minimum_stock: row.minimum_stock,
-              vendor_name: row.vendor_name,
+              // Only touch the vendor when the CSV names one, so a blank column can't unlink it.
+              ...(row.vendor_name ? { vendor_id: row.vendor_id, vendor_name: row.vendor_name } : {}),
               location: row.location,
               is_inventory: row.is_inventory,
             }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null)
@@ -482,6 +495,7 @@ export function useBulkImportParts() {
                 category: "maintenance_part",
                 unit_cost: row.unit_cost,
                 price: row.unit_cost,
+                vendor_id: row.vendor_id,
                 vendor_name: row.vendor_name || "",
                 alternate_vendors: [] as unknown as import("@/types/supabase").Json,
                 is_inventory: row.is_inventory,
