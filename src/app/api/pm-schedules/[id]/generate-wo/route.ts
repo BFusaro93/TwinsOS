@@ -143,7 +143,7 @@ function isDuplicateBatchError(error: any): boolean {
  * POST /api/pm-schedules/[id]/generate-wo
  *
  * Generates a parent Work Order + one sub-WO per asset in the PM schedule.
- * Parts templates (pm_schedule_asset_parts) are copied into wo_parts for each sub-WO.
+ * Parts templates (pm_schedule_asset_parts, plus the schedule-wide pm_schedule_parts) are copied into wo_parts for each sub-WO.
  * Updates pm_schedules.next_due_date based on frequency.
  *
  * Returns: { parentWorkOrderId: string, shortParts: string[], warning?: string }
@@ -315,6 +315,19 @@ export async function POST(
   const baseNumber = woNumber as string;
   const createdWOIds: string[] = [];
   const shortParts: string[] = [];
+
+  // Parts on the schedule's Parts tab are shared across all assets: they go on the
+  // master WO of a multi-asset batch (or the lone WO of a single-asset schedule),
+  // once, with one stock deduction. Asset-specific parts go on each asset's WO.
+  const { data: sharedPartRows, error: sharedPartsErr } = await adminClient
+    .from("pm_schedule_parts")
+    .select("*")
+    .eq("pm_schedule_id", scheduleId)
+    .is("deleted_at", null);
+  if (sharedPartsErr) {
+    return NextResponse.json({ error: `Failed to load the schedule's shared parts: ${sharedPartsErr.message}` }, { status: 500 });
+  }
+  const sharedParts = sharedPartRows ?? [];
   // The org's calendar day, not the server's (UTC is already tomorrow after
   // ~8pm ET). `today` is YYYY-MM-DD; format it as a plain calendar date.
   const dateLabel = new Date(`${today}T12:00:00Z`).toLocaleDateString("en-US", {
@@ -402,7 +415,7 @@ export async function POST(
 
     try {
       if (tplErr) throw new Error(`Failed to load the schedule's parts: ${tplErr.message}`);
-      shortParts.push(...await copyTemplatePartsAndDeduct(adminClient, userClient, profile.org_id, singleWO.id, templateParts ?? []));
+      shortParts.push(...await copyTemplatePartsAndDeduct(adminClient, userClient, profile.org_id, singleWO.id, [...(templateParts ?? []), ...sharedParts]));
     } catch (err) {
       await rollbackGeneratedWOs(adminClient, userClient, createdWOIds);
       return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
@@ -447,6 +460,14 @@ export async function POST(
       return NextResponse.json({ error: parentErr?.message ?? "Failed to create parent WO" }, { status: 500 });
     }
     createdWOIds.push(parentWO.id);
+
+    // Shared parts belong to the master WO only (once per batch), not to every asset's sub-WO.
+    try {
+      shortParts.push(...await copyTemplatePartsAndDeduct(adminClient, userClient, profile.org_id, parentWO.id, sharedParts));
+    } catch (err) {
+      await rollbackGeneratedWOs(adminClient, userClient, createdWOIds);
+      return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
 
     for (let i = 0; i < scheduleAssets.length; i++) {
       const sa = scheduleAssets[i];
