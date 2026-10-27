@@ -220,6 +220,11 @@ export interface CRMContract {
   salesRepId: string | null;
   saleType: "new" | "renewal" | null;
   lastBilledDate: string | null;
+  /** How a mid-cycle start bills its first stub — see src/lib/contract-billing.ts. */
+  startBillingMode: "first_full_cycle" | "prorate_first_period";
+  firstPeriodProratedAt: string | null;
+  /** Set when a financial edit changed a signed/active contract; cleared on client re-approval. */
+  changedSinceSignedAt: string | null;
   monthlyAmounts: MonthlyAmounts;
   invoiceLineItems: string[];
   defaultService: string | null;

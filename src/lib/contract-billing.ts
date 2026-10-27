@@ -407,3 +407,136 @@ export function termSkipReason(
   if (contract.end_date && contract.end_date < windowStart) return "contract has ended";
   return null;
 }
+
+// ── first-period proration ─────────────────────────────────────────────────────
+
+/** `crm_contracts.start_billing_mode`: how a contract that starts mid-cycle bills its first stub. */
+export type StartBillingMode = "first_full_cycle" | "prorate_first_period";
+
+export function normalizeStartBillingMode(raw: string | null | undefined): StartBillingMode {
+  return raw === "prorate_first_period" ? "prorate_first_period" : "first_full_cycle";
+}
+
+export interface ProrationContractRow extends BillingContractRow {
+  start_billing_mode?: string | null;
+  first_period_prorated_at?: string | null;
+  monthly_amount_cents?: number | null;
+  monthly_amounts?: Record<string, number | null> | null;
+}
+
+export interface ProrationPlan {
+  /** Stub period, inclusive, YYYY-MM-DD. */
+  periodStart: string;
+  periodEnd: string;
+  stubDays: number;
+  /** Length in days of the full billing cycle the stub is a slice of. */
+  cycleDays: number;
+  /** Full-cycle amount the stub is a fraction of. */
+  periodAmountCents: number;
+  /** Prorated amount, rounded to whole cents. */
+  amountCents: number;
+  /** Invoice line "name". */
+  label: string;
+  /** Invoice line "description" — shows the formula. */
+  formula: string;
+}
+
+/**
+ * Daily proration of a billing cycle: `periodCents × stubDays ÷ cycleDays`,
+ * rounded to the nearest cent. The one place this formula lives.
+ */
+export function prorateCents(periodCents: number, stubDays: number, cycleDays: number): number {
+  if (cycleDays <= 0 || stubDays <= 0) return 0;
+  return Math.round((periodCents * Math.min(stubDays, cycleDays)) / cycleDays);
+}
+
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function fmtShort(p: Ymd): string {
+  return `${MONTH_ABBR[p.m - 1]} ${p.d}, ${p.y}`;
+}
+
+function fmtMoney(cents: number): string {
+  return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** Billing day clamped to the length of month (y, m). */
+function clampedBoundary(y: number, m: number, billingDay: number): Ymd {
+  return { y, m, d: Math.min(billingDay, daysInMonth(y, m)) };
+}
+
+/**
+ * The prorated first-period stub for a contract that starts mid-cycle, or null
+ * when the contract isn't set to prorate, starts exactly on a billing day, or
+ * its cadence has no meaningful stub (weekly/biweekly/one_time).
+ *
+ * Pure — depends only on the contract row, never on "today". The cycle grid
+ * mirrors isBillingDueOn: a cycle runs from one billing day to the day before
+ * the next; a monthly cycle is one month, quarterly/annual cycles are 3/12
+ * months from the start month's billing day. The stub is the days from the
+ * start date up to the day before the FIRST regular billing day, so normal
+ * billing then picks up unchanged:
+ *   - start after that month's billing day (Oct 20, day 1): stub Oct 20–Oct 31,
+ *     first regular bill Nov 1 (monthly) / Jan 1 (quarterly) / next Oct 1 (annual).
+ *   - start before it, monthly only (Oct 20, day 25): stub Oct 20–Oct 24 of a
+ *     Sep 25–Oct 24 cycle, regular bill Oct 25. Quarterly/annual bill their
+ *     first full cycle on that day, so there is no stub.
+ */
+export function planFirstPeriodProration(contract: ProrationContractRow): ProrationPlan | null {
+  if (normalizeStartBillingMode(contract.start_billing_mode) !== "prorate_first_period") return null;
+  const frequency = normalizeBillingFrequency(contract.billing_frequency);
+  if (frequency !== "monthly" && frequency !== "quarterly" && frequency !== "annual") return null;
+  const start = parseYmd(contract.start_date);
+  if (!start) return null;
+
+  const span = frequency === "quarterly" ? 3 : frequency === "annual" ? 12 : 1;
+  const billingDay = Math.min(31, Math.max(1, contract.billing_day_of_month ?? 1));
+  const b0 = clampedBoundary(start.y, start.m, billingDay);
+  if (start.d === b0.d) return null; // starts exactly on a billing day: a full cycle
+
+  let cycleStart: Ymd;
+  let nextBoundary: Ymd;
+  if (start.d < b0.d) {
+    if (span !== 1) return null;
+    const prev = fromMonthIndex(monthIndex(start.y, start.m) - 1);
+    cycleStart = clampedBoundary(prev.y, prev.m, billingDay);
+    nextBoundary = b0;
+  } else {
+    const next = fromMonthIndex(monthIndex(start.y, start.m) + span);
+    cycleStart = b0;
+    nextBoundary = clampedBoundary(next.y, next.m, billingDay);
+  }
+
+  const stubDays = dayDiff(start, nextBoundary);
+  const cycleDays = dayDiff(cycleStart, nextBoundary);
+  if (stubDays <= 0 || cycleDays <= 0) return null;
+
+  const key = MONTH_KEYS[start.m - 1];
+  const override = contract.monthly_amounts?.[key];
+  const periodAmountCents = Math.round(override != null ? override : (contract.monthly_amount_cents ?? 0));
+  if (periodAmountCents <= 0) return null;
+
+  const periodEnd = addDays(nextBoundary, -1);
+  const amountCents = prorateCents(periodAmountCents, stubDays, cycleDays);
+  if (amountCents <= 0) return null;
+  return {
+    periodStart: fmt(start),
+    periodEnd: fmt(periodEnd),
+    stubDays,
+    cycleDays,
+    periodAmountCents,
+    amountCents,
+    label: `Prorated first period (${fmtShort(start)} – ${fmtShort(periodEnd)})`,
+    formula: `${fmtMoney(periodAmountCents)} × ${stubDays}/${cycleDays} days = ${fmtMoney(amountCents)}`,
+  };
+}
+
+/**
+ * Whether the stub still needs billing: prorate mode, never stubbed, and the
+ * contract hasn't already begun regular billing (last_billed_date set means a
+ * full cycle already went out — turning proration on later must not retro-bill
+ * a stub for a contract that is already running).
+ */
+export function prorationPending(contract: ProrationContractRow, hasLiveProratedInvoice: boolean): boolean {
+  return !contract.first_period_prorated_at && !contract.last_billed_date && !hasLiveProratedInvoice;
+}

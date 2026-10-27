@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
-import { alreadyBilledReason, billedInPeriod, planContractBilling, termSkipReason } from "@/lib/contract-billing";
+import { alreadyBilledReason, billedInPeriod, planContractBilling, planFirstPeriodProration, prorationPending, termSkipReason } from "@/lib/contract-billing";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
@@ -46,6 +46,9 @@ function mapContract(row: any): CRMContract {
     salesRepId: row.sales_rep_id ?? null,
     saleType: row.sale_type ?? null,
     lastBilledDate: row.last_billed_date ?? null,
+    startBillingMode: row.start_billing_mode === "prorate_first_period" ? "prorate_first_period" : "first_full_cycle",
+    firstPeriodProratedAt: row.first_period_prorated_at ?? null,
+    changedSinceSignedAt: row.changed_since_signed_at ?? null,
     monthlyAmounts: (row.monthly_amounts as MonthlyAmounts) ?? {},
     invoiceLineItems: (row.invoice_line_items as string[]) ?? [],
     defaultService: row.default_service ?? null,
@@ -132,6 +135,7 @@ export function useCreateContract() {
       billingFrequency?: BillingFrequency;
       billingDayOfMonth?: number;
       billMonthInAdvance?: boolean;
+      startBillingMode?: "first_full_cycle" | "prorate_first_period";
       paymentType?: string;
       poNumber?: string;
       autoGenerate?: boolean;
@@ -158,6 +162,7 @@ export function useCreateContract() {
           billing_frequency: values.billingFrequency ?? "monthly",
           billing_day_of_month: values.billingDayOfMonth ?? 1,
           bill_month_in_advance: values.billMonthInAdvance ?? false,
+          start_billing_mode: values.startBillingMode ?? "first_full_cycle",
           payment_type: values.paymentType ?? null,
           po_number: values.poNumber ?? null,
           auto_generate: values.autoGenerate ?? true,
@@ -319,8 +324,9 @@ export function useBulkImportContracts() {
 }
 
 // Fields that change what the client actually agreed to when they signed —
-// editing any of these on an already-signed contract must not leave the
-// original signature/status silently attached to the new terms.
+// editing any of these on an already-signed contract flags it "changed since
+// signed" (billing continues at the new terms) so the office gets the client's
+// approval rather than the original signature silently covering new terms.
 const CONTRACT_FINANCIAL_FIELDS = [
   "monthly_amount_cents",
   "monthly_amounts",
@@ -339,6 +345,7 @@ const CONTRACT_FINANCIAL_FIELDS = [
   "billing_day_of_month",
   "bill_month_in_advance",
   "billing_frequency",
+  "start_billing_mode",
 ] as const;
 
 /** Stable, null-tolerant equality for contract field values (dates, numbers, jsonb). */
@@ -369,6 +376,28 @@ function effectiveMonthlySchedule(amounts: unknown, flatCents: unknown): (number
   return MONTH_KEYS.map((k) => map[k] ?? flat);
 }
 
+/**
+ * Clears the "changed since signed" flag once the client has approved the new
+ * terms, and re-stamps signed_at to that approval. Billing is unaffected.
+ */
+export function useAcknowledgeContractChange() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, signedBy }: { id: string; signedBy?: string }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("crm_contracts")
+        .update({ changed_since_signed_at: null, signed_at: new Date().toISOString(), signed_by: signedBy ?? null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-contracts"] });
+    },
+  });
+}
+
 export function useUpdateContract() {
   const qc = useQueryClient();
   return useMutation({
@@ -384,16 +413,16 @@ export function useUpdateContract() {
 
       // Key PRESENCE is not a change: the edit dialog always submits every
       // financial field, so `f in updates` was true on every save — editing only a
-      // PO number, title or sales rep on a signed contract reverted it to "sent",
-      // cleared the signature, and silently stopped its billing. Compare against
-      // the stored values and only revert when one actually differs.
+      // PO number, title or sales rep on a signed contract flagged it as changed (and used to revert it to "sent",
+      // silently stopping its billing). Compare against the stored values and
+      // only flag when one actually differs.
       const touchesFinancials = CONTRACT_FINANCIAL_FIELDS.some((f) => f in updates);
       let finalUpdates = updates;
       if (touchesFinancials && !("status" in updates)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: current } = await (supabase as any)
           .from("crm_contracts")
-          .select(["status", ...CONTRACT_FINANCIAL_FIELDS].join(", "))
+          .select(["status", "changed_since_signed_at", ...CONTRACT_FINANCIAL_FIELDS].join(", "))
           .eq("id", id)
           .single();
         // monthly_amount_cents / monthly_amounts are compared as the schedule
@@ -422,13 +451,16 @@ export function useUpdateContract() {
               !sameContractValue(updates[f], current?.[f])
           );
         if (financialsChanged && (current?.status === "signed" || current?.status === "active")) {
-          // Revert to "sent" and clear the signature — the daily
-          // contract-invoices cron bills off these same fields, and treats
-          // "signed" and "active" contracts identically for billing
-          // eligibility (see useGenerateContractInvoices below), so either
-          // status's price/dates must never change without the client
-          // re-agreeing to the new terms first.
-          finalUpdates = { ...updates, status: "sent", signed_at: null, signed_by: null };
+          // The contract stays signed/active and KEEPS BILLING at the new
+          // terms (the daily cron reads these same fields). Reverting to "sent"
+          // used to silently stop billing. Instead flag it as changed since the
+          // client signed, so the office can get the client's approval; the
+          // audit-trail trigger records the field changes themselves. The first
+          // change's timestamp is kept across further edits.
+          finalUpdates = {
+            ...updates,
+            changed_since_signed_at: current?.changed_since_signed_at ?? new Date().toISOString(),
+          };
         }
       }
 
@@ -585,6 +617,77 @@ export interface GenerateInvoicesResult {
 }
 
 /**
+ * Creates the prorated first-period invoice for a contract (see
+ * planFirstPeriodProration). Mirrors the cron's stub block: draft invoice dated
+ * the org's today, one line carrying the formula, then number + marker. The
+ * marker (first_period_prorated_at) - not last_billed_date - records it, so the
+ * first regular cycle's catch-up rules are untouched.
+ */
+async function createProratedFirstInvoice(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  contract: any,
+  stub: NonNullable<ReturnType<typeof planFirstPeriodProration>>,
+  orgToday: string,
+): Promise<GenerateInvoicesResult> {
+  const contractId = contract.id as string;
+  const { data: orgTermsRow } = await supabase
+    .from("organizations")
+    .select("default_billing_terms")
+    .eq("id", contract.org_id)
+    .maybeSingle();
+  const invoiceTerms = resolveInvoiceTerms(contract.clients?.default_terms, orgTermsRow?.default_billing_terms);
+  const lineItems = (contract.invoice_line_items ?? []) as string[];
+  const baseDescription = lineItems.length > 0 ? lineItems.join("\n") : contract.title;
+
+  const { data: invoice, error: invErr } = await supabase
+    .from("crm_invoices")
+    .insert({
+      client_id: contract.client_id,
+      contract_id: contractId,
+      sales_rep_id: contract.sales_rep_id ?? null,
+      description: `${baseDescription}\n${stub.label}\n${stub.formula}`,
+      po_number: contract.po_number ?? null,
+      invoice_date: orgToday,
+      terms: invoiceTerms,
+      due_date: computeDueDate(orgToday, invoiceTerms),
+      status: "draft",
+      subtotal_cents: stub.amountCents,
+      total_cents: stub.amountCents,
+      balance_cents: stub.amountCents,
+      proration_period_start: stub.periodStart,
+      proration_period_end: stub.periodEnd,
+    })
+    .select("id")
+    .single();
+  if (invErr || !invoice) {
+    return { contractId, status: "skipped", reason: invErr?.code === "23505" ? "already billed for this date" : (invErr?.message ?? "insert failed") };
+  }
+  const { error: liErr } = await supabase.from("crm_invoice_line_items").insert({
+    invoice_id: invoice.id,
+    name: stub.label,
+    description: `${baseDescription} - ${stub.formula}`,
+    qty: 1,
+    rate_cents: stub.amountCents,
+    total_cents: stub.amountCents,
+    is_taxable: false,
+    sort_order: 1,
+  });
+  if (liErr) {
+    await supabase.from("crm_invoices").update({ deleted_at: new Date().toISOString() }).eq("id", invoice.id);
+    return { contractId, status: "skipped", reason: `line item insert failed: ${liErr.message}` };
+  }
+  const { error: numErr } = await supabase.rpc("assign_invoice_number", { p_invoice_id: invoice.id });
+  await supabase.from("crm_contracts").update({ first_period_prorated_at: orgToday }).eq("id", contractId);
+  return {
+    contractId,
+    status: "created",
+    reason: numErr ? `prorated invoice number not assigned (${numErr.message})` : undefined,
+  };
+}
+
+/**
  * Manually generates the current period's invoice for the given contracts —
  * the "Create Invoices" action. Unlike the daily cron
  * (/api/cron/contract-invoices) this ignores
@@ -615,7 +718,7 @@ export function useGenerateContractInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: contract, error: fetchErr } = await (supabase as any)
           .from("crm_contracts")
-          .select("id, org_id, client_id, title, status, po_number, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, clients!inner(deleted_at, default_terms, status)")
+          .select("id, org_id, client_id, title, status, po_number, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, start_billing_mode, first_period_prorated_at, clients!inner(deleted_at, default_terms, status)")
           .eq("id", contractId)
           // A cancelled client's contract must not keep billing (see the cron).
           .is("clients.deleted_at", null)
@@ -642,6 +745,35 @@ export function useGenerateContractInvoices() {
         // shared schedule math the daily cron uses, so the two can't drift.
         const plan = planContractBilling(contract, now, { billNow: true });
 
+        // ── prorated first-period stub ─────────────────────────────────────
+        // Same rules as the daily cron: bill the start-date → first-billing-day
+        // stub once (marker / last_billed_date / live prorated invoice block a
+        // repeat). While still inside the stub period the regular plan below
+        // would bill a FULL period for the same days, so it is skipped.
+        const stub = planFirstPeriodProration(contract);
+        if (stub) {
+          const orgToday = todayInZone(await getOrgTimeZone(supabase, contract.org_id));
+          if (orgToday >= stub.periodStart) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: liveStub } = await (supabase as any)
+              .from("crm_invoices")
+              .select("id")
+              .eq("contract_id", contract.id)
+              .not("proration_period_start", "is", null)
+              .is("deleted_at", null)
+              .limit(1)
+              .maybeSingle();
+            if (prorationPending(contract, !!liveStub)) {
+              const stubResult = await createProratedFirstInvoice(supabase, contract, stub, orgToday);
+              results.push(stubResult);
+              if (orgToday <= stub.periodEnd) continue;
+            } else if (orgToday <= stub.periodEnd) {
+              results.push({ contractId, status: "skipped", reason: `prorated first period (${stub.periodStart} – ${stub.periodEnd}) already billed` });
+              continue;
+            }
+          }
+        }
+
         // The term is tested against the BILLED period (advance-shifted), not
         // today — otherwise an advance-billed contract misses its first month
         // and bills one past its end (see termSkipReason).
@@ -662,6 +794,8 @@ export function useGenerateContractInvoices() {
           .select("id")
           .eq("client_id", contract.client_id)
           .eq("contract_id", contract.id)
+          // The prorated stub is its own invoice, not this period's regular one.
+          .is("proration_period_start", null)
           .is("deleted_at", null)
           .limit(1);
         // one_time's window is unbounded (both null): any live invoice on

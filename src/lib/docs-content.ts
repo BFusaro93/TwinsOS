@@ -984,7 +984,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Contracts",
             detail:
-              "CRM > Accounting > Contracts covers ongoing agreements: a monthly amount, billing frequency (weekly through annual, or one-time — honored by the invoicing cron, set through the API since the dialog doesn't expose it), auto-renew, billing day of month, and whether the contract bills a month in advance. The amount is charged per invoice at every frequency, not annualized. The end date can't be before the start date. Month-by-month amount overrides are supported for seasonal pricing.",
+              "CRM > Accounting > Contracts covers ongoing agreements: a monthly amount, billing frequency (weekly through annual, or one-time — honored by the invoicing cron, set through the API since the dialog doesn't expose it), auto-renew, billing day of month, and whether the contract bills a month in advance. The amount is charged per invoice at every frequency, not annualized. The end date can't be before the start date. Month-by-month amount overrides are supported for seasonal pricing. If a contract starts mid-cycle you can choose 'Prorate first period' (a daily-prorated first invoice for the partial stretch, then normal billing) or leave the default of starting on the first full cycle. Editing the financial terms of a signed contract keeps it billing at the new terms and flags it 'Changed since signed — needs client approval' until you clear the flag. Visits on a cancelled, expired or inactive contract bill like normal per-visit work.",
           },
           {
             step: "Sub-properties on one contract",

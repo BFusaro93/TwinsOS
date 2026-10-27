@@ -9,6 +9,7 @@ import {
   useCreateContract,
   useUpdateContract,
   useUpdateContractStatus,
+  useAcknowledgeContractChange,
   useDeleteContract,
   useContractNotes,
   useCreateContractNote,
@@ -262,6 +263,7 @@ interface DetailsState {
   monthlyAmounts: MonthlyAmounts;
   billingDayOfMonth: number;
   billMonthInAdvance: boolean;
+  startBillingMode: "first_full_cycle" | "prorate_first_period";
   paymentType: string;
   poNumber: string;
   autoGenerate: boolean;
@@ -419,6 +421,26 @@ function ContractDetailsTab({
                 checked={state.billMonthInAdvance}
                 onCheckedChange={(v) => onChange({ billMonthInAdvance: !!v })}
               />
+            </div>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-slate-600 dark:text-neutral-400">If Start Is Mid-Cycle</span>
+                <Select
+                  value={state.startBillingMode}
+                  onValueChange={(v) => onChange({ startBillingMode: v as DetailsState["startBillingMode"] })}
+                >
+                  <SelectTrigger className="h-7 w-44 shrink-0 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="first_full_cycle">Start on first full cycle</SelectItem>
+                    <SelectItem value="prorate_first_period">Prorate first period</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {state.startBillingMode === "prorate_first_period" && (
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  A starting date that falls between billing days gets a prorated invoice for the partial period (daily proration), then normal billing from the next billing day.
+                </p>
+              )}
             </div>
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm text-slate-600 dark:text-neutral-400">Payment Type</span>
@@ -1078,6 +1100,7 @@ export function ContractDialog({
       : MONTHS.reduce((acc, { key }) => { acc[key] = 0; return acc; }, {} as MonthlyAmounts),
     billingDayOfMonth: contract?.billingDayOfMonth ?? 1,
     billMonthInAdvance: contract?.billMonthInAdvance ?? false,
+    startBillingMode: contract?.startBillingMode ?? "first_full_cycle",
     paymentType: contract?.paymentType ?? "",
     poNumber: contract?.poNumber ?? "",
     autoGenerate: contract?.autoGenerate ?? true,
@@ -1092,10 +1115,27 @@ export function ContractDialog({
   const { mutateAsync: createContract, isPending: creating } = useCreateContract();
   const { mutateAsync: updateContract, isPending: updating } = useUpdateContract();
   const { mutateAsync: updateStatus } = useUpdateContractStatus();
+  const { mutateAsync: acknowledgeChange, isPending: acknowledging } = useAcknowledgeContractChange();
+  const { data: linkedJobs } = useJobsByContract(contract?.id);
+  const [confirmEnd, confirmEndDialog] = useConfirm();
   const isPending = creating || updating;
 
   async function handleStatusChange(status: ContractStatus) {
     if (!contract) return;
+    if (status === "cancelled" || status === "expired") {
+      // Visits on a contract that is no longer active stop being covered by the
+      // contract price and auto-invoice per visit instead — say so first.
+      const openJobs = (linkedJobs ?? []).filter((j) => j.status !== "completed" && j.status !== "cancelled").length;
+      if (openJobs > 0) {
+        const ok = await confirmEnd({
+          title: `${status === "cancelled" ? "Cancel" : "End"} this contract?`,
+          description: `${openJobs} linked job${openJobs !== 1 ? "s" : ""} will now bill per visit on the client's normal invoicing frequency instead of inside the contract price.`,
+          confirmLabel: status === "cancelled" ? "Cancel Contract" : "End Contract",
+          destructive: true,
+        });
+        if (!ok) return;
+      }
+    }
     try {
       const result = await updateStatus({ id: contract.id, status });
       if (!result.skipped) toast.success(`Contract marked as ${status}`);
@@ -1141,6 +1181,7 @@ export function ContractDialog({
           monthlyAmountCents: avgMonthlyCents,
           billingDayOfMonth: details.billingDayOfMonth,
           billMonthInAdvance: details.billMonthInAdvance,
+          startBillingMode: details.startBillingMode,
           paymentType: details.paymentType || undefined,
           poNumber: details.poNumber || undefined,
           autoGenerate: details.autoGenerate,
@@ -1165,6 +1206,7 @@ export function ContractDialog({
             monthly_amount_cents: avgMonthlyCents,
             billing_day_of_month: details.billingDayOfMonth,
             bill_month_in_advance: details.billMonthInAdvance,
+            start_billing_mode: details.startBillingMode,
             payment_type: details.paymentType || null,
             po_number: details.poNumber || null,
             auto_generate: details.autoGenerate,
@@ -1187,6 +1229,7 @@ export function ContractDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[85vh] w-full max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:p-0">
+        {confirmEndDialog}
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <div className="flex items-center gap-3">
             <DialogTitle className="text-xl font-bold">
@@ -1226,6 +1269,29 @@ export function ContractDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-auto px-6 py-4">
+          {contract?.changedSinceSignedAt && (
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+              <span className="flex-1">
+                <strong>Changed since signed — needs client approval.</strong>{" "}
+                The terms were edited after the client signed (on {fmtDate(contract.changedSinceSignedAt.slice(0, 10))}). Billing is running at the new terms.
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={acknowledging}
+                onClick={async () => {
+                  try {
+                    await acknowledgeChange({ id: contract.id, signedBy: contract.signedBy ?? undefined });
+                    toast.success("Marked as approved by the client");
+                  } catch {
+                    toast.error("Failed to update contract");
+                  }
+                }}
+              >
+                Client approved — clear flag
+              </Button>
+            </div>
+          )}
           {activeTab === "overview" && contract && (
             <ContractOverviewTab contract={contract} />
           )}
