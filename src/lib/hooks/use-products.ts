@@ -707,14 +707,39 @@ export function useDeleteProduct() {
         throw new Error(`Cannot delete product — it has ${blockers.join(" and ")}`);
       }
 
+      const deletedAt = new Date().toISOString();
       const { error } = await supabase
         .from("product_items")
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: deletedAt })
         .eq("id", id);
       if (error) throw error;
+
+      // A maintenance_part product is mirrored by a CMMS part (the same item).
+      // Leaving that part live kept it in the Parts list AND in the PO part
+      // picker, where a line now pointed at a deleted catalog product —
+      // goods receiving then failed with "No catalog product found". Retire
+      // the part with it (soft delete, history stays), and its asset links
+      // the way removing a part does.
+      const { data: retiredParts, error: partErr } = await supabase
+        .from("parts")
+        .update({ deleted_at: deletedAt })
+        .eq("product_item_id", id)
+        .is("deleted_at", null)
+        .select("id");
+      if (partErr) {
+        toast.warning(`Product deleted, but its CMMS part could not be retired: ${partErr.message}`);
+      } else if ((retiredParts ?? []).length > 0) {
+        await supabase
+          .from("asset_parts")
+          .update({ deleted_at: deletedAt })
+          .in("part_id", (retiredParts ?? []).map((p) => p.id as string))
+          .is("deleted_at", null);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["asset-parts"] });
     },
   });
 }
