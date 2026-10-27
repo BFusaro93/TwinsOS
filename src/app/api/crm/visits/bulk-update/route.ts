@@ -5,6 +5,7 @@ import { z } from "zod";
 import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
 import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { formatMonthDay } from "@/lib/utils";
+import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
 import {
   INVOICED_VISIT_LOCKED_CODE,
   INVOICED_VISIT_LOCKED_MESSAGE,
@@ -135,6 +136,19 @@ export async function POST(request: Request) {
   }
 
   await reopenOneTimeJobsForVisits(supabase, before, updates.status);
+
+  // Sending a visit to the crew pre-loads its service's chemicals (the crew's
+  // Chemical Mix card, the confirmation gate, stock depletion and the
+  // compliance report all hang off those rows). The single-visit hook and Team
+  // Assignment's Dispatch All already do this; the board's bulk "Change Status
+  // -> Dispatched" lands here and used to skip it, so those visits never had a
+  // chemical record at all. Best-effort, like the other paths.
+  if (updates.status === "dispatched") {
+    for (const row of before) {
+      if (row.status === "dispatched") continue;
+      await loadServiceChemicalsForVisit(supabase, row.id).catch(() => 0);
+    }
+  }
 
   // One lightweight client-timeline row per moved / newly-dispatched visit
   // ("Visit moved 9/7 → 9/8"). No notifications; best-effort.

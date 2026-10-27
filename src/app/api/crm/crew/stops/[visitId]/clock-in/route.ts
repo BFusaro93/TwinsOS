@@ -6,6 +6,8 @@ import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib
 import { closeOpenDriveSegment } from "@/lib/crew/drive-time";
 import { openStopPunches } from "@/lib/crew/stop-punches";
 import { startCrewDay } from "@/lib/crew/day-shifts";
+import { createServiceClient } from "@/lib/supabase/server";
+import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
@@ -197,6 +199,16 @@ export async function POST(
     .select();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // A visit the crew starts without the office ever dispatching it has no
+  // chemical records (preloading happens on dispatch), so the Chemical Mix card,
+  // the confirmation gate, stock depletion and the compliance report would all
+  // silently skip it. Load them now; a no-op when dispatch already did. The
+  // crew login can't write chemical applications, so this uses the service role
+  // (ownership of the stop was proven above). Best-effort.
+  for (const id of siblingIds) {
+    await loadServiceChemicalsForVisit(createServiceClient(), id).catch(() => 0);
+  }
 
   // If nobody tapped Start Day, the first job opens the day so payroll still
   // has a shift (flagged auto_first_job — the true start was earlier, at the shop).

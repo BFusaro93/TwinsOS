@@ -809,6 +809,9 @@ export function useStopClockIn() {
       // stops/[visitId]/clock-in/route.ts) — refresh so the home screen
       // stops showing "Driving" the moment a job actually starts.
       qc.invalidateQueries({ queryKey: ["crew-drive-today"] });
+      // Starting a never-dispatched stop preloads its chemicals server-side.
+      qc.invalidateQueries({ queryKey: ["crew-app-chemicals"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-chemical-confirmation"] });
     },
     onError: (err, anchorVisitId) => {
       toast.error(err instanceof Error ? err.message : "Failed to start job");
