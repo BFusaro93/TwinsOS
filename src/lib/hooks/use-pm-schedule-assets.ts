@@ -33,6 +33,28 @@ export function useAddPMScheduleAsset() {
       assetName: string;
     }) => {
       const supabase = createClient();
+      // UNIQUE (pm_schedule_id, asset_id) also covers soft-deleted rows, so
+      // re-adding an asset that was earlier removed from the schedule would
+      // fail with a unique violation. Revive that row instead of inserting.
+      const { data: removed, error: lookupErr } = await supabase
+        .from("pm_schedule_assets")
+        .select("id")
+        .eq("pm_schedule_id", input.pmScheduleId)
+        .eq("asset_id", input.assetId)
+        .not("deleted_at", "is", null)
+        .limit(1)
+        .maybeSingle();
+      if (lookupErr) throw lookupErr;
+      if (removed) {
+        const { data, error } = await supabase
+          .from("pm_schedule_assets")
+          .update({ deleted_at: null, asset_name: input.assetName })
+          .eq("id", removed.id)
+          .select()
+          .single();
+        if (error) throw error;
+        return mapPMScheduleAsset(data);
+      }
       const { data, error } = await supabase
         .from("pm_schedule_assets")
         .insert({
@@ -57,11 +79,22 @@ export function useRemovePMScheduleAsset() {
   return useMutation({
     mutationFn: async ({ id, pmScheduleId }: { id: string; pmScheduleId: string }) => {
       const supabase = createClient();
+      const deletedAt = new Date().toISOString();
       const { error } = await supabase
         .from("pm_schedule_assets")
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: deletedAt })
         .eq("id", id);
       if (error) throw error;
+      // Retire the asset's parts template with it: the row can be revived if
+      // the asset is re-added, and it should come back with a clean template
+      // rather than silently deducting stale parts at the next generation.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: partsErr } = await (supabase as any)
+        .from("pm_schedule_asset_parts")
+        .update({ deleted_at: deletedAt })
+        .eq("pm_schedule_asset_id", id)
+        .is("deleted_at", null);
+      if (partsErr) throw partsErr;
       return { pmScheduleId };
     },
     onSuccess: (_, { pmScheduleId }) => {

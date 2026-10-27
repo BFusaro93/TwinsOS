@@ -341,7 +341,9 @@ function MaterialsTab({ project }: { project: Project }) {
           await addReqLineItem({
             requisitionId: req.id,
             lineItem: {
-              productItemId: isPart ? "" : rawId,
+              // A part's line references the catalog product it mirrors (every
+              // PO/requisition line must reference a product_items row).
+              productItemId: isPart ? (parts.find((p) => p.id === rawId)?.productItemId ?? "") : rawId,
               partId: isPart ? rawId : null,
               productItemName: i.productName,
               partNumber: i.partNumber,
@@ -377,7 +379,7 @@ function MaterialsTab({ project }: { project: Project }) {
           const unitCostCents = Math.round(i.unitCost * 100);
           const newItem = {
             id: crypto.randomUUID(),
-            productItemId: isPart ? "" : rawId,
+            productItemId: isPart ? (parts.find((p) => p.id === rawId)?.productItemId ?? "") : rawId,
             partId: isPart ? rawId : null,
             productItemName: i.productName,
             partNumber: i.partNumber,

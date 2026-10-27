@@ -343,7 +343,11 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     const vendor = allVendors.find((v) => v.id === vendorId);
     const taxRate = parseFloat(taxRatePercent) || 0;
     const shippingCents = Math.round((parseFloat(shippingCost) || 0) * 100);
-    const discountCents = Math.round((parseFloat(discountCost) || 0) * 100);
+    // A discount can't exceed what is being bought — a typo'd discount used to
+    // save a NEGATIVE grand total that flowed into the spend reports (the
+    // public API clamps the same way).
+    const rawDiscountCents = Math.round((parseFloat(discountCost) || 0) * 100);
+    const clampDiscount = (subtotalCents: number) => Math.min(rawDiscountCents, Math.max(0, subtotalCents));
 
     if (isEditing && initialData) {
       // In edit mode, line items aren't shown — preserve the existing subtotal
@@ -352,6 +356,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
       const taxableSubtotalCents = Math.round(
         initialData.lineItems.filter((li) => li.taxable !== false).reduce((sum, li) => sum + li.quantity * li.unitCost, 0)
       );
+      const discountCents = clampDiscount(initialData.subtotal);
       const salesTaxCents = computeSalesTax({
         taxableSubtotal: taxableSubtotalCents,
         taxRatePercent: taxRate,
@@ -362,7 +367,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
         {
           id: initialData.id,
           vendorId: vendorId !== "none" ? vendorId : null,
-          vendorName: vendor?.name ?? initialData.vendorName,
+          vendorName: vendor?.name ?? (vendorId !== "none" ? initialData.vendorName : null),
           poDate: poDate || null,
           paymentType: (paymentType as import("@/types").PaymentType) || null,
           invoiceNumber: invoiceNumber || null,
@@ -385,18 +390,17 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     const taxableSubtotalCents = Math.round(
       lineItems.filter((li) => li.taxable).reduce((sum, li) => sum + li.quantity * li.unitCost, 0) * 100
     );
+    const discountCents = clampDiscount(subtotalCents);
     const salesTaxCents = computeSalesTax({
       taxableSubtotal: taxableSubtotalCents,
       taxRatePercent: taxRate,
       discountCost: discountCents,
       discountReducesTax,
     });
-    const now = new Date().toISOString();
-
     // PO number is generated server-side (an atomic per-org counter) — see
     // useCreatePurchaseOrder.
     const newPO: Omit<import("@/types").PurchaseOrder, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt" | "poNumber"> = {
-      poDate: poDate || now.split("T")[0],
+      poDate: poDate || todayLocalISODate(),
       invoiceNumber: invoiceNumber || null,
       status: "requested",
       vendorId,
@@ -814,7 +818,10 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                         .reduce((sum, li) => sum + li.quantity * li.unitCost, 0)
                     )
                   : Math.round(taxableSubtotalDollars * 100);
-                const discountCents = Math.round(discountDollars * 100);
+                // From the typed value, not discountDollars: in edit mode the
+                // line items aren't loaded, so discountDollars is clamped to a
+                // zero subtotal and the preview dropped the discount entirely.
+                const discountCents = Math.min(Math.round(Math.max(parseFloat(discountCost) || 0, 0) * 100), Math.max(0, subtotalCents));
                 const taxCents = computeSalesTax({
                   taxableSubtotal: taxableSubtotalCents,
                   taxRatePercent: taxRate,
@@ -829,7 +836,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                       <span>Subtotal</span>
                       <span className="tabular-nums">{formatCurrency(subtotalCents)}</span>
                     </div>
-                    {discountDollars > 0 && (
+                    {discountCents > 0 && (
                       <div className="flex justify-between text-slate-600 dark:text-neutral-400">
                         <span>Discount</span>
                         <span className="tabular-nums">-{formatCurrency(discountCents)}</span>

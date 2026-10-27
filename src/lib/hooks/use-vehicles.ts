@@ -245,41 +245,59 @@ export function useBulkImportVehicles() {
             asset_type: "vehicle",
           };
 
-          // Insert one-by-one; on duplicate asset_tag, update the existing row
+          // vehicles has no unique index on asset_tag (only on VIN), so a
+          // duplicate tag never raised 23505 — re-importing a CSV created a
+          // second copy of every vehicle without a VIN. Look the tag up first
+          // and update in place.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error } = await (supabase as any).from("vehicles").insert(row);
-          if (error?.code === "23505") {
-            // Re-importing a CSV to update mileage/VIN/etc with a blank status
-            // column would otherwise reset an in_shop/out_of_service vehicle
-            // back to "active" — normaliseVehicleStatus() defaults any
-            // blank/unrecognized value to "active", so status is only
-            // included in the patch when the CSV cell actually had content.
+          const { data: existingVehicle, error: lookupErr } = await (supabase as any)
+            .from("vehicles")
+            .select("id")
+            .eq("org_id", profile!.org_id)
+            .eq("asset_tag", row.asset_tag)
+            .is("deleted_at", null)
+            .limit(1)
+            .maybeSingle();
+          if (lookupErr) {
+            failed.push({ row: rowNum, error: `"${name}": ${lookupErr.message}` });
+            continue;
+          }
+
+          if (existingVehicle) {
+            // Only the cells the CSV filled in are written. Re-importing a CSV
+            // to update mileage/VIN/etc must not blank every other field, nor
+            // reset an in_shop/out_of_service vehicle to "active"
+            // (normaliseVehicleStatus() defaults a blank cell to "active", so
+            // status is only included when the cell had content).
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { error: updateErr } = await (supabase as any).from("vehicles").update({
               name: row.name,
-              make: row.make,
-              model: row.model,
-              year: row.year,
-              license_plate: row.license_plate,
-              vin: row.vin,
-              fuel_type: row.fuel_type,
+              ...(row.make ? { make: row.make } : {}),
+              ...(row.model ? { model: row.model } : {}),
+              ...(row.year ? { year: row.year } : {}),
+              ...(row.license_plate ? { license_plate: row.license_plate } : {}),
+              ...(row.vin ? { vin: row.vin } : {}),
+              ...(row.fuel_type ? { fuel_type: row.fuel_type } : {}),
               ...(statusProvided ? { status: row.status } : {}),
-              assigned_crew: row.assigned_crew,
-              purchase_vendor_name: row.purchase_vendor_name,
-              purchase_date: row.purchase_date,
-              purchase_price: row.purchase_price,
-              // A blank financing cell must not wipe saved financing details when a
-              // CSV is re-imported to update other fields (e.g. mileage/VIN).
+              ...(row.assigned_crew ? { assigned_crew: row.assigned_crew } : {}),
+              ...(row.purchase_vendor_name ? { purchase_vendor_name: row.purchase_vendor_name } : {}),
+              ...(row.purchase_date ? { purchase_date: row.purchase_date } : {}),
+              ...(row.purchase_price ? { purchase_price: row.purchase_price } : {}),
+              // A blank financing cell must not wipe saved financing details.
               ...(row.payment_method ? { payment_method: row.payment_method } : {}),
               ...(row.finance_institution ? { finance_institution: row.finance_institution } : {}),
-            }).eq("asset_tag", row.asset_tag).eq("org_id", profile!.org_id).is("deleted_at", null);
+            }).eq("id", existingVehicle.id);
             if (updateErr) {
-              failed.push({ row: rowNum, error: `"${name}": ${updateErr.message}` });
+              failed.push({ row: rowNum, error: updateErr.code === "23505" ? `"${name}": that VIN belongs to another vehicle` : `"${name}": ${updateErr.message}` });
               continue;
             }
-          } else if (error) {
-            failed.push({ row: rowNum, error: `"${name}": ${error.message}` });
-            continue;
+          } else {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error } = await (supabase as any).from("vehicles").insert(row);
+            if (error) {
+              failed.push({ row: rowNum, error: error.code === "23505" ? `"${name}": that VIN belongs to another vehicle` : `"${name}": ${error.message}` });
+              continue;
+            }
           }
 
           succeeded++;

@@ -94,7 +94,15 @@ export async function executeAction(
   }
 
   if (auto.action_type === "create_wo_request") {
-    const requestNumber = `MR-${new Date().getFullYear()}-${Date.now()}`;
+    // Atomic per-org counter, same as the public submit path.
+    const { data: requestNumber, error: numberErr } = await adminClient.rpc("next_entity_number", {
+      p_entity_type: "maintenance_request",
+      p_prefix: "MR",
+      p_org_id_override: orgId,
+    });
+    if (numberErr || typeof requestNumber !== "string") {
+      return { skipReason: `failed to allocate request number: ${numberErr?.message ?? "unknown"}` };
+    }
     const { data: mr, error: mrErr } = await adminClient
       .from("maintenance_requests")
       .insert({

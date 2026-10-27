@@ -64,7 +64,7 @@ export function POPaymentTracking({ po }: { po: PurchaseOrder }) {
   function saveCheckNumber(value: string) {
     if (checkSaveTimer.current) clearTimeout(checkSaveTimer.current);
     checkSaveTimer.current = setTimeout(() => {
-      updateStatus({ id: po.id, status: po.status, checkNumber: value || null });
+      updateStatus({ id: po.id, checkNumber: value || null });
     }, 600);
   }
 
@@ -78,7 +78,6 @@ export function POPaymentTracking({ po }: { po: PurchaseOrder }) {
     updateStatus(
       {
         id: po.id,
-        status: po.status,
         [field === "paymentSubmittedToAP" ? "paymentSubmittedToAP"
           : field === "paymentRemitted"   ? "paymentRemitted"
           : "paymentBookedInQB"]: next,
