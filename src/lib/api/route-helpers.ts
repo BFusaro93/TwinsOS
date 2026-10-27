@@ -25,7 +25,13 @@ export function jsonServerError(context: string, err: unknown) {
 /** Parses ?limit=&offset= query params, clamped to sane bounds, for public API list endpoints. */
 export function parsePagination(url: string): { limit: number; offset: number } {
   const { searchParams } = new URL(url);
-  const limit = Math.min(Math.max(Number(searchParams.get("limit")) || 50, 1), 200);
-  const offset = Math.max(Number(searchParams.get("offset")) || 0, 0);
+  // Whole numbers only: a fractional limit/offset ("limit=2.5") would reach
+  // PostgREST's range() as a non-integer, and Infinity would break the offset.
+  const whole = (raw: string | null, fallback: number) => {
+    const n = Math.floor(Number(raw));
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const limit = Math.min(Math.max(whole(searchParams.get("limit"), 50) || 50, 1), 200);
+  const offset = Math.min(Math.max(whole(searchParams.get("offset"), 0), 0), 1_000_000);
   return { limit, offset };
 }
