@@ -26,6 +26,7 @@ import type {
   ActionType,
 } from "@/types/automation";
 import { useMeters } from "@/lib/hooks/use-meters";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useCreateAutomation, useUpdateAutomation } from "@/lib/hooks/use-automations";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -73,7 +74,18 @@ export function AutomationDialog({
   const [actionType, setActionType] = useState<ActionType>("send_notification");
   const [woTitle, setWoTitle] = useState("");
   const [woPriority, setWoPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
-  const [woAssignedTo, setWoAssignedTo] = useState("");
+  const [woAssignedToId, setWoAssignedToId] = useState("");
+  // Name snapshot; for legacy unmatched rows it holds the old free text.
+  const [woAssignedToName, setWoAssignedToName] = useState("");
+  const { data: employees } = useSelectableEmployees();
+  const employeeOptions = (employees ?? []).map((e) => ({
+    id: e.id as string,
+    name: `${e.firstName} ${e.lastName}`.trim(),
+  }));
+  // Keep a saved assignee selectable even if they've since left the picker list.
+  if (woAssignedToId && !employeeOptions.some((u) => u.id === woAssignedToId)) {
+    employeeOptions.push({ id: woAssignedToId, name: woAssignedToName || "Former employee" });
+  }
   const [reqNotes, setReqNotes] = useState("");
   const [notifRole, setNotifRole] = useState<"admin" | "manager" | "technician" | "purchaser" | "all">("manager");
   const [notifMessage, setNotifMessage] = useState("");
@@ -101,7 +113,8 @@ export function AutomationDialog({
       setActionType("send_notification");
       setWoTitle("");
       setWoPriority("medium");
-      setWoAssignedTo("");
+      setWoAssignedToId("");
+      setWoAssignedToName("");
       setReqNotes("");
       setNotifRole("manager");
       setNotifMessage("");
@@ -154,12 +167,14 @@ export function AutomationDialog({
       case "create_work_order":
         setWoTitle(a.title);
         setWoPriority(a.priority);
-        setWoAssignedTo(a.assignedTo);
+        setWoAssignedToId(a.assignedToId);
+        setWoAssignedToName(a.assignedToName);
         break;
       case "create_wo_request":
         setWoTitle(a.title);
         setWoPriority(a.priority);
-        setWoAssignedTo(a.assignedTo);
+        setWoAssignedToId(a.assignedToId);
+        setWoAssignedToName(a.assignedToName);
         break;
       case "create_requisition":
         setReqNotes(a.notes);
@@ -194,7 +209,8 @@ export function AutomationDialog({
     setActionType(value);
     setWoTitle("");
     setWoPriority("medium");
-    setWoAssignedTo("");
+    setWoAssignedToId("");
+      setWoAssignedToName("");
     setReqNotes("");
     setNotifRole("manager");
     setNotifMessage("");
@@ -230,9 +246,9 @@ export function AutomationDialog({
   function buildAction(): AutomationRule["action"] {
     switch (actionType) {
       case "create_work_order":
-        return { type: "create_work_order", title: woTitle, priority: woPriority, assignedTo: woAssignedTo };
+        return { type: "create_work_order", title: woTitle, priority: woPriority, assignedToId: woAssignedToId, assignedToName: woAssignedToName };
       case "create_wo_request":
-        return { type: "create_wo_request", title: woTitle, priority: woPriority, assignedTo: woAssignedTo };
+        return { type: "create_wo_request", title: woTitle, priority: woPriority, assignedToId: woAssignedToId, assignedToName: woAssignedToName };
       case "create_requisition":
         return { type: "create_requisition", notes: reqNotes };
       case "send_notification":
@@ -586,12 +602,29 @@ export function AutomationDialog({
                       Assigned To{" "}
                       <span className="font-normal text-muted-foreground">(optional)</span>
                     </Label>
-                    <Input
-                      id="wo-assigned-to"
-                      placeholder="e.g. Casey Kleinman"
-                      value={woAssignedTo}
-                      onChange={(e) => setWoAssignedTo(e.target.value)}
-                    />
+                    <Select
+                      value={woAssignedToId || "none"}
+                      onValueChange={(v) => {
+                        const id = v === "none" ? "" : v;
+                        setWoAssignedToId(id);
+                        setWoAssignedToName(employeeOptions.find((u) => u.id === id)?.name ?? "");
+                      }}
+                    >
+                      <SelectTrigger id="wo-assigned-to">
+                        <SelectValue placeholder="Unassigned" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Unassigned</SelectItem>
+                        {employeeOptions.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!woAssignedToId && woAssignedToName && (
+                      <p className="text-xs text-amber-600">
+                        Previously typed &ldquo;{woAssignedToName}&rdquo; &mdash; no matching employee. Pick one so work orders get assigned.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -627,16 +660,33 @@ export function AutomationDialog({
                     </Select>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="wo-assigned-to">
+                    <Label htmlFor="wo-assigned-to-req">
                       Assigned To{" "}
                       <span className="font-normal text-muted-foreground">(optional)</span>
                     </Label>
-                    <Input
-                      id="wo-assigned-to"
-                      placeholder="e.g. Casey Kleinman"
-                      value={woAssignedTo}
-                      onChange={(e) => setWoAssignedTo(e.target.value)}
-                    />
+                    <Select
+                      value={woAssignedToId || "none"}
+                      onValueChange={(v) => {
+                        const id = v === "none" ? "" : v;
+                        setWoAssignedToId(id);
+                        setWoAssignedToName(employeeOptions.find((u) => u.id === id)?.name ?? "");
+                      }}
+                    >
+                      <SelectTrigger id="wo-assigned-to-req">
+                        <SelectValue placeholder="Unassigned" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Unassigned</SelectItem>
+                        {employeeOptions.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!woAssignedToId && woAssignedToName && (
+                      <p className="text-xs text-amber-600">
+                        Previously typed &ldquo;{woAssignedToName}&rdquo; &mdash; no matching employee. Pick one so requests and their work orders get assigned.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

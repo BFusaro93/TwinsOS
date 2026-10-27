@@ -248,10 +248,10 @@ export function RequestDetailPanel({ request }: RequestDetailPanelProps) {
         linkedEntityType: request.assetId
           ? (vehicles.some((v) => v.id === request.assetId) ? "vehicle" : "asset")
           : null,
-        assignedToId: null,
-        assignedToName: null,
-        assignedToIds: [],
-        assignedToNames: [],
+        assignedToId: request.assignedToId,
+        assignedToName: request.assignedToName,
+        assignedToIds: request.assignedToId ? [request.assignedToId] : [],
+        assignedToNames: request.assignedToId && request.assignedToName ? [request.assignedToName] : [],
         startDate: null,
         dueDate: fromAutomation ? shiftYmd(toISODate(new Date(request.createdAt)), 7) : null,
         category: null,

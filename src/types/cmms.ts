@@ -248,6 +248,9 @@ export interface MaintenanceRequest extends BaseRecord {
   requestedByName: string;
   linkedWorkOrderId: string | null;
   linkedWorkOrderNumber: string | null;
+  /** Pre-set by an automation; becomes the assignee of the converted work order. crm_employees.id */
+  assignedToId: string | null;
+  assignedToName: string | null;
   /** Set when this request was created by an automation rule. Passed to the converted WO to enable threshold advancement on completion. */
   automationId: string | null;
   /** Type of equipment (e.g. "Vehicle", "Mower", "Trailer") */

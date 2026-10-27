@@ -64,7 +64,10 @@ export interface CreateWorkOrderAction {
   type: "create_work_order";
   title: string;
   priority: "low" | "medium" | "high" | "urgent";
-  assignedTo: string;
+  /** crm_employees.id of the assignee (same FK as work_orders.assigned_to_id); "" = unassigned. */
+  assignedToId: string;
+  /** Display name snapshot of the assignee, for the rule summary. */
+  assignedToName: string;
 }
 
 /** Creates a Maintenance Request that goes through the approval workflow. */
@@ -72,7 +75,9 @@ export interface CreateWORequestAction {
   type: "create_wo_request";
   title: string;
   priority: "low" | "medium" | "high" | "urgent";
-  assignedTo: string;
+  /** crm_employees.id; carried onto the request and then its converted work order. "" = unassigned. */
+  assignedToId: string;
+  assignedToName: string;
 }
 export interface CreateRequisitionAction {
   type: "create_requisition";
