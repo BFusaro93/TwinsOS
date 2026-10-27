@@ -303,27 +303,43 @@ function getField(row: Record<string, string>, ...keys: string[]): string {
   return "";
 }
 
+/**
+ * A CSV date cell as a calendar day ("YYYY-MM-DD"), or null. po_date is a
+ * `date` column, so this must stay a calendar day: the old version built a
+ * local Date and returned toISOString() (UTC), which moved an export stamp
+ * after ~8pm ET ("4/9/26 20:30") to the NEXT day — and the PO-number year of a
+ * Jan 1 PO to the previous year.
+ */
 function parseDate(raw: string): string | null {
   if (!raw) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const ymd = (y: number, m: number, d: number) => {
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    return `${String(y).padStart(4, "0")}-${pad(m)}-${pad(d)}`;
+  };
 
   // Handle M/D/YY HH:MM format from QuickBooks exports (e.g. "4/9/26 14:09")
   // JavaScript's Date constructor treats 2-digit years as year 26 AD, not 2026.
   const shortYearFull = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})\s+(\d{1,2}):(\d{2})$/);
   if (shortYearFull) {
-    const [, mo, dy, yr, hr, mn] = shortYearFull;
-    return new Date(2000 + parseInt(yr), parseInt(mo) - 1, parseInt(dy), parseInt(hr), parseInt(mn)).toISOString();
+    const [, mo, dy, yr] = shortYearFull;
+    return ymd(2000 + parseInt(yr), parseInt(mo), parseInt(dy));
   }
 
   // Handle M/D/YY (date only, no time)
   const shortYearDate = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
   if (shortYearDate) {
     const [, mo, dy, yr] = shortYearDate;
-    return new Date(2000 + parseInt(yr), parseInt(mo) - 1, parseInt(dy)).toISOString();
+    return ymd(2000 + parseInt(yr), parseInt(mo), parseInt(dy));
   }
 
-  // Fallback for ISO / long-year formats
+  // ISO yyyy-mm-dd (with optional time): the day as written.
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return ymd(parseInt(iso[1]), parseInt(iso[2]), parseInt(iso[3]));
+
+  // M/D/YYYY and other long-year formats
   const d = new Date(raw);
-  return isNaN(d.getTime()) ? null : d.toISOString();
+  return isNaN(d.getTime()) ? null : ymd(d.getFullYear(), d.getMonth() + 1, d.getDate());
 }
 
 function mapStatus(raw: string): string {
@@ -454,7 +470,7 @@ async function importDenormalized(supabase: SupabaseClient, rows: Record<string,
     const grandTotalCents = subtotalCents + salesTaxCents + shippingCents;
 
     // Create the PO — derive year from the CSV's Created On date, not today
-    const poYear = createdOn ? new Date(createdOn).getFullYear() : new Date().getFullYear();
+    const poYear = createdOn ? Number(createdOn.slice(0, 4)) : new Date().getFullYear();
     const poNumber = `PO-${poYear}-${poNum}`;
     const { data: created, error: poErr } = await supabase
       .from("purchase_orders")

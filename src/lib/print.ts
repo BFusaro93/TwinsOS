@@ -484,7 +484,10 @@ export function printPO(
     addressLines,
     docTitle: "Purchase Order",
     docNumber: po.poNumber,
-    docDate: formatDateStr(po.createdAt),
+    // The PO's own date — createdAt is when the row was entered (for an
+    // imported historical PO, the import day), which also contradicted the
+    // "PO Date" line in the details block below.
+    docDate: formatDateStr(po.poDate ?? po.createdAt),
   });
 
   const rows = po.lineItems
