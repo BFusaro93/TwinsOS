@@ -226,15 +226,18 @@ export function useUpdatePurchaseOrder() {
           vendor_id: vendorId ?? undefined,
           vendor_name: vendorName ?? undefined,
           po_date: poDate ?? undefined,
-          payment_type: paymentType ?? undefined,
-          invoice_number: invoiceNumber ?? undefined,
+          // These three are nullable columns and the edit form sends null for
+          // a field the user cleared — `?? undefined` skipped the write, so a
+          // cleared invoice number / payment type / note silently came back.
+          payment_type: paymentType,
+          invoice_number: invoiceNumber,
           tax_rate_percent: taxRatePercent,
           shipping_cost: shippingCost,
           discount_cost: discountCost,
           discount_reduces_tax: discountReducesTax,
           sales_tax: salesTax,
           grand_total: grandTotal,
-          notes: notes ?? undefined,
+          notes,
         })
         .eq("id", id);
       if (error) throw error;
@@ -1000,33 +1003,43 @@ export function useDeletePOLineItem() {
 
 
       try {
-      if (totalReceived > 0) {
+      // A project-assigned line was received straight to its job, and a
+      // non-maintenance product with Track inventory off keeps no stock — in
+      // neither case did the receipt add units, so there is nothing to take
+      // back (ReceiveGoodsDialog / useUpdateGoodsReceipt skip them the same
+      // way). Reversing anyway would subtract the quantity from stock that
+      // came from OTHER receipts of the same product.
+      const receiptAddedNoStock = !!lineItem.project_id;
+      if (totalReceived > 0 && !receiptAddedNoStock) {
         // Resolve the catalog product the same way ReceiveGoodsDialog does:
         // by product_item_id first, then part number, then exact name.
         const { data: matchedProduct } = lineItem.product_item_id
-          ? await supabase.from("product_items").select("id, category").eq("id", lineItem.product_item_id).maybeSingle()
-          : { data: null as { id: string; category: string } | null };
+          ? await supabase.from("product_items").select("id, category, is_inventory").eq("id", lineItem.product_item_id).maybeSingle()
+          : { data: null as { id: string; category: string; is_inventory: boolean | null } | null };
         let productId = matchedProduct?.id ?? null;
         let productCategory = matchedProduct?.category ?? null;
+        let productIsInventory = matchedProduct?.is_inventory ?? null;
         if (!productId && lineItem.part_number) {
           const { data: byPartNumber } = await supabase
             .from("product_items")
-            .select("id, category")
+            .select("id, category, is_inventory")
             .eq("part_number", lineItem.part_number)
             .is("deleted_at", null)
             .maybeSingle();
           productId = byPartNumber?.id ?? null;
           productCategory = byPartNumber?.category ?? null;
+          productIsInventory = byPartNumber?.is_inventory ?? null;
         }
         if (!productId && lineItem.product_item_name) {
           const { data: byName } = await supabase
             .from("product_items")
-            .select("id, category")
+            .select("id, category, is_inventory")
             .eq("name", lineItem.product_item_name)
             .is("deleted_at", null)
             .maybeSingle();
           productId = byName?.id ?? null;
           productCategory = byName?.category ?? null;
+          productIsInventory = byName?.is_inventory ?? null;
         }
 
         if (!productId) {
@@ -1035,6 +1048,8 @@ export function useDeletePOLineItem() {
           );
         }
 
+        const untracked = productCategory !== "maintenance_part" && productIsInventory === false;
+        if (!untracked) {
         if (isMaintPart || productCategory === "maintenance_part") {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: linkedPart } = await (supabase as any)
@@ -1074,6 +1089,7 @@ export function useDeletePOLineItem() {
           if (prodAdjustErr) throw prodAdjustErr;
           reversedProductId = productId;
           reversedProductQty = -productDelta;
+        }
         }
       }
       } catch (reverseErr) {

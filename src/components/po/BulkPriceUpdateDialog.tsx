@@ -96,8 +96,11 @@ export function BulkPriceUpdateDialog({
     const pct = parseFloat(adjustPct);
     if (isNaN(pct)) return;
     const mult = 1 + pct / 100;
+    // "Applies to all visible rows": leave rows hidden by the search filter alone.
+    const visibleIds = new Set(filtered.map((r) => r.id));
     setRows((prev) =>
       prev.map((r) => {
+        if (!visibleIds.has(r.id)) return r;
         const updated = { ...r };
         if (adjustTarget === "unitCost" || adjustTarget === "both") {
           const cur = parseFloat(r.unitCost) || 0;

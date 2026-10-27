@@ -41,9 +41,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .from("assets")
     .update({
       ...(body.name !== undefined && { name: body.name }),
-      ...(body.assetTag !== undefined && { asset_tag: body.assetTag }),
+      // asset_tag / asset_type are NOT NULL (default ''), so a null from the
+      // caller ("clear it") has to be written as the empty string.
+      ...(body.assetTag !== undefined && { asset_tag: body.assetTag ?? "" }),
       ...(body.equipmentNumber !== undefined && { equipment_number: body.equipmentNumber }),
-      ...(body.assetType !== undefined && { asset_type: body.assetType }),
+      ...(body.assetType !== undefined && { asset_type: body.assetType ?? "" }),
       ...(body.status !== undefined && { status: body.status }),
       ...(body.make !== undefined && { make: body.make }),
       ...(body.model !== undefined && { model: body.model }),
@@ -59,6 +61,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .select(ASSET_SELECT)
     .maybeSingle();
 
+  if (error?.code === "23505") return jsonError("Another asset already uses that assetTag", 409);
   if (error) return jsonServerError("PATCH /api/v1/assets/[id]", error);
   if (!data) return jsonError("Asset not found", 404);
   return NextResponse.json(shapeAsset(data));

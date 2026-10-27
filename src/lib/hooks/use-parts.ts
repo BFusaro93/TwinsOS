@@ -451,19 +451,33 @@ export function useBulkImportParts() {
             // Duplicate — update existing record by part_number. Quantity is
             // not written directly: it goes through the audited RPC so the
             // cost layers follow (and only when the CSV actually has a value).
-            const { data: updated, error: updateError } = await supabase.from("parts").update({
-              name: row.name,
-              description: row.description,
-              category: row.category,
-              categories: row.categories as string[],
-              unit_cost: row.unit_cost,
-              minimum_stock: row.minimum_stock,
-              // Only touch the vendor when the CSV names one, so a blank column can't unlink it.
-              ...(row.vendor_name ? { vendor_id: row.vendor_id, vendor_name: row.vendor_name } : {}),
-              location: row.location,
-              is_inventory: row.is_inventory,
-            }).eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null)
-              .select("id, quantity_on_hand");
+            //
+            // Only the columns the CSV actually carries are written. `row`
+            // above fills every missing column with a default (cost 0, minimum
+            // stock 0, category "mechanical", blank description/location,
+            // is_inventory false), and writing those back to an existing part
+            // turned a quantity-only or cost-only re-import into a wipe of
+            // every other field on each matched part.
+            const patch: Record<string, unknown> = { name: row.name };
+            if (r.description !== undefined) patch.description = row.description;
+            if (r.category?.trim()) {
+              patch.category = row.category;
+              patch.categories = row.categories;
+            }
+            if (r.unitCost?.trim()) patch.unit_cost = row.unit_cost;
+            if (r.minimumStock?.trim()) patch.minimum_stock = row.minimum_stock;
+            // Only touch the vendor when the CSV names one, so a blank column can't unlink it.
+            if (row.vendor_name) {
+              patch.vendor_id = row.vendor_id;
+              patch.vendor_name = row.vendor_name;
+            }
+            if (r.location !== undefined) patch.location = row.location;
+            if (row.is_inventory || r.isInventory?.trim().toLowerCase() === "false") patch.is_inventory = row.is_inventory;
+            const { data: updated, error: updateError } = await supabase.from("parts")
+              // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+              .update(patch as never)
+              .eq("part_number", row.part_number).eq("org_id", profile!.org_id).is("deleted_at", null)
+              .select("id, quantity_on_hand, product_item_id");
             if (updateError) {
               failed.push({ row: rowNum, error: `"${name}": ${updateError.message}` });
               continue;
@@ -481,6 +495,32 @@ export function useBulkImportParts() {
                 continue;
               }
             }
+            // Keep the linked catalog product in step, as useUpdatePart does —
+            // otherwise the PO catalog keeps the old cost/name/vendor/stock.
+            const productSync: Record<string, unknown> = {};
+            if ("description" in patch) productSync.description = patch.description;
+            if ("unit_cost" in patch) productSync.unit_cost = patch.unit_cost;
+            if ("minimum_stock" in patch) productSync.minimum_stock = patch.minimum_stock;
+            if ("vendor_name" in patch) {
+              productSync.vendor_id = patch.vendor_id;
+              productSync.vendor_name = patch.vendor_name ?? "";
+            }
+            if ("is_inventory" in patch) productSync.is_inventory = patch.is_inventory;
+            if (qohRaw !== "") productSync.quantity_on_hand = qoh;
+            productSync.name = patch.name;
+            let productSyncFailed = false;
+            for (const existing of updated ?? []) {
+              if (!existing.product_item_id) continue;
+              const { error: productSyncErr } = await supabase
+                .from("product_items")
+                .update(productSync as never)
+                .eq("id", existing.product_item_id);
+              if (productSyncErr && !productSyncFailed) {
+                productSyncFailed = true;
+                failed.push({ row: rowNum, error: `"${name}": part updated, but the linked product could not be synced: ${productSyncErr.message}` });
+              }
+            }
+            if (productSyncFailed) continue;
           } else if (error) {
             failed.push({ row: rowNum, error: `"${name}": ${error.message}` });
             continue;
@@ -581,14 +621,32 @@ export function useBulkUpdateParts() {
   return useMutation({
     mutationFn: async (updates: { id: string; unitCost: number }[]) => {
       const supabase = createClient();
-      await Promise.all(
+      // Supabase returns failures as { error } instead of rejecting, so
+      // Promise.all alone reported success when a write was refused.
+      const partResults = await Promise.all(
         updates.map(({ id, unitCost }) =>
-          supabase.from("parts").update({ unit_cost: unitCost }).eq("id", id)
+          supabase.from("parts").update({ unit_cost: unitCost }).eq("id", id).select("id, product_item_id").maybeSingle()
         )
       );
+      const failed = partResults.find((r) => r.error);
+      if (failed?.error) throw failed.error;
+
+      // Mirror the new cost onto each part's catalog product (what PO lines
+      // default their unit cost from) — useUpdatePart and useBulkUpdateProducts
+      // both keep the pair in step; this path left the catalog on the old cost.
+      const mirrorResults = await Promise.all(
+        partResults.map((r, i) =>
+          r.data?.product_item_id
+            ? supabase.from("product_items").update({ unit_cost: updates[i].unitCost }).eq("id", r.data.product_item_id)
+            : Promise.resolve({ error: null })
+        )
+      );
+      const mirrorFailed = mirrorResults.find((r) => r.error);
+      if (mirrorFailed?.error) throw mirrorFailed.error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
     },
   });
 }

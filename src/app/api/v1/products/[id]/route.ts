@@ -82,6 +82,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .select(PRODUCT_SELECT)
     .maybeSingle();
 
+  if (error?.code === "23505") return jsonError("Another product already uses that partNumber", 409);
   if (error) return jsonServerError("PATCH /api/v1/products/[id]", error);
   if (!data) return jsonError("Product not found", 404);
 
@@ -176,6 +177,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         .from("parts")
         .update(partSyncFields)
         .eq("id", linkedPart.id);
+      if (partSyncError?.code === "23505") return jsonError("Another part already uses that partNumber", 409);
       if (partSyncError) return jsonServerError("PATCH /api/v1/products/[id] (parts sync)", partSyncError);
     }
   }
