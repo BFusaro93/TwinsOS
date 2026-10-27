@@ -37,7 +37,12 @@ export function QtyAdjustControl({ value, onChange }: QtyAdjustControlProps) {
     setInputVal(String(value));
   }
 
-  const parsed = parseInt(inputVal, 10);
+  // parseFloat (to 2 decimals, the precision of product_items.quantity_on_hand):
+  // parseInt turned a fractional product stock like 12.5 into 12, so merely
+  // tabbing out of the box offered "12.5 → 12" and a typed 7.5 saved as 7.
+  // Parts are whole-unit; their adjust hook rejects a fraction with a message.
+  const parsedFloat = parseFloat(inputVal);
+  const parsed = Number.isFinite(parsedFloat) ? Math.round(parsedFloat * 100) / 100 : NaN;
   const isDirty = !isNaN(parsed) && parsed !== value;
 
   function flash() {
@@ -80,7 +85,7 @@ export function QtyAdjustControl({ value, onChange }: QtyAdjustControlProps) {
         size="icon"
         className="h-7 w-7 shrink-0"
         onClick={() => {
-          const next = Math.max(0, value - 1);
+          const next = Math.max(0, Math.round((value - 1) * 100) / 100);
           setInputVal(String(next));
           openReasonPrompt(next);
         }}
@@ -90,6 +95,7 @@ export function QtyAdjustControl({ value, onChange }: QtyAdjustControlProps) {
 
       <Input
         type="number"
+        step="any"
         min={0}
         value={inputVal}
         onChange={(e) => setInputVal(e.target.value)}
@@ -104,7 +110,7 @@ export function QtyAdjustControl({ value, onChange }: QtyAdjustControlProps) {
         size="icon"
         className="h-7 w-7 shrink-0"
         onClick={() => {
-          const next = value + 1;
+          const next = Math.round((value + 1) * 100) / 100;
           setInputVal(String(next));
           openReasonPrompt(next);
         }}

@@ -334,7 +334,8 @@ function PartsSection({ workOrderId, workOrderNumber, workOrderTitle }: {
                           min={1}
                           value={qtyMap[part.id] ?? 1}
                           onChange={(e) =>
-                            setQtyMap((prev) => ({ ...prev, [part.id]: Math.max(1, Number(e.target.value)) }))
+                            // whole units only: wo_parts.quantity is an integer column, so 2.5 failed the insert
+                            setQtyMap((prev) => ({ ...prev, [part.id]: Math.max(1, Math.floor(Number(e.target.value)) || 1) }))
                           }
                           className="h-7 w-16 text-center text-sm"
                         />
