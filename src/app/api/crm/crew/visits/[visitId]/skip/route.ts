@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { formatMonthDay } from "@/lib/utils";
 import { logger } from "@/lib/logger";
+import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
 
 const log = logger.child("crew/skip");
 
@@ -25,7 +26,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("org_id, crew_id, crew_unassigned, client_id, job_id, scheduled_date, status, crm_jobs(crew_id)")
+    .select("org_id, crew_group_id, crew_id, crew_unassigned, client_id, job_id, scheduled_date, status, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -74,6 +75,28 @@ export async function POST(
       { error: "This service was closed out while the skip was being sent — refresh to see its current state." },
       { status: 409 }
     );
+  }
+
+  // Multi-crew stop: skipping the lead makes the DB hand the lead role (and the
+  // billing) to a live sibling. If that sibling already completed, its
+  // auto-invoice step was skipped as a secondary — run it now (idempotent).
+  if (existing.crew_group_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: newLead } = await (supabase as any)
+      .from("crm_job_visits")
+      .select("id")
+      .eq("crew_group_id", existing.crew_group_id)
+      .eq("crew_group_secondary", false)
+      .eq("status", "completed")
+      .is("deleted_at", null)
+      .neq("id", visitId)
+      .maybeSingle();
+    if (newLead?.id) {
+      const r = await applyVisitCompletionSideEffects({
+        supabase, orgId: existing.org_id, visitId: newLead.id, userId: user.id, dedupeActivity: true,
+      });
+      if (!r.ok) log.error("promoted lead billing failed", { visitId: newLead.id, error: r.error });
+    }
   }
 
   // Same client-timeline row the dispatch board writes for a skip — wording

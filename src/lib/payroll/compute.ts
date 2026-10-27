@@ -1,7 +1,7 @@
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { getCrewBreaksUnpaid, isBreakUnpaid } from "@/lib/crew/visit-labor";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { isoInZone, shiftYmd } from "@/lib/time/zone";
+import { isoInZone, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = any;
@@ -128,14 +128,24 @@ export async function computePayroll(
   // A punch belongs to the shift it happened inside, even when that shift
   // crossed midnight (11pm start, 1am punch is still the previous work_date).
   // Otherwise the punch's own local date is its day.
-  const DAY_MS = 86_400_000;
+  const OPEN_SHIFT_GRACE_MS = 6 * 3_600_000;
   const punchDate = (memberId: string, clockedInAt: string): string => {
     const localDate = isoInZone(new Date(clockedInAt), tz);
     const prev = shiftByKey.get(`${memberId}|${shiftYmd(localDate, -1)}`);
     if (!prev) return localDate;
     const at = new Date(clockedInAt).getTime();
     const startMs = new Date(prev.started_at).getTime();
-    const endMs = prev.ended_at ? new Date(prev.ended_at).getTime() : startMs + DAY_MS;
+    let endMs: number;
+    if (prev.ended_at) {
+      endMs = new Date(prev.ended_at).getTime();
+    } else {
+      // Open shift: it can't claim a full day of punches. Cap at the member's
+      // next shift start, else a few hours past its work-date midnight.
+      const midnight = zoneWallClockToInstant(shiftYmd(prev.work_date, 1), "00:00", tz);
+      endMs = (midnight ? midnight.getTime() : startMs) + OPEN_SHIFT_GRACE_MS;
+      const next = shiftByKey.get(`${memberId}|${localDate}`);
+      if (next) endMs = Math.min(endMs, new Date(next.started_at).getTime());
+    }
     return at >= startMs && at <= endMs ? prev.work_date : localDate;
   };
 

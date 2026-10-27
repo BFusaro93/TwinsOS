@@ -902,7 +902,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
         serviceZip: form.serviceZip || null,
         // Carried through only when the check ran against the address actually
         // being saved; an untouched address keeps the verdict it already had.
-        ...(svcAddr.state === "done" && svcAddr.result
+        ...(svcAddr.result && svcAddr.isCurrent({ address: form.serviceAddress, city: form.serviceCity, state: form.serviceState, zip: form.serviceZip })
           ? {
               addressVerdict: svcAddr.result.verdict,
               lat: svcAddr.result.lat,
@@ -1108,11 +1108,13 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
               <div className="grid grid-cols-3 gap-2">
                 <div className="flex flex-col gap-1.5">
                   <Label>City</Label>
-                  <Input value={form.serviceCity} onChange={(e) => patch("serviceCity", e.target.value)} />
+                  <Input value={form.serviceCity} onChange={(e) => patch("serviceCity", e.target.value)}
+                    onBlur={() => void svcAddr.verify({ address: form.serviceAddress, city: form.serviceCity, state: form.serviceState, zip: form.serviceZip })} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>State</Label>
-                  <Input value={form.serviceState} onChange={(e) => patch("serviceState", e.target.value)} className="uppercase" maxLength={2} />
+                  <Input value={form.serviceState} onChange={(e) => patch("serviceState", e.target.value)} className="uppercase" maxLength={2}
+                    onBlur={() => void svcAddr.verify({ address: form.serviceAddress, city: form.serviceCity, state: form.serviceState, zip: form.serviceZip })} />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label>ZIP</Label>
@@ -1802,7 +1804,7 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
       // Carry the verdict through only when the check ran against the address
       // actually being saved; otherwise leave the stored verdict alone.
       const checked =
-        addr.state === "done" && addr.result
+        addr.result && addr.isCurrent({ address: form.address, city: form.city, state: form.state, zip: form.zip })
           ? {
               addressVerdict: addr.result.verdict,
               lat: addr.result.lat,
@@ -1840,11 +1842,13 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-1 flex flex-col gap-1.5">
               <Label>City</Label>
-              <Input value={form.city} onChange={(e) => patch("city", e.target.value)} />
+              <Input value={form.city} onChange={(e) => patch("city", e.target.value)}
+                onBlur={() => void addr.verify({ address: form.address, city: form.city, state: form.state, zip: form.zip })} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>State</Label>
-              <Input value={form.state} onChange={(e) => patch("state", e.target.value)} className="uppercase" maxLength={2} />
+              <Input value={form.state} onChange={(e) => patch("state", e.target.value)} className="uppercase" maxLength={2}
+                onBlur={() => void addr.verify({ address: form.address, city: form.city, state: form.state, zip: form.zip })} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>ZIP</Label>

@@ -124,9 +124,18 @@ function ConversationPane({ thread, orgName, personName, staffName, staffId, sta
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // The thread body renders only after the messages load, so one scroll on open lands
+  // before there is anything to scroll to. Scroll again on the next frames so opening a
+  // thread always lands on the newest message.
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages]);
+    const toBottom = () => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    toBottom();
+    const raf = requestAnimationFrame(() => {
+      toBottom();
+      requestAnimationFrame(toBottom);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [messages, isLoading, thread]);
 
   async function handleSend() {
     const body = draft.trim();

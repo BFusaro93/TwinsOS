@@ -376,6 +376,7 @@ export function useCrews(activeOnly = false) {
         .from("crm_crews")
         .select("*, crm_crew_members(*, crm_employees(first_name, last_name, resource_code)), foreman:foreman_id(first_name, last_name)")
         .is("deleted_at", null)
+        .is("crm_crew_members.deleted_at", null)
         .order("name");
       if (activeOnly) q = q.eq("is_active", true);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -520,9 +521,11 @@ export function useRemoveCrewMember() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_crew_members")
-        .delete()
+        // Soft delete: payroll/punch history references this row.
+        .update({ deleted_at: new Date().toISOString() })
         .eq("crew_id", crewId)
-        .eq("employee_id", employeeId);
+        .eq("employee_id", employeeId)
+        .is("deleted_at", null);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-crews"] }),

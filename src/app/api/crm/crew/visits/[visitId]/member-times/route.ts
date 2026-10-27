@@ -98,6 +98,7 @@ async function memberBelongsToVisit(
     .select("id, crew_id, org_id")
     .eq("id", crewMemberId)
     .eq("org_id", visit.org_id)
+    .is("deleted_at", null)
     .maybeSingle();
   if (!member) return false;
 

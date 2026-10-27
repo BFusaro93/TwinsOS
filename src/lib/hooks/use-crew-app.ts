@@ -675,6 +675,7 @@ export function useMyCrewInfo() {
         .from("crm_crew_members")
         .select("id, name, role, employee_id")
         .eq("crew_id", crew.id)
+        .is("deleted_at", null)
         .order("role")
         .order("name");
 

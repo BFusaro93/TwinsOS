@@ -171,7 +171,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   /** Date Sold — feeds the Sales by Date Sold / Approved Sales by Sales Rep reports. Defaults to today. */
   const [dateSold, setDateSold] = useState(todayStr());
   const [crewId, setCrewId] = useState<string | null>(null);
-  // Which of the client's properties this job is for; only asked when the client has 2+.
+  // Which of the client's properties this job is for; asked per showPropertyPicker.
   const [propertyId, setPropertyId] = useState<string | null>(null);
   const [notesToCrew, setNotesToCrew] = useState("");
   const [isPending, setIsPending] = useState(false);
@@ -557,6 +557,28 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         billing_zip: effectiveClient.billingZip,
       },
     });
+  // Picker visibility: 2+ properties always; a lone property only when it isn't the
+  // client's own (master) address, or the client has no usable address of its own.
+  // Evaluated against the client alone so picking the property can't hide the picker.
+  const clientOwnAddressMissing =
+    !!effectiveClient &&
+    !resolveStopAddress({
+      property: null,
+      client: {
+        service_address: effectiveClient.serviceAddress,
+        service_city: effectiveClient.serviceCity,
+        service_state: effectiveClient.serviceState,
+        service_zip: effectiveClient.serviceZip,
+        billing_address: effectiveClient.billingAddress,
+        billing_city: effectiveClient.billingCity,
+        billing_state: effectiveClient.billingState,
+        billing_zip: effectiveClient.billingZip,
+      },
+    });
+  const showPropertyPicker =
+    (clientProperties ?? []).length >= 2 ||
+    ((clientProperties ?? []).length === 1 &&
+      (!(clientProperties ?? [])[0].isMaster || clientOwnAddressMissing));
   const { data: clientProjects } = useClientProjects(effectiveClientId, effectiveClientName);
   const brandColor = orgSettings?.brandColor ?? "#1e1e1e";
 
@@ -779,7 +801,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
               </div>
             </div>
 
-            {(clientProperties ?? []).length >= 2 && (
+            {showPropertyPicker && (
               <div className="flex flex-col gap-1.5">
                 <Label>Property</Label>
                 <Select value={effectivePropertyId ?? "client"} onValueChange={(v) => setPropertyId(v === "client" ? null : v)}>

@@ -15,7 +15,7 @@ export async function resolveWorkingMemberIds(
   opts: { includeAbsent?: boolean } = {}
 ): Promise<string[]> {
   const [{ data: defaults }, { data: overrides }, { data: absences }] = await Promise.all([
-    supabase.from("crm_crew_members").select("id, crew_id").eq("org_id", orgId),
+    supabase.from("crm_crew_members").select("id, crew_id").eq("org_id", orgId).is("deleted_at", null),
     supabase.from("crm_crew_daily_members").select("member_id, crew_id").eq("org_id", orgId).eq("work_date", workDate),
     supabase.from("crm_crew_day_absences").select("crew_member_id").eq("org_id", orgId).eq("work_date", workDate).is("deleted_at", null),
   ]);

@@ -52,9 +52,19 @@ export function ChatDialog({
 
   useSupportMessagesRealtime(open ? orgId : null);
 
+  // The dialog body mounts in a portal after `open` flips and the thread renders after the
+  // messages load, so a single scroll on open lands before there is anything to scroll to.
+  // Scroll on the next frames too, so opening always lands on the newest message.
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, open]);
+    if (!open) return;
+    const toBottom = () => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    toBottom();
+    const raf = requestAnimationFrame(() => {
+      toBottom();
+      requestAnimationFrame(toBottom);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [messages, open, isLoading]);
 
   async function handleSend() {
     const body = draft.trim();

@@ -64,6 +64,10 @@ export async function GET(request: Request) {
         stripe_connect_account_id: accountId,
         stripe_connect_status: "pending",
         stripe_connect_livemode: true,
+        // A newly linked account hasn't proven anything yet; don't carry over the
+        // previous account's capabilities until the status sync below confirms them.
+        stripe_connect_charges_enabled: false,
+        stripe_connect_payouts_enabled: false,
       })
       .eq("id", profile.org_id);
     if (updateError) throw updateError;

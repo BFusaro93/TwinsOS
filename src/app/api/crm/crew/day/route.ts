@@ -5,7 +5,7 @@ import { getRouteAuth, resolveCallerCrewId, assertCallerOwnsVisit } from "@/lib/
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { resolveWorkingMemberIds } from "@/lib/crew/stop-punches";
-import { startCrewDay, endCrewDay, openShiftLookbackDate } from "@/lib/crew/day-shifts";
+import { startCrewDay, endCrewDay, closeMemberOpenShift } from "@/lib/crew/day-shifts";
 
 /**
  * The crew's paid day (shop to shop).
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
   // because a crew login's own RLS shouldn't expose other crews' rosters.
   const admin = createServiceClient();
   const [{ data: everyone }, { data: moves }] = await Promise.all([
-    admin.from("crm_crew_members").select("id, name, role, crew_id").eq("org_id", orgId).order("name"),
+    admin.from("crm_crew_members").select("id, name, role, crew_id").eq("org_id", orgId).is("deleted_at", null).order("name"),
     admin.from("crm_crew_daily_members").select("member_id, crew_id").eq("org_id", orgId).eq("work_date", workDate),
   ]);
   const movedTo = new Map(((moves ?? []) as { member_id: string; crew_id: string }[]).map((m) => [m.member_id, m.crew_id]));
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     // the caller can't yet "own" this member, which is what crew RLS checks.
     if (action === "add_member") {
       const admin = createServiceClient();
-      const { data: member } = await admin.from("crm_crew_members").select("id").eq("id", crewMemberId).eq("org_id", orgId).maybeSingle();
+      const { data: member } = await admin.from("crm_crew_members").select("id").eq("id", crewMemberId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
       if (!member) return NextResponse.json({ error: "That person isn't in your company's crew list" }, { status: 404 });
       const { error: moveErr } = await admin.from("crm_crew_daily_members").upsert(
         { org_id: orgId, work_date: workDate, crew_id: crewId, member_id: crewMemberId, created_by: user.id },
@@ -157,21 +157,9 @@ export async function POST(request: Request) {
 
     // member_out — left for the day: end the shift, end any open job punch,
     // and drop them from the roster so the next Start Job doesn't punch them.
-    // The open shift may have started before midnight (storm work): look back
-    // a day, newest first, and never past 24h so a forgotten shift isn't
-    // closed at an absurd length.
-    const { data: openRows } = await db.from("crm_crew_day_shifts").select("id, started_at")
-      .eq("crew_member_id", crewMemberId).eq("org_id", orgId)
-      .gte("work_date", openShiftLookbackDate(workDate)).lte("work_date", workDate)
-      .gt("started_at", new Date(Date.now() - 24 * 3_600_000).toISOString())
-      .is("deleted_at", null).is("ended_at", null)
-      .order("started_at", { ascending: false }).limit(1);
-    const open = ((openRows ?? []) as { id: string; started_at: string }[])[0];
-    if (open) {
-      const end = new Date(open.started_at).getTime() > Date.now() ? open.started_at : now;
-      const { error: closeErr } = await db.from("crm_crew_day_shifts").update({ ended_at: end }).eq("id", open.id);
-      if (closeErr) throw new Error(closeErr.message);
-    }
+    // The open shift may have started before midnight (storm work); a
+    // forgotten shift older than 16h is left open for payroll to flag.
+    await closeMemberOpenShift(db, { orgId, crewMemberId, workDate, at: now });
     if (visitId) {
       await db.from("crm_crew_member_times").update({ clocked_out_at: now, updated_at: now })
         .eq("visit_id", visitId).eq("crew_member_id", crewMemberId).is("deleted_at", null).is("clocked_out_at", null).lt("clocked_in_at", now);
