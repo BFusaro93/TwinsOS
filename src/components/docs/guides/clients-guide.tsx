@@ -148,6 +148,16 @@ export function ClientsGuide() {
           There&apos;s no undo dialog for it: to bring a cancelled client back, change the status
           again like any other field.
         </p>
+        <p>
+          If the client (or any of the clients in a bulk cancel) has upcoming visits nobody has
+          started, you&apos;re asked <strong>&quot;Cancel their N upcoming visits?&quot;</strong>{" "}
+          first. <strong>Yes</strong> cancels the scheduled and dispatched visits that have no
+          clock-in and aren&apos;t invoiced — recurring and package visits are removed from the
+          schedule, one-time visits stay on the record as Cancelled. Completed and in-progress
+          visits are never touched. <strong>No</strong> leaves every visit as it is. Reactivating the
+          client lets recurring visits generate again on their own, but one-time visits cancelled this
+          way are <em>not</em> restored.
+        </p>
         <Callout>
           Because a lead and a client are the same row, nothing about a lead&apos;s
           history — estimates, notes, an already-scheduled site visit — gets lost or re-created
