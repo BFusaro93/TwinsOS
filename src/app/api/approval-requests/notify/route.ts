@@ -142,12 +142,16 @@ export async function POST(request: Request) {
 
   const emailMap = new Map<string, string>();
   for (const p of profiles ?? []) {
-    // crm_estimate has its own "Estimate Approval Required" toggle, separate
-    // from requisition/PO — don't email an approver who's opted out.
-    if (entityType === "crm_estimate") {
-      const prefs = (p.notification_prefs ?? {}) as Record<string, unknown>;
-      if (prefs.emailEstimateApprovalRequired === false) continue;
-    }
+    // Each record type has its own "… Approval Required" email toggle in
+    // Settings → Notifications (estimates, requisitions, purchase orders) —
+    // don't email an approver who's opted out of that one. The requisition and
+    // PO toggles were shown but never read, so opting out changed nothing.
+    const approvalPrefKey =
+      entityType === "crm_estimate" ? "emailEstimateApprovalRequired"
+      : entityType === "purchase_order" ? "emailPoApprovalRequired"
+      : "emailApprovalRequired";
+    const prefs = (p.notification_prefs ?? {}) as Record<string, unknown>;
+    if (prefs[approvalPrefKey] === false) continue;
     if (p.email) emailMap.set(p.id, p.email);
   }
 
