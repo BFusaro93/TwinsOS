@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mapJob, mapVisit } from "./use-crm-jobs";
 import type { CRMJob, CRMJobVisit, StormEvent, StormEventStatus, SnowRoute, SnowRouteStop } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -362,19 +363,22 @@ export function useStormEventVisits(stormEventId: string) {
     queryKey: ["crm-job-visits", "storm-event", stormEventId],
     queryFn: async () => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_job_visits")
-        .select(`
-          *,
-          clients(display_name, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
-          crm_crews(name),
-          crm_jobs(*, crm_crews(name), crm_job_services(*), client_properties(address, city, state, zip))
-        `)
-        .eq("storm_event_id", stormEventId)
-        .is("deleted_at", null)
-        .order("order_num", { ascending: true, nullsFirst: false });
-      if (error) throw error;
+      // Paged — a large storm can dispatch more than PostgREST's 1000-row cap, and
+      // the stops past it silently never appeared on the board or the route.
+      const data = await fetchAllRows<unknown>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("crm_job_visits")
+          .select(`
+            *,
+            clients(display_name, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
+            crm_crews(name),
+            crm_jobs(*, crm_crews(name), crm_job_services(*), client_properties(address, city, state, zip))
+          `)
+          .eq("storm_event_id", stormEventId)
+          .is("deleted_at", null)
+          .order("order_num", { ascending: true, nullsFirst: false })
+      );
       return (data.map(mapVisit)) as CRMJobVisit[];
     },
     enabled: !!stormEventId,
@@ -400,14 +404,17 @@ export function useAddJobsToStormEvent() {
       // selection must not create a second visit for the same job on the
       // same storm (double dispatch/double billing). The DB also enforces
       // this via a unique index as the authoritative guard.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existing } = await (supabase as any)
-        .from("crm_job_visits")
-        .select("job_id")
-        .eq("storm_event_id", stormEventId)
-        .is("deleted_at", null)
-        .in("job_id", jobs.map((j) => j.jobId));
-      const alreadyAdded = new Set((existing ?? []).map((r: { job_id: string }) => r.job_id));
+      // Read the storm's own visits (paged) rather than `.in(job_id, <every selected
+      // id>)`: a few hundred uuids overflow the request URL and failed the whole add.
+      const existing = await fetchAllRows<{ job_id: string }>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("crm_job_visits")
+          .select("job_id")
+          .eq("storm_event_id", stormEventId)
+          .is("deleted_at", null)
+      );
+      const alreadyAdded = new Set(existing.map((r) => r.job_id));
       const newJobs = jobs.filter((j) => !alreadyAdded.has(j.jobId));
 
       // Append after the event's existing stops — each batch used to restart
@@ -426,14 +433,17 @@ export function useAddJobsToStormEvent() {
 
       // Crew size from each job (the column defaults to 1, which understated actual
       // hours / labor on a multi-man snow route).
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: jobSizes } = await (supabase as any)
-        .from("crm_jobs")
-        .select("id, man_count")
-        .in("id", newJobs.map((j) => j.jobId));
-      const menByJob = new Map<string, number>(
-        ((jobSizes ?? []) as { id: string; man_count: number | null }[]).map((r) => [r.id, Math.max(1, Number(r.man_count) || 1)])
-      );
+      const menByJob = new Map<string, number>();
+      for (let i = 0; i < newJobs.length; i += 100) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: jobSizes } = await (supabase as any)
+          .from("crm_jobs")
+          .select("id, man_count")
+          .in("id", newJobs.slice(i, i + 100).map((j) => j.jobId));
+        for (const r of (jobSizes ?? []) as { id: string; man_count: number | null }[]) {
+          menByJob.set(r.id, Math.max(1, Number(r.man_count) || 1));
+        }
+      }
 
       const rows = newJobs.map((j, i) => ({
         job_id: j.jobId,

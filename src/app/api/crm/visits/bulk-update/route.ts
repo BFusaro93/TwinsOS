@@ -55,16 +55,22 @@ export async function POST(request: Request) {
   // OUT on completion, it never guards a manual reschedule. Check every
   // affected visit before writing; this is a data-integrity floor, not an
   // advisory warning, so any violation blocks the whole batch.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: beforeRows } = await (supabase as any)
-    .from("crm_job_visits")
-    .select("id, client_id, job_id, scheduled_date, status, crew_id, start_time, clocked_in_at, clocked_out_at")
-    .in("id", ids);
-  const before = (beforeRows ?? []) as {
+  // Chunked: up to 500 ids in one `.in()` overflow the request URL (a select-all
+  // on a busy day failed the whole action).
+  type BeforeRow = {
     id: string; client_id: string; job_id: string; scheduled_date: string; status: string;
     crew_id: string | null; start_time: string | null;
     clocked_in_at: string | null; clocked_out_at: string | null;
-  }[];
+  };
+  const before: BeforeRow[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: beforeRows } = await (supabase as any)
+      .from("crm_job_visits")
+      .select("id, client_id, job_id, scheduled_date, status, crew_id, start_time, clocked_in_at, clocked_out_at")
+      .in("id", ids.slice(i, i + 100));
+    before.push(...((beforeRows ?? []) as BeforeRow[]));
+  }
 
   // crm_crews has no org-scoped FK to crm_job_visits, so a crew id from another
   // org would write through RLS (which only checks the visit's own org_id) and
@@ -128,17 +134,19 @@ export async function POST(request: Request) {
     if (res.error) return NextResponse.json({ error: res.error }, { status: res.forbidden ? 403 : 500 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
-    .from("crm_job_visits")
-    .update({
-      ...updates,
-      // An explicit crew and "unassigned" are mutually exclusive.
-      ...(updates.crew_id ? { crew_unassigned: false } : {}),
-      ...(updates.crew_unassigned ? { crew_id: null } : {}),
-      updated_at: new Date().toISOString(),
-    })
-    .in("id", ids);
+  const patch = {
+    ...updates,
+    // An explicit crew and "unassigned" are mutually exclusive.
+    ...(updates.crew_id ? { crew_unassigned: false } : {}),
+    ...(updates.crew_unassigned ? { crew_id: null } : {}),
+    updated_at: new Date().toISOString(),
+  };
+  let error: { message: string; hint?: string } | null = null;
+  for (let i = 0; i < ids.length && !error; i += 100) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await (supabase as any).from("crm_job_visits").update(patch).in("id", ids.slice(i, i + 100));
+    error = res.error;
+  }
 
   if (error) {
     const isLocked = (error as { hint?: string }).hint === INVOICED_VISIT_LOCKED_CODE;
