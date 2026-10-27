@@ -311,7 +311,15 @@ export function useMyCrewVisits(date: string, includeCarryOver = false) {
       // Remembered route order as the tiebreaker after priority — same rule as
       // the dispatch board and /api/crm/crew/visits.
       const cmp = crewVisitComparator(await fetchRememberedRouteOrder(supabase, membership.crew_id, [date]));
-      return [...carried.sort(cmp), ...[...data].sort(cmp)].map(mapVisit);
+      // A cancelled or on-hold job's leftover visits must not show on the crew's day
+      // (GET /api/crm/crew/visits already hides them) — except one the crew is
+      // clocked into right now, which they still need to clock out of.
+      const visible = (row: Record<string, unknown>) => {
+        const jobStatus = (row.crm_jobs as { status?: string | null } | null)?.status;
+        if (jobStatus !== "cancelled" && jobStatus !== "hold") return true;
+        return !!row.clocked_in_at && !row.clocked_out_at;
+      };
+      return [...carried.sort(cmp), ...[...data].sort(cmp)].filter(visible).map(mapVisit);
     },
   });
 }
@@ -417,6 +425,14 @@ export function useStopDetail(anchorVisitId: string) {
 
       const crewId = anchor.crewId;
       const siblings = (siblingRows as Record<string, unknown>[])
+        // A held / cancelled job's visit isn't on the crew's list or part of the
+        // stop the clock-in/out routes act on — unless it's already started.
+        .filter((row) => {
+          if (row.id === anchorVisitId) return true;
+          const jobStatus = (row.crm_jobs as { status?: string | null } | null)?.status;
+          if (jobStatus !== "cancelled" && jobStatus !== "hold") return true;
+          return !!row.clocked_in_at && !row.clocked_out_at;
+        })
         .map(mapVisit)
         .filter((v) => (v.crewId ?? null) === (crewId ?? null));
 

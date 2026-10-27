@@ -856,9 +856,11 @@ function CloseOutDialog({
       // failure, or a double-click) is skipped entirely — re-running its
       // update would re-fire completion side-effects and re-posting its
       // material row would double the storm's material cost.
-      const pending = visits.filter((v) => v.status !== "completed");
+      // Skipped / cancelled stops are called off, not worked — closing them out
+      // would complete (and bill) a stop the crew never plowed.
+      const pending = visits.filter((v) => v.status !== "completed" && v.status !== "skipped" && v.status !== "cancelled");
       if (pending.length === 0) {
-        toast.info("These visits are already closed out");
+        toast.info("These visits are already closed out, skipped or cancelled");
         onDone();
         onOpenChange(false);
         return;
