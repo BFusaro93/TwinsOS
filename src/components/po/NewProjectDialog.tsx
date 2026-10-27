@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateProject, useUpdateProject } from "@/lib/hooks/use-projects";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import { useClients } from "@/lib/hooks/use-clients";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -43,6 +44,8 @@ interface NewProjectDialogProps {
 
 export function NewProjectDialog({ open, onOpenChange, initialData, defaultClientId, onCreated, defaultContractPriceCents, defaultName }: NewProjectDialogProps) {
   const isEditing = !!initialData;
+  // Viewers/requestors are read-only on projects (DB guard: 20261111040200).
+  const { canWriteEquipt } = useRoleCapabilities();
   const [name, setName] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [address, setAddress] = useState("");
@@ -153,7 +156,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
   const saving = createProject.isPending || updateProject.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open && canWriteEquipt} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Project" : "New Project"}</DialogTitle>
