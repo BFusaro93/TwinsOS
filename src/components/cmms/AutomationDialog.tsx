@@ -118,7 +118,12 @@ export function AutomationDialog({
     switch (t.type) {
       case "meter_threshold":
         setMeterId(t.meterId);
-        setMeterLabel(t.meterLabel);
+        setMeterLabel(
+          (() => {
+            const m = meters.find((m) => m.id === t.meterId);
+            return m ? `${m.name} — ${m.assetName}` : t.meterLabel;
+          })(),
+        );
         setMeterOperator(t.operator);
         setMeterValue(String(t.value));
         setIntervalValue(t.interval != null ? String(t.interval) : "");

@@ -25,6 +25,7 @@ import {
   useUpdateAutomation,
   useDeleteAutomation,
 } from "@/lib/hooks/use-automations";
+import { useMeters } from "@/lib/hooks/use-meters";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
@@ -66,10 +67,17 @@ const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
 
 export type { AutomationRule };
 
-export function formatTrigger(trigger: AutomationTrigger): string {
+export function formatTrigger(
+  trigger: AutomationTrigger,
+  meters: { id: string; name: string; assetName: string }[] = [],
+): string {
   switch (trigger.type) {
-    case "meter_threshold":
-      return `${trigger.meterLabel} ${trigger.operator} ${trigger.value.toLocaleString()}`;
+    case "meter_threshold": {
+      // The stored label is a snapshot from save time; prefer the live meter so renames show up.
+      const meter = meters.find((m) => m.id === trigger.meterId);
+      const label = meter ? `${meter.name} — ${meter.assetName}` : trigger.meterLabel;
+      return `${label} ${trigger.operator} ${trigger.value.toLocaleString()}`;
+    }
     case "part_low_stock":
       return trigger.partName === "any"
         ? "Any part drops below minimum stock"
@@ -127,6 +135,7 @@ export function AutomationsPage() {
   const updateAutomation = useUpdateAutomation();
   const deleteAutomation = useDeleteAutomation();
   const { canWriteEquipt } = useRoleCapabilities();
+  const { data: meters = [] } = useMeters();
   const [newOpen, setNewOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
   const [addingTemplate, setAddingTemplate] = useState<string | null>(null);
@@ -264,7 +273,7 @@ export function AutomationsPage() {
             {rules.map((rule) => (
               <TableRow key={rule.id}>
                 <TableCell className="font-medium">{rule.name}</TableCell>
-                <TableCell className="text-slate-600 dark:text-neutral-400">{formatTrigger(rule.trigger)}</TableCell>
+                <TableCell className="text-slate-600 dark:text-neutral-400">{formatTrigger(rule.trigger, meters)}</TableCell>
                 <TableCell className="text-slate-600 dark:text-neutral-400">{formatAction(rule.action)}</TableCell>
                 <TableCell className="text-muted-foreground text-sm">{formatDate(rule.lastFiredAt)}</TableCell>
                 <TableCell>
