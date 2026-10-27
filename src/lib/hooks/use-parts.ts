@@ -526,7 +526,7 @@ export function useBulkImportParts() {
             continue;
           } else if (newPart && !newPart.product_item_id) {
             // Auto-create a product_items entry so this part appears in the PO catalog
-            const { data: product } = await supabase
+            const { data: product, error: productErr } = await supabase
               .from("product_items")
               .insert({
                 name: row.name,
@@ -546,10 +546,35 @@ export function useBulkImportParts() {
               })
               .select("id")
               .single();
-            if (product) {
+            let productId: string | null = product?.id ?? null;
+            if (!productId && productErr?.code === "23505") {
+              // A catalog product with this part number already exists but has
+              // no part (e.g. it was created from a PO import first): it is
+              // the same physical item, so link to it instead of leaving the
+              // new part without a catalog entry (which can't be ordered and
+              // whose receipts can't reach it).
+              const { data: existingProduct } = await supabase
+                .from("product_items")
+                .select("id")
+                .eq("org_id", profile!.org_id)
+                .eq("part_number", row.part_number)
+                .eq("category", "maintenance_part")
+                .is("deleted_at", null)
+                .maybeSingle();
+              if (existingProduct) {
+                const { data: taken } = await supabase
+                  .from("parts")
+                  .select("id")
+                  .eq("product_item_id", existingProduct.id)
+                  .is("deleted_at", null)
+                  .maybeSingle();
+                if (!taken) productId = existingProduct.id;
+              }
+            }
+            if (productId) {
               await supabase
                 .from("parts")
-                .update({ product_item_id: product.id })
+                .update({ product_item_id: productId })
                 .eq("id", newPart.id);
             }
           }
