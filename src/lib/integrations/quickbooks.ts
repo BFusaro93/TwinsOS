@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import { logger } from "@/lib/logger";
 import { createServiceClient } from "@/lib/supabase/server";
+import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 
 const log = logger.child("quickbooks");
 
@@ -397,6 +398,61 @@ async function buildServiceItemResolver(
   };
 }
 
+/**
+ * Resolves a QuickBooks payment Term by days-to-due so the invoice's terms
+ * pass through instead of QuickBooks applying the customer's default (Net 30).
+ * Matches an existing STANDARD term with the same DueDays (preferring an exact
+ * name match), else creates one named like Landscapt's own labels. Returns
+ * null on any failure — the invoice still pushes with its DueDate, which
+ * beats blocking a sync over a terms lookup.
+ */
+async function getTermIdForDays(conn: QuickBooksConnection, days: number): Promise<string | null> {
+  try {
+    const name = days === 0 ? "Due on receipt" : `Net ${days}`;
+    const terms = (await qboQuery(conn, "SELECT Id, Name, DueDays, Type FROM Term WHERE Active = true", "Term")) as {
+      Id: string;
+      Name: string;
+      DueDays?: number | string;
+      Type?: string;
+    }[];
+    // QBO omits DueDays on a 0-day term (its built-in "Due on receipt"), so a
+    // missing value means 0 — reading it as NaN made that term never match.
+    const sameDays = terms.filter((t) => (t.Type ?? "STANDARD") === "STANDARD" && Number(t.DueDays ?? 0) === days);
+    const isNamed = (t: { Name: string }) => String(t.Name).toLowerCase() === name.toLowerCase();
+    const match = sameDays.find(isNamed) ?? sameDays[0] ?? terms.find(isNamed);
+    if (match) return match.Id as string;
+
+    const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/term`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${conn.accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ Name: name, DueDays: days }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      log.error("QuickBooks term creation failed — pushing with DueDate only", { status: res.status, text, days });
+      return null;
+    }
+    const data = await res.json();
+    return data.Term.Id as string;
+  } catch (err) {
+    log.error("QuickBooks term lookup failed — pushing with DueDate only", { err, days });
+    return null;
+  }
+}
+
+/** Whole days from invoice date to due date (both YYYY-MM-DD), or null if either is missing/invalid. */
+function daysBetween(invoiceDate: string | null | undefined, dueDate: string | null | undefined): number | null {
+  if (!invoiceDate || !dueDate) return null;
+  const a = Date.parse(`${invoiceDate.slice(0, 10)}T00:00:00Z`);
+  const b = Date.parse(`${dueDate.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b) || b < a) return null;
+  return Math.round((b - a) / 86_400_000);
+}
+
 export interface QboInvoiceLineInput {
   description: string;
   qty: number;
@@ -405,6 +461,8 @@ export interface QboInvoiceLineInput {
   /** Per-unit price in dollars; sent so QBO doesn't fall back to the Item's own price. */
   unitPrice?: number;
   itemId: string;
+  /** Only meaningful with salesTaxCodeId (Automated Sales Tax): marks the line TAX vs NON. */
+  taxable?: boolean;
 }
 
 export interface CreateInvoiceInput {
@@ -424,9 +482,83 @@ export interface CreateInvoiceInput {
    * Phase 4 reconciliation panel with QuickBooks' own error text.
    */
   taxCents?: number;
+  /** QuickBooks Term id (SalesTermRef) so terms pass through instead of the customer's default. */
+  termId?: string | null;
+  /**
+   * A company with Automated Sales Tax computes tax itself from this tax code
+   * and each line's TAX/NON flag, and silently ignores a manual TotalTax (the
+   * invoice just comes out untaxed). When set, this replaces the taxCents path.
+   */
+  salesTaxCodeId?: string | null;
+  /** Landscapt's total, used to flag any drift after QuickBooks computes its own. */
+  expectedTotalCents?: number;
 }
 
-export async function createInvoice(conn: QuickBooksConnection, input: CreateInvoiceInput): Promise<string> {
+/** True for a company that uses Automated Sales Tax (every US QuickBooks Online company today). */
+async function usesAutomatedSalesTax(conn: QuickBooksConnection): Promise<boolean> {
+  try {
+    const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/preferences`, {
+      headers: { Authorization: `Bearer ${conn.accessToken}`, Accept: "application/json" },
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data.Preferences?.TaxPrefs?.UsingSalesTax === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The QuickBooks sales tax code carrying exactly one rate equal to the
+ * invoice's rate, creating it (and its rate) when the company doesn't have one
+ * yet. Returns null if it can't be resolved — the caller then falls back to
+ * an explicit tax line so the total still matches.
+ */
+async function getOrCreateSalesTaxCodeId(conn: QuickBooksConnection, rateBps: number): Promise<string | null> {
+  try {
+    const rate = rateBps / 100;
+    const rates = await qboQuery(conn, "SELECT Id, Name, RateValue FROM TaxRate WHERE Active = true", "TaxRate");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const matchingRateIds = new Set(rates.filter((r: any) => Math.abs(Number(r.RateValue) - rate) < 0.00001).map((r: any) => String(r.Id)));
+    if (matchingRateIds.size > 0) {
+      const codes = await qboQuery(conn, "SELECT * FROM TaxCode WHERE Active = true", "TaxCode");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const code = codes.find((c: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const details: any[] = c.SalesTaxRateList?.TaxRateDetail ?? [];
+        return details.length === 1 && matchingRateIds.has(String(details[0].TaxRateRef?.value));
+      });
+      if (code) return String(code.Id);
+    }
+
+    const agencies = await qboQuery(conn, "SELECT Id FROM TaxAgency", "TaxAgency");
+    if (agencies.length === 0) return null;
+    const name = `Landscapt ${rate}%`;
+    const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/taxservice/taxcode`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${conn.accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        TaxCode: name,
+        TaxRateDetails: [{ TaxRateName: name, RateValue: String(rate), TaxAgencyId: String(agencies[0].Id), TaxApplicableOn: "Sales" }],
+      }),
+    });
+    if (!res.ok) {
+      log.error("QuickBooks tax code creation failed — falling back to a tax line", { status: res.status, text: await res.text().catch(() => ""), rateBps });
+      return null;
+    }
+    const data = await res.json();
+    return data.TaxCodeId ? String(data.TaxCodeId) : null;
+  } catch (err) {
+    log.error("QuickBooks tax code lookup failed — falling back to a tax line", { err, rateBps });
+    return null;
+  }
+}
+
+function buildInvoiceBody(input: CreateInvoiceInput, forUpdate = false): Record<string, unknown> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lines: Record<string, unknown>[] = input.lines.map((l) => ({
     DetailType: "SalesItemLineDetail",
@@ -436,13 +568,18 @@ export async function createInvoice(conn: QuickBooksConnection, input: CreateInv
       ItemRef: { value: l.itemId },
       Qty: l.qty,
       ...(l.unitPrice != null ? { UnitPrice: l.unitPrice } : {}),
+      ...(input.salesTaxCodeId ? { TaxCodeRef: { value: l.taxable ? "TAX" : "NON" } } : {}),
     },
   }));
   if (input.discountCents && input.discountCents > 0) {
     lines.push({
       DetailType: "DiscountLineDetail",
       Amount: centsToDollars(input.discountCents),
-      DiscountLineDetail: { PercentBased: false },
+      DiscountLineDetail: {
+        PercentBased: false,
+        // Landscapt takes the discount off the taxable base before taxing it.
+        ...(input.salesTaxCodeId ? { TaxCodeRef: { value: input.lines.some((l) => l.taxable) ? "TAX" : "NON" } } : {}),
+      },
     });
   }
 
@@ -452,12 +589,27 @@ export async function createInvoice(conn: QuickBooksConnection, input: CreateInv
     Line: lines,
   };
   if (input.dueDate) body.DueDate = input.dueDate;
+  if (input.termId) body.SalesTermRef = { value: input.termId };
   if (input.docNumber) body.DocNumber = input.docNumber;
-  if (input.taxCents && input.taxCents > 0) {
+  if (input.salesTaxCodeId) {
+    body.TxnTaxDetail = { TxnTaxCodeRef: { value: input.salesTaxCodeId } };
+  } else if (input.taxCents && input.taxCents > 0) {
     body.TxnTaxDetail = { TotalTax: centsToDollars(input.taxCents) };
+  } else if (forUpdate) {
+    // An update that omits TxnTaxDetail leaves the old tax in place, so a
+    // now-untaxed invoice must say so explicitly.
+    body.TxnTaxDetail = { TotalTax: 0 };
   }
+  return body;
+}
 
-  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/invoice`, {
+async function qboInvoiceRequest(
+  conn: QuickBooksConnection,
+  body: Record<string, unknown>,
+  operation?: "void"
+): Promise<Record<string, unknown>> {
+  const url = `${conn.baseUrl}/v3/company/${conn.realmId}/invoice${operation ? `?operation=${operation}` : ""}`;
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${conn.accessToken}`,
@@ -468,10 +620,73 @@ export async function createInvoice(conn: QuickBooksConnection, input: CreateInv
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`QuickBooks invoice creation failed (${res.status}): ${text}`);
+    throw new Error(`QuickBooks invoice ${operation ?? (body.Id ? "update" : "creation")} failed (${res.status}): ${text}`);
   }
   const data = await res.json();
-  return data.Invoice.Id as string;
+  return data.Invoice as Record<string, unknown>;
+}
+
+export interface QboWriteResult {
+  id: string;
+  /** What QuickBooks says the invoice totals, in cents — compared against Landscapt's to catch tax drift. */
+  totalCents: number;
+}
+
+function toWriteResult(invoice: Record<string, unknown>): QboWriteResult {
+  return { id: String(invoice.Id), totalCents: Math.round(Number(invoice.TotalAmt ?? 0) * 100) };
+}
+
+export async function createInvoice(conn: QuickBooksConnection, input: CreateInvoiceInput): Promise<QboWriteResult> {
+  return toWriteResult(await qboInvoiceRequest(conn, buildInvoiceBody(input)));
+}
+
+/** The invoice as QuickBooks currently holds it — its SyncToken is required for any update or void. */
+async function getQboInvoice(conn: QuickBooksConnection, qboInvoiceId: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/invoice/${encodeURIComponent(qboInvoiceId)}`, {
+    headers: { Authorization: `Bearer ${conn.accessToken}`, Accept: "application/json" },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`QuickBooks invoice lookup failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return data.Invoice as Record<string, unknown>;
+}
+
+/** QuickBooks keeps a voided invoice but zeroes it and notes "Voided"; it can never be edited again. */
+function isQboInvoiceVoided(inv: Record<string, unknown>): boolean {
+  return Number(inv.TotalAmt ?? 0) === 0 && /void/i.test(String(inv.PrivateNote ?? ""));
+}
+
+/** A stale SyncToken (another edit landed between our read and write) is QBO error 5010. */
+function isStaleSyncToken(err: unknown): boolean {
+  return err instanceof Error && /\b5010\b|stale object/i.test(err.message);
+}
+
+async function withFreshSyncToken(
+  get: () => Promise<Record<string, unknown>>,
+  write: (current: Record<string, unknown>) => Promise<Record<string, unknown>>
+): Promise<Record<string, unknown>> {
+  try {
+    return await write(await get());
+  } catch (err) {
+    if (!isStaleSyncToken(err)) throw err;
+    return write(await get());
+  }
+}
+
+export async function updateInvoice(conn: QuickBooksConnection, qboInvoiceId: string, input: CreateInvoiceInput): Promise<QboWriteResult> {
+  return toWriteResult(
+    await withFreshSyncToken(() => getQboInvoice(conn, qboInvoiceId), (current) =>
+      qboInvoiceRequest(conn, { ...buildInvoiceBody(input, true), Id: qboInvoiceId, SyncToken: current.SyncToken, sparse: true })
+    )
+  );
+}
+
+export async function voidInvoice(conn: QuickBooksConnection, qboInvoiceId: string): Promise<void> {
+  await withFreshSyncToken(() => getQboInvoice(conn, qboInvoiceId), (current) =>
+    qboInvoiceRequest(conn, { Id: qboInvoiceId, SyncToken: current.SyncToken }, "void")
+  );
 }
 
 export interface CreatePaymentInput {
@@ -479,6 +694,8 @@ export interface CreatePaymentInput {
   qboInvoiceId: string;
   amountCents: number;
   paymentDate: string;
+  /** Check number / reference — QuickBooks' PaymentRefNum, which caps at 21 characters. */
+  referenceNumber?: string | null;
 }
 
 export async function createPayment(conn: QuickBooksConnection, input: CreatePaymentInput): Promise<string> {
@@ -487,6 +704,7 @@ export async function createPayment(conn: QuickBooksConnection, input: CreatePay
     CustomerRef: { value: input.customerId },
     TotalAmt: amount,
     TxnDate: input.paymentDate,
+    ...(input.referenceNumber?.trim() ? { PaymentRefNum: input.referenceNumber.trim().slice(0, 21) } : {}),
     Line: [{ Amount: amount, LinkedTxn: [{ TxnId: input.qboInvoiceId, TxnType: "Invoice" }] }],
   };
   const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/payment`, {
@@ -549,38 +767,149 @@ async function resolveCustomerId(
 }
 
 export interface PushInvoiceResult {
-  status: "pushed" | "already_synced" | "skipped" | "error";
+  status: "pushed" | "updated" | "voided" | "already_synced" | "skipped" | "error";
   qboInvoiceId?: string;
   reason?: string;
 }
 
+/** Everything QuickBooks needs for an invoice, built from the persisted invoice row and its lines. */
+async function buildInvoicePushInput(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  conn: QuickBooksConnection,
+  orgId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  invoice: any,
+  customerId: string
+): Promise<CreateInvoiceInput> {
+  const client = invoice.clients;
+  const resolveItemId = await buildServiceItemResolver(db, conn, orgId);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lineItems = (invoice.crm_invoice_line_items ?? []).sort((a: any, b: any) => a.sort_order - b.sort_order);
+  const lines: QboInvoiceLineInput[] = lineItems.length > 0
+    ? await Promise.all(
+        lineItems.map(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          async (li: any) => {
+            const qty = Number(li.qty) || 1;
+            const amountCents: number = li.total_cents ?? 0;
+            // UnitPrice must satisfy Amount = UnitPrice × Qty. The stored
+            // rate does whenever total_cents is round(rate × qty) (every
+            // invoicing path writes it that way); otherwise derive it.
+            const rateCents = li.rate_cents as number | null;
+            const unitPrice = rateCents != null && Math.round(rateCents * qty) === amountCents
+              ? centsToDollars(rateCents)
+              : Math.round((amountCents / qty) * 1e5) / 1e7;
+            return {
+              description: li.name ? `${li.name}${li.description ? ` — ${li.description}` : ""}` : (li.description ?? "Service"),
+              qty,
+              amountCents,
+              unitPrice,
+              itemId: await resolveItemId(li.name),
+              taxable: !!li.is_taxable,
+            };
+          }
+        )
+      )
+    : [{ description: invoice.description || "Service", qty: 1, amountCents: 0, itemId: await resolveItemId(null) }];
+
+  // Line-level discounts (crm_invoice_line_items.discount_cents) used to be
+  // dropped, so QuickBooks showed the pre-discount total. Lines stay gross
+  // (keeps Amount = UnitPrice × Qty exact, which QBO validates), and every
+  // line discount is folded into the single invoice DiscountLineDetail
+  // together with the document-level discount — same net total as
+  // Σ(total_cents − discount_cents) − invoice discount.
+  const lineDiscountCents: number = lineItems.reduce(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (s: number, li: any) => s + (li.discount_cents ?? 0),
+    0
+  );
+
+  // The header's terms/due_date are only written by Save Invoice; an invoice
+  // sent straight from the status menu has neither, and the UI just displays
+  // the client default (else Due on Receipt). Resolve it the same way here, or
+  // QuickBooks falls back to the customer's own default (Net 30).
+  const dueDate: string | null =
+    invoice.due_date ??
+    (invoice.invoice_date
+      ? computeDueDate(invoice.invoice_date, resolveInvoiceTerms(invoice.terms ?? client.default_terms, null))
+      : null);
+  const termDays = daysBetween(invoice.invoice_date, dueDate);
+  const termId = termDays != null ? await getTermIdForDays(conn, termDays) : null;
+
+  // Tax. An Automated Sales Tax company ignores a hand-set total, so give it a
+  // tax code at this invoice's rate and let it compute (any difference is
+  // flagged after the write). If a code can't be resolved, add the tax as its
+  // own untaxed line so the invoice total still matches Landscapt's.
+  const taxCents: number = invoice.tax_cents ?? 0;
+  let salesTaxCodeId: string | null = null;
+  let manualTaxCents = taxCents;
+  if (taxCents > 0 && (invoice.tax_rate_bps ?? 0) > 0 && (await usesAutomatedSalesTax(conn))) {
+    salesTaxCodeId = await getOrCreateSalesTaxCodeId(conn, invoice.tax_rate_bps);
+    manualTaxCents = 0;
+    if (!salesTaxCodeId) {
+      lines.push({
+        description: `Sales tax (${(invoice.tax_rate_bps / 100).toString()}%)`,
+        qty: 1,
+        amountCents: taxCents,
+        unitPrice: centsToDollars(taxCents),
+        itemId: await resolveItemId(null),
+        taxable: false,
+      });
+    }
+  } else if (taxCents > 0) {
+    manualTaxCents = taxCents;
+  }
+
+  return {
+    customerId,
+    invoiceDate: invoice.invoice_date,
+    dueDate,
+    termId,
+    docNumber: invoice.invoice_number != null ? String(invoice.invoice_number) : null,
+    lines,
+    discountCents: (invoice.discount_cents ?? 0) + lineDiscountCents,
+    taxCents: manualTaxCents,
+    salesTaxCodeId,
+    expectedTotalCents: invoice.total_cents ?? undefined,
+  };
+}
+
 /**
- * Pushes an invoice to QuickBooks as a new Invoice, resolving the client's
- * QBO customer lazily (same policy as Phase 2) if it isn't linked yet.
- * Idempotent — a no-op if this invoice already has a qbo_invoice_id. Never
- * throws: callers (the automatic "invoice sent" hook and a manual retry
- * route) must not fail their own action because QuickBooks is down or
- * unconfigured.
+ * Keeps an invoice in QuickBooks in step with Landscapt. A new invoice is
+ * created; one that already has a qbo_invoice_id is updated in place with its
+ * current lines/amounts/terms, or voided there when it is void here. Voiding a
+ * paid invoice is blocked upstream (see assertVoidable), which is also what
+ * QuickBooks requires. A QuickBooks invoice that was voided can never be
+ * edited, so un-voiding in Landscapt surfaces an error instead. With
+ * `onlyIfSynced`, an invoice that was never pushed is left alone — edit
+ * triggers use this so saving a draft can't create it in QuickBooks early.
+ * Never throws: callers (the automatic hooks and the manual retry route) must
+ * not fail their own action because QuickBooks is down or unconfigured.
  */
 export async function pushInvoiceToQuickBooks(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   orgId: string,
-  invoiceId: string
+  invoiceId: string,
+  opts: { onlyIfSynced?: boolean } = {}
 ): Promise<PushInvoiceResult> {
   const { data: invoice } = await db
     .from("crm_invoices")
     .select(`
-      id, client_id, invoice_number, invoice_date, due_date, description, qbo_invoice_id, discount_cents, tax_cents,
-      clients (id, display_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, qbo_customer_id),
-      crm_invoice_line_items (name, description, qty, rate_cents, total_cents, discount_cents, sort_order)
+      id, client_id, status, invoice_number, invoice_date, due_date, terms, description, qbo_invoice_id, discount_cents, tax_cents, tax_rate_bps, total_cents,
+      clients (id, display_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, qbo_customer_id, default_terms),
+      crm_invoice_line_items (name, description, qty, rate_cents, total_cents, discount_cents, is_taxable, sort_order)
     `)
     .eq("id", invoiceId)
     .eq("org_id", orgId)
     .is("deleted_at", null)
     .maybeSingle();
   if (!invoice) return { status: "error", reason: "invoice_not_found" };
-  if (invoice.qbo_invoice_id) return { status: "already_synced", qboInvoiceId: invoice.qbo_invoice_id };
+  if (!invoice.qbo_invoice_id && (opts.onlyIfSynced || invoice.status === "void")) {
+    return { status: "skipped", reason: "not_synced" };
+  }
 
   const conn = await getValidConnection(db, orgId);
   if (!conn) return { status: "skipped", reason: "not_connected" };
@@ -601,63 +930,60 @@ export async function pushInvoiceToQuickBooks(
       return { status: "error", reason: "ambiguous_client_match" };
     }
 
-    const resolveItemId = await buildServiceItemResolver(db, conn, orgId);
+    /**
+     * QuickBooks accepted the write, but if it computed a different total (tax
+     * rounding, a rate it treats differently) the two books disagree — record
+     * that as a sync error so it shows in the Sync Status panel instead of
+     * drifting silently.
+     */
+    const driftMessage = (input: CreateInvoiceInput, written: QboWriteResult): string | null => {
+      const expected = input.expectedTotalCents;
+      if (expected == null || Math.abs(written.totalCents - expected) <= 1) return null;
+      return `QuickBooks totals $${(written.totalCents / 100).toFixed(2)} but this invoice is $${(expected / 100).toFixed(2)} — usually sales tax calculated differently in QuickBooks. Check the tax setup there.`;
+    };
+    const markOk = async (drift: string | null = null) => {
+      await db
+        .from("crm_invoices")
+        .update({ qbo_sync_error: drift, qbo_sync_attempted_at: attemptedAt })
+        .eq("id", invoiceId);
+      await recordSyncResult(db, orgId, drift ? "error" : "ok");
+    };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const lineItems = (invoice.crm_invoice_line_items ?? []).sort((a: any, b: any) => a.sort_order - b.sort_order);
-    const lines: QboInvoiceLineInput[] = lineItems.length > 0
-      ? await Promise.all(
-          lineItems.map(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            async (li: any) => {
-              const qty = Number(li.qty) || 1;
-              const amountCents: number = li.total_cents ?? 0;
-              // UnitPrice must satisfy Amount = UnitPrice × Qty. The stored
-              // rate does whenever total_cents is round(rate × qty) (every
-              // invoicing path writes it that way); otherwise derive it.
-              const rateCents = li.rate_cents as number | null;
-              const unitPrice = rateCents != null && Math.round(rateCents * qty) === amountCents
-                ? centsToDollars(rateCents)
-                : Math.round((amountCents / qty) * 1e5) / 1e7;
-              return {
-                description: li.name ? `${li.name}${li.description ? ` — ${li.description}` : ""}` : (li.description ?? "Service"),
-                qty,
-                amountCents,
-                unitPrice,
-                itemId: await resolveItemId(li.name),
-              };
-            }
-          )
-        )
-      : [{ description: invoice.description || "Service", qty: 1, amountCents: 0, itemId: await resolveItemId(null) }];
+    // ── already in QuickBooks: update or void it ──
+    if (invoice.qbo_invoice_id) {
+      const qboInvoiceId: string = invoice.qbo_invoice_id;
+      const current = await getQboInvoice(conn, qboInvoiceId);
+      const voidedInQbo = isQboInvoiceVoided(current);
 
-    // Line-level discounts (crm_invoice_line_items.discount_cents) used to be
-    // dropped, so QuickBooks showed the pre-discount total. Lines stay gross
-    // (keeps Amount = UnitPrice × Qty exact, which QBO validates), and every
-    // line discount is folded into the single invoice DiscountLineDetail
-    // together with the document-level discount — same net total as
-    // Σ(total_cents − discount_cents) − invoice discount.
-    const lineDiscountCents: number = lineItems.reduce(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (s: number, li: any) => s + (li.discount_cents ?? 0),
-      0
-    );
+      if (invoice.status === "void") {
+        if (voidedInQbo) return { status: "already_synced", qboInvoiceId };
+        await voidInvoice(conn, qboInvoiceId);
+        await markOk();
+        return { status: "voided", qboInvoiceId };
+      }
+      if (voidedInQbo) {
+        // QuickBooks can't reopen a voided invoice, so the two have diverged for good.
+        const message = "This invoice was voided in QuickBooks and can't be reopened there — create a new invoice to sync it again.";
+        await recordSyncResult(db, orgId, "error");
+        await db.from("crm_invoices").update({ qbo_sync_error: message, qbo_sync_attempted_at: attemptedAt }).eq("id", invoiceId);
+        return { status: "error", reason: "voided_in_quickbooks", qboInvoiceId };
+      }
+      const updateInput = await buildInvoicePushInput(db, conn, orgId, invoice, resolved.customerId);
+      const updated = await updateInvoice(conn, qboInvoiceId, updateInput);
+      await markOk(driftMessage(updateInput, updated));
+      return { status: "updated", qboInvoiceId };
+    }
 
-    const qboInvoiceId = await createInvoice(conn, {
-      customerId: resolved.customerId,
-      invoiceDate: invoice.invoice_date,
-      dueDate: invoice.due_date,
-      docNumber: invoice.invoice_number != null ? String(invoice.invoice_number) : null,
-      lines,
-      discountCents: (invoice.discount_cents ?? 0) + lineDiscountCents,
-      taxCents: invoice.tax_cents ?? 0,
-    });
-
+    // ── not yet in QuickBooks: create it ──
+    const createInput = await buildInvoicePushInput(db, conn, orgId, invoice, resolved.customerId);
+    const created = await createInvoice(conn, createInput);
+    const qboInvoiceId = created.id;
+    const drift = driftMessage(createInput, created);
     await db
       .from("crm_invoices")
-      .update({ qbo_invoice_id: qboInvoiceId, qbo_sync_error: null, qbo_sync_attempted_at: attemptedAt })
+      .update({ qbo_invoice_id: qboInvoiceId, qbo_sync_error: drift, qbo_sync_attempted_at: attemptedAt })
       .eq("id", invoiceId);
-    await recordSyncResult(db, orgId, "ok");
+    await recordSyncResult(db, orgId, drift ? "error" : "ok");
     return { status: "pushed", qboInvoiceId };
   } catch (err) {
     log.error("QuickBooks invoice push failed", { err, invoiceId, orgId });
@@ -696,7 +1022,7 @@ export async function pushPaymentToQuickBooks(
   const { data: payment } = await db
     .from("crm_payments")
     .select(`
-      id, client_id, payment_date,
+      id, client_id, payment_date, reference,
       clients (id, display_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, qbo_customer_id),
       crm_payment_allocations (id, amount_cents, qbo_payment_id, crm_invoices (id, qbo_invoice_id))
     `)
@@ -751,6 +1077,7 @@ export async function pushPaymentToQuickBooks(
         qboInvoiceId,
         amountCents: alloc.amount_cents,
         paymentDate: payment.payment_date,
+        referenceNumber: payment.reference,
       });
       await db
         .from("crm_payment_allocations")
@@ -773,4 +1100,169 @@ export async function pushPaymentToQuickBooks(
     pushedAllocations: pushed,
     skippedAllocations: skipped,
   };
+}
+
+/**
+ * Server-side entry point for payments that don't go through a browser —
+ * Stripe webhooks, autopay, the public pay link. Pushes any of the payment's
+ * invoices that aren't in QuickBooks yet first (an auto-generated invoice may
+ * never have been "sent" from the UI), since a payment can't be linked to an
+ * invoice QuickBooks doesn't have, then the payment itself. Safe to fire after
+ * the money is already recorded: it never throws, and QuickBooks being down or
+ * unconfigured leaves the usual error row for the Sync Status panel to retry.
+ */
+export async function syncStripePaymentToQuickBooks(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  paymentId: string
+): Promise<void> {
+  try {
+    const { data: allocations } = await db
+      .from("crm_payment_allocations")
+      .select("invoice_id, crm_invoices (id, status, qbo_invoice_id)")
+      .eq("payment_id", paymentId);
+    for (const alloc of (allocations ?? []) as { crm_invoices: { id: string; status: string; qbo_invoice_id: string | null } | null }[]) {
+      const inv = alloc.crm_invoices;
+      if (inv && !inv.qbo_invoice_id && inv.status !== "draft" && inv.status !== "void") {
+        await pushInvoiceToQuickBooks(db, orgId, inv.id);
+      }
+    }
+    await pushPaymentToQuickBooks(db, orgId, paymentId);
+  } catch (err) {
+    log.error("QuickBooks sync after Stripe payment failed", { err, paymentId, orgId });
+  }
+}
+
+// ── payment reversals (refunds, chargebacks) ────────────────────────────────
+
+export interface QuickBooksPaymentLink {
+  allocationId: string;
+  qboPaymentId: string;
+}
+
+/**
+ * Captures which allocations of a payment are already in QuickBooks BEFORE a
+ * reversal runs: refund_payment() deletes an allocation row that is refunded in
+ * full, and that row is the only place its qbo_payment_id lives.
+ */
+export async function snapshotQuickBooksPaymentLinks(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  paymentId: string
+): Promise<QuickBooksPaymentLink[]> {
+  try {
+    const { data } = await db
+      .from("crm_payment_allocations")
+      .select("id, qbo_payment_id")
+      .eq("payment_id", paymentId)
+      .not("qbo_payment_id", "is", null);
+    return ((data ?? []) as { id: string; qbo_payment_id: string }[]).map((a) => ({ allocationId: a.id, qboPaymentId: a.qbo_payment_id }));
+  } catch {
+    return [];
+  }
+}
+
+async function qboPaymentRequest(
+  conn: QuickBooksConnection,
+  body: Record<string, unknown>,
+  operation?: "void"
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/payment${operation ? `?operation=${operation}` : ""}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${conn.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`QuickBooks payment ${operation ?? "update"} failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return data.Payment as Record<string, unknown>;
+}
+
+async function getQboPayment(conn: QuickBooksConnection, qboPaymentId: string): Promise<Record<string, unknown>> {
+  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/payment/${encodeURIComponent(qboPaymentId)}`, {
+    headers: { Authorization: `Bearer ${conn.accessToken}`, Accept: "application/json" },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`QuickBooks payment lookup failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return data.Payment as Record<string, unknown>;
+}
+
+/**
+ * Brings the QuickBooks Payments behind a payment in line with its allocations
+ * after a refund or chargeback has been applied: an allocation that was
+ * refunded in full is gone, so its QuickBooks Payment is voided (reopening the
+ * invoice there, as it reopened here); one that shrank has its amount reduced.
+ * Pass the snapshot taken before the reversal ran. Never throws.
+ */
+export async function mirrorPaymentReversalToQuickBooks(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  paymentId: string,
+  links: QuickBooksPaymentLink[]
+): Promise<void> {
+  if (links.length === 0) return;
+  try {
+    const conn = await getValidConnection(db, orgId);
+    if (!conn) return;
+    const { data: remaining } = await db
+      .from("crm_payment_allocations")
+      .select("id, amount_cents, crm_invoices (qbo_invoice_id)")
+      .eq("payment_id", paymentId);
+    const byId = new Map<string, { amount_cents: number; crm_invoices: { qbo_invoice_id: string | null } | null }>(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((remaining ?? []) as any[]).map((r) => [r.id, r])
+    );
+
+    for (const link of links) {
+      try {
+        const current = await getQboPayment(conn, link.qboPaymentId);
+        const qboCents = Math.round(Number(current.TotalAmt ?? 0) * 100);
+        const row = byId.get(link.allocationId);
+        if (!row) {
+          if (qboCents > 0) {
+            await withFreshSyncToken(
+              () => getQboPayment(conn, link.qboPaymentId),
+              (cur) => qboPaymentRequest(conn, { Id: link.qboPaymentId, SyncToken: cur.SyncToken }, "void")
+            );
+          }
+          continue;
+        }
+        const invoiceId = row.crm_invoices?.qbo_invoice_id;
+        if (row.amount_cents !== qboCents && invoiceId) {
+          const amount = centsToDollars(row.amount_cents);
+          await withFreshSyncToken(
+            () => getQboPayment(conn, link.qboPaymentId),
+            (cur) =>
+              qboPaymentRequest(conn, {
+                Id: link.qboPaymentId,
+                SyncToken: cur.SyncToken,
+                sparse: true,
+                TotalAmt: amount,
+                Line: [{ Amount: amount, LinkedTxn: [{ TxnId: invoiceId, TxnType: "Invoice" }] }],
+              })
+          );
+        }
+      } catch (err) {
+        log.error("QuickBooks payment reversal failed", { err, paymentId, qboPaymentId: link.qboPaymentId, orgId });
+        await db
+          .from("crm_payment_allocations")
+          .update({ qbo_sync_error: errorMessage(err), qbo_sync_attempted_at: new Date().toISOString() })
+          .eq("id", link.allocationId);
+        await recordSyncResult(db, orgId, "error");
+      }
+    }
+  } catch (err) {
+    log.error("QuickBooks payment reversal mirror failed", { err, paymentId, orgId });
+  }
 }

@@ -92,6 +92,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/cron/quickbooks-sync",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/sales-meeting-reminders",
       "schedule": "*/15 * * * *"
     },

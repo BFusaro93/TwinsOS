@@ -14,6 +14,7 @@ import { loadInvoiceChemicalsForPdf } from "@/lib/invoices/chemical-applications
 import { loadInvoiceVisitNotes, combineInvoiceNotes } from "@/lib/invoices/visit-notes";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
+import { computeInvoiceTotals } from "@/lib/invoices/totals";
 import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError, buildClientMergeVars } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -134,6 +135,37 @@ export async function POST(req: NextRequest) {
         ref_id: invoiceId,
         ref_table: "crm_invoices",
       });
+    }
+  }
+
+  // Line items autosave but the header totals only move on Save Invoice, so a
+  // draft emailed without saving would go out at its stale (often $0) total.
+  // Re-derive them from the saved lines before anything renders. Drafts only —
+  // re-sending an already-sent invoice must never change its amounts.
+  if (inv.status === "draft") {
+    const lines = (inv.crm_invoice_line_items ?? []) as { total_cents: number | null; discount_cents: number | null; is_taxable: boolean | null }[];
+    const computed = computeInvoiceTotals({
+      lines: lines.map((li) => ({ totalCents: li.total_cents ?? 0, discountCents: li.discount_cents ?? 0, isTaxable: !!li.is_taxable })),
+      discountCents: inv.discount_cents ?? 0,
+      discountType: inv.discount_type ?? null,
+      discountValue: inv.discount_value ?? null,
+      taxRateBps: inv.tax_rate_bps ?? 0,
+    });
+    if (computed.totalCents !== (inv.total_cents ?? 0) || computed.subtotalCents !== (inv.subtotal_cents ?? 0)) {
+      const patch = {
+        subtotal_cents: computed.subtotalCents,
+        discount_cents: computed.discountCents,
+        tax_cents: computed.taxCents,
+        total_cents: computed.totalCents,
+        balance_cents: Math.max(0, computed.totalCents - (inv.amount_paid_cents ?? 0)),
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: totalsErr } = await (supabase as any).from("crm_invoices").update(patch).eq("id", invoiceId);
+      if (totalsErr) {
+        log.error("invoice totals recompute failed before email", { invoiceId, error: totalsErr.message });
+        return NextResponse.json({ error: "Could not update the invoice totals — the invoice was not sent." }, { status: 500 });
+      }
+      Object.assign(inv, patch);
     }
   }
 

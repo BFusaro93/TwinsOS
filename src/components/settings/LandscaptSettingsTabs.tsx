@@ -1466,7 +1466,7 @@ function QuickBooksSyncStatusSection() {
   async function handleRetryInvoice(id: string) {
     try {
       const result = await retryInvoice(id);
-      if (result.status === "pushed") toast.success("Invoice synced to QuickBooks");
+      if (result.status === "pushed" || result.status === "updated" || result.status === "voided") toast.success("Invoice synced to QuickBooks");
       else if (result.status === "already_synced") toast.success("Already synced");
       else toast.error(result.reason === "ambiguous_client_match" ? "Client match is still ambiguous" : "Sync failed again");
     } catch (err) {

@@ -3,6 +3,7 @@ import { getStripeForOrg } from "@/lib/stripe/server";
 import { methodForPaymentIntent, decodeAllocations } from "@/lib/stripe/crm-payments";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
+import { syncStripePaymentToQuickBooks } from "@/lib/integrations/quickbooks";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 
@@ -273,6 +274,10 @@ async function applyViaRpc({
   } catch (err) {
     log.error("recorded payment but a follow-up step failed", { error: err, paymentId });
   }
+
+  // Mirror into QuickBooks (no-op for orgs that haven't connected it). Its own
+  // try/catch — it never throws, so it can't turn a recorded payment into an error.
+  await syncStripePaymentToQuickBooks(db, orgId, paymentId);
 
   return "applied";
 }
