@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapProductItem } from "@/lib/supabase/mappers";
 import { setProducts } from "@/lib/hooks/cost-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -13,12 +14,17 @@ export function useProducts() {
     queryKey: ["products"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("product_items")
-        .select("*")
-        .is("deleted_at", null)
-        .order("name");
-      if (error) throw error;
+      // Paged: PostgREST silently caps a plain select at 1000 rows, and the
+      // catalog already sits near that (918 products in the largest org) —
+      // past it, products would vanish from every picker, PO line and the
+      // cost store with no error.
+      const data = await fetchAllRows<Parameters<typeof mapProductItem>[0]>(() =>
+        supabase
+          .from("product_items")
+          .select("*")
+          .is("deleted_at", null)
+          .order("name")
+      );
       const products = data.map(mapProductItem);
       setProducts(products);
       return products;

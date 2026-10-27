@@ -79,18 +79,23 @@ export function useContracts(clientId?: string, activeOnly?: boolean) {
     queryKey: ["crm-contracts", clientId ?? "all", activeOnly ?? "any"],
     queryFn: async () => {
       const supabase = createClient();
+      // Paged: PostgREST silently caps a plain select at 1000 rows, so past
+      // 1000 contracts the oldest dropped out of the list, its CSV export and
+      // the bulk "Create Invoices" selection with no error.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q = (supabase as any)
-        .from("crm_contracts")
-        .select("*, clients(display_name, primary_email, primary_phone), sales_rep:crm_employees!crm_contracts_sales_rep_id_fkey(first_name,last_name)")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (clientId) q = q.eq("client_id", clientId);
-      if (activeOnly === true) q = q.eq("is_active", true);
-      if (activeOnly === false) q = q.eq("is_active", false);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data.map(mapContract)) as CRMContract[];
+      const rows = await fetchAllRows<any>(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q = (supabase as any)
+          .from("crm_contracts")
+          .select("*, clients(display_name, primary_email, primary_phone), sales_rep:crm_employees!crm_contracts_sales_rep_id_fkey(first_name,last_name)")
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false });
+        if (clientId) q = q.eq("client_id", clientId);
+        if (activeOnly === true) q = q.eq("is_active", true);
+        if (activeOnly === false) q = q.eq("is_active", false);
+        return q;
+      });
+      return (rows.map(mapContract)) as CRMContract[];
     },
   });
 }
