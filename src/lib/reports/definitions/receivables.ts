@@ -33,7 +33,7 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
       const data = await fetchAllRows<unknown>(() =>
         supabase
           .from("crm_invoices")
-          .select("due_date, invoice_date, balance_cents, clients:client_id(display_name)")
+          .select("client_id, due_date, invoice_date, balance_cents, clients:client_id(display_name)")
           .gt("balance_cents", 0)
           .is("deleted_at", null)
           .in("status", ISSUED_INVOICE_STATUSES)
@@ -41,6 +41,7 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
       );
 
       type Row = {
+        client_id: string | null;
         due_date: string | null;
         invoice_date: string | null;
         balance_cents: number | null;
@@ -55,15 +56,19 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
         d90_plus_cents: number;
         total_cents: number;
       }
-      const byClient = new Map<string, Buckets>();
+      // Keyed by client id: display names aren't unique, and keying by name
+      // folded two different clients' balances into one row.
+      const byClient = new Map<string, Buckets & { client_name: string }>();
       // Days past due on the org's calendar. Measuring from UTC midnight
       // pushed anything due today into "1-30 days" every evening after 8pm ET.
       const today = todayInZone(timeZone);
 
       for (const r of (data ?? []) as unknown as Row[]) {
         const clientName = r.clients?.display_name ?? "(unknown)";
+        const clientKey = r.client_id ?? clientName;
         const buckets =
-          byClient.get(clientName) ?? {
+          byClient.get(clientKey) ?? {
+            client_name: clientName,
             current_cents: 0,
             d1_30_cents: 0,
             d31_60_cents: 0,
@@ -80,12 +85,12 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
         else if (daysPastDue <= 90) buckets.d61_90_cents += balance;
         else buckets.d90_plus_cents += balance;
         buckets.total_cents += balance;
-        byClient.set(clientName, buckets);
+        byClient.set(clientKey, buckets);
       }
 
-      const rows = [...byClient.entries()]
-        .sort((a, b) => b[1].total_cents - a[1].total_cents)
-        .map(([client_name, buckets]) => ({ client_name, ...buckets }));
+      const rows = [...byClient.values()]
+        .sort((a, b) => b.total_cents - a.total_cents)
+        .map((buckets) => ({ ...buckets }));
 
       return buildResult(
         [

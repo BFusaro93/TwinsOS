@@ -87,25 +87,34 @@ export function StatementsList() {
         ? Math.round(Number(minBalance) * 100)
         : undefined;
 
-      const settled = await Promise.allSettled(
-        ids.map(async (clientId) => {
-          const res = await fetch(`/api/crm/clients/${clientId}/statement/email`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              statementDate,
-              periodFrom,
-              periodTo,
-              message: message.trim() || undefined,
-              detail: showLineItemDetails,
-              minBalanceCents,
-            }),
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(data.error ?? "Failed to send");
-          return { clientId, skipped: !!data.skipped };
-        })
-      );
+      const sendOne = async (clientId: string) => {
+        const res = await fetch(`/api/crm/clients/${clientId}/statement/email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            statementDate,
+            periodFrom,
+            periodTo,
+            message: message.trim() || undefined,
+            detail: showLineItemDetails,
+            minBalanceCents,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? "Failed to send");
+        return { clientId, skipped: !!data.skipped };
+      };
+
+      // A few at a time, not all at once: each send renders a PDF and calls the
+      // email provider, and "Select all" over a few hundred clients fired every
+      // request simultaneously — tripping the provider's rate limit (the
+      // overflow came back as "Failed — check they have an email on file") and
+      // piling PDF renders onto one server instance.
+      const BATCH_SIZE = 4;
+      const settled: PromiseSettledResult<{ clientId: string; skipped: boolean }>[] = [];
+      for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+        settled.push(...(await Promise.allSettled(ids.slice(i, i + BATCH_SIZE).map(sendOne))));
+      }
 
       const nextResults: Record<string, SendStatus> = {};
       let sentCount = 0;
