@@ -44,7 +44,22 @@ const baseAdjustment = {
   targets: z.array(z.enum(ADJUST_TARGETS)).min(1, "Pick at least one target"),
 };
 
-export const previewPriceAdjustmentSchema = z.object(baseAdjustment);
+/**
+ * A percentage at or below -100 prices every matched line at $0 (the SQL
+ * clamps negatives to 0), and an absurd magnitude overflows the integer rate
+ * column and 500s the run — both are typos, not intent, so reject them at the
+ * boundary instead of previewing/applying a mass free-service run.
+ */
+const amountInRange = (v: { method: "percent" | "flat"; amount: number }) =>
+  v.method === "percent"
+    ? v.amount > -100 && v.amount <= 1000
+    : Math.abs(v.amount) <= 100_000_000;
+const AMOUNT_RANGE_MESSAGE =
+  "Percent must be between -99.99% and 1000%; a flat amount can't exceed $1,000,000";
+
+export const previewPriceAdjustmentSchema = z
+  .object(baseAdjustment)
+  .refine(amountInRange, { message: AMOUNT_RANGE_MESSAGE, path: ["amount"] });
 
 /**
  * One line the user ticked in the preview, carrying the price they were shown.
@@ -59,14 +74,16 @@ export const priceAdjustmentSelectionSchema = z.object({
   oldRateCents: z.number().int(),
 });
 
-export const applyPriceAdjustmentSchema = z.object({
-  ...baseAdjustment,
-  name: z.string().trim().min(1, "Name is required").max(200),
-  notes: z.string().trim().max(2000).optional(),
-  selected: z
-    .array(priceAdjustmentSelectionSchema)
-    .min(1, "Select at least one line to apply"),
-});
+export const applyPriceAdjustmentSchema = z
+  .object({
+    ...baseAdjustment,
+    name: z.string().trim().min(1, "Name is required").max(200),
+    notes: z.string().trim().max(2000).optional(),
+    selected: z
+      .array(priceAdjustmentSelectionSchema)
+      .min(1, "Select at least one line to apply"),
+  })
+  .refine(amountInRange, { message: AMOUNT_RANGE_MESSAGE, path: ["amount"] });
 
 export type PreviewPriceAdjustmentInput = z.infer<typeof previewPriceAdjustmentSchema>;
 export type ApplyPriceAdjustmentInput = z.infer<typeof applyPriceAdjustmentSchema>;
