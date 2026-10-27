@@ -3,8 +3,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { computeInvoiceTotals } from "@/lib/invoices/totals";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
-import { fireQuickBooksInvoiceSync, fireQuickBooksPaymentSync } from "@/lib/integrations/quickbooks-client";
+import { fireQuickBooksInvoiceSync, fireQuickBooksInvoiceUpdate, fireQuickBooksPaymentSync } from "@/lib/integrations/quickbooks-client";
 import type { CRMInvoice, InvoiceLineItem, CRMPayment } from "@/types/crm-invoices";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -881,6 +882,7 @@ export function useVoidInvoice() {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
       qc.invalidateQueries({ queryKey: ["clients"] });
+      fireQuickBooksInvoiceUpdate(vars.id);
     },
   });
 }
@@ -918,7 +920,7 @@ export function useUpdateInvoiceStatus() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: current, error: currentErr } = await (supabase as any)
         .from("crm_invoices")
-        .select("status, total_cents, amount_paid_cents, client_id")
+        .select("status, total_cents, amount_paid_cents, client_id, invoice_number")
         .eq("id", id)
         .single();
       if (currentErr) throw currentErr;
@@ -943,6 +945,34 @@ export function useUpdateInvoiceStatus() {
           throw new Error("it has payments recorded, so its status follows its payments");
         }
       }
+      // Line items autosave but the header totals only move on Save Invoice, so
+      // a draft sent without saving would go out at its stale (often $0) total.
+      // Re-derive the totals from the saved lines before it leaves draft.
+      if (current?.status === "draft" && (status === "sent" || status === "printed")) {
+        await recalcInvoiceTotalsFromLines(supabase, id);
+        // Likewise only Save Invoice assigned the number, so a draft sent from
+        // here went out numberless (and QuickBooks invented its own). The RPC
+        // is idempotent. Same timeline entry as useAssignInvoiceNumber.
+        if (current.invoice_number == null) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: assigned, error: numErr } = await (supabase.rpc as any)("assign_invoice_number", { p_invoice_id: id });
+          if (numErr || assigned == null) throw numErr ?? new Error("could not assign an invoice number");
+          if (current.client_id) {
+            // The recalc above just rewrote total_cents; `current` is stale.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: fresh } = await (supabase as any).from("crm_invoices").select("total_cents").eq("id", id).single();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any).from("client_activity").insert({
+              client_id: current.client_id,
+              activity_type: "invoice",
+              subject: `Invoice #${assigned}`,
+              ref_id: id,
+              ref_table: "crm_invoices",
+              amount_cents: fresh?.total_cents ?? 0,
+            });
+          }
+        }
+      }
       const leavingVoid = current?.status === "void";
       if (leavingVoid) {
         patch.balance_cents = Math.max(0, (current.total_cents ?? 0) - (current.amount_paid_cents ?? 0));
@@ -963,6 +993,9 @@ export function useUpdateInvoiceStatus() {
       qc.invalidateQueries({ queryKey: ["clients"] });
       if (vars.status === "sent") {
         fireQuickBooksInvoiceSync(vars.id);
+      } else {
+        // Void (or un-void) of an invoice that's already in QuickBooks.
+        fireQuickBooksInvoiceUpdate(vars.id);
       }
     },
   });
@@ -1006,6 +1039,12 @@ export function useUpdateInvoiceHeader() {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.id] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      // Only the header fields QuickBooks mirrors (number, dates, terms) matter;
+      // PO#, sales rep, payment method etc. don't go over.
+      const p = vars.patch;
+      if (p.invoice_number !== undefined || p.invoice_date !== undefined || p.due_date !== undefined || p.terms !== undefined) {
+        fireQuickBooksInvoiceUpdate(vars.id);
+      }
     },
   });
 }
@@ -1320,38 +1359,6 @@ async function resetJobProductsForLines(supabase: any, lineItemIds: string[]) {
   }
 }
 
-/**
- * The one place an invoice's header totals are derived from its lines.
- *
- * Subtotal is net of each line's own discount. The document-level discount is
- * re-derived from discount_type/discount_value when it is a percent (bps of the
- * CURRENT subtotal — the stored discount_cents is only a snapshot and goes
- * stale as lines change), then clamped to [0, subtotal] so it can never push
- * the invoice negative. Tax applies to taxable lines net of the document
- * discount (never negative). Mirrors increment_invoice_totals in SQL.
- */
-export function computeInvoiceTotals(input: {
-  lines: { totalCents: number; discountCents: number; isTaxable: boolean }[];
-  discountCents: number;
-  discountType?: "percent" | "flat" | null;
-  discountValue?: number | null;
-  taxRateBps: number;
-}) {
-  const netLineCents = (li: { totalCents: number; discountCents: number }) => li.totalCents - li.discountCents;
-  const subtotalCents = input.lines.reduce((s, li) => s + netLineCents(li), 0);
-  const rawDiscountCents =
-    input.discountType === "percent"
-      ? Math.round(Math.max(0, subtotalCents) * ((input.discountValue ?? 0) / 10000))
-      : input.discountCents;
-  const discountCents = Math.min(Math.max(0, rawDiscountCents), Math.max(0, subtotalCents));
-  const taxRateBps = Math.min(Math.max(0, input.taxRateBps), 10000);
-  const taxableSubtotal = input.lines.filter((li) => li.isTaxable).reduce((s, li) => s + netLineCents(li), 0);
-  const taxableBase = Math.max(0, taxableSubtotal - discountCents);
-  const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
-  const totalCents = subtotalCents - discountCents + taxCents;
-  return { subtotalCents, discountCents, taxRateBps, taxCents, totalCents };
-}
-
 // Shared by useDeleteInvoiceLineItem and useSetJobProductStatus (removing a
 // job product from an invoice deletes its line item the same way).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1425,6 +1432,9 @@ export async function recalcInvoiceTotalsFromLines(supabase: any, invoiceId: str
   // Status/allocations/credit for the new total (also re-syncs the client's
   // balances).
   const { wasNewlyPaid } = await reconcileInvoicePayments(supabase, invoiceId);
+
+  // A line delete / taxable toggle just changed what QuickBooks should hold.
+  fireQuickBooksInvoiceUpdate(invoiceId);
 
   return { invoiceId, clientId: inv?.client_id as string | undefined, wasNewlyPaid };
 }
@@ -1527,6 +1537,7 @@ export function useUpdateInvoiceFinancials() {
       if (data?.wasNewlyPaid && data.clientId) {
         fireAutomationTrigger({ triggerType: "invoice_paid", clientId: data.clientId, invoiceId: vars.id });
       }
+      fireQuickBooksInvoiceUpdate(vars.id);
     },
   });
 }

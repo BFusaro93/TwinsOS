@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { syncStripePaymentToQuickBooks } from "@/lib/integrations/quickbooks";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
@@ -138,6 +139,9 @@ export async function POST(request: Request) {
   } catch (err) {
     log.error("recorded payment but a follow-up step failed", { error: err, paymentId: row.payment_id });
   }
+
+  // Mirror into QuickBooks (no-op for orgs that haven't connected it); never throws.
+  await syncStripePaymentToQuickBooks(db, orgId, row.payment_id);
 
   return NextResponse.json({ received: true });
 }

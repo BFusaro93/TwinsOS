@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { snapshotQuickBooksPaymentLinks, mirrorPaymentReversalToQuickBooks } from "@/lib/integrations/quickbooks";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
@@ -385,6 +386,7 @@ export async function POST(request: Request) {
       // own amount_refunded under the payment row lock. The staff refund route
       // does the same, so whichever of the two lands first applies it and the
       // other is a no-op — they converge instead of each adding a delta.
+      const qboLinks = await snapshotQuickBooksPaymentLinks(db, payment.id);
       let deltaCents = 0;
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -416,6 +418,8 @@ export async function POST(request: Request) {
         log.error("failed to sync estimate deposit after refund", { error: err, paymentId: payment.id });
       }
       if (deltaCents <= 0) break; // already reconciled (e.g. our own refund route already applied this)
+      // Void/reduce the matching QuickBooks payments (no-op if not connected); never throws.
+      await mirrorPaymentReversalToQuickBooks(db, payment.org_id, payment.id, qboLinks);
 
       try {
         // refund_payment() reverses the invoice side itself — it walks the
@@ -636,6 +640,7 @@ async function handleDisputeEvent(
       }
     }
 
+    const qboLinks = await snapshotQuickBooksPaymentLinks(db, payment.id);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: applied, error: reconcileErr } = await (db.rpc as any)("reconcile_stripe_payment_reversal", {
       p_payment_id: payment.id,
@@ -647,6 +652,7 @@ async function handleDisputeEvent(
     }
     const deltaCents = typeof applied === "number" ? applied : 0;
     if (deltaCents > 0) {
+      await mirrorPaymentReversalToQuickBooks(db, payment.org_id, payment.id, qboLinks);
       try {
         await syncEstimateDepositWithPayment(db, payment.org_id, paymentIntentId);
         await db.rpc("sync_client_balance", { p_client_id: payment.client_id });

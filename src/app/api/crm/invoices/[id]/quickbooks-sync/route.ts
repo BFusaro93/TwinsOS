@@ -5,11 +5,14 @@ import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
 
 /**
  * POST /api/crm/invoices/[id]/quickbooks-sync — pushes this invoice to
- * QuickBooks. Called automatically whenever an invoice is sent (email send
- * and the manual status dropdown both fire this fire-and-forget), and can
- * be called again as a manual retry — idempotent via qbo_invoice_id.
+ * QuickBooks: creates it, or — if it already has a qbo_invoice_id — updates
+ * it to match Landscapt (or voids it there when it's void here). Called
+ * automatically when an invoice is sent and whenever a synced invoice is
+ * edited or voided (fire-and-forget), and as a manual retry. With
+ * ?onlyIfSynced=1 an invoice that was never pushed is left alone, so editing a
+ * draft can't create it in QuickBooks early.
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -26,6 +29,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
 
   const { id } = await params;
-  const result = await pushInvoiceToQuickBooks(supabase, profile.org_id, id);
+  const onlyIfSynced = new URL(req.url).searchParams.get("onlyIfSynced") === "1";
+  const result = await pushInvoiceToQuickBooks(supabase, profile.org_id, id, { onlyIfSynced });
   return NextResponse.json(result);
 }

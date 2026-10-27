@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { snapshotQuickBooksPaymentLinks, mirrorPaymentReversalToQuickBooks } from "@/lib/integrations/quickbooks";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -86,6 +87,10 @@ export async function POST(
   if (payment.refunded_amount_cents + refundAmountCents > payment.amount_cents) {
     return NextResponse.json({ error: "Refund amount exceeds remaining refundable balance" }, { status: 400 });
   }
+
+  // refund_payment() deletes an allocation refunded in full, taking its
+  // QuickBooks payment id with it — capture those links before the reversal.
+  const qboLinks = await snapshotQuickBooksPaymentLinks(db, paymentId);
 
   let appliedCents = 0;
   if (payment.stripe_payment_intent_id) {
@@ -191,6 +196,9 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (db.rpc as any)("sync_client_balance", { p_client_id: payment.client_id });
+
+  // Void/reduce the matching QuickBooks payments (no-op if QuickBooks isn't connected); never throws.
+  await mirrorPaymentReversalToQuickBooks(db, profile.org_id, paymentId, qboLinks);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (db as any).from("client_activity").insert({
