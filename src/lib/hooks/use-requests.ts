@@ -56,7 +56,15 @@ export function useCreateRequest() {
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      const requestNumber = `MR-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+      // Atomic per-org counter — the old `Date.now().slice(-5)` suffix repeated
+      // every 100 seconds, so two requests could be handed the same number
+      // (same as the public submit path, which already uses this RPC).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: requestNumber, error: numberErr } = await (supabase.rpc as any)("next_entity_number", {
+        p_entity_type: "maintenance_request",
+        p_prefix: "MR",
+      });
+      if (numberErr || typeof requestNumber !== "string") throw numberErr ?? new Error("Failed to generate request number");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("maintenance_requests")

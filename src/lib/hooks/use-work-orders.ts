@@ -364,18 +364,22 @@ export function useBulkImportWorkOrders() {
         if (error?.code === "23505") {
           const { data: { user } } = await supabase.auth.getUser();
           const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
+          // Only the cells the CSV filled in: `row` fills every blank with a
+          // default ("open", "medium", null...), and writing those back reopened
+          // completed work orders and blanked descriptions/assets/due dates when
+          // a CSV was re-imported to update one field.
           await supabase.from("work_orders").update({
             title: row.title,
-            description: row.description,
-            status: row.status,
-            priority: row.priority,
-            wo_type: row.wo_type,
-            asset_id: row.asset_id,
-            asset_name: row.asset_name,
-            linked_entity_type: row.linked_entity_type,
-            assigned_to_name: row.assigned_to_name,
-            due_date: row.due_date,
-            category: row.category,
+            ...(r.description?.trim() ? { description: row.description } : {}),
+            ...(r.status?.trim() ? { status: row.status } : {}),
+            ...(r.priority?.trim() ? { priority: row.priority } : {}),
+            ...(row.wo_type ? { wo_type: row.wo_type } : {}),
+            ...(row.asset_id ? { asset_id: row.asset_id } : {}),
+            ...(row.asset_name ? { asset_name: row.asset_name } : {}),
+            ...(row.linked_entity_type ? { linked_entity_type: row.linked_entity_type } : {}),
+            ...(row.assigned_to_name ? { assigned_to_name: row.assigned_to_name } : {}),
+            ...(row.due_date ? { due_date: row.due_date } : {}),
+            ...(row.category ? { category: row.category } : {}),
           }).eq("work_order_number", row.work_order_number).eq("org_id", profile!.org_id).is("deleted_at", null);
         } else if (error) {
           throw error;
