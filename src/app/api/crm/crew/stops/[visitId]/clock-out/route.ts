@@ -151,6 +151,13 @@ export async function POST(
   // effects (invoice line, timeline row, automations).
   const openRows = stopRows.filter((r) => !r.clocked_out_at && r.status !== "completed");
   if (openRows.length === 0) {
+    // Every visit of the stop is already finished: this is a replay of a
+    // clock-out that landed (the offline queue retries after a lost response,
+    // or a double tap). Answer success, as the concurrent-race path below does —
+    // a 400 here left a failed "didn't sync" card for work that had saved.
+    if (stopRows.length > 0) {
+      return NextResponse.json({ visitIds: stopRows.map((r) => r.id), visits: stopRows, alreadyClockedOut: true });
+    }
     return NextResponse.json({ error: "Nothing to clock out for this stop" }, { status: 400 });
   }
 

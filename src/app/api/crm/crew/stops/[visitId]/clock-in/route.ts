@@ -169,6 +169,12 @@ export async function POST(
     .map((r) => r.id);
 
   if (siblingIds.length === 0) {
+    // The whole stop is already clocked in: a replay of a clock-in that landed
+    // (offline-queue retry after a lost response, double tap) — success, not a
+    // 400 that parks a "didn't sync" card on work that saved.
+    if (stopRows.length > 0) {
+      return NextResponse.json({ visitIds: stopRows.map((r) => r.id), visits: stopRows, alreadyClockedIn: true });
+    }
     return NextResponse.json({ error: "Nothing to clock in for this stop" }, { status: 400 });
   }
 

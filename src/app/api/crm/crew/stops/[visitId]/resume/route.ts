@@ -81,6 +81,15 @@ export async function POST(
     .filter((r) => r.clocked_in_at && !r.clocked_out_at && r.paused_at);
 
   if (pausedRows.length === 0) {
+    // Already resumed (a replayed or double-tapped Resume): success. The
+    // conditional write below already guarantees the break isn't added twice.
+    const running = (candidateRows as VisitRow[])
+      .filter((r) => effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor))
+      .filter((r) => stopKeyForVisit(toStopKeyInput(r)) === anchorKey)
+      .filter((r) => r.clocked_in_at && !r.clocked_out_at && !r.paused_at);
+    if (running.length > 0) {
+      return NextResponse.json({ visitIds: running.map((r) => r.id), visits: running, alreadyResumed: true });
+    }
     return NextResponse.json({ error: "Nothing to resume for this stop" }, { status: 400 });
   }
 
