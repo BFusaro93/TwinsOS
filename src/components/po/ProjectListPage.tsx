@@ -15,6 +15,7 @@ import { ProjectListPanel } from "./ProjectListPanel";
 import { ProjectDetailPanel } from "./ProjectDetailPanel";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { Button } from "@/components/ui/button";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   Table,
@@ -47,6 +48,7 @@ const PROJECT_COLUMNS: ColumnDef[] = [
 ];
 
 export function ProjectListPage() {
+  const { canWriteEquipt } = useRoleCapabilities();
   // Include archived projects in the management list so they can be unarchived
   const { data: projects, isLoading } = useProjects(true);
   const { selectedProjectId, setSelectedProjectId } = usePOStore();
@@ -249,10 +251,12 @@ export function ProjectListPage() {
                 <Maximize2 className="mr-1.5 h-3.5 w-3.5" />Table
               </Button>
             </div>
-            <Button size="sm" onClick={() => setNewProjectOpen(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Project
-            </Button>
+            {canWriteEquipt && (
+              <Button size="sm" onClick={() => setNewProjectOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                New Project
+              </Button>
+            )}
           </div>
         }
       />

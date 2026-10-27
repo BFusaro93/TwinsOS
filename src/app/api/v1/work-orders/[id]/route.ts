@@ -59,7 +59,35 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!parent || parent.org_id !== auth.orgId) return jsonError("Parent work order not found", 404);
   }
 
-  const assigneeIds = [...new Set([body.assignedToId, ...(body.assignedToIds ?? [])].filter((x): x is string => !!x))];
+  // assigned_to_id and assigned_to_ids/names are one assignee set and are
+  // always written together, primary first:
+  //   * assignedToIds given (with or without assignedToId): the set is the
+  //     union of both; the primary is the first entry (assignedToId wins when
+  //     it is non-null).
+  //   * only assignedToId given: a non-null id replaces the old primary and
+  //     keeps the existing co-assignees; null unassigns everyone.
+  // Previously sending only assignedToIds left assigned_to_id stale, and only
+  // assignedToId wiped the co-assignees.
+  const assignmentTouched = body.assignedToId !== undefined || body.assignedToIds !== undefined;
+  const suppliedIds = [...new Set([body.assignedToId, ...(body.assignedToIds ?? [])].filter((x): x is string => !!x))];
+  let assigneeIds = suppliedIds;
+  const carriedIds = new Set<string>();
+  if (assignmentTouched && body.assignedToIds === undefined && body.assignedToId) {
+    const { data: current } = await db
+      .from("work_orders")
+      .select("assigned_to_id, assigned_to_ids")
+      .eq("org_id", auth.orgId)
+      .eq("id", id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (current) {
+      const existing = Array.isArray(current.assigned_to_ids) ? (current.assigned_to_ids as string[]) : [];
+      for (const eid of existing) {
+        if (eid !== current.assigned_to_id && eid !== body.assignedToId) carriedIds.add(eid);
+      }
+      assigneeIds = [body.assignedToId, ...carriedIds];
+    }
+  }
   const employeeMap = new Map<string, string>();
   if (assigneeIds.length > 0) {
     const { data: employees } = await db
@@ -67,12 +95,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .select("id, org_id, first_name, last_name")
       .in("id", assigneeIds)
       .is("deleted_at", null);
-    for (const empId of assigneeIds) {
+    for (const empId of [...assigneeIds]) {
       const emp = (employees ?? []).find((e) => e.id === empId);
-      if (!emp || emp.org_id !== auth.orgId) return jsonError(`Employee ${empId} not found`, 404);
+      if (!emp || emp.org_id !== auth.orgId) {
+        // A carried-over co-assignee who has since been deleted just drops
+        // off; an id the caller supplied must exist.
+        if (carriedIds.has(empId)) {
+          assigneeIds = assigneeIds.filter((x) => x !== empId);
+          continue;
+        }
+        return jsonError(`Employee ${empId} not found`, 404);
+      }
       employeeMap.set(empId, `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim());
     }
   }
+  const primaryAssigneeId = assigneeIds[0] ?? null;
 
   const { data, error } = await db
     .from("work_orders")
@@ -85,15 +122,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.category !== undefined && { category: body.category }),
       ...(body.pmScheduleId !== undefined && { pm_schedule_id: body.pmScheduleId }),
       ...(body.parentWorkOrderId !== undefined && { parent_work_order_id: body.parentWorkOrderId }),
-      ...(body.assignedToId !== undefined && {
-        assigned_to_id: body.assignedToId,
-        // null unassigns — the denormalised name has to go with the id.
-        assigned_to_name: body.assignedToId ? (employeeMap.get(body.assignedToId) ?? null) : null,
-      }),
-      // Keep assigned_to_ids/names in sync with the primary assignee: any
-      // assignee change rewrites the arrays as the union of assignedToId and
-      // assignedToIds (primary first). A null assignedToId alone clears them.
-      ...((body.assignedToId !== undefined || body.assignedToIds !== undefined) && {
+      // Any assignee change rewrites the primary (id + denormalised name)
+      // and the arrays together — see the note above.
+      ...(assignmentTouched && {
+        assigned_to_id: primaryAssigneeId,
+        assigned_to_name: primaryAssigneeId ? (employeeMap.get(primaryAssigneeId) ?? null) : null,
         assigned_to_ids: assigneeIds,
         assigned_to_names: assigneeIds.map((aid) => employeeMap.get(aid) ?? ""),
       }),

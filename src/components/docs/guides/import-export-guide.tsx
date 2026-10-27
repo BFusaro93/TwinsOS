@@ -38,7 +38,7 @@ const DEDUPE_BEHAVIOR: [string, string, string][] = [
   ["Clients", "accountNumber, only when the row supplies one", "Existing client is updated with the new row's contact and address fields. Clients without an account number always insert as new — the org auto-assigns one."],
   ["Leads", "primaryEmail or primaryPhone against every existing non-deleted client", "No new record is created. Instead the matched client is tagged “imported-lead” and the row is counted separately as “matched,” not “created.”"],
   ["Contracts", "client + contract name + start date", "The row is skipped with a note — an existing contract is never overwritten. Clients are matched by exact name; a name shared by two clients, or not found, skips the row. Status defaults to draft, so set it to active in the file for contracts that should bill. Imports don\u2019t fire automations."],
-  ["Purchase Orders", "po_number (derived as PO-{year}-{csv PO #})", "The row is skipped outright — not merged, not counted as imported. Existing POs are never overwritten by a re-import."],
+  ["Purchase Orders", "po_number (derived as PO-{year}-{csv PO #})", "The PO is skipped and listed in the failed-rows summary (\u201calready exists\u201d) — not merged, not counted as imported. Existing POs are never overwritten by a re-import."],
 ];
 
 export function ImportExportGuide() {
@@ -333,6 +333,13 @@ export function ImportExportGuide() {
             defaults to <code>maintenance_part</code>). A line with neither a usable part number nor a
             name is skipped rather than inserted without a catalog reference — every PO line item
             must reference a Products catalog entry per this platform&apos;s data rules.
+          </li>
+          <li>
+            <strong>Quantities</strong> accept decimals (for example 2.5 gallons) and a blank cell
+            means 1. Maintenance parts must be whole numbers, and text or zero/negative quantities are
+            rejected. Every row that can&apos;t be imported — a duplicate PO, a bad quantity, a line
+            with no catalog match, or a line the database refused — is listed with its row number
+            and reason in the results summary instead of being dropped silently.
           </li>
           <li>
             When the resolved catalog entry has a part number, the importer also syncs it into CMMS
