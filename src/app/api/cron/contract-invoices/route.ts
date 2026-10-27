@@ -9,6 +9,7 @@ import {
   termSkipReason,
 } from "@/lib/contract-billing";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
 
@@ -92,29 +93,35 @@ export async function GET(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any;
 
-  const { data: contracts, error: fetchErr } = await sb
-    .from("crm_contracts")
-    .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at, default_terms, status)")
-    // A cancelled client's contract must not keep billing — generate.ts already
-    // treats cancelled clients (and deleted ones) as inactive for visits, but the
-    // invoicing paths only checked deleted_at, so a cancelled client kept getting
-    // draft invoices every period.
-    .is("clients.deleted_at", null)
-    .neq("clients.status", "cancelled")
-    .eq("is_active", true)
-    .eq("auto_generate", true)
-    // Only a contract the client has actually agreed to should be auto-billed.
-    // is_active/auto_generate alone aren't enough to gate this: both default
-    // to true on a brand-new contract, so a still-"draft"/"sent" (never
-    // signed) contract — or one the office marked "cancelled"/"expired" —
-    // would otherwise be picked up here the moment its billing day rolls
-    // around, since nothing else in this query looks at status at all.
-    .in("status", ["signed", "active"])
-    .is("deleted_at", null);
-
-  if (fetchErr) {
+  // Paged: this selects every org's billable contracts at once, and PostgREST
+  // silently caps a plain select at 1000 rows — past that, whichever contracts
+  // fell off the end were never billed, with no error and no log line.
+  let contracts: Record<string, unknown>[];
+  try {
+    contracts = await fetchAllRows<Record<string, unknown>>(() =>
+      sb
+        .from("crm_contracts")
+        .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at, default_terms, status)")
+        // A cancelled client's contract must not keep billing — generate.ts already
+        // treats cancelled clients (and deleted ones) as inactive for visits, but the
+        // invoicing paths only checked deleted_at, so a cancelled client kept getting
+        // draft invoices every period.
+        .is("clients.deleted_at", null)
+        .neq("clients.status", "cancelled")
+        .eq("is_active", true)
+        .eq("auto_generate", true)
+        // Only a contract the client has actually agreed to should be auto-billed.
+        // is_active/auto_generate alone aren't enough to gate this: both default
+        // to true on a brand-new contract, so a still-"draft"/"sent" (never
+        // signed) contract — or one the office marked "cancelled"/"expired" —
+        // would otherwise be picked up here the moment its billing day rolls
+        // around, since nothing else in this query looks at status at all.
+        .in("status", ["signed", "active"])
+        .is("deleted_at", null)
+    );
+  } catch (fetchErr) {
     console.error("[contract-invoices] fetch error:", fetchErr);
-    return NextResponse.json({ error: fetchErr.message }, { status: 500 });
+    return NextResponse.json({ error: fetchErr instanceof Error ? fetchErr.message : "fetch failed" }, { status: 500 });
   }
 
   // Filter to contracts due today for their own billing_frequency (see
