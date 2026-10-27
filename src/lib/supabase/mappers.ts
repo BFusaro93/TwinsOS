@@ -695,6 +695,8 @@ export function mapMaintenanceRequest(row: MaintenanceRequestRow): MaintenanceRe
     requestedByName: row.requested_by_name,
     linkedWorkOrderId: row.linked_work_order_id,
     linkedWorkOrderNumber: row.linked_work_order_number,
+    assignedToId: row.assigned_to_id ?? null,
+    assignedToName: row.assigned_to_name ?? null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     automationId: (row as any).automation_id ?? null,
     equipmentType: row.equipment_type ?? null,

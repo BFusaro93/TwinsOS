@@ -101,7 +101,7 @@ export function formatAction(action: AutomationAction): string {
     case "create_work_order":
       return `Create work order: "${action.title}" — ${action.priority} priority${action.assignedToName ? ` → ${action.assignedToName}` : ""}`;
     case "create_wo_request":
-      return `Create WO request: "${action.title}" — ${action.priority} priority`;
+      return `Create WO request: "${action.title}" — ${action.priority} priority${action.assignedToName ? ` → ${action.assignedToName}` : ""}`;
     case "create_requisition":
       return `Create purchase requisition${action.notes ? `: ${action.notes}` : ""}`;
     case "send_notification":

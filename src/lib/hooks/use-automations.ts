@@ -84,6 +84,8 @@ export function mapAutomation(row: AutomationRow): AutomationRule {
         type: "create_wo_request",
         title: (ac.title as string) ?? "",
         priority: ((ac.priority as string) ?? "medium") as "low" | "medium" | "high" | "urgent",
+        assignedToId: (ac.assigned_to_id as string) ?? "",
+        assignedToName: (ac.assigned_to as string) ?? "",
       };
       break;
     case "create_requisition":
@@ -163,6 +165,8 @@ function serialiseActionConfig(action: AutomationAction): Json {
       return {
         title: action.title,
         priority: action.priority,
+        assigned_to_id: action.assignedToId || null,
+        assigned_to: action.assignedToName,
       };
     case "create_requisition":
       return { notes: action.notes };

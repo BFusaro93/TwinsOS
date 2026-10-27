@@ -6,6 +6,13 @@
 -- value ("Casey"). Only UNAMBIGUOUS matches (exactly one active employee) are
 -- written; zero- or multi-match rows are left alone and reported via NOTICE.
 
+-- Requests had no assignee at all, so a "Create WO Request" automation could
+-- never hand one on. The automation now stamps it here and Convert to Work
+-- Order copies it onto the WO.
+ALTER TABLE maintenance_requests
+  ADD COLUMN IF NOT EXISTS assigned_to_id uuid REFERENCES crm_employees(id),
+  ADD COLUMN IF NOT EXISTS assigned_to_name text;
+
 DO $$
 DECLARE
   r record;
@@ -17,7 +24,7 @@ BEGIN
     SELECT id, org_id, name, btrim(action_config->>'assigned_to') AS txt
     FROM automations
     WHERE deleted_at IS NULL
-      AND action_type = 'create_work_order'
+      AND action_type IN ('create_work_order', 'create_wo_request')
       AND btrim(coalesce(action_config->>'assigned_to', '')) <> ''
       AND coalesce(action_config->>'assigned_to_id', '') = ''
   LOOP

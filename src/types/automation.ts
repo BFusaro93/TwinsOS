@@ -75,6 +75,9 @@ export interface CreateWORequestAction {
   type: "create_wo_request";
   title: string;
   priority: "low" | "medium" | "high" | "urgent";
+  /** crm_employees.id; carried onto the request and then its converted work order. "" = unassigned. */
+  assignedToId: string;
+  assignedToName: string;
 }
 export interface CreateRequisitionAction {
   type: "create_requisition";

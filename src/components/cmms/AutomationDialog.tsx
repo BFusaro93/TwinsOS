@@ -168,6 +168,8 @@ export function AutomationDialog({
       case "create_wo_request":
         setWoTitle(a.title);
         setWoPriority(a.priority);
+        setWoAssignedToId(a.assignedToId);
+        setWoAssignedToName(a.assignedToName);
         break;
       case "create_requisition":
         setReqNotes(a.notes);
@@ -241,7 +243,7 @@ export function AutomationDialog({
       case "create_work_order":
         return { type: "create_work_order", title: woTitle, priority: woPriority, assignedToId: woAssignedToId, assignedToName: woAssignedToName };
       case "create_wo_request":
-        return { type: "create_wo_request", title: woTitle, priority: woPriority };
+        return { type: "create_wo_request", title: woTitle, priority: woPriority, assignedToId: woAssignedToId, assignedToName: woAssignedToName };
       case "create_requisition":
         return { type: "create_requisition", notes: reqNotes };
       case "send_notification":
@@ -651,6 +653,35 @@ export function AutomationDialog({
                         <SelectItem value="urgent">Urgent</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="wo-assigned-to-req">
+                      Assigned To{" "}
+                      <span className="font-normal text-muted-foreground">(optional)</span>
+                    </Label>
+                    <Select
+                      value={woAssignedToId || "none"}
+                      onValueChange={(v) => {
+                        const id = v === "none" ? "" : v;
+                        setWoAssignedToId(id);
+                        setWoAssignedToName(employeeOptions.find((u) => u.id === id)?.name ?? "");
+                      }}
+                    >
+                      <SelectTrigger id="wo-assigned-to-req">
+                        <SelectValue placeholder="Unassigned" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Unassigned</SelectItem>
+                        {employeeOptions.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!woAssignedToId && woAssignedToName && (
+                      <p className="text-xs text-amber-600">
+                        Previously typed &ldquo;{woAssignedToName}&rdquo; &mdash; no matching employee. Pick one so requests and their work orders get assigned.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
