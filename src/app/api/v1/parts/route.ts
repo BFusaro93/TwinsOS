@@ -17,6 +17,9 @@ export async function GET(request: Request) {
     .eq("org_id", auth.orgId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
+    // created_at ties are routine (a bulk insert shares one transaction time), so
+    // offset paging needs a total order or pages repeat / skip rows.
+    .order("id", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) return jsonServerError("GET /api/v1/parts", error);
