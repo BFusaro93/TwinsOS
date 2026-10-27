@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
+import { propagateCrewToVisits } from "@/lib/visits/propagate-crew";
 
 const BodySchema = z.object({
   crewId: z.string().uuid().nullable(),
@@ -50,27 +51,8 @@ export async function POST(
     if (!crew) return NextResponse.json({ error: "Crew not found" }, { status: 404 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error, count } = await (supabase as any)
-    .from("crm_job_visits")
-    .update({ crew_id: crewId }, { count: "exact" })
-    .eq("job_id", jobId)
-    // Visits individually pinned to "no crew" stay unassigned — the job's
-    // crew change must not reach them.
-    .eq("crew_unassigned", false)
-    // A multi-crew stop's crews are set per visit — the job's default crew
-    // changing must not overwrite them.
-    .is("crew_group_id", null)
-    // Never reassign a stop that is mid-clock — it would split the stop.
-    .neq("status", "in_progress")
-    .is("clocked_in_at", null)
-    .neq("status", "completed")
-    .neq("status", "cancelled")
-    .neq("status", "skipped")
-    .gte("scheduled_date", fromDate)
-    .is("deleted_at", null);
+  const { updated, error } = await propagateCrewToVisits(supabase, { jobId, crewId, fromDate });
+  if (error) return NextResponse.json({ error }, { status: 500 });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json({ updated: count ?? 0 });
+  return NextResponse.json({ updated });
 }
