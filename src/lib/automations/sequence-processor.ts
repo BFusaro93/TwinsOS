@@ -701,7 +701,8 @@ async function runClaimedStep(
           client_id,
           field_def_id: customFieldId,
           value_text: isNumber ? null : value,
-          value_number: isNumber ? (Number(value) || null) : null,
+          // `Number(value) || null` turned a legitimate 0 into NULL.
+          value_number: isNumber && value.trim() !== "" && Number.isFinite(Number(value)) ? Number(value) : null,
         }, { onConflict: "client_id,field_def_id" }));
       detail = `${def?.name ?? "custom field"} → ${value}`;
     } else {

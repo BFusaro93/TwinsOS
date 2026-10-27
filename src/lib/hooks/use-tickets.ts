@@ -7,6 +7,8 @@ import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { toast } from "sonner";
 import { logger } from "@/lib/logger";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
+import type { BulkImportResult } from "@/lib/csv";
 import type { CRMTicket, NewTicketFormValues, TicketStatus } from "@/types/crm-tickets";
 
 const log = logger.child("use-tickets");
@@ -154,7 +156,7 @@ const TICKET_PRIORITIES = ["low", "normal", "high", "urgent"];
 export function useBulkImportTickets() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -163,39 +165,71 @@ export function useBulkImportTickets() {
       const clients = await fetchAllRows<{ id: string; display_name: string }>(() =>
         supabase.from("clients").select("id, display_name").is("deleted_at", null).order("id"),
       );
-      const byName = new Map(clients.map((c) => [c.display_name.trim().toLowerCase(), c.id]));
-
-      let created = 0;
-      let skipped = 0;
-
-      for (const r of rows) {
-        const subject = r.subject?.trim();
-        if (!subject) { skipped++; continue; }
-
-        const clientId = r.clientName?.trim() ? byName.get(r.clientName.trim().toLowerCase()) ?? null : null;
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (supabase as any).from("crm_tickets").insert({
-          created_by: user?.id ?? null,
-          type: TICKET_TYPES.includes(r.type?.trim().toLowerCase()) ? r.type.trim().toLowerCase() : "note",
-          client_id: clientId,
-          category: r.category?.trim() || null,
-          subject,
-          body: r.body?.trim() || null,
-          status: (() => {
-            // "On Hold" (space-separated, as a person would type it in a CSV)
-            // needs to match the "on_hold" status value, not just "on hold".
-            const normalized = r.status?.trim().toLowerCase().replace(/\s+/g, "_");
-            return TICKET_STATUSES.includes(normalized) ? normalized : "open";
-          })(),
-          priority: TICKET_PRIORITIES.includes(r.priority?.trim().toLowerCase()) ? r.priority.trim().toLowerCase() : "normal",
-          due_date: r.dueDate?.trim() || null,
-        });
-        if (error) throw error;
-        created++;
+      // Two clients can share a display name: a plain Map let the LAST one
+      // silently win, filing the ticket on the wrong client. Track every id per
+      // name and report ambiguous rows instead (the estimate/invoice importers do).
+      const idsByName = new Map<string, string[]>();
+      for (const c of clients) {
+        const key = c.display_name.trim().toLowerCase();
+        idsByName.set(key, [...(idsByName.get(key) ?? []), c.id]);
       }
 
-      return { created, skipped };
+      let succeeded = 0;
+      const failed: BulkImportResult["failed"] = [];
+
+      for (const [idx, r] of rows.entries()) {
+        const rowNum = idx + 1;
+        try {
+          const subject = r.subject?.trim();
+          if (!subject) { failed.push({ row: rowNum, error: "Missing required field: Subject" }); continue; }
+
+          const clientNameKey = r.clientName?.trim().toLowerCase() ?? "";
+          const nameMatches = clientNameKey ? idsByName.get(clientNameKey) ?? [] : [];
+          if (nameMatches.length > 1) {
+            failed.push({ row: rowNum, error: `"${subject}": more than one client is named "${r.clientName?.trim()}" — skipped` });
+            continue;
+          }
+          const clientId = nameMatches[0] ?? null;
+
+          // A due date typed M/D/YYYY (Excel's default) is not a valid Postgres
+          // date literal; normalize it, and report a non-date instead of letting
+          // the insert fail with an opaque error that used to abort the batch.
+          const dueDateRaw = r.dueDate?.trim() ?? "";
+          const dueDate = dueDateRaw ? normalizeCsvDate(dueDateRaw) : null;
+          if (dueDateRaw && !dueDate) {
+            failed.push({ row: rowNum, error: `"${subject}": due date "${dueDateRaw}" is not a valid date (use YYYY-MM-DD or M/D/YYYY)` });
+            continue;
+          }
+
+          // "On Hold" (space-separated, as a person would type it in a CSV)
+          // needs to match the "on_hold" status value, not just "on hold".
+          const normalizedStatus = r.status?.trim().toLowerCase().replace(/\s+/g, "_") ?? "";
+          const status = TICKET_STATUSES.includes(normalizedStatus) ? normalizedStatus : "open";
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error } = await (supabase as any).from("crm_tickets").insert({
+            created_by: user?.id ?? null,
+            type: TICKET_TYPES.includes(r.type?.trim().toLowerCase()) ? r.type.trim().toLowerCase() : "note",
+            client_id: clientId,
+            category: r.category?.trim() || null,
+            subject,
+            body: r.body?.trim() || null,
+            status,
+            // closed_at is only ever set by the app (no trigger): an imported
+            // closed ticket without it is missing from every closed-date report.
+            closed_at: status === "closed" ? new Date().toISOString() : null,
+            priority: TICKET_PRIORITIES.includes(r.priority?.trim().toLowerCase()) ? r.priority.trim().toLowerCase() : "normal",
+            due_date: dueDate,
+          });
+          // One bad row must not abort the batch after earlier rows were written.
+          if (error) { failed.push({ row: rowNum, error: `"${subject}": ${error.message}` }); continue; }
+          succeeded++;
+        } catch (err) {
+          failed.push({ row: rowNum, error: err instanceof Error ? err.message : "Unknown error" });
+        }
+      }
+
+      return { succeeded, failed };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });

@@ -77,6 +77,7 @@ export async function notifyStaffOfDepositExcess(
           .from("profiles")
           .select("id, email, name, notification_prefs")
           .eq("id", repUserId)
+          .neq("status", "inactive")
           .maybeSingle();
         if (rep) recipients = [...recipients, rep];
       }

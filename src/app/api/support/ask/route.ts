@@ -135,6 +135,11 @@ export async function POST(req: NextRequest) {
       typeof t.content === "string" && t.content.trim().length > 0)
     .slice(-10)
     .map((t) => ({ role: t.role, content: t.content.slice(0, 4000) }));
+  // The Messages API requires the conversation to open with a user turn. After
+  // a failed request (the client keeps that question but drops its reply) or a
+  // window cut mid-pair, the capped history can start on an assistant turn,
+  // which made every later question in that chat fail with a 400.
+  while (history.length > 0 && history[0].role !== "user") history.shift();
 
   // Cap Ask AI at 100 requests/org/day so no single tenant can run up the
   // shared ANTHROPIC_API_KEY bill. Atomic RPC avoids a check-then-write race.

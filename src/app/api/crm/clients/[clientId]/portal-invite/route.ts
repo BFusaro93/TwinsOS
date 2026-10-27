@@ -32,8 +32,15 @@ export async function POST(
   }
 
   const { clientId } = await params;
-  const { email } = await req.json();
+  const body = (await req.json().catch(() => null)) as { email?: unknown } | null;
+  // Trim + lowercase: a pasted " Jane@X.com " would otherwise fail the Resend
+  // send, and the portal login (Supabase Auth lowercases emails) wouldn't match
+  // the mixed-case address stored on the invite.
+  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return NextResponse.json({ error: "Enter a valid email address" }, { status: 400 });
+  }
 
   const { data: client } = await supabase
     .from("clients")

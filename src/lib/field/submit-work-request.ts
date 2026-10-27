@@ -111,6 +111,7 @@ export async function submitWorkRequest(
         .from("profiles")
         .select("email, name, notification_prefs")
         .eq("org_id", org.id)
+        .neq("status", "inactive")
         .in("role", ["admin", "manager"]);
 
       const eligible = (recipients ?? []).filter((p: { email: string | null; notification_prefs: Record<string, unknown> | null }) => {

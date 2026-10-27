@@ -43,7 +43,9 @@ export async function notifyStaffOfEstimateDecision(
         .from("profiles")
         .select("id, email, name, notification_prefs")
         .eq("id", repUserId)
-        .single();
+        // A deactivated login must not keep getting client-decision emails.
+        .neq("status", "inactive")
+        .maybeSingle();
       if (rep) recipients = [...recipients, rep];
     }
   }

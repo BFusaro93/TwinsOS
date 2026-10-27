@@ -680,12 +680,14 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                 )
               }
               onImport={async (rows) => {
-                const { created, skipped } = await bulkImportTickets(rows);
-                if (skipped > 0) {
-                  toast.warning(`Imported ${created} ticket${created !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (missing subject).`);
+                const result = await bulkImportTickets(rows);
+                const { succeeded, failed } = result;
+                if (failed.length > 0) {
+                  toast.warning(`Imported ${succeeded} ticket${succeeded !== 1 ? "s" : ""}. ${failed.length} row${failed.length !== 1 ? "s" : ""} failed — see details below.`);
                 } else {
-                  toast.success(`Successfully imported ${created} ticket${created !== 1 ? "s" : ""}.`);
+                  toast.success(`Successfully imported ${succeeded} ticket${succeeded !== 1 ? "s" : ""}.`);
                 }
+                return result;
               }}
             />
             {canAdd && (

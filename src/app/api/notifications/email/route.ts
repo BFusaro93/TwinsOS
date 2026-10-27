@@ -264,6 +264,7 @@ export async function POST(request: Request) {
       .select("id")
       .eq("org_id", callerProfile.org_id)
       .in("role", ["admin", "manager"])
+      .neq("status", "inactive")
       .neq("id", user.id);
     directRecipientIds.push(...(managers ?? []).map((p: { id: string }) => p.id));
   }
