@@ -11,7 +11,7 @@ import {
 const PAIRED_EVENTS: [string, string][] = [
   ["Work order assigned", "You're set as the assignee on a work order."],
   ["Work order status changed", "A work order you're watching changes status."],
-  ["Work order overdue", "A work order passes its due date without being closed."],
+  ["Work order overdue", "An open or in-progress work order passes its due date. The email is one daily digest to the work order's assignees and to admins and managers (all overdue orders), once per due date."],
   ["Work order comment", "Someone comments on a work order you're involved with."],
   ["Requisition approved", "A requisition you submitted is approved."],
   ["Requisition rejected", "A requisition you submitted is rejected."],
@@ -26,8 +26,8 @@ const PAIRED_EVENTS: [string, string][] = [
   ["Ticket comment", "Someone comments on a ticket you're involved with."],
   ["Contract expiring", "A contract is approaching its expiration date."],
   ["Warranty expiring", "A warranty for one of your clients ends within 30 days — one reminder per end date. Goes to the client's sales rep, or to admins (in-app) when the client has none."],
-  ["Low stock alert", "A part's quantity on hand drops to or below its minimum."],
-  ["PM schedule due", "A preventive-maintenance schedule's next-due date has passed."],
+  ["Low stock alert", "A part or stocked material's quantity on hand drops to or below its minimum. The email is one daily digest to admins, managers and purchasers, sent once per item until it is restocked above the minimum."],
+  ["PM schedule due", "A preventive-maintenance schedule is due within 7 days or overdue and has no open work order. The email (off by default) is one daily digest to admins, managers and technicians, once per due date."],
   ["New maintenance request", "A new maintenance request is submitted."],
 ];
 

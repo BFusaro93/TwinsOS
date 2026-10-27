@@ -267,7 +267,11 @@ export function AutomationsGuide() {
           </li>
           <li>
             <strong>Require approval before sending</strong> — holds the email in a pending state for a
-            person to review and release, instead of sending automatically.
+            person to review and release, instead of sending automatically. Text-message steps work the
+            same way, with one addition: texts only go out between 8:00 AM and 9:00 PM in your
+            organization&apos;s time zone, so approving a text at night shows &quot;Approved — will send
+            tomorrow at 8:00 AM&quot; and it is sent then (opt-out, do-not-text and bounce checks run again
+            at the moment it actually sends).
           </li>
         </ul>
       </Section>
