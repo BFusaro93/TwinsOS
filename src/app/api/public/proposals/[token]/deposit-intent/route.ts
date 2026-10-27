@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
@@ -47,6 +48,13 @@ export async function POST(
   }
 
   const { token } = await params;
+
+  // Unauthenticated endpoint that creates Stripe objects: throttle per IP+token
+  // (fails open if the limiter itself errors).
+  const allowed = await checkAuthRateLimit(`deposit-intent:${getClientIp(_req)}:${token.slice(0, 16)}`, 20, 600);
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many attempts. Please wait a few minutes and try again." }, { status: 429 });
+  }
   const parsed = BodySchema.safeParse(await _req.json().catch(() => ({})));
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid payment method" }, { status: 400 });

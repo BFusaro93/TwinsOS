@@ -7,6 +7,9 @@ import { mapJob, mapVisit } from "./use-crm-jobs";
 import type { CRMJob, CRMJobVisit, StormEvent, StormEventStatus, SnowRoute, SnowRouteStop } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { loadContractsById, isSnowContractEnded } from "./use-snow-invoicing";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
 
@@ -59,8 +62,9 @@ function mapSnowRouteStop(row: any): SnowRouteStop {
 // ── snow jobs (standing on-demand snow jobs per client) ─────────────────────
 
 export function useSnowJobs() {
+  const timeZone = useOrgTimeZone();
   return useQuery({
-    queryKey: ["crm-jobs", "snow"],
+    queryKey: ["crm-jobs", "snow", timeZone],
     queryFn: async () => {
       const supabase = createClient();
       // Paged: PostgREST caps a response at 1000 rows.
@@ -92,8 +96,22 @@ export function useSnowJobs() {
       // Same for a client who has since cancelled or been deleted: the recurring
       // generator already stops serving them (excludeInactiveParents), so a storm
       // must not send a crew (and an invoice) there either.
+      // A contract-linked snow job whose contract has ended (cancelled / expired /
+      // inactive / deleted / past end_date) is no longer served, so it must not be
+      // offered for dispatch — same "ended" test as complete-visit-side-effects.
+      // Visits that already exist or completed are untouched and still bill via
+      // Snow Invoicing, which reads visits rather than this list.
+      const contractIds = [...new Set(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (data as any[]).map((r) => r.contract_id as string | null).filter((c): c is string => !!c)
+      )];
+      const contractById = await loadContractsById(supabase, contractIds);
+      const today = todayInZone(timeZone);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data.filter((row: any) => !["lead", "lost", "cancelled"].includes(row.clients?.status) && !row.clients?.deleted_at).map((row: any) => ({
+      const contractOk = (row: any): boolean =>
+        !row.contract_id || !isSnowContractEnded(contractById.get(row.contract_id), today);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data.filter((row: any) => contractOk(row) && !["lead", "lost", "cancelled"].includes(row.clients?.status) && !row.clients?.deleted_at).map((row: any) => ({
         ...mapJob({
           ...row,
           // Same resolution order as the main dispatch board, the crew app and
