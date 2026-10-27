@@ -172,6 +172,17 @@ export function AutomationsGuide() {
             ))}
           </tbody>
         </Table>
+        <p>
+          <strong>Custom field conditions.</strong> The &quot;Custom field&quot; condition (available in trigger
+          conditions, stop conditions and If Branches) lets you pick one of your client custom fields, then compare
+          it. Text fields offer equals, not equals, contains, does not contain, is set and is not set; number fields
+          offer equals, not equals, greater/less than (or equal to), is set and is not set. It reads the client&apos;s
+          saved value when the trigger fires and again each time a stop condition or If Branch is checked. A client
+          with no value only matches &quot;is not set&quot;; every other comparison is not met. If the field is
+          deleted, the condition is never met and the editor shows &quot;Field deleted&quot; so you can pick another.
+          If you change a field&apos;s type, the stored value is read as the new type, and a value that does not fit
+          counts as empty.
+        </p>
         <Callout>
           <strong>Why Stop Conditions matter.</strong> A sequence can run over days or weeks (Wait
           events add real delay). If a client cancels, a lead converts, or a ticket gets closed
