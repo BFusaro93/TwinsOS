@@ -238,6 +238,11 @@ export function useUpdateProduct() {
   return useMutation({
     mutationFn: async ({ id, ...input }: ProductUpdateInput) => {
       const supabase = createClient();
+      // The category BEFORE this edit: moving a product into / out of
+      // maintenance_part has to create / retire its CMMS Parts mirror (below).
+      const { data: beforeRow } = input.category !== undefined
+        ? await supabase.from("product_items").select("category").eq("id", id).maybeSingle()
+        : { data: null };
       const { data, error } = await supabase
         .from("product_items")
         .update({
@@ -269,6 +274,63 @@ export function useUpdateProduct() {
         .select()
         .single();
       if (error) throw error;
+
+      // Category moved INTO maintenance_part: the product needs its CMMS parts
+      // row, or goods receiving updates the catalog stock but nothing shows in
+      // Parts / on work orders. Moved OUT: retire the mirror so a live part
+      // doesn't keep claiming stock for a product that is no longer a part.
+      // (The public API's PATCH /products does the same.)
+      const wasMaint = beforeRow?.category === "maintenance_part";
+      const isMaint = data.category === "maintenance_part";
+      if (beforeRow && isMaint && !wasMaint) {
+        const { data: existingPart } = await supabase
+          .from("parts")
+          .select("id")
+          .eq("product_item_id", id)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (!existingPart) {
+          // An unlinked part with the same part number is the same physical part — adopt it.
+          const { data: samePart } = data.part_number
+            ? await supabase
+                .from("parts")
+                .select("id, product_item_id")
+                .eq("org_id", data.org_id)
+                .eq("part_number", data.part_number)
+                .is("deleted_at", null)
+                .maybeSingle()
+            : { data: null };
+          const { error: mirrorErr } = samePart
+            ? samePart.product_item_id
+              ? { error: { message: `part number "${data.part_number}" already belongs to a different product` } }
+              : await supabase.from("parts").update({ product_item_id: id }).eq("id", samePart.id)
+            : await supabase.from("parts").insert({
+                name: data.name,
+                part_number: data.part_number || "",
+                description: data.description || "",
+                category: data.part_category || "maintenance_part",
+                unit_cost: data.unit_cost,
+                quantity_on_hand: Math.max(0, Math.round(Number(data.quantity_on_hand ?? 0))),
+                minimum_stock: data.minimum_stock ?? 0,
+                vendor_id: data.vendor_id,
+                vendor_name: data.vendor_name || "",
+                product_item_id: id,
+                is_inventory: data.is_inventory,
+              });
+          if (mirrorErr) {
+            toast.warning(`Product saved, but its CMMS part could not be created: ${mirrorErr.message}`);
+          }
+        }
+      } else if (beforeRow && wasMaint && !isMaint) {
+        const { error: retireErr } = await supabase
+          .from("parts")
+          .update({ deleted_at: new Date().toISOString(), product_item_id: null })
+          .eq("product_item_id", id)
+          .is("deleted_at", null);
+        if (retireErr) {
+          toast.warning(`Product saved, but its CMMS part could not be retired: ${retireErr.message}`);
+        }
+      }
 
       // Sync relevant fields to the linked Part record (if maintenance_part)
       const syncFields: Record<string, unknown> = {};
