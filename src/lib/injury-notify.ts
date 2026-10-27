@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
 import { resolveAssigneeId } from "@/lib/ticket-notify";
-import { EMAIL_FROM, escapeHtml } from "@/lib/email/send";
+import { EMAIL_FROM, escapeHtml, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { sendPushToUser } from "@/lib/notifications/send-push";
 
 // Alerts the supervisor when an injury / illness / near miss is reported, so the
@@ -89,7 +89,7 @@ export async function notifyInjuryReported(
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
     const resend = new Resend(resendKey);
     for (const p of emailable) {
-      await resend.emails.send({
+      await sendEmailRetryingRateLimit(resend, {
         from: EMAIL_FROM,
         to: p.email,
         subject: title,

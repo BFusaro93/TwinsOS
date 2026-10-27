@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
-import { EMAIL_FROM_EQUIPT, escapeHtml } from "@/lib/email/send";
+import { EMAIL_FROM_EQUIPT, escapeHtml, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { sendPushToUser } from "@/lib/notifications/send-push";
 
 type NotifType =
@@ -502,7 +502,7 @@ export async function POST(request: Request) {
   for (const profile of eligible) {
     const isAdminBroadcast = adminRecipientIds.includes(profile.id);
     const { subject, html } = buildEmail((profile as { name?: string | null }).name ?? null, isAdminBroadcast);
-    const result = await resend.emails.send({ from: FROM, to: profile.email as string, subject, html });
+    const result = await sendEmailRetryingRateLimit(resend, { from: FROM, to: profile.email as string, subject, html });
     if (!result.error) sent++;
   }
 

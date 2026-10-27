@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
-import { EMAIL_FROM } from "@/lib/email/send";
+import { EMAIL_FROM, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
 
 /**
@@ -97,7 +97,7 @@ export async function notifyStaffOfFailedDeposit(
   const link = `${siteUrl}/crm/estimates/${estimateId}`;
 
   for (const p of emailEligible) {
-    await resend.emails.send({
+    await sendEmailRetryingRateLimit(resend, {
       from: EMAIL_FROM,
       to: p.email,
       subject: title,

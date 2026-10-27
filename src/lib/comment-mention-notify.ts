@@ -1,5 +1,5 @@
 import { Resend } from "resend";
-import { EMAIL_FROM, escapeHtml } from "@/lib/email/send";
+import { EMAIL_FROM, escapeHtml, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { sendPushToUser } from "@/lib/notifications/send-push";
 import { recordPath } from "@/lib/notifications/record-links";
 import { stripMentionTokens } from "@/lib/mentions";
@@ -72,7 +72,7 @@ export async function notifyMentions(
         ? `<a href="${siteUrl}${path}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Comment</a>`
         : "";
       for (const p of emailEligible) {
-        await resend.emails.send({
+        await sendEmailRetryingRateLimit(resend, {
           from: EMAIL_FROM,
           to: p.email,
           subject: title,

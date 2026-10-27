@@ -1,4 +1,4 @@
-import { EMAIL_FROM_EQUIPT } from "@/lib/email/send";
+import { EMAIL_FROM_EQUIPT, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { createServiceClient } from "@/lib/supabase/server";
 import { fireEventAutomations, type AdminClient } from "@/lib/automations/cmms-automation-actions";
@@ -126,9 +126,12 @@ export async function submitWorkRequest(
         const subject = `New maintenance request: ${input.title}`;
         const link = `${siteUrl}/cmms/requests?id=${mr.id}`;
 
-        await Promise.allSettled(
-          eligible.map((p: { email: string; name: string | null }) =>
-            resend.emails.send({
+        // One at a time with a rate-limit retry: firing every recipient at once
+        // tripped the provider's 2 requests/second limit, and those rejections
+        // resolve (not throw), so managers past the second never got the email.
+        for (const p of eligible as { email: string; name: string | null }[]) {
+          try {
+            await sendEmailRetryingRateLimit(resend, {
               from: EMAIL_FROM_EQUIPT,
               to: p.email,
               subject,
@@ -138,9 +141,11 @@ export async function submitWorkRequest(
                 <p style="margin:0 0 24px;color:#475569">${escapeHtml(input.requestedBy)} submitted: <strong>${escapeHtml(String(requestNumber))} — ${escapeHtml(input.title)}</strong>.</p>
                 <a href="${link}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Review Request</a>
               </div>`,
-            })
-          )
-        );
+            });
+          } catch {
+            // Non-fatal — one recipient failing shouldn't block the others
+          }
+        }
       }
     }
   } catch {

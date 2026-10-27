@@ -1,6 +1,6 @@
 import "server-only";
 import { Resend } from "resend";
-import { EMAIL_FROM, escapeHtml } from "@/lib/email/send";
+import { EMAIL_FROM, escapeHtml, sendEmailRetryingRateLimit } from "@/lib/email/send";
 
 // Emails Landscapt support staff (members of the platform staff org —
 // organizations.is_platform_staff_org) when a customer org sends feedback or
@@ -47,9 +47,11 @@ async function emailStaff(
 
   let sent = 0;
   for (const r of recipients) {
-    await resend.emails
-      .send({ from: EMAIL_FROM, to: r.email, subject: opts.subject, html })
-      .then(() => { sent++; })
+    await sendEmailRetryingRateLimit(resend, { from: EMAIL_FROM, to: r.email, subject: opts.subject.replace(/\s+/g, " ").trim(), html })
+      // A rejected send resolves with `error` rather than throwing, so count
+      // only a send that actually went out (a "0 sent" run is retried by the
+      // support-chat cron).
+      .then((res) => { if (!res.error) sent++; })
       .catch(() => {
         // Non-fatal — one recipient failing shouldn't block the others
       });

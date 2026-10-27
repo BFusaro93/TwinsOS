@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
-import { EMAIL_FROM } from "@/lib/email/send";
+import { EMAIL_FROM, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { renderEstimatePDF } from "@/lib/estimate-pdf";
 import { escapeHtml } from "@/lib/utils/escape-html";
 
@@ -103,7 +103,7 @@ export async function notifyStaffOfEstimateDecision(
   }
 
   for (const p of emailEligible) {
-    await resend.emails.send({
+    await sendEmailRetryingRateLimit(resend, {
       from: EMAIL_FROM,
       to: p.email,
       subject: title,
