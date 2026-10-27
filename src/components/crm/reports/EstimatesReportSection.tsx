@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery } from "@/lib/hooks/use-query";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { createClient } from "@/lib/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -137,20 +138,29 @@ function useEstimatesReportData(rangeStart: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sb = supabase as any;
 
-      const [estRes, liRes] = await Promise.all([
-        sb
-          .from("estimates")
-          .select("id, estimate_number, stage, total_price_cents:total_cents, created_at, description, clients(display_name)")
-          .is("deleted_at", null)
-          .gte("created_at", rangeStart),
-        sb
-          .from("estimate_line_items")
-          .select("id, estimate_id, service_name, status, qty, rate_cents, total_cents, direct_cost_cents:total_cost_cents, estimates(stage, created_at)")
-          .is("deleted_at", null),
+      // Paged (PostgREST caps one response at 1000 rows without an error), and
+      // the line-item range is applied in the database through an inner join:
+      // fetching every line item ever and filtering by estimate date here meant
+      // the 1000-row cap was spent on rows the filter then threw away.
+      const [estimatesAll, lineItemsAll] = await Promise.all([
+        fetchAllRows<RawEstimate>(() =>
+          sb
+            .from("estimates")
+            .select("id, estimate_number, stage, total_price_cents:total_cents, created_at, description, clients(display_name)")
+            .is("deleted_at", null)
+            .gte("created_at", rangeStart)
+        ),
+        fetchAllRows<RawLineItem>(() =>
+          sb
+            .from("estimate_line_items")
+            .select("id, estimate_id, service_name, status, qty, rate_cents, total_cents, direct_cost_cents:total_cost_cents, estimates!inner(stage, created_at)")
+            .is("deleted_at", null)
+            .gte("estimates.created_at", rangeStart)
+        ),
       ]);
 
-      const estimates: RawEstimate[] = estRes.data ?? [];
-      const lineItems: RawLineItem[] = (liRes.data ?? []).filter(
+      const estimates: RawEstimate[] = estimatesAll;
+      const lineItems: RawLineItem[] = lineItemsAll.filter(
         (li: RawLineItem) => li.estimates && li.estimates.created_at >= rangeStart
       );
 
