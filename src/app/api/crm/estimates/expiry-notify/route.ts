@@ -106,12 +106,17 @@ export async function GET(req: NextRequest) {
     });
 
     try {
-      await resend.emails.send({
+      const { error: sendErr } = await resend.emails.send({
         from: orgEmailFrom(orgName),
         to: profile.email,
         subject: `Estimate #${estimateNum} ${expiryPhrase(daysLeft)} — ${clientName}`,
         html,
       });
+      // The Resend SDK reports a rejected send (rate limit, bad address) in
+      // `error` rather than throwing. Falling through stamped
+      // expiry_notified_at on a reminder that never went out, so tomorrow's run
+      // skipped it and nobody was ever told the estimate lapsed.
+      if (sendErr) continue;
       notified++;
       await supabase
         .from("estimates")
