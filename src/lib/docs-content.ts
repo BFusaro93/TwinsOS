@@ -1879,6 +1879,26 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "On the Crew App's My Schedule screen tap Edit Crew. Mark 'Not working' for someone who is out (they're skipped by Start Day and Start Job), tap Clock In for a late arrival, 'Left for the day' for someone leaving early, and Back if they return the same day (the time away comes off as an unpaid break). The office can fix anything afterward on Report Center > Payroll, or with Edit Job Times on the Dispatch Board.",
       },
       {
+        q: "Can the crew leader add someone from another crew for the day?",
+        a: "Yes. On the Crew App's My Schedule screen tap Edit Crew, then use the 'Add someone to my crew today' picker at the bottom, choose the person and tap Add. It lists people from the company's other crews who aren't already on yours today. They're moved onto your crew for today only (the same one-day move the Dispatch Board's Team Assignment makes), clocked in like a late arrival, and added to the running job's punches if a job is in progress. They return to their usual crew tomorrow. Only people who are on some crew's roster can be added; add anyone else under Team > Crews first.",
+      },
+      {
+        q: "How do I assign a job straight to one person instead of a crew?",
+        a: "Landscapt > Team > Employees > open the person > Edit > User Settings > tick 'Schedule Jobs Directly' and save. That person then appears by name in every crew dropdown (new job, Edit Job, the visit panel and the Dispatch Board) and you assign to them like a crew. Behind the scenes they get their own one-person crew; if their login is linked to the employee and isn't already attached to another crew, it's attached to that crew so they see the jobs in the Crew App. Unticking the box (or deactivating the employee) retires that crew: it stops appearing in dropdowns but past jobs keep their history. A person already on a regular crew can't also be on a second crew's standing roster on the same days, so for them add the personal crew's day through Team Assignment or Edit Crew when they work it.",
+      },
+      {
+        q: "Why does an office login show a My Schedule tile on the home screen?",
+        a: "Because that login is attached to a crew (Team > Crews > Linked Login, or automatically through 'Schedule Jobs Directly'), and the crew has a visit today, or a stop still clocked in from an earlier day. The tile opens the Crew App's My Schedule, so an owner or office employee who goes into the field doesn't need a second shared crew login. On a day with nothing assigned the tile is hidden. Shared crew logins always see My Schedule on their own home screen.",
+      },
+      {
+        q: "Why can't a crew login clock in or out, or edit its crew?",
+        a: "The Crew App finds the crew's stops, roster and day clock by the crew its login is attached to. If the login's crew has no jobs or visits assigned to it, or the jobs sit on a different (for example inactive or duplicate) crew, the schedule looks empty and clock in/out is refused as not assigned; an empty roster also leaves Edit Crew with no one to show. Check Team > Crews that the login is linked to one active crew, that the crew has members under Team Assignments, and that the jobs are assigned to that crew (Edit Job > Crew). Each crew can have only one linked login.",
+      },
+      {
+        q: "Does the audit trail show which crew a job or visit moved from and to?",
+        a: "Yes. A crew change on a job or visit now reads like 'crew: Maintenance 1 → Test Crew' on the visit's Audit tab and the job's Audit Trail, with who made the change and when ('Unassigned' shows when a side was empty). Entries logged before this change say only 'crew changed'.",
+      },
+      {
         q: "Where do I get crew hours for payroll?",
         a: "Landscapt > Reports > Payroll tab (admins and any role with the \"View & Edit Payroll Report\" permission, under Report Access in the role editor; other users don't see the tab). Pick a period (up to 62 days, with This week / Last week / Last 2 weeks shortcuts), expand an employee to see each day, and correct clock-in/out times, unpaid break minutes or hours, add extra hours (shop time, PTO) with a note, then Save. Export as Excel (totals + daily), CSV or PDF. Corrections only change the Payroll report; recorded shifts and Job Costing are untouched. Amber 'check' badges mark days that were never ended, have an open job punch, or had no Start Day.",
       },

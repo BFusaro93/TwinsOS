@@ -14,7 +14,8 @@ import { useModuleAccess, useAddonAccess } from "@/lib/hooks/use-module-access";
 import { useCrmAccess } from "@/lib/hooks/use-permissions";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
-import { useMyCrewInfo } from "@/lib/hooks/use-crew-app";
+import { useMyCrewInfo, useMyCrewVisits } from "@/lib/hooks/use-crew-app";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { parseHomeShortcuts, getHomeShortcutIcon } from "@/lib/home-shortcuts";
 
 /**
@@ -140,8 +141,13 @@ export default function HomePage() {
   const { data: orgSettings } = useOrgSettings();
   // A regular (office) login can be attached to a crew in Team settings; those
   // users get the same My Schedule entry the shared crew logins have, so they
-  // don't need a second login to work in the field.
+  // don't need a second login to work in the field — but only on a day they
+  // actually have a visit: today's, or a stop still clocked into from an
+  // earlier day (the same list My Schedule itself shows).
   const { data: myCrew } = useMyCrewInfo();
+  const { today: orgToday } = useOrgDates();
+  const { data: myVisitsToday = [] } = useMyCrewVisits(orgToday(), true);
+  const hasVisitToday = !!myCrew && myVisitsToday.some((v) => v.status !== "cancelled" && v.status !== "skipped");
   const shortcuts = parseHomeShortcuts(orgSettings?.customizations);
   usePendingPlanRedirect();
 
@@ -173,7 +179,7 @@ export default function HomePage() {
 
       {/* Primary app boxes */}
       <div className="flex w-full max-w-6xl flex-wrap justify-center gap-5">
-        {myCrew && (
+        {hasVisitToday && (
           <Link href="/crm/crew" className={INTERNAL_BOX}>
             <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-500 dark:text-brand-400 transition-colors group-hover:bg-brand-100 dark:group-hover:bg-brand-900/40">
               <CalendarCheck className="h-8 w-8" />

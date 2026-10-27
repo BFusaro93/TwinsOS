@@ -63,6 +63,14 @@ export function CrewAppGuide() {
           them — no clients list, no invoices, no estimates, and no sidebar full of office screens.
         </p>
         <p>
+          <strong>Office staff in the field.</strong> An owner or office employee doesn&apos;t need a
+          separate crew login. When their own login is attached to a crew (Team → Crews → Linked
+          Login, or automatically by ticking <strong>Schedule Jobs Directly</strong> on their
+          employee record), the regular home screen shows a <strong>My Schedule</strong> tile on any
+          day that crew has a visit &mdash; or a stop still clocked in from an earlier day &mdash; and
+          hides it on days with nothing assigned.
+        </p>
+        <p>
           It runs in the phone&apos;s browser, so there&apos;s nothing to download from an app store.
           It&apos;s also an installable web app: have crews use the browser&apos;s{" "}
           <strong>Add to Home Screen</strong> (iPhone Safari) or <strong>Install app</strong>{" "}
@@ -229,6 +237,14 @@ export function CrewAppGuide() {
             and the time they were away is taken off as an unpaid break.
           </li>
         </ul>
+        <p>
+          <strong>Someone from another crew is helping today: Add someone to my crew today.</strong> At
+          the bottom of Edit Crew, pick the person from the list and tap <strong>Add</strong>. The list
+          shows people on the company&apos;s other crews who aren&apos;t already on yours today. They
+          join your crew for today only (the same one-day move the dispatch board&apos;s Team
+          Assignment makes), are clocked in like a late arrival, and join the running job&apos;s
+          punches if a job is in progress. Tomorrow they are back on their usual crew.
+        </p>
         <Callout>
           The day clock is for the <strong>crew leader&apos;s login</strong> &mdash; the crew login (or
           the regular user linked to the crew), and only for that crew&apos;s own roster. Office staff
