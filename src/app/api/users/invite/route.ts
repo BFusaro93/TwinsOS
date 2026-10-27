@@ -57,7 +57,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { email, name, role } = body;
+  const { email: rawEmail, name, role } = body;
+  // Trimmed once and used everywhere: the untrimmed value (a pasted address with
+  // a trailing space passes the format check below) was sent to the auth API and
+  // to Resend, which reject it, so the invite failed with a generic 500.
+  const email = typeof rawEmail === "string" ? rawEmail.trim() : rawEmail;
   if (typeof email !== "string" || typeof name !== "string" || typeof role !== "string" || !email.trim() || !name.trim() || !role) {
     return NextResponse.json({ error: "email, name, and role are required" }, { status: 400 });
   }
@@ -177,7 +181,7 @@ export async function POST(request: Request) {
         id: linkData.user.id,
         org_id: callerProfile.org_id,
         name,
-        email: email.trim(),
+        email,
         role,
         status: "invited",
       },
