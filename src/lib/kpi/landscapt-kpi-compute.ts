@@ -257,6 +257,7 @@ async function computePayments(supabase: Client, w: YearWindow): Promise<Values>
       .gte("payment_date", w.from)
       .lte("payment_date", w.to)
       .order("payment_date", { ascending: true })
+      .order("id")
       .range(from, to)
   );
   if (rows.length === 0) return { cash_collected_ytd: null };
@@ -399,6 +400,7 @@ async function computeClients(supabase: Client, w: YearWindow): Promise<Values> 
         .select("id, account_type, status, created_at, client_since, closed_at, source, referred_by, referred_by_client_id")
         .is("deleted_at", null)
         .order("created_at", { ascending: true })
+        .order("id")
         .range(from, to)
     ),
     fetchAll<MaintenanceJobRow>((from, to) =>
@@ -408,6 +410,7 @@ async function computeClients(supabase: Client, w: YearWindow): Promise<Values> 
         .in("job_type", MAINTENANCE_JOB_TYPES)
         .is("deleted_at", null)
         .order("created_at", { ascending: true })
+        .order("id")
         .range(from, to)
     ),
   ]);
@@ -565,6 +568,7 @@ async function computeTimesheets(supabase: Client, w: YearWindow): Promise<Value
       .lte("work_date", w.to)
       .not("hours", "is", null)
       .order("work_date", { ascending: true })
+      .order("id")
       .range(from, to)
   );
 
@@ -648,6 +652,7 @@ async function computeTickets(supabase: Client, w: YearWindow): Promise<Values> 
         .gte("closed_at", w.fromInstant)
         .lt("closed_at", w.endInstantExclusive)
         .order("closed_at", { ascending: true })
+        .order("id")
         .range(from, to)
     ),
     supabase
