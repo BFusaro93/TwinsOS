@@ -5,6 +5,7 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
+import { escapeCsvCell } from "@/lib/csv";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { isoInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -51,9 +52,9 @@ function SummaryKPI({ label, value, sub, color }: { label: string; value: string
   );
 }
 
-function csvText(value: string) {
-  return `"${value.replace(/"/g, '""')}"`;
-}
+// escapeCsvCell also neutralizes spreadsheet formulas (a client named
+// `=HYPERLINK(...)` from a public form must not execute when staff open this).
+const csvText = escapeCsvCell;
 
 /**
  * Render a "YYYY-MM-DD" worked date without a timezone round-trip — parsing
@@ -96,7 +97,7 @@ function downloadCSV(rows: JobCostingReportRow[]) {
       r.marginPct.toFixed(1),
     ].join(","));
   }
-  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

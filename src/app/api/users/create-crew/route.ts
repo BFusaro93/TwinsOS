@@ -28,9 +28,14 @@ export async function POST(request: Request) {
   }
   const { data: callerProfile, error: profileErr } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, status")
     .eq("id", user.id)
     .single();
+  // A deactivated admin's token outlives the ban by up to an hour and this
+  // route uses the service role, so RLS can't stop it.
+  if (callerProfile?.status === "inactive") {
+    return NextResponse.json({ error: "Account is deactivated" }, { status: 403 });
+  }
   if (profileErr || !callerProfile || callerProfile.role !== "admin") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }

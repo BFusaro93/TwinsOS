@@ -260,8 +260,8 @@ export function RolesList() {
     try {
       await deleteRole(role.id);
       toast.success("Role deleted");
-    } catch {
-      toast.error("Failed to delete role");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to delete role");
     }
   }
 

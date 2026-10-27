@@ -12,8 +12,9 @@ import {
   MONTH_LABELS,
   netPaymentCents,
 } from "@/lib/reports/helpers";
-import { isClientStatus } from "@/lib/reports/client-status";
-import { isoInZone, ymd, zoneDateParts } from "@/lib/time/zone";
+import { CLIENT_STATUSES } from "@/lib/reports/client-status";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { isoInZone, ymd, zoneDateParts, zoneWallClockToInstant } from "@/lib/time/zone";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 
@@ -93,41 +94,72 @@ export function useReportData(options: { enabled?: boolean } = {}) {
       const monthStartDate = ymd(nyYear, nyMonth, 1);
       const sixMonthsStartDate = ymd(nyYear, nyMonth - 5, 1);
 
+      // Every read is either a head COUNT or a paged fetch: PostgREST silently
+      // caps one response at 1000 rows, so selecting whole tables made the
+      // client/job/invoice figures wrong as soon as an org passed 1000 rows.
+      const monthStartInstant =
+        zoneWallClockToInstant(monthStartDate, "00:00", orgTimeZone)?.toISOString() ?? `${monthStartDate}T00:00:00Z`;
+      const countOf = async (q: PromiseLike<{ count: number | null; error: { message: string } | null }>) => {
+        const { count, error } = await q;
+        if (error) throw new Error(error.message);
+        return count ?? 0;
+      };
+
       const [
-        clientsRes,
-        invoicesRes,
-        jobsRes,
-        estimatesRes,
-        paymentsRes,
+        totalClients,
+        activeClients,
+        totalLeads,
+        invoicesData,
+        jobsScheduled,
+        jobsCompleted,
+        jobsThisMonth,
+        estimatesData,
+        paymentsData,
       ] = await Promise.all([
-        sb.from("clients").select("id, status").is("deleted_at", null),
-        sb.from("crm_invoices").select("id, total_cents, balance_cents, invoice_date, due_date, terms, status").is("deleted_at", null),
-        sb.from("crm_jobs").select("id, status, created_at").is("deleted_at", null),
-        sb
-          .from("estimates")
-          .select("id, stage, total_price_cents:total_cents, estimate_date")
-          .is("deleted_at", null)
-          .gte("estimate_date", ytdStartDate)
-          .lte("estimate_date", todayDate),
+        // 'lost' is a closed lead, not a client (see client-status.ts).
+        countOf(sb.from("clients").select("id", { count: "exact", head: true }).is("deleted_at", null).in("status", [...CLIENT_STATUSES])),
+        countOf(sb.from("clients").select("id", { count: "exact", head: true }).is("deleted_at", null).eq("status", "active")),
+        countOf(sb.from("clients").select("id", { count: "exact", head: true }).is("deleted_at", null).eq("status", "lead")),
+        fetchAllRows<{
+          id: string;
+          total_cents: number;
+          balance_cents: number | null;
+          invoice_date: string | null;
+          due_date: string | null;
+          terms: string | null;
+          status: string;
+        }>(() =>
+          sb.from("crm_invoices").select("id, total_cents, balance_cents, invoice_date, due_date, terms, status").is("deleted_at", null)
+        ),
+        // crm_jobs.status CHECK: scheduled | in_progress | completed |
+        // cancelled | skipped | hold. "Scheduled" here = on the board or underway.
+        countOf(sb.from("crm_jobs").select("id", { count: "exact", head: true }).is("deleted_at", null).in("status", ["scheduled", "in_progress"])),
+        countOf(sb.from("crm_jobs").select("id", { count: "exact", head: true }).is("deleted_at", null).eq("status", "completed")),
+        // created_at is a timestamptz: on/after the org's midnight of the 1st.
+        countOf(sb.from("crm_jobs").select("id", { count: "exact", head: true }).is("deleted_at", null).gte("created_at", monthStartInstant)),
+        fetchAllRows<{ id: string; stage: string; total_price_cents: number }>(() =>
+          sb
+            .from("estimates")
+            .select("id, stage, total_price_cents:total_cents, estimate_date")
+            .is("deleted_at", null)
+            .gte("estimate_date", ytdStartDate)
+            .lte("estimate_date", todayDate)
+        ),
         // Rule B (cash): real money only — no credits, no AR write-offs, net of refunds.
-        sb
-          .from("crm_payments")
-          .select("payment_date, amount_cents, refunded_amount_cents")
-          .is("deleted_at", null)
-          .eq("is_credit", false)
-          .neq("method", AR_WRITE_OFF_METHOD)
-          .gte("payment_date", sixMonthsStartDate)
-          .lte("payment_date", todayDate),
+        fetchAllRows<{ payment_date: string | null; amount_cents: number | null; refunded_amount_cents: number | null }>(() =>
+          sb
+            .from("crm_payments")
+            .select("payment_date, amount_cents, refunded_amount_cents")
+            .is("deleted_at", null)
+            .eq("is_credit", false)
+            .neq("method", AR_WRITE_OFF_METHOD)
+            .gte("payment_date", sixMonthsStartDate)
+            .lte("payment_date", todayDate)
+        ),
       ]);
 
-      // Clients — 'lost' is a closed lead, not a client (see client-status.ts).
-      const clients = clientsRes.data ?? [];
-      const totalClients = clients.filter((c: { status: string }) => isClientStatus(c.status)).length;
-      const activeClients = clients.filter((c: { status: string }) => c.status === "active").length;
-      const totalLeads = clients.filter((c: { status: string }) => c.status === "lead").length;
-
       // Invoices — Rule A: only issued invoices (not draft/void) are revenue or AR.
-      const invoices = invoicesRes.data ?? [];
+      const invoices = invoicesData;
       const isIssued = (i: { status: string }) =>
         (ISSUED_INVOICE_STATUSES as readonly string[]).includes(i.status);
       const issuedInvoices = invoices.filter(isIssued);
@@ -163,24 +195,10 @@ export function useReportData(options: { enabled?: boolean } = {}) {
           0
         );
 
-      // Jobs — crm_jobs.status CHECK: scheduled | in_progress | completed |
-      // cancelled | skipped | hold. "Scheduled" here = on the board or underway.
-      const jobs = jobsRes.data ?? [];
-      const jobsScheduled = jobs.filter(
-        (j: { status: string }) => j.status === "scheduled" || j.status === "in_progress"
-      ).length;
-      const jobsCompleted = jobs.filter(
-        (j: { status: string }) => j.status === "completed"
-      ).length;
-      // created_at is a timestamptz — reduce it to its NY calendar date first.
-      const jobsThisMonth = jobs.filter(
-        (j: { created_at: string }) => isoInZone(new Date(j.created_at), orgTimeZone) >= monthStartDate
-      ).length;
-
       // Estimates — YTD by estimate_date. Close rate is won ÷ decided, where
       // decided = accepted + invoiced + lost; open/draft estimates aren't a
       // loss yet and would otherwise drag the rate down.
-      const estimates = estimatesRes.data ?? [];
+      const estimates = estimatesData;
       const estimatesWonList = estimates.filter(
         (e: { stage: string }) => e.stage === "accepted" || e.stage === "invoiced"
       );
@@ -196,11 +214,7 @@ export function useReportData(options: { enabled?: boolean } = {}) {
       for (let i = 5; i >= 0; i--) {
         monthlyMap.set(monthKeyOf(ymd(nyYear, nyMonth - i, 1)), 0);
       }
-      for (const p of (paymentsRes.data ?? []) as Array<{
-        payment_date: string | null;
-        amount_cents: number | null;
-        refunded_amount_cents: number | null;
-      }>) {
+      for (const p of paymentsData) {
         if (!p.payment_date) continue;
         const key = monthKeyOf(p.payment_date);
         if (monthlyMap.has(key)) {

@@ -42,17 +42,35 @@ export function useMultiRecordAuditLog(groups: { recordType: AuditRecordType; re
     queryKey,
     queryFn: async () => {
       const supabase = createClient();
+      // A recurring job can have hundreds of visits. `.in("record_id", ids)` puts
+      // every id in the URL (hundreds of ids overflow the gateway's URL limit and
+      // the whole tab errors), and PostgREST caps a response at 1000 rows with no
+      // error — so chunk the ids and page each chunk instead of one big query.
+      const ID_CHUNK = 100;
+      const PAGE = 1000;
       const results = await Promise.all(
-        nonEmptyGroups.map(async (g) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data, error } = await (supabase as any)
-            .from("audit_log")
-            .select("*")
-            .eq("record_type", g.recordType)
-            .in("record_id", g.recordIds)
-            .is("deleted_at", null);
-          if (error) throw error;
-          return data;
+        nonEmptyGroups.flatMap((g) => {
+          const chunks: string[][] = [];
+          for (let i = 0; i < g.recordIds.length; i += ID_CHUNK) chunks.push(g.recordIds.slice(i, i + ID_CHUNK));
+          return chunks.map(async (ids) => {
+            const rows: Parameters<typeof mapAuditEntry>[0][] = [];
+            for (let from = 0; ; from += PAGE) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const { data, error } = await (supabase as any)
+                .from("audit_log")
+                .select("*")
+                .eq("record_type", g.recordType)
+                .in("record_id", ids)
+                .is("deleted_at", null)
+                .order("created_at", { ascending: false })
+                .order("id")
+                .range(from, from + PAGE - 1);
+              if (error) throw error;
+              rows.push(...(data ?? []));
+              if (!data || data.length < PAGE) break;
+            }
+            return rows;
+          });
         })
       );
       const merged = (results.flat().map(mapAuditEntry)) as AuditEntry[];

@@ -5,6 +5,7 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrency } from "@/lib/utils";
+import { escapeCsvCell } from "@/lib/csv";
 import { isoInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 import { Download, TrendingUp, TrendingDown } from "lucide-react";
 import type { COGSReportRow } from "@/app/api/crm/reports/cogs/route";
@@ -55,7 +56,7 @@ function downloadCSV(rows: COGSReportRow[]) {
   const lines = [headers.join(",")];
   for (const r of rows) {
     lines.push([
-      `"${r.serviceName.replace(/"/g, '""')}"`,
+      escapeCsvCell(r.serviceName),
       r.visitCount,
       r.budgetedHours.toFixed(1),
       r.actualStaffHrs.toFixed(1),
@@ -74,7 +75,7 @@ function downloadCSV(rows: COGSReportRow[]) {
       r.laborEstimatedVisitCount,
     ].join(","));
   }
-  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

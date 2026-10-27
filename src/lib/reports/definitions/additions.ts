@@ -214,17 +214,6 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     description: "A list of packages with a renewal setting, ready to renew.",
     filters: [],
     run: async ({ supabase }) => {
-      const { data, error } = await supabase
-        .from("crm_jobs")
-        .select(
-          "package_name, package_renewal, package_step, package_total_steps, scheduled_date, rate_cents, total_cents, status, clients:client_id(display_name)"
-        )
-        .eq("job_type", "package")
-        .not("package_renewal", "is", null)
-        .is("deleted_at", null)
-        .limit(5000);
-      if (error) throw new Error(error.message);
-
       interface Row {
         package_name: string | null;
         package_renewal: string | null;
@@ -236,7 +225,19 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         status: string | null;
         clients: { display_name: string | null } | null;
       }
-      const rows = ((data ?? []) as unknown as Row[]).map((r) => ({
+      // Paged: a single .limit(5000) is capped at 1000 rows by PostgREST, which
+      // silently dropped every renewal past the 1000th on a large org.
+      const data = await fetchAllRows<Row>(() =>
+        supabase
+          .from("crm_jobs")
+          .select(
+            "package_name, package_renewal, package_step, package_total_steps, scheduled_date, rate_cents, total_cents, status, clients:client_id(display_name)"
+          )
+          .eq("job_type", "package")
+          .not("package_renewal", "is", null)
+          .is("deleted_at", null)
+      );
+      const rows = data.map((r) => ({
         client_name: r.clients?.display_name ?? "",
         package_name: r.package_name,
         renewal: r.package_renewal,
@@ -271,19 +272,6 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       "Contract budgeted-to-date vs. invoiced-to-date revenue for each active contract.",
     filters: [],
     run: async ({ supabase, timeZone }) => {
-      const { data: contracts, error } = await supabase
-        .from("crm_contracts")
-        .select(
-          "id, title, status, start_date, end_date, signed_at, created_at, billing_frequency, billing_day_of_month, bill_month_in_advance, monthly_amount_cents, monthly_amounts, clients:client_id(display_name)"
-        )
-        // Same gate the billing paths use: only signed/active contracts are
-        // ever invoiced, so only they carry a budget.
-        .eq("is_active", true)
-        .in("status", BILLABLE_CONTRACT_STATUSES)
-        .is("deleted_at", null)
-        .limit(5000);
-      if (error) throw new Error(error.message);
-
       interface ContractRow extends ContractScheduleRow {
         id: string;
         title: string | null;
@@ -294,25 +282,41 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         monthly_amounts: Record<string, number> | null;
         clients: { display_name: string | null } | null;
       }
-      const contractRows = (contracts ?? []) as unknown as ContractRow[];
+      // Both reads are paged: PostgREST caps a response at 1000 rows no matter
+      // the .limit(), and a few hundred contracts invoicing monthly blow past
+      // that — the truncated invoices made contracts read as under-invoiced.
+      const contractRows = await fetchAllRows<ContractRow>(() =>
+        supabase
+          .from("crm_contracts")
+          .select(
+            "id, title, status, start_date, end_date, signed_at, created_at, billing_frequency, billing_day_of_month, bill_month_in_advance, monthly_amount_cents, monthly_amounts, clients:client_id(display_name)"
+          )
+          // Same gate the billing paths use: only signed/active contracts are
+          // ever invoiced, so only they carry a budget.
+          .eq("is_active", true)
+          .in("status", BILLABLE_CONTRACT_STATUSES)
+          .is("deleted_at", null)
+      );
 
       const ids = contractRows.map((c) => c.id);
       const invoicedByContract = new Map<string, { invoiced: number; paid: number }>();
-      if (ids.length > 0) {
-        const { data: invoices, error: invError } = await supabase
-          .from("crm_invoices")
-          .select("contract_id, total_cents, amount_paid_cents, status")
-          .in("contract_id", ids)
-          .is("deleted_at", null)
-          .in("status", ISSUED_INVOICE_STATUSES)
-          .limit(5000);
-        if (invError) throw new Error(invError.message);
-        interface InvRow {
-          contract_id: string | null;
-          total_cents: number | null;
-          amount_paid_cents: number | null;
-        }
-        for (const inv of (invoices ?? []) as InvRow[]) {
+      interface InvRow {
+        contract_id: string | null;
+        total_cents: number | null;
+        amount_paid_cents: number | null;
+      }
+      // Ids go on the URL, so query them in chunks.
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        const invoices = await fetchAllRows<InvRow>(() =>
+          supabase
+            .from("crm_invoices")
+            .select("contract_id, total_cents, amount_paid_cents, status")
+            .in("contract_id", chunk)
+            .is("deleted_at", null)
+            .in("status", ISSUED_INVOICE_STATUSES)
+        );
+        for (const inv of invoices) {
           if (!inv.contract_id) continue;
           const entry = invoicedByContract.get(inv.contract_id) ?? { invoiced: 0, paid: 0 };
           entry.invoiced += inv.total_cents ?? 0;

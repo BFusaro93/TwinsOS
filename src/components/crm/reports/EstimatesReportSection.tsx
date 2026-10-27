@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery } from "@/lib/hooks/use-query";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -138,12 +139,11 @@ function useEstimatesReportData(rangeStart: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sb = supabase as any;
 
-      // Both reads are paged: PostgREST silently caps a plain select at 1000
-      // rows, and the line-item read spans every estimate ever created (the
-      // range is applied to its parent), so past 1000 lines the won-by-service
-      // and cost-breakdown reports were built from an arbitrary slice with no
-      // error. fetchAllRows also throws on a failed page instead of reporting 0.
-      const [estimates, allLineItems] = await Promise.all([
+      // Paged (PostgREST caps one response at 1000 rows without an error), and
+      // the line-item range is applied in the database through an inner join:
+      // fetching every line item ever and filtering by estimate date here meant
+      // the 1000-row cap was spent on rows the filter then threw away.
+      const [estimatesAll, lineItemsAll] = await Promise.all([
         fetchAllRows<RawEstimate>(() =>
           sb
             .from("estimates")
@@ -154,12 +154,14 @@ function useEstimatesReportData(rangeStart: string) {
         fetchAllRows<RawLineItem>(() =>
           sb
             .from("estimate_line_items")
-            .select("id, estimate_id, service_name, status, qty, rate_cents, total_cents, direct_cost_cents:total_cost_cents, estimates(stage, created_at)")
+            .select("id, estimate_id, service_name, status, qty, rate_cents, total_cents, direct_cost_cents:total_cost_cents, estimates!inner(stage, created_at)")
             .is("deleted_at", null)
+            .gte("estimates.created_at", rangeStart)
         ),
       ]);
 
-      const lineItems: RawLineItem[] = allLineItems.filter(
+      const estimates: RawEstimate[] = estimatesAll;
+      const lineItems: RawLineItem[] = lineItemsAll.filter(
         (li: RawLineItem) => li.estimates && li.estimates.created_at >= rangeStart
       );
 

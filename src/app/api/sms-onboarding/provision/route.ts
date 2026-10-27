@@ -21,8 +21,8 @@ export async function POST() {
   } = await authed.auth.getUser();
   if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: profile } = await authed.from("profiles").select("org_id, role").eq("id", user.id).single();
-  if (!profile || profile.role !== "admin") {
+  const { data: profile } = await authed.from("profiles").select("org_id, role, status").eq("id", user.id).single();
+  if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
 
