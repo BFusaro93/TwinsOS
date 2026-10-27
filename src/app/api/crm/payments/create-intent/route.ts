@@ -79,17 +79,6 @@ export async function POST(request: Request) {
       { status: 409 }
     );
   }
-  // Apply the client's existing deposit/credit first so they aren't charged
-  // for money they've already paid.
-  try {
-    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice);
-  } catch {
-    return NextResponse.json({ error: "Couldn't apply the client's existing credit — nothing was charged." }, { status: 500 });
-  }
-  if (invoice.balance_cents <= 0) {
-    return NextResponse.json({ error: "Invoice was fully paid from the client's existing credit — nothing to charge — refresh to see it paid.", paidFromCredit: true }, { status: 409 });
-  }
-
   // stripe_connect_livemode isn't in the generated Supabase types yet (added
   // by a migration this session wrote but did not apply/regenerate types for).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -106,36 +95,6 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-
-  // The processing fee only ever applies to card — ACH is the fee-free
-  // alternative by design, so it must never be computed for that path.
-  // An override may only lower the fee: cap it at the fee the org's own
-  // settings would charge on this balance, so a client-supplied value can
-  // never inflate the charge above what the invoice + standard fee allows.
-  const standardFeeCents = computeProcessingFee(
-    {
-      ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
-      ccProcessingFeeBps: org.cc_processing_fee_bps,
-      ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
-    },
-    invoice.balance_cents,
-    false
-  ).feeCents;
-  const cappedOverrideFeeCents =
-    overrideFeeCents === undefined ? undefined : Math.min(overrideFeeCents, standardFeeCents);
-  const { feeCents, totalChargeCents } =
-    paymentMethod === "card"
-      ? computeProcessingFee(
-          {
-            ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
-            ccProcessingFeeBps: org.cc_processing_fee_bps,
-            ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
-          },
-          invoice.balance_cents,
-          waiveFee ?? false,
-          cappedOverrideFeeCents
-        )
-      : { feeCents: 0, totalChargeCents: invoice.balance_cents };
 
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
 
@@ -171,6 +130,50 @@ export async function POST(request: Request) {
     isAch: paymentMethod === "us_bank_account",
   });
   if (refusal) return NextResponse.json(refusal.body, { status: refusal.status });
+
+  // Every check above can refuse; only now consume the client's credit, so a
+  // refused attempt never leaves the invoice quietly changed. Apply the client's
+  // existing deposit/credit first so they aren't charged for money they've
+  // already paid.
+  try {
+    invoice.balance_cents = await applyCreditBeforeCharge(supabase, invoice);
+  } catch {
+    return NextResponse.json({ error: "Couldn't apply the client's existing credit — nothing was charged." }, { status: 500 });
+  }
+  if (invoice.balance_cents <= 0) {
+    return NextResponse.json({ error: "Invoice was fully paid from the client's existing credit — nothing to charge — refresh to see it paid.", paidFromCredit: true }, { status: 409 });
+  }
+
+  // The processing fee only ever applies to card — ACH is the fee-free
+  // alternative by design, so it must never be computed for that path.
+  // An override may only lower the fee: cap it at the fee the org's own
+  // settings would charge on this balance, so a client-supplied value can
+  // never inflate the charge above what the invoice + standard fee allows.
+  const standardFeeCents = computeProcessingFee(
+    {
+      ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
+      ccProcessingFeeBps: org.cc_processing_fee_bps,
+      ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+    },
+    invoice.balance_cents,
+    false
+  ).feeCents;
+  const cappedOverrideFeeCents =
+    overrideFeeCents === undefined ? undefined : Math.min(overrideFeeCents, standardFeeCents);
+  const { feeCents, totalChargeCents } =
+    paymentMethod === "card"
+      ? computeProcessingFee(
+          {
+            ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
+            ccProcessingFeeBps: org.cc_processing_fee_bps,
+            ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+          },
+          invoice.balance_cents,
+          waiveFee ?? false,
+          cappedOverrideFeeCents
+        )
+      : { feeCents: 0, totalChargeCents: invoice.balance_cents };
+
 
   // Created directly on the org's connected account (a "direct charge") so the
   // funds land in their own Stripe balance/payouts, never the platform's.
