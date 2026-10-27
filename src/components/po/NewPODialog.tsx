@@ -367,7 +367,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
         {
           id: initialData.id,
           vendorId: vendorId !== "none" ? vendorId : null,
-          vendorName: vendor?.name ?? initialData.vendorName,
+          vendorName: vendor?.name ?? (vendorId !== "none" ? initialData.vendorName : null),
           poDate: poDate || null,
           paymentType: (paymentType as import("@/types").PaymentType) || null,
           invoiceNumber: invoiceNumber || null,

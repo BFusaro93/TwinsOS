@@ -223,8 +223,10 @@ export function useUpdatePurchaseOrder() {
       const { error } = await supabase
         .from("purchase_orders")
         .update({
-          vendor_id: vendorId ?? undefined,
-          vendor_name: vendorName ?? undefined,
+          // null = the user chose "No vendor": clear both, never leave a
+          // vendor_name pointing at a vendor the PO no longer has.
+          vendor_id: vendorId,
+          vendor_name: vendorName ?? "",
           po_date: poDate ?? undefined,
           // These three are nullable columns and the edit form sends null for
           // a field the user cleared — `?? undefined` skipped the write, so a
