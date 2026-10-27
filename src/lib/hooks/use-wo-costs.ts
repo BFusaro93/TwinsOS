@@ -64,6 +64,7 @@ export function usePartOpenWOQty(partId: string) {
         .select("quantity, work_order_id, work_orders!inner(status)")
         .eq("part_id", partId)
         .is("deleted_at", null)
+        .is("work_orders.deleted_at", null)
         .in("work_orders.status", ["open", "in_progress", "on_hold"]);
       if (error) {
         // Fallback: if the join fails, fetch without status filter
