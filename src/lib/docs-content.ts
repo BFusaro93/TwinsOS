@@ -112,6 +112,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "All three modules share Vendors (one table used by PO, CMMS, and CRM) and Parts inventory (replenished via PO → Receiving → Parts stock). A Work Order or a CRM Job can each spawn a Purchase Requisition when materials are needed, and CRM invoices link back to PO purchase orders for job cost reconciliation.",
           },
           {
+            step: "Home shortcuts",
+            detail:
+              "Admins can add their own tiles to the Home page under Master Account Settings > Integrations > Home Page Shortcuts (each opens in a new tab): a name, optional subtitle, icon and the web address to open (for example your fleet or supplier login). A bare address like example.com is saved as https://example.com; only http and https links are accepted, and anything else (such as mailto: or a script address) is refused with a message when you save.",
+          },
+          {
             step: "Recommended setup order",
             detail:
               "1) Go to Settings > Users and invite your team. 2) Configure Approval Flows for Requisitions and POs. 3) Add your vendors. 4) Build the Products catalog. 5) Add your assets and vehicles. 6) Add spare parts and link them to assets. 7) Create PM Schedules. 8) Set up Automations for meter-based maintenance. 9) In CRM, add your clients and their properties. 10) Configure Services and Production Rates so Estimates can use the budget engine. 11) Build out Packages and Contracts for recurring billing.",
@@ -1510,7 +1515,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Warranty expiring",
             detail:
-              "A reminder goes out once per end date when a warranty is within 30 days of ending — to the client's sales rep (in-app and email), or to admins in-app when the client has no rep. Turn either off under Settings > Notifications > Warranty Expiring Soon.",
+              "A reminder goes out once per end date when a warranty is within 30 days of ending — to the client's sales rep (in-app and email), or, when the client has no rep or the rep has left or can't be reached, to the organization's admins (in-app and email, per each admin's settings). Turn either off under Settings > Notifications > Warranty Expiring Soon.",
           },
           {
             step: "Per-user preferences",
@@ -1551,6 +1556,11 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Adding a vendor",
             detail:
               "Go to Vendors in the sidebar. Click '+ New Vendor'. Enter name, contact name, email, phone, and address. Vendors are immediately available on all Requisition, PO, and CRM forms.",
+          },
+          {
+            step: "Renaming a vendor",
+            detail:
+              "Renaming a vendor updates the name everywhere it is shown: parts, products and their alternate-vendor lists, requisitions, purchase orders, receipts, work-order vendor charges, project subcontract costs, and asset and vehicle purchase vendors. Records that only have a typed-in name and no link to the vendor are not changed.",
           },
           {
             step: "Vendor history",
@@ -2003,7 +2013,11 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What happens if we cancel our subscription?",
-        a: "The account becomes read-only for 90 days: you can still view your data, but saves are blocked, automations pause, and a banner shows the end date with a Resubscribe link (Settings > Subscription). After 90 days the app locks and shows a Resubscribe screen; your data is kept. Resubscribing restores full access and resumes automations.",
+        a: "The account becomes read-only for 90 days: you can still view your data, but saves are blocked, automations pause (scheduled invoices, reminder and report emails, campaigns, automation sends and your Zapier API key all stop working), and a banner shows the end date with a Resubscribe link (Settings > Subscription). After 90 days the app locks and shows a Resubscribe screen; your data is kept. Resubscribing restores full access and resumes automations.",
+      },
+      {
+        q: "What happens when my free trial ends?",
+        a: "Once the trial end date passes, Landscapt and Equipt lock and show a screen asking you to subscribe; Settings and Billing stay reachable so you can upgrade. Your data is kept, and the database also refuses saves from a stale tab or an API call, so nothing can be changed until you subscribe. Choosing a plan restores full access straight away.",
       },
       {
         q: "Can I customize which fields are required?",

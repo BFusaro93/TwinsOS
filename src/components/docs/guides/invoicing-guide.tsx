@@ -181,6 +181,55 @@ export function InvoicingGuide() {
             client record apart from a problem on the sending side.
           </li>
           <li>
+            <strong>Where invoice emails go.</strong> If the client has a <strong>Billing
+            Email</strong> (Client &gt; Edit &gt; Billing), invoices and account statements go there;
+            with none, they go to the primary email. The send dialog pre-fills that address and you
+            can still type a different one. If the client&apos;s email has hard-bounced, sending to
+            the saved address is refused (&quot;Client&apos;s email address has hard-bounced. Update
+            it, or send to a different address.&quot;); typing a corrected address sends normally.
+          </li>
+          <li>
+            <strong>Emailing locks the invoice.</strong> An invoice is locked the moment it is
+            emailed, including when you email several at once from the Invoices list, so the amounts
+            the client received can&apos;t be edited underneath them. Unlock it first to change it.
+            A locked invoice can&apos;t be deleted until you unlock it, and an invoice with payments
+            applied can&apos;t be deleted at all: the check runs before anything is changed, so a
+            refused delete leaves the invoice exactly as it was.
+          </li>
+          <li>
+            <strong>Voiding or deleting an invoice releases its materials.</strong> Job materials
+            that the invoice billed go back to Pending (and the stock they used is restored), so they
+            can bill again on a replacement invoice instead of staying marked Invoiced against a dead
+            one. The voided invoice keeps its lines for the record.
+          </li>
+          <li>
+            <strong>Every issued invoice has a number.</strong> A draft that was never saved (for
+            example one started from a job or estimate) is numbered at the moment you email or print
+            it, so the client never receives an invoice with no number.
+          </li>
+          <li>
+            <strong>Terms and due date on hand-created invoices.</strong> An invoice you create from
+            a job, from an estimate or from scratch takes the client&apos;s default payment terms (the
+            organization&apos;s when the client has none) and gets its due date from them, so a Net 30
+            client&apos;s invoice is due in 30 days and the past-due reminders fire. A due date you
+            type yourself wins.
+          </li>
+          <li>
+            <strong>Percent discounts follow the line.</strong> A line discount entered as a percent
+            stays that percent when you change the quantity or rate, rather than freezing at the old
+            dollar amount; a flat-dollar discount stays put but can&apos;t exceed the line total. The
+            on-screen totals are calculated the same way Save stores them, and Enter Payment always
+            offers the invoice&apos;s current balance with a fresh method, date and reference.
+          </li>
+          <li>
+            <strong>The online invoice page.</strong> The client&apos;s link always shows the
+            invoice. When it can be paid it has a Pay button; otherwise a note replaces the button:
+            &quot;This invoice has been voided&quot;, &quot;This invoice isn&apos;t ready for payment
+            yet&quot; (a draft) or &quot;This invoice has no balance due&quot; (paid or zero
+            balance). A failed payment attempt shows its error next to the button without hiding the
+            invoice.
+          </li>
+          <li>
             <strong>The manual Invoice buttons won&apos;t double-bill.</strong> The dispatch board&apos;s
             per-visit popup and the job detail page&apos;s Invoice button both check for an existing
             invoice first &mdash; a visit or job that&apos;s already been invoiced shows{" "}

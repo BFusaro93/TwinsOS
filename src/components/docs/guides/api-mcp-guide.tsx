@@ -438,6 +438,30 @@ export function ApiMcpGuide() {
           problem.
         </p>
         <p>
+          <strong>Behavior worth knowing.</strong> List endpoints take{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">limit</code>{" "}
+          (1&ndash;200, default 50) and{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">offset</code>;
+          out-of-range or fractional values are clamped rather than rejected, and results come back in a
+          stable order so paging doesn&apos;t skip or repeat rows. Creating or updating a part, product,
+          asset or vehicle whose part number or asset tag is already used by another record returns a{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">409</code>{" "}
+          naming the field. Parts and maintenance-part products are kept in step: creating a part also
+          creates (or links) its catalog product, and changing the part&apos;s name, part number,
+          description, minimum stock, cost or vendor updates that product too. Creating a PM schedule
+          with an <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">assetId</code>{" "}
+          attaches that asset to it. On a work order,{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">assignedToId</code>{" "}
+          alone changes the primary assignee and keeps any other assignees already on the work order;
+          send <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">assignedToIds</code>{" "}
+          to replace the whole list (an{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">assignedToId</code>{" "}
+          sent with it becomes the primary), and{" "}
+          <code className="rounded bg-[#f4f6f0] dark:bg-muted/50 px-1 py-0.5 font-mono text-xs">assignedToId: null</code>{" "}
+          unassigns everyone. A canceled organization&apos;s keys stop working until it
+          resubscribes.
+        </p>
+        <p>
           <strong>Revoking</strong> a key (from the same Public API Keys card) takes effect
           immediately — any REST client or MCP connection using it loses access right away, mid-session
           included. This cannot be undone; if the integration needs access again, issue a new key.

@@ -24,9 +24,9 @@ const PAIRED_EVENTS: [string, string][] = [
   ["New ticket", "A new support/service ticket comes in."],
   ["Ticket assigned", "You're set as the assignee on a ticket."],
   ["Ticket comment", "Someone comments on a ticket you're involved with."],
-  ["Contract expiring", "A contract is approaching its expiration date."],
-  ["Warranty expiring", "A warranty for one of your clients ends within 30 days — one reminder per end date. Goes to the client's sales rep, or to admins (in-app) when the client has none."],
-  ["Low stock alert", "A part or stocked material's quantity on hand drops to or below its minimum. The email is one daily digest to admins, managers and purchasers, sent once per item until it is restocked above the minimum."],
+  ["Contract expiring", "A contract is approaching its expiration date (3 days out, active contracts that don't auto-renew). Goes to the contract's sales rep; if that rep has left or can't be reached, to the client's account manager, then to admins."],
+  ["Warranty expiring", "A warranty for one of your clients ends within 30 days — one reminder per end date. Goes to the client's sales rep; if the rep has left or can't be reached it falls through to admins (in-app and email, per their settings)."],
+  ["Low stock alert", "A part or stocked material's quantity on hand drops to or below its minimum (items with a minimum of zero aren't tracked). The email is one daily digest to admins, managers and purchasers, sent once per item until it is restocked above the minimum."],
   ["PM schedule due", "A preventive-maintenance schedule is due within 7 days or overdue and has no open work order. The email (off by default) is one daily digest to admins, managers and technicians, once per due date."],
   ["New maintenance request", "A new maintenance request is submitted."],
 ];
@@ -180,6 +180,17 @@ export function NotificationPreferencesGuide() {
           their inbox.
         </Callout>
       </Section>
+
+      <Callout>
+        <strong>The approval emails each have their own switch.</strong> Estimate Approval Required,
+        Requisition Approval Required and Purchase Order Approval Required are separate email
+        toggles, and an approver who switched one off no longer gets that email (the others are
+        unaffected). An approval email that the mail provider rejects doesn&apos;t start the
+        10-minute cooldown, so resubmitting retries it. A <strong>deactivated user</strong> gets no
+        email, bell or assignment notification of any kind, for example an assignee who has left.
+        A card dispute (chargeback) shows in the bell and opens the invoice, or the client when the
+        payment had no invoice.
+      </Callout>
 
       <Section id="defaults" title="Why defaults live in code, not a database row">
         <p>

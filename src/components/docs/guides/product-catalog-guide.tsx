@@ -207,6 +207,13 @@ export function ProductCatalogGuide() {
           documents keep displaying correctly. There is currently no Restore button anywhere in the
           UI; reactivating an archived product requires a direct database change.
         </p>
+        <p>
+          Deleting a <strong>Maintenance Part</strong> product also retires its matching CMMS Part
+          (and that part&apos;s asset links), so a part never stays in the Parts list and the PO
+          part picker pointing at a catalog product that no longer exists. If a product is ever moved
+          into the Maintenance Part category (through the API), its CMMS part is created, or an
+          unlinked part with the same part number is adopted; moving it out retires the part.
+        </p>
       </Section>
 
       <Section id="import" title="Bulk import">
@@ -223,6 +230,15 @@ export function ProductCatalogGuide() {
             mapped to the correct category — you don&apos;t need the exact enum spelling in your
             spreadsheet. A row with an unrecognizable category, or a missing name, is skipped rather
             than failing the whole import.
+          </li>
+          <li>
+            <strong>Re-imports only touch what the file carries.</strong> For a product that
+            already exists, a blank quantity, cost, price or vendor cell leaves the saved value
+            alone (a cost-only file doesn&apos;t zero the stock), and a quantity that is filled in
+            is applied as a recorded stock adjustment. Quantities can be decimals for materials;
+            maintenance parts must be whole numbers, and a negative or non-numeric quantity fails
+            that row with the reason shown. A vendor name is linked to your existing vendor when
+            exactly one vendor has that name (not case-sensitive).
           </li>
           <li>
             <strong>Dedup only works by Part Number.</strong> A row whose part number matches an

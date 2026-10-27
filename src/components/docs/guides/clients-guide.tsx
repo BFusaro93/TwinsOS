@@ -156,7 +156,7 @@ export function ClientsGuide() {
           schedule, one-time visits stay on the record as Cancelled. Completed and in-progress
           visits are never touched. <strong>No</strong> leaves every visit as it is. Reactivating the
           client lets recurring visits generate again on their own, but one-time visits cancelled this
-          way are <em>not</em> restored.
+          way are <em>not</em> restored. Deleting a client asks the same question.
         </p>
         <Callout>
           Because a lead and a client are the same row, nothing about a lead&apos;s
@@ -446,7 +446,18 @@ export function ClientsGuide() {
           Statement</strong> sends it to an address (defaulting to the client&apos;s own, but
           editable) instead. If the minimum-balance filter is set and the client&apos;s balance
           falls short of it, an email send is silently skipped rather than sent — the dialog
-          reports this so it isn&apos;t mistaken for a delivery failure.
+          reports this so it isn&apos;t mistaken for a delivery failure. Statements go to the
+          client&apos;s <strong>Billing Email</strong> when one is saved, otherwise the primary
+          email, and Email Statements for many clients at once from Accounting &gt; Statements sends
+          them a few at a time so the mail provider&apos;s rate limit isn&apos;t hit.
+        </p>
+        <p>
+          <strong>Sub-accounts and parent payments.</strong> Only issued invoices count (not drafts
+          or voids). When a payment was recorded on another account, typically the parent&apos;s, and
+          applied to this client&apos;s invoices, the child&apos;s statement shows it as a payment
+          line labelled <strong>Paid by parent account</strong> with the method and invoice number,
+          for just the share applied to the child&apos;s invoices (net of any refund). The
+          child&apos;s balance on the statement therefore matches what the child actually owes.
         </p>
       </Section>
     </DocsFontScope>

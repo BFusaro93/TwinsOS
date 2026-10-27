@@ -150,6 +150,12 @@ export function AutomationsGuide() {
           </GuideLink>{" "}
           for how forms are built and published; this page doesn&apos;t re-cover that.
         </p>
+        <p>
+          <strong>Bulk edits fire triggers too.</strong> Adding or removing a tag on many clients at
+          once fires Tag added or Tag removed for each client that actually changed (a client that
+          already had the tag isn&apos;t counted as newly tagged), and a bulk edit of a client&apos;s
+          source or email opt-in fires the same triggers as editing one client.
+        </p>
       </Section>
 
       <Section id="conditions" title="Trigger Conditions vs. Stop Conditions">
@@ -191,6 +197,14 @@ export function AutomationsGuide() {
           &quot;Client status = cancelled&quot; ends the sequence for that client before the next event
           runs, without affecting anyone else still in progress.
         </Callout>
+        <p>
+          <strong>Restrict Entry To</strong> (in the sequence&apos;s Rules dialog) limits who can
+          enroll at all: All clients and open leads, Active clients only, Residential clients only,
+          Commercial clients only, Leads only, or Former clients only (inactive or cancelled). It is
+          checked on every way a client can enter &mdash; a trigger firing, a service visit, or an
+          estimate or meeting date trigger &mdash; so a &quot;Residential only&quot; sequence never
+          emails a commercial client. A client who doesn&apos;t qualify is simply not enrolled.
+        </p>
       </Section>
 
       <Section id="events" title="Events">
@@ -263,7 +277,10 @@ export function AutomationsGuide() {
           </li>
           <li>
             <strong>Send Between</strong> — a start and end time window (defaults to 8:00 AM&ndash;6:00
-            PM); the email only goes out inside that window.
+            PM); the email only goes out inside that window, judged on your organization&apos;s
+            clock. A step that comes due outside it (a visit completed at 11 PM, a wait that ended
+            overnight) is held and goes out when the window next opens. A window whose start is later
+            than its end, such as 10:00 PM to 6:00 AM, runs overnight.
           </li>
           <li>
             <strong>Require approval before sending</strong> — holds the email in a pending state for a

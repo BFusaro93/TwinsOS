@@ -576,6 +576,9 @@ export function EstimatingGuide() {
             Choose which line items to include &mdash; not every accepted line has to become part
             of the job. Lines that net out to <strong>$0</strong> start unchecked so they don&rsquo;t
             land on the job (and its invoice) as empty rows; tick them if you really want them.
+            Lines the client declined (a tier or option they unchecked) and lines still marked
+            Draft, which were never part of the quote, are not offered at all, and Draft lines are
+            also left out when you create an invoice from the estimate.
           </li>
           <li>
             Pick a <strong>Job Type</strong>: One Time, Recurring, Project, or Waiting List.

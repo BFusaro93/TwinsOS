@@ -166,6 +166,14 @@ export function CrewAppGuide() {
           (for crews working from a browser tab instead of the app) has the identical card and does the
           same thing against the same underlying job — either side works from the same planned list.
         </p>
+        <p>
+          <strong>Request Materials</strong> (in the native crew app) is the crew asking for
+          something instead. Pick a stocked or project material from the catalog, enter a quantity
+          and an optional note, and Submit Request creates a draft requisition tied to that job for
+          the office to review. The quantity can be fractional, up to two decimals (half a yard of
+          mulch is 0.5); maintenance parts aren&apos;t available in field requests. The crew never
+          sees prices on the request.
+        </p>
       </Section>
 
       <Section id="drive-time" title="Drive time">
@@ -195,7 +203,11 @@ export function CrewAppGuide() {
           <li>
             <strong>Who &quot;everyone&quot; is.</strong> The crew&apos;s roster for that date: the
             employees under Team → Crews → Team Assignments, adjusted by any same-day reassignment on
-            the Crew Board, minus anyone marked not working. A crew with nobody on its roster can&apos;t
+            the Crew Board, minus anyone marked not working and minus anyone whose
+            Days on the Team Assignment don&apos;t include that weekday (an employee on one crew
+            Mon&ndash;Wed and another Thu&ndash;Fri counts only on the crew they&apos;re scheduled
+            with that day; a same-day reassignment always wins). Deactivated or terminated employees
+            are never on a roster. A crew with nobody on its roster can&apos;t
             start a day &mdash; the button stays disabled until the office adds people.
           </li>
           <li>
@@ -213,6 +225,22 @@ export function CrewAppGuide() {
           <li>
             <strong>The day is the company&apos;s day.</strong> Which calendar day a shift belongs
             to follows your organization&apos;s time zone, not the phone&apos;s.
+          </li>
+          <li>
+            <strong>Started a job after End Day?</strong> Storm call-back, or End Day tapped by
+            mistake: starting a job reopens that person&apos;s shift for the day, and the time between
+            End Day and the new job start is taken off as an unpaid break, so the hours worked after
+            End Day are paid and nothing is counted twice. Tapping Start Day on a day that has
+            already ended does nothing; only starting a job reopens it.
+          </li>
+          <li>
+            <strong>Working past midnight.</strong> A shift that started the evening before and is
+            still running (storm work) stays one shift: after midnight the card still shows the day
+            running with an <strong>End Day</strong> button, a second Start Day isn&apos;t offered,
+            and the first job after midnight doesn&apos;t open an overlapping shift. End Day closes
+            it once. A shift that has been left open for more than 16 hours is treated as
+            forgotten: End Day doesn&apos;t close it at an absurd length, it stays open and the
+            Payroll report flags it for the office to correct.
           </li>
         </ul>
         <p>
@@ -234,7 +262,9 @@ export function CrewAppGuide() {
           </li>
           <li>
             <strong>Back</strong> &mdash; someone who left returns the same day. Their shift reopens
-            and the time they were away is taken off as an unpaid break.
+            and the time they were away is taken off as an unpaid break. If a job is still in
+            progress, their earlier job punch reopens too with the time away taken off, so the hours
+            they work on that job after returning are counted in job hours and Job Costing.
           </li>
         </ul>
         <p>
@@ -276,13 +306,20 @@ export function CrewAppGuide() {
         <p>
           Start Job and Stop Job apply to the <strong>whole stop</strong>. Skip is the exception —
           it&apos;s per service, so a crew can skip the hedges and still complete the mow at the same
-          property.
+          property. A leftover visit on a job that is On Hold or Cancelled isn&apos;t on the crew&apos;s
+          list, so Start Job and Stop Job skip it rather than starting, completing and invoicing work
+          nobody asked for. A double tap, or a tap queued offline that replays later, is treated as
+          already done instead of showing an error.
         </p>
         <p>
           If the stop has chemicals, a <strong>Confirm chemicals applied</strong> card lists each one
           at its planned amount. Enter how much was actually used, or tick <strong>Not used</strong>,
           then tap <strong>Confirm chemicals</strong>. When the company requires crew confirmation,{" "}
-          <strong>Stop Job stays disabled</strong> until every chemical is confirmed.
+          <strong>Stop Job stays disabled</strong> until every chemical is confirmed. Chemicals on a
+          service the crew skipped (or the office cancelled) aren&apos;t listed to mix or confirm and
+          never hold up Stop Job. If the crew starts a stop the office never dispatched, its
+          chemicals are loaded at Start Job so the card, the confirmation and the stock deduction
+          still work.
         </p>
         <Callout>
           If the office left <strong>notes for the crew</strong> on the job, the stop asks the crew to{" "}
@@ -371,6 +408,10 @@ export function CrewAppGuide() {
           <strong>Add Photo</strong> takes a picture with the camera and attaches it to the visit.
           Before-and-afters, damage found on arrival, and anything a client might query later all
           belong here — they stay attached to the visit rather than living in someone&apos;s camera roll.
+          Photos bigger than about 3 MB (typical for a recent phone camera) are shrunk on the phone
+          before they upload (longest side 2,400 px, re-saved as a JPEG), so uploads don&apos;t fail
+          on a weak connection; smaller photos go up untouched. If an upload fails you can pick the
+          same photo again and retry.
         </p>
       </Section>
 

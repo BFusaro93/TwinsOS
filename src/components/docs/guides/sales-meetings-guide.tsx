@@ -204,6 +204,15 @@ export function SalesMeetingsGuide() {
           on every tick within its reminder window — see the reschedule note below for the one case
           that intentionally re-arms it.
         </Callout>
+        <p>
+          <strong>Who is reminded.</strong> The meeting&apos;s assigned rep. If that rep has left
+          (deleted or deactivated) or has no login or email to reach, the reminder goes to the
+          client&apos;s account manager instead, and if there isn&apos;t one, to the organization&apos;s
+          admins, so a reminder is never silently dropped. Each recipient&apos;s own notification
+          settings still apply. If nobody can be reached the reminder isn&apos;t marked as sent, so it
+          goes out on a later run once someone is set up while the meeting is still in its window.
+          Organizations whose subscription is canceled get no automated reminders.
+        </p>
       </Section>
 
       <Section id="reschedule" title="Rescheduling and the reminder reset">

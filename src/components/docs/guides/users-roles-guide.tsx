@@ -188,6 +188,16 @@ export function UsersRolesGuide() {
           user simply doesn&apos;t see a tile that would otherwise dead-end in a &quot;not
           linked&quot; screen.
         </p>
+        <p>
+          <strong>Money actions are checked inside the database, per permission.</strong> Having
+          CRM access is not enough to move money: refunding or voiding a payment needs the
+          refund/void or delete-payment permission, recording or editing a payment or credit needs
+          Add/Modify Payments or Credits, applying money or credit to an invoice needs the payment
+          or credit permission, and merging invoices, invoicing a project milestone and reconciling
+          an invoice&apos;s payments need Add/Modify Invoices (reconcile accepts the payment
+          permissions too). The same keys the buttons use are enforced on the server, so a role
+          without them is refused even if it calls the action another way.
+        </p>
         <Callout>
           <strong>Admins skip all of this.</strong> If <code>profiles.role === &quot;admin&quot;</code>,
           every CRM permission check passes automatically — an Admin never needs a{" "}
@@ -203,7 +213,9 @@ export function UsersRolesGuide() {
             required to open the Report Center, and — as of the latest reporting changes — to
             run or save a custom analysis, open a saved report, view a Custom Dashboard, or use the
             Graphics Library. <strong>Manage Report Center</strong> additionally allows building
-            those and editing the KPI Scorecard.
+            those and editing the KPI Scorecard, and is also what lets someone create or change
+            dashboards, custom reports and scheduled report emails. The database itself refuses
+            those writes without it, so a view-only role can&apos;t do them any other way.
           </li>
           <li>
             <strong>View &amp; Edit Payroll Report</strong> (Home &gt; Report Access) unlocks the
@@ -253,11 +265,13 @@ export function UsersRolesGuide() {
           <li>
             An Admin can resend a pending invite, change a user&apos;s role, or deactivate them at
             any time from the same table. Deactivating revokes their login outright — it&apos;s not
-            just a status label, it bans their account the same moment, so they&apos;re signed out
-            within the hour even if already logged in. A deactivated user shows an{" "}
+            just a status label, it bans their account the same moment, so they can&apos;t sign in
+            again, and a session that&apos;s already open loses access to your organization&apos;s
+            data immediately rather than lingering until it expires. A deactivated user shows an{" "}
             <strong>Inactive</strong> badge and a reactivate icon in place of the trash icon;
             clicking it restores their login immediately, with their role and any CRM employee link
-            untouched. Marking the user&apos;s CRM employee record inactive has the same effect on permissions: a deactivated employee keeps no CRM or role permissions until reactivated. For a shared crew login, this only affects sign-in — to take the crew itself
+            untouched. A deactivated user can&apos;t be re-invited (use Reactivate instead), and a
+            deactivated admin can&apos;t use the invite, reset-password or deactivate actions. Marking the user&apos;s CRM employee record inactive has the same effect on permissions: a deactivated employee keeps no CRM or role permissions until reactivated. Setting an employee&apos;s Employment Status to <strong>Terminated</strong> does the same as deactivating them (and moving them back out of Terminated reactivates them). Deactivating or terminating an employee also takes them off every crew roster, so Start Day and Start Job no longer clock them in, payroll no longer carries them and the crew&apos;s headcount drops. Reactivating does not put them back on a crew; add them to a crew again (a Schedule Jobs Directly person gets their one-person crew back automatically). For a shared crew login, this only affects sign-in — to take the crew itself
             off the Dispatch Board, turn it off under Team → Crews instead.
           </li>
         </ol>
@@ -365,7 +379,10 @@ export function UsersRolesGuide() {
             <strong>A deleted (soft-deleted) CRM role silently revokes access.</strong> If a{" "}
             <code>crm_roles</code> row an employee is assigned to gets deleted, that employee loses
             CRM access the same as if no role were assigned at all — nothing on the user record
-            itself changes to indicate why.
+            itself changes to indicate why. To prevent that, the app now refuses to delete a role
+            while employees are still assigned to it (&quot;N employees are still assigned to this
+            role. Reassign them to another role first.&quot;); move them to another role, then
+            delete.
           </li>
           <li>
             <strong>The employee record has a third, unrelated &quot;User Role&quot; field — it grants nothing.</strong>{" "}

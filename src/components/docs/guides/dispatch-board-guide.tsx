@@ -616,6 +616,21 @@ export function DispatchBoardGuide() {
           not be invoiced&rdquo; &mdash; instead of it passing silently. Mark those visits complete
           again to retry billing; it never double-bills a visit that already has an invoice.
         </p>
+        <p>
+          <strong>Change Status &gt; Dispatched in bulk</strong> does what dispatching one visit
+          does: each visit that wasn&apos;t already dispatched gets its dispatched time stamped
+          (what the &quot;visit dispatched&quot; Zapier trigger and the crew app key on) and the
+          service&apos;s chemicals are preloaded onto the crew&apos;s Chemical Mix card.
+        </p>
+        <p>
+          <strong>Re-assign Crew in bulk</strong> sends each affected crew the same &quot;New Job
+          Assigned&quot; push a single reassignment sends (for up to 40 visits per action, so a
+          select-all doesn&apos;t flood phones). <strong>Completed visits are never re-assigned</strong>{" "}
+          &mdash; a finished visit keeps the crew that did the work so its labor and history stay
+          put; if everything you selected is completed you&apos;re told so instead. Sending selected
+          visits back to the waiting list processes them one at a time, and the job&apos;s own date
+          and crew only reset when its last visit goes back.
+        </p>
         <Callout>
           Email Selected Clients requires the same permission as any other outbound client email
           (Email Activity&apos;s Send permission) — it isn&apos;t a separate, less-gated path to

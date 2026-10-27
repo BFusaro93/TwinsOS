@@ -33,8 +33,12 @@ const LANDSCAPT_ENTITIES: [string, string, string][] = [
 ];
 
 const DEDUPE_BEHAVIOR: [string, string, string][] = [
-  ["Vendors", "name (exact match, case-sensitive on lookup, org-scoped)", "Existing vendor is updated with the new row's contact info, address, type, website, notes, and active flag."],
-  ["Parts", "partNumber (unique per org)", "Existing part is updated with the new row's name, description, category, cost, quantity, min stock, vendor name, and location."],
+  ["Vendors", "name (trimmed, not case-sensitive, org-scoped; a name repeated inside one file counts as the same vendor)", "Existing vendor is updated with only the columns the row fills in (contact, email, phone, address, type, website, notes). A blank cell never erases saved details, and the Active column only changes the vendor's status when the cell has a value (Active, Inactive, true, false, yes or no). Renaming a vendor in the app also renames it on its parts, products, assets, vehicles and other records that show the vendor's name."],
+  ["Parts", "partNumber (unique per org)", "Existing part is updated with only the columns the CSV carries (name always; description, category, unit cost, minimum stock, vendor, location, inventory flag when present). A quantity-only or cost-only file leaves everything else alone. A quantity on hand in the CSV is applied as a recorded stock adjustment (reason \u201cCSV import\u201d), not a silent overwrite, and only when it differs from the current count; a blank quantity cell leaves stock as it is. The part\u2019s catalog product is kept in step."],
+  ["Products", "partNumber (within the org)", "Existing product is updated with only the columns the CSV carries. A blank quantity, price, unit cost or vendor cell leaves the saved value alone, so a cost-only file no longer zeroes stock or resets prices. Stock changes go through a recorded adjustment (reason \u201cCSV import\u201d) so cost layers and the audit trail follow. Quantities accept decimals for materials; maintenance parts must be whole numbers."],
+  ["Assets", "assetTag", "Existing asset is updated with only the cells the CSV filled in (make, model, year, serial, location, purchase details, asset type when a type is given). Blank cells never wipe saved values and a blank status keeps the current status."],
+  ["Vehicles", "assetTag (looked up first, so a repeat import never creates a second copy)", "Existing vehicle is updated with only the cells the CSV filled in. A blank status keeps the current one, and a VIN that belongs to another vehicle is reported as a failed row."],
+  ["Work Orders", "workOrderNumber", "Existing work order is updated with only the columns the CSV carries (title always). A completed work order is not reopened by a file that has no status column, and blank descriptions, assets or due dates don\u2019t erase saved ones."],
   ["Clients", "accountNumber, only when the row supplies one", "Existing client is updated with the new row's contact and address fields. Clients without an account number always insert as new — the org auto-assigns one."],
   ["Leads", "primaryEmail or primaryPhone against every existing non-deleted client", "No new record is created. Instead the matched client is tagged “imported-lead” and the row is counted separately as “matched,” not “created.”"],
   ["Contracts", "client + contract name + start date", "The row is skipped with a note — an existing contract is never overwritten. Clients are matched by exact name; a name shared by two clients, or not found, skips the row. Status defaults to draft, so set it to active in the file for contracts that should bill. Imports don\u2019t fire automations."],
@@ -95,6 +99,14 @@ export function ImportExportGuide() {
           Money fields are converted from stored cents to a formatted dollar string on the way out
           (e.g. Parts&apos; unit cost, Purchase Orders&apos; grand total). Everything else is written
           as-is from the record.
+        </p>
+        <p>
+          <strong>Safe to open in Excel or Sheets.</strong> A text value that starts with{" "}
+          <code>=</code>, <code>+</code>, <code>-</code>, <code>@</code> or a tab would be run as a
+          formula by a spreadsheet, so the export puts a single quote in front of it (a client name
+          typed into a public form as <code>=HYPERLINK(...)</code> shows as plain text instead of
+          executing). Plain numbers, including negative amounts, are left alone. If you re-import
+          such a file, the quote is part of the text, so remove it first.
         </p>
         <Callout>
           There is no dedicated &quot;Download Template&quot; button in this panel — that&apos;s a
@@ -399,6 +411,13 @@ export function ImportExportGuide() {
             <strong>No pre-commit server-side dry run.</strong> The 5-row preview table is a client-side
             rendering of your mapped CSV, not a validation pass against the database — duplicate
             and error handling only happens once you click Import.
+          </li>
+          <li>
+            <strong>Re-importing updates only what the file contains.</strong> For Equipt entities
+            (Products, Parts, Assets, Vehicles, Work Orders and Vendors) a matched record is updated
+            with just the columns present and filled in; blank cells and missing columns leave the
+            saved values alone, and stock quantities change only through a recorded adjustment.
+            See the table above for each entity&apos;s matching key.
           </li>
           <li>
             <strong>Import only creates or merges — it never deletes.</strong> There is no way to

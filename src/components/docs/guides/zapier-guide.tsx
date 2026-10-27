@@ -96,7 +96,12 @@ export function ZapierGuide() {
         <Callout>
           <strong>Whose data does a Zap see?</strong> The key is tied to your organization, not an
           individual user. Anything a Zap does happens as your org, scoped only to your org&apos;s
-          own records.
+          own records. While the organization&apos;s subscription is canceled the key stops
+          working, so Zaps can&apos;t create or change records in a read-only account; it works
+          again after you resubscribe. On Create Work Order, Priority must be low, medium, high or
+          critical, Type must be reactive or preventive and Due Date must be YYYY-MM-DD (letter case
+          doesn&apos;t matter, and a field the Zap leaves unmapped is simply ignored); anything else
+          is rejected with a message saying which field is wrong.
         </Callout>
       </Section>
 

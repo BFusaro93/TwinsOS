@@ -161,7 +161,9 @@ export function SnowGuide() {
           visit is its own row with its own depth reading, closed out separately.
         </p>
         <p>
-          Once every visit for the event is closed out, move the storm event&apos;s status to{" "}
+          Skipped and cancelled stops are never closed out: they were called off rather than
+          plowed, so Close Out (and Close Out Selected) leave them alone and nothing is billed for
+          them. Once every visit for the event is closed out, move the storm event&apos;s status to{" "}
           <strong>Complete</strong>.
         </p>
       </Section>
