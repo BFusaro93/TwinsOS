@@ -370,13 +370,18 @@ export function useClientActivity(clientId: string) {
       const childNameById = new Map((children ?? []).map((c) => [c.id, c.display_name as string]));
       const activityClientIds = [clientId, ...childIds];
 
+      // Paged: PostgREST caps a response at 1000 rows, and a long-lived client
+      // (or a parent rolling up its children) passes that — the oldest history
+      // silently vanished from the timeline.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("client_activity")
-        .select("*, profiles(name)")
-        .in("client_id", activityClientIds)
-        .order("occurred_at", { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllRows<any>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("client_activity")
+          .select("*, profiles(name)")
+          .in("client_id", activityClientIds)
+          .order("occurred_at", { ascending: false })
+      );
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data.map((row: any) => {
         const activity = mapActivity(row);

@@ -23,9 +23,16 @@ export function computeWaitFireAt(
   config: Record<string, number> | null | undefined,
   from: Date = new Date()
 ): Date {
-  const days = config?.days ?? 0;
-  const hours = config?.hours ?? 0;
-  const minutes = config?.minutes ?? 0;
+  // The Wait dialog only sets min={0} as a browser hint, so a typed "-2" is
+  // saved as-is; a negative (or non-numeric) part must not schedule the next
+  // step in the past — or, for NaN, throw on toISOString() in the cron sweep.
+  const part = (v: unknown) => {
+    const n = Number(v ?? 0);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const days = part(config?.days);
+  const hours = part(config?.hours);
+  const minutes = part(config?.minutes);
   const d = new Date(from);
   d.setDate(d.getDate() + days);
   d.setHours(d.getHours() + hours);

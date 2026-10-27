@@ -280,6 +280,7 @@ export async function POST(request: Request) {
       .select("id, notification_prefs")
       .eq("org_id", callerProfile.org_id)
       .eq("role", "admin")
+      .neq("status", "inactive")
       .neq("id", user.id);
 
     adminRecipientIds = (admins ?? [])
@@ -302,6 +303,8 @@ export async function POST(request: Request) {
       const { data: inAppProfiles } = await adminClient
         .from("profiles")
         .select("id, notification_prefs")
+        // A deactivated login (e.g. an assignee who has left) gets nothing.
+        .neq("status", "inactive")
         .in("id", inAppIds);
 
       const inAppEligible = (inAppProfiles ?? [])
@@ -360,6 +363,7 @@ export async function POST(request: Request) {
   const { data: profiles } = await adminClient
     .from("profiles")
     .select("id, email, name, notification_prefs, role")
+    .neq("status", "inactive")
     .in("id", allEmailIds);
 
   const userPrefKey = resolveApprovalPrefKey(notifType, entityType);

@@ -4149,7 +4149,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
       <AccountStatementDialog
         clientId={clientId}
         clientName={client.displayName}
-        clientEmail={client.primaryEmail}
+        clientEmail={client.billingEmail?.trim() || client.primaryEmail}
         open={accountStatementOpen}
         onClose={() => setAccountStatementOpen(false)}
       />

@@ -81,6 +81,8 @@ export async function POST(request: Request) {
     .from("profiles")
     .select("id")
     .eq("org_id", callerProfile.org_id)
+    // A deactivated login can still be @mentioned in the text; don't notify it.
+    .neq("status", "inactive")
     .in("id", body.mentionedUserIds.slice(0, 50));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const validIds = (validRecipients ?? []).map((p: any) => p.id as string);

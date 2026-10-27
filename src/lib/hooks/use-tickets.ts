@@ -101,6 +101,8 @@ export function useCreateTicket() {
           subject: values.subject || null,
           body: values.body || null,
           status: values.status,
+          // Logged straight as closed (e.g. a finished call): closed_at is app-set.
+          closed_at: values.status === "closed" ? new Date().toISOString() : null,
           assigned_to: values.assignedTo || null,
           assigned_to_id: values.assignedToId ?? null,
           due_date: values.dueDate || null,
@@ -293,7 +295,13 @@ export function useUpdateTicket() {
         // which used a separate useCloseTicket call for this. Otherwise a
         // bulk "Mark Closed" never sets it, and reopening a closed ticket
         // leaves a stale closed_at behind.
-        payload.closed_at = updates.status === "closed" ? new Date().toISOString() : null;
+        //
+        // The edit sheet submits the whole form, status included, so re-saving an
+        // ALREADY closed ticket (fixing its subject, say) arrives here with
+        // status "closed" again — stamp closed_at only on the transition into
+        // closed, or every edit moved the closed date to now.
+        if (updates.status !== "closed") payload.closed_at = null;
+        else if (beforeStatus !== "closed") payload.closed_at = new Date().toISOString();
       }
       if (updates.assignedTo !== undefined) payload.assigned_to = updates.assignedTo || null;
       if (updates.assignedToId !== undefined) payload.assigned_to_id = updates.assignedToId ?? null;

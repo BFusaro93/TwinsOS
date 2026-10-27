@@ -120,7 +120,10 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
   const { data: vendors = [] } = useVendors();
   const { data: projects = [] } = useProjects();
   const { data: photoJobs = [] } = usePhotoJobs();
-  const { data: clients = [] } = useClients();
+  const { data: allClients = [] } = useClients();
+  // useClients() returns leads too, and they have their own group below —
+  // leaving them here listed every lead twice.
+  const clients = allClients.filter((c) => c.status !== "lead");
   const { data: leads = [] } = useLeads();
   const { data: invoices = [] } = useInvoices();
   const { data: estimates = [] } = useEstimates();

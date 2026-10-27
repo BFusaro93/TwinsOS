@@ -80,7 +80,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: client, error: clientErr } = await (supabase as any)
     .from("clients")
-    .select("org_id, display_name, primary_email, email_bounced_at, billing_address, billing_city, billing_state, billing_zip")
+    .select("org_id, display_name, primary_email, billing_email, email_bounced_at, billing_address, billing_city, billing_state, billing_zip")
     .eq("id", clientId)
     .is("deleted_at", null)
     .single();
@@ -91,7 +91,11 @@ export async function POST(
 
   const toEmails = (body.to && body.to.length > 0)
     ? body.to.map((e) => e.trim())
-    : (client.primary_email ? [client.primary_email as string] : []);
+    : (() => {
+      // Statements are billing mail: a Billing Email, when set, wins over the primary.
+      const stored = ((client.billing_email as string | null)?.trim() || (client.primary_email as string | null)) ?? null;
+      return stored ? [stored] : [];
+    })();
   if (toEmails.length === 0) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
   }

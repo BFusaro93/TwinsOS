@@ -605,7 +605,7 @@ export function CampaignsList() {
 
   const recipientCount = useMemo(() => {
     if (!sending) return 0;
-    const eligible = allClients.filter((c) => !c.doNotMarket && c.primaryEmail);
+    const eligible = allClients.filter((c) => !c.doNotMarket && c.okToEmail !== false && c.primaryEmail);
     if (sending.targetSegment === "custom") {
       const ids = new Set(sending.audienceClientIds);
       return eligible.filter((c) => ids.has(c.id)).length;
