@@ -460,9 +460,15 @@ export async function POST(req: NextRequest) {
   // Update invoice status to "sent" if it hasn't been emailed yet. "printed" is
   // included so a "both" delivery-method client's invoice — printed first, then
   // emailed — correctly progresses instead of staying stuck at "printed" forever.
+  // The invoice is also locked here, in the same write: a sent invoice must not
+  // keep silently-editable amounts. The single-invoice dialog locks from the
+  // client after a send, but the Invoices list's bulk "Email" runs this route
+  // directly per invoice and never did — every invoice emailed in bulk stayed
+  // editable (and re-priceable) after the client had received it.
+  const lockPatch = inv.locked ? {} : { locked: true, locked_at: new Date().toISOString() };
   if (inv.status === "draft" || inv.status === "printed") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: statusErr } = await (supabase as any).from("crm_invoices").update({ status: "sent" }).eq("id", invoiceId);
+    const { error: statusErr } = await (supabase as any).from("crm_invoices").update({ status: "sent", ...lockPatch }).eq("id", invoiceId);
     if (statusErr) {
       // The email already went out; surface the failed status flip rather than
       // silently leaving the invoice in draft/printed.
@@ -471,6 +477,12 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+  } else if (!inv.locked) {
+    // Re-sending an already-issued invoice: lock it too. Best-effort — the
+    // email is out, and a failed lock must not turn this into an error.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: lockErr } = await (supabase as any).from("crm_invoices").update(lockPatch).eq("id", invoiceId);
+    if (lockErr) log.error("could not lock an invoice after emailing it", { invoiceId, error: lockErr.message });
   }
 
   // Push to QuickBooks now that the invoice has gone out — never throws, so
