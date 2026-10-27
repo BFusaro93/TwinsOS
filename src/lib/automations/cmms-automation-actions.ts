@@ -72,13 +72,36 @@ export async function executeAction(
     const meterDueDate = isMeterPM
       ? shiftYmd(todayInZone(await getOrgTimeZone(adminClient, orgId)), 7)
       : null;
+    // assigned_to_id is crm_employees.id (work_orders_assigned_to_id_fkey).
+    // Re-verify it belongs to this org and is still active; a stale id falls
+    // back to unassigned rather than failing the whole WO insert on the FK.
+    let assigneeId: string | null = null;
+    let assigneeName: string | null = (ac.assigned_to as string) || null;
+    const configuredAssigneeId = (ac.assigned_to_id as string) || null;
+    if (configuredAssigneeId) {
+      const { data: emp } = await adminClient
+        .from("crm_employees")
+        .select("id, first_name, last_name")
+        .eq("id", configuredAssigneeId)
+        .eq("org_id", orgId)
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (emp) {
+        assigneeId = emp.id as string;
+        assigneeName = `${emp.first_name} ${emp.last_name}`.trim();
+      }
+    }
     const { data: wo, error: woErr } = await adminClient
       .from("work_orders")
       .insert({
         org_id: orgId,
         title: acTitle,
         priority: acPriority,
-        assigned_to_name: (ac.assigned_to as string) || null,
+        assigned_to_id: assigneeId,
+        assigned_to_name: assigneeName,
+        assigned_to_ids: assigneeId ? [assigneeId] : [],
+        assigned_to_names: assigneeId && assigneeName ? [assigneeName] : [],
         status: "open",
         asset_id: ctx.assetId ?? null,
         asset_name: ctx.assetName ?? null,

@@ -74,7 +74,9 @@ export function mapAutomation(row: AutomationRow): AutomationRule {
         type: "create_work_order",
         title: (ac.title as string) ?? "",
         priority: ((ac.priority as string) ?? "medium") as "low" | "medium" | "high" | "urgent",
-        assignedTo: (ac.assigned_to as string) ?? "",
+        assignedToId: (ac.assigned_to_id as string) ?? "",
+        // Legacy rows that never matched an employee keep their free text here.
+        assignedToName: (ac.assigned_to as string) ?? "",
       };
       break;
     case "create_wo_request":
@@ -82,7 +84,6 @@ export function mapAutomation(row: AutomationRow): AutomationRule {
         type: "create_wo_request",
         title: (ac.title as string) ?? "",
         priority: ((ac.priority as string) ?? "medium") as "low" | "medium" | "high" | "urgent",
-        assignedTo: (ac.assigned_to as string) ?? "",
       };
       break;
     case "create_requisition":
@@ -155,13 +156,13 @@ function serialiseActionConfig(action: AutomationAction): Json {
       return {
         title: action.title,
         priority: action.priority,
-        assigned_to: action.assignedTo,
+        assigned_to_id: action.assignedToId || null,
+        assigned_to: action.assignedToName,
       };
     case "create_wo_request":
       return {
         title: action.title,
         priority: action.priority,
-        assigned_to: action.assignedTo,
       };
     case "create_requisition":
       return { notes: action.notes };
