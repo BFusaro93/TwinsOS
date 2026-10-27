@@ -10,6 +10,9 @@ type AnySupabase = any;
  * job-level for Job Costing; payroll reads these shifts.
  */
 
+/** A still-open shift from the previous work date this young is treated as a shift that crossed midnight. */
+const CARRY_OVER_SHIFT_MS = 12 * 3_600_000;
+
 /**
  * Opens a shift for every working member (roster minus absent) who doesn't
  * already have one today. Returns how many were opened. Throws on a write
@@ -53,6 +56,25 @@ export async function startCrewDay(
       if (reopenErr) throw new Error(reopenErr.message);
     }
   }
+
+  // Storm work crosses midnight: a shift opened last evening (work_date =
+  // yesterday) that is still running is the SAME shift, so the first job after
+  // midnight must not open a second one — End Day would then close both at the
+  // same instant and the overlap (midnight to End Day) was paid twice. Only for
+  // a job-start auto-open: an explicit Start Day always means a fresh day.
+  if (p.source === "auto_first_job") {
+    const { data: carried } = await supabase
+      .from("crm_crew_day_shifts")
+      .select("crew_member_id")
+      .eq("org_id", p.orgId)
+      .eq("work_date", shiftYmd(p.workDate, -1))
+      .is("deleted_at", null)
+      .is("ended_at", null)
+      .gt("started_at", new Date(new Date(p.at).getTime() - CARRY_OVER_SHIFT_MS).toISOString())
+      .in("crew_member_id", memberIds);
+    for (const r of (carried ?? []) as { crew_member_id: string }[]) has.add(r.crew_member_id);
+  }
+
   const rows = memberIds
     .filter((id) => !has.has(id))
     .map((id) => ({

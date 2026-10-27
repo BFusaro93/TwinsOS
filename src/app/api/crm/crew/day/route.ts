@@ -5,7 +5,7 @@ import { getRouteAuth, resolveCallerCrewId, assertCallerOwnsVisit } from "@/lib/
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { resolveWorkingMemberIds } from "@/lib/crew/stop-punches";
-import { startCrewDay, endCrewDay, closeMemberOpenShift } from "@/lib/crew/day-shifts";
+import { startCrewDay, endCrewDay, closeMemberOpenShift, openShiftLookbackDate, MAX_AUTO_CLOSE_SHIFT_MS } from "@/lib/crew/day-shifts";
 
 /**
  * The crew's paid day (shop to shop).
@@ -45,13 +45,30 @@ export async function GET(request: Request) {
   const [{ data: members }, { data: shifts }, { data: absences }] = await Promise.all([
     memberIds.length ? db.from("crm_crew_members").select("id, name, role").in("id", memberIds).order("name") : { data: [] },
     memberIds.length
-      ? db.from("crm_crew_day_shifts").select("crew_member_id, started_at, ended_at").eq("org_id", orgId).eq("work_date", workDate).is("deleted_at", null).in("crew_member_id", memberIds)
+      // Today's shifts plus last evening's still-open one (storm work crosses
+      // midnight): without it the crew saw "Start Day" and no End Day after
+      // midnight, and a second Start Day opened an overlapping shift.
+      ? db.from("crm_crew_day_shifts").select("crew_member_id, work_date, started_at, ended_at").eq("org_id", orgId)
+          .gte("work_date", openShiftLookbackDate(workDate)).lte("work_date", workDate)
+          .is("deleted_at", null).in("crew_member_id", memberIds)
       : { data: [] },
     db.from("crm_crew_day_absences").select("crew_member_id").eq("org_id", orgId).eq("work_date", workDate).is("deleted_at", null),
   ]);
-  const shiftBy = new Map<string, { started_at: string; ended_at: string | null }>(
-    ((shifts ?? []) as { crew_member_id: string; started_at: string; ended_at: string | null }[]).map((s) => [s.crew_member_id, s])
-  );
+  const shiftBy = new Map<string, { started_at: string; ended_at: string | null }>();
+  const nowMs = Date.now();
+  for (const s of (shifts ?? []) as { crew_member_id: string; work_date: string; started_at: string; ended_at: string | null }[]) {
+    if (s.work_date === workDate) {
+      shiftBy.set(s.crew_member_id, s);
+    } else if (!s.ended_at && nowMs - new Date(s.started_at).getTime() < MAX_AUTO_CLOSE_SHIFT_MS && !shiftBy.has(s.crew_member_id)) {
+      // Yesterday's shift that is still running — the member's current shift
+      // unless they already have one for today (which the loop sets below).
+      shiftBy.set(s.crew_member_id, s);
+    }
+  }
+  // A shift for today always wins over a carried-over one, whatever the row order.
+  for (const s of (shifts ?? []) as { crew_member_id: string; work_date: string; started_at: string; ended_at: string | null }[]) {
+    if (s.work_date === workDate) shiftBy.set(s.crew_member_id, s);
+  }
   const absent = new Set(((absences ?? []) as { crew_member_id: string }[]).map((a) => a.crew_member_id));
   // Crew members from other crews who can be pulled onto this crew for today.
   // Names only — read with the service client (scoped to the caller's org)
