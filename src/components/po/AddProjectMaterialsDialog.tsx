@@ -188,7 +188,8 @@ export function AddProjectMaterialsDialog({
                     <tr key={item.id} className="border-b last:border-0">
                       <td className="py-1.5 pr-2">
                         <CatalogItemCombobox
-                          products={products}
+                          // Same filter as `catalog` above: a maintenance_part can't carry a project_id.
+                          products={products.filter((p) => p.category !== "maintenance_part")}
                           parts={parts}
                           value={item.productKey}
                           onValueChange={(val) => handleProductChange(item.id, val)}

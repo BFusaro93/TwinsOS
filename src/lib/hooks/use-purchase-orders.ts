@@ -726,7 +726,7 @@ export function useUpdatePurchaseOrderStatus() {
         ...(checkNumber !== undefined && { checkNumber }),
         ...(paymentBookedInQB !== undefined && { paymentBookedInQB }),
       });
-      return { previous };
+      return { previous, previousStatus: previous?.find((po) => po.id === id)?.status };
     },
     onError: (_err, _vars, context) => {
       if (context?.previous) {
@@ -738,7 +738,12 @@ export function useUpdatePurchaseOrderStatus() {
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
       queryClient.invalidateQueries({ queryKey: ["purchase-orders", id] });
     },
-    onSuccess: (_, { id, status }) => {
+    onSuccess: (_, { id, status }, context) => {
+      // Payment-tracking toggles and the check-number save reuse this mutation
+      // with the PO's CURRENT status — that isn't a status change, and firing
+      // "PO became <status>" automations again on every checkbox would repeat
+      // their actions (emails, work orders, requisitions) each time.
+      if (context?.previousStatus === status) return;
       // Fire any po_status_change automations configured for this target status (best-effort)
       fetch("/api/automations/run", {
         method: "POST",
