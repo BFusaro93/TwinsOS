@@ -4,6 +4,8 @@ import { Resend } from "resend";
 import { EMAIL_FROM } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { escapeHtml } from "@/lib/utils/escape-html";
+import { resolveReminderRecipients } from "@/lib/notifications/reminder-recipients";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 /**
  * GET /api/cron/sales-meeting-reminders — called every 15 minutes by Vercel
@@ -56,8 +58,7 @@ export async function GET(request: Request) {
     .select(`
       id, org_id, title, scheduled_at, location, client_id, lead_name,
       sales_rep_id,
-      clients(display_name),
-      crm_employees(id, user_id, email, first_name, last_name)
+      clients(display_name)
     `)
     .eq("status", "scheduled")
     .is("deleted_at", null)
@@ -71,8 +72,10 @@ export async function GET(request: Request) {
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   let notified = 0;
+  const orgCanceled = createOrgCanceledResolver(supabase);
 
   for (const meeting of upcoming as Record<string, unknown>[]) {
+    if (await orgCanceled(meeting.org_id as string)) continue; // canceled orgs get no automated reminders
     // Claim this meeting before sending anything — conditioned on
     // reminder_sent_at still being null, so an overlapping/retried cron run
     // (this fires every 15 min and isn't guaranteed exactly-once) can't also
@@ -86,7 +89,6 @@ export async function GET(request: Request) {
       .select("id");
     if (!claimed?.length) continue;
 
-    const rep = meeting.crm_employees as Record<string, unknown> | null;
     const clientName = (meeting.clients as Record<string, unknown> | null)?.display_name as string
       ?? (meeting.lead_name as string | null)
       ?? "a new lead";
@@ -121,60 +123,60 @@ export async function GET(request: Request) {
         .eq("reminder_sent_at", now.toISOString());
     };
 
-    if (rep) {
-      // crm_employees has no notification_prefs of its own — that lives on
-      // profiles, keyed by the employee's linked login (user_id), which has
-      // no declared FK relationship PostgREST can nest-select through, so
-      // it's looked up separately. An employee with no user_id (no login)
-      // still gets the email via crm_employees.email, just no in-app row.
-      let prefs: Record<string, unknown> = {};
-      if (rep.user_id) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("notification_prefs")
-          .eq("id", rep.user_id)
-          .single();
-        prefs = (profile?.notification_prefs ?? {}) as Record<string, unknown>;
-      }
-      const repName = `${rep.first_name} ${rep.last_name}`.trim();
+    // The assigned rep, unless they have left (deleted/deactivated) or have no
+    // reachable login or email — then the client's account manager, then org
+    // admins. notification_prefs live on the recipient's linked login.
+    const { recipients } = await resolveReminderRecipients(supabase, {
+      orgId: meeting.org_id as string,
+      repEmployeeId: meeting.sales_rep_id as string | null,
+      clientId: meeting.client_id as string | null,
+    });
+    if (recipients.length === 0) {
+      // Nobody to tell: give the claim back so a later tick (once a rep or
+      // admin exists) can still send it while the meeting is in the window.
+      await releaseClaim();
+      continue;
+    }
 
-      if (rep.user_id && prefs.inAppMeetingReminder !== false) {
+    for (const r of recipients) {
+      if (r.userId && r.prefs.inAppMeetingReminder !== false) {
         const { error: notifErr } = await supabase
           .from("notifications")
           .insert({
-            org_id: meeting.org_id,
-            user_id: rep.user_id,
+            org_id: meeting.org_id as string,
+            user_id: r.userId,
             type: "sales_meeting_reminder",
             title: `Meeting at ${timeStr} — ${clientName}`,
             message: `${meeting.title} with ${clientName} starts at ${timeStr}${meeting.location ? ` at ${meeting.location}` : ""}.`,
-            entity_id: meeting.id,
+            entity_id: meeting.id as string,
             entity_type: "sales_meeting",
           });
         if (!notifErr) inAppSent = true;
       }
+    }
 
-      if (rep.email && prefs.emailMeetingReminder !== false) {
-        try {
-          const { error: sendErr } = await resend.emails.send({
-            from: EMAIL_FROM,
-            to: rep.email as string,
-            subject: `Meeting in ${REMINDER_LEAD_MINUTES} minutes — ${clientName}`,
-            html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+    for (const r of recipients) {
+      if (!r.email || r.prefs.emailMeetingReminder === false) continue;
+      try {
+        const { error: sendErr } = await resend.emails.send({
+          from: EMAIL_FROM,
+          to: r.email,
+          subject: `Meeting in ${REMINDER_LEAD_MINUTES} minutes — ${clientName}`,
+          html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
               <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Upcoming Sales Meeting</h2>
-              <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(repName || "there")},</p>
+              <p style="margin:0 0 4px;color:#475569">Hi ${escapeHtml(r.firstName || "there")},</p>
               <p style="margin:0 0 24px;color:#475569"><strong>${escapeHtml(String(meeting.title ?? ""))}</strong> with ${escapeHtml(clientName)} starts at <strong>${timeStr}</strong>${meeting.location ? ` at ${escapeHtml(String(meeting.location))}` : ""}.</p>
               <a href="${meetingUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Calendar</a>
             </div>`,
-          });
-          if (sendErr) {
-            await releaseClaim();
-          } else {
-            notified++;
-          }
-        } catch {
-          // continue to next meeting if one email fails
+        });
+        if (sendErr) {
           await releaseClaim();
+        } else {
+          notified++;
         }
+      } catch {
+        // continue to next recipient if one email fails
+        await releaseClaim();
       }
     }
   }

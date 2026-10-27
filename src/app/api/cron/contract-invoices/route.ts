@@ -10,6 +10,7 @@ import {
 } from "@/lib/contract-billing";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
 
@@ -141,7 +142,9 @@ export async function GET(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const dueTodayContracts: any[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const orgCanceled = createOrgCanceledResolver(supabase);
   for (const c of ((contracts ?? []) as any[])) {
+    if (await orgCanceled(c.org_id)) continue; // canceled orgs get no automated invoices
     const { date: todayDate } = await orgToday(c.org_id);
     // Term vs the BILLED period (advance-shifted), not today — see termSkipReason.
     if (termSkipReason(planContractBilling(c, todayDate, { billNow: false }), c)) continue;

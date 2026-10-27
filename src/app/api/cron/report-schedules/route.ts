@@ -6,6 +6,7 @@ import { getReport } from "@/lib/reports/registry";
 import { renderScheduledReportPdf } from "@/lib/reports/run-scheduled";
 import { EMAIL_FROM } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 import { hourInZone, startOfTodayInZoneIso } from "@/lib/time/zone";
 
 /**
@@ -69,7 +70,9 @@ export async function GET(request: Request) {
   // errored run is not retried until tomorrow, same as before) and is skipped.
   const dayStartByOrg = new Map<string, string>();
   const due: { id: string; org_id: string; report_key: string; recipients: string[]; last_run_at: string | null }[] = [];
+  const orgCanceled = createOrgCanceledResolver(supabase);
   for (const schedule of schedules ?? []) {
+    if (await orgCanceled(schedule.org_id)) continue; // canceled orgs get no scheduled report emails
     const tz = await getOrgTimeZone(supabase, schedule.org_id);
     if (!dayStartByOrg.has(schedule.org_id)) {
       dayStartByOrg.set(schedule.org_id, startOfTodayInZoneIso(now, tz));
