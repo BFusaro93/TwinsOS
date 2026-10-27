@@ -147,7 +147,15 @@ export async function POST(req: NextRequest) {
   // damages sending-domain reputation, so it is blocked for transactional mail
   // too (see the Resend webhook that sets email_bounced_at). An explicit `to`
   // override is how staff send to a corrected address, so it is not blocked.
-  const usingStoredInvoiceEmail = !(body.to && body.to.length > 0);
+  // The send dialog always submits its pre-filled recipients as `to`, so "no
+  // `to` given" alone never matched and the guard below never ran for a
+  // single-invoice send: staff could keep emailing a dead address. Sending to
+  // exactly the stored (bounced) address counts as using it; only a different
+  // address is the "corrected address" override.
+  const storedEmail = ((inv.clients?.primary_email as string | null) ?? "").trim().toLowerCase();
+  const usingStoredInvoiceEmail =
+    !(body.to && body.to.length > 0) ||
+    (storedEmail !== "" && body.to.every((e) => e.trim().toLowerCase() === storedEmail));
   if (usingStoredInvoiceEmail && inv.clients?.email_bounced_at) {
     return NextResponse.json(
       { error: "Client's email address has hard-bounced. Update it, or send to a different address." },
