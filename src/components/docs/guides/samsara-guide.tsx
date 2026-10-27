@@ -160,8 +160,12 @@ export function SamsaraGuide() {
           </li>
           <li>
             <strong>The incoming mileage is less than the meter&apos;s current value</strong> — the
-            reading is skipped and logged (odometers don&apos;t go backwards, so this is treated as
-            bad or stale data rather than written).
+            reading is always saved to the meter&apos;s history. If the meter&apos;s latest reading
+            was entered <em>manually</em> (for example a mistyped, too-high odometer), the Samsara
+            reading replaces it as the current value, so one bad manual entry can&apos;t block
+            syncing. If the latest reading already came from Samsara, odometers don&apos;t go
+            backwards, so the lower reading is kept in the history with a note but the current
+            value is left alone. Either way the meter&apos;s Last Reading time is refreshed.
           </li>
           <li>
             <strong>The incoming mileage is greater than or equal to the current value</strong> — a

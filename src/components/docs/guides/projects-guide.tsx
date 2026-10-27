@@ -120,6 +120,12 @@ export function ProjectsGuide() {
           A project&apos;s status runs through a flow — Sold → Scheduled → In Progress → Complete —
           with On Hold and Canceled as side branches, shown as a step indicator on the Details tab.
         </p>
+        <p>
+          Users with the Equipt <strong>Viewer</strong> or <strong>Requestor</strong> role can see
+          projects but not change them: New Project, Edit, Archive, Delete, the status buttons and
+          the Materials / Other Costs actions are hidden, and the database refuses writes from those
+          roles. Purchasers keep full access so they can track job costs.
+        </p>
       </Section>
 
       <Section id="assigning-costs" title="Assigning costs to a Project">
