@@ -173,6 +173,19 @@ export function JobsPackagesGuide() {
           Changing a job&apos;s crew note resets the crew&apos;s &quot;I&apos;ve read this&quot;
           acknowledgment, so they have to read it again before they can clock in.
         </Callout>
+        <p>
+          <strong>Editing the crew note updates upcoming visits.</strong> Each generated visit
+          carries a copy of the job&apos;s crew note. When you change the note on the job, the
+          upcoming visits (scheduled or dispatched, not yet started) that still hold the unchanged
+          copy get the new text, so a new gate code reaches the crew on the next stop. A note someone
+          typed on one particular visit is left alone.
+        </p>
+        <p>
+          <strong>Adding a visit by hand.</strong> On the job&apos;s Visits tab, Add Visit lets you
+          pick a crew or choose <strong>Unassigned</strong>, which pins that visit to no crew instead
+          of falling back to the job&apos;s crew. The date defaults to your organization&apos;s
+          today.
+        </p>
       </Section>
 
       <Section id="job-costing-tab" title="The Job Costing tab">
@@ -408,7 +421,8 @@ export function JobsPackagesGuide() {
             share a name (case doesn&apos;t matter) — creating, renaming or importing one that
             clashes is refused with a message, and a duplicate row in a CSV import is skipped.
             Switching a schedule off stops any new visits being generated for the jobs on it
-            (including the per-job Generate Visits button); visits that already exist are kept.
+            (including the per-job Generate Visits button); visits that already exist are kept. Renaming a schedule carries every job on it
+            along, so they keep their cadence.
           </li>
         </ul>
       </Section>

@@ -133,7 +133,9 @@ export function WarrantiesGuide() {
         <p>
           Each morning, any active warranty ending within 30 days triggers one reminder per end date:
           an in-app notification and an email to the client&apos;s sales rep, so they can offer a
-          renewal. If the client has no sales rep, organization admins get the in-app notification.
+          renewal. If the client has no sales rep, or the rep has left or can&apos;t be reached,
+          organization admins get the in-app notification and the email instead, so the reminder is
+          never dropped. Canceled organizations get no automated reminders.
           Turn either channel off under <strong>Settings → Notifications → Warranty Expiring Soon</strong>.
           Renewing a warranty gives it a new end date, which re-arms the reminder.
         </p>

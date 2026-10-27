@@ -178,7 +178,13 @@ export function ContractsGuide() {
           Oct 20&ndash;31, then $1,000 from Nov 1). The invoice line names the stub period and shows
           the formula. It&apos;s generated once &mdash; by the cron or Create Invoices, whichever
           comes first &mdash; and applies to Monthly, Quarterly and Annual contracts (a contract
-          starting exactly on a billing day has no stub).
+          starting exactly on a billing day has no stub, and weekly, biweekly and one-time contracts
+          never prorate). A monthly contract that starts <em>before</em> its billing day (say Oct 20
+          with billing day 25) bills Oct 20&ndash;24 as the stub; quarterly and annual contracts
+          starting before their billing day simply bill their first full cycle on that day. Turning
+          proration on for a contract that has already started regular billing doesn&apos;t bill a
+          stub after the fact. The stub uses the starting month&apos;s entry in the monthly-amounts
+          grid when there is one, otherwise the flat amount.
         </p>
         <Callout>
           <strong>Why bill a month in advance?</strong> For recurring service, invoicing after the

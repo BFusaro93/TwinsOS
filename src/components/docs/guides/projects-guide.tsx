@@ -276,7 +276,11 @@ export function ProjectsGuide() {
           change order, maintained by the database. The only field you edit directly is the
           Original Contract Price, on the New/Edit Project dialog. It is still not derived from
           actual Invoices — invoicing and payment activity shown on Billing/Analysis doesn&apos;t feed
-          back into either contract figure.
+          back into either contract figure. The prices are before tax: the edit dialog labels the
+          field &quot;Original Contract Price, before tax&quot;, shows the revised figure beneath it
+          once change orders are approved, and re-saving a project never adds approved change
+          orders on top a second time. &quot;Remaining to bill&quot; compares the pre-tax price
+          with what has been billed excluding tax (void invoices ignored).
         </Callout>
               <p>
           A <strong>Warranties</strong> tab also appears next to those when the project has a client.
@@ -324,6 +328,15 @@ export function ProjectsGuide() {
             <strong>default</strong>, and the Rate Calculator loads it each time it opens. Use{" "}
             <strong>Save as Scenario</strong> to store the current inputs, or{" "}
             <strong>Update</strong> to save changes back to the scenario you loaded.
+          </li>
+          <li>
+            Overtime is a true weighted average. Overtime hours are paid at 1.5&times; the wage, and
+            the calculator weights each wage by the share of <em>all</em> hours worked at it
+            (overtime hours &divide; total hours). A crew with 400 regular and 100 overtime hours
+            blends to 20% overtime, not 25%. Fixed overhead is still spread over regular hours only,
+            so extra overtime never dilutes it. After this changes a scenario&apos;s numbers, open
+            the Rate Calculator and click <strong>Set as project rates</strong> again to apply the
+            new rates.
           </li>
           <li>
             SUI and FUI only apply to each employee&apos;s first dollars of wages (for example

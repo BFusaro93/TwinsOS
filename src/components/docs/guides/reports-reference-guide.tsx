@@ -234,7 +234,7 @@ const SECTIONS: ReportSection[] = [
         name: "Payment Audit Summary",
         description: "Shows payments received per day, broken out by payment method.",
         filters: "Payment Date",
-        notes: ["Cash only: excludes account credits and AR write-offs; amounts are net of refunds."],
+        notes: ["Cash only: excludes account credits and AR write-offs; amounts are net of refunds. Payments from a client that has since been deleted still count (the client shows as \"(deleted)\" in custom analyses of payments), so cash-received and P&L totals keep money that was really collected. Custom analyses built on invoices and invoice line items likewise keep a deleted client's billed revenue."],
       },
       {
         name: "Credit Card Processing Fees",
@@ -732,7 +732,11 @@ export function ReportsReferenceGuide() {
             by the number of men, so every man-hours, variance, revenue-per-man-hour and labor-cost
             figure counts worked time only. A one-hour lunch in a nine-hour day with three crew
             reports 24.00 man-hours, not 27.00. Hours a dispatcher typed in by hand are used exactly
-            as entered.
+            as entered. When people are clocked in on a stop, the visit&apos;s hours follow their
+            actual punches (each person&apos;s own in-to-out minus breaks, added together) rather
+            than crew size × duration. The Timesheet Detail, Job Hours Summary and Crew Hours
+            Summary reports use the same net-of-pause hours; labor cost is reduced by the pause
+            only when pauses are unpaid for your company (the default).
           </li>
         </ul>
       </Callout>
