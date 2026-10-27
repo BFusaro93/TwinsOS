@@ -19,6 +19,7 @@ import { ROUNDING_LABELS, type AdjustMethod, type RoundingRule } from "@/lib/pri
 import {
   ADJUST_TARGETS,
   TARGET_LABELS,
+  lineDeltaCents,
   type AdjustTarget,
   type PriceAdjustmentPreview,
 } from "@/types/crm-pricing";
@@ -88,14 +89,14 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
   );
   const selectedRows = changedRows.filter((c) => !excluded.has(rowKey(c)));
   const selectedDelta = selectedRows.reduce(
-    (sum, c) => sum + (c.newRateCents - c.oldRateCents),
+    (sum, c) => sum + lineDeltaCents(c),
     0
   );
   const selectedByTarget = ADJUST_TARGETS.reduce(
     (acc, t) => {
       const rows = selectedRows.filter((c) => c.entityType === t);
       acc.counts[t] = rows.length;
-      acc.deltas[t] = rows.reduce((s, c) => s + (c.newRateCents - c.oldRateCents), 0);
+      acc.deltas[t] = rows.reduce((s, c) => s + lineDeltaCents(c), 0);
       return acc;
     },
     { counts: {} as Record<AdjustTarget, number>, deltas: {} as Record<AdjustTarget, number> }
@@ -379,7 +380,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Total change</p>
+                <p className="text-xs text-muted-foreground">Total change (per visit, quantity-weighted)</p>
                 <p
                   className={`text-xl font-semibold tabular-nums ${
                     selectedDelta > 0 ? "text-emerald-600 dark:text-emerald-400" : selectedDelta < 0 ? "text-red-600 dark:text-red-400" : "text-slate-900 dark:text-neutral-100"
@@ -488,17 +489,18 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                   </thead>
                   <tbody>
                     {visibleRows.map((c) => {
-                      const delta = c.newRateCents - c.oldRateCents;
+                      const delta = lineDeltaCents(c);
+                      const rateMoved = c.newRateCents !== c.oldRateCents;
                       const isOut = excluded.has(rowKey(c));
                       return (
                         <tr
                           key={`${c.entityType}-${c.entityId}`}
                           className={`border-b last:border-0 ${
-                            delta === 0 ? "text-slate-400 dark:text-neutral-500" : isOut ? "bg-slate-50 dark:bg-muted/40 text-slate-400 dark:text-neutral-500" : ""
+                            !rateMoved ? "text-slate-400 dark:text-neutral-500" : isOut ? "bg-slate-50 dark:bg-muted/40 text-slate-400 dark:text-neutral-500" : ""
                           }`}
                         >
                           <td className="px-4 py-2">
-                            {delta !== 0 && (
+                            {rateMoved && (
                               <Checkbox
                                 aria-label={`Include ${c.label}`}
                                 checked={!isOut}
@@ -508,6 +510,11 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                           </td>
                           <td className="px-4 py-2">
                             {c.label}
+                            {c.quantity !== 1 && (
+                              <span className="ml-2 text-[11px] text-muted-foreground">
+                                × {c.quantity.toLocaleString()} units
+                              </span>
+                            )}
                             {isOut && (
                               <span className="ml-2 rounded bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
                                 excluded
@@ -535,7 +542,7 @@ export function PriceAdjustmentForm({ onApplied }: { onApplied?: () => void }) {
                                 : ""
                             }`}
                           >
-                            {delta === 0 ? "—" : isOut ? "no change" : signedCurrency(delta)}
+                            {!rateMoved ? "—" : isOut ? "no change" : signedCurrency(delta)}
                           </td>
                         </tr>
                       );

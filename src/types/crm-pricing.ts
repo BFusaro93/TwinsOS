@@ -96,6 +96,21 @@ export interface PriceAdjustmentCandidate {
   label: string;
   oldRateCents: number;
   newRateCents: number;
+  /** Units billed per visit (job services); 1 for packages and package services. */
+  quantity: number;
+}
+
+/**
+ * What one line actually changes on a bill: rates are per unit and a visit
+ * bills round(rate * qty), so the change is the difference of the two rounded
+ * line totals. Mirrors crm_apply_price_adjustment's delta_cents.
+ */
+export function lineDeltaCents(c: {
+  oldRateCents: number;
+  newRateCents: number;
+  quantity: number;
+}): number {
+  return Math.round(c.newRateCents * c.quantity) - Math.round(c.oldRateCents * c.quantity);
 }
 
 export interface PriceAdjustmentPreview {
@@ -104,6 +119,7 @@ export interface PriceAdjustmentPreview {
   changedCount: number;
   /** Rows the filters matched but the maths leaves untouched. */
   unchangedCount: number;
+  /** Quantity-weighted: the real per-visit change, not the per-unit rate change. */
   deltaCents: number;
   countsByTarget: Record<AdjustTarget, number>;
   deltaByTarget: Record<AdjustTarget, number>;

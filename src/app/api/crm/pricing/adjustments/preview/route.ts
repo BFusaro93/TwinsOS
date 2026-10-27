@@ -7,6 +7,7 @@ import {
   type AdjustTarget,
   type PriceAdjustmentCandidate,
   type PriceAdjustmentPreview,
+  lineDeltaCents,
 } from "@/types/crm-pricing";
 import { authorizePricing } from "@/lib/pricing/authorize";
 import { logger } from "@/lib/logger";
@@ -70,6 +71,7 @@ export async function POST(request: Request) {
       label: string;
       old_rate_cents: number;
       new_rate_cents: number;
+      quantity: number | string | null;
     }[]
   ).map((r) => ({
     entityType: r.entity_type,
@@ -79,6 +81,8 @@ export async function POST(request: Request) {
     label: r.label,
     oldRateCents: r.old_rate_cents,
     newRateCents: r.new_rate_cents,
+    // numeric comes back as a number or string depending on the driver.
+    quantity: r.quantity == null ? 1 : Number(r.quantity),
   }));
 
   const changed = candidates.filter((c) => c.newRateCents !== c.oldRateCents);
@@ -86,7 +90,7 @@ export async function POST(request: Request) {
   const deltaByTarget = emptyByTarget();
   for (const c of changed) {
     countsByTarget[c.entityType] += 1;
-    deltaByTarget[c.entityType] += c.newRateCents - c.oldRateCents;
+    deltaByTarget[c.entityType] += lineDeltaCents(c);
   }
 
   const preview: PriceAdjustmentPreview = {
@@ -97,7 +101,7 @@ export async function POST(request: Request) {
     ],
     changedCount: changed.length,
     unchangedCount: candidates.length - changed.length,
-    deltaCents: changed.reduce((s, c) => s + (c.newRateCents - c.oldRateCents), 0),
+    deltaCents: changed.reduce((s, c) => s + lineDeltaCents(c), 0),
     countsByTarget,
     deltaByTarget,
   };
