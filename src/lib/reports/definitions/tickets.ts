@@ -1,5 +1,6 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import { buildResult, col } from "@/lib/reports/helpers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { todayInZone } from "@/lib/time/zone";
 
 // ============================================================
@@ -18,17 +19,6 @@ export const TICKET_REPORTS: PrebuiltReportDef[] = [
       // due TODAY as already past due. The ticket-past-due cron that emails
       // about the same tickets resolves the org's zone too; they must agree.
       const today = todayInZone(timeZone);
-      const { data, error } = await supabase
-        .from("crm_tickets")
-        .select("ticket_number, subject, category, assigned_to, due_date, clients(display_name)")
-        .eq("status", "open")
-        .not("due_date", "is", null)
-        .lt("due_date", today)
-        .is("deleted_at", null)
-        .order("due_date", { ascending: true })
-        .limit(2000);
-      if (error) throw new Error(error.message);
-
       type Row = {
         ticket_number: number | null;
         subject: string | null;
@@ -38,7 +28,19 @@ export const TICKET_REPORTS: PrebuiltReportDef[] = [
         clients: { display_name: string | null } | null;
       };
 
-      const rows = ((data ?? []) as unknown as Row[]).map((r) => ({
+      // Paged: .limit(2000) is capped at 1000 rows by PostgREST.
+      const data = await fetchAllRows<Row>(() =>
+        supabase
+          .from("crm_tickets")
+          .select("ticket_number, subject, category, assigned_to, due_date, clients(display_name)")
+          .eq("status", "open")
+          .not("due_date", "is", null)
+          .lt("due_date", today)
+          .is("deleted_at", null)
+          .order("due_date", { ascending: true })
+      );
+
+      const rows = data.map((r) => ({
         ticket_number: r.ticket_number,
         subject: r.subject,
         category: r.category,
