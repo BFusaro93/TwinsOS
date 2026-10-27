@@ -240,19 +240,32 @@ export async function notifyTicketComment(
 ) {
   const { orgId, ticketId, ticketNumber, subject, assignedToId, assignedToName, commenterName, commenterId, commentBody } = params;
   const assigneeId = await resolveAssigneeId(supabase, orgId, assignedToId ?? null, assignedToName);
-  if (!assigneeId || assigneeId === commenterId) return;
+  if (assigneeId && assigneeId === commenterId) return;
 
-  const { data: assignee } = await supabase
-    .from("profiles")
-    .select("id, email, name, notification_prefs")
-    .eq("id", assigneeId)
-    .neq("status", "inactive")
-    .maybeSingle();
-  if (!assignee) return;
+  const { data: assigneeRow } = assigneeId
+    ? await supabase
+        .from("profiles")
+        .select("id, email, name, notification_prefs")
+        .eq("id", assigneeId)
+        .neq("status", "inactive")
+        .maybeSingle()
+    : { data: null };
+  // A comment with no staff author (commenterId null: the client replying by
+  // text) must still reach someone. When the ticket is unassigned, assigned to
+  // an employee with no login, or assigned to a deactivated user, the reply
+  // used to be filed on the ticket and notify nobody. Fall back to the same
+  // audience that hears about new tickets. Staff-authored comments keep the
+  // assignee-only behavior.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let recipients: any[] = assigneeRow ? [assigneeRow] : [];
+  if (!assigneeRow && commenterId === null) {
+    recipients = await resolveBroadcastRecipients(supabase, orgId, "newTicketRecipientIds");
+  }
+  if (!recipients.length) return;
 
   const label = ticketLabel(subject, ticketNumber);
   const snippet = commentBody.length > 120 ? `${commentBody.slice(0, 120)}…` : commentBody;
-  await sendToRecipients(supabase, [assignee], {
+  await sendToRecipients(supabase, recipients, {
     orgId, ticketId,
     notifType: "ticket_comment",
     inAppPrefKey: "inAppTicketComment", emailPrefKey: "emailTicketComment",

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
 
 // GET /api/crm/forms/[id]/rules
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -57,6 +58,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const { data: profile } = await supabase
     .from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
+  {
+    const denied = await rejectWithoutFormsPermission(supabase, "edit");
+    if (denied) return denied;
+  }
 
   const { data: form } = await db
     .from("crm_forms").select("id").eq("id", id).eq("org_id", profile.org_id).maybeSingle();

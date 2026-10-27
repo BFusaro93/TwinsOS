@@ -189,10 +189,16 @@ export function parseCSV(text: string): Record<string, string>[] {
     seen.set(h, count);
     return count > 1 ? `${h} (${count})` : h;
   });
-  return lines.slice(1).map((line) => {
-    const values = parseRow(line);
-    return Object.fromEntries(headers.map((h, i) => [h, (values[i] ?? "").trim()]));
-  });
+  return lines
+    .slice(1)
+    .map((line) => parseRow(line))
+    // Spreadsheet exports pad the sheet with rows of bare delimiters (",,,,").
+    // They pass the non-blank-line check in splitCSVRows, so each one used to
+    // reach the importer as an empty record and be reported as a failed row
+    // ("Missing required field") or, for importers with no required field,
+    // create an empty record.
+    .filter((values) => values.some((v) => v.trim() !== ""))
+    .map((values) => Object.fromEntries(headers.map((h, i) => [h, (values[i] ?? "").trim()])));
 }
 
 /**

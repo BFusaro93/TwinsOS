@@ -68,14 +68,18 @@ export async function resolveEmailStepContent(
   if (client.email_bounced_at) return { error: "client's email address has hard-bounced (email_bounced_at)" };
 
   const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary"];
-  const toEmails = new Set<string>();
+  // Keyed by trimmed lowercase address: the same mailbox typed with different
+  // case or stray spaces on the client, its billing email and a contact is one
+  // recipient, not a To header listing the person two or three times.
+  const toByKey = new Map<string, string>();
+  const addEmail = (raw: unknown) => {
+    if (typeof raw !== "string") return;
+    const email = raw.trim();
+    if (email && !toByKey.has(email.toLowerCase())) toByKey.set(email.toLowerCase(), email);
+  };
 
-  if (toSelection.includes("client_primary") && client.primary_email) {
-    toEmails.add(client.primary_email as string);
-  }
-  if (toSelection.includes("billing_email") && client.billing_email) {
-    toEmails.add(client.billing_email as string);
-  }
+  if (toSelection.includes("client_primary")) addEmail(client.primary_email);
+  if (toSelection.includes("billing_email")) addEmail(client.billing_email);
   if (toSelection.includes("all_contacts")) {
     const { data: contacts } = await supabase
       .from("client_contacts")
@@ -83,12 +87,10 @@ export async function resolveEmailStepContent(
       .eq("client_id", params.clientId)
       .eq("ok_to_email", true)
       .is("deleted_at", null);
-    for (const contact of contacts ?? []) {
-      if (contact.email) toEmails.add(contact.email as string);
-    }
+    for (const contact of contacts ?? []) addEmail(contact.email);
   }
 
-  if (toEmails.size === 0) return { error: "no resolvable recipient email for the selected 'to' options" };
+  if (toByKey.size === 0) return { error: "no resolvable recipient email for the selected 'to' options" };
 
   const { data: orgRow } = await supabase
     .from("organizations")
@@ -199,7 +201,7 @@ export async function resolveEmailStepContent(
   };
 
   return {
-    toEmails: [...toEmails],
+    toEmails: [...toByKey.values()],
     toName: clientDisplayName,
     fromAddress,
     replyTo,

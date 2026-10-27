@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
 
 function toSlug(name: string): string {
   return name
@@ -71,9 +72,18 @@ export async function POST(req: Request) {
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
+  {
+    const denied = await rejectWithoutFormsPermission(supabase, "edit");
+    if (denied) return denied;
+  }
 
-  const body = await req.json();
-  const { name, description, status = "draft" } = body;
+  const body = await req.json().catch(() => null);
+  const { name, description, status = "draft" } = (body ?? {}) as { name?: unknown; description?: unknown; status?: string };
+  // A missing/blank name used to reach the insert and come back as an opaque
+  // 500 (NOT NULL violation); an empty slug would also be generated from it.
+  if (typeof name !== "string" || !name.trim()) {
+    return NextResponse.json({ error: "Form name is required" }, { status: 400 });
+  }
 
   // Ensure unique slug within org
   let slug = toSlug(name || "form");
