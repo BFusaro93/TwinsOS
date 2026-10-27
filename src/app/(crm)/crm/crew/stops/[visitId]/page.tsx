@@ -158,11 +158,18 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const { data: photos = [] } = useVisitPhotos(anchorVisitId);
   const stopVisitIds = stop?.visits.map((v) => v.id) ?? [];
   const { data: chemicals = [] } = useVisitChemicals(stopVisitIds);
-  const usedChemicals = chemicals.filter((c) => c.used);
+  // A service the crew skipped (or the office cancelled) is not being applied, so
+  // its chemicals are neither "what to mix" nor something to confirm — and the
+  // server's completion gate only looks at the visits still being closed out, so
+  // counting them here blocked Stop Job on a chemical for work that was never done.
+  const visitStatusById = new Map((stop?.visits ?? []).map((v) => [v.id, v.status as string]));
+  const usedChemicals = chemicals.filter((c) => c.used && !["skipped", "cancelled"].includes(visitStatusById.get(c.visitId) ?? ""));
   // Preloaded chemicals are only the PLANNED amount until the crew confirms what
   // was actually used (amount, or "Not used"). Confirmation gates completing the
   // stop when the company requires it — the server enforces it either way.
-  const unconfirmedChemicals = chemicals.filter((c) => c.preloaded && !c.confirmedAt);
+  const unconfirmedChemicals = chemicals.filter(
+    (c) => c.preloaded && !c.confirmedAt && !["skipped", "cancelled", "completed"].includes(visitStatusById.get(c.visitId) ?? "")
+  );
   const { data: chemConfirmStatus } = useChemicalConfirmationStatus(stopVisitIds);
   const confirmChemicals = useConfirmChemicals();
   const [chemEdits, setChemEdits] = useState<Record<string, { amount: string; notUsed: boolean }>>({});
@@ -342,11 +349,19 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const result = await uploadPhoto.mutateAsync({ visitId: anchorVisitId, file });
-    if (result?.signedUrl) {
-      setPhotoUrls(prev => ({ ...prev, [result.id]: result.signedUrl }));
+    const input = e.target;
+    try {
+      const result = await uploadPhoto.mutateAsync({ visitId: anchorVisitId, file });
+      if (result?.signedUrl) {
+        setPhotoUrls(prev => ({ ...prev, [result.id]: result.signedUrl }));
+      }
+    } catch {
+      // The mutation's onError already toasted. Falling through resets the
+      // input: otherwise re-picking the same photo after a failed upload fires
+      // no change event and the retry silently does nothing.
+    } finally {
+      input.value = "";
     }
-    e.target.value = "";
   }
 
   async function loadSignedUrl(storagePath: string, photoId: string) {

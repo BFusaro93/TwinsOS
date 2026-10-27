@@ -79,6 +79,15 @@ export async function POST(
     .map((r) => r.id);
 
   if (openIds.length === 0) {
+    // Already paused (a replayed or double-tapped Pause): success, so the
+    // offline queue doesn't park a failed card on a break that did start.
+    const alreadyPaused = (candidateRows as VisitRow[])
+      .filter((r) => effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor))
+      .filter((r) => stopKeyForVisit(toStopKeyInput(r)) === anchorKey)
+      .filter((r) => r.clocked_in_at && !r.clocked_out_at && r.paused_at);
+    if (alreadyPaused.length > 0) {
+      return NextResponse.json({ visitIds: alreadyPaused.map((r) => r.id), visits: alreadyPaused, alreadyPaused: true });
+    }
     return NextResponse.json({ error: "Nothing to pause for this stop" }, { status: 400 });
   }
 

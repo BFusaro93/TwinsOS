@@ -152,10 +152,15 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
     const emp = (allEmployees ?? []).find((e) => e.id === newEmployeeId);
     const name = emp ? `${emp.firstName} ${emp.lastName}` : newEmployeeId;
     try {
-      await removeMember({ crewId: crew.id, employeeId: member.employeeId });
+      // Add the replacement FIRST: the database refuses someone already on
+      // another crew for the same days, and removing the current person before
+      // that refusal left the slot empty — they silently vanished from the
+      // crew's roster (and from the next Start Day) with only a failure toast.
       await addMember({ crewId: crew.id, employeeId: newEmployeeId, name, daysOfWeek: member.daysOfWeek });
-    } catch {
-      toast.error("Failed to update assignment");
+      await removeMember({ crewId: crew.id, employeeId: member.employeeId });
+    } catch (err) {
+      const msg = (err as { message?: string })?.message;
+      toast.error(msg ? `Failed to update assignment: ${msg}` : "Failed to update assignment");
     }
   }
 

@@ -985,6 +985,13 @@ export function useCreateVisit() {
         .single();
       if (error) throw error;
 
+      // A visit created already dispatched (a package service sent from the
+      // Waiting List) never goes through a scheduled -> dispatched transition,
+      // so nothing preloaded its chemicals. Best-effort, like every other path.
+      if (values.status === 'dispatched') {
+        await loadServiceChemicalsForVisit(supabase, data.id).catch(() => 0);
+      }
+
       // Deliberately NOT cascading this visit's crew onto crm_jobs.crew_id:
       // that column is the default crew for every future generated visit, so a
       // one-off visit assignment (or an "unassigned" NULL) would silently
