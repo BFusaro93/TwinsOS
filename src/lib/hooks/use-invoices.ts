@@ -823,6 +823,22 @@ export function useDeleteInvoice() {
   return useMutation({
     mutationFn: async ({ id, clientId }: { id: string; clientId: string }) => {
       const supabase = createClient();
+      // The soft delete below is rejected by the DB when money is applied to
+      // the invoice — but only AFTER its lines were wiped and its materials
+      // reset, which left a live invoice with a total and no lines (and its
+      // materials free to be billed again). Refuse up front, before anything
+      // is destroyed; the stale-view case (a payment landed while this
+      // invoice was open) is exactly when the UI's own guard has the old data.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: current, error: currentErr } = await (supabase as any)
+        .from("crm_invoices")
+        .select("amount_paid_cents")
+        .eq("id", id)
+        .single();
+      if (currentErr) throw currentErr;
+      if ((current?.amount_paid_cents ?? 0) > 0) {
+        throw new Error("This invoice cannot be deleted: payments are applied to it. Refund or unapply them first.");
+      }
       // Free any materials this draft billed before its lines disappear.
       const { data: lines, error: linesErr } = await supabase
         .from("crm_invoice_line_items")
@@ -947,6 +963,14 @@ export function useUpdateInvoiceStatus() {
       const leavingVoid = current?.status === "void";
       if (leavingVoid) {
         patch.balance_cents = Math.max(0, (current.total_cents ?? 0) - (current.amount_paid_cents ?? 0));
+      }
+      // Issuing a draft that was never numbered (created from a job/estimate and
+      // never saved) must not leave a live invoice with no number — the client
+      // would receive "Invoice #—". Idempotent RPC; a no-op for numbered ones.
+      if (current?.status === "draft" && status !== "draft") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: numErr } = await (supabase.rpc as any)("assign_invoice_number", { p_invoice_id: id });
+        if (numErr) throw numErr;
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)

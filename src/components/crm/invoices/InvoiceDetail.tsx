@@ -187,6 +187,23 @@ function InlineEdit({
 
 // ── line item row ─────────────────────────────────────────────────────────────
 
+/**
+ * A line's discount in cents after its gross total changed (qty or rate edit).
+ * A percent discount stores its percentage (basis points) in discountValue, so
+ * it must follow the new total — keeping the old cents made "10% off" a fixed
+ * dollar amount the moment the quantity changed. A flat discount stays put but
+ * can't exceed the line's (possibly smaller) total.
+ */
+function rescaleLineDiscountCents(
+  line: { discountCents: number; discountType: InvoiceLineItem["discountType"]; discountValue: number | null },
+  totalCents: number
+): number {
+  if (line.discountType === "percent" && line.discountValue != null) {
+    return Math.max(0, Math.min(Math.round(totalCents * (line.discountValue / 10000)), totalCents));
+  }
+  return Math.min(line.discountCents, totalCents);
+}
+
 function LineItemRow({
   item, invoiceId, taxRateBps, discounts, locked = false,
 }: {
@@ -221,8 +238,7 @@ function LineItemRow({
     setRow((p) => {
       const n = { ...p, [k]: v };
       n.totalCents = Math.round(Number(n.qty) * n.rateCents);
-      // A flat discount can't exceed the line's own (possibly now-smaller) total
-      n.discountCents = Math.min(n.discountCents, n.totalCents);
+      n.discountCents = rescaleLineDiscountCents(n, n.totalCents);
       return n;
     });
     editSeq.current += 1;
@@ -445,7 +461,7 @@ function LineItemRow({
             const cents = parseCurrencyToCents(rateStr);
             setRateStr((cents / 100).toFixed(2));
             const totalCents = Math.round(row.qty * cents);
-            const updated = { ...row, rateCents: cents, totalCents, discountCents: Math.min(row.discountCents, totalCents) };
+            const updated = { ...row, rateCents: cents, totalCents, discountCents: rescaleLineDiscountCents(row, totalCents) };
             setRow(updated);
             saveRow(updated);
           }}
@@ -978,7 +994,7 @@ export function InvoiceDetail({
       toast.success("Invoice deleted");
       setConfirmDeleteOpen(false);
       onDiscard?.();
-    } catch { toast.error("Failed to delete invoice"); }
+    } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to delete invoice"); }
     finally { setDeleting(false); }
   }
 
