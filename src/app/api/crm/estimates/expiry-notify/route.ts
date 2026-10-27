@@ -6,11 +6,12 @@ import { orgEmailFrom } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
 import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { resolveAssigneeId } from "@/lib/ticket-notify";
 
 // Called daily by Vercel Cron (see vercel.json) — Vercel Cron always sends a
 // GET request, so this must be GET, not POST, or it silently never fires.
 // Finds estimates expiring in the next 3 days (not yet won/lost/expired) and
-// emails the created_by user as an in-app notification proxy.
+// emails the created_by user (or, when that is null, the sales rep's login) as an in-app notification proxy.
 
 const serviceClient = () =>
   createClient(
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
   const { data: expiring } = await (supabase as any)
     .from("estimates")
     .select(`
-      id, estimate_number, description, valid_until_date, total_cents, org_id, created_by,
+      id, estimate_number, description, valid_until_date, total_cents, org_id, created_by, sales_rep_id,
       clients(display_name),
       organizations(name, brand_color)
     `)
@@ -62,9 +63,19 @@ export async function GET(req: NextRequest) {
   const orgCanceled = createOrgCanceledResolver(supabase);
 
   for (const est of expiring as Record<string, unknown>[]) {
-    const createdBy = est.created_by as string | null;
-    if (!createdBy) continue;
     if (await orgCanceled(est.org_id as string)) continue; // canceled orgs get no automated reminders
+
+    // Estimates created through an API/import/automation have no created_by.
+    // Fall back to the estimate's sales rep (a crm_employees id) resolved to
+    // their login; a rep with no login gets no email. The inactive-user check
+    // below applies to either path. This is a system reminder, so there is no
+    // acting user to suppress.
+    const createdBy =
+      (est.created_by as string | null) ??
+      (est.sales_rep_id
+        ? await resolveAssigneeId(supabase, est.org_id as string, est.sales_rep_id as string, null)
+        : null);
+    if (!createdBy) continue;
 
     // Re-filter against the org's calendar — the SQL bounds above are
     // deliberately a day wider than the real window.

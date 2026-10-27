@@ -7542,6 +7542,7 @@ export type Database = {
           label: string
           new_rate_cents: number
           old_rate_cents: number
+          quantity: number
           org_id: string
           revert_skipped: boolean
         }
@@ -7556,6 +7557,7 @@ export type Database = {
           label: string
           new_rate_cents: number
           old_rate_cents: number
+          quantity?: number
           org_id?: string
           revert_skipped?: boolean
         }
@@ -7570,6 +7572,7 @@ export type Database = {
           label?: string
           new_rate_cents?: number
           old_rate_cents?: number
+          quantity?: number
           org_id?: string
           revert_skipped?: boolean
         }
@@ -17471,6 +17474,7 @@ export type Database = {
           label: string
           new_rate_cents: number
           old_rate_cents: number
+          quantity: number
         }[]
       }
       crm_recompute_job_actual_hours: {
