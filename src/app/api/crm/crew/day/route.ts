@@ -124,14 +124,20 @@ export async function POST(request: Request) {
 
     // The optional visit must be one of THIS crew's visits in this org —
     // RLS only checks org_id, so a stray id could otherwise punch anyone.
+    let jobInProgress = false;
     if (visitId) {
       const { data: visit } = await db.from("crm_job_visits")
-        .select("id, crew_id, crew_unassigned, crm_jobs(crew_id)")
+        .select("id, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, crm_jobs(crew_id)")
         .eq("id", visitId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
       if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
       if (!(await assertCallerOwnsVisit(db, user.id, orgId, visit))) {
         return NextResponse.json({ error: "That visit isn't on your crew" }, { status: 403 });
       }
+      // A closed punch is only reopened while the stop is still running: after
+      // Stop Job the crew dialog can still be open, and reopening it then would
+      // leave the punch open forever.
+      jobInProgress = !!visit.clocked_in_at && !visit.clocked_out_at
+        && !["completed", "cancelled", "skipped"].includes(visit.status as string);
     }
 
     if (action === "member_in" || action === "add_member") {
@@ -143,9 +149,21 @@ export async function POST(request: Request) {
       if (inErr) throw new Error(inErr.message);
       if (visitId) {
         // A job is in progress: the member also joins its job punches from now.
-        const { data: punch } = await db.from("crm_crew_member_times").select("id")
+        const { data: punch } = await db.from("crm_crew_member_times").select("id, clocked_out_at, break_minutes")
           .eq("visit_id", visitId).eq("crew_member_id", crewMemberId).is("deleted_at", null).maybeSingle();
-        if (!punch) {
+        if (punch?.clocked_out_at && jobInProgress) {
+          // Left earlier and is back: one punch per member per visit, so the
+          // closed punch is reopened with the time away taken off — leaving it
+          // closed dropped everything they did on this job after returning
+          // (job hours, Job Costing and labor cost all under-counted).
+          const outMs = new Date(punch.clocked_out_at as string).getTime();
+          if (outMs < new Date(now).getTime()) {
+            const away = Math.max(0, Math.round((new Date(now).getTime() - outMs) / 60_000));
+            await db.from("crm_crew_member_times")
+              .update({ clocked_out_at: null, break_minutes: Number(punch.break_minutes ?? 0) + away, updated_at: now })
+              .eq("id", punch.id).eq("clocked_out_at", punch.clocked_out_at);
+          }
+        } else if (!punch) {
           await db.from("crm_crew_member_times").upsert(
             { org_id: orgId, visit_id: visitId, crew_member_id: crewMemberId, clocked_in_at: now, clocked_out_at: null, deleted_at: null, updated_at: now },
             { onConflict: "visit_id,crew_member_id", ignoreDuplicates: false }

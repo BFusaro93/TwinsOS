@@ -342,11 +342,19 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const result = await uploadPhoto.mutateAsync({ visitId: anchorVisitId, file });
-    if (result?.signedUrl) {
-      setPhotoUrls(prev => ({ ...prev, [result.id]: result.signedUrl }));
+    const input = e.target;
+    try {
+      const result = await uploadPhoto.mutateAsync({ visitId: anchorVisitId, file });
+      if (result?.signedUrl) {
+        setPhotoUrls(prev => ({ ...prev, [result.id]: result.signedUrl }));
+      }
+    } catch {
+      // The mutation's onError already toasted. Falling through resets the
+      // input: otherwise re-picking the same photo after a failed upload fires
+      // no change event and the retry silently does nothing.
+    } finally {
+      input.value = "";
     }
-    e.target.value = "";
   }
 
   async function loadSignedUrl(storagePath: string, photoId: string) {

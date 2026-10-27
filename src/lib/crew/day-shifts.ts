@@ -24,12 +24,35 @@ export async function startCrewDay(
   if (memberIds.length === 0) return 0;
   const { data: existing } = await supabase
     .from("crm_crew_day_shifts")
-    .select("crew_member_id")
+    .select("id, crew_member_id, ended_at, break_minutes")
     .eq("org_id", p.orgId)
     .eq("work_date", p.workDate)
     .is("deleted_at", null)
     .in("crew_member_id", memberIds);
   const has = new Set(((existing ?? []) as { crew_member_id: string }[]).map((r) => r.crew_member_id));
+
+  // A job started after End Day (storm call-back, an accidental End Day, a
+  // second shift): the member's shift for today is already ended, and the
+  // unique member+day index means no new one can be opened — so the hours
+  // worked after End Day were never on the clock and payroll (which pays the
+  // shift) silently dropped them. Reopen it the way a late "member in" does,
+  // taking the time away off the clock. Only when a job start triggers it:
+  // an explicit Start Day on an ended day stays a no-op.
+  if (p.source === "auto_first_job") {
+    const atMs = new Date(p.at).getTime();
+    for (const s of (existing ?? []) as { id: string; ended_at: string | null; break_minutes: number | null }[]) {
+      if (!s.ended_at) continue;
+      const endedMs = new Date(s.ended_at).getTime();
+      if (endedMs >= atMs) continue;
+      const awayMinutes = Math.max(0, Math.round((atMs - endedMs) / 60_000));
+      const { error: reopenErr } = await supabase
+        .from("crm_crew_day_shifts")
+        .update({ ended_at: null, break_minutes: Number(s.break_minutes ?? 0) + awayMinutes })
+        .eq("id", s.id)
+        .eq("ended_at", s.ended_at);
+      if (reopenErr) throw new Error(reopenErr.message);
+    }
+  }
   const rows = memberIds
     .filter((id) => !has.has(id))
     .map((id) => ({
@@ -98,7 +121,7 @@ export async function endCrewDay(
   p: { orgId: string; crewId: string; workDate: string; at: string }
 ): Promise<number> {
   // includeAbsent: someone who left early was marked absent but still has a shift to close.
-  const memberIds = await resolveWorkingMemberIds(supabase, p.orgId, p.crewId, p.workDate, { includeAbsent: true });
+  const memberIds = await resolveWorkingMemberIds(supabase, p.orgId, p.crewId, p.workDate, { includeAbsent: true, includeInactive: true });
   if (memberIds.length === 0) return 0;
   const { data: open } = await supabase
     .from("crm_crew_day_shifts")

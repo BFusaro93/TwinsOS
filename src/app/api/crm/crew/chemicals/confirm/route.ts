@@ -50,6 +50,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Chemical entry not found" }, { status: 404 });
   }
 
+  // The rows were read with the service role (no org scoping), so ownership is
+  // proven only through each row's visit. A row with no visit has nothing to
+  // prove it against — it must not be confirmable by any signed-in user.
+  if ((rows as { visit_id: string | null }[]).some((r) => !r.visit_id)) {
+    return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
+  }
   const visitIds = [...new Set((rows as { visit_id: string | null }[]).map((r) => r.visit_id).filter((v): v is string => !!v))];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visits } = await (supabase as any)

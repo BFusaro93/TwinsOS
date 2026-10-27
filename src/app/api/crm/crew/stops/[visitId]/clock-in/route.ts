@@ -224,7 +224,10 @@ export async function POST(
   try {
     // Ownership was proven above, so the effective crew IS the caller's crew.
     const driveCrewId = effectiveVisitCrewId(anchor);
-    if (driveCrewId) await closeOpenDriveSegment(supabase, driveCrewId, anchor.org_id);
+    // Closed at the moment of the tap, not the server's clock: a queued offline
+    // Clock In replaying hours later would otherwise credit every hour until the
+    // sync as driving (see crew/occurred-at.ts).
+    if (driveCrewId) await closeOpenDriveSegment(supabase, driveCrewId, anchor.org_id, new Date(now));
   } catch (err) {
     log.error("auto-close drive segment failed", {
       crewId: effectiveVisitCrewId(anchor),

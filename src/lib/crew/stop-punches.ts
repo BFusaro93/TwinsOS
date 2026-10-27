@@ -12,10 +12,10 @@ export async function resolveWorkingMemberIds(
   orgId: string,
   crewId: string,
   workDate: string,
-  opts: { includeAbsent?: boolean } = {}
+  opts: { includeAbsent?: boolean; includeInactive?: boolean } = {}
 ): Promise<string[]> {
   const [{ data: defaults }, { data: overrides }, { data: absences }] = await Promise.all([
-    supabase.from("crm_crew_members").select("id, crew_id").eq("org_id", orgId).is("deleted_at", null),
+    supabase.from("crm_crew_members").select("id, crew_id, employee_id").eq("org_id", orgId).is("deleted_at", null),
     supabase.from("crm_crew_daily_members").select("member_id, crew_id").eq("org_id", orgId).eq("work_date", workDate),
     supabase.from("crm_crew_day_absences").select("crew_member_id").eq("org_id", orgId).eq("work_date", workDate).is("deleted_at", null),
   ]);
@@ -23,9 +23,26 @@ export async function resolveWorkingMemberIds(
     ((overrides ?? []) as { member_id: string; crew_id: string }[]).map((o) => [o.member_id, o.crew_id])
   );
   const absent = new Set(((absences ?? []) as { crew_member_id: string }[]).map((a) => a.crew_member_id));
-  return ((defaults ?? []) as { id: string; crew_id: string }[])
-    .filter((m) => (overrideCrew.get(m.id) ?? m.crew_id) === crewId && (opts.includeAbsent || !absent.has(m.id)))
-    .map((m) => m.id);
+  const onCrew = ((defaults ?? []) as { id: string; crew_id: string; employee_id: string | null }[])
+    .filter((m) => (overrideCrew.get(m.id) ?? m.crew_id) === crewId && (opts.includeAbsent || !absent.has(m.id)));
+
+  // A deactivated (terminated) employee can still have a roster row. Without
+  // this they were punched in by every Start Day / Start Job and carried on
+  // payroll. End Day passes includeInactive so a shift of someone deactivated
+  // mid-day can still be closed. Read separately and fail-open: if the
+  // employees can't be read the roster is returned as before.
+  const employeeIds = [...new Set(onCrew.map((m) => m.employee_id).filter((v): v is string => !!v))];
+  if (employeeIds.length === 0 || opts.includeInactive) return onCrew.map((m) => m.id);
+  const { data: employees } = await supabase
+    .from("crm_employees")
+    .select("id, is_active, deleted_at")
+    .in("id", employeeIds);
+  const inactive = new Set(
+    ((employees ?? []) as { id: string; is_active: boolean | null; deleted_at: string | null }[])
+      .filter((e) => e.is_active === false || !!e.deleted_at)
+      .map((e) => e.id)
+  );
+  return onCrew.filter((m) => !m.employee_id || !inactive.has(m.employee_id)).map((m) => m.id);
 }
 
 /**

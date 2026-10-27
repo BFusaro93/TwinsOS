@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { downscaleImage } from "@/lib/utils/downscale-image";
 import { groupVisitsIntoStops, type Stop, type VisitWithNotesStamp } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
@@ -1046,7 +1047,9 @@ export function useUploadVisitPhoto() {
   return useMutation({
     mutationFn: async ({ visitId, file, caption }: { visitId: string; file: File; caption?: string }) => {
       const form = new FormData();
-      form.append("file", file);
+      // Vercel rejects request bodies over ~4.5MB (413, HTML body), and a phone
+      // photo is routinely 3-8MB — downscale first, like the invoice photos do.
+      form.append("file", await downscaleImage(file));
       if (caption) form.append("caption", caption);
       const res = await fetch(`/api/crm/crew/visits/${visitId}/photos`, {
         method: "POST",
@@ -1266,7 +1269,7 @@ export function useSubmitFieldUpsell() {
       const form = new FormData();
       form.append("serviceId", serviceId);
       form.append("note", note);
-      if (file) form.append("file", file);
+      if (file) form.append("file", await downscaleImage(file));
       const res = await fetch(`/api/crm/crew/visits/${visitId}/upsell`, {
         method: "POST",
         body: form,
