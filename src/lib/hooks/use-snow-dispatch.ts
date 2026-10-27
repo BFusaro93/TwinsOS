@@ -63,31 +63,37 @@ export function useSnowJobs() {
     queryKey: ["crm-jobs", "snow"],
     queryFn: async () => {
       const supabase = createClient();
+      // Paged: PostgREST caps a response at 1000 rows.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_jobs")
-        .select(`
-          *,
-          clients(display_name, status, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
-          client_properties(address, city, state, zip),
-          crm_crews(name),
-          crm_job_services(*)
-        `)
-        .eq("job_type", "snow")
-        .is("deleted_at", null)
-        // Exclude terminal statuses — a cancelled or on-hold snow job
-        // shouldn't keep showing up as a candidate for "Add Jobs to
-        // Dispatch" / Master Routes. Same convention as the activeOnly
-        // filter in useCRMJobs (use-crm-jobs.ts).
-        .neq("status", "cancelled")
-        .neq("status", "hold")
-        .order("priority", { ascending: true });
-      if (error) throw error;
+      const data = await fetchAllRows<any>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("crm_jobs")
+          .select(`
+            *,
+            clients(display_name, status, deleted_at, primary_phone, priority, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
+            client_properties(address, city, state, zip),
+            crm_crews(name),
+            crm_job_services(*)
+          `)
+          .eq("job_type", "snow")
+          .is("deleted_at", null)
+          // Exclude terminal statuses — a cancelled or on-hold snow job
+          // shouldn't keep showing up as a candidate for "Add Jobs to
+          // Dispatch" / Master Routes. Same convention as the activeOnly
+          // filter in useCRMJobs (use-crm-jobs.ts).
+          .neq("status", "cancelled")
+          .neq("status", "hold")
+          .order("priority", { ascending: true })
+      );
       // A lead (or closed-lost lead) can't have jobs — crm_jobs_reject_lead_client
       // blocks new ones — so a job that predates that guard, or whose client
       // was moved back to a lead, must not be offered for dispatch or billed.
+      // Same for a client who has since cancelled or been deleted: the recurring
+      // generator already stops serving them (excludeInactiveParents), so a storm
+      // must not send a crew (and an invoice) there either.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data.filter((row: any) => !["lead", "lost"].includes(row.clients?.status)).map((row: any) => ({
+      return (data.filter((row: any) => !["lead", "lost", "cancelled"].includes(row.clients?.status) && !row.clients?.deleted_at).map((row: any) => ({
         ...mapJob({
           ...row,
           // Same resolution order as the main dispatch board, the crew app and
