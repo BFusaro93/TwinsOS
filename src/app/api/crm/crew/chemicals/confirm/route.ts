@@ -50,6 +50,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Chemical entry not found" }, { status: 404 });
   }
 
+  // A row with no visit can't be tied to the caller's stop, and `rows` was read with the
+  // service role across all orgs — without this check anyone signed in could confirm it.
+  if ((rows as { visit_id: string | null }[]).some((r) => !r.visit_id)) {
+    return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
+  }
+
   const visitIds = [...new Set((rows as { visit_id: string | null }[]).map((r) => r.visit_id).filter((v): v is string => !!v))];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visits } = await (supabase as any)
