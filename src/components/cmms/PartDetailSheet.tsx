@@ -796,7 +796,7 @@ function PartDetailSheetInner({ part, open, onOpenChange }: PartDetailSheetProps
     (products ?? []).find(
       (p) =>
         p.category === "maintenance_part" &&
-        (p.id === livePart.productItemId || p.partNumber === livePart.partNumber)
+        (p.id === livePart.productItemId || (!!livePart.partNumber && p.partNumber === livePart.partNumber))
     ) ?? null;
   const linkedProductName = linkedProduct?.name ?? null;
 

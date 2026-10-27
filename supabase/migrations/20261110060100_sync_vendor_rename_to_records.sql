@@ -32,6 +32,19 @@ begin
     where vendor_id = new.id and org_id = new.org_id and vendor_name is distinct from new.name;
   update public.product_items set vendor_name = new.name
     where vendor_id = new.id and org_id = new.org_id and vendor_name is distinct from new.name;
+  -- Alternate vendors are [{vendorId, vendorName}] jsonb on parts and products.
+  update public.parts set alternate_vendors = (
+      select jsonb_agg(case when e->>'vendorId' = new.id::text then jsonb_set(e, '{vendorName}', to_jsonb(new.name)) else e end)
+        from jsonb_array_elements(alternate_vendors) e)
+    where org_id = new.org_id and jsonb_typeof(alternate_vendors) = 'array'
+      and exists (select 1 from jsonb_array_elements(alternate_vendors) e
+                   where e->>'vendorId' = new.id::text and e->>'vendorName' is distinct from new.name);
+  update public.product_items set alternate_vendors = (
+      select jsonb_agg(case when e->>'vendorId' = new.id::text then jsonb_set(e, '{vendorName}', to_jsonb(new.name)) else e end)
+        from jsonb_array_elements(alternate_vendors) e)
+    where org_id = new.org_id and jsonb_typeof(alternate_vendors) = 'array'
+      and exists (select 1 from jsonb_array_elements(alternate_vendors) e
+                   where e->>'vendorId' = new.id::text and e->>'vendorName' is distinct from new.name);
   update public.wo_vendor_charges set vendor_name = new.name
     where vendor_id = new.id and org_id = new.org_id and vendor_name is distinct from new.name;
   update public.project_subcontract_costs set vendor_name = new.name
