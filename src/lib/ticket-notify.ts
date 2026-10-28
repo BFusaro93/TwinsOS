@@ -232,6 +232,59 @@ export async function notifyTicketAssigned(
   });
 }
 
+/** Contributor added — tells the person they were CC'd on the ticket, the same way an
+ *  assignee hears about an assignment (and reusing its preference keys). Never notifies
+ *  the person who added them, and won't repeat within the notify window so a double
+ *  click or retry can't send two notices. */
+export async function notifyContributorAdded(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  params: NotifyBase & {
+    employeeId: string | null;
+    userName: string;
+    addedByUserId: string;
+    addedByName: string;
+    dedupeSince: string;
+  }
+) {
+  const { orgId, ticketId, ticketNumber, subject, employeeId, userName, addedByUserId, addedByName, dedupeSince } = params;
+  const userId = await resolveAssigneeId(supabase, orgId, employeeId, userName);
+  if (!userId || userId === addedByUserId) return;
+
+  const { count: alreadySent } = await supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("user_id", userId)
+    .eq("entity_id", ticketId)
+    .eq("type", "ticket_contributor_added")
+    .gte("created_at", dedupeSince);
+  if ((alreadySent ?? 0) > 0) return;
+
+  const { data: recipient } = await supabase
+    .from("profiles")
+    .select("id, email, name, notification_prefs")
+    .eq("id", userId)
+    .neq("status", "inactive")
+    .maybeSingle();
+  if (!recipient) return;
+
+  const label = ticketLabel(subject, ticketNumber);
+  await sendToRecipients(supabase, [recipient], {
+    orgId, ticketId,
+    notifType: "ticket_contributor_added",
+    inAppPrefKey: "inAppTicketAssigned", emailPrefKey: "emailTicketAssigned",
+    title: `Added to Ticket — ${label}`,
+    message: `${addedByName} added you as a contributor on ticket ${label}. You'll be notified of new comments.`,
+    emailHtml: (name) => emailShell(
+      "You Were Added to a Ticket",
+      name,
+      `<p style="margin:0 0 24px;color:#475569">${escapeHtml(addedByName)} added you as a contributor on ticket <strong>${escapeHtml(label)}</strong>. You'll be notified of new comments.</p>`,
+      ticketId
+    ),
+  });
+}
+
 /** Ticket comment — notifies the resolved assignee (if not the commenter). */
 export async function notifyTicketComment(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

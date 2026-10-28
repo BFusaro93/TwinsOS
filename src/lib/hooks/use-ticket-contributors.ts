@@ -67,12 +67,21 @@ export function useAddTicketContributor() {
     mutationFn: async ({ ticketId, employeeId, userName }: { ticketId: string; employeeId: string; userName: string }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("ticket_contributors")
-        .insert({ ticket_id: ticketId, employee_id: employeeId, user_name: userName });
+        .insert({ ticket_id: ticketId, employee_id: employeeId, user_name: userName })
+        .select("id")
+        .single();
       if (error) throw error;
+      return data as { id: string };
     },
-    onSuccess: (_data, { ticketId }) => {
+    onSuccess: (row, { ticketId }) => {
+      // Best-effort, after the write succeeded — same pattern as the "assigned" notice.
+      fetch(`/api/crm/tickets/${ticketId}/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: "contributor_added", contributorId: row.id }),
+      }).catch(() => {});
       qc.invalidateQueries({ queryKey: ["ticket-contributors", ticketId] });
       qc.invalidateQueries({ queryKey: ["ticket-contributions"] });
     },

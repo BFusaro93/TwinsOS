@@ -103,6 +103,7 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <CircleAlert className={cn(cls, "text-red-500 dark:text-red-400")} />;
     case "ticket_created":
     case "ticket_assigned":
+    case "ticket_contributor_added":
       return <MessageSquarePlus className={cn(cls, "text-brand-500 dark:text-brand-400")} />;
     case "ticket_comment":
       return <MessageSquare className={cn(cls, "text-slate-400 dark:text-neutral-500")} />;
@@ -217,7 +218,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_contributor_added", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -375,6 +376,7 @@ export function NotificationsBell() {
       estimate_deposit_failed:    { href: (id) => `/crm/estimates/${id}`, title: "Deposit Failed" },
       ticket_created:             { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "New Ticket" },
       ticket_assigned:            { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "Ticket Assigned" },
+      ticket_contributor_added:   { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "Added to Ticket" },
       ticket_comment:             { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "New Comment" },
       contract_expiring:          { href: () => "/crm/accounting/contracts", title: "Contract Expiring Soon" },
       warranty_expiring:          { href: () => "/crm/warranties", title: "Warranty Expiring Soon" },

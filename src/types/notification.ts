@@ -30,6 +30,7 @@ export interface AppNotification {
     | "estimate_deposit_excess"
     | "ticket_created"
     | "ticket_assigned"
+    | "ticket_contributor_added"
     | "ticket_comment"
     | "contract_expiring"
     | "warranty_expiring"
