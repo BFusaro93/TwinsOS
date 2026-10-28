@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mapPart } from "@/lib/supabase/mappers";
 import { setParts } from "@/lib/hooks/cost-store";
 import { useSettingsStore } from "@/stores/settings-store";
-import type { BulkImportResult } from "@/lib/csv";
+import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
 import type { Part } from "@/types/cmms";
 
 /**
@@ -404,7 +404,8 @@ export function useBulkImportParts() {
           // of silently importing a null cost.
           let unitCostCents = 0;
           if (r.unitCost?.trim()) {
-            const parsed = Math.round(parseFloat(r.unitCost) * 100);
+            // Strips "$" and thousands commas ("1,200.50" parsed as 1 before).
+            const parsed = parseCsvDollarsToCents(r.unitCost) as number;
             if (Number.isNaN(parsed)) {
               failed.push({ row: rowNum, error: `"${name}": invalid unit cost ("${r.unitCost}")` });
               continue;
@@ -435,7 +436,7 @@ export function useBulkImportParts() {
             vendor_id: matchedVendor?.id ?? null,
             vendor_name: matchedVendor?.name ?? (csvVendor || null),
             location: r.location?.trim() || null,
-            is_inventory: r.quantityOnHand !== undefined || r.minimumStock !== undefined || r.isInventory === "true" || qoh > 0 || minStock > 0,
+            is_inventory: r.quantityOnHand !== undefined || r.minimumStock !== undefined || r.isInventory?.trim().toLowerCase() === "true" || qoh > 0 || minStock > 0,
             cost_layers: [] as unknown as import("@/types/supabase").Json,
             alternate_vendors: [] as unknown as import("@/types/supabase").Json,
           };
