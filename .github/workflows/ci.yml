@@ -1,0 +1,32 @@
+name: CI
+
+# Typecheck and lint on every pull request and on pushes to main.
+# The production build runs on Vercel, so it is not duplicated here.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-and-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Dependency audit (high severity, non-blocking)
+        run: npm audit --audit-level=high
+        continue-on-error: true

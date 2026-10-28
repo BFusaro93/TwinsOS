@@ -145,6 +145,7 @@ export async function GET(request: Request) {
   const dueTodayContracts: any[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orgCanceled = createOrgCanceledResolver(supabase);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const c of ((contracts ?? []) as any[])) {
     if (await orgCanceled(c.org_id)) continue; // canceled orgs get no automated invoices
     const { date: todayDate } = await orgToday(c.org_id);
