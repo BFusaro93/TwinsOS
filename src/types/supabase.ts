@@ -15693,6 +15693,64 @@ export type Database = {
           },
         ]
       }
+      vendor_address_split_backup: {
+        Row: {
+          id: string
+          org_id: string
+          original_address: string
+          split_at: string
+          split_city: string
+          split_state: string
+          split_street: string
+          split_zip: string
+          vendor_id: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          original_address: string
+          split_at?: string
+          split_city?: string
+          split_state?: string
+          split_street?: string
+          split_zip?: string
+          vendor_id: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          original_address?: string
+          split_at?: string
+          split_city?: string
+          split_state?: string
+          split_street?: string
+          split_zip?: string
+          vendor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_address_split_backup_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_address_split_backup_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_address_split_backup_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vendors: {
         Row: {
           address: string
@@ -15708,14 +15766,14 @@ export type Database = {
           notes: string | null
           org_id: string
           phone: string
-          updated_at: string
           state: string
+          updated_at: string
           vendor_type: string | null
           w9_expiration_date: string | null
           w9_received_date: string | null
           w9_status: string
-          zip: string
           website: string | null
+          zip: string
         }
         Insert: {
           address?: string
@@ -15731,14 +15789,14 @@ export type Database = {
           notes?: string | null
           org_id?: string
           phone?: string
-          updated_at?: string
           state?: string
+          updated_at?: string
           vendor_type?: string | null
           w9_expiration_date?: string | null
           w9_received_date?: string | null
           w9_status?: string
-          zip?: string
           website?: string | null
+          zip?: string
         }
         Update: {
           address?: string
@@ -15754,14 +15812,14 @@ export type Database = {
           notes?: string | null
           org_id?: string
           phone?: string
-          updated_at?: string
           state?: string
+          updated_at?: string
           vendor_type?: string | null
           w9_expiration_date?: string | null
           w9_received_date?: string | null
           w9_status?: string
-          zip?: string
           website?: string | null
+          zip?: string
         }
         Relationships: [
           {
@@ -17394,6 +17452,33 @@ export type Database = {
         Args: { p_employee_id: string }
         Returns: number
       }
+      crm_insert_sequence_event: {
+        Args: {
+          p_config?: Json
+          p_event_type: string
+          p_parent_event_id?: string
+          p_sequence_id: string
+        }
+        Returns: {
+          config: Json
+          created_at: string
+          deleted_at: string | null
+          event_type: string
+          id: string
+          is_active: boolean
+          org_id: string
+          parent_event_id: string | null
+          position: number
+          sequence_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "crm_sequence_events"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       crm_job_compute_totals: {
         Args: { p_job_id: string; p_job_type: string; p_rate_cents: number }
         Returns: Record<string, unknown>
@@ -17604,15 +17689,6 @@ export type Database = {
           reverted: number
           skipped: number
         }[]
-      }
-      crm_insert_sequence_event: {
-        Args: {
-          p_config?: Json
-          p_event_type: string
-          p_parent_event_id?: string
-          p_sequence_id: string
-        }
-        Returns: Database["public"]["Tables"]["crm_sequence_events"]["Row"]
       }
       crm_run_report: {
         Args: {
