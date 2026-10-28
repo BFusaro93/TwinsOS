@@ -118,6 +118,15 @@ export function MetersGuide() {
             Request, you can also set a <strong>Service Interval</strong> — see the worked example
             below for what that does.
           </li>
+          <li>
+            For those two actions, <strong>Assigned To</strong> is a picker of your employees (leave
+            it on Unassigned to skip it). The person you pick is put on every work order the
+            automation creates; on a WO Request they&apos;re carried onto the work order when the
+            request is converted. An older automation whose Assigned To was typed as free text shows
+            &ldquo;Previously typed&hellip; no matching employee&rdquo; &mdash; pick the employee
+            once so its work orders actually get assigned. An employee who has since left stays
+            selectable on the automations already using them.
+          </li>
         </ol>
       </Section>
 

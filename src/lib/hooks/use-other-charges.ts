@@ -5,6 +5,12 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import type { CRMOtherCharge } from "@/types/crm-invoices";
 import { recalcInvoiceTotalsFromLines } from "@/lib/hooks/use-invoices";
+import {
+  otherChargeBaseCents,
+  otherChargeLineDescription,
+  resolveOtherChargeCents,
+  type OtherChargeType,
+} from "@/lib/invoices/other-charges";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -13,7 +19,9 @@ function mapOtherCharge(row: Record<string, any>): CRMOtherCharge {
     id: row.id,
     name: row.name,
     description: row.description ?? "",
+    chargeType: row.charge_type === "percent" ? "percent" : "flat",
     amountCents: row.amount_cents ?? 0,
+    percentBps: row.percent_bps ?? 0,
     isTaxable: !!row.is_taxable,
     isActive: !!row.is_active,
     sortOrder: row.sort_order ?? 0,
@@ -40,7 +48,11 @@ export function useOtherCharges() {
 export interface OtherChargeInput {
   name: string;
   description: string;
+  chargeType: OtherChargeType;
+  /** Fixed amount; 0 for a percent charge. */
   amountCents: number;
+  /** Basis points; 0 for a flat charge. */
+  percentBps: number;
   isTaxable: boolean;
 }
 
@@ -52,7 +64,9 @@ export function useCreateOtherCharge() {
       const { error } = await db.from("crm_other_charges").insert({
         name: input.name,
         description: input.description,
+        charge_type: input.chargeType,
         amount_cents: input.amountCents,
+        percent_bps: input.percentBps,
         is_taxable: input.isTaxable,
       });
       if (error) throw error;
@@ -83,7 +97,9 @@ export function useSeedCommonOtherCharges() {
       const rows = COMMON_OTHER_CHARGES.filter((c) => !have.has(c.name.toLowerCase())).map((c, i) => ({
         name: c.name,
         description: c.description,
+        charge_type: "flat",
         amount_cents: 0,
+        percent_bps: 0,
         is_taxable: false,
         sort_order: i,
       }));
@@ -105,7 +121,9 @@ export function useUpdateOtherCharge() {
       const patch: Record<string, any> = {};
       if (updates.name !== undefined) patch.name = updates.name;
       if (updates.description !== undefined) patch.description = updates.description;
+      if (updates.chargeType !== undefined) patch.charge_type = updates.chargeType;
       if (updates.amountCents !== undefined) patch.amount_cents = updates.amountCents;
+      if (updates.percentBps !== undefined) patch.percent_bps = updates.percentBps;
       if (updates.isTaxable !== undefined) patch.is_taxable = updates.isTaxable;
       if (updates.isActive !== undefined) patch.is_active = updates.isActive;
       const { error } = await db.from("crm_other_charges").update(patch).eq("id", id);
@@ -148,8 +166,8 @@ export function useAddOtherChargeToInvoices() {
       charge,
     }: {
       invoiceIds: string[];
-      /** amountCents lets the caller override the catalog amount for this run. */
-      charge: Pick<CRMOtherCharge, "name" | "description" | "amountCents" | "isTaxable">;
+      /** The amount / percent let the caller override the catalog value for this run. */
+      charge: Pick<CRMOtherCharge, "name" | "description" | "chargeType" | "amountCents" | "percentBps" | "isTaxable">;
     }): Promise<BulkAddResult> => {
       const supabase = createClient() as any;
       const result: BulkAddResult = { added: 0, skipped: [] };
@@ -165,21 +183,36 @@ export function useAddOtherChargeToInvoices() {
           if (inv.status === "void") { result.skipped.push({ invoiceId, reason: "Void" }); continue; }
           if (inv.locked) { result.skipped.push({ invoiceId, reason: "Locked" }); continue; }
 
-          const { count } = await supabase
+          const { data: lineRows, error: linesErr } = await supabase
             .from("crm_invoice_line_items")
-            .select("id", { count: "exact", head: true })
+            .select("total_cents, discount_cents, is_other_charge")
             .eq("invoice_id", invoiceId);
+          if (linesErr) throw linesErr;
+
+          // A percent charge is worked out per invoice from its own service lines.
+          const base = otherChargeBaseCents(
+            (lineRows ?? []).map((li: Record<string, any>) => ({
+              totalCents: li.total_cents ?? 0,
+              discountCents: li.discount_cents ?? 0,
+              isOtherCharge: !!li.is_other_charge,
+            }))
+          );
+          const amountCents = resolveOtherChargeCents(charge, base);
+          if (amountCents <= 0) {
+            result.skipped.push({ invoiceId, reason: charge.chargeType === "percent" ? "No service lines to take a percent of" : "Amount is $0" });
+            continue;
+          }
 
           const { error: insErr } = await supabase.from("crm_invoice_line_items").insert({
             invoice_id: invoiceId,
             name: charge.name,
-            description: charge.description || charge.name,
+            description: otherChargeLineDescription(charge),
             qty: 1,
-            rate_cents: charge.amountCents,
-            total_cents: charge.amountCents,
+            rate_cents: amountCents,
+            total_cents: amountCents,
             is_taxable: charge.isTaxable,
             is_other_charge: true,
-            sort_order: count ?? 0,
+            sort_order: lineRows?.length ?? 0,
           });
           if (insErr) throw insErr;
           await recalcInvoiceTotalsFromLines(supabase, invoiceId);

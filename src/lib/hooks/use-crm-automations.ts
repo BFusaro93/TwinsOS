@@ -103,6 +103,7 @@ function mapEvent(row: any): CRMSequenceEvent {
     sequenceId: row.sequence_id,
     eventType: row.event_type as EventType,
     position: row.position,
+    parentEventId: row.parent_event_id ?? null,
     isActive: row.is_active,
     config: row.config ?? {},
     createdAt: row.created_at,
@@ -377,34 +378,18 @@ export function useCreateEvent() {
       eventType: EventType;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       config?: Record<string, any>;
-      position?: number;
+      /** IF Branch step to nest the new step inside; omit to append at the top level. */
+      parentEventId?: string | null;
     }) => {
-      // Always derive the position from the sequence's current last step —
-      // every caller previously passed a hardcoded 0 (or a value computed
-      // from a stale local list), so every step in a hand-built sequence
-      // landed at position 0 and only the first ever ran. Ignore the caller's
-      // position entirely rather than trust a value that's easy to get wrong.
-      const { data: existing, error: posError } = await db()
-        .from("crm_sequence_events")
-        .select("position")
-        .eq("sequence_id", values.sequenceId)
-        .is("deleted_at", null)
-        .order("position", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (posError) throw posError;
-      const nextPosition = (existing?.position ?? -1) + 1;
-
-      const { data, error } = await db()
-        .from("crm_sequence_events")
-        .insert({
-          sequence_id: values.sequenceId,
-          event_type: values.eventType,
-          config: values.config ?? {},
-          position: nextPosition,
-        })
-        .select()
-        .single();
+      // Position is always derived server-side: appended to the end of the
+      // sequence, or to the end of the parent IF's block (shifting later steps
+      // and in-flight enrollments so none of them points at the wrong step).
+      const { data, error } = await db().rpc("crm_insert_sequence_event", {
+        p_sequence_id: values.sequenceId,
+        p_event_type: values.eventType,
+        p_config: values.config ?? {},
+        p_parent_event_id: values.parentEventId ?? null,
+      });
       if (error) throw error;
       return mapEvent(data);
     },
@@ -443,10 +428,26 @@ export function useDeleteEvent() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, sequenceId }: { id: string; sequenceId: string }) => {
+      // Deleting an IF Branch takes its whole block with it — leaving the
+      // inner steps behind would silently turn guarded steps into unguarded ones.
+      const { data: rows, error: readError } = await db()
+        .from("crm_sequence_events")
+        .select("id, parent_event_id")
+        .eq("sequence_id", sequenceId)
+        .is("deleted_at", null);
+      if (readError) throw readError;
+      const children = new Map<string, string[]>();
+      for (const r of rows as { id: string; parent_event_id: string | null }[]) {
+        if (!r.parent_event_id) continue;
+        children.set(r.parent_event_id, [...(children.get(r.parent_event_id) ?? []), r.id]);
+      }
+      const ids = [id];
+      for (let i = 0; i < ids.length; i++) ids.push(...(children.get(ids[i]) ?? []));
+
       const { error } = await db()
         .from("crm_sequence_events")
         .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
+        .in("id", ids);
       if (error) throw error;
       return sequenceId;
     },

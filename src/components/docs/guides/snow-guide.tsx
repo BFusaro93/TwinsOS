@@ -283,7 +283,10 @@ export function SnowGuide() {
           per storm event, a rate per inch of snowfall (charged once per event, or separately per
           push), or an hourly rate times actual hours logged. Only completed, non-contract snow
           visits that don&apos;t already have an invoice line item appear in the queue, so
-          generating invoices twice never double-bills.
+          generating invoices twice never double-bills. A snow job linked to a contract is billed
+          on the contract&apos;s cycle only while that contract is in force; once the contract is
+          cancelled, expired, inactive, deleted or past its end date, nothing else bills its
+          visits, so they appear in this queue like any other snow visit.
         </p>
         <p>
           A per-inch visit that was completed from the crew app has no snow depth (only the office

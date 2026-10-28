@@ -869,21 +869,34 @@ async function runClaimedStep(
       adminClient, conditions, "AND", client_id, estimate_id, ticket_id, invoice_id
     );
 
-    const future = (events ?? [])
-      .filter((e: { position: number }) => e.position > next_event_position)
-      .sort((a: { position: number }, b: { position: number }) => a.position - b.position);
-
-    // crm_sequence_events is a flat, position-ordered list — there's no
-    // parent/end-marker to represent a real nested block, even though the IF
-    // Branch dialog's copy describes "events nested under this IF block".
-    // So the guarded body is exactly the single event immediately following
-    // this one: conditions met → continue into it normally; conditions not
-    // met → skip past it straight to whatever comes after. A true multi-step
-    // block needs a schema change (e.g. an explicit block/end marker) to do
-    // properly — this is the best approximation the current data model
-    // supports, and it's the only one that keeps single-event bodies (the
-    // common case) actually branching correctly.
-    const skipToPosition = conditionsMet ? next_event_position : (future[0]?.position ?? next_event_position);
+    // The block is every step nested under this IF, however deep. Conditions
+    // met → carry on into the first one normally. Not met → jump past the last
+    // one. Read parent links off all non-deleted steps (not just active ones)
+    // so a deactivated nested IF doesn't cut its own inner steps out of the
+    // block and leave them running unguarded.
+    let skipToPosition = next_event_position;
+    if (!conditionsMet) {
+      const { data: links } = await adminClient
+        .from("crm_sequence_events")
+        .select("id, parent_event_id, position")
+        .eq("sequence_id", sequence_id)
+        .is("deleted_at", null);
+      const rows = (links ?? []) as { id: string; parent_event_id: string | null; position: number }[];
+      const inBlock = new Set<string>([currentEvent.id]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const r of rows) {
+          if (!inBlock.has(r.id) && r.parent_event_id && inBlock.has(r.parent_event_id)) {
+            inBlock.add(r.id);
+            grew = true;
+          }
+        }
+      }
+      for (const r of rows) {
+        if (inBlock.has(r.id) && r.id !== currentEvent.id && r.position > skipToPosition) skipToPosition = r.position;
+      }
+    }
 
     const action = await advanceEnrollmentPastStep(adminClient, {
       enrollmentId: enrollId,
@@ -894,7 +907,7 @@ async function runClaimedStep(
     await logSequenceExecution(adminClient, {
       orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
       eventId: currentEvent.id, eventType: "if_branch", action: conditionsMet ? "branch_true" : "branch_false",
-      detail: conditionsMet ? "conditions met — continuing into branch" : "conditions not met — branch skipped",
+      detail: conditionsMet ? "conditions met — continuing into branch" : "conditions not met — block skipped",
     });
     return { fired: { enrollmentId: enrollId, action: `if_branch ${conditionsMet ? "true" : "false"} → ${action}` } };
   }

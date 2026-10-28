@@ -266,7 +266,10 @@ export function TicketsGuide() {
           The search box above the Tickets list has an &times; button, and Escape clears it. The
           column filter narrows by one field at a time; <strong>Category</strong>,{" "}
           <strong>Assignment</strong> (including Unassigned) and <strong>Priority</strong> are
-          picked from a list and match exactly, instead of being typed.
+          picked from a list and match exactly, instead of being typed. <strong>Created</strong> and{" "}
+          <strong>Due Date</strong> are date-range filters (From / To). Created is compared on your
+          company&apos;s calendar day, so a ticket logged in the evening lands on the day your staff
+          saw it.
         </p>
       </Section>
 

@@ -309,7 +309,10 @@ export function CrewAppGuide() {
           property. A leftover visit on a job that is On Hold or Cancelled isn&apos;t on the crew&apos;s
           list, so Start Job and Stop Job skip it rather than starting, completing and invoicing work
           nobody asked for. A double tap, or a tap queued offline that replays later, is treated as
-          already done instead of showing an error.
+          already done instead of showing an error. If a crew already started the stop (Start Job
+          clocked them in) and then skips it, their clocks stop at the skip &mdash; as long as no
+          other service at the same stop is still running &mdash; so the hours still reach the
+          Timesheet and Job Costing instead of staying open.
         </p>
         <p>
           If the stop has chemicals, a <strong>Confirm chemicals applied</strong> card lists each one

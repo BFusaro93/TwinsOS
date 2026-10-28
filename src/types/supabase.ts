@@ -7014,6 +7014,7 @@ export type Database = {
       crm_other_charges: {
         Row: {
           amount_cents: number
+          charge_type: string
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -7023,11 +7024,13 @@ export type Database = {
           is_taxable: boolean
           name: string
           org_id: string
+          percent_bps: number
           sort_order: number
           updated_at: string
         }
         Insert: {
           amount_cents?: number
+          charge_type?: string
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -7037,11 +7040,13 @@ export type Database = {
           is_taxable?: boolean
           name: string
           org_id?: string
+          percent_bps?: number
           sort_order?: number
           updated_at?: string
         }
         Update: {
           amount_cents?: number
+          charge_type?: string
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -7051,6 +7056,7 @@ export type Database = {
           is_taxable?: boolean
           name?: string
           org_id?: string
+          percent_bps?: number
           sort_order?: number
           updated_at?: string
         }
@@ -8266,6 +8272,7 @@ export type Database = {
           id: string
           is_active: boolean
           org_id: string
+          parent_event_id: string | null
           position: number
           sequence_id: string
           updated_at: string
@@ -8278,6 +8285,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           org_id?: string
+          parent_event_id?: string | null
           position?: number
           sequence_id: string
           updated_at?: string
@@ -8290,6 +8298,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           org_id?: string
+          parent_event_id?: string | null
           position?: number
           sequence_id?: string
           updated_at?: string
@@ -8300,6 +8309,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_sequence_events_parent_event_id_fkey"
+            columns: ["parent_event_id"]
+            isOneToOne: false
+            referencedRelation: "crm_sequence_events"
             referencedColumns: ["id"]
           },
           {
@@ -15671,6 +15687,7 @@ export type Database = {
       vendors: {
         Row: {
           address: string
+          city: string
           contact_name: string
           created_at: string
           created_by: string | null
@@ -15683,14 +15700,17 @@ export type Database = {
           org_id: string
           phone: string
           updated_at: string
+          state: string
           vendor_type: string | null
           w9_expiration_date: string | null
           w9_received_date: string | null
           w9_status: string
+          zip: string
           website: string | null
         }
         Insert: {
           address?: string
+          city?: string
           contact_name?: string
           created_at?: string
           created_by?: string | null
@@ -15703,14 +15723,17 @@ export type Database = {
           org_id?: string
           phone?: string
           updated_at?: string
+          state?: string
           vendor_type?: string | null
           w9_expiration_date?: string | null
           w9_received_date?: string | null
           w9_status?: string
+          zip?: string
           website?: string | null
         }
         Update: {
           address?: string
+          city?: string
           contact_name?: string
           created_at?: string
           created_by?: string | null
@@ -15723,10 +15746,12 @@ export type Database = {
           org_id?: string
           phone?: string
           updated_at?: string
+          state?: string
           vendor_type?: string | null
           w9_expiration_date?: string | null
           w9_received_date?: string | null
           w9_status?: string
+          zip?: string
           website?: string | null
         }
         Relationships: [
@@ -16927,36 +16952,45 @@ export type Database = {
       rpt_vendors: {
         Row: {
           address: string | null
+          city: string | null
           contact_name: string | null
           email: string | null
           id: string | null
           is_active: boolean | null
           name: string | null
           phone: string | null
+          state: string | null
           vendor_type: string | null
           w9_status: string | null
+          zip: string | null
         }
         Insert: {
           address?: string | null
+          city?: string | null
           contact_name?: string | null
           email?: string | null
           id?: string | null
           is_active?: boolean | null
           name?: string | null
           phone?: string | null
+          state?: string | null
           vendor_type?: string | null
           w9_status?: string | null
+          zip?: string | null
         }
         Update: {
           address?: string | null
+          city?: string | null
           contact_name?: string | null
           email?: string | null
           id?: string | null
           is_active?: boolean | null
           name?: string | null
           phone?: string | null
+          state?: string | null
           vendor_type?: string | null
           w9_status?: string | null
+          zip?: string | null
         }
         Relationships: []
       }
@@ -17561,6 +17595,15 @@ export type Database = {
           reverted: number
           skipped: number
         }[]
+      }
+      crm_insert_sequence_event: {
+        Args: {
+          p_config?: Json
+          p_event_type: string
+          p_parent_event_id?: string
+          p_sequence_id: string
+        }
+        Returns: Database["public"]["Tables"]["crm_sequence_events"]["Row"]
       }
       crm_run_report: {
         Args: {

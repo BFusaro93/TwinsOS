@@ -22,6 +22,12 @@ import {
 } from "@/lib/hooks/use-invoices";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useOtherCharges } from "@/lib/hooks/use-other-charges";
+import {
+  formatPercentBps,
+  otherChargeBaseCents,
+  otherChargeLineDescription,
+  resolveOtherChargeCents,
+} from "@/lib/invoices/other-charges";
 import { SaleTypeSelect } from "@/components/crm/commissions/SaleTypeSelect";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
@@ -59,7 +65,7 @@ import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer,
 import { toast } from "sonner";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
-import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment } from "@/types/crm-invoices";
+import type { InvoiceStatus, InvoiceLineItem, PaymentMethod, CRMPayment, CRMOtherCharge } from "@/types/crm-invoices";
 import type { DiscountType, CRMDiscount } from "@/types/crm-discounts";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { InvoicePhotosPanel } from "@/components/crm/invoices/InvoicePhotosPanel";
@@ -867,18 +873,24 @@ export function InvoiceDetail({
   }
 
   /** Other charges are catalog templates: copy the fields onto a plain line (no service_id). */
-  async function addOtherCharge(c: { name: string; description: string; amountCents: number; isTaxable: boolean }) {
+  async function addOtherCharge(c: CRMOtherCharge) {
     if (addingLineItemRef.current) return;
+    // A percent charge is worked out from this invoice's service lines right now.
+    const amountCents = resolveOtherChargeCents(c, otherChargeBaseCents(lineItems));
+    if (c.chargeType === "percent" && amountCents <= 0) {
+      toast.error(`Add a service line first — ${c.name} is ${formatPercentBps(c.percentBps)} of the invoice's services`);
+      return;
+    }
     addingLineItemRef.current = true;
     try {
       await upsertItem({
         invoiceId: invoice!.id,
         item: {
           name: c.name,
-          description: c.description || c.name,
+          description: otherChargeLineDescription(c),
           qty: 1,
-          rate_cents: c.amountCents,
-          total_cents: c.amountCents,
+          rate_cents: amountCents,
+          total_cents: amountCents,
           is_taxable: c.isTaxable,
           is_other_charge: true,
           sort_order: lineItems.length,
@@ -1610,7 +1622,9 @@ export function InvoiceDetail({
                                 {c.isTaxable && (
                                   <span className="rounded bg-amber-50 px-1 text-[10px] text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">Tax</span>
                                 )}
-                                {c.amountCents > 0 && <span className="text-slate-400 dark:text-neutral-500">${(c.amountCents / 100).toFixed(2)}</span>}
+                                {c.chargeType === "percent"
+                                  ? c.percentBps > 0 && <span className="text-slate-400 dark:text-neutral-500">{formatPercentBps(c.percentBps)}</span>
+                                  : c.amountCents > 0 && <span className="text-slate-400 dark:text-neutral-500">${(c.amountCents / 100).toFixed(2)}</span>}
                               </div>
                             </button>
                           ))}

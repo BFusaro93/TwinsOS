@@ -1001,8 +1001,8 @@ function ImportExportTab({ hasEquipt }: { hasEquipt: boolean }) {
       case "Vendors":
         if (!vendors?.length) return;
         downloadCSV("vendors.csv",
-          ["name", "contactName", "email", "phone", "address", "website", "vendorType", "isActive", "w9Status"],
-          vendors.map((v) => [v.name, v.contactName, v.email, v.phone, v.address, v.website ?? "", v.vendorType ?? "", v.isActive, v.w9Status]));
+          ["name", "contactName", "email", "phone", "address", "city", "state", "zip", "website", "vendorType", "isActive", "w9Status"],
+          vendors.map((v) => [v.name, v.contactName, v.email, v.phone, v.address, v.city, v.state, v.zip, v.website ?? "", v.vendorType ?? "", v.isActive, v.w9Status]));
         break;
       case "Requisitions":
         if (!requisitions?.length) return;
@@ -1091,7 +1091,7 @@ function ImportExportTab({ hasEquipt }: { hasEquipt: boolean }) {
               { label: "Assets",       icon: <Cog className="h-6 w-6" />,           onImport: (r: Record<string, string>[]) => bulkImportAssets(r),     templateColumns: ["name", "assetTag", "equipmentNumber", "assetType", "make", "model", "year", "serialNumber", "location", "status", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"], required: ["name", "assetTag"], equiptOnly: true },
               { label: "Vehicles",     icon: <Truck className="h-6 w-6" />,         onImport: (r: Record<string, string>[]) => bulkImportVehicles(r),   templateColumns: ["name", "assetTag", "make", "model", "year", "licensePlate", "vin", "fuelType", "status", "assignedCrew", "purchaseVendorName", "purchaseDate", "purchasePrice", "paymentMethod", "financeInstitution"], required: ["name", "assetTag"], equiptOnly: true },
               { label: "Parts",        icon: <Cog className="h-6 w-6" />,            onImport: (r: Record<string, string>[]) => bulkImportParts(r),      templateColumns: ["name", "partNumber", "description", "category", "unitCost", "quantityOnHand", "minimumStock", "vendorName", "location"], required: ["name", "partNumber"], equiptOnly: true },
-              { label: "Vendors",      icon: <Building2 className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportVendors(r),    templateColumns: ["name", "contactName", "email", "phone", "address", "vendorType", "website", "notes"], required: ["name"] },
+              { label: "Vendors",      icon: <Building2 className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportVendors(r),    templateColumns: ["name", "contactName", "email", "phone", "address", "city", "state", "zip", "vendorType", "website", "notes"], required: ["name"] },
               { label: "Requisitions",    icon: <FileText className="h-6 w-6" />,      onImport: (r: Record<string, string>[]) => bulkImportRequisitions(r), templateColumns: ["title", "vendorName", "notes"], required: ["title"] },
               { label: "Products",        icon: <BookOpen className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportProducts(r), templateColumns: ["name", "partNumber", "description", "category", "unitCost", "price", "quantityOnHand", "vendorName", "isInventory"], required: ["name", "partNumber", "category"] },
               { label: "Purchase Orders", icon: <ShoppingCart className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportPurchaseOrders(r), templateColumns: ["Purchase Order #", "Vendor", "Status", "Created On", "Approved On", "Completed On", "Due Date", "Line Type", "Line Name", "Part Number", "Unit Cost", "Ordered Quantity", "Ordered Cost"], required: [] as string[] },

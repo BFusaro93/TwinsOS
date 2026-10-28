@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
+import { formatPercentBps, parsePercentToBps, type OtherChargeType } from "@/lib/invoices/other-charges";
 import {
   useOtherCharges,
   useCreateOtherCharge,
@@ -19,11 +21,13 @@ import {
 interface Draft {
   name: string;
   description: string;
+  chargeType: OtherChargeType;
+  /** Dollars when flat, a percentage when percent. */
   amount: string;
   isTaxable: boolean;
 }
 
-const EMPTY_DRAFT: Draft = { name: "", description: "", amount: "", isTaxable: false };
+const EMPTY_DRAFT: Draft = { name: "", description: "", chargeType: "flat", amount: "", isTaxable: false };
 
 function parseAmountCents(raw: string): number | null {
   if (raw.trim() === "") return 0;
@@ -43,7 +47,7 @@ function ChargeForm({
   saving: boolean;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-[1fr_2fr_7rem_auto]">
+    <div className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-[1fr_2fr_8rem_7rem_auto]">
       <Input
         autoFocus
         value={draft.name}
@@ -57,13 +61,23 @@ function ChargeForm({
         placeholder="Description shown on the invoice"
         className="h-8 text-sm"
       />
+      <Select
+        value={draft.chargeType}
+        onValueChange={(v) => onChange({ ...draft, chargeType: v as OtherChargeType, amount: "" })}
+      >
+        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="flat">Fixed $</SelectItem>
+          <SelectItem value="percent">% of invoice</SelectItem>
+        </SelectContent>
+      </Select>
       <Input
         type="number"
         min="0"
         step="0.01"
         value={draft.amount}
         onChange={(e) => onChange({ ...draft, amount: e.target.value })}
-        placeholder="Amount $"
+        placeholder={draft.chargeType === "percent" ? "Percent %" : "Amount $"}
         className="h-8 text-sm"
       />
       <div className="flex items-center gap-3">
@@ -90,12 +104,18 @@ export function OtherChargesEditor() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
 
-  function validate(): { name: string; description: string; amountCents: number; isTaxable: boolean } | null {
+  function validate() {
     const name = draft.name.trim();
     if (!name) { toast.error("Enter a name"); return null; }
+    const description = draft.description.trim();
+    if (draft.chargeType === "percent") {
+      const percentBps = parsePercentToBps(draft.amount);
+      if (percentBps === null) { toast.error("Enter a valid percent"); return null; }
+      return { name, description, chargeType: "percent" as const, amountCents: 0, percentBps, isTaxable: draft.isTaxable };
+    }
     const amountCents = parseAmountCents(draft.amount);
     if (amountCents === null) { toast.error("Enter a valid amount"); return null; }
-    return { name, description: draft.description.trim(), amountCents, isTaxable: draft.isTaxable };
+    return { name, description, chargeType: "flat" as const, amountCents, percentBps: 0, isTaxable: draft.isTaxable };
   }
 
   async function handleAdd() {
@@ -164,7 +184,9 @@ export function OtherChargesEditor() {
                 <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-neutral-500">{c.description}</p>
               )}
             </div>
-            <span className="text-sm tabular-nums text-slate-700 dark:text-neutral-300">{formatCurrency(c.amountCents)}</span>
+            <span className="text-sm tabular-nums text-slate-700 dark:text-neutral-300">
+              {c.chargeType === "percent" ? `${formatPercentBps(c.percentBps)} of invoice` : formatCurrency(c.amountCents)}
+            </span>
             <Switch
               checked={c.isActive}
               onCheckedChange={(v) => void updateCharge({ id: c.id, updates: { isActive: v } })}
@@ -177,7 +199,10 @@ export function OtherChargesEditor() {
                 setDraft({
                   name: c.name,
                   description: c.description,
-                  amount: c.amountCents ? (c.amountCents / 100).toFixed(2) : "",
+                  chargeType: c.chargeType,
+                  amount: c.chargeType === "percent"
+                    ? (c.percentBps ? String(c.percentBps / 100) : "")
+                    : (c.amountCents ? (c.amountCents / 100).toFixed(2) : ""),
                   isTaxable: c.isTaxable,
                 });
               }}

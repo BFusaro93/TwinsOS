@@ -7,7 +7,11 @@ export interface Vendor extends BaseRecord {
   contactName: string;
   email: string;
   phone: string;
+  /** Street line. City, state and zip are their own fields. */
   address: string;
+  city: string;
+  state: string;
+  zip: string;
   website: string | null;
   notes: string | null;
   vendorType: string | null;

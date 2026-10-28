@@ -318,6 +318,8 @@ export interface CRMSequenceEvent {
   sequenceId: string;
   eventType: EventType;
   position: number;
+  /** The IF Branch step this one is nested inside; null at the top level. */
+  parentEventId: string | null;
   isActive: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config: Record<string, any>;
