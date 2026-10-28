@@ -5,6 +5,7 @@ import { PURCHASE_ORDER_SELECT, PO_LINE_ITEM_SELECT, shapePurchaseOrder, shapePo
 import { createPurchaseOrderSchema } from "./validation";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { computeSalesTax } from "@/lib/utils/po-tax";
 
 /** GET /api/v1/purchase-orders — list the org's purchase orders. Requires scope "purchase_orders:read". */
 export async function GET(request: Request) {
@@ -145,8 +146,11 @@ export async function POST(request: Request) {
   // money the org apparently got back from a vendor.
   const discountCost = Math.min(body.discountCostCents ?? 0, subtotal);
   const discountReducesTax = body.discountReducesTax ?? false;
-  const taxableBase = discountReducesTax ? Math.max(0, taxableSubtotal - discountCost) : taxableSubtotal;
-  const salesTax = Math.round(taxableBase * (taxRatePercent / 100));
+  // The shared helper, not a local `base * (rate / 100)`: dividing the rate
+  // first picks up float error (8.25 / 100) that can land a half-cent on the
+  // wrong side, so the API total would drift a cent from the same PO built in
+  // the app.
+  const salesTax = computeSalesTax({ taxableSubtotal, taxRatePercent, discountCost, discountReducesTax });
   const shippingCost = body.shippingCostCents ?? 0;
   const grandTotal = subtotal - discountCost + salesTax + shippingCost;
 

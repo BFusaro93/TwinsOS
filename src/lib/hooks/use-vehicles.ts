@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapVehicle } from "@/lib/supabase/mappers";
-import type { BulkImportResult } from "@/lib/csv";
+import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
+import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
 import type { Vehicle, AssetStatus } from "@/types/cmms";
 
 function patchVehicleCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Vehicle>) {
@@ -225,6 +226,18 @@ export function useBulkImportVehicles() {
             continue;
           }
 
+          // "$25,000.00" parsed as 25 (and "$25000" as NaN -> silently null);
+          // an unreadable date made Postgres reject the row.
+          const priceCents = parseCsvDollarsToCents(r.purchasePrice);
+          if (priceCents !== null && Number.isNaN(priceCents)) {
+            failed.push({ row: rowNum, error: `"${name}": invalid purchase price ("${r.purchasePrice}")` });
+            continue;
+          }
+          const purchaseDate = r.purchaseDate?.trim() ? normalizeCsvDate(r.purchaseDate) : null;
+          if (r.purchaseDate?.trim() && !purchaseDate) {
+            failed.push({ row: rowNum, error: `"${name}": invalid purchase date ("${r.purchaseDate}")` });
+            continue;
+          }
           const statusProvided = !!r.status?.trim();
           const row = {
             name,
@@ -238,8 +251,8 @@ export function useBulkImportVehicles() {
             status: normaliseVehicleStatus(r.status ?? ""),
             assigned_crew: r.assignedCrew?.trim() || null,
             purchase_vendor_name: r.purchaseVendorName?.trim() || null,
-            purchase_date: r.purchaseDate?.trim() || null,
-            purchase_price: r.purchasePrice ? Math.round(parseFloat(r.purchasePrice) * 100) || null : null,
+            purchase_date: purchaseDate,
+            purchase_price: priceCents || null,
             payment_method: r.paymentMethod?.trim() || null,
             finance_institution: r.financeInstitution?.trim() || null,
             asset_type: "vehicle",

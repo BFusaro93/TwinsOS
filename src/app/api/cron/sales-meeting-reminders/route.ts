@@ -111,11 +111,15 @@ export async function GET(request: Request) {
 
     // The claim above is taken before anything goes out. If the rep's only
     // channel fails (the email), give it back so the next 15-min tick retries
-    // — but never once the in-app notification landed, or the rep would get it
-    // twice.
+    // — but never once ANY recipient was reached (in-app or email). The claim
+    // is meeting-wide, so releasing after a partial success would re-send to
+    // everyone already emailed on the next tick. Trade-off: a recipient whose
+    // send failed while another succeeded is not retried (no per-recipient
+    // ledger table; failures are logged).
     let inAppSent = false;
+    let emailSent = false;
     const releaseClaim = async () => {
-      if (inAppSent) return;
+      if (inAppSent || emailSent) return;
       await supabase
         .from("crm_sales_meetings")
         .update({ reminder_sent_at: null })
@@ -155,6 +159,7 @@ export async function GET(request: Request) {
       }
     }
 
+    let emailFailed = false;
     for (const r of recipients) {
       if (!r.email || r.prefs.emailMeetingReminder === false) continue;
       try {
@@ -170,15 +175,19 @@ export async function GET(request: Request) {
             </div>`,
         });
         if (sendErr) {
-          await releaseClaim();
+          emailFailed = true;
         } else {
+          emailSent = true;
           notified++;
         }
       } catch {
         // continue to next recipient if one email fails
-        await releaseClaim();
+        emailFailed = true;
       }
     }
+    // Decide once, after every recipient was tried: only a total failure
+    // (nothing delivered anywhere) hands the claim back for a retry.
+    if (emailFailed) await releaseClaim();
   }
 
   return NextResponse.json({ notified });

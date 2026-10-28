@@ -78,6 +78,22 @@ export async function POST(
   // is org_id + has_crm_access(), and has_crm_access() is true for role
   // 'crew'. Best-effort — the note is already on the visit either way.
   if (visit.client_id) {
+    // Idempotent on retry: a flaky response makes the offline queue resend, and
+    // the comment RPC dedupes by id but this insert had no guard. Skip when the
+    // same author already logged the same note on this visit a few minutes ago.
+    const since = new Date(Date.now() - 10 * 60_000).toISOString();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: dup } = await (supabase as any)
+      .from("client_activity")
+      .select("id")
+      .eq("activity_type", "crew_note")
+      .eq("ref_id", visitId)
+      .eq("created_by", user.id)
+      .eq("body", parsed.data.note)
+      .gte("occurred_at", since)
+      .limit(1);
+    if ((dup ?? []).length > 0) return NextResponse.json({ job_comments: jobComments ?? [] });
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: activityError } = await (supabase as any)
       .from("client_activity")
