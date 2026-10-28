@@ -19,6 +19,7 @@ import { RevenueSnapshot, canViewRevenueSnapshot } from "@/components/crm/report
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { formatInZone, hourInZone, isoInZone, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
 import { useEmployees } from "@/lib/hooks/use-employees";
+import { useContributedTicketIds } from "@/lib/hooks/use-ticket-contributors";
 import { useSalesMeetings, useSalesReps } from "@/lib/hooks/use-sales-meetings";
 
 const STAGE_COLOR: Record<EstimateStage, string> = {
@@ -83,14 +84,19 @@ export function MyDay() {
   // My Day is per-user, so default tickets and meetings to the ones assigned to
   // you; "Everyone" is one click away for managers who triage the whole queue.
   const [scope, setScope] = useState<"mine" | "all">("mine");
-  const myEmployeeId = (employees ?? []).find((e) => e.userId === currentUser.id)?.id ?? null;
+  const myEmployee = (employees ?? []).find((e) => e.userId === currentUser.id);
+  const myEmployeeId = myEmployee?.id ?? null;
+  const { data: contributedTicketIds } = useContributedTicketIds(
+    myEmployee ? `${myEmployee.firstName} ${myEmployee.lastName}` : currentUser.name
+  );
   const myName = currentUser.name.trim().toLowerCase();
   const openTickets = scope === "all"
     ? allOpenTickets
     : (allOpenTickets ?? []).filter((t) =>
-        myEmployeeId && t.assignedToId
+        contributedTicketIds?.has(t.id) ||
+        (myEmployeeId && t.assignedToId
           ? t.assignedToId === myEmployeeId
-          : !t.assignedToId && !!t.assignedTo && t.assignedTo.trim().toLowerCase() === myName
+          : !t.assignedToId && !!t.assignedTo && t.assignedTo.trim().toLowerCase() === myName)
       );
   const { data: allOrgEstimates, isLoading: estimatesLoading } = useEstimates();
   const { data: allInvoices, isLoading: invoicesLoading } = useInvoices();
@@ -363,7 +369,7 @@ export function MyDay() {
                   ))
                 ) : recentTickets.length === 0 ? (
                   <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">
-                    {scope === "mine" ? "No open tickets assigned to you — you&apos;re all caught up!" : "No open tickets — you&apos;re all caught up!"}
+                    {scope === "mine" ? "No open tickets assigned to you or CC&apos;d on — you&apos;re all caught up!" : "No open tickets — you&apos;re all caught up!"}
                   </p>
                 ) : (
                   recentTickets.map((t) => (

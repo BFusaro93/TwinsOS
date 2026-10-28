@@ -40,6 +40,25 @@ export function useTicketContributors(ticketId: string) {
   });
 }
 
+/** Ids of tickets where `userName` is a contributor (names are stored as
+ * "First Last", same as the Contributors tab writes them). */
+export function useContributedTicketIds(userName: string | null) {
+  return useQuery({
+    queryKey: ["ticket-contributions", userName],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("ticket_contributors")
+        .select("ticket_id")
+        .eq("user_name", userName as string);
+      if (error) throw error;
+      return new Set<string>((data as { ticket_id: string }[]).map((r) => r.ticket_id));
+    },
+    enabled: !!userName,
+  });
+}
+
 export function useAddTicketContributor() {
   const qc = useQueryClient();
   return useMutation({
