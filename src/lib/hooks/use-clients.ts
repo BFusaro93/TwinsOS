@@ -761,6 +761,7 @@ export function useBulkImportClients() {
 
       let succeeded = 0;
       const failed: BulkImportResult["failed"] = [];
+      const skipped: BulkImportResult["failed"] = [];
 
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i];
@@ -810,10 +811,14 @@ export function useBulkImportClients() {
               continue;
             }
             existingByAccount = byAccount;
-          } else {
+          }
+          if (!existingByAccount) {
+            // No account match (blank, or a NEW account number): a matching
+            // email/phone means this is the same customer — skip, don't create
+            // a duplicate.
             const matchedClientId = (email && byEmail.get(email)) || (phoneDigits && byPhone.get(phoneDigits));
             if (matchedClientId) {
-              failed.push({ row: rowNum, error: `"${displayName}": matches an existing client by email or phone (likely duplicate) — skipped` });
+              skipped.push({ row: rowNum, error: `"${displayName}": matches an existing client by email or phone — skipped` });
               continue;
             }
           }
@@ -936,7 +941,7 @@ export function useBulkImportClients() {
         }
       }
 
-      return { succeeded, failed };
+      return { succeeded, failed, skipped };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });

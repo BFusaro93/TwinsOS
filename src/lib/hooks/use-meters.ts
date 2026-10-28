@@ -3,6 +3,7 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapMeter } from "@/lib/supabase/mappers";
 import type { Meter } from "@/types/cmms";
+import { addMeterReadingCore } from "@/lib/hooks/use-meter-readings";
 
 export function useMeters() {
   return useQuery({
@@ -49,9 +50,34 @@ export function useCreateMeter() {
         source: input.source,
       }).select().single();
       if (error) throw error;
+
+      // A non-zero starting value needs a baseline reading, otherwise the
+      // first real reading is validated against nothing and the history
+      // doesn't explain where the meter's value came from. Goes through the
+      // shared reading path so the recompute rules stay identical.
+      if (Number(input.currentValue) > 0) {
+        try {
+          await addMeterReadingCore({
+            meterId: data.id,
+            value: Number(input.currentValue),
+            readingAt: input.lastReadingAt || new Date().toISOString(),
+            source: input.source,
+            recordedByName: null,
+            notes: "Initial reading",
+          });
+        } catch (readingErr) {
+          // Don't leave a meter whose value has no backing reading.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("meters").update({ deleted_at: new Date().toISOString() }).eq("id", data.id);
+          throw readingErr;
+        }
+      }
       return mapMeter(data);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["meters"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["meters"] });
+      queryClient.invalidateQueries({ queryKey: ["meter-readings"] });
+    },
     onError: (err) => console.error("[useCreateMeter]", err),
   });
 }
@@ -61,22 +87,48 @@ export function useUpdateMeter() {
   return useMutation({
     mutationFn: async ({ id, ...input }: Partial<Meter> & { id: string }) => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any).from("meters").update({
+
+      // current_value is denormalized off meter_readings, so a direct edit
+      // must go through the reading path (same no-decrease / ordering rules)
+      // instead of overwriting the column — otherwise the next reading's
+      // recompute silently reverts it. A value equal to the current one is a
+      // no-op; a lower one is rejected by the reading rules with a clear error.
+      if (input.currentValue !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: cur, error: curErr } = await (supabase as any)
+          .from("meters").select("current_value, source").eq("id", id).single();
+        if (curErr) throw curErr;
+        if (Number(cur.current_value) !== Number(input.currentValue)) {
+          await addMeterReadingCore({
+            meterId: id,
+            value: Number(input.currentValue),
+            readingAt: new Date().toISOString(),
+            source: input.source ?? cur.source ?? "manual",
+            recordedByName: null,
+            notes: "Manual meter edit",
+          });
+        }
+      }
+      const patch = {
         ...(input.name !== undefined && { name: input.name }),
         ...(input.assetId !== undefined && { asset_id: input.assetId }),
         ...(input.assetName !== undefined && { asset_name: input.assetName }),
         ...(input.unit !== undefined && { unit: input.unit }),
-        ...(input.currentValue !== undefined && { current_value: input.currentValue }),
-        ...(input.lastReadingAt !== undefined && { last_reading_at: input.lastReadingAt }),
+        // current_value / last_reading_at are owned by the reading path above.
         ...(input.source !== undefined && { source: input.source }),
-      }).eq("id", id).select().single();
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const table = (supabase as any).from("meters");
+      const { data, error } = Object.keys(patch).length > 0
+        ? await table.update(patch).eq("id", id).select().single()
+        : await table.select("*").eq("id", id).single();
       if (error) throw error;
       return mapMeter(data);
     },
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["meters"] });
       queryClient.invalidateQueries({ queryKey: ["meters", id] });
+      queryClient.invalidateQueries({ queryKey: ["meter-readings", id] });
     },
   });
 }

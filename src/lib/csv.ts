@@ -20,6 +20,9 @@ export interface BulkImportRowError {
 export interface BulkImportResult {
   succeeded: number;
   failed: BulkImportRowError[];
+  /** Rows deliberately not imported because they match an existing record
+   *  (duplicates). Not errors; reported separately from `failed`. */
+  skipped?: BulkImportRowError[];
 }
 
 /** Type guard: does an `onImport` return value look like a `BulkImportResult`? */
@@ -36,7 +39,8 @@ export function isBulkImportResult(value: unknown): value is BulkImportResult {
 export function summarizeImportFailures(result: BulkImportResult): string {
   const shown = result.failed.slice(0, 5).map((f) => `Row ${f.row}: ${f.error}`).join(" | ");
   const more = result.failed.length > 5 ? ` (+${result.failed.length - 5} more)` : "";
-  return `${result.succeeded} imported, ${result.failed.length} failed. ${shown}${more}`;
+  const skippedNote = result.skipped?.length ? `, ${result.skipped.length} skipped as duplicates` : "";
+  return `${result.succeeded} imported, ${result.failed.length} failed${skippedNote}. ${shown}${more}`;
 }
 
 // Leading characters a spreadsheet (Excel, Sheets, LibreOffice) treats as the
@@ -129,7 +133,7 @@ export function exportCSVTemplate(columns: string[], filename: string): void {
 }
 
 /** Parse a single CSV row, handling quoted fields with embedded commas and quotes */
-function parseRow(line: string): string[] {
+function parseRow(line: string, delimiter = ","): string[] {
   const result: string[] = [];
   let current = "";
   let inQuotes = false;
@@ -142,7 +146,7 @@ function parseRow(line: string): string[] {
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (ch === "," && !inQuotes) {
+    } else if (ch === delimiter && !inQuotes) {
       result.push(current);
       current = "";
     } else {
@@ -192,12 +196,30 @@ function unescapeCsvCell(val: string): string {
   return /^'[=+\-@]/.test(val) ? val.slice(1) : val;
 }
 
+/**
+ * Pick the delimiter (comma, semicolon or tab) from the header row by
+ * counting unquoted occurrences of each; ties and no-delimiter headers fall
+ * back to comma so existing comma files behave exactly as before.
+ */
+function detectDelimiter(headerLine: string): string {
+  const counts: Record<string, number> = { ",": 0, ";": 0, "\t": 0 };
+  let inQuotes = false;
+  for (const ch of headerLine) {
+    if (ch === '"') inQuotes = !inQuotes;
+    else if (!inQuotes && ch in counts) counts[ch]++;
+  }
+  let best = ",";
+  for (const d of [";", "\t"]) if (counts[d] > counts[best]) best = d;
+  return best;
+}
+
 export function parseCSV(text: string): Record<string, string>[] {
   // Strip BOM (Excel UTF-8 CSVs often start with \uFEFF)
   const cleaned = text.replace(/^\uFEFF/, "");
   const lines = splitCSVRows(cleaned);
   if (lines.length < 2) return [];
-  const rawHeaders = parseRow(lines[0]).map((h) => h.trim());
+  const delimiter = detectDelimiter(lines[0]);
+  const rawHeaders = parseRow(lines[0], delimiter).map((h) => h.trim());
   // Deduplicate headers: if "Part Number" appears twice, the second becomes "Part Number (2)"
   const seen = new Map<string, number>();
   const headers = rawHeaders.map((h) => {
@@ -207,7 +229,7 @@ export function parseCSV(text: string): Record<string, string>[] {
   });
   return lines
     .slice(1)
-    .map((line) => parseRow(line))
+    .map((line) => parseRow(line, delimiter))
     // Spreadsheet exports pad the sheet with rows of bare delimiters (",,,,").
     // They pass the non-blank-line check in splitCSVRows, so each one used to
     // reach the importer as an empty record and be reported as a failed row
