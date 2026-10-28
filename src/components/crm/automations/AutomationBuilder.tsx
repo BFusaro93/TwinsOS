@@ -121,20 +121,17 @@ export function AutomationBuilder({ automationId }: Props) {
     }
   }
 
-  async function handleAddEvent(type: EventType) {
+  async function handleAddEvent(type: EventType, sequenceId: string | null, parentEventId?: string) {
     if (!canModify || (type === "tags" && !canAddTags)) return;
-    if (!focusedSequenceId || createEvent.isPending) return;
+    if (!sequenceId || createEvent.isPending) return;
     try {
-      await createEvent.mutateAsync({
-        sequenceId: focusedSequenceId,
-        eventType: type,
-        config: {},
-        position: 0,
-      });
+      await createEvent.mutateAsync({ sequenceId, eventType: type, config: {}, parentEventId });
     } catch {
       toast.error("Failed to add event");
     }
   }
+
+  const addablePalette = EVENT_PALETTE.filter(({ type }) => type !== "tags" || canAddTags);
 
   if (isLoading) {
     return (
@@ -236,10 +233,10 @@ export function AutomationBuilder({ automationId }: Props) {
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-neutral-500">
                 Events
               </p>
-              {canModify && EVENT_PALETTE.filter(({ type }) => type !== "tags" || canAddTags).map(({ type, label, icon: Icon }) => (
+              {canModify && addablePalette.map(({ type, label, icon: Icon }) => (
                 <button
                   key={type}
-                  onClick={() => handleAddEvent(type)}
+                  onClick={() => handleAddEvent(type, focusedSequenceId)}
                   disabled={!focusedSequenceId || createEvent.isPending}
                   className="flex cursor-grab items-center gap-2 rounded p-2 text-sm text-slate-700 dark:text-neutral-300 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
                   title={focusedSequenceId ? `Add ${label}` : "Select a sequence first"}
@@ -270,6 +267,9 @@ export function AutomationBuilder({ automationId }: Props) {
                   onFocus={() => setFocusedSequenceId(seq.id)}
                   onRulesClick={() => setRulesSequenceId(seq.id)}
                   onEventClick={(ev) => setEditingEvent(ev)}
+                  palette={addablePalette}
+                  onAddInside={(type, parentEventId) => handleAddEvent(type, seq.id, parentEventId)}
+                  isAdding={createEvent.isPending}
                 />
               ))}
 

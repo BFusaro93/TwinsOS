@@ -140,7 +140,11 @@ export function ServicesPricingGuide() {
         <p>
           The <strong>Price Adjustments</strong> tab is the tool for an actual price increase: it
           changes what clients get billed going forward. Every run follows the same three steps —
-          describe the change, preview it, then apply.
+          describe the change, preview it, then apply. The preview and the totals are
+          quantity-weighted: a visit bills the rate times its quantity, so the change shown is the
+          real per-visit difference, not just the per-unit rate change. A percentage of -100% or
+          lower (which would price everything at $0) and an absurdly large amount are rejected
+          rather than previewed.
         </p>
         <ol className="list-decimal space-y-2 pl-5">
           <li>

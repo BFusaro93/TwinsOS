@@ -190,10 +190,12 @@ npx supabase db push      # Push migration to remote
 npx supabase gen types    # Regenerate TypeScript types from DB schema
                           # Output: src/types/supabase.ts — commit this file
 
-# Testing
-npm run test              # Vitest unit tests
-npm run test:e2e          # Playwright end-to-end tests
+# Verification
+# There is no test runner yet (no `test` / `test:e2e` scripts). Verify changes with:
+npm run typecheck && npm run lint, plus manual browser checks on `npm run dev:test`.
 ```
+
+Use `npm run dev:test` (TEST Supabase project) for local development, not `npm run dev`. See `README.md` and `docs/HANDOFF_ASSESSMENT.md`.
 
 Run `npx supabase gen types` after every schema migration and commit the updated `src/types/supabase.ts`.
 

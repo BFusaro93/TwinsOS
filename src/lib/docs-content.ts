@@ -601,6 +601,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "An automation can: create a Work Order, create a Maintenance Request (a review step before it becomes a WO), create a Purchase Requisition, notify a role in-app (Send Notification), or send an email (Send Email, requires email configuration).",
           },
           {
+            step: "Assigned To on Create WO / WO Request",
+            detail:
+              "For the Create Work Order and Create WO Request actions, Assigned To is a picker of your employees (Unassigned by default). The person you pick is put on every work order the automation creates; on a WO Request they carry over to the work order when the request is converted. An older automation with free-typed text shows 'Previously typed… no matching employee' — pick the employee once so its work orders get assigned. An employee who has since left stays selectable on automations already using them.",
+          },
+          {
             step: "Setting a service interval",
             detail:
               "When the action type is 'Create Work Order' or 'Create WO Request', you can set a Service Interval. After the triggered WO is marked Done, the threshold automatically advances by the interval — so you never have to update it manually.",
@@ -972,6 +977,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Open the invoice's Photos tab (or 'Photos to include' in the email dialog) to attach up to 12 photos from the invoice's visits and jobs, Job Photos linked to the client or project, or direct uploads. They print on extra PDF pages and show as a gallery on the client's online invoice page. HEIC iPhone photos are converted automatically; only JPEG and PNG print in the PDF, and Print Selected leaves photos out.",
           },
           {
+            step: "Other charges (fixed or % of invoice)",
+            detail:
+              "Settings > Accounting > Other Charges is a catalog of fees — late fee, trip charge, fuel surcharge — each with a name, a printed description, a Taxable switch and an amount that is either Fixed $ or % of invoice (e.g. 4.5%). Add one from an invoice's Add Line Item list, or to many invoices at once from the Invoices list (Actions > Add Other Charge, needs Add / modify invoices). A percent charge is worked out when you add it, from that invoice's service lines (each line after its own discount; other charges and the invoice discount aren't counted), and the line prints with the percent, e.g. 'Fuel Surcharge (4.5%)'. It is then a fixed-dollar line that doesn't change if the services are edited, and changing the catalog never changes lines already on invoices. In bulk, each invoice gets its own dollar figure; the percent (or amount) can be overridden for that run, and locked, void or service-less invoices are skipped. 'Add common charges' seeds nine standard fees at $0.00 as Fixed $ — switch the ones you charge as a percentage. Other charges need no service and earn no commission.",
+          },
+          {
             step: "Invoices list columns and filters",
             detail:
               "The Columns menu adds Account Balance, Prepay, Credits, Payment type, Sent / Printed (where a draft is queued, or Sent/Printed once issued) and Frequency (the contract's cadence, or One-time). Filters: Date takes a from/to range, Balance takes At least / At most / Exactly, and Status and Payment type are pick-from-list (Status matches what the column shows, so a past-due Sent invoice is under Overdue). The Payments page has the same Date range filter; it opens on Last 30 Days, the All tab shows every payment, and searching or filtering reaches past the 30-day window.",
@@ -1090,6 +1100,11 @@ export const DOC_SECTIONS: DocSection[] = [
             step: "Custom field conditions",
             detail:
               "Trigger conditions, stop conditions, and If Branches can check a client custom field: pick the field, then compare it (text: equals, not equals, contains, does not contain, is set, is not set; number: also greater/less than). The condition reads the client's saved value at trigger time and at each stop/If check. A client with no value only matches 'is not set'. If the field is later deleted, the condition is never met and the editor shows 'Field deleted'.",
+          },
+          {
+            step: "If Branch blocks",
+            detail:
+              "An If Branch guards a block of steps: everything inside runs only when all its conditions are met, and everyone else skips the whole block and carries on with the step after it. Add a branch, then use 'Add step inside' on its card to put steps in it (any type, including another If Branch); they show indented under an orange line. Steps are added at the end of the sequence or of the block — there's no drag-to-reorder yet. Deleting a branch deletes its block. A deactivated branch isn't checked, so its steps run for everyone. Branches built before blocks existed guarded only the one step after them; that step was moved inside automatically so nothing changed. The execution log shows 'branch true' (block ran) or 'branch false' (block skipped).",
           },
           {
             step: "What can trigger a sequence",
@@ -1555,7 +1570,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Adding a vendor",
             detail:
-              "Go to Vendors in the sidebar. Click '+ New Vendor'. Enter name, contact name, email, phone, and address. Vendors are immediately available on all Requisition, PO, and CRM forms.",
+              "Go to Vendors in the sidebar. Click '+ New Vendor'. Enter name, contact name, email, phone, and the address in separate Street, City, State and Zip boxes (Google checks it when you leave the field and offers a correction you can accept or ignore). Vendors are immediately available on all Requisition, PO, and CRM forms.",
           },
           {
             step: "Renaming a vendor",
@@ -1825,6 +1840,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Purchasing",
     items: [
       {
+        q: "Why can't I delete a purchase order or requisition, or lower a PO line's quantity?",
+        a: "The app blocks changes that would orphan stock or records. A PO that has goods receipts recorded against it can't be deleted — cancel it instead. A requisition that already has purchase orders created from it can't be deleted — cancel or close it. And a PO line's quantity can't be lowered below what has already been received; correct the goods receipt first, then edit the line.",
+      },
+      {
         q: "How do I create a purchase order from a requisition?",
         a: "Open the approved requisition from Purchasing > Requisitions and click 'Convert to PO' in the detail panel. The PO is pre-filled with all line items, vendor, and cost information. You can adjust any field before saving.",
       },
@@ -2029,6 +2048,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Can an automation email send itself before anyone reviews it?",
         a: "Only if 'require approval' is off for that email event. Turn it on to hold the email for manual approval before it sends — useful when you're not fully confident in a new automation yet.",
+      },
+      {
+        q: "How do I make several steps run only for some clients (If Branch)?",
+        a: "Add an If Branch to the sequence, set its conditions, then use 'Add step inside' on the branch card to put each step in the block. Everything inside runs only when all the conditions are met; everyone else skips the whole block and continues with the step after it. Steps are added at the end of the sequence or block (no drag-to-reorder yet), deleting a branch deletes its block, and a deactivated branch isn't checked so its steps run for everyone. If a step ran for someone who didn't qualify, check that it's indented under the branch and the branch is active — the execution log shows 'branch false' when a block was skipped.",
+      },
+      {
+        q: "Can an Other Charge be a percentage of the invoice instead of a fixed amount?",
+        a: "Yes. In Settings > Accounting > Other Charges choose 'Fixed $' or '% of invoice' for each charge (e.g. a 4.5% fuel surcharge). When you add it to an invoice, or to many invoices at once from the Invoices list (Actions > Add Other Charge), the dollar amount is worked out from that invoice's service lines — each after its own discount, not counting other charges or the invoice discount — and written as a normal line such as 'Fuel Surcharge (4.5%)'. It doesn't change afterwards if you edit the services, and an invoice with no service lines is skipped because there's nothing to take a percent of.",
       },
     ],
   },

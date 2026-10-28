@@ -298,7 +298,11 @@ export interface CRMOtherCharge {
   id: string;
   name: string;
   description: string;
+  /** "flat" = amountCents; "percent" = percentBps of the invoice's service lines. */
+  chargeType: "flat" | "percent";
   amountCents: number;
+  /** Basis points (450 = 4.5%); only meaningful when chargeType is "percent". */
+  percentBps: number;
   isTaxable: boolean;
   isActive: boolean;
   sortOrder: number;

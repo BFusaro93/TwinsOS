@@ -62,7 +62,7 @@ export function IfBranchEventDialog({ open, onOpenChange, event }: Props) {
         </DialogHeader>
 
         <p className="text-sm text-muted-foreground">
-          Events nested under this IF block only run when ALL conditions below are met. If no conditions are met, clients skip the IF block and continue in the sequence.
+          Steps inside this IF block only run when ALL conditions below are met. Otherwise clients skip the whole block and continue with whatever comes after it. Use “Add step inside” on the IF card to put steps in the block.
         </p>
 
         <div className="flex flex-col gap-2">

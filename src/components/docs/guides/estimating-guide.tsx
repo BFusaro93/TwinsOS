@@ -57,6 +57,11 @@ export function EstimatingGuide() {
       </div>
 
       <Section id="creating" title="Creating an estimate">
+        <p>
+          On the Estimates list, the <strong>Client</strong>, <strong>Stage</strong> and{" "}
+          <strong>Sales Rep</strong> column filters are picked from a list and match exactly
+          (Sales Rep also offers <em>Unassigned</em>).
+        </p>
         <ol className="list-decimal space-y-2 pl-5">
           <li>
             Go to <strong>CRM &rarr; Estimates &rarr; + New Estimate</strong>.
@@ -433,7 +438,9 @@ export function EstimatingGuide() {
       <Section id="deposits" title="Taking a deposit on acceptance">
         <p>
           Set <strong>Deposit Required</strong> on the estimate header and the client is asked for it
-          as part of accepting the proposal, before the acceptance is recorded.
+          as part of accepting the proposal, before the acceptance is recorded. If the client
+          unticks lines or picks a cheaper option so the accepted total comes in below the deposit,
+          the deposit is capped at the accepted total rather than blocking acceptance.
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
