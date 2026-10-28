@@ -246,38 +246,68 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     openInMaps(stop.address);
   }
 
+  // Each hook's onError already toasts the failure; swallow the rejection here
+  // so it isn't also reported as an unhandled promise rejection.
   async function handleClockIn() {
-    await stopClockIn.mutateAsync(anchorVisitId);
+    try {
+      await stopClockIn.mutateAsync(anchorVisitId);
+    } catch {
+      /* surfaced by the mutation's onError */
+    }
   }
 
   async function handlePause() {
-    await stopPause.mutateAsync(anchorVisitId);
+    try {
+      await stopPause.mutateAsync(anchorVisitId);
+    } catch {
+      /* surfaced by the mutation's onError */
+    }
   }
 
   async function handleResume() {
-    await stopResume.mutateAsync(anchorVisitId);
+    try {
+      await stopResume.mutateAsync(anchorVisitId);
+    } catch {
+      /* surfaced by the mutation's onError */
+    }
   }
 
   async function handleClockOut() {
-    await stopClockOut.mutateAsync({ anchorVisitId, notes: clockOutNotes || undefined });
+    try {
+      await stopClockOut.mutateAsync({ anchorVisitId, notes: clockOutNotes || undefined });
+    } catch {
+      return; // surfaced by the mutation's onError; stay on the stop
+    }
     setClockOutOpen(false);
     router.push("/crm/crew");
   }
 
   async function handleSkip() {
     if (!skipTargetId || !skipReason.trim()) return;
-    await skipVisit.mutateAsync({ visitId: skipTargetId, reason: skipReason });
+    try {
+      await skipVisit.mutateAsync({ visitId: skipTargetId, reason: skipReason });
+    } catch {
+      return; // surfaced by the mutation's onError; keep the dialog open
+    }
     setSkipTargetId(null);
     setSkipReason("");
   }
 
   async function handleAcknowledge() {
-    await acknowledge.mutateAsync(anchorVisitId);
+    try {
+      await acknowledge.mutateAsync(anchorVisitId);
+    } catch {
+      /* surfaced by the mutation's onError */
+    }
   }
 
   async function handleSendNote() {
     if (!noteText.trim()) return;
-    await addNote.mutateAsync({ visitId: anchorVisitId, note: noteText });
+    try {
+      await addNote.mutateAsync({ visitId: anchorVisitId, note: noteText });
+    } catch {
+      return; // surfaced by the mutation's onError; keep the draft
+    }
     setNoteText("");
   }
 
