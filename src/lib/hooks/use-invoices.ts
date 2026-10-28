@@ -1325,11 +1325,14 @@ export function useRefundPayment() {
     mutationFn: async ({
       id,
       refundAmountCents,
+      idempotencyToken,
     }: {
       id: string;
       clientId: string;
       refundAmountCents: number;
       invoiceId?: string | null;
+      /** One per dialog open — makes a repeated submit the same Stripe refund. */
+      idempotencyToken?: string;
     }) => {
       // Routed through a server API instead of writing directly from the
       // browser: a card/ACH payment's refund has to call Stripe (which
@@ -1340,7 +1343,7 @@ export function useRefundPayment() {
       const res = await fetch(`/api/crm/payments/${id}/refund`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refundAmountCents }),
+        body: JSON.stringify({ refundAmountCents, idempotencyToken }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
