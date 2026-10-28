@@ -1,4 +1,5 @@
 import { selectAllRows } from "@/lib/visits/generate";
+import { AR_WRITE_OFF_METHOD } from "@/lib/reports/helpers";
 import type { AccountStatementActivityRow } from "@/components/crm/invoices/pdf/AccountStatementDocument";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -143,8 +144,11 @@ export async function buildAccountStatementData(
     });
   }
 
+  // Cash only, like the invoice-statement layout: an AR write-off zeroes bad
+  // debt without money changing hands, so it must never print as the client's
+  // "last payment".
   const lastPaymentRow = [...(paymentRows ?? [])]
-    .filter((r: Record<string, unknown>) => r.is_credit !== true)
+    .filter((r: Record<string, unknown>) => r.is_credit !== true && r.method !== AR_WRITE_OFF_METHOD)
     .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
       (b.payment_date as string).localeCompare(a.payment_date as string)
     )[0];

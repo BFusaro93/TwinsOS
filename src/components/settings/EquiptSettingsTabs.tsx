@@ -56,7 +56,7 @@ import { useVendors, useBulkImportVendors } from "@/lib/hooks/use-vendors";
 import { useRequisitions, useBulkImportRequisitions } from "@/lib/hooks/use-requisitions";
 import { usePurchaseOrders, useBulkImportPurchaseOrders } from "@/lib/hooks/use-purchase-orders";
 import { useProducts, useBulkImportProducts } from "@/lib/hooks/use-products";
-import { downloadCSV, readCSVFile } from "@/lib/csv";
+import { downloadCSV, readCSVFile, isBulkImportResult, summarizeImportFailures } from "@/lib/csv";
 import { autoMapColumns, remapRows } from "@/components/shared/ImportExportMenu";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useCurrentUserStore } from "@/stores";
@@ -860,7 +860,17 @@ function ImportTile({
     setImporting(true);
     setImportError(null);
     try {
-      await onImport(parsedRows);
+      const result = await onImport(parsedRows);
+      if (isBulkImportResult(result)) {
+        // Row-level result: a partial failure must not read as full success.
+        if (result.failed.length > 0) {
+          setImportError(summarizeImportFailures(result));
+          return;
+        }
+        setPreviewOpen(false);
+        onStatus({ type: "success", message: `Successfully imported ${result.succeeded} ${label.toLowerCase()}.` });
+        return;
+      }
       setPreviewOpen(false);
       onStatus({ type: "success", message: `Successfully imported ${parsedRows.length} ${label.toLowerCase()}.` });
     } catch (err) {
