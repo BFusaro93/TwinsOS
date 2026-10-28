@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recomputeStopLabor } from "@/lib/crew/visit-labor";
+import { createServiceClient } from "@/lib/supabase/server";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 
 /**
@@ -56,9 +57,12 @@ const INVOICED_PUNCH_MESSAGE =
  * invoice — same definition as lib/visits/invoiced-guard. Fails closed: if the
  * check errors, a crew caller is refused rather than let rewrite billed hours.
  */
-async function visitIsInvoiced(supabase: Supabase, visitId: string): Promise<boolean> {
+async function visitIsInvoiced(_supabase: Supabase, visitId: string): Promise<boolean> {
+  // Crew logins can't read crm_invoice_line_items (RLS), so a user-scoped query
+  // would return no rows and the lock would never fire. The visit was already
+  // authorized for the caller, so look up billing state with the service client.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await (createServiceClient() as any)
     .from("crm_invoice_line_items")
     .select("visit_id, crm_invoices!inner(deleted_at, status)")
     .eq("visit_id", visitId)
