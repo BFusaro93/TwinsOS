@@ -75,7 +75,7 @@ Legend: **Required** = the app is broken or a core feature is off without it. **
 
 - **Variables:** `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET`, `QUICKBOOKS_ENVIRONMENT` (`sandbox` or `production`; the ID/secret pair must match).
 - **Setup:** create the app at developer.intuit.com and register the redirect URI `https://<domain>/api/integrations/quickbooks/callback`.
-- **Behavior:** one-way sync (customers, invoices, payments, terms, tax, voids, Stripe payments, refunds) on a 15-minute cron plus a reconcile pass. Code in `lib/integrations/quickbooks*.ts`, routes under `/api/integrations/quickbooks/*` and `/api/cron/quickbooks-sync`. Built recently (#343); treat as the least battle-tested integration.
+- **Behavior:** one-way sync (customers, invoices, payments, terms, tax, voids, Stripe payments, refunds) on a 15-minute cron plus a reconcile pass. Code in `lib/integrations/quickbooks*.ts`, routes under `/api/integrations/quickbooks/*` and `/api/cron/quickbooks-sync`. AR write-offs push as credit memos (not cash payments), credit applications are not pushed, and payment pushes are idempotent. Built recently (#343); treat as the least battle-tested integration.
 
 ## Google Maps
 
