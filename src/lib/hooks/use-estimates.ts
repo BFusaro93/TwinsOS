@@ -404,6 +404,7 @@ export function useBulkImportEstimates() {
           });
           if (!lineError) {
             try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               await recalcEstimateTotalsShared(supabase as any, inserted.id);
               linesAdded++;
             } catch {
