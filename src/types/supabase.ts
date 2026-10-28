@@ -15480,6 +15480,7 @@ export type Database = {
       ticket_contributors: {
         Row: {
           added_at: string
+          employee_id: string | null
           id: string
           org_id: string
           ticket_id: string
@@ -15487,6 +15488,7 @@ export type Database = {
         }
         Insert: {
           added_at?: string
+          employee_id?: string | null
           id?: string
           org_id?: string
           ticket_id: string
@@ -15494,12 +15496,20 @@ export type Database = {
         }
         Update: {
           added_at?: string
+          employee_id?: string | null
           id?: string
           org_id?: string
           ticket_id?: string
           user_name?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "ticket_contributors_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "crm_employees"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ticket_contributors_ticket_id_fkey"
             columns: ["ticket_id"]

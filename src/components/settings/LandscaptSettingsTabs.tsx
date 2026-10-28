@@ -77,6 +77,7 @@ import { RolesList } from "@/components/crm/roles/RolesList";
 import { EstimateStagesEditor } from "@/components/crm/settings/EstimateStagesEditor";
 import { OverheadSettingsEditor } from "@/components/crm/settings/OverheadSettingsEditor";
 import { LaborRatesEditor } from "@/components/crm/settings/LaborRatesEditor";
+import { StripeMethodImport } from "@/components/crm/settings/StripeMethodImport";
 import { ClientPortalTab } from "@/components/crm/settings/ClientPortalSettings";
 import { SnowRoutesEditor } from "@/components/crm/settings/SnowRoutesEditor";
 import { OtherChargesEditor } from "@/components/crm/settings/OtherChargesEditor";
@@ -1315,6 +1316,7 @@ function ConnectAccountSection() {
         denied: "Stripe connection was cancelled.",
         in_use: "That Stripe account is already connected to another Landscapt organization.",
         unauthorized: "Only admins can connect Stripe.",
+        impersonating: "End your impersonation session first — the customer's own admin needs to connect Stripe.",
       };
       toast.error(messages[params.get("reason") ?? ""] ?? "Couldn't connect your Stripe account. Please try again.");
     }
@@ -1549,6 +1551,8 @@ function QuickBooksSyncStatusSection() {
 // ── AccountingTab ─────────────────────────────────────────────────────────────
 
 function AccountingTab() {
+  const { data: connectStatusForImport } = useConnectStatus();
+  const connectActive = connectStatusForImport?.chargesEnabled === true;
   const { data: paymentMethods = [] } = useOrgList("payment_methods");
   const { data: discountsList = [] } = useDiscounts();
   const { data: otherChargesList = [] } = useOtherCharges();
@@ -1657,6 +1661,7 @@ function AccountingTab() {
         description="Connect your own Stripe account to accept client card payments and receive payouts directly."
       >
         <ConnectAccountSection />
+        {connectActive && <StripeMethodImport />}
         <div className="flex items-center gap-2 border-t px-4 py-4">
           <Checkbox
             id="ach-payments-enabled"

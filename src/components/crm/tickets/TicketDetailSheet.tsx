@@ -659,16 +659,19 @@ function ContributorsTab({ ticket }: { ticket: CRMTicket }) {
   const { data: employees } = useSelectableEmployees();
   const [selected, setSelected] = useState("");
 
-  const existing = new Set((contributors ?? []).map((c) => c.userName));
+  // Legacy rows (employeeId null) are matched by name so they can't be re-added.
+  const existingIds = new Set((contributors ?? []).map((c) => c.employeeId).filter(Boolean));
+  const existingNames = new Set((contributors ?? []).map((c) => c.userName));
   const available = (employees ?? [])
-    .map((e) => `${e.firstName} ${e.lastName}`)
-    .filter((name) => !existing.has(name));
+    .map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}` }))
+    .filter((e) => !existingIds.has(e.id) && !existingNames.has(e.name));
 
   async function handleAdd() {
-    if (!selected) return;
-    await addContributor.mutateAsync({ ticketId: ticket.id, userName: selected });
+    const person = available.find((e) => e.id === selected);
+    if (!person) return;
+    await addContributor.mutateAsync({ ticketId: ticket.id, employeeId: person.id, userName: person.name });
     setSelected("");
-    toast.success(`${selected} added as contributor`);
+    toast.success(`${person.name} added as contributor`);
   }
 
   return (
@@ -706,7 +709,7 @@ function ContributorsTab({ ticket }: { ticket: CRMTicket }) {
             {available.length === 0 ? (
               <SelectItem value="__none" disabled>All employees added</SelectItem>
             ) : (
-              available.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)
+              available.map((e) => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)
             )}
           </SelectContent>
         </Select>

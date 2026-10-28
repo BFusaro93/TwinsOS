@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured, resolvedStripeMode } from "@/lib/stripe/server";
 import { clearStaleSavedPaymentMethods, syncConnectStatusFromStripe } from "@/lib/stripe/connect";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 import { logger } from "@/lib/logger";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 
@@ -27,6 +28,9 @@ export async function POST(request: Request) {
   if (profile.role !== "admin") {
     return NextResponse.json({ error: "Only admins can manage payment settings" }, { status: 403 });
   }
+
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "connecting Stripe (the customer's own admin needs to do this)");
+  if (impersonating) return impersonating;
 
   // stripe_connect_livemode isn't in the generated Supabase types yet (added
   // by a migration this session wrote but did not apply/regenerate types for).

@@ -122,6 +122,15 @@ export interface NewSalesMeetingInput {
   ticketId: string | null;
 }
 
+/** Best-effort: tell the assigned rep a meeting landed on their calendar. */
+function notifyRepAssigned(meetingId: string) {
+  void fetch(`/api/crm/sales-meetings/${meetingId}/notify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event: "assigned" }),
+  }).catch(() => {});
+}
+
 export function useCreateSalesMeeting() {
   const qc = useQueryClient();
   return useMutation({
@@ -147,6 +156,7 @@ export function useCreateSalesMeeting() {
         .select()
         .single();
       if (error) throw error;
+      notifyRepAssigned(data.id);
       return mapMeeting(data);
     },
     onSuccess: () => {
@@ -161,6 +171,7 @@ export function useUpdateSalesMeeting() {
     mutationFn: async ({ id, values }: { id: string; values: Partial<NewSalesMeetingInput> & { status?: string } }) => {
       const supabase = createClient();
       const patch: Record<string, unknown> = {};
+      let repChanged = false;
       if (values.clientId !== undefined) patch.client_id = values.clientId;
       if (values.leadName !== undefined) patch.lead_name = values.leadName;
       if (values.title !== undefined) patch.title = values.title;
@@ -192,10 +203,11 @@ export function useUpdateSalesMeeting() {
           values.scheduledAt !== undefined &&
           existing &&
           new Date(existing.scheduled_at).getTime() !== new Date(values.scheduledAt).getTime();
-        const repChanged =
+        repChanged = !!(
           values.salesRepId !== undefined &&
           existing &&
-          existing.sales_rep_id !== values.salesRepId;
+          existing.sales_rep_id !== values.salesRepId
+        );
         if (timeChanged || repChanged) {
           patch.reminder_sent_at = null;
         }
@@ -214,6 +226,7 @@ export function useUpdateSalesMeeting() {
         .select()
         .single();
       if (error) throw error;
+      if (repChanged) notifyRepAssigned(id);
       return mapMeeting(data);
     },
     onSuccess: () => {
