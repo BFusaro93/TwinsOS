@@ -38,6 +38,7 @@ export interface AppNotification {
     | "injury_reported"
     | "part_stock_short"
     | "sales_meeting_reminder"
+    | "sales_meeting_assigned"
     | "payment_disputed";
   title: string;
   body: string;

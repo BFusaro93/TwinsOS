@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Ticket, ClipboardSignature, Receipt, UserRound, Plus, Inbox } from "lucide-react";
+import { Ticket, ClipboardSignature, Receipt, UserRound, Plus, Inbox, CalendarCheck } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, formatCurrency, formatDate, todayLocalISODate } from "@/lib/utils";
 import { useCurrentUserStore } from "@/stores";
@@ -17,7 +17,8 @@ import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { RevenueSnapshot, canViewRevenueSnapshot } from "@/components/crm/reports/RevenueSnapshot";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
-import { hourInZone, todayInZone } from "@/lib/time/zone";
+import { formatInZone, hourInZone, isoInZone, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
+import { useSalesMeetings, useSalesReps } from "@/lib/hooks/use-sales-meetings";
 
 const STAGE_COLOR: Record<EstimateStage, string> = {
   draft:    "bg-muted text-slate-600 dark:text-neutral-400",
@@ -102,6 +103,17 @@ export function MyDay() {
   useEffect(() => {
     setGreetingBar({ greeting: getGreeting(orgTimeZone), date: getTodayLong(orgTimeZone) });
   }, [orgTimeZone]);
+  // Scheduled sales meetings from the start of the org's today through the next
+  // 7 days — the week ahead, not just today, so a Monday morning shows the week.
+  const meetingsFrom = zoneWallClockToInstant(today, "00:00", orgTimeZone)?.toISOString() ?? "";
+  const meetingsTo = (() => {
+    const d = new Date(`${today}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 8);
+    return zoneWallClockToInstant(d.toISOString().slice(0, 10), "00:00", orgTimeZone)?.toISOString() ?? "";
+  })();
+  const { data: weekMeetings, isLoading: meetingsLoading } = useSalesMeetings(meetingsFrom, meetingsTo);
+  const { data: salesReps } = useSalesReps();
+  const upcomingMeetings = (weekMeetings ?? []).filter((m) => m.status === "scheduled");
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
   const overdueCount = (openTickets ?? []).filter(
@@ -249,6 +261,57 @@ export function MyDay() {
       <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 flex-1">
         {/* Left column */}
         <div className="flex min-w-0 flex-col gap-4">
+          {/* Upcoming Sales Meetings */}
+          {allow("sales_meeting_list") && (
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
+              <SectionHeader title="Upcoming Meetings" href="/crm/sales-meetings" />
+              <div className="mt-3">
+                {meetingsLoading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 border-b py-2.5 last:border-0">
+                      <Skeleton className="h-4 w-full" />
+                    </div>
+                  ))
+                ) : upcomingMeetings.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">
+                    No meetings scheduled in the next 7 days.
+                  </p>
+                ) : (
+                  upcomingMeetings.slice(0, 6).map((m) => {
+                    const isToday = isoInZone(new Date(m.scheduledAt), orgTimeZone) === today;
+                    const rep = salesReps?.find((r) => r.id === m.salesRepId)?.name;
+                    return (
+                      <Link
+                        key={m.id}
+                        href={`/crm/sales-meetings?open=${m.id}`}
+                        className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2.5 last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 -mx-4 px-4 transition-colors"
+                      >
+                        <CalendarCheck className="h-3.5 w-3.5 shrink-0 text-sky-500 dark:text-sky-400" />
+                        <span className={cn("shrink-0 text-xs", isToday ? "font-semibold text-sky-600 dark:text-sky-400" : "text-slate-500 dark:text-neutral-400")}>
+                          {isToday ? "Today" : formatInZone(m.scheduledAt, orgTimeZone)}{" "}
+                          {formatInZone(m.scheduledAt, orgTimeZone, { hour: "numeric", minute: "2-digit" })}
+                        </span>
+                        <span className="min-w-[9rem] flex-1 truncate text-sm text-slate-700 dark:text-neutral-300">
+                          {m.title}
+                        </span>
+                        {(m.clientName ?? m.leadName) && (
+                          <span className="text-xs text-blue-600 dark:text-blue-400 shrink-0 max-w-[120px] max-sm:max-w-[72px] truncate">
+                            {m.clientName ?? m.leadName}
+                          </span>
+                        )}
+                        {rep && (
+                          <span className="max-w-[110px] max-sm:max-w-[72px] truncate rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground shrink-0">
+                            {rep}
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Open Tickets */}
           {allow("tickets_view_modify") && (
             <div className="rounded-lg border bg-card p-4 shadow-sm">

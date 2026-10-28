@@ -112,6 +112,7 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
     case "automation_alert":
       return <Bell className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "sales_meeting_reminder":
+    case "sales_meeting_assigned":
       return <CalendarClock className={cn(cls, "text-sky-500 dark:text-sky-400")} />;
     case "comment_mention":
       return <AtSign className={cn(cls, "text-brand-500 dark:text-brand-400")} />;
@@ -216,7 +217,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "injury_reported", "part_stock_short", "payment_disputed"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -382,6 +383,7 @@ export function NotificationsBell() {
       part_stock_short:           { href: (id) => id ? `/cmms/parts?open=${id}` : "/cmms/parts", title: "Part Used Before Received" },
       injury_reported:            { href: (id) => id ? `/tools/injury-cases?open=${id}` : "/tools/injury-cases", title: "Injury Report" },
       sales_meeting_reminder:     { href: (id) => id ? `/crm/sales-meetings?open=${id}` : "/crm/sales-meetings", title: "Meeting Reminder" },
+      sales_meeting_assigned:     { href: (id) => id ? `/crm/sales-meetings?open=${id}` : "/crm/sales-meetings", title: "Meeting Assigned" },
     };
     dbNotifications.filter((n) => {
       if (n.type === "wo_comment" && notifPrefs?.inAppWorkOrderComment === false) return false;

@@ -40,7 +40,7 @@ type EmployeeRow = {
   deleted_at: string | null;
 };
 
-async function recipientFromEmployee(db: AnyDb, orgId: string, employeeId: string | null | undefined): Promise<ReminderRecipient | null> {
+export async function recipientFromEmployee(db: AnyDb, orgId: string, employeeId: string | null | undefined): Promise<ReminderRecipient | null> {
   if (!employeeId) return null;
   const { data } = await db
     .from("crm_employees")

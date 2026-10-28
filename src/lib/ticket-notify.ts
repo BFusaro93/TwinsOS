@@ -240,25 +240,40 @@ export async function notifyTicketComment(
 ) {
   const { orgId, ticketId, ticketNumber, subject, assignedToId, assignedToName, commenterName, commenterId, commentBody } = params;
   const assigneeId = await resolveAssigneeId(supabase, orgId, assignedToId ?? null, assignedToName);
-  if (assigneeId && assigneeId === commenterId) return;
 
-  const { data: assigneeRow } = assigneeId
+  // Contributors are CC'd on the ticket (ticket_contributors stores a display
+  // name, same as the assignee name fallback above), so they hear about
+  // comments too. Names that don't match an employee with a login are skipped.
+  const { data: contributorRows } = await supabase
+    .from("ticket_contributors")
+    .select("user_name")
+    .eq("ticket_id", ticketId)
+    .eq("org_id", orgId);
+  const contributorIds: string[] = [];
+  for (const row of contributorRows ?? []) {
+    const id = await resolveAssigneeId(supabase, orgId, null, row.user_name);
+    if (id) contributorIds.push(id);
+  }
+
+  // Never notify the commenter about their own comment.
+  const userIds = Array.from(new Set([assigneeId, ...contributorIds].filter((id): id is string => !!id && id !== commenterId)));
+
+  const { data: userRows } = userIds.length
     ? await supabase
         .from("profiles")
         .select("id, email, name, notification_prefs")
-        .eq("id", assigneeId)
+        .in("id", userIds)
         .neq("status", "inactive")
-        .maybeSingle()
-    : { data: null };
+    : { data: [] };
   // A comment with no staff author (commenterId null: the client replying by
-  // text) must still reach someone. When the ticket is unassigned, assigned to
-  // an employee with no login, or assigned to a deactivated user, the reply
-  // used to be filed on the ticket and notify nobody. Fall back to the same
-  // audience that hears about new tickets. Staff-authored comments keep the
-  // assignee-only behavior.
+  // text) must still reach someone. When the ticket has no reachable
+  // assignee or contributor (unassigned, an employee with no login, or a
+  // deactivated user), the reply used to be filed on the ticket and notify
+  // nobody. Fall back to the same audience that hears about new tickets.
+  // Staff-authored comments keep the assignee + contributors behavior.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let recipients: any[] = assigneeRow ? [assigneeRow] : [];
-  if (!assigneeRow && commenterId === null) {
+  let recipients: any[] = userRows ?? [];
+  if (!recipients.length && commenterId === null) {
     recipients = await resolveBroadcastRecipients(supabase, orgId, "newTicketRecipientIds");
   }
   if (!recipients.length) return;
@@ -272,7 +287,7 @@ export async function notifyTicketComment(
     title: `New Comment — ${label}`,
     message: `${commenterName} commented on ${label}: "${snippet}"`,
     emailHtml: (name) => emailShell(
-      "New Comment on Your Ticket",
+      "New Comment on a Ticket",
       name,
       `<p style="margin:0 0 8px;color:#475569">${escapeHtml(commenterName)} commented on <strong>${escapeHtml(label)}</strong>:</p>
        <blockquote style="margin:0 0 24px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#374151;font-style:italic">${escapeHtml(snippet)}</blockquote>`,
