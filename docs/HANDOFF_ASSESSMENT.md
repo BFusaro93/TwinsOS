@@ -121,17 +121,17 @@ Scale and structure questions for an experienced engineer to answer:
 ## 5. Handoff checklist (in priority order)
 
 Week 1, low effort, high value:
-- [ ] Write `README.md`: what it is, prerequisites, how to run (`npm run dev:test`), env setup, where docs live.
-- [ ] Write `docs/ARCHITECTURE.md`: system diagram, request flow, auth/permission model, tenancy, crons, webhooks, integrations. Pull from `CLAUDE.md` and the migration headers.
-- [ ] Write `docs/INTEGRATIONS.md`: each third-party service, owning account, keys, webhooks to configure, rotation steps.
-- [ ] Write `docs/RUNBOOKS.md`: PROD/TEST project refs, migration apply and drift recovery, rolling back a bad migration, key rotation, cron failures, build failures (OOM).
+- [x] Write `README.md`: what it is, prerequisites, how to run (`npm run dev:test`), env setup, where docs live.
+- [x] Write `docs/ARCHITECTURE.md`: system diagram, request flow, auth/permission model, tenancy, crons, webhooks, integrations. Pull from `CLAUDE.md` and the migration headers.
+- [x] Write `docs/INTEGRATIONS.md` (owner/login column still to be filled in by the current owner): each third-party service, owning account, keys, webhooks to configure, rotation steps.
+- [x] Write `docs/RUNBOOKS.md` (TEST project ref, backup/PITR tier and uptime monitor still to confirm): PROD/TEST project refs, migration apply and drift recovery, rolling back a bad migration, key rotation, cron failures, build failures (OOM).
 - [ ] Move the assistant's memory notes that encode decisions into `docs/decisions/` (ADR style). They are currently outside the repo.
-- [ ] Fix `CLAUDE.md`: remove nonexistent test commands, correct the standards the code does not follow, or fix the code.
-- [ ] Clean repo root (screenshots, `test.txt`, `.docx`).
+- [x] Fix `CLAUDE.md` (test commands only; standards-vs-code drift remains): remove nonexistent test commands, correct the standards the code does not follow, or fix the code.
+- [x] Clean repo root (screenshots, `test.txt`, `.docx`).
 - [ ] Prove `supabase db reset` works from scratch.
 
 Weeks 2 to 4:
-- [ ] CI: typecheck, lint, build on every PR; `npm audit`; secret scan; Dependabot.
+- [x] CI: typecheck (lint and typecheck done; secret scan still open), lint, build on every PR; `npm audit`; secret scan; Dependabot.
 - [ ] Add Vitest and write tests for the money paths, then a cross-tenant isolation suite.
 - [ ] Audit all 110 service-role call sites and all `SECURITY DEFINER` functions; add CI checks for the latter.
 - [ ] Regenerate `supabase.ts`; remove `as any` on data access in priority order.

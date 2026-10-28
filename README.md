@@ -12,6 +12,9 @@ Next.js (App Router, TypeScript strict) + Supabase (Postgres with Row Level Secu
 | If you want to... | Read |
 |---|---|
 | Understand the domain model, conventions, and traps | [CLAUDE.md](CLAUDE.md) |
+| See how requests, tenancy, permissions, cron, and subsystems fit together | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Find every third-party service, its env vars, and webhooks | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
+| Apply migrations, recover from drift, handle incidents | [docs/RUNBOOKS.md](docs/RUNBOOKS.md) |
 | See the state of the codebase for handoff (docs, debt, security, architecture) | [docs/HANDOFF_ASSESSMENT.md](docs/HANDOFF_ASSESSMENT.md) |
 | Set up or promote a Supabase environment | [supabase/DEPLOYMENT.md](supabase/DEPLOYMENT.md) |
 | Integrate with the public API / Zapier | [docs/zapier-integration.md](docs/zapier-integration.md) |
