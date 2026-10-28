@@ -34,6 +34,15 @@ Syncs: clients (as QBO customers), invoices, payments, and later changes
 - **Payment recorded** (manual, Stripe webhook, autopay, portal): immediate,
   invoice pushed first if it isn't in QBO yet. One QBO Payment per
   `crm_payment_allocations` row.
+- **AR write-off** (payment method "AR Write-off"): pushed as a QBO **credit memo**
+  applied to the invoice by a zero-total linking Payment — never as a cash Payment.
+  The allocation's `qbo_payment_id` is stored as `cm:<creditMemoId>:<applyingPaymentId>`;
+  a refund/removal voids the linking Payment, then the credit memo.
+- **Credit application** (`is_credit` payments): NOT pushed. They apply a prepayment/
+  credit whose original payment is already in QBO, so pushing again would double count.
+  The reconcile cron skips them.
+- Every QBO create carries a `requestid` (the allocation id), so a Stripe-webhook push
+  racing a manual/cron push yields one QBO transaction.
 - **Refund / chargeback**: QBO payment voided (full) or reduced (partial).
   The allocation row — and its `qbo_payment_id` — is deleted by
   `refund_payment()` on a full refund, so links are snapshotted first.
@@ -82,7 +91,7 @@ returns 401 otherwise).
 ## Known limits (tell the customer plainly)
 
 - No backfill; no two-way sync; QBO Online only.
-- Prepayments/credits with no invoice allocation, and edits to an existing
+- Credit applications (they re-use a payment already in QBO), prepayments/credits with no invoice allocation, and edits to an existing
   payment's allocations, do not sync.
 - **Disconnect deletes the `integrations` row but keeps the per-record QBO
   ids.** Reconnecting to the same company is fine (but the "after connect"
