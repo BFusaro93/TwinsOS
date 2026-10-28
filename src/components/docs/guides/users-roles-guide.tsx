@@ -260,7 +260,9 @@ export function UsersRolesGuide() {
           <li>
             They receive an email invitation and set their own password on first login. If the email
             is already registered elsewhere in the system, a password-reset link is sent instead so
-            they land on the same set-password screen.
+            they land on the same set-password screen. If the email belongs to a different type of
+            account, such as a client portal login, or to a user in another organization, the invite
+            is refused with a message; use a different email.
           </li>
           <li>
             An Admin can resend a pending invite, change a user&apos;s role, or deactivate them at

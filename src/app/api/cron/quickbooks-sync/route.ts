@@ -119,11 +119,13 @@ export async function GET(request: Request) {
       // 3. Payments recorded since connecting whose invoice is in QuickBooks but which aren't.
       const { data: allocations } = await db
         .from("crm_payment_allocations")
-        .select("payment_id, qbo_sync_attempted_at, crm_invoices!inner(qbo_invoice_id), crm_payments!inner(deleted_at, created_at)")
+        .select("payment_id, qbo_sync_attempted_at, crm_invoices!inner(qbo_invoice_id), crm_payments!inner(deleted_at, created_at, is_credit)")
         .eq("org_id", orgId)
         .is("qbo_payment_id", null)
         .not("crm_invoices.qbo_invoice_id", "is", null)
         .is("crm_payments.deleted_at", null)
+        // Credit applications aren't pushed (the original prepayment already is).
+        .or("is_credit.is.null,is_credit.eq.false", { referencedTable: "crm_payments" })
         .gte("crm_payments.created_at", connectedAt)
         .lt("crm_payments.created_at", settledBefore)
         .limit(MAX_PAYMENTS * 3);

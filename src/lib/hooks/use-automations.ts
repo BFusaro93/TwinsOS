@@ -25,7 +25,7 @@ export function mapAutomation(row: AutomationRow): AutomationRule {
         type: "meter_threshold",
         meterId: (tc.meter_id as string) ?? "",
         meterLabel: (tc.meter_label as string) ?? "",
-        operator: ((tc.operator as string) ?? ">=") as ">=" | "<=",
+        operator: ((tc.operator as string) ?? ">=") as ">=" | "<=" | "<",
         value: Number(tc.threshold ?? 0),
         interval: tc.interval != null ? Number(tc.interval) : null,
       };

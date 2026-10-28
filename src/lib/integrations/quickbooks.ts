@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { logger } from "@/lib/logger";
 import { createServiceClient } from "@/lib/supabase/server";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
+import { AR_WRITE_OFF_METHOD } from "@/lib/reports/helpers";
 
 const log = logger.child("quickbooks");
 
@@ -696,6 +697,115 @@ export interface CreatePaymentInput {
   paymentDate: string;
   /** Check number / reference — QuickBooks' PaymentRefNum, which caps at 21 characters. */
   referenceNumber?: string | null;
+  /**
+   * QuickBooks `requestid`: a retry or a concurrent second caller with the same
+   * id gets the original response back instead of a duplicate Payment. Pass the
+   * allocation id so the Stripe-webhook path and the manual/cron push can race
+   * safely.
+   */
+  requestId?: string;
+}
+
+/** Marks a qbo_payment_id as a credit memo (+ its applying Payment) rather than a cash Payment. */
+const CREDIT_MEMO_LINK_PREFIX = "cm:";
+
+export function isCreditMemoLink(qboPaymentId: string): boolean {
+  return qboPaymentId.startsWith(CREDIT_MEMO_LINK_PREFIX);
+}
+
+/** "cm:<creditMemoId>:<applyingPaymentId>" -> ids. */
+function parseCreditMemoLink(link: string): { creditMemoId: string; applyPaymentId: string | null } {
+  const [, creditMemoId, applyPaymentId] = link.split(":");
+  return { creditMemoId, applyPaymentId: applyPaymentId || null };
+}
+
+async function qboPost(
+  conn: QuickBooksConnection,
+  entity: "creditmemo" | "payment",
+  body: Record<string, unknown>,
+  opts: { requestId?: string; operation?: "void" } = {}
+): Promise<Record<string, unknown>> {
+  const qs = new URLSearchParams();
+  if (opts.operation) qs.set("operation", opts.operation);
+  if (opts.requestId) qs.set("requestid", opts.requestId.slice(0, 50));
+  const q = qs.toString();
+  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/${entity}${q ? `?${q}` : ""}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${conn.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`QuickBooks ${entity} ${opts.operation ?? "creation"} failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return (entity === "creditmemo" ? data.CreditMemo : data.Payment) as Record<string, unknown>;
+}
+
+export interface CreateCreditMemoInput {
+  customerId: string;
+  qboInvoiceId: string;
+  amountCents: number;
+  txnDate: string;
+  note: string;
+  requestId: string;
+}
+
+/**
+ * Records an AR write-off / account credit as a QuickBooks CREDIT MEMO applied
+ * to the invoice, never as a cash Payment, so it doesn't inflate cash
+ * received. Two steps, both keyed by `requestid` so a retry after a partial
+ * failure resumes instead of duplicating: create the credit memo, then a
+ * zero-total Payment that links the credit memo to the invoice (QuickBooks'
+ * way of applying a credit). Returns the combined link string stored in
+ * qbo_payment_id.
+ */
+export async function createCreditMemoApplied(conn: QuickBooksConnection, input: CreateCreditMemoInput): Promise<string> {
+  const amount = centsToDollars(input.amountCents);
+  const itemId = await getOrCreateDefaultServiceItem(conn);
+  const memo = await qboPost(
+    conn,
+    "creditmemo",
+    {
+      CustomerRef: { value: input.customerId },
+      TxnDate: input.txnDate,
+      PrivateNote: input.note,
+      Line: [
+        {
+          Amount: amount,
+          DetailType: "SalesItemLineDetail",
+          Description: input.note,
+          SalesItemLineDetail: { ItemRef: { value: itemId }, Qty: 1, UnitPrice: amount },
+        },
+      ],
+    },
+    { requestId: `cm-${input.requestId}` }
+  );
+  const creditMemoId = String(memo.Id);
+  const applied = await qboPost(
+    conn,
+    "payment",
+    {
+      CustomerRef: { value: input.customerId },
+      TotalAmt: 0,
+      TxnDate: input.txnDate,
+      Line: [
+        {
+          Amount: amount,
+          LinkedTxn: [
+            { TxnId: input.qboInvoiceId, TxnType: "Invoice" },
+            { TxnId: creditMemoId, TxnType: "CreditMemo" },
+          ],
+        },
+      ],
+    },
+    { requestId: `cma-${input.requestId}` }
+  );
+  return `${CREDIT_MEMO_LINK_PREFIX}${creditMemoId}:${String(applied.Id)}`;
 }
 
 export async function createPayment(conn: QuickBooksConnection, input: CreatePaymentInput): Promise<string> {
@@ -707,21 +817,8 @@ export async function createPayment(conn: QuickBooksConnection, input: CreatePay
     ...(input.referenceNumber?.trim() ? { PaymentRefNum: input.referenceNumber.trim().slice(0, 21) } : {}),
     Line: [{ Amount: amount, LinkedTxn: [{ TxnId: input.qboInvoiceId, TxnType: "Invoice" }] }],
   };
-  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/payment`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${conn.accessToken}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`QuickBooks payment creation failed (${res.status}): ${text}`);
-  }
-  const data = await res.json();
-  return data.Payment.Id as string;
+  const created = await qboPost(conn, "payment", body, { requestId: input.requestId });
+  return String(created.Id);
 }
 
 async function recordSyncResult(
@@ -1022,7 +1119,7 @@ export async function pushPaymentToQuickBooks(
   const { data: payment } = await db
     .from("crm_payments")
     .select(`
-      id, client_id, payment_date, reference,
+      id, client_id, payment_date, reference, method, is_credit,
       clients (id, display_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, qbo_customer_id),
       crm_payment_allocations (id, amount_cents, qbo_payment_id, crm_invoices (id, qbo_invoice_id))
     `)
@@ -1055,6 +1152,16 @@ export async function pushPaymentToQuickBooks(
     return { status: "error", reason: "ambiguous_client_match" };
   }
 
+  // An AR write-off is not money received: it goes to QuickBooks as a credit memo
+  // applied to the invoice, never as a cash Payment. A credit payment only applies
+  // a prepayment/credit that is already in QuickBooks as the original payment, so
+  // pushing it again would double count — leave it out entirely.
+  const isWriteOff = payment.method === AR_WRITE_OFF_METHOD;
+  if (payment.is_credit === true && !isWriteOff) {
+    return { status: "skipped", pushedAllocations: 0, skippedAllocations: 0 };
+  }
+  const asCreditMemo = isWriteOff;
+
   let pushed = 0;
   let skipped = 0;
   let anyError = false;
@@ -1072,17 +1179,36 @@ export async function pushPaymentToQuickBooks(
     }
 
     try {
-      const qboPaymentId = await createPayment(conn, {
-        customerId: resolved.customerId,
-        qboInvoiceId,
-        amountCents: alloc.amount_cents,
-        paymentDate: payment.payment_date,
-        referenceNumber: payment.reference,
-      });
+      // Re-check right before writing: the Stripe-webhook path and a manual /
+      // cron push can overlap, and the loop's snapshot may be stale.
+      const { data: fresh } = await db.from("crm_payment_allocations").select("qbo_payment_id").eq("id", alloc.id).maybeSingle();
+      if (fresh?.qbo_payment_id) continue;
+
+      // The allocation id is the QuickBooks requestid, so two racing callers that
+      // both reach this point still get ONE QBO transaction back.
+      const qboPaymentId = asCreditMemo
+        ? await createCreditMemoApplied(conn, {
+            customerId: resolved.customerId,
+            qboInvoiceId,
+            amountCents: alloc.amount_cents,
+            txnDate: payment.payment_date,
+            note: "AR write-off",
+            requestId: alloc.id,
+          })
+        : await createPayment(conn, {
+            customerId: resolved.customerId,
+            qboInvoiceId,
+            amountCents: alloc.amount_cents,
+            paymentDate: payment.payment_date,
+            referenceNumber: payment.reference,
+            requestId: alloc.id,
+          });
+      // Only the first writer's id lands; a concurrent writer gets the same QBO id back via requestid.
       await db
         .from("crm_payment_allocations")
         .update({ qbo_payment_id: qboPaymentId, qbo_sync_error: null, qbo_sync_attempted_at: attemptedAt })
-        .eq("id", alloc.id);
+        .eq("id", alloc.id)
+        .is("qbo_payment_id", null);
       pushed++;
     } catch (err) {
       log.error("QuickBooks payment push failed", { err, paymentId, allocationId: alloc.id, orgId });
@@ -1197,6 +1323,23 @@ async function getQboPayment(conn: QuickBooksConnection, qboPaymentId: string): 
   return data.Payment as Record<string, unknown>;
 }
 
+/** Unlinks (voids the applying Payment) then voids the credit memo. */
+async function voidCreditMemoLink(conn: QuickBooksConnection, link: string): Promise<void> {
+  const { creditMemoId, applyPaymentId } = parseCreditMemoLink(link);
+  if (applyPaymentId) {
+    await withFreshSyncToken(
+      () => getQboPayment(conn, applyPaymentId),
+      (cur) => qboPaymentRequest(conn, { Id: applyPaymentId, SyncToken: cur.SyncToken }, "void")
+    );
+  }
+  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/creditmemo/${encodeURIComponent(creditMemoId)}`, {
+    headers: { Authorization: `Bearer ${conn.accessToken}`, Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`QuickBooks credit memo lookup failed (${res.status})`);
+  const cur = (await res.json()).CreditMemo as Record<string, unknown>;
+  await qboPost(conn, "creditmemo", { Id: creditMemoId, SyncToken: cur.SyncToken }, { operation: "void" });
+}
+
 /**
  * Brings the QuickBooks Payments behind a payment in line with its allocations
  * after a refund or chargeback has been applied: an allocation that was
@@ -1226,6 +1369,12 @@ export async function mirrorPaymentReversalToQuickBooks(
 
     for (const link of links) {
       try {
+        if (isCreditMemoLink(link.qboPaymentId)) {
+          // A credit memo is not cash: a refund/chargeback shouldn't touch it. If the
+          // allocation is gone (reversed in full), unwind the credit; otherwise leave it.
+          if (!byId.has(link.allocationId)) await voidCreditMemoLink(conn, link.qboPaymentId);
+          continue;
+        }
         const current = await getQboPayment(conn, link.qboPaymentId);
         const qboCents = Math.round(Number(current.TotalAmt ?? 0) * 100);
         const row = byId.get(link.allocationId);

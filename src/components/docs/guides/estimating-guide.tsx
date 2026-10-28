@@ -421,6 +421,12 @@ export function EstimatingGuide() {
           updated proposal. Extend the Valid until date and re-send to reopen it.
         </p>
         <p>
+          <strong>Expiry reminders.</strong> About three days before an open estimate&rsquo;s Valid
+          until date, the person who created it gets an email and an in-app reminder. An estimate
+          with no creator (one that came in through the API, an import or an automation) reminds its
+          sales rep instead, provided that rep has a login.
+        </p>
+        <p>
           <strong>What the client sees.</strong> The page shows the client&rsquo;s billing address
           and the service address, has a <strong>Download PDF</strong> button, and a{" "}
           <strong>Request changes</strong> box. In the estimate&rsquo;s display settings,{" "}

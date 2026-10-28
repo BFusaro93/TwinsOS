@@ -93,6 +93,14 @@ export function ApprovalFlowsGuide() {
           Changes</strong> button also appears while a change is unsaved, in case you want to save
           immediately or navigate away right after editing).
         </p>
+        <p>
+          <strong>Approvers must be able to approve.</strong> A Requisition or Purchase Order step
+          can&apos;t be assigned to the <code>viewer</code> or <code>requestor</code> role, or to a
+          specific user who has one of those roles, because those roles have no Approve or Reject
+          buttons and the request would stall at that step. The editor shows a warning and the save
+          is refused with a message naming the step; pick a manager, admin or purchaser instead.
+          Landscapt estimate approval flows are not affected by this rule.
+        </p>
       </Section>
 
       <Section id="worked-example" title="Worked example: a 2-step requisition chain">

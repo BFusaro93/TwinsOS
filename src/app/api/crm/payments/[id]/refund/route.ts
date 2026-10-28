@@ -4,7 +4,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
-import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { chargeIdempotencyKey, refundIdempotencyKey } from "@/lib/stripe/idempotency";
 import { logger } from "@/lib/logger";
 import { syncEstimateDepositWithPayment } from "@/lib/stripe/record-estimate-deposit";
 
@@ -12,6 +12,11 @@ const log = logger.child("crm payments refund");
 
 const RefundSchema = z.object({
   refundAmountCents: z.number().int().positive(),
+  // Client-generated, one per refund-dialog open. Two submits of the same dialog
+  // share it (double-click, retry after a timeout) and collapse into one Stripe
+  // refund; a deliberate second refund later opens the dialog again and gets a
+  // fresh token, so it is never swallowed by a time-bucket collision.
+  idempotencyToken: z.string().uuid().optional(),
 });
 
 const adminClient = () =>
@@ -68,7 +73,7 @@ export async function POST(
 
   const parsed = RefundSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
-  const { refundAmountCents } = parsed.data;
+  const { refundAmountCents, idempotencyToken } = parsed.data;
 
   const db = adminClient();
 
@@ -120,7 +125,11 @@ export async function POST(
         },
         {
           stripeAccount: org.stripe_connect_account_id,
-          idempotencyKey: chargeIdempotencyKey(["refund", paymentId, refundAmountCents]),
+          // A token-less caller (older client, direct API use) keeps the legacy
+          // 10-second bucket; the UI always sends a token.
+          idempotencyKey: idempotencyToken
+            ? refundIdempotencyKey(paymentId, refundAmountCents, idempotencyToken)
+            : chargeIdempotencyKey(["refund", paymentId, refundAmountCents]),
         }
       );
       stripeRefundId = refund.id;

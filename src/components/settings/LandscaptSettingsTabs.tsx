@@ -88,7 +88,7 @@ import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
 import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
-import { downloadCSV, readCSVFile } from "@/lib/csv";
+import { downloadCSV, readCSVFile, isBulkImportResult, summarizeImportFailures } from "@/lib/csv";
 import { autoMapColumns, remapRows } from "@/components/shared/ImportExportMenu";
 import { useClients, useLeads, useBulkImportClients, useBulkImportLeads } from "@/lib/hooks/use-clients";
 import { useEstimates, useBulkImportEstimates } from "@/lib/hooks/use-estimates";
@@ -2065,6 +2065,16 @@ function ImportTile({
     setImportError(null);
     try {
       const result = await onImport(parsedRows);
+      if (isBulkImportResult(result)) {
+        // Row-level result: a partial failure must not read as full success.
+        if (result.failed.length > 0) {
+          setImportError(summarizeImportFailures(result));
+          return;
+        }
+        setPreviewOpen(false);
+        onStatus({ type: "success", message: `Successfully imported ${result.succeeded} ${label.toLowerCase()}.` });
+        return;
+      }
       setPreviewOpen(false);
       // An importer that skips rows can report how many it actually created; otherwise assume all.
       const imported =
