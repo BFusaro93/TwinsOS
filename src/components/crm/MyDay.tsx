@@ -86,9 +86,7 @@ export function MyDay() {
   const [scope, setScope] = useState<"mine" | "all">("mine");
   const myEmployee = (employees ?? []).find((e) => e.userId === currentUser.id);
   const myEmployeeId = myEmployee?.id ?? null;
-  const { data: contributedTicketIds } = useContributedTicketIds(
-    myEmployee ? `${myEmployee.firstName} ${myEmployee.lastName}` : currentUser.name
-  );
+  const { data: contributedTicketIds } = useContributedTicketIds(myEmployeeId);
   const myName = currentUser.name.trim().toLowerCase();
   const openTickets = scope === "all"
     ? allOpenTickets

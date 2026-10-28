@@ -241,17 +241,18 @@ export async function notifyTicketComment(
   const { orgId, ticketId, ticketNumber, subject, assignedToId, assignedToName, commenterName, commenterId, commentBody } = params;
   const assigneeId = await resolveAssigneeId(supabase, orgId, assignedToId ?? null, assignedToName);
 
-  // Contributors are CC'd on the ticket (ticket_contributors stores a display
-  // name, same as the assignee name fallback above), so they hear about
-  // comments too. Names that don't match an employee with a login are skipped.
+  // Contributors are CC'd on the ticket, so they hear about comments too.
+  // Rows identify an employee by id; legacy rows whose name never matched an
+  // employee have no id and fall back to the name lookup. Employees with no
+  // login are skipped.
   const { data: contributorRows } = await supabase
     .from("ticket_contributors")
-    .select("user_name")
+    .select("employee_id, user_name")
     .eq("ticket_id", ticketId)
     .eq("org_id", orgId);
   const contributorIds: string[] = [];
   for (const row of contributorRows ?? []) {
-    const id = await resolveAssigneeId(supabase, orgId, null, row.user_name);
+    const id = await resolveAssigneeId(supabase, orgId, row.employee_id ?? null, row.user_name);
     if (id) contributorIds.push(id);
   }
 
