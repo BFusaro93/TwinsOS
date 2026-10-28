@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
 import { MAX_CHANGE_REQUEST_MESSAGE_CHARS, submitEstimateChangeRequest } from "@/lib/estimate-change-requests";
 
 const serviceClient = () =>
@@ -13,7 +14,18 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
-  const body = await req.json() as { requesterName: string; message: string };
+
+  // Unauthenticated endpoint that writes a record and notifies every admin and
+  // manager in-app: throttle per IP+token (fails open if the limiter errors),
+  // like the other public write routes.
+  if (!(await checkAuthRateLimit(`proposal-change:${getClientIp(req)}:${token.slice(0, 16)}`, 5, 600))) {
+    return NextResponse.json({ error: "Too many requests. Please wait a few minutes and try again." }, { status: 429 });
+  }
+
+  const body = await req.json().catch(() => null) as { requesterName?: string; message?: string } | null;
+  if (!body || typeof body.requesterName !== "string" || typeof body.message !== "string") {
+    return NextResponse.json({ error: "Name and message are required" }, { status: 400 });
+  }
 
   if (!body.requesterName?.trim() || !body.message?.trim()) {
     return NextResponse.json({ error: "Name and message are required" }, { status: 400 });

@@ -75,7 +75,10 @@ export async function POST(
   const openIds = (candidateRows as VisitRow[])
     .filter((r) => effectiveVisitCrewId(r) === effectiveVisitCrewId(anchor))
     .filter((r) => stopKeyForVisit(toStopKeyInput(r)) === anchorKey)
-    .filter((r) => r.clocked_in_at && !r.clocked_out_at && !r.paused_at)
+    // A sibling the office already marked complete (Mark Complete never sets
+    // clocked_out_at) is finished work: pausing it would leave paused_at stuck
+    // on a closed visit and, on Resume, add break minutes to its hours.
+    .filter((r) => r.clocked_in_at && !r.clocked_out_at && !r.paused_at && r.status !== "completed")
     .map((r) => r.id);
 
   if (openIds.length === 0) {

@@ -2,7 +2,7 @@
 
 import { DateRangeFilter } from "@/components/shared/DateRangeFilter";
 import { inDateRange } from "@/lib/utils/column-filters";
-import { useState, useMemo, useEffect, Fragment } from "react";
+import { useState, useMemo, useEffect, useRef, Fragment } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -1359,6 +1359,14 @@ export function RefundDialog({ payment, onClose }: { payment: CRMPayment | null;
     if (payment) setRefundAmount((Math.max(0, payment.amountCents - payment.refundedAmountCents) / 100).toFixed(2));
   }, [payment?.id, payment?.refundedAmountCents]);
 
+  // One idempotency token per dialog open: a double-click or retry of this same
+  // submit is one Stripe refund; reopening the dialog starts a new one. Keyed on
+  // payment id only (not refundedAmountCents) so it survives a refetch mid-submit.
+  const refundTokenRef = useRef<{ paymentId: string; token: string } | null>(null);
+  useEffect(() => {
+    refundTokenRef.current = payment ? { paymentId: payment.id, token: crypto.randomUUID() } : null;
+  }, [payment?.id]);
+
   if (!payment) return null;
 
   const maxRefund = payment.amountCents - payment.refundedAmountCents;
@@ -1369,7 +1377,7 @@ export function RefundDialog({ payment, onClose }: { payment: CRMPayment | null;
     if (cents <= 0) { toast.error("Enter a refund amount"); return; }
     if (cents > maxRefund) { toast.error(`Max refundable: ${formatCurrency(maxRefund)}`); return; }
     try {
-      await refund({ id: payment.id, clientId: payment.clientId, refundAmountCents: cents, invoiceId: payment.invoiceId });
+      await refund({ id: payment.id, clientId: payment.clientId, refundAmountCents: cents, invoiceId: payment.invoiceId, idempotencyToken: refundTokenRef.current?.paymentId === payment.id ? refundTokenRef.current.token : undefined });
       toast.success("Refund recorded");
       onClose();
     } catch (err) {

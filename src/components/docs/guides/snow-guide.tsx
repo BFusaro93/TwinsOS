@@ -121,7 +121,8 @@ export function SnowGuide() {
         </ul>
         <p>
           Jobs are also excluded automatically if today isn&apos;t one of the days their contract
-          authorizes service on. Everything not excluded is pre-checked; uncheck or check
+          authorizes service on. A snow job whose contract has ended (cancelled, expired, inactive,
+          deleted or past its end date) no longer appears on this board at all. Everything not excluded is pre-checked; uncheck or check
           individual rows before clicking <strong>Add to Dispatch</strong>.
         </p>
         <Callout>

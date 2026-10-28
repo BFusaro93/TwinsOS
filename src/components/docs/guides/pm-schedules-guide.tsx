@@ -333,8 +333,9 @@ export function PMSchedulesGuide() {
           monthly, etc.) regardless of how much the asset is actually used. Equipt&apos;s{" "}
           <strong>Automations</strong> (CMMS &gt; Automations) can also trigger recurring
           maintenance from a <strong>Meter Threshold</strong> — engine hours, odometer miles, and
-          similar values that accrue with usage — which is <strong>usage-based</strong> instead of
-          date-based.
+          similar values that accrue with usage on a cumulative meter — which is{" "}
+          <strong>usage-based</strong> instead of date-based. (Level meters, like a fuel tank, only
+          support &ldquo;drops below&rdquo; alerts, which aren&apos;t PM.)
         </p>
         <p>They&apos;re independent mechanisms, and nothing stops you from using both on the same asset:</p>
         <ul className="list-disc space-y-2 pl-5">

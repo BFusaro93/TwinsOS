@@ -63,6 +63,14 @@ export function MetersListPanel({ meters, selectedId, onSelect }: MetersListPane
                   {meter.currentValue.toLocaleString()}{" "}
                   <span className="font-normal text-slate-400 dark:text-neutral-500">{meter.unit}</span>
                 </span>
+                {meter.kind === "level" && (
+                  <>
+                    <span>·</span>
+                    <span>
+                      Level{meter.capacity != null ? ` · ${Math.round((meter.currentValue / meter.capacity) * 100)}%` : ""}
+                    </span>
+                  </>
+                )}
                 <span>·</span>
                 <span title={formatDate(meter.lastReadingAt)}>
                   Updated {relativeTime(meter.lastReadingAt)}

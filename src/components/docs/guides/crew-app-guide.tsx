@@ -382,6 +382,12 @@ export function CrewAppGuide() {
           someone who arrived late or left early is counted for exactly the time they were there. The
           crew-size multiplication is used only when there are no punches for the stop.
         </p>
+        <p>
+          <strong>Once a visit is invoiced, its punches are locked for crew.</strong> After a
+          visit&apos;s hours have been billed on a live (not voided or deleted) invoice, the crew
+          app refuses changes or deletions to member punches on that visit and tells you to ask the
+          office to correct the time. The office can still edit times.
+        </p>
         <Callout>
           Hours on a stop are per <em>crew</em>, multiplied by headcount. Individual start and finish
           times for someone who came late or left early come from two places: the crew leader&apos;s{" "}
@@ -397,6 +403,7 @@ export function CrewAppGuide() {
           <strong>Notes to Office</strong> sends a message back from the field. It shows on the
           dispatch board against that stop, so it&apos;s the right place for &quot;couldn&apos;t reach the
           side bed, sprinkler running&quot; rather than a text message to somebody&apos;s phone.
+          If your connection drops and the app resends the note, it is saved once, not twice.
         </p>
         <p>
           <strong>Notes from the office.</strong> The job&apos;s crew note appears under{" "}

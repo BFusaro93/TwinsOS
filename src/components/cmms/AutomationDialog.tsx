@@ -55,7 +55,7 @@ export function AutomationDialog({
   const [triggerType, setTriggerType] = useState<TriggerType>("part_low_stock");
   const [meterId, setMeterId] = useState("");
   const [meterLabel, setMeterLabel] = useState("");
-  const [meterOperator, setMeterOperator] = useState<">=" | "<=">(">=");
+  const [meterOperator, setMeterOperator] = useState<">=" | "<=" | "<">(">=");
   const [meterValue, setMeterValue] = useState("");
   const [partName, setPartName] = useState("any");
   const [pmDaysAhead, setPmDaysAhead] = useState("7");
@@ -66,6 +66,8 @@ export function AutomationDialog({
   const [intervalValue, setIntervalValue] = useState("");
 
   const { data: meters = [] } = useMeters();
+  const selectedMeter = meters.find((m) => m.id === meterId);
+  const isLevelMeter = selectedMeter?.kind === "level";
   const createAutomation = useCreateAutomation();
   const updateAutomation = useUpdateAutomation();
   const queryClient = useQueryClient();
@@ -269,6 +271,8 @@ export function AutomationDialog({
         // threshold: without one it would re-fire at the same reading after
         // every completed WO (or, for notify/email/requisition, never again).
         if (meterOperator === ">=" && !(Number(intervalValue) > 0)) return false;
+        // Level meters only support "drops below" and cumulative meters never do.
+        if (selectedMeter && (selectedMeter.kind === "level") !== (meterOperator === "<")) return false;
         break;
       case "part_low_stock":
         if (!partName.trim()) return false;
@@ -385,6 +389,10 @@ export function AutomationDialog({
                         if (m) {
                           setMeterId(m.id);
                           setMeterLabel(`${m.name} — ${m.assetName}`);
+                          // Level meters only support "drops below"; cumulative
+                          // meters only ever use >= / <=.
+                          if (m.kind === "level") setMeterOperator("<");
+                          else if (meterOperator === "<") setMeterOperator(">=");
                         }
                       }}
                     >
@@ -402,22 +410,31 @@ export function AutomationDialog({
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="meter-operator">Operator</Label>
+                      <Label htmlFor="meter-operator">{isLevelMeter ? "When the level" : "Operator"}</Label>
                       <Select
                         value={meterOperator}
-                        onValueChange={(v) => setMeterOperator(v as ">=" | "<=")}
+                        onValueChange={(v) => setMeterOperator(v as ">=" | "<=" | "<")}
+                        disabled={isLevelMeter}
                       >
                         <SelectTrigger id="meter-operator">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value=">=">≥ (greater than or equal)</SelectItem>
-                          <SelectItem value="<=">≤ (less than or equal)</SelectItem>
+                          {isLevelMeter ? (
+                            <SelectItem value="<">drops below</SelectItem>
+                          ) : (
+                            <>
+                              <SelectItem value=">=">≥ (greater than or equal)</SelectItem>
+                              <SelectItem value="<=">≤ (less than or equal)</SelectItem>
+                            </>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="meter-value">Threshold Value</Label>
+                      <Label htmlFor="meter-value">
+                        Threshold Value{selectedMeter ? ` (${selectedMeter.unit})` : ""}
+                      </Label>
                       <Input
                         id="meter-value"
                         type="number"
@@ -427,6 +444,12 @@ export function AutomationDialog({
                       />
                     </div>
                   </div>
+                  {isLevelMeter && (
+                    <p className="text-xs text-muted-foreground">
+                      Fires once when the level drops below the threshold, then fires again only after the level has
+                      risen back to the threshold or above.
+                    </p>
+                  )}
                   {meterOperator === ">=" && (
                     <div className="flex flex-col gap-1.5">
                       <Label htmlFor="meter-interval">Service Interval</Label>

@@ -129,8 +129,14 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
               {meter.currentValue.toLocaleString()}
               <span className="ml-1 break-words text-sm font-normal text-slate-400 dark:text-neutral-500">{meter.unit}</span>
             </p>
+            {meter.kind === "level" && meter.capacity != null && (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {Math.round((meter.currentValue / meter.capacity) * 100)}% of {meter.capacity.toLocaleString()} {meter.unit}
+              </p>
+            )}
           </div>
-          {totalDelta !== null && (
+          {/* Net change / average per month only make sense for a meter that counts up. */}
+          {meter.kind === "cumulative" && totalDelta !== null && (
             <div className="min-w-0 rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Past 12 mo
@@ -141,7 +147,7 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
               </p>
             </div>
           )}
-          {avgPerMonth !== null && (
+          {meter.kind === "cumulative" && avgPerMonth !== null && (
             <div className="min-w-0 rounded-md border bg-slate-50 dark:bg-muted/40 p-3">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Avg / mo
@@ -215,6 +221,7 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
           </p>
           <dl>
             <MetaRow label="Last Reading" value={formatDate(meter.lastReadingAt)} />
+            <MetaRow label="Kind" value={meter.kind === "level" ? "Level (goes up and down)" : "Cumulative (counts up)"} />
             <MetaRow label="Source" value={meter.source === "samsara" ? "Samsara (automatic)" : "Manual entry"} />
             <MetaRow label="Asset / Vehicle" value={meter.assetName} />
           </dl>

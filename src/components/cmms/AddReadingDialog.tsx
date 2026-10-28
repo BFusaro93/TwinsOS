@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useAddMeterReading } from "@/lib/hooks/use-meter-readings";
+import { useAddMeterReading, levelReadingError } from "@/lib/hooks/use-meter-readings";
 import type { Meter } from "@/types";
 
 interface AddReadingDialogProps {
@@ -40,10 +40,15 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
   const addReading = useAddMeterReading();
 
   const parsedValue = readingValue !== "" ? Number(readingValue) : null;
+  const isLevel = meter.kind === "level";
+  const levelError =
+    isLevel && parsedValue !== null && !isNaN(parsedValue)
+      ? levelReadingError(parsedValue, meter.capacity, meter.unit)
+      : null;
   const isValid =
     parsedValue !== null &&
     !isNaN(parsedValue) &&
-    parsedValue >= meter.currentValue &&
+    (isLevel ? levelError === null : parsedValue >= meter.currentValue) &&
     readingDate !== "";
 
   function handleClose() {
@@ -107,14 +112,21 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
               <Input
                 id="reading-value"
                 type="number"
-                min={meter.currentValue}
+                min={isLevel ? 0 : meter.currentValue}
+                max={isLevel && meter.capacity != null ? meter.capacity : undefined}
                 placeholder={meter.currentValue.toString()}
                 value={readingValue}
                 onChange={(e) => setReadingValue(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Must be ≥ current reading ({meter.currentValue.toLocaleString()} {meter.unit})
-              </p>
+              {levelError ? (
+                <p className="text-xs text-destructive">{levelError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {isLevel
+                    ? `Current level; can go up or down${meter.capacity != null ? ` (0 to ${meter.capacity.toLocaleString()} ${meter.unit})` : ""}`
+                    : `Must be ≥ current reading (${meter.currentValue.toLocaleString()} ${meter.unit})`}
+                </p>
+              )}
             </div>
 
             {/* Reading Date */}
@@ -142,6 +154,10 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
               />
             </div>
           </div>
+
+          {addReading.error && (
+            <p className="mt-4 text-sm text-destructive">{addReading.error.message}</p>
+          )}
 
           <DialogFooter className="mt-6">
             <Button type="button" variant="outline" onClick={handleClose}>

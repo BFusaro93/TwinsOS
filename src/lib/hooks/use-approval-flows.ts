@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapApprovalFlow } from "@/lib/supabase/mappers";
+import { LIMITED_APPROVER_ROLES } from "@/lib/hooks/use-approval-requests";
 import type { ApprovalFlow, ApprovalFlowStep } from "@/types";
 
 export function useApprovalFlows() {
@@ -80,7 +81,7 @@ export function useCreateApprovalFlow() {
 export function useUpdateApprovalFlow() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ flowId, steps }: { flowId: string; steps: ApprovalFlowStep[] }) => {
+    mutationFn: async ({ flowId, steps, entityType }: { flowId: string; steps: ApprovalFlowStep[]; entityType?: ApprovalFlow["entityType"] }) => {
       // Bug 5 — the same approver cannot be listed in more than one step of
       // a chain: a user-specific step (assignedUserId set) means only that
       // person can act, so re-using their id in another step is a duplicate
@@ -111,6 +112,28 @@ export function useUpdateApprovalFlow() {
       });
 
       const supabase = createClient();
+
+      // Limited Equipt roles (viewer/requestor) can't see approve/reject
+      // buttons, so a step that depends on one would stall the chain forever.
+      // Landscapt estimate flows use crm_roles instead, so they're exempt.
+      if (entityType !== "crm_estimate") {
+        const badRole = steps.findIndex((s) => LIMITED_APPROVER_ROLES.includes(s.requiredRole));
+        if (badRole !== -1) {
+          throw new Error(
+            `Step ${badRole + 1}: "${steps[badRole].requiredRole}" users can't approve — choose manager, admin or purchaser.`
+          );
+        }
+        const userIds = steps.map((s) => s.assignedUserId).filter((id): id is string => !!id);
+        if (userIds.length > 0) {
+          const { data: profs } = await supabase.from("profiles").select("id, name, role").in("id", userIds);
+          const bad = (profs ?? []).find((p) => LIMITED_APPROVER_ROLES.includes(p.role));
+          if (bad) {
+            throw new Error(
+              `${bad.name ?? "That user"} has the ${bad.role} role and can't approve. Pick someone with the manager, admin or purchaser role.`
+            );
+          }
+        }
+      }
 
       const { data: existingSteps } = await supabase
         .from("approval_flow_steps")

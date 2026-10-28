@@ -91,10 +91,12 @@ export async function executeAction(
       p_org_id_override: orgId,
     });
     if (woNumErr || !workOrderNumber) return { skipReason: `failed to generate WO number: ${woNumErr?.message ?? "unknown"}` };
-    // A meter rule is preventive maintenance by definition (an oil change at
-    // N hours), and counts toward PM compliance as due 7 days after the meter
-    // trips — see v_pm_outcomes.
-    const isMeterPM = auto.trigger_type === "meter_threshold";
+    // A cumulative meter rule is preventive maintenance by definition (an oil
+    // change at N hours), and counts toward PM compliance as due 7 days after
+    // the meter trips — see v_pm_outcomes. A level-meter "drops below" rule
+    // (operator '<', e.g. low fuel) is a low-level alert, not PM.
+    const triggerOperator = (auto.trigger_config as Record<string, unknown> | null)?.operator;
+    const isMeterPM = auto.trigger_type === "meter_threshold" && triggerOperator !== "<";
     const meterDueDate = isMeterPM
       ? shiftYmd(todayInZone(await getOrgTimeZone(adminClient, orgId)), 7)
       : null;

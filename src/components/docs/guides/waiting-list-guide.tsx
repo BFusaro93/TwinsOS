@@ -140,6 +140,12 @@ export function WaitingListGuide() {
           picking different dates per job in one action. Use the per-row Schedule button when jobs
           need different treatment.
         </Callout>
+        <p>
+          <strong>Skipped or cancelled visits.</strong> A waiting-list job leaves this list once it
+          has a live visit. A visit that was skipped or cancelled never happened, so it doesn&apos;t
+          count: if a job&apos;s only visits were skipped or cancelled, the job goes back on the
+          Waiting List. Scheduling it again creates a fresh visit and takes it off again.
+        </p>
       </Section>
 
       <Section id="day-in-the-life" title="A day in the life">
