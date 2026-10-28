@@ -2,6 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapAsset } from "@/lib/supabase/mappers";
+import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
+import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
 import type { Asset, AssetStatus } from "@/types/cmms";
 
 function patchAssetCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Asset>) {
@@ -183,77 +185,106 @@ function normaliseAssetStatus(raw: string): string {
 }
 
 /**
- * Bulk-inserts assets from a CSV import.
- * Rows missing `name` or `assetTag` are silently skipped.
+ * Bulk-inserts assets from a CSV import. A row missing `name` or `assetTag`,
+ * or with an unreadable date / price, is reported as a failed row; the rest of
+ * the file still imports (one bad cell used to abort everything after it).
  */
 export function useBulkImportAssets() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
       const supabase = createClient();
-      const inserts = rows
-        .filter((r) => r.name?.trim() && r.assetTag?.trim())
-        .map((r) => ({
-          statusProvided: !!r.status?.trim(),
-          rawTypeProvided: !!r.assetType?.trim(),
-          name: r.name.trim(),
-          asset_tag: r.assetTag.trim(),
-          equipment_number: r.equipmentNumber?.trim() || null,
-          asset_type: r.assetType?.trim() || "equipment",
-          make: r.make?.trim() || null,
-          model: r.model?.trim() || null,
-          year: r.year ? parseInt(r.year) || null : null,
-          serial_number: r.serialNumber?.trim() || null,
-          license_plate: r.licensePlate?.trim() || null,
-          location: r.location?.trim() || null,
-          status: normaliseAssetStatus(r.status ?? ""),
-          purchase_vendor_name: r.purchaseVendorName?.trim() || null,
-          purchase_date: r.purchaseDate?.trim() || null,
-          purchase_price: r.purchasePrice ? Math.round(parseFloat(r.purchasePrice) * 100) || null : null,
-          payment_method: r.paymentMethod?.trim() || null,
-          finance_institution: r.financeInstitution?.trim() || null,
-        }));
-      if (inserts.length === 0) return 0;
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
 
-      // Insert one-by-one; on duplicate asset_tag, update the existing row
-      let count = 0;
-      for (const { statusProvided, rawTypeProvided, ...row } of inserts) {
-        const { error } = await supabase.from("assets").insert(row);
-        if (error?.code === "23505") {
-          const { data: { user } } = await supabase.auth.getUser();
-          const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
-          // Only the cells the CSV filled in are written: `row` fills every
-          // blank with null / the "equipment" default, and writing those back
-          // wiped make, model, serial, location, purchase info... on each
-          // matched asset when a CSV was re-imported to update one field.
-          const { error: updateErr } = await supabase.from("assets").update({
-            name: row.name,
-            ...(row.equipment_number ? { equipment_number: row.equipment_number } : {}),
-            ...(rawTypeProvided ? { asset_type: row.asset_type } : {}),
-            ...(row.make ? { make: row.make } : {}),
-            ...(row.model ? { model: row.model } : {}),
-            ...(row.year ? { year: row.year } : {}),
-            ...(row.serial_number ? { serial_number: row.serial_number } : {}),
-            ...(row.license_plate ? { license_plate: row.license_plate } : {}),
-            ...(row.location ? { location: row.location } : {}),
-            // A blank status cell must not reset an in_shop/out_of_service
-            // asset to "active" when a CSV is re-imported to update other fields.
-            ...(statusProvided ? { status: row.status } : {}),
-            ...(row.purchase_vendor_name ? { purchase_vendor_name: row.purchase_vendor_name } : {}),
-            ...(row.purchase_date ? { purchase_date: row.purchase_date } : {}),
-            ...(row.purchase_price ? { purchase_price: row.purchase_price } : {}),
-            // A blank financing cell must not wipe saved financing details when a
-            // CSV is re-imported to update other fields (e.g. mileage/VIN).
-            ...(row.payment_method ? { payment_method: row.payment_method } : {}),
-            ...(row.finance_institution ? { finance_institution: row.finance_institution } : {}),
-          }).eq("asset_tag", row.asset_tag).eq("org_id", profile!.org_id).is("deleted_at", null);
-          if (updateErr) throw updateErr;
-        } else if (error) {
-          throw error;
+      const failed: BulkImportResult["failed"] = [];
+      let succeeded = 0;
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const rowNum = i + 1;
+        try {
+          if (!r.name?.trim() || !r.assetTag?.trim()) {
+            failed.push({ row: rowNum, error: "Missing required field: Name / Asset Tag" });
+            continue;
+          }
+          const label = `"${r.name.trim()}"`;
+          // Accepts 2024-03-05 and 3/5/2024; a raw "March 5" used to make
+          // Postgres reject the insert and abort the rest of the import.
+          const purchaseDate = r.purchaseDate?.trim() ? normalizeCsvDate(r.purchaseDate) : null;
+          if (r.purchaseDate?.trim() && !purchaseDate) {
+            failed.push({ row: rowNum, error: `${label}: invalid purchase date ("${r.purchaseDate}")` });
+            continue;
+          }
+          // "$25,000.00" parsed as 25 (or NaN -> silently null) before.
+          const priceCents = parseCsvDollarsToCents(r.purchasePrice);
+          if (priceCents !== null && Number.isNaN(priceCents)) {
+            failed.push({ row: rowNum, error: `${label}: invalid purchase price ("${r.purchasePrice}")` });
+            continue;
+          }
+          const statusProvided = !!r.status?.trim();
+          const rawTypeProvided = !!r.assetType?.trim();
+          const row = {
+            name: r.name.trim(),
+            asset_tag: r.assetTag.trim(),
+            equipment_number: r.equipmentNumber?.trim() || null,
+            asset_type: r.assetType?.trim() || "equipment",
+            make: r.make?.trim() || null,
+            model: r.model?.trim() || null,
+            year: r.year ? parseInt(r.year) || null : null,
+            serial_number: r.serialNumber?.trim() || null,
+            license_plate: r.licensePlate?.trim() || null,
+            location: r.location?.trim() || null,
+            status: normaliseAssetStatus(r.status ?? ""),
+            purchase_vendor_name: r.purchaseVendorName?.trim() || null,
+            purchase_date: purchaseDate,
+            purchase_price: priceCents || null,
+            payment_method: r.paymentMethod?.trim() || null,
+            finance_institution: r.financeInstitution?.trim() || null,
+          };
+
+          // Insert one-by-one; on duplicate asset_tag, update the existing row
+          const { error } = await supabase.from("assets").insert(row);
+          if (error?.code === "23505") {
+            // Only the cells the CSV filled in are written: `row` fills every
+            // blank with null / the "equipment" default, and writing those back
+            // wiped make, model, serial, location, purchase info... on each
+            // matched asset when a CSV was re-imported to update one field.
+            const { error: updateErr } = await supabase.from("assets").update({
+              name: row.name,
+              ...(row.equipment_number ? { equipment_number: row.equipment_number } : {}),
+              ...(rawTypeProvided ? { asset_type: row.asset_type } : {}),
+              ...(row.make ? { make: row.make } : {}),
+              ...(row.model ? { model: row.model } : {}),
+              ...(row.year ? { year: row.year } : {}),
+              ...(row.serial_number ? { serial_number: row.serial_number } : {}),
+              ...(row.license_plate ? { license_plate: row.license_plate } : {}),
+              ...(row.location ? { location: row.location } : {}),
+              // A blank status cell must not reset an in_shop/out_of_service
+              // asset to "active" when a CSV is re-imported to update other fields.
+              ...(statusProvided ? { status: row.status } : {}),
+              ...(row.purchase_vendor_name ? { purchase_vendor_name: row.purchase_vendor_name } : {}),
+              ...(row.purchase_date ? { purchase_date: row.purchase_date } : {}),
+              ...(row.purchase_price ? { purchase_price: row.purchase_price } : {}),
+              // A blank financing cell must not wipe saved financing details when a
+              // CSV is re-imported to update other fields (e.g. mileage/VIN).
+              ...(row.payment_method ? { payment_method: row.payment_method } : {}),
+              ...(row.finance_institution ? { finance_institution: row.finance_institution } : {}),
+            }).eq("asset_tag", row.asset_tag).eq("org_id", profile!.org_id).is("deleted_at", null);
+            if (updateErr) {
+              failed.push({ row: rowNum, error: `${label}: ${updateErr.message}` });
+              continue;
+            }
+          } else if (error) {
+            failed.push({ row: rowNum, error: `${label}: ${error.message}` });
+            continue;
+          }
+          succeeded++;
+        } catch (err) {
+          failed.push({ row: rowNum, error: err instanceof Error ? err.message : "Unknown error" });
         }
-        count++;
       }
-      return count;
+      return { succeeded, failed };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["assets"] }),
   });
