@@ -578,7 +578,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Adding a meter to an asset",
             detail:
-              "Open any asset or vehicle detail and go to the Meters tab. Click '+ New Meter'. Choose the unit (miles, hours, gallons, cycles, etc.) and give it a name.",
+              "Open any asset or vehicle detail and go to the Meters tab. Click '+ New Meter'. Choose the unit (miles, hours, gallons, cycles, etc.), give it a name, and pick Cumulative (odometer, hours; readings only go up) or Level (fuel, tank; readings can go up or down, with an optional capacity).",
           },
           {
             step: "Recording a reading",
@@ -588,7 +588,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Creating a meter-threshold automation",
             detail:
-              "Go to CMMS > Automations and click '+ New Automation'. Set Trigger Type to 'Meter Threshold', select the meter, choose the operator (≥ for cumulative like mileage), and enter the threshold value.",
+              "Go to CMMS > Automations and click '+ New Automation'. Set Trigger Type to 'Meter Threshold', select the meter, choose the operator (≥ for cumulative meters like mileage; < 'drops below' for level meters like a fuel tank), and enter the threshold value. A level rule fires once when the value drops below the threshold and re-arms after a reading brings it back to or above it. Service Intervals and PM triggers are for cumulative meters only.",
           },
           {
             step: "Other trigger types",
@@ -1878,7 +1878,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Do meter-based oil changes count toward PM compliance?",
-        a: "Yes. A work order from a Meter Threshold automation — created directly or converted from its request — is due 7 days after the meter tripped. Done within 7 days is on time; a request still unconverted after 7 days counts as a missed PM.",
+        a: "Yes. A work order from a cumulative Meter Threshold (≥) automation — created directly or converted from its request — is due 7 days after the meter tripped. Done within 7 days is on time; a request still unconverted after 7 days counts as a missed PM. Low-level (drops below) alerts from a level meter are not PM and don't count.",
       },
       {
         q: "What happens when a part falls below minimum stock?",
