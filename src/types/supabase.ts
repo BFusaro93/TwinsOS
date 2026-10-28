@@ -12949,6 +12949,7 @@ export type Database = {
           default_invoice_delivery: string
           default_invoice_frequency: string
           id: string
+          is_demo: boolean
           is_platform_staff_org: boolean
           name: string
           oauth_write_roles: string[]
@@ -12994,6 +12995,7 @@ export type Database = {
           default_invoice_delivery?: string
           default_invoice_frequency?: string
           id?: string
+          is_demo?: boolean
           is_platform_staff_org?: boolean
           name: string
           oauth_write_roles?: string[]
@@ -13039,6 +13041,7 @@ export type Database = {
           default_invoice_delivery?: string
           default_invoice_frequency?: string
           id?: string
+          is_demo?: boolean
           is_platform_staff_org?: boolean
           name?: string
           oauth_write_roles?: string[]
