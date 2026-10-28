@@ -71,18 +71,23 @@ export async function inChunks<T, R>(values: T[], size: number, fn: (chunk: T[])
   return out;
 }
 
-/** Orgs (from `orgIds`) whose plan includes the Equipt module. */
+/**
+ * Orgs (from `orgIds`) whose plan includes the Equipt module. Demo/sandbox orgs
+ * (organizations.is_demo) and the platform staff org are excluded: their data
+ * is fake and their logins are demo or support addresses, so a digest is noise
+ * at best and a mail to a real person's inbox at worst.
+ */
 export async function loadEquiptOrgIds(supabase: AnyClient, orgIds: string[]): Promise<Set<string>> {
   const rows = await inChunks(orgIds, 100, async (chunk) => {
-    const { data, error } = await supabase.from("organizations").select("id, plan").in("id", chunk);
+    const { data, error } = await supabase.from("organizations").select("id, plan, is_demo, is_platform_staff_org").in("id", chunk);
     if (error) throw error;
-    return (data ?? []) as { id: string; plan: string | null }[];
+    return (data ?? []) as { id: string; plan: string | null; is_demo: boolean; is_platform_staff_org: boolean }[];
   });
   // A canceled org gets no background work (no digests), same rule as the other crons
   // (see src/lib/orgs/org-canceled.ts). planIncludesModule is checked first; canceled
   // plans are excluded explicitly rather than relying on that table's handling.
   return new Set(
-    rows.filter((o) => o.plan !== "canceled" && planIncludesModule(o.plan ?? "", "equipt")).map((o) => o.id)
+    rows.filter((o) => !o.is_demo && !o.is_platform_staff_org && o.plan !== "canceled" && planIncludesModule(o.plan ?? "", "equipt")).map((o) => o.id)
   );
 }
 
