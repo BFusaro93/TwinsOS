@@ -89,7 +89,28 @@ export function useDeleteMeter() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("meters").update({ deleted_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
+
+      // Same cleanup useDeleteAsset does for its meters: a meter-threshold
+      // automation pointing at a deleted meter would otherwise stay enabled
+      // but dead (the runner just skips it as "meter not found" every 15 min).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: autos } = await (supabase as any)
+        .from("automations")
+        .select("id, trigger_config")
+        .eq("trigger_type", "meter_threshold")
+        .eq("enabled", true)
+        .is("deleted_at", null);
+      const toDisable = ((autos ?? []) as { id: string; trigger_config: Record<string, unknown> | null }[])
+        .filter((a) => String(a.trigger_config?.meter_id ?? "") === id)
+        .map((a) => a.id);
+      if (toDisable.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from("automations").update({ enabled: false }).in("id", toDisable);
+      }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["meters"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["meters"] });
+      queryClient.invalidateQueries({ queryKey: ["automations"] });
+    },
   });
 }
