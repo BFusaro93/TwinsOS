@@ -15,7 +15,8 @@ export function useMeterReadings(meterId: string | null) {
         .select("*")
         .eq("meter_id", meterId!)
         .is("deleted_at", null)
-        .order("reading_at", { ascending: true });
+        .order("reading_at", { ascending: true })
+        .order("created_at", { ascending: true });
       if (error) throw error;
       return (data.map(mapMeterReading)) as MeterReading[];
     },
@@ -24,6 +25,19 @@ export function useMeterReadings(meterId: string | null) {
 }
 
 export type NewMeterReadingInput = Omit<MeterReading, "id" | "orgId" | "createdBy" | "createdAt" | "updatedAt" | "deletedAt">;
+
+/**
+ * Range rule for level meters (fuel / tank): never negative, and not above the
+ * meter's capacity when one is set. Returns an error message, or null if OK.
+ */
+export function levelReadingError(value: number, capacity: number | null | undefined, unit: string): string | null {
+  if (!Number.isFinite(value)) return "Enter a valid number for the reading.";
+  if (value < 0) return "A level reading can't be negative.";
+  if (capacity != null && value > Number(capacity)) {
+    return `This reading (${value}) is above the meter's capacity (${Number(capacity)} ${unit}). Check the value or raise the capacity.`;
+  }
+  return null;
+}
 
 /**
  * Single write path for meter readings: validates the no-decrease /
@@ -42,7 +56,19 @@ export async function addMeterReadingCore(input: NewMeterReadingInput): Promise<
   // is rejected outright; a replaced meter gets a new meter record.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const readDb = supabase as any;
-  const [{ data: before, error: beforeErr }, { data: after, error: afterErr }] = await Promise.all([
+  const { data: meterRow, error: meterErr } = await readDb
+    .from("meters").select("kind, capacity, unit").eq("id", input.meterId).single();
+  if (meterErr) throw meterErr;
+  const isLevel = meterRow?.kind === "level";
+  const levelError = isLevel ? levelReadingError(Number(input.value), meterRow.capacity, meterRow.unit) : null;
+  if (levelError) throw new Error(levelError);
+
+  // Level meters (fuel / tank) legitimately go up and down, so the ordering
+  // checks below apply to cumulative meters only; the range check above is
+  // their only rule.
+  const [{ data: before, error: beforeErr }, { data: after, error: afterErr }] = isLevel
+    ? [{ data: null, error: null }, { data: null, error: null }]
+    : await Promise.all([
     readDb
       .from("meter_readings")
       .select("value, reading_at")
@@ -100,6 +126,8 @@ export async function addMeterReadingCore(input: NewMeterReadingInput): Promise<
     .eq("meter_id", input.meterId)
     .is("deleted_at", null)
     .order("reading_at", { ascending: false })
+    // Same-day level readings share a reading_at (noon); newest entry wins.
+    .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (latestError) throw latestError;
@@ -158,6 +186,7 @@ export function useDeleteMeterReading() {
         .eq("meter_id", meterId)
         .is("deleted_at", null)
         .order("reading_at", { ascending: false })
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (latestError) throw latestError;

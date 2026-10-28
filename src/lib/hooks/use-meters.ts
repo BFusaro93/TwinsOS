@@ -48,6 +48,8 @@ export function useCreateMeter() {
         current_value: input.currentValue,
         last_reading_at: input.lastReadingAt,
         source: input.source,
+        kind: input.kind,
+        capacity: input.kind === "level" ? input.capacity : null,
       }).select().single();
       if (error) throw error;
 
@@ -88,6 +90,30 @@ export function useUpdateMeter() {
     mutationFn: async ({ id, ...input }: Partial<Meter> & { id: string }) => {
       const supabase = createClient();
 
+      // Kind decides which reading rules apply, so it is locked once the meter
+      // has any reading (a baseline reading counts). Capacity is level-only and
+      // must still contain the current value.
+      if (input.kind !== undefined || input.capacity !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: cur, error: curErr } = await (supabase as any)
+          .from("meters").select("kind, current_value").eq("id", id).single();
+        if (curErr) throw curErr;
+        if (input.kind !== undefined && input.kind !== cur.kind) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { count, error: cntErr } = await (supabase as any)
+            .from("meter_readings").select("id", { count: "exact", head: true })
+            .eq("meter_id", id).is("deleted_at", null);
+          if (cntErr) throw cntErr;
+          if ((count ?? 0) > 0) throw new Error("A meter's kind can't be changed once it has readings.");
+        }
+        const nextKind = input.kind ?? cur.kind;
+        if (nextKind === "level" && input.capacity != null) {
+          if (!(input.capacity > 0)) throw new Error("Capacity must be greater than 0.");
+          const nextValue = input.currentValue ?? Number(cur.current_value);
+          if (nextValue > input.capacity) throw new Error(`Capacity (${input.capacity}) can't be below the current level (${nextValue}).`);
+        }
+      }
+
       // current_value is denormalized off meter_readings, so a direct edit
       // must go through the reading path (same no-decrease / ordering rules)
       // instead of overwriting the column — otherwise the next reading's
@@ -116,6 +142,8 @@ export function useUpdateMeter() {
         ...(input.unit !== undefined && { unit: input.unit }),
         // current_value / last_reading_at are owned by the reading path above.
         ...(input.source !== undefined && { source: input.source }),
+        ...(input.kind !== undefined && { kind: input.kind, ...(input.kind === "cumulative" && { capacity: null }) }),
+        ...(input.capacity !== undefined && input.kind !== "cumulative" && { capacity: input.capacity }),
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const table = (supabase as any).from("meters");

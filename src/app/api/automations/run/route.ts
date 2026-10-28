@@ -309,7 +309,7 @@ async function handleRun(request: Request) {
 
       const { data: meter, error: meterErr } = await (adminClient as AdminClient)
         .from("meters")
-        .select("id, current_value, asset_id, asset_name, org_id")
+        .select("id, current_value, asset_id, asset_name, org_id, kind")
         .eq("id", meterId)
         // meter_id comes from the rule's own trigger_config (user-editable
         // JSON) and this runs on the service-role client — never read another
@@ -323,7 +323,29 @@ async function handleRun(request: Request) {
       }
 
       const currentValue = Number(meter.current_value ?? 0);
-      const triggered = operator === ">=" ? currentValue >= threshold : currentValue <= threshold;
+
+      // Rising-meter semantics (>= / <=) only make sense on a cumulative meter,
+      // and a level meter (fuel / tank) only supports "drops below" (<). A
+      // mismatched rule must never generate preventive-maintenance work.
+      const isLevelMeter = meter.kind === "level";
+      if (isLevelMeter !== (operator === "<")) {
+        skipped.push({
+          automationId: auto.id,
+          reason: isLevelMeter
+            ? `operator ${operator} is not supported on a level meter (use "drops below")`
+            : `"drops below" is only supported on a level meter`,
+        });
+        continue;
+      }
+
+      // "<" fires on the value being below the threshold. It goes through the
+      // generic fire-once gating below: the firing sets pending_reset, and the
+      // `!triggered` branch clears it once the level is back at/above the
+      // threshold -- so it fires once per dip, not once per cron run.
+      const triggered =
+        operator === ">=" ? currentValue >= threshold
+        : operator === "<" ? currentValue < threshold
+        : currentValue <= threshold;
 
       // ── Notify / email / requisition rules on a rising (>=) meter ────────
       // These create nothing the release trigger could wait on, and a meter

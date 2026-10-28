@@ -12351,11 +12351,13 @@ export type Database = {
         Row: {
           asset_id: string | null
           asset_name: string
+          capacity: number | null
           created_at: string
           created_by: string | null
           current_value: number
           deleted_at: string | null
           id: string
+          kind: string
           last_reading_at: string | null
           name: string
           org_id: string
@@ -12366,11 +12368,13 @@ export type Database = {
         Insert: {
           asset_id?: string | null
           asset_name?: string
+          capacity?: number | null
           created_at?: string
           created_by?: string | null
           current_value?: number
           deleted_at?: string | null
           id?: string
+          kind?: string
           last_reading_at?: string | null
           name: string
           org_id?: string
@@ -12381,11 +12385,13 @@ export type Database = {
         Update: {
           asset_id?: string | null
           asset_name?: string
+          capacity?: number | null
           created_at?: string
           created_by?: string | null
           current_value?: number
           deleted_at?: string | null
           id?: string
+          kind?: string
           last_reading_at?: string | null
           name?: string
           org_id?: string
