@@ -1152,10 +1152,15 @@ export async function pushPaymentToQuickBooks(
     return { status: "error", reason: "ambiguous_client_match" };
   }
 
-  // Write-offs and account credits are not money received: they go to QuickBooks
-  // as a credit memo applied to the invoice, never as a cash Payment.
+  // An AR write-off is not money received: it goes to QuickBooks as a credit memo
+  // applied to the invoice, never as a cash Payment. A credit payment only applies
+  // a prepayment/credit that is already in QuickBooks as the original payment, so
+  // pushing it again would double count — leave it out entirely.
   const isWriteOff = payment.method === AR_WRITE_OFF_METHOD;
-  const asCreditMemo = isWriteOff || payment.is_credit === true;
+  if (payment.is_credit === true && !isWriteOff) {
+    return { status: "skipped", pushedAllocations: 0, skippedAllocations: 0 };
+  }
+  const asCreditMemo = isWriteOff;
 
   let pushed = 0;
   let skipped = 0;
@@ -1187,7 +1192,7 @@ export async function pushPaymentToQuickBooks(
             qboInvoiceId,
             amountCents: alloc.amount_cents,
             txnDate: payment.payment_date,
-            note: isWriteOff ? "AR write-off" : "Account credit applied",
+            note: "AR write-off",
             requestId: alloc.id,
           })
         : await createPayment(conn, {
