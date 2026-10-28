@@ -1316,6 +1316,7 @@ function ConnectAccountSection() {
         denied: "Stripe connection was cancelled.",
         in_use: "That Stripe account is already connected to another Landscapt organization.",
         unauthorized: "Only admins can connect Stripe.",
+        impersonating: "End your impersonation session first — the customer's own admin needs to connect Stripe.",
       };
       toast.error(messages[params.get("reason") ?? ""] ?? "Couldn't connect your Stripe account. Please try again.");
     }

@@ -14,7 +14,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export async function rejectIfImpersonating(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any, any, any>,
-  userId: string
+  userId: string,
+  action = "managing users"
 ): Promise<NextResponse | null> {
   const { data, error } = await supabase
     .from("staff_impersonation_sessions")
@@ -26,7 +27,7 @@ export async function rejectIfImpersonating(
   if (error) return null; // non-staff / unreadable: no grant to worry about
   if (data && data.length > 0) {
     return NextResponse.json(
-      { error: "End your impersonation session before managing users. This action would apply to your own organization, not the one you are viewing." },
+      { error: `End your impersonation session before ${action}. This action would apply to your own organization, not the one you are viewing.` },
       { status: 409 }
     );
   }

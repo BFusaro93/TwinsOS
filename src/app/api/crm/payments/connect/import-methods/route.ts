@@ -9,6 +9,7 @@ import {
   type ImportClientRow,
 } from "@/lib/stripe/import-saved-methods";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe import saved methods");
@@ -41,6 +42,9 @@ async function gate(): Promise<Gate> {
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return { ok: false, response: NextResponse.json({ error: "Profile not found" }, { status: 403 }) };
+
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "importing saved payment methods");
+  if (impersonating) return { ok: false, response: impersonating };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: canManagePayments } = await (supabase.rpc as any)("has_settings_permission", {
