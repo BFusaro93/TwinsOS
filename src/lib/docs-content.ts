@@ -1743,7 +1743,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "What syncs",
             detail:
-              "Clients (as QuickBooks customers), invoices once they leave draft (number, lines, terms, due date, discount and sales tax), payments (including Stripe card and ACH payments, with the check/reference number), and later changes: invoice edits and voids update the same QuickBooks invoice, and refunds or chargebacks void or reduce the QuickBooks payment.",
+              "Clients (as QuickBooks customers), invoices once they leave draft (number, lines, terms, due date, discount and sales tax), payments (including Stripe card and ACH payments, with the check/reference number), and later changes: invoice edits and voids update the same QuickBooks invoice, and refunds or chargebacks void or reduce the QuickBooks payment. AR write-offs go to QuickBooks as credit memos applied to the invoice; credits you apply from an existing prepayment aren't sent again.",
           },
           {
             step: "One way, and only new records",

@@ -203,6 +203,10 @@ export function QuickBooksGuide() {
             refunded in full, or reduces it for a partial refund.
           </li>
           <li>
+            <strong>Write-offs.</strong> An AR write-off isn&apos;t money received, so it goes to QuickBooks as a credit
+            memo applied to the invoice, not as a payment.
+          </li>
+          <li>
             <strong>Chargebacks.</strong> When a card dispute takes the money back, the QuickBooks payment is voided or
             reduced the same way.
           </li>
@@ -294,7 +298,8 @@ export function QuickBooksGuide() {
           <li>Anything entered or changed in QuickBooks — the sync is one-way.</li>
           <li>Invoices and payments created before you connected (no backfill).</li>
           <li>
-            Prepayments and credits that aren&apos;t applied to an invoice, and edits to an existing payment&apos;s
+            Credits you apply to an invoice (the original prepayment is already in QuickBooks), prepayments and credits
+            that aren&apos;t applied to an invoice, and edits to an existing payment&apos;s
             allocations after it was recorded.
           </li>
           <li>Estimates, contracts, jobs, purchase orders, and vendor bills.</li>
