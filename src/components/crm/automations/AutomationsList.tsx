@@ -198,13 +198,11 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
         sequenceId: sequence.id,
         triggerType: template.triggerType,
       });
-      for (let i = 0; i < template.events.length; i++) {
-        const step = template.events[i];
+      for (const step of template.events) {
         await createEvent.mutateAsync({
           sequenceId: sequence.id,
           eventType: step.eventType,
           config: step.config,
-          position: i,
         });
       }
       router.push(`/crm/communication/automations/${automation.id}`);

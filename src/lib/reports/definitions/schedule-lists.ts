@@ -125,7 +125,7 @@ export const SCHEDULE_LIST_REPORTS: PrebuiltReportDef[] = [
     filters: [],
     analysis: () => ({
       dataset: "rpt_vendors",
-      columns: ["name", "contact_name", "phone", "email", "address", "vendor_type", "is_active"],
+      columns: ["name", "contact_name", "phone", "email", "address", "city", "state", "zip", "vendor_type", "is_active"],
       filters: [],
       groupBy: [],
       aggregates: [],

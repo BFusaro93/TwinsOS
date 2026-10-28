@@ -24,6 +24,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import type { Vendor } from "@/types";
 import { useCreateVendor, useUpdateVendor, useVendors } from "@/lib/hooks/use-vendors";
+import { useVerifyAddress } from "@/lib/hooks/use-verify-address";
+import { AddressSuggestion } from "@/components/shared/AddressSuggestion";
 
 /** Case-insensitive, trimmed name comparison — same normalization as the
  * duplicate-name check in useBulkImportVendors's CSV import path. */
@@ -51,6 +53,9 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
   const [phone, setPhone] = useState("");
   const [website, setWebsite] = useState("");
   const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zip, setZip] = useState("");
   const [notes, setNotes] = useState("");
   const [w9Status, setW9Status] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -64,6 +69,7 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
   const [formError, setFormError] = useState<string | null>(null);
   const [duplicateVendor, setDuplicateVendor] = useState<Vendor | null>(null);
 
+  const addr = useVerifyAddress();
   const createVendor = useCreateVendor();
   const updateVendor = useUpdateVendor();
   const { data: existingVendors } = useVendors();
@@ -76,6 +82,9 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
       setPhone(initialData.phone ?? "");
       setWebsite(initialData.website ?? "");
       setAddress(initialData.address ?? "");
+      setCity(initialData.city ?? "");
+      setState(initialData.state ?? "");
+      setZip(initialData.zip ?? "");
       setNotes(initialData.notes ?? "");
       setW9Status(initialData.w9Status);
       setIsActive(initialData.isActive);
@@ -95,6 +104,10 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
     setPhone("");
     setWebsite("");
     setAddress("");
+    setCity("");
+    setState("");
+    setZip("");
+    addr.reset();
     setNotes("");
     setW9Status("");
     setIsActive(true);
@@ -111,7 +124,10 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
       contactName,
       email,
       phone: phone || "",
-      address: address || "",
+      address: address.trim(),
+      city: city.trim(),
+      state: state.trim(),
+      zip: zip.trim(),
       website: website || null,
       notes: notes || null,
       vendorType,
@@ -254,14 +270,60 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
               />
             </div>
 
-            {/* Address — full width */}
+            {/* Address — street, city, state, zip */}
             <div className="sm:col-span-2 grid gap-1.5">
-              <Label htmlFor="vendor-address">Address</Label>
+              <Label htmlFor="vendor-address">Street address</Label>
               <Input
                 id="vendor-address"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="Street, City, State, ZIP"
+                onBlur={() => void addr.verify({ address, city, state, zip })}
+                placeholder="123 Main St"
+              />
+            </div>
+            <div className="sm:col-span-2 grid grid-cols-[1fr_auto_auto] gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="vendor-city">City</Label>
+                <Input
+                  id="vendor-city"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  onBlur={() => void addr.verify({ address, city, state, zip })}
+                  placeholder="Worcester"
+                />
+              </div>
+              <div className="grid w-20 gap-1.5">
+                <Label htmlFor="vendor-state">State</Label>
+                <Input
+                  id="vendor-state"
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
+                  onBlur={() => void addr.verify({ address, city, state, zip })}
+                  placeholder="MA"
+                />
+              </div>
+              <div className="grid w-24 gap-1.5">
+                <Label htmlFor="vendor-zip">Zip</Label>
+                <Input
+                  id="vendor-zip"
+                  value={zip}
+                  onChange={(e) => setZip(e.target.value)}
+                  onBlur={() => void addr.verify({ address, city, state, zip })}
+                  placeholder="01605"
+                />
+              </div>
+            </div>
+            <div className="sm:col-span-2">
+              <AddressSuggestion
+                typed={{ address, city, state, zip }}
+                state={addr.state}
+                result={addr.result}
+                onAccept={(n) => {
+                  setAddress(n.address);
+                  setCity(n.city);
+                  setState(n.state);
+                  setZip(n.zip);
+                }}
               />
             </div>
 

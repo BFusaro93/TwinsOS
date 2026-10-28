@@ -67,11 +67,11 @@ export function VendorsPage() {
             <ImportExportMenu
               entityLabel="Vendors"
               onExport={() => {
-                const rows = (vendors ?? []).map((v) => [v.name, v.contactName, v.email, v.phone, v.address, v.vendorType, v.isActive ? "Active" : "Inactive", v.website, v.notes]);
-                downloadCSV("vendors-export.csv", ["Name", "Contact Name", "Email", "Phone", "Address", "Vendor Type", "Is Active", "Website", "Notes"], rows);
+                const rows = (vendors ?? []).map((v) => [v.name, v.contactName, v.email, v.phone, v.address, v.city, v.state, v.zip, v.vendorType, v.isActive ? "Active" : "Inactive", v.website, v.notes]);
+                downloadCSV("vendors-export.csv", ["Name", "Contact Name", "Email", "Phone", "Address", "City", "State", "Zip", "Vendor Type", "Is Active", "Website", "Notes"], rows);
               }}
               onImport={(rows) => bulkImportVendors(rows)}
-              templateColumns={["name", "contactName", "email", "phone", "address", "vendorType", "website", "notes"]}
+              templateColumns={["name", "contactName", "email", "phone", "address", "city", "state", "zip", "vendorType", "website", "notes"]}
               templateFilename="vendors-template.csv"
               requiredColumns={["name"]}
             />

@@ -327,8 +327,9 @@ export function InvoicingGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Set them up</strong> in Settings &gt; Accounting &gt; <em>Other Charges</em>. Each has
-            a name, a description (what prints on the invoice), a default amount, and a Taxable switch.
-            Turn a charge off to stop offering it without losing the invoices it&apos;s already on.
+            a name, a description (what prints on the invoice), an amount, and a Taxable switch. The
+            amount is either a <em>Fixed $</em> figure or a <em>% of invoice</em> (a 4.5% fuel
+            surcharge, say). Turn a charge off to stop offering it without losing the invoices it&apos;s already on.
           </li>
           <li>
             <strong>Starting from scratch?</strong> While the list is empty, click{" "}
@@ -341,13 +342,20 @@ export function InvoicingGuide() {
             <strong>On one invoice</strong>, open <em>Add Line Item</em>; active charges are listed under
             an <em>Other Charges</em> heading below your services. The line is a normal line &mdash; edit
             its amount, quantity or taxable flag like any other. Changing the catalog later never
-            changes lines already on invoices.
+            changes lines already on invoices. A percent charge is worked out when you add it, from
+            that invoice&apos;s service lines (each line after its own discount; other charges and the
+            invoice discount aren&apos;t counted), and the line prints with the percent, e.g.
+            &ldquo;Fuel Surcharge (4.5%)&rdquo;. It&apos;s a fixed dollar line from then on &mdash; it
+            doesn&apos;t change if you edit the services afterwards. With no service lines yet there&apos;s
+            nothing to take a percent of, so it isn&apos;t added.
           </li>
           <li>
             <strong>On many invoices at once</strong>, tick them in the Invoices list and choose
-            Actions &gt; <em>Add Other Charge&hellip;</em>. Pick the charge, adjust the amount if this
-            run needs a different one (it must be more than $0), and it&apos;s added to every selected invoice and their totals
-            recalculated. Locked and void invoices are skipped, and the result tells you how many were.
+            Actions &gt; <em>Add Other Charge&hellip;</em>. Pick the charge, adjust the amount or percent if this
+            run needs a different one (it must be more than zero), and it&apos;s added to every selected
+            invoice and their totals recalculated. A percent charge is worked out separately on each
+            invoice, so every invoice gets its own dollar figure; invoices with no service lines are
+            skipped. Locked and void invoices are skipped, and the result tells you how many were.
             You need the <em>Add / modify invoices</em> permission.
           </li>
         </ul>

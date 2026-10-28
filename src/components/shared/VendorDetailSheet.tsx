@@ -118,7 +118,15 @@ function DetailsTab({ vendor, onUpdateNotes }: { vendor: Vendor; onUpdateNotes: 
           }
         />
         <DetailRow label="Phone" value={vendor.phone} />
-        <DetailRow label="Address" value={vendor.address} />
+        <DetailRow
+          label="Address"
+          value={
+            [vendor.address, [vendor.city, vendor.state].filter(Boolean).join(", "), vendor.zip]
+              .map((part) => part.trim())
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        />
         <DetailRow
           label="Website"
           value={

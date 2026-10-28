@@ -50,7 +50,7 @@ const EVENT_TYPES: [string, string][] = [
   ],
   [
     "If / Branch",
-    "Checks one or more conditions against the client/job/estimate record. Events nested under the branch only run when every condition is met — everyone else skips the block and continues past it in the sequence.",
+    "Checks one or more conditions against the client/job/estimate record. The steps inside the branch only run when every condition is met — everyone else skips the whole block and continues with whatever comes after it. See If Branch blocks below.",
   ],
   ["Note", "Adds a note to the client's activity timeline."],
   [
@@ -91,6 +91,7 @@ export function AutomationsGuide() {
           <TOCLink href="#triggers">Triggers</TOCLink>
           <TOCLink href="#conditions">Trigger Conditions vs. Stop Conditions</TOCLink>
           <TOCLink href="#events">Events</TOCLink>
+          <TOCLink href="#if-branches">If Branch blocks</TOCLink>
           <TOCLink href="#worked-example">Worked example: New Lead sequence</TOCLink>
           <TOCLink href="#email-windows">Email send windows &amp; approval</TOCLink>
           <TOCLink href="#automations-vs-campaigns">Automations vs. Sales Campaigns</TOCLink>
@@ -227,6 +228,47 @@ export function AutomationsGuide() {
         </Table>
       </Section>
 
+      <Section id="if-branches" title="If Branch blocks">
+        <p>
+          An If Branch guards a <strong>block</strong> of steps. Every step inside the block runs only
+          when <em>all</em> of the branch&apos;s conditions are met; for everyone else the whole block is
+          skipped and the client carries on with the first step after it.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Adding steps to a block.</strong> Add an If Branch from the Events list, then use{" "}
+            <em>Add step inside</em> on its card and choose the step type. Steps inside a branch show
+            indented under an orange line. You can put any step in a block, including a Wait or another
+            If Branch (a nested block is skipped along with the block around it).
+          </li>
+          <li>
+            <strong>Steps are added at the end.</strong> A new step goes to the end of the sequence, or
+            to the end of the block when you use <em>Add step inside</em>. There&apos;s no drag-to-reorder
+            or move-into-block yet &mdash; to change what sits inside a branch, delete the step and add it
+            again inside.
+          </li>
+          <li>
+            <strong>Deleting a branch deletes its block.</strong> Removing an If Branch also removes every
+            step inside it, so a guarded step can never end up running for everyone by accident.
+          </li>
+          <li>
+            <strong>Turning a branch off.</strong> A deactivated If Branch isn&apos;t checked at all, so the
+            steps inside it run for every client. Deactivate the individual steps instead if you want them
+            to stop.
+          </li>
+          <li>
+            <strong>If Branches that existed before blocks.</strong> Earlier If Branches guarded only the
+            one step directly after them. Those steps were moved inside their branch automatically, so
+            running sequences behave exactly as before. Add more steps inside the branch if you meant it
+            to guard several.
+          </li>
+          <li>
+            <strong>In the execution log</strong>, a branch is recorded as <em>branch true</em> (the block
+            ran) or <em>branch false</em> (the block was skipped).
+          </li>
+        </ul>
+      </Section>
+
       <Section id="worked-example" title="Worked example: New Lead sequence">
         <p>
           A common pattern — greet a new lead, then follow up differently depending on whether they&apos;ve
@@ -244,15 +286,16 @@ export function AutomationsGuide() {
             primary email, restricted to weekday send hours.
           </li>
           <li>
-            <strong>If / Branch</strong> — condition: has an estimate been sent?
+            <strong>If / Branch</strong> — condition: no estimate has been sent yet. Inside the branch
+            (added with <em>Add step inside</em>):
             <ul className="list-disc space-y-1 pl-5 mt-2">
               <li>
-                <strong>If true</strong> — nothing nested here; the client falls through to whatever
-                comes after the branch.
+                <strong>Wait</strong> 2 more days, then <strong>Text Message</strong> — a short nudge
+                asking if they&apos;d like an estimate.
               </li>
               <li>
-                <strong>If false</strong> (nested under the branch) — <strong>Wait</strong> 2 more days,
-                then <strong>Text Message</strong> — a short nudge asking if they&apos;d like an estimate.
+                A lead who already has an estimate doesn&apos;t meet the condition, so they skip both
+                steps and fall through to whatever comes after the branch.
               </li>
             </ul>
           </li>
@@ -336,6 +379,13 @@ export function AutomationsGuide() {
       </Section>
 
       <Section id="faq" title="FAQ">
+        <p>
+          <strong>Why did a step inside an If Branch run for a client who didn&apos;t meet the
+          condition?</strong> Check that the step is actually inside the branch &mdash; steps inside show
+          indented under the branch card, and a step after it at the normal level always runs. Also check
+          the branch itself is active; a deactivated branch is never checked, so its steps run for
+          everyone. The execution log shows <em>branch false</em> when a client skipped a block.
+        </p>
         <p>
           <strong>What happens when a client clicks Unsubscribe in a marketing email?</strong> The
           link opens a confirmation page showing your company name; nothing changes until they press

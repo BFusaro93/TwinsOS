@@ -21,7 +21,7 @@ const MEETING_FIELDS: [string, string][] = [
   ["Title *", "Free text, e.g. \"Estimate walkthrough\"."],
   ["Meeting Type", "In Person, Phone, or Video — label only, doesn't change any behavior."],
   ["Date / Time / Duration *", "Duration is in minutes (5-minute increments). Together with the start time, this defines the window used for the double-booking check."],
-  ["Location", "Free text — an address or a video-call link, whichever fits the meeting type."],
+  ["Location", "Free text — an address or a video-call link, whichever fits the meeting type. For an In Person meeting, picking a client fills an empty Location with their master property address (or billing address if they have no property) once; it never overwrites what you've typed or a saved meeting's location. A link beside the field opens an address in Google Maps, or opens a pasted video link."],
   ["Link to Estimate / Link to Ticket", "Only shown once a client is picked. Each is scoped to that client's own estimates/tickets."],
   ["Notes", "Free text, staff-only."],
 ];

@@ -134,6 +134,14 @@ export function PurchaseOrdersGuide() {
           if a manager needs a line changed on an ordered record, an admin has to make the edit.
         </Callout>
         <Callout>
+          <strong>A PO line can&apos;t be lowered below what&apos;s already been received.</strong>{" "}
+          If goods receipts already recorded 10 of a line, its quantity can&apos;t be cut under 10
+          &mdash; correct the goods receipt first. Likewise a <strong>PO with goods receipts can&apos;t
+          be deleted</strong> (the stock it added would have nothing to trace to) &mdash; cancel it
+          instead, and a <strong>Requisition that already has purchase orders can&apos;t be
+          deleted</strong> &mdash; cancel or close it.
+        </Callout>
+        <Callout>
           <strong>Editing line items on a pending or approved record silently resubmits it for
           approval.</strong> Change a quantity or add a line on a Requisition or PO that&apos;s
           already Pending Approval or Approved, and it automatically re-runs the full approval
