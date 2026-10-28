@@ -103,6 +103,11 @@ function MeterContent({ meter }: { meter: Meter }) {
               {meter.currentValue.toLocaleString()}
             </span>
             <span className="text-sm text-muted-foreground">{meter.unit}</span>
+            {meter.kind === "level" && meter.capacity != null && (
+              <span className="text-sm text-muted-foreground">
+                ({Math.round((meter.currentValue / meter.capacity) * 100)}% of {meter.capacity.toLocaleString()})
+              </span>
+            )}
           </div>
           <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">
             Last updated {formatDate(meter.lastReadingAt)}

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 type AdminClient = ReturnType<typeof import("@supabase/supabase-js").createClient<any>>;
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 const SAMSARA_STATS_URL =
   "https://api.samsara.com/fleet/vehicles/stats?types=obdOdometerMeters,gpsDistanceMeters";
@@ -88,7 +89,10 @@ async function handleSync(request: Request) {
 
   const results: Record<string, unknown>[] = [];
 
+  const orgCanceled = createOrgCanceledResolver(adminClient);
   for (const integration of integrations) {
+    // Canceled orgs get no background sync (cron or manual), same as the other cron routes.
+    if (await orgCanceled(integration.org_id as string)) continue;
     const orgResult = await syncOrg(adminClient, integration.org_id as string, integration.api_key as string);
     results.push({ orgId: integration.org_id, ...orgResult });
 

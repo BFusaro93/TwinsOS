@@ -9,6 +9,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, ShoppingCart, FileText } from
 import { NewRequisitionDialog } from "@/components/po/NewRequisitionDialog";
 import type { PrefillItem } from "@/components/po/NewRequisitionDialog";
 import { NewPODialog } from "@/components/po/NewPODialog";
+import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 import type { POPrefillItem } from "@/components/po/NewPODialog";
 import type { MaterialsNeededResult, MaterialsNeededRow } from "@/lib/reports/materials/materials-needed";
 
@@ -34,6 +35,9 @@ function fmtDate(d: string | null) {
 }
 
 export default function MaterialsNeededReportPage() {
+  // Equipt role limits (viewer / requestor) apply to the requisition + PO the
+  // buttons below create; the DB refuses them, so hide what would just fail.
+  const { canCreateRequisition, canCreatePO } = useRoleCapabilities();
   const [onlyShortfalls, setOnlyShortfalls] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -241,20 +245,24 @@ export default function MaterialsNeededReportPage() {
         )}
       </div>
 
-      {selectedRows.length > 0 && (
+      {selectedRows.length > 0 && (canCreateRequisition || canCreatePO) && (
         <div className="sticky bottom-4 flex items-center justify-between rounded-lg border bg-card shadow-lg px-4 py-3">
           <p className="text-sm text-slate-600 dark:text-neutral-400">
             {selectedRows.length} product{selectedRows.length !== 1 ? "s" : ""} selected
           </p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={openRequisition}>
-              <FileText className="mr-1.5 h-3.5 w-3.5" />
-              Create Requisition
-            </Button>
-            <Button size="sm" onClick={openPO} className="bg-green-600 hover:bg-green-700">
-              <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
-              Create PO
-            </Button>
+            {canCreateRequisition && (
+              <Button variant="outline" size="sm" onClick={openRequisition}>
+                <FileText className="mr-1.5 h-3.5 w-3.5" />
+                Create Requisition
+              </Button>
+            )}
+            {canCreatePO && (
+              <Button size="sm" onClick={openPO} className="bg-green-600 hover:bg-green-700">
+                <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
+                Create PO
+              </Button>
+            )}
           </div>
         </div>
       )}

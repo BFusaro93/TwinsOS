@@ -594,6 +594,8 @@ export function mapMeter(row: MeterRow): Meter {
     currentValue: row.current_value,
     lastReadingAt: row.last_reading_at ?? row.created_at,
     source: row.source as "manual" | "samsara",
+    kind: row.kind === "level" ? "level" : "cumulative",
+    capacity: row.capacity != null ? Number(row.capacity) : null,
   };
 }
 
