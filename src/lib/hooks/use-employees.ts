@@ -231,11 +231,16 @@ export function useBulkImportEmployees() {
     mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
       const supabase = createClient();
 
-      const { data: existing } = await supabase.from("crm_employees").select("id, email").is("deleted_at", null);
+      const { data: existing } = await supabase.from("crm_employees").select("id, email, first_name, last_name").is("deleted_at", null);
       const byEmail = new Map((existing ?? []).filter((e) => e.email).map((e) => [e.email!.trim().toLowerCase(), e.id]));
+      // Employees with no email can't be matched by email; fall back to
+      // case-insensitive full name so re-imports don't duplicate them.
+      const nameKey = (f: string, l: string) => `${f.trim().toLowerCase()} ${l.trim().toLowerCase()}`;
+      const byName = new Map((existing ?? []).map((e) => [nameKey(e.first_name ?? "", e.last_name ?? ""), e.id]));
 
       let succeeded = 0;
       const failed: BulkImportResult["failed"] = [];
+      const skipped: BulkImportResult["failed"] = [];
 
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i];
@@ -279,6 +284,11 @@ export function useBulkImportEmployees() {
             hourly_rate_cents: hourlyRateCents,
           };
 
+          if (!email && byName.has(nameKey(firstName, lastName))) {
+            skipped.push({ row: rowNum, error: `"${firstName} ${lastName}": an employee with this name already exists (no email to match on) — skipped` });
+            continue;
+          }
+
           const existingId = email ? byEmail.get(email.toLowerCase()) : undefined;
           if (existingId) {
             // Only the cells the CSV filled in: `payload` turns every blank
@@ -304,6 +314,7 @@ export function useBulkImportEmployees() {
             // email would both create a new employee instead of the second
             // one matching (updating) the first.
             if (newEmployee && email) byEmail.set(email.toLowerCase(), newEmployee.id);
+            if (newEmployee) byName.set(nameKey(firstName, lastName), newEmployee.id);
           }
 
           succeeded++;
@@ -312,7 +323,7 @@ export function useBulkImportEmployees() {
         }
       }
 
-      return { succeeded, failed };
+      return { succeeded, failed, skipped };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-employees"] });
