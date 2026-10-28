@@ -578,7 +578,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Adding a meter to an asset",
             detail:
-              "Open any asset or vehicle detail and go to the Meters tab. Click '+ New Meter'. Choose the unit (miles, hours, gallons, cycles, etc.) and give it a name.",
+              "Open any asset or vehicle detail and go to the Meters tab. Click '+ New Meter'. Choose the unit (miles, hours, gallons, cycles, etc.), give it a name, and pick Cumulative (odometer, hours; readings only go up) or Level (fuel, tank; readings can go up or down, with an optional capacity).",
           },
           {
             step: "Recording a reading",
@@ -588,7 +588,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Creating a meter-threshold automation",
             detail:
-              "Go to CMMS > Automations and click '+ New Automation'. Set Trigger Type to 'Meter Threshold', select the meter, choose the operator (≥ for cumulative like mileage), and enter the threshold value.",
+              "Go to CMMS > Automations and click '+ New Automation'. Set Trigger Type to 'Meter Threshold', select the meter, choose the operator (≥ for cumulative meters like mileage; < 'drops below' for level meters like a fuel tank), and enter the threshold value. A level rule fires once when the value drops below the threshold and re-arms after a reading brings it back to or above it. Service Intervals and PM triggers are for cumulative meters only.",
           },
           {
             step: "Other trigger types",
@@ -1878,7 +1878,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Do meter-based oil changes count toward PM compliance?",
-        a: "Yes. A work order from a Meter Threshold automation — created directly or converted from its request — is due 7 days after the meter tripped. Done within 7 days is on time; a request still unconverted after 7 days counts as a missed PM.",
+        a: "Yes. A work order from a cumulative Meter Threshold (≥) automation — created directly or converted from its request — is due 7 days after the meter tripped. Done within 7 days is on time; a request still unconverted after 7 days counts as a missed PM. Low-level (drops below) alerts from a level meter are not PM and don't count.",
       },
       {
         q: "What happens when a part falls below minimum stock?",
@@ -1909,6 +1909,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Landscapt (CRM)",
     items: [
+      {
+        q: "A job I skipped or cancelled a visit for is back on the Waiting List. Is that right?",
+        a: "Yes. A waiting-list job leaves the list once it has a live visit, but a skipped or cancelled visit never happened, so a job whose only visits were skipped or cancelled returns to the Waiting List. Scheduling it again creates a new visit and takes it off.",
+      },
+      {
+        q: "When does an invoice count as overdue, and who gets contract and estimate expiry reminders?",
+        a: "An unpaid invoice is overdue once its due day has passed; one on Due on Receipt terms with no due date goes overdue the day after its invoice date, and an invoice with no balance left is never overdue. About three days before an open estimate expires, its creator is reminded (its sales rep when there is no creator). Contract expiry warnings go only for signed or active contracts, never for cancelled, expired or draft ones. A snow job whose contract has ended no longer shows on the Snow Dispatch board, and its completed visits bill per visit.",
+      },
+      {
+        q: "Why can't a crew member edit punches on a visit?",
+        a: "Once a visit's hours are on a live invoice, the crew app refuses changes or deletions to member punches on it and asks you to have the office correct the time. The office can still edit times. A crew note resent after a dropped connection is saved once.",
+      },
       {
         q: "How does the crew clock in for the day (Start Day / End Day)?",
         a: "On the Crew App's My Schedule screen, tap Start Day once and everyone on the crew's roster for that day is clocked in; tap End Day at the shop to clock everyone out (the app asks you to confirm if a job is still running). This is the paid shop-to-shop day that feeds payroll. Start Job and Stop Job separately clock the crew in and out of each stop for Job Costing. If nobody taps Start Day, starting the first job opens the day anyway and payroll flags it as 'Started at first job'. The Start Day button stays disabled if the crew has nobody on its roster (add people under Team > Crews > Team Assignments).",
@@ -2053,6 +2065,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I import existing data?",
         a: "Go to Settings > Import / Export. Download the template for the entity you want to import, fill it in, and upload. The importer validates each row before committing.",
+      },
+      {
+        q: "What file formats and values does the CSV importer accept?",
+        a: "CSV files saved as UTF-8, Windows-1252 (Excel's 'CSV (Comma delimited)' on Windows) or UTF-16 ('Unicode Text') all import with accents and curly quotes intact, and columns can be separated by commas, semicolons or tabs. Money cells can include a $ and thousands separators ($1,250.50). The protective leading quote an export adds in front of =, +, - or @ is removed on import. If some rows fail, the dialog says how many imported and how many failed, with each failing row's reason. Rows skipped as duplicates are listed separately: clients that match an existing client's email or phone, products with no part number that match an existing product's name, and employees with no email that match an existing employee's name. Re-importing employees only updates the cells your file fills in.",
+      },
+      {
+        q: "Why can't I invite a user, or assign an approver?",
+        a: "An invite is refused when the email already belongs to a different type of account (such as a client portal login) or to a user in another organization; use a different email. In an approval flow editor, Requisition and Purchase Order steps can't be assigned to the viewer or requestor role, or to a user with one of those roles, because they can't approve; pick a manager, admin or purchaser.",
       },
       {
         q: "How is data isolated — can other companies see our data?",

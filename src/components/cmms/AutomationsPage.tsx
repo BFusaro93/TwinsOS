@@ -76,6 +76,7 @@ export function formatTrigger(
       // The stored label is a snapshot from save time; prefer the live meter so renames show up.
       const meter = meters.find((m) => m.id === trigger.meterId);
       const label = meter ? `${meter.name} — ${meter.assetName}` : trigger.meterLabel;
+      if (trigger.operator === "<") return `${label} drops below ${trigger.value.toLocaleString()}`;
       return `${label} ${trigger.operator} ${trigger.value.toLocaleString()}`;
     }
     case "part_low_stock":

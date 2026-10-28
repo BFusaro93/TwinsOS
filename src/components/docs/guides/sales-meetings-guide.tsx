@@ -211,6 +211,9 @@ export function SalesMeetingsGuide() {
           admins, so a reminder is never silently dropped. Each recipient&apos;s own notification
           settings still apply. If nobody can be reached the reminder isn&apos;t marked as sent, so it
           goes out on a later run once someone is set up while the meeting is still in its window.
+          If the reminder reaches at least one recipient, it is marked as sent even when another
+          recipient&apos;s email failed, so people who already received it are never emailed again; only a
+          run where nothing could be delivered is retried.
           Organizations whose subscription is canceled get no automated reminders.
         </p>
       </Section>

@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("portal/account");
 
 const UpdateSchema = z.object({
   primary_phone: z.string().max(30).nullable().optional(),
@@ -103,7 +106,7 @@ export async function POST(req: Request) {
     .single();
 
   if (error) {
-    console.error("[portal/account] Failed to add contact:", error);
+    log.error("failed to add contact", { error: error.message });
     return NextResponse.json({ error: "Failed to add contact" }, { status: 500 });
   }
 

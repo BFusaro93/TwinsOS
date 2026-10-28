@@ -6,7 +6,7 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapProductItem } from "@/lib/supabase/mappers";
 import { setProducts } from "@/lib/hooks/cost-store";
 import { useSettingsStore } from "@/stores/settings-store";
-import type { BulkImportResult } from "@/lib/csv";
+import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
 import type { ProductItem } from "@/types";
 
 export function useProducts() {
@@ -447,8 +447,7 @@ function normalizeProductCategory(raw: string): string | null {
  *  that isn't a valid number — callers must check for NaN and treat it as a
  *  row validation failure rather than silently inserting a corrupted cost. */
 function parseCentsOrNaN(raw: string | undefined): number | null {
-  if (!raw?.trim()) return null;
-  return Math.round(parseFloat(raw) * 100);
+  return parseCsvDollarsToCents(raw);
 }
 
 /** CSV "taxable" cell: yes/true/1 -> true, no/false/0 -> false, blank -> true (new-product default). */
@@ -468,6 +467,16 @@ export function useBulkImportProducts() {
 
       let succeeded = 0;
       const failed: BulkImportResult["failed"] = [];
+      const skipped: BulkImportResult["failed"] = [];
+
+      // Rows with no part number can't be matched by the unique part_number
+      // constraint, so re-importing the same file duplicated them. Match on
+      // exact (case-insensitive, trimmed) name against existing live products.
+      const existingNames = new Set(
+        (await fetchAllRows<{ name: string }>(() =>
+          supabase.from("product_items").select("name").is("deleted_at", null).order("id"),
+        )).map((p) => p.name.trim().toLowerCase()),
+      );
 
       const { data: vendorRows } = await supabase.from("vendors").select("id, name").is("deleted_at", null);
       const vendorsByName = new Map<string, { id: string; name: string } | null>();
@@ -538,6 +547,11 @@ export function useBulkImportProducts() {
             cost_layers: [] as unknown as import("@/types/supabase").Json,
             alternate_vendors: [] as unknown as import("@/types/supabase").Json,
           };
+
+          if (!row.part_number && existingNames.has(name.toLowerCase())) {
+            skipped.push({ row: rowNum, error: `"${name}": a product with this name already exists (no part number to match on) — skipped` });
+            continue;
+          }
 
           const { data: created, error } = await supabase
             .from("product_items")
@@ -652,12 +666,13 @@ export function useBulkImportProducts() {
             }
           }
 
+          if (!row.part_number) existingNames.add(name.toLowerCase());
           succeeded++;
         } catch (err) {
           failed.push({ row: rowNum, error: err instanceof Error ? err.message : "Unknown error" });
         }
       }
-      return { succeeded, failed };
+      return { succeeded, failed, skipped };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });

@@ -189,7 +189,13 @@ export interface Meter extends BaseRecord {
   currentValue: number;
   lastReadingAt: string;
   source: "manual" | "samsara";
+  /** cumulative = odometer/hours (only counts up); level = fuel/tank (goes up and down). */
+  kind: MeterKind;
+  /** Level meters only: full-scale value readings must stay within. Null = unset. */
+  capacity: number | null;
 }
+
+export type MeterKind = "cumulative" | "level";
 
 export interface MeterReading extends BaseRecord {
   meterId: string;
