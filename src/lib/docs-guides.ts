@@ -310,6 +310,13 @@ export const DOC_GUIDES: DocGuide[] = [
     icon: Workflow,
   },
   {
+    slug: "quickbooks-guide",
+    kicker: "Integrations",
+    title: "QuickBooks Online Sync",
+    description: "What Landscapt sends to QuickBooks, when it sends it, and what to do when something doesn't show up.",
+    icon: Calculator,
+  },
+  {
     slug: "samsara-guide",
     kicker: "Integrations",
     title: "Samsara Integration",

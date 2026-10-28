@@ -1730,6 +1730,46 @@ export const DOC_SECTIONS: DocSection[] = [
         ],
       },
       {
+        id: "quickbooks-integration",
+        title: "Connecting QuickBooks Online",
+        summary: "Send customers, invoices and payments to QuickBooks automatically — one way, Landscapt to QuickBooks.",
+        icon: Receipt,
+        steps: [
+          {
+            step: "Connect",
+            detail:
+              "An admin goes to Landscapt Settings > Integrations (also shown under Settings > Accounting), clicks Connect QuickBooks, signs in to Intuit, picks the QuickBooks Online company and approves. The card then reads 'Connected' with the company name. QuickBooks Desktop isn't supported.",
+          },
+          {
+            step: "What syncs",
+            detail:
+              "Clients (as QuickBooks customers), invoices once they leave draft (number, lines, terms, due date, discount and sales tax), payments (including Stripe card and ACH payments, with the check/reference number), and later changes: invoice edits and voids update the same QuickBooks invoice, and refunds or chargebacks void or reduce the QuickBooks payment.",
+          },
+          {
+            step: "One way, and only new records",
+            detail:
+              "Landscapt writes to QuickBooks; nothing is pulled back, so change invoices and payments in Landscapt. Only invoices and payments created after you connect are sent — existing ones are not backfilled.",
+          },
+          {
+            step: "Matching clients to customers",
+            detail:
+              "An exact name match links automatically, no match creates a new QuickBooks customer, and similar-but-not-identical names ask you to choose: open the client, find the QuickBooks section, click Sync to QuickBooks and pick a match or 'None of these — create new'.",
+          },
+          {
+            step: "Check for failures",
+            detail:
+              "Settings > Accounting > Sync Status lists anything that didn't sync, with the reason and a Retry button (needs the QB Reconciliation and QuickBooks Resync permissions). A safety-net job also re-checks every 15 minutes.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "How each field maps, timing, what doesn't sync, and fixes for each error message.",
+            href: "/settings/support/quickbooks-guide",
+            linkLabel: "Open the QuickBooks guide",
+          },
+        ],
+      },
+      {
         id: "zapier-integration",
         title: "Connecting Zapier",
         summary: "Trigger Zaps on Equipt and Landscapt events, or create records from a Zap.",
@@ -2034,6 +2074,26 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I connect the Samsara integration for vehicle odometers?",
         a: "Go to Settings > Integrations and enter your Samsara API key. Once connected, vehicle odometer readings sync automatically and update the corresponding vehicle meter, which can trigger mileage-based automations.",
+      },
+      {
+        q: "How do I connect QuickBooks?",
+        a: "An admin goes to Landscapt Settings > Integrations (or Settings > Accounting), clicks Connect QuickBooks, signs in to Intuit, chooses the QuickBooks Online company and approves. Invoices and payments created from then on are sent to QuickBooks automatically. It's one-way — nothing comes back from QuickBooks — and only QuickBooks Online is supported.",
+      },
+      {
+        q: "Why isn't an invoice showing up in QuickBooks?",
+        a: "Drafts are never sent, and invoices created before you connected aren't backfilled. Otherwise check Settings > Accounting > Sync Status for the reason and click Retry. The most common cause is a client whose name only loosely matches an existing QuickBooks customer: open the client's QuickBooks section, click Sync to QuickBooks, and pick the right customer. A safety-net job also re-checks every 15 minutes.",
+      },
+      {
+        q: "If I change or void an invoice in Landscapt, does QuickBooks update?",
+        a: "Yes. Editing a sent invoice (lines, tax, number, date, terms) updates the same QuickBooks invoice about two seconds after you stop, and voiding it voids it in QuickBooks. A voided QuickBooks invoice can't be reopened, so un-voiding in Landscapt shows a sync error instead. Changes made in QuickBooks are never pulled back.",
+      },
+      {
+        q: "Do payments and refunds sync to QuickBooks?",
+        a: "Yes. Recorded payments and Stripe card/ACH payments are sent as payments against the invoice, with your check or reference number. A split payment becomes one QuickBooks payment per invoice. Refunding voids the QuickBooks payment (full refund) or reduces it (partial), and chargebacks do the same. Prepayments and credits not applied to an invoice don't sync.",
+      },
+      {
+        q: "Why is the QuickBooks total different from my Landscapt invoice?",
+        a: "Almost always sales tax: QuickBooks calculates tax itself from a tax code at the invoice's rate, and any difference is recorded under Settings > Accounting > Sync Status. Check the tax rate on the invoice and the tax setup on the QuickBooks company, then fix whichever is wrong and Retry.",
       },
       {
         q: "How do I connect Zapier?",
