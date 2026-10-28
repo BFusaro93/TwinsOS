@@ -18,8 +18,8 @@ import {
   voidBlockedMessage,
   useUnappliedPayments,
   useApplyCreditToInvoice,
-  computeInvoiceTotals,
 } from "@/lib/hooks/use-invoices";
+import { computeInvoiceTotals } from "@/lib/invoices/totals";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useOtherCharges } from "@/lib/hooks/use-other-charges";
 import {
