@@ -92,7 +92,7 @@ export function MyDay() {
           ? t.assignedToId === myEmployeeId
           : !t.assignedToId && !!t.assignedTo && t.assignedTo.trim().toLowerCase() === myName
       );
-  const { data: allEstimates, isLoading: estimatesLoading } = useEstimates();
+  const { data: allOrgEstimates, isLoading: estimatesLoading } = useEstimates();
   const { data: allInvoices, isLoading: invoicesLoading } = useInvoices();
   const { data: allClients, isLoading: clientsLoading } = useClients();
   const { data: pendingApprovals, isLoading: approvalsLoading } = usePendingSequenceApprovals();
@@ -136,6 +136,10 @@ export function MyDay() {
     (t) => t.dueDate && t.dueDate < today
   ).length;
 
+  // Estimates follow the same Mine/Everyone scope, by sales rep.
+  const allEstimates = scope === "all"
+    ? allOrgEstimates
+    : (allOrgEstimates ?? []).filter((e) => !!myEmployeeId && e.salesRepId === myEmployeeId);
   const pendingEstimates = (allEstimates ?? []).filter((e) =>
     ["draft", "quote", "sent"].includes(e.stage)
   );
@@ -223,7 +227,7 @@ export function MyDay() {
         {allow("estimate_list") && (
           <Link href="/crm/estimates?stage=draft,quote,sent" className={KPI_CARD_CLASS}>
             <div className="flex items-start justify-between mb-2">
-              <span className="text-xs font-medium text-muted-foreground">Pending Estimates</span>
+              <span className="text-xs font-medium text-muted-foreground">{scope === "mine" ? "My Pending Estimates" : "Pending Estimates"}</span>
               <ClipboardSignature className="h-4 w-4 text-blue-400" />
             </div>
             {estimatesLoading ? (
@@ -405,7 +409,7 @@ export function MyDay() {
           {/* Recent Estimates */}
           {allow("estimate_list") && (
             <div className="rounded-lg border bg-card p-4 shadow-sm">
-              <SectionHeader title="Recent Estimates" href="/crm/estimates" />
+              <SectionHeader title={scope === "mine" ? "My Recent Estimates" : "Recent Estimates"} href="/crm/estimates" />
               <div className="mt-3">
                 {estimatesLoading ? (
                   Array.from({ length: 4 }).map((_, i) => (
@@ -414,7 +418,7 @@ export function MyDay() {
                     </div>
                   ))
                 ) : recentEstimates.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">No estimates yet</p>
+                  <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">{scope === "mine" ? "No estimates assigned to you yet" : "No estimates yet"}</p>
                 ) : (
                   recentEstimates.map((e) => (
                     <Link
