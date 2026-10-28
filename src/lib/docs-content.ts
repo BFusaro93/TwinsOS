@@ -1915,7 +1915,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "When does an invoice count as overdue, and who gets contract and estimate expiry reminders?",
-        a: "An unpaid invoice is overdue once its due day has passed; one on Due on Receipt terms with no due date goes overdue the day after its invoice date, and an invoice with no balance left is never overdue. About three days before an open estimate expires, its creator is reminded (its sales rep when there is no creator). Contract expiry warnings go only for signed or active contracts, never for cancelled, expired or draft ones. A snow job whose contract has ended no longer shows on the Snow Dispatch board, and its completed visits bill per visit.",
+        a: "An unpaid invoice is overdue once its due day has passed; one on Due on Receipt terms with no due date goes overdue the day after its invoice date, and an invoice with no balance left is never overdue. About three days before an open estimate expires, its creator is reminded (its sales rep when there is no creator). Contract expiry warnings go only for signed or active contracts, never for cancelled, expired or draft ones. A snow job whose contract has ended no longer shows on the Snow Jobs board, and its completed visits bill per visit.",
       },
       {
         q: "Why can't a crew member edit punches on a visit?",
@@ -2064,7 +2064,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I import existing data?",
-        a: "Go to Settings > Import / Export. Download the template for the entity you want to import, fill it in, and upload. The importer validates each row before committing.",
+        a: "Open the list for what you want to import (Clients, Parts, Products and so on), choose Import / Export, then Download Template to get a blank file with the right columns. Fill it in and upload it with Import CSV; the importer validates each row and tells you which rows failed or were skipped as duplicates. Settings > Import / Export also exports your data in the same column layout, which works as a template too.",
       },
       {
         q: "What file formats and values does the CSV importer accept?",
