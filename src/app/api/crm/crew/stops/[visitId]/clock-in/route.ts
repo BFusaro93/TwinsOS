@@ -121,10 +121,14 @@ export async function POST(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: candidateRows, error: candErr } = await (supabase as any)
+  const candidateQuery = (supabase as any)
     .from("crm_job_visits")
-    .select(VISIT_SELECT)
-    .eq("client_id", anchor.client_id)
+    .select(VISIT_SELECT);
+  // .eq(col, null) matches nothing in PostgREST, which left a client-less
+  // visit with no stop to start.
+  const { data: candidateRows, error: candErr } = await (anchor.client_id
+    ? candidateQuery.eq("client_id", anchor.client_id)
+    : candidateQuery.is("client_id", null))
     .eq("scheduled_date", anchor.scheduled_date)
     .is("deleted_at", null)
     // Terminal visits are never part of the stop being started. 'completed'
@@ -186,6 +190,15 @@ export async function POST(
     // 400 that parks a "didn't sync" card on work that saved.
     if (stopRows.length > 0) {
       return NextResponse.json({ visitIds: stopRows.map((r) => r.id), visits: stopRows, alreadyClockedIn: true });
+    }
+    // The anchor itself is finished (the office completed/skipped/cancelled it, or
+    // this is a stale screen): say so, so the crew app can refresh instead of
+    // reporting an opaque failure.
+    if (TERMINAL_STATUS_FILTER.includes(anchor.status)) {
+      return NextResponse.json(
+        { error: `This stop is already ${anchor.status} — refresh to see its current status.` },
+        { status: 409 }
+      );
     }
     return NextResponse.json({ error: "Nothing to clock in for this stop" }, { status: 400 });
   }
