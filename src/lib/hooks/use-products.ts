@@ -6,7 +6,7 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapProductItem } from "@/lib/supabase/mappers";
 import { setProducts } from "@/lib/hooks/cost-store";
 import { useSettingsStore } from "@/stores/settings-store";
-import type { BulkImportResult } from "@/lib/csv";
+import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
 import type { ProductItem } from "@/types";
 
 export function useProducts() {
@@ -447,8 +447,7 @@ function normalizeProductCategory(raw: string): string | null {
  *  that isn't a valid number — callers must check for NaN and treat it as a
  *  row validation failure rather than silently inserting a corrupted cost. */
 function parseCentsOrNaN(raw: string | undefined): number | null {
-  if (!raw?.trim()) return null;
-  return Math.round(parseFloat(raw) * 100);
+  return parseCsvDollarsToCents(raw);
 }
 
 /** CSV "taxable" cell: yes/true/1 -> true, no/false/0 -> false, blank -> true (new-product default). */
