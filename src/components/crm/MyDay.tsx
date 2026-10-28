@@ -18,6 +18,7 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import { RevenueSnapshot, canViewRevenueSnapshot } from "@/components/crm/reports/RevenueSnapshot";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { formatInZone, hourInZone, isoInZone, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
+import { useEmployees } from "@/lib/hooks/use-employees";
 import { useSalesMeetings, useSalesReps } from "@/lib/hooks/use-sales-meetings";
 
 const STAGE_COLOR: Record<EstimateStage, string> = {
@@ -77,7 +78,20 @@ export function MyDay() {
   const { currentUser } = useCurrentUserStore();
   const firstName = currentUser.name.split(" ")[0];
 
-  const { data: openTickets, isLoading: ticketsLoading } = useTickets({ status: "open" });
+  const { data: allOpenTickets, isLoading: ticketsLoading } = useTickets({ status: "open" });
+  const { data: employees } = useEmployees(true);
+  // My Day is per-user, so default tickets and meetings to the ones assigned to
+  // you; "Everyone" is one click away for managers who triage the whole queue.
+  const [scope, setScope] = useState<"mine" | "all">("mine");
+  const myEmployeeId = (employees ?? []).find((e) => e.userId === currentUser.id)?.id ?? null;
+  const myName = currentUser.name.trim().toLowerCase();
+  const openTickets = scope === "all"
+    ? allOpenTickets
+    : (allOpenTickets ?? []).filter((t) =>
+        myEmployeeId && t.assignedToId
+          ? t.assignedToId === myEmployeeId
+          : !t.assignedToId && !!t.assignedTo && t.assignedTo.trim().toLowerCase() === myName
+      );
   const { data: allEstimates, isLoading: estimatesLoading } = useEstimates();
   const { data: allInvoices, isLoading: invoicesLoading } = useInvoices();
   const { data: allClients, isLoading: clientsLoading } = useClients();
@@ -113,7 +127,9 @@ export function MyDay() {
   })();
   const { data: weekMeetings, isLoading: meetingsLoading } = useSalesMeetings(meetingsFrom, meetingsTo);
   const { data: salesReps } = useSalesReps();
-  const upcomingMeetings = (weekMeetings ?? []).filter((m) => m.status === "scheduled");
+  const upcomingMeetings = (weekMeetings ?? []).filter(
+    (m) => m.status === "scheduled" && (scope === "all" || (!!myEmployeeId && m.salesRepId === myEmployeeId))
+  );
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 
   const overdueCount = (openTickets ?? []).filter(
@@ -154,6 +170,23 @@ export function MyDay() {
           </h1>
           <p className="text-sm text-slate-400 dark:text-neutral-500 mt-0.5 min-h-5">{greetingBar?.date ?? ""}</p>
         </div>
+        <div className="flex items-center gap-2">
+        <div className="inline-flex rounded-md border border-border bg-card p-0.5 text-xs font-medium" role="group" aria-label="Show tickets and meetings for">
+          {(["mine", "all"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={scope === v}
+              onClick={() => setScope(v)}
+              className={cn(
+                "rounded px-2.5 py-1 transition-colors",
+                scope === v ? "bg-muted text-slate-900 dark:text-neutral-100" : "text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-neutral-200"
+              )}
+            >
+              {v === "mine" ? "Mine" : "Everyone"}
+            </button>
+          ))}
+        </div>
         <PermissionGate permission="tickets_view_modify">
           <Link
             href="/crm/tickets"
@@ -163,6 +196,7 @@ export function MyDay() {
             Add Ticket
           </Link>
         </PermissionGate>
+        </div>
       </div>
 
       {/* KPI cards */}
@@ -171,7 +205,7 @@ export function MyDay() {
         {allow("tickets_view_modify") && (
           <Link href="/crm/tickets?status=open" className={KPI_CARD_CLASS}>
             <div className="flex items-start justify-between mb-2">
-              <span className="text-xs font-medium text-muted-foreground">Open Tickets</span>
+              <span className="text-xs font-medium text-muted-foreground">{scope === "mine" ? "My Open Tickets" : "Open Tickets"}</span>
               <Ticket className="h-4 w-4 text-orange-400" />
             </div>
             {ticketsLoading ? (
@@ -264,7 +298,7 @@ export function MyDay() {
           {/* Upcoming Sales Meetings */}
           {allow("sales_meeting_list") && (
             <div className="rounded-lg border bg-card p-4 shadow-sm">
-              <SectionHeader title="Upcoming Meetings" href="/crm/sales-meetings" />
+              <SectionHeader title={scope === "mine" ? "My Upcoming Meetings" : "Upcoming Meetings"} href="/crm/sales-meetings" />
               <div className="mt-3">
                 {meetingsLoading ? (
                   Array.from({ length: 3 }).map((_, i) => (
@@ -274,7 +308,7 @@ export function MyDay() {
                   ))
                 ) : upcomingMeetings.length === 0 ? (
                   <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">
-                    No meetings scheduled in the next 7 days.
+                    {scope === "mine" ? "No meetings assigned to you in the next 7 days." : "No meetings scheduled in the next 7 days."}
                   </p>
                 ) : (
                   upcomingMeetings.slice(0, 6).map((m) => {
@@ -315,7 +349,7 @@ export function MyDay() {
           {/* Open Tickets */}
           {allow("tickets_view_modify") && (
             <div className="rounded-lg border bg-card p-4 shadow-sm">
-              <SectionHeader title="Open Tickets" href="/crm/tickets?status=open" />
+              <SectionHeader title={scope === "mine" ? "My Open Tickets" : "Open Tickets"} href="/crm/tickets?status=open" />
               <div className="mt-3">
                 {ticketsLoading ? (
                   Array.from({ length: 4 }).map((_, i) => (
@@ -325,7 +359,7 @@ export function MyDay() {
                   ))
                 ) : recentTickets.length === 0 ? (
                   <p className="py-6 text-center text-sm text-slate-400 dark:text-neutral-500">
-                    No open tickets — you&apos;re all caught up!
+                    {scope === "mine" ? "No open tickets assigned to you — you&apos;re all caught up!" : "No open tickets — you&apos;re all caught up!"}
                   </p>
                 ) : (
                   recentTickets.map((t) => (
