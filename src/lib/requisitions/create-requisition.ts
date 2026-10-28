@@ -1,4 +1,5 @@
 import { REQUISITION_SELECT } from "@/app/api/v1/requisitions/shape";
+import { computeSalesTax } from "@/lib/utils/po-tax";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = any;
@@ -105,8 +106,10 @@ export async function createRequisitionRecord(
   // grand total, but only reduces the taxable base when discountReducesTax
   // is set — requisitions have no per-line taxable flag, so the whole
   // subtotal is the taxable base (unlike purchase orders).
-  const taxableBase = discountReducesTax ? Math.max(0, subtotal - discountCost) : subtotal;
-  const salesTax = Math.round(taxableBase * (taxRatePercent / 100));
+  // Shared helper, not `base * (rate / 100)`: dividing the rate first picks up
+  // float error that can put a half-cent on the wrong side, drifting a cent
+  // from the same requisition built in the app.
+  const salesTax = computeSalesTax({ taxableSubtotal: subtotal, taxRatePercent, discountCost, discountReducesTax });
   const shippingCost = input.shippingCostCents ?? 0;
   const grandTotal = subtotal - discountCost + salesTax + shippingCost;
   // Atomic per-org/year counter, not Date.now() — two requests in the same

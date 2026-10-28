@@ -5,7 +5,7 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { closeMemberPunchesOnOtherCrews } from "@/lib/crew/member-moves";
-import type { BulkImportResult } from "@/lib/csv";
+import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
 import type { CRMEmployee, CRMCrew, CRMCrewMember, CRMCrewLogin } from "@/types/crm-employees";
 
 // ── mappers ───────────────────────────────────────────────────────────────────
@@ -254,8 +254,9 @@ export function useBulkImportEmployees() {
           // instead of silently importing a null/zero rate.
           let hourlyRateCents = 0;
           if (r.hourlyRate?.trim()) {
-            const parsed = Math.round(parseFloat(r.hourlyRate) * 100);
-            if (Number.isNaN(parsed)) {
+            // Strips "$" / thousands commas; rejects negatives.
+            const parsed = parseCsvDollarsToCents(r.hourlyRate) as number;
+            if (Number.isNaN(parsed) || parsed < 0) {
               failed.push({ row: rowNum, error: `"${firstName} ${lastName}": invalid hourly rate ("${r.hourlyRate}")` });
               continue;
             }
@@ -280,7 +281,14 @@ export function useBulkImportEmployees() {
 
           const existingId = email ? byEmail.get(email.toLowerCase()) : undefined;
           if (existingId) {
-            const { error } = await supabase.from("crm_employees").update(payload).eq("id", existingId);
+            // Only the cells the CSV filled in: `payload` turns every blank
+            // into null / a $0 hourly rate, and writing that back wiped the
+            // phone, address and pay rate of every matched employee when a
+            // partial file was re-imported.
+            const patch = Object.fromEntries(
+              Object.entries(payload).filter(([k, v]) => (k === "hourly_rate_cents" ? !!r.hourlyRate?.trim() : v !== null))
+            );
+            const { error } = await supabase.from("crm_employees").update(patch as never).eq("id", existingId);
             if (error) {
               failed.push({ row: rowNum, error: `"${firstName} ${lastName}": ${error.message}` });
               continue;

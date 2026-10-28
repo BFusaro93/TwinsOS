@@ -32,6 +32,13 @@ export function isBulkImportResult(value: unknown): value is BulkImportResult {
   );
 }
 
+/** One-line summary of a partial import (first 5 failed rows) for dialogs without a details list. */
+export function summarizeImportFailures(result: BulkImportResult): string {
+  const shown = result.failed.slice(0, 5).map((f) => `Row ${f.row}: ${f.error}`).join(" | ");
+  const more = result.failed.length > 5 ? ` (+${result.failed.length - 5} more)` : "";
+  return `${result.succeeded} imported, ${result.failed.length} failed. ${shown}${more}`;
+}
+
 // Leading characters a spreadsheet (Excel, Sheets, LibreOffice) treats as the
 // start of a formula / DDE command. Tab and CR are included because some
 // apps strip them and then evaluate what follows.
@@ -211,6 +218,37 @@ export function parseCSV(text: string): Record<string, string>[] {
 }
 
 /**
+ * Decode raw file bytes to text. UTF-8 (with or without BOM) is tried first in
+ * strict mode; a file that is not valid UTF-8 is what "CSV (Comma delimited)"
+ * saved by Windows Excel produces (Windows-1252), so fall back to that rather
+ * than turning every accented letter / smart quote into U+FFFD. UTF-16 files
+ * ("Unicode Text") are detected by their BOM.
+ */
+export function decodeCsvBytes(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder("utf-16le").decode(bytes);
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder("utf-16be").decode(bytes);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("windows-1252").decode(bytes);
+  }
+}
+
+/**
+ * Dollar cell -> integer cents. Strips "$", thousands separators and spaces
+ * ("$1,250.50" -> 125050): parseFloat("1,250.50") is 1, which silently imported
+ * a $1.00 cost. Returns null for a blank cell and NaN for content that is not
+ * a number, so callers can fail the row instead of storing a corrupt amount.
+ */
+export function parseCsvDollarsToCents(raw: string | null | undefined): number | null {
+  const cleaned = (raw ?? "").replace(/[$,\s]/g, "");
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? Math.round(n * 100) : NaN;
+}
+
+/**
  * Read a File object as text and parse it as CSV.
  * Returns a Promise resolving to the parsed rows.
  */
@@ -219,13 +257,12 @@ export function readCSVFile(file: File): Promise<Record<string, string>[]> {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const text = e.target?.result as string;
-        resolve(parseCSV(text));
+        resolve(parseCSV(decodeCsvBytes(e.target?.result as ArrayBuffer)));
       } catch (err) {
         reject(err);
       }
     };
     reader.onerror = () => reject(new Error("Failed to read file"));
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   });
 }
