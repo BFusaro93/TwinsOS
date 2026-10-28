@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapApprovalRequest } from "@/lib/supabase/mappers";
@@ -52,6 +53,9 @@ export function useApprovalRequests(entityId: string) {
   });
 }
 
+/** Equipt roles that can't see approve/reject buttons — never valid as chain approvers. */
+export const LIMITED_APPROVER_ROLES: string[] = ["viewer", "requestor"];
+
 interface SubmitForApprovalArgs {
   entityId: string;
   entityType: ApprovalFlow["entityType"];
@@ -83,6 +87,35 @@ export async function submitEntityForApproval(
   });
   if (error) throw new Error(error.message);
   const autoApproved = !!(data as { auto_approved?: boolean } | null)?.auto_approved;
+
+  if (!autoApproved && entityType !== "crm_estimate") {
+    // A saved chain can still point at a viewer/requestor (limited Equipt roles
+    // have no approve buttons), which would stall silently. Warn the submitter.
+    try {
+      const { data: pending } = await supabase
+        .from("approval_requests")
+        .select("approver_id, approver_name")
+        .eq("entity_id", entityId)
+        .eq("archived", false)
+        .eq("status", "pending");
+      const ids = ((pending ?? []) as { approver_id: string | null }[])
+        .map((r) => r.approver_id)
+        .filter((id): id is string => !!id);
+      if (ids.length > 0) {
+        const { data: profs } = await supabase.from("profiles").select("id, name, role").in("id", ids);
+        const stuck = ((profs ?? []) as { name: string | null; role: string }[]).filter((p) =>
+          LIMITED_APPROVER_ROLES.includes(p.role)
+        );
+        if (stuck.length > 0 && stuck.length === ids.length) {
+          toast.warning(
+            `Submitted, but ${stuck.map((p) => p.name ?? "an approver").join(", ")} can't approve (viewer/requestor roles have no approve buttons). Ask an admin to fix the approval flow.`
+          );
+        }
+      }
+    } catch {
+      // Best-effort warning only.
+    }
+  }
 
   if (!autoApproved) {
     // Fire approval notification emails (best-effort — don't block on failure)

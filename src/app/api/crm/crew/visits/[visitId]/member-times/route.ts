@@ -47,6 +47,28 @@ interface VisitRow {
 
 type Supabase = Awaited<ReturnType<typeof getRouteAuth>>["supabase"];
 
+
+const INVOICED_PUNCH_MESSAGE =
+  "This visit has already been invoiced, so crew punches can't be changed. Ask the office to correct the time.";
+
+/**
+ * True when the visit carries a line on a live (not deleted, not void)
+ * invoice — same definition as lib/visits/invoiced-guard. Fails closed: if the
+ * check errors, a crew caller is refused rather than let rewrite billed hours.
+ */
+async function visitIsInvoiced(supabase: Supabase, visitId: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from("crm_invoice_line_items")
+    .select("visit_id, crm_invoices!inner(deleted_at, status)")
+    .eq("visit_id", visitId)
+    .is("crm_invoices.deleted_at", null)
+    .neq("crm_invoices.status", "void")
+    .limit(1);
+  if (error) return true;
+  return (data ?? []).length > 0;
+}
+
 /**
  * Loads the visit and authorizes the caller against it. Returns the visit and
  * whether the caller is a crew login, or a ready-made error response.
@@ -171,6 +193,11 @@ export async function POST(
   if ("response" in auth) return auth.response;
   const { visit, isCrew } = auth;
 
+  // Crew can't rewrite punches once the visit is billed; office keeps the ability.
+  if (isCrew && (await visitIsInvoiced(supabase, visit.id))) {
+    return NextResponse.json({ error: INVOICED_PUNCH_MESSAGE, code: "invoiced_visit_locked" }, { status: 409 });
+  }
+
   const { crewMemberId } = parsed.data;
   const clockedInAt = parsed.data.clockedInAt ?? null;
   const clockedOutAt = parsed.data.clockedOutAt ?? null;
@@ -223,6 +250,9 @@ export async function DELETE(
 
   const auth = await authorizeVisit(supabase, user.id, visitId);
   if ("response" in auth) return auth.response;
+  if (auth.isCrew && (await visitIsInvoiced(supabase, auth.visit.id))) {
+    return NextResponse.json({ error: INVOICED_PUNCH_MESSAGE, code: "invoiced_visit_locked" }, { status: 409 });
+  }
 
   // Soft delete — never hard-delete payroll punches.
   const now = new Date().toISOString();
