@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { clearStaleSavedPaymentMethods, syncConnectStatusFromStripe } from "@/lib/stripe/connect";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("stripe connect oauth callback");
@@ -32,6 +33,9 @@ export async function GET(request: Request) {
 
   const { data: profile } = await supabase.from("profiles").select("org_id, role").eq("id", user.id).single();
   if (!profile || profile.role !== "admin") return fail("unauthorized");
+
+  // The profile org below is the staff member's HOME org — never link a Stripe account to it on behalf of a tenant.
+  if (await rejectIfImpersonating(supabase, user.id)) return fail("impersonating");
 
   try {
     const stripe = getStripe();

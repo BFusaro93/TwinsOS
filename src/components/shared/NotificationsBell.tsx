@@ -103,6 +103,7 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <CircleAlert className={cn(cls, "text-red-500 dark:text-red-400")} />;
     case "ticket_created":
     case "ticket_assigned":
+    case "ticket_contributor_added":
       return <MessageSquarePlus className={cn(cls, "text-brand-500 dark:text-brand-400")} />;
     case "ticket_comment":
       return <MessageSquare className={cn(cls, "text-slate-400 dark:text-neutral-500")} />;
@@ -112,6 +113,7 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
     case "automation_alert":
       return <Bell className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "sales_meeting_reminder":
+    case "sales_meeting_assigned":
       return <CalendarClock className={cn(cls, "text-sky-500 dark:text-sky-400")} />;
     case "comment_mention":
       return <AtSign className={cn(cls, "text-brand-500 dark:text-brand-400")} />;
@@ -216,7 +218,7 @@ export function NotificationsBell() {
       .from("notifications")
       .select("id, type, title, message, entity_id, entity_type, created_at")
       .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "injury_reported", "part_stock_short", "payment_disputed"])
+      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_contributor_added", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed"])
       .order("created_at", { ascending: false })
       .limit(50)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -374,6 +376,7 @@ export function NotificationsBell() {
       estimate_deposit_failed:    { href: (id) => `/crm/estimates/${id}`, title: "Deposit Failed" },
       ticket_created:             { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "New Ticket" },
       ticket_assigned:            { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "Ticket Assigned" },
+      ticket_contributor_added:   { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "Added to Ticket" },
       ticket_comment:             { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "New Comment" },
       contract_expiring:          { href: () => "/crm/accounting/contracts", title: "Contract Expiring Soon" },
       warranty_expiring:          { href: () => "/crm/warranties", title: "Warranty Expiring Soon" },
@@ -382,6 +385,7 @@ export function NotificationsBell() {
       part_stock_short:           { href: (id) => id ? `/cmms/parts?open=${id}` : "/cmms/parts", title: "Part Used Before Received" },
       injury_reported:            { href: (id) => id ? `/tools/injury-cases?open=${id}` : "/tools/injury-cases", title: "Injury Report" },
       sales_meeting_reminder:     { href: (id) => id ? `/crm/sales-meetings?open=${id}` : "/crm/sales-meetings", title: "Meeting Reminder" },
+      sales_meeting_assigned:     { href: (id) => id ? `/crm/sales-meetings?open=${id}` : "/crm/sales-meetings", title: "Meeting Assigned" },
     };
     dbNotifications.filter((n) => {
       if (n.type === "wo_comment" && notifPrefs?.inAppWorkOrderComment === false) return false;

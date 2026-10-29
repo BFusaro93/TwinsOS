@@ -281,7 +281,7 @@ export function TicketsGuide() {
           <li><strong>Details</strong> — status flow buttons, the client/category/assignee/dates meta grid, body text, and a Linked Records picker that can attach the ticket to an Estimate, Invoice, Job, Project or Damage Case (estimates, invoices and jobs must belong to the same client).</li>
           <li><strong>Comments &amp; History</strong> — threaded comments via the shared <code>CommentsSection</code> (<code>recordType=&quot;ticket&quot;</code>).</li>
           <li><strong>Files</strong> — attachments via the shared <code>AttachmentsSection</code>.</li>
-          <li><strong>Contributors</strong> — additional staff CC&apos;d on the ticket as participants, distinct from the single assignee. Managed by <code>use-ticket-contributors.ts</code>.</li>
+          <li><strong>Contributors</strong> — additional staff CC&apos;d on the ticket as participants, distinct from the single assignee. They get a notification when added and on every new comment (never for their own actions). Managed by <code>use-ticket-contributors.ts</code>.</li>
           <li><strong>Audit Trail</strong> — the shared <code>AuditTrailTab</code> change history.</li>
         </ul>
         <p>

@@ -294,7 +294,7 @@ export function ImportExportMenu({
         // per-row detail rather than one opaque success/error message.
         setImportSummary(result);
         setShowFailedRows(false);
-        if (result.failed.length === 0) {
+        if (result.failed.length === 0 && !result.skipped?.length) {
           setPreviewOpen(false);
           setParsedRows([]);
         }
@@ -499,7 +499,7 @@ export function ImportExportMenu({
           {importSummary && (
             <div
               className={`rounded-md border px-4 py-3 text-sm ${
-                importSummary.failed.length > 0
+                (importSummary.failed.length > 0 || !!importSummary.skipped?.length)
                   ? "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300"
                   : "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400"
               }`}
@@ -507,8 +507,9 @@ export function ImportExportMenu({
               <p className="font-medium">
                 {importSummary.succeeded} imported
                 {importSummary.failed.length > 0 && `, ${importSummary.failed.length} failed`}
+                {!!importSummary.skipped?.length && `, ${importSummary.skipped.length} skipped (duplicates)`}
               </p>
-              {importSummary.failed.length > 0 && (
+              {(importSummary.failed.length > 0 || !!importSummary.skipped?.length) && (
                 <>
                   <button
                     type="button"
@@ -522,6 +523,11 @@ export function ImportExportMenu({
                       {importSummary.failed.map((f, i) => (
                         <li key={i} className="border-b border-amber-100 dark:border-amber-900 px-2 py-1 last:border-0">
                           <span className="font-medium">Row {f.row}:</span> {f.error}
+                        </li>
+                      ))}
+                      {(importSummary.skipped ?? []).map((f, i) => (
+                        <li key={`s${i}`} className="border-b border-amber-100 dark:border-amber-900 px-2 py-1 last:border-0">
+                          <span className="font-medium">Row {f.row} (skipped):</span> {f.error}
                         </li>
                       ))}
                     </ul>

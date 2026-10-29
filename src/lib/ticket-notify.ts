@@ -232,6 +232,59 @@ export async function notifyTicketAssigned(
   });
 }
 
+/** Contributor added — tells the person they were CC'd on the ticket, the same way an
+ *  assignee hears about an assignment (and reusing its preference keys). Never notifies
+ *  the person who added them, and won't repeat within the notify window so a double
+ *  click or retry can't send two notices. */
+export async function notifyContributorAdded(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  params: NotifyBase & {
+    employeeId: string | null;
+    userName: string;
+    addedByUserId: string;
+    addedByName: string;
+    dedupeSince: string;
+  }
+) {
+  const { orgId, ticketId, ticketNumber, subject, employeeId, userName, addedByUserId, addedByName, dedupeSince } = params;
+  const userId = await resolveAssigneeId(supabase, orgId, employeeId, userName);
+  if (!userId || userId === addedByUserId) return;
+
+  const { count: alreadySent } = await supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("user_id", userId)
+    .eq("entity_id", ticketId)
+    .eq("type", "ticket_contributor_added")
+    .gte("created_at", dedupeSince);
+  if ((alreadySent ?? 0) > 0) return;
+
+  const { data: recipient } = await supabase
+    .from("profiles")
+    .select("id, email, name, notification_prefs")
+    .eq("id", userId)
+    .neq("status", "inactive")
+    .maybeSingle();
+  if (!recipient) return;
+
+  const label = ticketLabel(subject, ticketNumber);
+  await sendToRecipients(supabase, [recipient], {
+    orgId, ticketId,
+    notifType: "ticket_contributor_added",
+    inAppPrefKey: "inAppTicketAssigned", emailPrefKey: "emailTicketAssigned",
+    title: `Added to Ticket — ${label}`,
+    message: `${addedByName} added you as a contributor on ticket ${label}. You'll be notified of new comments.`,
+    emailHtml: (name) => emailShell(
+      "You Were Added to a Ticket",
+      name,
+      `<p style="margin:0 0 24px;color:#475569">${escapeHtml(addedByName)} added you as a contributor on ticket <strong>${escapeHtml(label)}</strong>. You'll be notified of new comments.</p>`,
+      ticketId
+    ),
+  });
+}
+
 /** Ticket comment — notifies the resolved assignee (if not the commenter). */
 export async function notifyTicketComment(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -240,25 +293,41 @@ export async function notifyTicketComment(
 ) {
   const { orgId, ticketId, ticketNumber, subject, assignedToId, assignedToName, commenterName, commenterId, commentBody } = params;
   const assigneeId = await resolveAssigneeId(supabase, orgId, assignedToId ?? null, assignedToName);
-  if (assigneeId && assigneeId === commenterId) return;
 
-  const { data: assigneeRow } = assigneeId
+  // Contributors are CC'd on the ticket, so they hear about comments too.
+  // Rows identify an employee by id; legacy rows whose name never matched an
+  // employee have no id and fall back to the name lookup. Employees with no
+  // login are skipped.
+  const { data: contributorRows } = await supabase
+    .from("ticket_contributors")
+    .select("employee_id, user_name")
+    .eq("ticket_id", ticketId)
+    .eq("org_id", orgId);
+  const contributorIds: string[] = [];
+  for (const row of contributorRows ?? []) {
+    const id = await resolveAssigneeId(supabase, orgId, row.employee_id ?? null, row.user_name);
+    if (id) contributorIds.push(id);
+  }
+
+  // Never notify the commenter about their own comment.
+  const userIds = Array.from(new Set([assigneeId, ...contributorIds].filter((id): id is string => !!id && id !== commenterId)));
+
+  const { data: userRows } = userIds.length
     ? await supabase
         .from("profiles")
         .select("id, email, name, notification_prefs")
-        .eq("id", assigneeId)
+        .in("id", userIds)
         .neq("status", "inactive")
-        .maybeSingle()
-    : { data: null };
+    : { data: [] };
   // A comment with no staff author (commenterId null: the client replying by
-  // text) must still reach someone. When the ticket is unassigned, assigned to
-  // an employee with no login, or assigned to a deactivated user, the reply
-  // used to be filed on the ticket and notify nobody. Fall back to the same
-  // audience that hears about new tickets. Staff-authored comments keep the
-  // assignee-only behavior.
+  // text) must still reach someone. When the ticket has no reachable
+  // assignee or contributor (unassigned, an employee with no login, or a
+  // deactivated user), the reply used to be filed on the ticket and notify
+  // nobody. Fall back to the same audience that hears about new tickets.
+  // Staff-authored comments keep the assignee + contributors behavior.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let recipients: any[] = assigneeRow ? [assigneeRow] : [];
-  if (!assigneeRow && commenterId === null) {
+  let recipients: any[] = userRows ?? [];
+  if (!recipients.length && commenterId === null) {
     recipients = await resolveBroadcastRecipients(supabase, orgId, "newTicketRecipientIds");
   }
   if (!recipients.length) return;
@@ -272,7 +341,7 @@ export async function notifyTicketComment(
     title: `New Comment — ${label}`,
     message: `${commenterName} commented on ${label}: "${snippet}"`,
     emailHtml: (name) => emailShell(
-      "New Comment on Your Ticket",
+      "New Comment on a Ticket",
       name,
       `<p style="margin:0 0 8px;color:#475569">${escapeHtml(commenterName)} commented on <strong>${escapeHtml(label)}</strong>:</p>
        <blockquote style="margin:0 0 24px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#374151;font-style:italic">${escapeHtml(snippet)}</blockquote>`,

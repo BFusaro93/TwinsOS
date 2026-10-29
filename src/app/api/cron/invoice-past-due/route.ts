@@ -46,6 +46,8 @@ export async function GET(request: Request) {
       // due_on_receipt terms falls back to the invoice date as the due day.
       .or(`and(due_date.not.is.null,due_date.lt.${utcToday}),and(due_date.is.null,terms.eq.due_on_receipt,invoice_date.lt.${utcToday})`)
       .not("status", "in", '("paid","void","draft")')
+      // Same as isInvoiceOverdue: an invoice with nothing left to pay is not past due.
+      .gt("balance_cents", 0)
       .is("deleted_at", null)
       .order("id")
       .range(from, from + 999);

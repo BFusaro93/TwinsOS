@@ -25,7 +25,7 @@ const STATUS_ROWS: [string, string, string][] = [
   ["Viewed", "Linear", "The client opened their invoice link. Only reachable once an invoice has actually been shared, so it never appears on an invoice still in Draft."],
   ["Partial", "Linear", "A payment was recorded against the invoice, but the balance is still greater than $0."],
   ["Paid", "Linear", "amount_paid_cents has covered the full total — balance is $0."],
-  ["Overdue", "Side state", "Not a stored status — computed on the fly from the due date (or the invoice date, for Due on Receipt terms) whenever it's still displayed and unpaid. It disappears the moment the balance clears or you void the invoice, with no cron job flipping a column."],
+  ["Overdue", "Side state", "Not a stored status — computed on the fly from the due date whenever it's still displayed and unpaid. An invoice on Due on Receipt terms with no due date goes overdue the day after its invoice date. An invoice with a zero or negative balance is never overdue, and neither is one whose balance has been cleared. It disappears the moment the balance clears or you void the invoice, with no cron job flipping a column."],
   ["Void", "Side state", "Set by hand when an invoice should no longer count — a mistake, a client dispute you're not pursuing. Once void, the invoice is excluded from “overdue” and left alone by all the auto-status logic below."],
 ];
 

@@ -67,6 +67,13 @@ export async function resolveEmailStepContent(
   // See 20260919010000_client_email_bounce_suppression.sql.
   if (client.email_bounced_at) return { error: "client's email address has hard-bounced (email_bounced_at)" };
 
+  // An email step saved with no subject and no body (e.g. a step dropped in and
+  // never filled out) would send a blank "(no subject)" email to every client
+  // it reaches. Skip it instead; the execution log records why.
+  if (!params.subjectTemplate?.trim() && !params.bodyTemplate?.trim()) {
+    return { error: "email step has no subject or body (fill it in to enable it)" };
+  }
+
   const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary"];
   // Keyed by trimmed lowercase address: the same mailbox typed with different
   // case or stray spaces on the client, its billing email and a contact is one

@@ -35,13 +35,15 @@ export async function GET(request: Request) {
   );
   const stripe = getStripe();
 
+  // Every org that has ever had the SMS add-on, enabled or not: an org that
+  // switched it off mid-period still owes for the overage it already sent, and
+  // billSmsOverageForPeriod only bills a positive delta, so orgs without an
+  // overage cost nothing here.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: addonRows, error } = await (supabase as any)
     .from("organization_addons")
-    .select("org_id, organizations(id, stripe_customer_id)")
-    .eq("addon_key", "sms")
-    .eq("enabled", true)
-    .not("stripe_subscription_item_id", "is", null);
+    .select("org_id, enabled, organizations(id, stripe_customer_id)")
+    .eq("addon_key", "sms");
   if (error) {
     log.error("failed to list orgs with SMS addon enabled", { error });
     return NextResponse.json({ error: "Failed to list SMS-enabled orgs" }, { status: 500 });

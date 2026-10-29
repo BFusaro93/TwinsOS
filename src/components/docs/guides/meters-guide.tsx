@@ -10,7 +10,7 @@ import {
 import { GuideLink } from "@/components/docs/GuideLink";
 
 const TRIGGER_TYPES: [string, string][] = [
-  ["Meter Threshold", "A meter's current value crosses a number you choose (see below for the full walkthrough)."],
+  ["Meter Threshold", "A cumulative meter reaches a number you choose, or a level meter drops below one (see below for the full walkthrough)."],
   ["Part Low Stock", "A part's quantity on hand drops to or below its minimum stock level — any part, or one you specify."],
   ["PM Schedule Due", "A preventive-maintenance schedule's next-due date is within N days."],
   ["Work Order Overdue", "A work order's due date has passed by N or more days."],
@@ -40,7 +40,7 @@ export function MetersGuide() {
       <DocsHero
         kicker="Equipt (CMMS)"
         title="Meters & Usage-Based Automations"
-        description="Track hours, miles, gallons, and cycles on any asset — and let Equipt open the work order for you the moment a threshold is crossed."
+        description="Track hours, miles, cycles, and fuel levels on any asset — and let Equipt open the work order for you the moment a threshold is crossed."
       />
 
       <div className="rounded-lg border border-[#e6e6e0] dark:border-border bg-card p-6 shadow-sm">
@@ -49,6 +49,7 @@ export function MetersGuide() {
         </h2>
         <div className="flex flex-col gap-1">
           <TOCLink href="#what-are-meters">What are meters</TOCLink>
+          <TOCLink href="#cumulative-vs-level">Cumulative vs. level meters</TOCLink>
           <TOCLink href="#adding-and-reading">Adding a meter and recording readings</TOCLink>
           <TOCLink href="#building-an-automation">Building a meter-threshold automation</TOCLink>
           <TOCLink href="#worked-example">Worked example: Truck #4 oil changes</TOCLink>
@@ -61,9 +62,8 @@ export function MetersGuide() {
 
       <Section id="what-are-meters" title="What are meters">
         <p>
-          A meter tracks a usage value that accrues over time on a specific asset or vehicle —
-          engine hours on a mower, odometer miles on a truck, gallons through a sprayer, cycles on
-          a piece of equipment. Unlike a PM schedule, which fires on a calendar date, a meter fires
+          A meter tracks a value on a specific asset or vehicle — engine hours on a mower,
+          odometer miles on a truck, cycles on a piece of equipment, or the fuel left in a tank. Unlike a PM schedule, which fires on a calendar date, a meter fires
           based on <em>how much the asset has actually been used</em>.
         </p>
         <p>
@@ -73,6 +73,54 @@ export function MetersGuide() {
         </p>
       </Section>
 
+      <Section id="cumulative-vs-level" title="Cumulative vs. level meters">
+        <p>Every meter is one of two kinds, chosen when you create it:</p>
+        <Table>
+          <thead>
+            <TableHeadRow>
+              <th className="px-3 py-2">&nbsp;</th>
+              <th className="px-3 py-2">Cumulative</th>
+              <th className="px-3 py-2">Level</th>
+            </TableHeadRow>
+          </thead>
+          <tbody>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Use it for</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Odometer miles, engine hours, cycles — usage that only accrues.</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Fuel, propane, or fluid in a tank — an amount that is used up and refilled.</td>
+            </tr>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Readings</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Only go up.</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Can go up or down. The current value is simply the latest reading.</td>
+            </tr>
+            <tr className="border-b border-[#eceae3] dark:border-border">
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Capacity</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Not used.</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Optional. When set, readings must stay between 0 and the capacity, and the meter shows the value in raw units plus a percent of capacity. With no capacity it shows raw units only.</td>
+            </tr>
+            <tr>
+              <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Automations</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Fire when the value reaches a threshold (≥), and can use a Service Interval to repeat. These count as preventive maintenance.</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">Fire when the value drops below a threshold (&lt;). These are low-level alerts, not preventive maintenance.</td>
+            </tr>
+          </tbody>
+        </Table>
+        <p>
+          A level automation fires once when a reading drops below the threshold, then stays quiet
+          — further low readings don&apos;t create duplicates, and finishing its work order
+          doesn&apos;t re-arm it, because the tank may still be low. It re-arms automatically once a
+          reading brings the level back to the threshold or above (after a refill), ready to alert
+          on the next drop.
+        </p>
+        <Callout>
+          Service Intervals, PM triggers, and &ldquo;reaches&rdquo; (≥) rules are for cumulative
+          meters only. Use <strong>drops below</strong> for level meters. Work orders raised by a
+          drops-below alert are normal work orders: they aren&apos;t typed Preventive, get no 7-day
+          due date, and don&apos;t count toward PM compliance.
+        </Callout>
+      </Section>
+
       <Section id="adding-and-reading" title="Adding a meter and recording readings">
         <ol className="list-decimal space-y-2 pl-5">
           <li>
@@ -80,8 +128,10 @@ export function MetersGuide() {
             <strong>+ New Meter</strong>.
           </li>
           <li>
-            Choose the unit — miles, hours, gallons, cycles, or whatever fits the asset — and give
-            the meter a name (e.g. &quot;Odometer&quot; or &quot;Engine Hours&quot;).
+            Choose the unit — miles, hours, gallons, cycles, or whatever fits the asset — give
+            the meter a name (e.g. &quot;Odometer&quot; or &quot;Fuel Tank&quot;), and pick{" "}
+            <strong>Cumulative</strong> or <strong>Level</strong>. For a level meter you can also
+            enter its <strong>capacity</strong>.
           </li>
           <li>
             To log usage, click the meter and use <strong>+ Add Reading</strong>. Enter the value
@@ -110,7 +160,8 @@ export function MetersGuide() {
           </li>
           <li>
             Choose the operator — <strong>≥</strong> is the one you&apos;ll use almost always for
-            cumulative meters like mileage or hours, since those values only go up. Enter the{" "}
+            cumulative meters like mileage or hours. For a level meter such as a fuel tank, choose{" "}
+            <strong>&lt;</strong> (drops below) instead. Enter the{" "}
             <strong>threshold value</strong> to compare against.
           </li>
           <li>
@@ -286,8 +337,8 @@ export function MetersGuide() {
             for how those work.
           </li>
           <li>
-            <strong>Meter PMs count toward PM compliance.</strong> A work order from a Meter Threshold
-            automation — created directly, or converted from the request it raised — is typed{" "}
+            <strong>Cumulative-meter PMs count toward PM compliance.</strong> A work order from a
+            Meter Threshold (≥) automation — created directly, or converted from the request it raised — is typed{" "}
             <strong>Preventive</strong> and due <strong>7 days</strong> after the meter tripped. Done
             within those 7 days is on time; a request left unconverted past 7 days counts as a missed
             PM. See{" "}

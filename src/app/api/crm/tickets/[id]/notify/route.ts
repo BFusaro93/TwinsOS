@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
-import { notifyStaffOfNewTicket, notifyTicketAssigned, notifyTicketComment } from "@/lib/ticket-notify";
+import { notifyContributorAdded, notifyStaffOfNewTicket, notifyTicketAssigned, notifyTicketComment } from "@/lib/ticket-notify";
 
 /**
  * POST /api/crm/tickets/[id]/notify
@@ -9,7 +9,7 @@ import { notifyStaffOfNewTicket, notifyTicketAssigned, notifyTicketComment } fro
  * Fired best-effort from client mutation hooks (useCreateTicket,
  * useUpdateTicket, useAddComment) after the DB write already succeeded —
  * mirrors useSubmitForApproval's fetch("/api/approval-requests/notify").
- * Body: { event: "created" | "assigned" | "comment"; commentId?: string }
+ * Body: { event: "created" | "assigned" | "comment" | "contributor_added"; commentId?: string; contributorId?: string }
  *
  * The comment body is loaded server-side from commentId (it used to be taken
  * from the request, so any member could email arbitrary text under the
@@ -44,7 +44,7 @@ export async function POST(
   if (!hasCrmAccess) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id: ticketId } = await params;
-  let body: { event?: string; commentId?: string };
+  let body: { event?: string; commentId?: string; contributorId?: string };
   try {
     body = await request.json();
   } catch {
@@ -123,6 +123,30 @@ export async function POST(
       commenterName: profile?.name ?? "Someone",
       commenterId: user.id,
       commentBody: (comment.body as string | null) ?? "",
+    });
+  } else if (body.event === "contributor_added") {
+    if (!body.contributorId) return NextResponse.json({ error: "contributorId is required" }, { status: 400 });
+    const { data: contributor } = await adminClient
+      .from("ticket_contributors")
+      .select("id, org_id, ticket_id, employee_id, user_name, added_at")
+      .eq("id", body.contributorId)
+      .maybeSingle();
+    if (
+      !contributor ||
+      contributor.org_id !== ticket.org_id ||
+      contributor.ticket_id !== ticket.id ||
+      !isFresh(contributor.added_at as string | null)
+    ) {
+      return NextResponse.json({ error: "Contributor not found" }, { status: 404 });
+    }
+    const { data: profile } = await supabase.from("profiles").select("name").eq("id", user.id).single();
+    await notifyContributorAdded(adminClient, {
+      ...base,
+      employeeId: (contributor.employee_id as string | null) ?? null,
+      userName: contributor.user_name as string,
+      addedByUserId: user.id,
+      addedByName: profile?.name ?? "Someone",
+      dedupeSince: new Date(Date.now() - NOTIFY_WINDOW_MS).toISOString(),
     });
   } else {
     return NextResponse.json({ error: `Unknown event: ${body.event}` }, { status: 400 });

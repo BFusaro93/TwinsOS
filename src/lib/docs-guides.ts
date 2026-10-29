@@ -103,7 +103,7 @@ export const DOC_GUIDES: DocGuide[] = [
     slug: "meters-guide",
     kicker: "Equipt (CMMS)",
     title: "Meters & Usage-Based Automations",
-    description: "Track hours, miles, gallons, and cycles on any asset — and let Equipt open the work order for you the moment a threshold is crossed.",
+    description: "Track hours, miles, cycles, and fuel levels on any asset — and let Equipt open the work order for you the moment a threshold is crossed.",
     icon: Gauge,
   },
   {

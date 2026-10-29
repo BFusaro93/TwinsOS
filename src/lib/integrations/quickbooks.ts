@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { logger } from "@/lib/logger";
 import { createServiceClient } from "@/lib/supabase/server";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
+import { AR_WRITE_OFF_METHOD } from "@/lib/reports/helpers";
 
 const log = logger.child("quickbooks");
 
@@ -19,14 +20,46 @@ const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
 const REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke";
 const SCOPE = "com.intuit.quickbooks.accounting";
 
-export function isQuickBooksConfigured(): boolean {
-  return Boolean(process.env.QUICKBOOKS_CLIENT_ID && process.env.QUICKBOOKS_CLIENT_SECRET);
+export type QuickBooksEnvironment = "sandbox" | "production";
+
+/**
+ * Which Intuit environment an org talks to. Orgs listed in
+ * QUICKBOOKS_SANDBOX_ORG_IDS (comma-separated) always use the sandbox keys, so a
+ * test org keeps its sandbox connection while every other org uses the
+ * deployment's default environment (QUICKBOOKS_ENVIRONMENT, sandbox when
+ * unset). Same idea as Stripe's per-org livemode.
+ */
+export function resolveQuickBooksEnvironment(orgId: string): QuickBooksEnvironment {
+  const sandboxOrgs = (process.env.QUICKBOOKS_SANDBOX_ORG_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim().toLowerCase())
+    .filter(Boolean);
+  if (sandboxOrgs.includes(orgId.toLowerCase())) return "sandbox";
+  return process.env.QUICKBOOKS_ENVIRONMENT === "production" ? "production" : "sandbox";
 }
 
-function apiBaseUrl(): string {
-  return process.env.QUICKBOOKS_ENVIRONMENT === "production"
-    ? "https://quickbooks.api.intuit.com"
-    : "https://sandbox-quickbooks.api.intuit.com";
+/** Sandbox keys when set (QUICKBOOKS_CLIENT_ID_SANDBOX/_SECRET_SANDBOX), else the default pair — which is the sandbox pair on deployments that run entirely in sandbox. */
+function credentialsFor(env: QuickBooksEnvironment): { clientId: string; clientSecret: string } | null {
+  const sandboxId = process.env.QUICKBOOKS_CLIENT_ID_SANDBOX;
+  const sandboxSecret = process.env.QUICKBOOKS_CLIENT_SECRET_SANDBOX;
+  if (env === "sandbox" && sandboxId && sandboxSecret) return { clientId: sandboxId, clientSecret: sandboxSecret };
+  const clientId = process.env.QUICKBOOKS_CLIENT_ID;
+  const clientSecret = process.env.QUICKBOOKS_CLIENT_SECRET;
+  return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
+
+export function isQuickBooksConfigured(orgId: string): boolean {
+  return credentialsFor(resolveQuickBooksEnvironment(orgId)) !== null;
+}
+
+function requireCredentials(env: QuickBooksEnvironment): { clientId: string; clientSecret: string } {
+  const creds = credentialsFor(env);
+  if (!creds) throw new Error(`QuickBooks ${env} credentials are not configured`);
+  return creds;
+}
+
+function apiBaseUrl(env: QuickBooksEnvironment): string {
+  return env === "production" ? "https://quickbooks.api.intuit.com" : "https://sandbox-quickbooks.api.intuit.com";
 }
 
 /** CSRF token for the OAuth redirect round trip — set in a cookie at /connect, verified at /callback. */
@@ -34,9 +67,9 @@ export function generateState(): string {
   return randomBytes(24).toString("hex");
 }
 
-export function getAuthorizeUrl(redirectUri: string, state: string): string {
+export function getAuthorizeUrl(redirectUri: string, state: string, env: QuickBooksEnvironment): string {
   const params = new URLSearchParams({
-    client_id: process.env.QUICKBOOKS_CLIENT_ID!,
+    client_id: requireCredentials(env).clientId,
     response_type: "code",
     scope: SCOPE,
     redirect_uri: redirectUri,
@@ -51,16 +84,17 @@ interface TokenResponse {
   expires_in: number;
 }
 
-function basicAuthHeader(): string {
-  const raw = `${process.env.QUICKBOOKS_CLIENT_ID}:${process.env.QUICKBOOKS_CLIENT_SECRET}`;
+function basicAuthHeader(env: QuickBooksEnvironment): string {
+  const { clientId, clientSecret } = requireCredentials(env);
+  const raw = `${clientId}:${clientSecret}`;
   return `Basic ${Buffer.from(raw).toString("base64")}`;
 }
 
-async function requestTokens(body: URLSearchParams): Promise<TokenResponse> {
+async function requestTokens(body: URLSearchParams, env: QuickBooksEnvironment): Promise<TokenResponse> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: {
-      Authorization: basicAuthHeader(),
+      Authorization: basicAuthHeader(env),
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
     },
@@ -73,23 +107,24 @@ async function requestTokens(body: URLSearchParams): Promise<TokenResponse> {
   return res.json();
 }
 
-export async function exchangeCodeForTokens(code: string, redirectUri: string): Promise<TokenResponse> {
+export async function exchangeCodeForTokens(code: string, redirectUri: string, env: QuickBooksEnvironment): Promise<TokenResponse> {
   return requestTokens(
-    new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectUri })
+    new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectUri }),
+    env
   );
 }
 
-export async function refreshTokens(refreshToken: string): Promise<TokenResponse> {
-  return requestTokens(new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }));
+export async function refreshTokens(refreshToken: string, env: QuickBooksEnvironment): Promise<TokenResponse> {
+  return requestTokens(new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }), env);
 }
 
 /** Best-effort — a failed revoke just leaves a dead token that expires on its own; never block disconnect on it. */
-export async function revokeToken(token: string): Promise<void> {
+export async function revokeToken(token: string, env: QuickBooksEnvironment): Promise<void> {
   try {
     await fetch(REVOKE_URL, {
       method: "POST",
       headers: {
-        Authorization: basicAuthHeader(),
+        Authorization: basicAuthHeader(env),
         "Content-Type": "application/json",
         Accept: "application/json",
       },
@@ -111,6 +146,8 @@ interface QuickBooksIntegrationConfig {
   refresh_token: string;
   realm_id: string;
   expires_at: string;
+  /** Recorded at connect time so refreshes keep using the keys the tokens were issued under. Absent on older rows. */
+  environment?: QuickBooksEnvironment;
 }
 
 /**
@@ -140,9 +177,10 @@ export async function getValidConnection(
   if (!row || !row.enabled) return null;
 
   const config = row.config as QuickBooksIntegrationConfig;
+  const env = config.environment ?? resolveQuickBooksEnvironment(orgId);
 
   if (new Date(config.expires_at).getTime() - Date.now() < 5 * 60 * 1000) {
-    const tokens = await refreshTokens(config.refresh_token);
+    const tokens = await refreshTokens(config.refresh_token, env);
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
     const nextConfig: QuickBooksIntegrationConfig = {
       ...config,
@@ -169,12 +207,12 @@ export async function getValidConnection(
     if (!updated) {
       const { data: fresh } = await db.from("integrations").select("config").eq("id", row.id).single();
       const freshConfig = fresh.config as QuickBooksIntegrationConfig;
-      return { accessToken: freshConfig.access_token, realmId: freshConfig.realm_id, baseUrl: apiBaseUrl() };
+      return { accessToken: freshConfig.access_token, realmId: freshConfig.realm_id, baseUrl: apiBaseUrl(env) };
     }
-    return { accessToken: tokens.access_token, realmId: config.realm_id, baseUrl: apiBaseUrl() };
+    return { accessToken: tokens.access_token, realmId: config.realm_id, baseUrl: apiBaseUrl(env) };
   }
 
-  return { accessToken: config.access_token, realmId: config.realm_id, baseUrl: apiBaseUrl() };
+  return { accessToken: config.access_token, realmId: config.realm_id, baseUrl: apiBaseUrl(env) };
 }
 
 export async function fetchCompanyInfo(conn: QuickBooksConnection): Promise<{ companyName: string }> {
@@ -696,6 +734,115 @@ export interface CreatePaymentInput {
   paymentDate: string;
   /** Check number / reference — QuickBooks' PaymentRefNum, which caps at 21 characters. */
   referenceNumber?: string | null;
+  /**
+   * QuickBooks `requestid`: a retry or a concurrent second caller with the same
+   * id gets the original response back instead of a duplicate Payment. Pass the
+   * allocation id so the Stripe-webhook path and the manual/cron push can race
+   * safely.
+   */
+  requestId?: string;
+}
+
+/** Marks a qbo_payment_id as a credit memo (+ its applying Payment) rather than a cash Payment. */
+const CREDIT_MEMO_LINK_PREFIX = "cm:";
+
+export function isCreditMemoLink(qboPaymentId: string): boolean {
+  return qboPaymentId.startsWith(CREDIT_MEMO_LINK_PREFIX);
+}
+
+/** "cm:<creditMemoId>:<applyingPaymentId>" -> ids. */
+function parseCreditMemoLink(link: string): { creditMemoId: string; applyPaymentId: string | null } {
+  const [, creditMemoId, applyPaymentId] = link.split(":");
+  return { creditMemoId, applyPaymentId: applyPaymentId || null };
+}
+
+async function qboPost(
+  conn: QuickBooksConnection,
+  entity: "creditmemo" | "payment",
+  body: Record<string, unknown>,
+  opts: { requestId?: string; operation?: "void" } = {}
+): Promise<Record<string, unknown>> {
+  const qs = new URLSearchParams();
+  if (opts.operation) qs.set("operation", opts.operation);
+  if (opts.requestId) qs.set("requestid", opts.requestId.slice(0, 50));
+  const q = qs.toString();
+  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/${entity}${q ? `?${q}` : ""}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${conn.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`QuickBooks ${entity} ${opts.operation ?? "creation"} failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return (entity === "creditmemo" ? data.CreditMemo : data.Payment) as Record<string, unknown>;
+}
+
+export interface CreateCreditMemoInput {
+  customerId: string;
+  qboInvoiceId: string;
+  amountCents: number;
+  txnDate: string;
+  note: string;
+  requestId: string;
+}
+
+/**
+ * Records an AR write-off / account credit as a QuickBooks CREDIT MEMO applied
+ * to the invoice, never as a cash Payment, so it doesn't inflate cash
+ * received. Two steps, both keyed by `requestid` so a retry after a partial
+ * failure resumes instead of duplicating: create the credit memo, then a
+ * zero-total Payment that links the credit memo to the invoice (QuickBooks'
+ * way of applying a credit). Returns the combined link string stored in
+ * qbo_payment_id.
+ */
+export async function createCreditMemoApplied(conn: QuickBooksConnection, input: CreateCreditMemoInput): Promise<string> {
+  const amount = centsToDollars(input.amountCents);
+  const itemId = await getOrCreateDefaultServiceItem(conn);
+  const memo = await qboPost(
+    conn,
+    "creditmemo",
+    {
+      CustomerRef: { value: input.customerId },
+      TxnDate: input.txnDate,
+      PrivateNote: input.note,
+      Line: [
+        {
+          Amount: amount,
+          DetailType: "SalesItemLineDetail",
+          Description: input.note,
+          SalesItemLineDetail: { ItemRef: { value: itemId }, Qty: 1, UnitPrice: amount },
+        },
+      ],
+    },
+    { requestId: `cm-${input.requestId}` }
+  );
+  const creditMemoId = String(memo.Id);
+  const applied = await qboPost(
+    conn,
+    "payment",
+    {
+      CustomerRef: { value: input.customerId },
+      TotalAmt: 0,
+      TxnDate: input.txnDate,
+      Line: [
+        {
+          Amount: amount,
+          LinkedTxn: [
+            { TxnId: input.qboInvoiceId, TxnType: "Invoice" },
+            { TxnId: creditMemoId, TxnType: "CreditMemo" },
+          ],
+        },
+      ],
+    },
+    { requestId: `cma-${input.requestId}` }
+  );
+  return `${CREDIT_MEMO_LINK_PREFIX}${creditMemoId}:${String(applied.Id)}`;
 }
 
 export async function createPayment(conn: QuickBooksConnection, input: CreatePaymentInput): Promise<string> {
@@ -707,21 +854,8 @@ export async function createPayment(conn: QuickBooksConnection, input: CreatePay
     ...(input.referenceNumber?.trim() ? { PaymentRefNum: input.referenceNumber.trim().slice(0, 21) } : {}),
     Line: [{ Amount: amount, LinkedTxn: [{ TxnId: input.qboInvoiceId, TxnType: "Invoice" }] }],
   };
-  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/payment`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${conn.accessToken}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`QuickBooks payment creation failed (${res.status}): ${text}`);
-  }
-  const data = await res.json();
-  return data.Payment.Id as string;
+  const created = await qboPost(conn, "payment", body, { requestId: input.requestId });
+  return String(created.Id);
 }
 
 async function recordSyncResult(
@@ -1022,7 +1156,7 @@ export async function pushPaymentToQuickBooks(
   const { data: payment } = await db
     .from("crm_payments")
     .select(`
-      id, client_id, payment_date, reference,
+      id, client_id, payment_date, reference, method, is_credit,
       clients (id, display_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip, qbo_customer_id),
       crm_payment_allocations (id, amount_cents, qbo_payment_id, crm_invoices (id, qbo_invoice_id))
     `)
@@ -1055,6 +1189,16 @@ export async function pushPaymentToQuickBooks(
     return { status: "error", reason: "ambiguous_client_match" };
   }
 
+  // An AR write-off is not money received: it goes to QuickBooks as a credit memo
+  // applied to the invoice, never as a cash Payment. A credit payment only applies
+  // a prepayment/credit that is already in QuickBooks as the original payment, so
+  // pushing it again would double count — leave it out entirely.
+  const isWriteOff = payment.method === AR_WRITE_OFF_METHOD;
+  if (payment.is_credit === true && !isWriteOff) {
+    return { status: "skipped", pushedAllocations: 0, skippedAllocations: 0 };
+  }
+  const asCreditMemo = isWriteOff;
+
   let pushed = 0;
   let skipped = 0;
   let anyError = false;
@@ -1072,17 +1216,36 @@ export async function pushPaymentToQuickBooks(
     }
 
     try {
-      const qboPaymentId = await createPayment(conn, {
-        customerId: resolved.customerId,
-        qboInvoiceId,
-        amountCents: alloc.amount_cents,
-        paymentDate: payment.payment_date,
-        referenceNumber: payment.reference,
-      });
+      // Re-check right before writing: the Stripe-webhook path and a manual /
+      // cron push can overlap, and the loop's snapshot may be stale.
+      const { data: fresh } = await db.from("crm_payment_allocations").select("qbo_payment_id").eq("id", alloc.id).maybeSingle();
+      if (fresh?.qbo_payment_id) continue;
+
+      // The allocation id is the QuickBooks requestid, so two racing callers that
+      // both reach this point still get ONE QBO transaction back.
+      const qboPaymentId = asCreditMemo
+        ? await createCreditMemoApplied(conn, {
+            customerId: resolved.customerId,
+            qboInvoiceId,
+            amountCents: alloc.amount_cents,
+            txnDate: payment.payment_date,
+            note: "AR write-off",
+            requestId: alloc.id,
+          })
+        : await createPayment(conn, {
+            customerId: resolved.customerId,
+            qboInvoiceId,
+            amountCents: alloc.amount_cents,
+            paymentDate: payment.payment_date,
+            referenceNumber: payment.reference,
+            requestId: alloc.id,
+          });
+      // Only the first writer's id lands; a concurrent writer gets the same QBO id back via requestid.
       await db
         .from("crm_payment_allocations")
         .update({ qbo_payment_id: qboPaymentId, qbo_sync_error: null, qbo_sync_attempted_at: attemptedAt })
-        .eq("id", alloc.id);
+        .eq("id", alloc.id)
+        .is("qbo_payment_id", null);
       pushed++;
     } catch (err) {
       log.error("QuickBooks payment push failed", { err, paymentId, allocationId: alloc.id, orgId });
@@ -1197,6 +1360,23 @@ async function getQboPayment(conn: QuickBooksConnection, qboPaymentId: string): 
   return data.Payment as Record<string, unknown>;
 }
 
+/** Unlinks (voids the applying Payment) then voids the credit memo. */
+async function voidCreditMemoLink(conn: QuickBooksConnection, link: string): Promise<void> {
+  const { creditMemoId, applyPaymentId } = parseCreditMemoLink(link);
+  if (applyPaymentId) {
+    await withFreshSyncToken(
+      () => getQboPayment(conn, applyPaymentId),
+      (cur) => qboPaymentRequest(conn, { Id: applyPaymentId, SyncToken: cur.SyncToken }, "void")
+    );
+  }
+  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/creditmemo/${encodeURIComponent(creditMemoId)}`, {
+    headers: { Authorization: `Bearer ${conn.accessToken}`, Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`QuickBooks credit memo lookup failed (${res.status})`);
+  const cur = (await res.json()).CreditMemo as Record<string, unknown>;
+  await qboPost(conn, "creditmemo", { Id: creditMemoId, SyncToken: cur.SyncToken }, { operation: "void" });
+}
+
 /**
  * Brings the QuickBooks Payments behind a payment in line with its allocations
  * after a refund or chargeback has been applied: an allocation that was
@@ -1226,6 +1406,12 @@ export async function mirrorPaymentReversalToQuickBooks(
 
     for (const link of links) {
       try {
+        if (isCreditMemoLink(link.qboPaymentId)) {
+          // A credit memo is not cash: a refund/chargeback shouldn't touch it. If the
+          // allocation is gone (reversed in full), unwind the credit; otherwise leave it.
+          if (!byId.has(link.allocationId)) await voidCreditMemoLink(conn, link.qboPaymentId);
+          continue;
+        }
         const current = await getQboPayment(conn, link.qboPaymentId);
         const qboCents = Math.round(Number(current.TotalAmt ?? 0) * 100);
         const row = byId.get(link.allocationId);

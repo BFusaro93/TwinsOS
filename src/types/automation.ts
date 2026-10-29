@@ -13,7 +13,7 @@ export interface MeterThresholdTrigger {
   type: "meter_threshold";
   meterId: string;       // references Meter.id
   meterLabel: string;    // "{meter.name} — {meter.assetName}" for display
-  operator: ">=" | "<=";
+  operator: ">=" | "<=" | "<";  // "<" = level meter "drops below"
   value: number;
   interval?: number | null;  // auto-advance amount after WO completion
 }

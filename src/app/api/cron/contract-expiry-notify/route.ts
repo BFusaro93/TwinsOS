@@ -63,6 +63,11 @@ export async function GET(request: Request) {
     .gte("end_date", todayStr)
     .lte("end_date", windowEndStr)
     .eq("is_active", true)
+    // Only contracts that are actually in force: cancelling or expiring a
+    // contract leaves is_active true, so without this a cancelled (or
+    // still-draft) contract nearing its end date told the rep to "renew it"
+    // and enrolled the CLIENT in the contract_about_to_expire automation.
+    .in("status", ["signed", "active"])
     .is("deleted_at", null);
 
   if (!expiring?.length) {
@@ -154,16 +159,34 @@ export async function GET(request: Request) {
 
     let emailFailed = false;
     let emailedAny = false;
-    for (const r of recipients) {
-      if (r.userId && r.prefs.inAppContractExpiring !== false) {
+    // A retry (after a failed email released the claim) must not stack a second
+    // in-app row on the users who already got this reminder: same contract +
+    // same message = same end date.
+    const inAppMessage = `${contract.title} for ${clientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. Renew it or follow up with the client before it lapses.`;
+    const inAppUserIds = recipients
+      .filter((r) => r.userId && r.prefs.inAppContractExpiring !== false)
+      .map((r) => r.userId as string);
+    if (inAppUserIds.length) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: alreadyNotified } = await (supabase as any)
+        .from("notifications")
+        .select("user_id")
+        .eq("org_id", contract.org_id as string)
+        .eq("type", "contract_expiring")
+        .eq("entity_id", contract.id as string)
+        .eq("message", inAppMessage)
+        .in("user_id", inAppUserIds);
+      const already = new Set(((alreadyNotified ?? []) as { user_id: string }[]).map((n) => n.user_id));
+      for (const userId of inAppUserIds) {
+        if (already.has(userId)) continue;
         await supabase
           .from("notifications")
           .insert({
             org_id: contract.org_id,
-            user_id: r.userId,
+            user_id: userId,
             type: "contract_expiring",
             title: `Contract Expiring Soon — ${contract.title}`,
-            message: `${contract.title} for ${clientName} ends on ${new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. Renew it or follow up with the client before it lapses.`,
+            message: inAppMessage,
             entity_id: contract.id,
             entity_type: "contract",
           });

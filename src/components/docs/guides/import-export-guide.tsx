@@ -35,12 +35,13 @@ const LANDSCAPT_ENTITIES: [string, string, string][] = [
 const DEDUPE_BEHAVIOR: [string, string, string][] = [
   ["Vendors", "name (trimmed, not case-sensitive, org-scoped; a name repeated inside one file counts as the same vendor)", "Existing vendor is updated with only the columns the row fills in (contact, email, phone, address, city, state, zip, type, website, notes). An older file with the whole address in the address column still imports; it lands in the street field, so put the city, state and zip in their own columns. A blank cell never erases saved details, and the Active column only changes the vendor's status when the cell has a value (Active, Inactive, true, false, yes or no). Renaming a vendor in the app also renames it on its parts, products, assets, vehicles and other records that show the vendor's name."],
   ["Parts", "partNumber (unique per org)", "Existing part is updated with only the columns the CSV carries (name always; description, category, unit cost, minimum stock, vendor, location, inventory flag when present). A quantity-only or cost-only file leaves everything else alone. A quantity on hand in the CSV is applied as a recorded stock adjustment (reason \u201cCSV import\u201d), not a silent overwrite, and only when it differs from the current count; a blank quantity cell leaves stock as it is. The part\u2019s catalog product is kept in step."],
-  ["Products", "partNumber (within the org)", "Existing product is updated with only the columns the CSV carries. A blank quantity, price, unit cost or vendor cell leaves the saved value alone, so a cost-only file no longer zeroes stock or resets prices. Stock changes go through a recorded adjustment (reason \u201cCSV import\u201d) so cost layers and the audit trail follow. Quantities accept decimals for materials; maintenance parts must be whole numbers."],
+  ["Products", "partNumber (within the org); rows with no part number are matched on exact name", "A row with no part number whose name already exists (ignoring case) is skipped as a duplicate. Existing product is updated with only the columns the CSV carries. A blank quantity, price, unit cost or vendor cell leaves the saved value alone, so a cost-only file no longer zeroes stock or resets prices. Stock changes go through a recorded adjustment (reason \u201cCSV import\u201d) so cost layers and the audit trail follow. Quantities accept decimals for materials; maintenance parts must be whole numbers."],
   ["Assets", "assetTag", "Existing asset is updated with only the cells the CSV filled in (make, model, year, serial, location, purchase details, asset type when a type is given). Blank cells never wipe saved values and a blank status keeps the current status."],
   ["Vehicles", "assetTag (looked up first, so a repeat import never creates a second copy)", "Existing vehicle is updated with only the cells the CSV filled in. A blank status keeps the current one, and a VIN that belongs to another vehicle is reported as a failed row."],
   ["Work Orders", "workOrderNumber", "Existing work order is updated with only the columns the CSV carries (title always). A completed work order is not reopened by a file that has no status column, and blank descriptions, assets or due dates don\u2019t erase saved ones."],
-  ["Clients", "accountNumber, only when the row supplies one", "Existing client is updated with the new row's contact and address fields. Clients without an account number always insert as new — the org auto-assigns one."],
+  ["Clients", "accountNumber when the row supplies one; otherwise primaryEmail or primaryPhone", "A matching account number updates the existing client with the row's contact and address fields. A row whose account number is blank or new but whose email or phone matches an existing client is skipped as a duplicate and listed in the skipped rows. Everything else inserts as a new client and the org auto-assigns the account number."],
   ["Leads", "primaryEmail or primaryPhone against every existing non-deleted client", "No new record is created. Instead the matched client is tagged “imported-lead” and the row is counted separately as “matched,” not “created.”"],
+  ["Employees", "email; rows with no email are matched on full name", "A matched employee is updated with only the cells your file filled in: blank phone, address or hourly rate cells never erase saved values. An employee with no email whose first and last name already exist is skipped as a duplicate. Hourly rate accepts $ and thousands separators."],
   ["Contracts", "client + contract name + start date", "The row is skipped with a note — an existing contract is never overwritten. Clients are matched by exact name; a name shared by two clients, or not found, skips the row. Status defaults to draft, so set it to active in the file for contracts that should bill. Imports don\u2019t fire automations."],
   ["Purchase Orders", "po_number (derived as PO-{year}-{csv PO #})", "The PO is skipped and listed in the failed-rows summary (\u201calready exists\u201d) — not merged, not counted as imported. Existing POs are never overwritten by a re-import."],
 ];
@@ -105,8 +106,9 @@ export function ImportExportGuide() {
           <code>=</code>, <code>+</code>, <code>-</code>, <code>@</code> or a tab would be run as a
           formula by a spreadsheet, so the export puts a single quote in front of it (a client name
           typed into a public form as <code>=HYPERLINK(...)</code> shows as plain text instead of
-          executing). Plain numbers, including negative amounts, are left alone. If you re-import
-          such a file, the quote is part of the text, so remove it first.
+          executing). Plain numbers, including negative amounts, are left alone. When you import a
+          file, that protective leading quote is removed again (only in front of <code>=</code>,{" "}
+          <code>+</code>, <code>-</code> or <code>@</code>), so an export round-trips cleanly.
         </p>
         <Callout>
           There is no dedicated &quot;Download Template&quot; button in this panel — that&apos;s a
@@ -261,11 +263,29 @@ export function ImportExportGuide() {
             erroring or creating a second copy.
           </li>
           <li>
-            Any <em>other</em> database error (not a duplicate-key violation) is not swallowed —
+            For entities not listed as reporting row by row, any <em>other</em> database error (not a duplicate-key violation) is not swallowed —
             it throws, which stops the mutation and surfaces the error message in the preview
             dialog&apos;s error banner. Rows already committed earlier in that same batch stay
             committed; rows after the failure are never attempted. There is no all-or-nothing
             transaction wrapping the whole CSV.
+          </li>
+          <li>
+            <strong>File format.</strong> The importer reads UTF-8, Windows-1252 (what Excel&apos;s
+            &ldquo;CSV (Comma delimited)&rdquo; saves on Windows) and UTF-16 (&ldquo;Unicode
+            Text&rdquo;) files, so accented letters and curly quotes come through intact. It detects
+            whether columns are separated by commas, semicolons or tabs from the header row. Money
+            cells may include <code>$</code> and thousands separators (<code>$1,250.50</code>).
+          </li>
+          <li>
+            <strong>Results summary.</strong> When some rows import and others fail, the dialog says
+            so (for example &ldquo;12 imported, 3 failed&rdquo;) and lists the failing rows with the
+            reason, rather than reporting success. Rows deliberately not imported because they match
+            an existing record are listed separately as skipped (duplicates), not as failures.
+          </li>
+          <li>
+            <strong>Vendors, Assets and Vehicles</strong> also report row by row: a row with a
+            missing name or tag, an unreadable date or price, or a database error is listed as failed
+            with the reason, and the rest of the file still imports.
           </li>
           <li>
             <strong>Estimates, Invoices and Payments</strong> are more forgiving about bad rows:

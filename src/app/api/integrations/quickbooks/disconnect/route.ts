@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { revokeToken } from "@/lib/integrations/quickbooks";
+import { revokeToken, resolveQuickBooksEnvironment, type QuickBooksEnvironment } from "@/lib/integrations/quickbooks";
 
 /** POST /api/integrations/quickbooks/disconnect — admin-only. Revokes the token and removes the connection. */
 export async function POST() {
@@ -24,8 +24,8 @@ export async function POST() {
     .maybeSingle();
 
   if (row) {
-    const config = row.config as { refresh_token?: string } | null;
-    if (config?.refresh_token) await revokeToken(config.refresh_token);
+    const config = row.config as { refresh_token?: string; environment?: QuickBooksEnvironment } | null;
+    if (config?.refresh_token) await revokeToken(config.refresh_token, config.environment ?? resolveQuickBooksEnvironment(profile.org_id));
     await supabase.from("integrations").delete().eq("id", row.id);
   }
 
