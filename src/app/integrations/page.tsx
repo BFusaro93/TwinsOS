@@ -47,8 +47,8 @@ const INTEGRATIONS: IntegrationEntry[] = [
     brand: "quickbooks",
     brandColor: "#2CA01C",
     name: "QuickBooks Online",
-    status: "soon",
-    body: "Automatic one-way sync of customers, invoices, and payments to QuickBooks so your books stay current without double entry. Coming soon — finishing setup with QuickBooks now.",
+    status: "live",
+    body: "Automatic one-way sync of customers, invoices, and payments to QuickBooks Online — including edits, voids, and refunds — so your books stay current without double entry.",
   },
   {
     brand: "zapier",

@@ -25,6 +25,7 @@ import { OnlinePaymentsGuide } from "@/components/docs/guides/online-payments-gu
 import { PartsInventoryGuide } from "@/components/docs/guides/parts-inventory-guide";
 import { PMSchedulesGuide } from "@/components/docs/guides/pm-schedules-guide";
 import { ProductCatalogGuide } from "@/components/docs/guides/product-catalog-guide";
+import { QuickBooksGuide } from "@/components/docs/guides/quickbooks-guide";
 import { ProjectsGuide } from "@/components/docs/guides/projects-guide";
 import { PurchaseOrdersGuide } from "@/components/docs/guides/purchase-orders-guide";
 import { ReportCenterGuide } from "@/components/docs/guides/report-center-guide";
@@ -81,6 +82,7 @@ export const GUIDE_COMPONENTS: Record<string, ComponentType> = {
   "reports-reference-guide": ReportsReferenceGuide,
   "required-fields-guide": RequiredFieldsGuide,
   "sales-meetings-guide": SalesMeetingsGuide,
+  "quickbooks-guide": QuickBooksGuide,
   "samsara-guide": SamsaraGuide,
   "services-pricing-guide": ServicesPricingGuide,
   "sms-onboarding-guide": SmsOnboardingGuide,
