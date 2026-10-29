@@ -104,9 +104,17 @@ returns 401 otherwise).
 ## Environment
 
 - `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET`, `QUICKBOOKS_ENVIRONMENT`
-  (`sandbox` | `production`) — **per deployment, not per org.** Sandbox tokens do
-  not work against production keys; every org reconnects when the deployment
-  flips. Watch for stray `<` `>` copied around the values.
+  (`sandbox` | `production`) are the **default for every org**. On production
+  these are the production keys. Sandbox tokens do not work against production
+  keys. Watch for stray `<` `>` copied around the values.
+- **Per-org sandbox:** orgs listed in `QUICKBOOKS_SANDBOX_ORG_IDS`
+  (comma-separated) use `QUICKBOOKS_CLIENT_ID_SANDBOX` /
+  `QUICKBOOKS_CLIENT_SECRET_SANDBOX` and the sandbox API. Today that is the
+  it@ sandbox org only. The environment is stored on each connection
+  (`integrations.config.environment`) at connect time, so token refresh and
+  revoke keep using the keys the tokens were issued under. A connection made
+  before this existed has no stored value and falls back to the resolved
+  environment.
 - Redirect URI registered at Intuit must be exactly
   `https://<domain>/api/integrations/quickbooks/callback`.
 - `CRON_SECRET` for `/api/cron/quickbooks-sync` (`vercel.json`).
