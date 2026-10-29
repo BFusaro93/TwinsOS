@@ -14,6 +14,7 @@ import {
   resumeStop,
   skipVisit,
   startDrive,
+  submitUpsell,
   uploadVisitPhoto,
   useJobProductMaterials,
 } from '@/lib/api';
@@ -35,6 +36,7 @@ import {
   type RecordMaterialUsagePayload,
   type RequestMaterialsPayload,
   type SkipServicePayload,
+  type SuggestWorkPayload,
 } from './types';
 
 // Drains the local offline queue against the real API. Triggered by (a)
@@ -176,6 +178,20 @@ async function processItem(item: QueueItem): Promise<void> {
         // retry after a flaky partial success re-uses the same comment id
         // server-side instead of appending the note twice.
         await addCrewNote(item.visitId, payload.note, item.id);
+        break;
+      }
+      case 'suggest_work': {
+        // item.visitId is the stop's anchor visit id, same as photos/materials.
+        const payload = item.payload as SuggestWorkPayload;
+        await submitUpsell(item.visitId, payload.serviceId, payload.note, payload.photo);
+        if (payload.photo) {
+          // Only delete the local copy after a confirmed send, like add_photo.
+          try {
+            new File(payload.photo.localUri).delete();
+          } catch {
+            // Already gone — not fatal.
+          }
+        }
         break;
       }
       case 'skip_service': {

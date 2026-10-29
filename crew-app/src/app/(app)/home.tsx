@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
+import { CrewDayBanner, EditCrewModal, useCrewDay } from '@/components/crew-day';
 import { SyncStatusChip } from '@/components/sync-status-chip';
 import { useAuth } from '@/lib/auth-context';
 import { C } from '@/lib/colors';
@@ -20,6 +21,7 @@ import {
 import { applyDriveOverlay, applyStopQueueOverlay } from '@/lib/offline/overlay';
 import { useOfflineQueue } from '@/lib/offline/queue-context';
 import { unregisterPushToken } from '@/lib/notifications';
+import { notesToPlainText } from '@/lib/rich-notes';
 
 const TODAY = todayLocalDate();
 
@@ -28,6 +30,8 @@ export default function HomeScreen() {
   const { stops: serverStops, crewName, drive: serverDrive, isLoading, isRefetching, error, refetch } =
     useCrewStops(TODAY);
   const { items, itemsForVisit, enqueueStartDrive, enqueueEndDrive } = useOfflineQueue();
+  const crewDay = useCrewDay();
+  const [editCrewOpen, setEditCrewOpen] = useState(false);
 
   // Overlay each stop with its own pending queue actions (clock/pause) so a
   // stop clocked in or paused offline reads that way here immediately too,
@@ -61,6 +65,13 @@ export default function HomeScreen() {
     return p === 'clocked_in' || p === 'on_break';
   });
 
+  // The stop in progress, if any — Edit Crew passes its anchor visit so a
+  // member clocking in/out also moves that stop's job punch.
+  const activeStopAnchorId = stops.find((s) => {
+    const p = stopProgress(s);
+    return p === 'clocked_in' || p === 'on_break';
+  })?.anchorVisitId;
+
   const completedCount = stops.filter((s) => stopProgress(s) === 'completed').length;
 
   // Refresh whenever the tab regains focus — e.g. coming back from a stop
@@ -68,6 +79,7 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       void refetch();
+      void crewDay.refresh();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
   );
@@ -120,6 +132,14 @@ export default function HomeScreen() {
           </View>
         ) : null}
       </View>
+
+      <CrewDayBanner crewDay={crewDay} anyJobActive={anyStopActive} onEditCrew={() => setEditCrewOpen(true)} />
+      <EditCrewModal
+        visible={editCrewOpen}
+        onClose={() => setEditCrewOpen(false)}
+        crewDay={crewDay}
+        visitId={activeStopAnchorId}
+      />
 
       <DriveBanner
         drive={drive}
@@ -260,7 +280,7 @@ function StopCard({ stop, onPress }: { stop: ReturnType<typeof applyStopQueueOve
       {stop.notesToCrew ? (
         <View style={styles.cardNote}>
           <Text style={styles.cardNoteText} numberOfLines={2}>
-            {stop.notesToCrew}
+            {notesToPlainText(stop.notesToCrew)}
           </Text>
         </View>
       ) : null}

@@ -65,6 +65,14 @@ interface OfflineQueueContextValue {
   enqueueAddNote: (anchorVisitId: string, note: string) => Promise<void>;
   /** `visitId` here is the individual service visit id, NOT the stop's anchor — each service in a stop can be skipped independently, matching the web stop page. */
   enqueueSkipVisit: (visitId: string, reason: string, serviceName: string) => Promise<void>;
+  /** `visitId` is the stop's anchor visit id. `photo` is a local copy the queue item owns (see captureVisitPhoto). */
+  enqueueSuggestWork: (
+    anchorVisitId: string,
+    serviceId: string,
+    serviceName: string,
+    note: string,
+    photo?: { localUri: string; mimeType: string; fileName: string }
+  ) => Promise<void>;
   /** Resets a failed item back to pending so the sync engine attempts it again. */
   retry: (id: string) => Promise<void>;
   /** Permanently discards a failed item (e.g. after the crew member acknowledges a conflict). */
@@ -327,6 +335,28 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
     [refresh, userId]
   );
 
+  const enqueueSuggestWork = useCallback(
+    async (
+      anchorVisitId: string,
+      serviceId: string,
+      serviceName: string,
+      note: string,
+      photo?: { localUri: string; mimeType: string; fileName: string }
+    ) => {
+      if (!userId) throw new Error('Not signed in');
+      await enqueueAction({
+        id: randomUUID(),
+        type: 'suggest_work',
+        visitId: anchorVisitId,
+        userId,
+        payload: { serviceId, serviceName, note, ...(photo ? { photo } : {}) },
+      });
+      await refresh();
+      void drainQueue();
+    },
+    [refresh, userId]
+  );
+
   const retry = useCallback(
     async (id: string) => {
       await retryQueueItem(id);
@@ -369,6 +399,7 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
       enqueueAcknowledgeNotes,
       enqueueAddNote,
       enqueueSkipVisit,
+      enqueueSuggestWork,
       retry,
       discard,
       syncNow,
@@ -388,6 +419,7 @@ export function OfflineQueueProvider({ children }: PropsWithChildren) {
     enqueueAcknowledgeNotes,
     enqueueAddNote,
     enqueueSkipVisit,
+    enqueueSuggestWork,
     retry,
     discard,
     syncNow,

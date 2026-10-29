@@ -2,9 +2,13 @@ import { File, UploadType } from 'expo-file-system';
 
 import { supabase } from '@/lib/supabase';
 import type {
+  ChemicalConfirmationStatus,
+  CrewDay,
+  CrewDayAction,
   CrewVisitsResponse,
   JobProductMaterial,
   PickerProduct,
+  UpsellService,
   VisitChemicalApplication,
   VisitPhoto,
   VisitRequisition,
@@ -231,9 +235,126 @@ export async function fetchVisitPhotos(visitId: string): Promise<VisitPhoto[]> {
   return authedFetch(`/api/crm/crew/visits/${visitId}/photos`) as Promise<VisitPhoto[]>;
 }
 
-/** GET /api/crm/crew/visits/:id/chemicals — read-only chemical mix info for a visit. */
-export async function fetchVisitChemicals(visitId: string): Promise<VisitChemicalApplication[]> {
-  return authedFetch(`/api/crm/crew/visits/${visitId}/chemicals`) as Promise<VisitChemicalApplication[]>;
+/**
+ * GET /api/crm/crew/chemicals?visitIds=a,b — every chemical application across
+ * the stop's visits, including `visitId`, `preloaded` and `confirmedAt` (the
+ * single-visit route omits them). Batched because a stop bundles several
+ * same-day visits and the confirm gate + skipped-service filter need all of them.
+ */
+export async function fetchStopChemicals(visitIds: string[]): Promise<VisitChemicalApplication[]> {
+  if (visitIds.length === 0) return [];
+  return authedFetch(
+    `/api/crm/crew/chemicals?visitIds=${encodeURIComponent(visitIds.join(','))}`
+  ) as Promise<VisitChemicalApplication[]>;
+}
+
+/** GET /api/crm/crew/chemicals/confirm?visitIds=… — whether the confirm-chemicals gate applies. */
+export async function fetchChemicalConfirmationStatus(visitIds: string[]): Promise<ChemicalConfirmationStatus> {
+  return authedFetch(
+    `/api/crm/crew/chemicals/confirm?visitIds=${encodeURIComponent(visitIds.join(','))}`
+  ) as Promise<ChemicalConfirmationStatus>;
+}
+
+/**
+ * POST /api/crm/crew/chemicals/confirm — records what was actually applied
+ * (amount, or "Not used") on each preloaded row. Online-only on purpose: it
+ * must land before Stop Job, which the server refuses (409
+ * chemical_confirmation_required) while any preloaded row is unconfirmed.
+ */
+export async function confirmChemicals(
+  items: { id: string; used: boolean; chemicalAmount?: number }[]
+): Promise<{ confirmed: number }> {
+  return authedFetch(`/api/crm/crew/chemicals/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  }) as Promise<{ confirmed: number }>;
+}
+
+/** GET /api/crm/crew/upsell-services — services crews may suggest from the field. */
+export async function fetchUpsellServices(): Promise<UpsellService[]> {
+  return authedFetch(`/api/crm/crew/upsell-services`) as Promise<UpsellService[]>;
+}
+
+/**
+ * POST /api/crm/crew/visits/:anchorVisitId/upsell — a crew flags work they
+ * spotted. Multipart (serviceId, note, optional file). Called by the sync
+ * engine for queued 'suggest_work' items. No Idempotency-Key support, but the
+ * server dedupes the same user+service+visit+exact note within 10 minutes, so
+ * a retried identical request is safe. Returns { id, ticketNumber, photoAttached }.
+ */
+export async function submitUpsell(
+  visitId: string,
+  serviceId: string,
+  note: string,
+  photo?: { localUri: string; mimeType: string; fileName: string }
+): Promise<{ id: string; ticketNumber: number; photoAttached: boolean }> {
+  const { data } = await supabase.auth.getSession();
+  const session = data.session;
+  if (!session) throw new ApiError(401, 'Not signed in');
+  const url = `${API_BASE_URL}/api/crm/crew/visits/${visitId}/upsell`;
+
+  if (photo) {
+    const result = await new File(photo.localUri).upload(url, {
+      httpMethod: 'POST',
+      uploadType: UploadType.MULTIPART,
+      fieldName: 'file',
+      mimeType: photo.mimeType,
+      parameters: { serviceId, note },
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (result.status < 200 || result.status >= 300) {
+      let message = result.body || `Upload failed (${result.status})`;
+      try {
+        const parsed = JSON.parse(result.body);
+        if (typeof parsed?.error === 'string') message = parsed.error;
+      } catch {
+        // not JSON — keep the raw text
+      }
+      throw new ApiError(result.status, message);
+    }
+    return JSON.parse(result.body);
+  }
+
+  const form = new FormData();
+  form.append('serviceId', serviceId);
+  form.append('note', note);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: form,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new ApiError(res.status, typeof json?.error === 'string' ? json.error : `Request failed (${res.status})`);
+  }
+  return json;
+}
+
+/** GET /api/crm/crew/day — today's roster with each member's shift + absent flag. */
+export async function fetchCrewDay(): Promise<CrewDay> {
+  return authedFetch(`/api/crm/crew/day`) as Promise<CrewDay>;
+}
+
+/**
+ * POST /api/crm/crew/day — Start/End Day and per-member in/out/add. The server
+ * stamps its own `now` (no occurredAt / Idempotency-Key), so these are
+ * deliberately NOT queued offline: a replay hours later would credit the wrong
+ * time against payroll. `visitId` is the in-progress stop's anchor visit, which
+ * keeps that stop's job punch in step with the member's shift.
+ */
+export async function postCrewDay(
+  action: CrewDayAction,
+  opts: { crewMemberId?: string; visitId?: string } = {}
+): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/day`, { method: 'POST', body: JSON.stringify({ action, ...opts }) });
+}
+
+/** POST /api/crm/crew/attendance — mark a member "Not working" today (or back). Online-only, same reason as postCrewDay(). */
+export async function setMemberAbsent(crewMemberId: string, absent: boolean, visitId?: string): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/attendance`, {
+    method: 'POST',
+    body: JSON.stringify({ crewMemberId, absent, ...(visitId ? { visitId } : {}) }),
+  });
 }
 
 /**

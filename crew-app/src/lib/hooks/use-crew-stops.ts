@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { fetchCrewVisits } from '@/lib/api';
+import { subscribeScheduleRefresh } from '@/lib/hooks/schedule-refresh';
 import type { CrewDriveInfo, CrewStop } from '@/lib/types';
 
 interface UseCrewStopsResult {
@@ -54,6 +55,9 @@ export function useCrewStops(date: string): UseCrewStopsResult {
   }, [load]);
 
   const refetch = useCallback(() => load(false), [load]);
+
+  // A push (new assignment, dispatcher note) asks every mounted schedule to refresh.
+  useEffect(() => subscribeScheduleRefresh(() => void load(false)), [load]);
 
   return { stops, crewName, drive, isLoading, isRefetching, error, refetch };
 }

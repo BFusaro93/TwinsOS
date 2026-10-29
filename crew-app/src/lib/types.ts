@@ -154,6 +154,7 @@ export interface PickerProduct {
 // office for the mix ratio" rather than a wrong guess.
 export interface VisitChemicalApplication {
   id: string;
+  visitId: string;
   productName: string | null;
   used: boolean;
   chemicalAmount: number | null;
@@ -161,7 +162,44 @@ export interface VisitChemicalApplication {
   solutionAmount: number | null;
   solutionUnitName: string | null;
   applicationRateLabel: string | null;
+  /** Preloaded from the service at the planned amount; an estimate until the crew confirms. */
+  preloaded: boolean;
+  /** When the crew confirmed what was actually used (null = still an estimate). */
+  confirmedAt: string | null;
 }
+
+// GET /api/crm/crew/chemicals/confirm — whether the confirm-chemicals gate
+// applies to this stop (org mode + visits an admin waived).
+export interface ChemicalConfirmationStatus {
+  mode: 'crew_required' | 'office_later';
+  waivedVisitIds: string[];
+}
+
+// GET /api/crm/crew/upsell-services — services the office opened up for crews
+// to suggest from the field. An empty list hides "Suggest work".
+export interface UpsellService {
+  id: string;
+  name: string;
+  upsellPitch: string | null;
+}
+
+// GET/POST /api/crm/crew/day — the crew's paid day (shop to shop) + roster.
+export interface CrewDayMember {
+  id: string;
+  name: string;
+  role: string | null;
+  absent: boolean;
+  startedAt: string | null;
+  endedAt: string | null;
+}
+
+export interface CrewDay {
+  workDate: string;
+  available: { id: string; name: string; role: string | null }[];
+  members: CrewDayMember[];
+}
+
+export type CrewDayAction = 'start_day' | 'end_day' | 'member_in' | 'member_out' | 'add_member';
 
 // Mirrors GET/POST .../job-products[/:id/use-materials] — materials office
 // staff already planned/called for on this job (crm_job_products), distinct

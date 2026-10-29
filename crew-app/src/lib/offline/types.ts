@@ -13,7 +13,8 @@ export type QueueActionType =
   | 'record_material_usage'
   | 'acknowledge_notes'
   | 'add_note'
-  | 'skip_service';
+  | 'skip_service'
+  | 'suggest_work';
 
 export type QueueStatus = 'pending' | 'syncing' | 'failed';
 
@@ -93,6 +94,15 @@ export interface SkipServicePayload {
   serviceName: string;
 }
 
+export interface SuggestWorkPayload {
+  serviceId: string;
+  /** Denormalized for display while queued/syncing, like RequestMaterialsPayload's productItemName. */
+  serviceName: string;
+  note: string;
+  /** file:// copy this queue item owns in the app's document dir; deleted after a confirmed send. */
+  photo?: { localUri: string; mimeType: string; fileName: string };
+}
+
 export type QueuePayload =
   | ClockInPayload
   | ClockOutPayload
@@ -105,7 +115,8 @@ export type QueuePayload =
   | RecordMaterialUsagePayload
   | AcknowledgeNotesPayload
   | AddNotePayload
-  | SkipServicePayload;
+  | SkipServicePayload
+  | SuggestWorkPayload;
 
 /** A single queued offline action, persisted in SQLite (see db.ts). */
 export interface QueueItem {
