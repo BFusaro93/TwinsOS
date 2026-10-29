@@ -20,14 +20,46 @@ const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
 const REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke";
 const SCOPE = "com.intuit.quickbooks.accounting";
 
-export function isQuickBooksConfigured(): boolean {
-  return Boolean(process.env.QUICKBOOKS_CLIENT_ID && process.env.QUICKBOOKS_CLIENT_SECRET);
+export type QuickBooksEnvironment = "sandbox" | "production";
+
+/**
+ * Which Intuit environment an org talks to. Orgs listed in
+ * QUICKBOOKS_SANDBOX_ORG_IDS (comma-separated) always use the sandbox keys, so a
+ * test org keeps its sandbox connection while every other org uses the
+ * deployment's default environment (QUICKBOOKS_ENVIRONMENT, sandbox when
+ * unset). Same idea as Stripe's per-org livemode.
+ */
+export function resolveQuickBooksEnvironment(orgId: string): QuickBooksEnvironment {
+  const sandboxOrgs = (process.env.QUICKBOOKS_SANDBOX_ORG_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim().toLowerCase())
+    .filter(Boolean);
+  if (sandboxOrgs.includes(orgId.toLowerCase())) return "sandbox";
+  return process.env.QUICKBOOKS_ENVIRONMENT === "production" ? "production" : "sandbox";
 }
 
-function apiBaseUrl(): string {
-  return process.env.QUICKBOOKS_ENVIRONMENT === "production"
-    ? "https://quickbooks.api.intuit.com"
-    : "https://sandbox-quickbooks.api.intuit.com";
+/** Sandbox keys when set (QUICKBOOKS_CLIENT_ID_SANDBOX/_SECRET_SANDBOX), else the default pair — which is the sandbox pair on deployments that run entirely in sandbox. */
+function credentialsFor(env: QuickBooksEnvironment): { clientId: string; clientSecret: string } | null {
+  const sandboxId = process.env.QUICKBOOKS_CLIENT_ID_SANDBOX;
+  const sandboxSecret = process.env.QUICKBOOKS_CLIENT_SECRET_SANDBOX;
+  if (env === "sandbox" && sandboxId && sandboxSecret) return { clientId: sandboxId, clientSecret: sandboxSecret };
+  const clientId = process.env.QUICKBOOKS_CLIENT_ID;
+  const clientSecret = process.env.QUICKBOOKS_CLIENT_SECRET;
+  return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
+
+export function isQuickBooksConfigured(orgId: string): boolean {
+  return credentialsFor(resolveQuickBooksEnvironment(orgId)) !== null;
+}
+
+function requireCredentials(env: QuickBooksEnvironment): { clientId: string; clientSecret: string } {
+  const creds = credentialsFor(env);
+  if (!creds) throw new Error(`QuickBooks ${env} credentials are not configured`);
+  return creds;
+}
+
+function apiBaseUrl(env: QuickBooksEnvironment): string {
+  return env === "production" ? "https://quickbooks.api.intuit.com" : "https://sandbox-quickbooks.api.intuit.com";
 }
 
 /** CSRF token for the OAuth redirect round trip — set in a cookie at /connect, verified at /callback. */
@@ -35,9 +67,9 @@ export function generateState(): string {
   return randomBytes(24).toString("hex");
 }
 
-export function getAuthorizeUrl(redirectUri: string, state: string): string {
+export function getAuthorizeUrl(redirectUri: string, state: string, env: QuickBooksEnvironment): string {
   const params = new URLSearchParams({
-    client_id: process.env.QUICKBOOKS_CLIENT_ID!,
+    client_id: requireCredentials(env).clientId,
     response_type: "code",
     scope: SCOPE,
     redirect_uri: redirectUri,
@@ -52,16 +84,17 @@ interface TokenResponse {
   expires_in: number;
 }
 
-function basicAuthHeader(): string {
-  const raw = `${process.env.QUICKBOOKS_CLIENT_ID}:${process.env.QUICKBOOKS_CLIENT_SECRET}`;
+function basicAuthHeader(env: QuickBooksEnvironment): string {
+  const { clientId, clientSecret } = requireCredentials(env);
+  const raw = `${clientId}:${clientSecret}`;
   return `Basic ${Buffer.from(raw).toString("base64")}`;
 }
 
-async function requestTokens(body: URLSearchParams): Promise<TokenResponse> {
+async function requestTokens(body: URLSearchParams, env: QuickBooksEnvironment): Promise<TokenResponse> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: {
-      Authorization: basicAuthHeader(),
+      Authorization: basicAuthHeader(env),
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
     },
@@ -74,23 +107,24 @@ async function requestTokens(body: URLSearchParams): Promise<TokenResponse> {
   return res.json();
 }
 
-export async function exchangeCodeForTokens(code: string, redirectUri: string): Promise<TokenResponse> {
+export async function exchangeCodeForTokens(code: string, redirectUri: string, env: QuickBooksEnvironment): Promise<TokenResponse> {
   return requestTokens(
-    new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectUri })
+    new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectUri }),
+    env
   );
 }
 
-export async function refreshTokens(refreshToken: string): Promise<TokenResponse> {
-  return requestTokens(new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }));
+export async function refreshTokens(refreshToken: string, env: QuickBooksEnvironment): Promise<TokenResponse> {
+  return requestTokens(new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }), env);
 }
 
 /** Best-effort — a failed revoke just leaves a dead token that expires on its own; never block disconnect on it. */
-export async function revokeToken(token: string): Promise<void> {
+export async function revokeToken(token: string, env: QuickBooksEnvironment): Promise<void> {
   try {
     await fetch(REVOKE_URL, {
       method: "POST",
       headers: {
-        Authorization: basicAuthHeader(),
+        Authorization: basicAuthHeader(env),
         "Content-Type": "application/json",
         Accept: "application/json",
       },
@@ -112,6 +146,8 @@ interface QuickBooksIntegrationConfig {
   refresh_token: string;
   realm_id: string;
   expires_at: string;
+  /** Recorded at connect time so refreshes keep using the keys the tokens were issued under. Absent on older rows. */
+  environment?: QuickBooksEnvironment;
 }
 
 /**
@@ -141,9 +177,10 @@ export async function getValidConnection(
   if (!row || !row.enabled) return null;
 
   const config = row.config as QuickBooksIntegrationConfig;
+  const env = config.environment ?? resolveQuickBooksEnvironment(orgId);
 
   if (new Date(config.expires_at).getTime() - Date.now() < 5 * 60 * 1000) {
-    const tokens = await refreshTokens(config.refresh_token);
+    const tokens = await refreshTokens(config.refresh_token, env);
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
     const nextConfig: QuickBooksIntegrationConfig = {
       ...config,
@@ -170,12 +207,12 @@ export async function getValidConnection(
     if (!updated) {
       const { data: fresh } = await db.from("integrations").select("config").eq("id", row.id).single();
       const freshConfig = fresh.config as QuickBooksIntegrationConfig;
-      return { accessToken: freshConfig.access_token, realmId: freshConfig.realm_id, baseUrl: apiBaseUrl() };
+      return { accessToken: freshConfig.access_token, realmId: freshConfig.realm_id, baseUrl: apiBaseUrl(env) };
     }
-    return { accessToken: tokens.access_token, realmId: config.realm_id, baseUrl: apiBaseUrl() };
+    return { accessToken: tokens.access_token, realmId: config.realm_id, baseUrl: apiBaseUrl(env) };
   }
 
-  return { accessToken: config.access_token, realmId: config.realm_id, baseUrl: apiBaseUrl() };
+  return { accessToken: config.access_token, realmId: config.realm_id, baseUrl: apiBaseUrl(env) };
 }
 
 export async function fetchCompanyInfo(conn: QuickBooksConnection): Promise<{ companyName: string }> {

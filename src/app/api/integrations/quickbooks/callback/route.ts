@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { exchangeCodeForTokens } from "@/lib/integrations/quickbooks";
+import { exchangeCodeForTokens, resolveQuickBooksEnvironment } from "@/lib/integrations/quickbooks";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("quickbooks-callback");
@@ -33,7 +33,8 @@ export async function GET(request: Request) {
   if (!profile || profile.role !== "admin") return NextResponse.redirect(`${settingsUrl}&quickbooks=error`);
 
   try {
-    const tokens = await exchangeCodeForTokens(code, `${url.origin}/api/integrations/quickbooks/callback`);
+    const environment = resolveQuickBooksEnvironment(profile.org_id);
+    const tokens = await exchangeCodeForTokens(code, `${url.origin}/api/integrations/quickbooks/callback`, environment);
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
     const { error } = await supabase.from("integrations").upsert(
@@ -45,6 +46,7 @@ export async function GET(request: Request) {
           refresh_token: tokens.refresh_token,
           realm_id: realmId,
           expires_at: expiresAt,
+          environment,
         },
         enabled: true,
         last_sync_at: new Date().toISOString(),
