@@ -5589,6 +5589,7 @@ export type Database = {
           applied_discount_id: string | null
           balance_cents: number
           client_id: string
+          consolidated_into_id: string | null
           contract_id: string | null
           created_at: string
           created_by: string | null

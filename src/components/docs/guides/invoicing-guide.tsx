@@ -51,6 +51,7 @@ export function InvoicingGuide() {
           <TOCLink href="#other-charges">Other charges (late fees, trip charges, surcharges)</TOCLink>
           <TOCLink href="#invoice-list">The Invoices list: columns and filters</TOCLink>
           <TOCLink href="#status-lifecycle">Invoice status lifecycle</TOCLink>
+          <TOCLink href="#merge-consolidate">Merging and consolidating invoices</TOCLink>
           <TOCLink href="#recording-payments">Recording payments</TOCLink>
           <TOCLink href="#partial-payment-example">Worked example: a partial payment</TOCLink>
           <TOCLink href="#money-limits">Discounts, tax rate, and quantity limits</TOCLink>
@@ -457,6 +458,37 @@ export function InvoicingGuide() {
           balance, the client&apos;s Account Balance and the charge queues stay correct. Likewise an
           invoice with payments recorded can&apos;t be moved back to Draft or Sent.
         </Callout>
+      </Section>
+
+      <Section id="merge-consolidate" title="Merging and consolidating invoices">
+        <p>
+          On the Invoices list, tick two or more invoices and choose{" "}
+          <strong>Merge / Consolidate Invoices</strong> from the actions menu. What happens depends
+          on whose invoices you picked.
+        </p>
+        <ul className="list-disc space-y-1.5 pl-5">
+          <li>
+            <strong>Same client (merge).</strong> You pick one invoice to keep; the others&apos; line
+            items move onto it and they&apos;re voided. Locked invoices can&apos;t be merged.
+          </li>
+          <li>
+            <strong>Sub-accounts of one parent (consolidate).</strong> To bill a property manager for
+            several properties together, select the invoices from the sub-accounts and choose
+            the same action. It creates one <strong>new invoice on the parent account</strong>. Each line is
+            tagged with its sub-account name in brackets, so the customer can see which property it
+            belongs to. Every line keeps the tax it was already charged, so sub-accounts with different
+            tax rates stay correct (the invoice&apos;s tax rate shows a blended figure when they differ).
+            The original invoices are voided and linked to the new one. The new invoice starts as a
+            draft: review it, then print or send it like any other.
+          </li>
+        </ul>
+        <p>
+          Consolidating is blocked for locked invoices, invoices already synced to QuickBooks, invoices
+          with a bank payment still processing or an open dispute, and invoices where a{" "}
+          <em>sub-account</em> has already made a payment (a payment stays with the account that made
+          it). Payments the parent made, such as one check covering several properties, move onto the
+          new invoice.
+        </p>
       </Section>
 
       <Section id="recording-payments" title="Recording payments">
