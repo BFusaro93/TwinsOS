@@ -2394,12 +2394,13 @@ export function useCreateJobsFromEstimate() {
 
               // A catalog product under a ONE-TIME/project service becomes a pending,
               // zero-price job product, so it lands in Materials Needed, the crew's
-              // "Materials called for" (Used / Not used) and inventory. Not for
-              // recurring jobs: a job product is recorded once and then final, so a
-              // weekly service would only ever account for its first visit — those
-              // keep the read-only list. job_service_subitem_id lets the invoice
+              // "Materials called for" (Used / Not used) and inventory. Only for single-
+              // visit job types (one-time, project, waiting list): a job product is
+              // recorded once and then final, so a recurring or package job (many
+              // visits) would only ever account for its first visit — those keep the
+              // read-only list. job_service_subitem_id lets the invoice
               // sweeps skip these rows (their dollars are already in the service price).
-              if (jobType !== "recurring") {
+              if (["one_time", "project", "waiting_list"].includes(jobType)) {
                 const copiedBySource = new Map(
                   ((copied ?? []) as { id: string; source_subitem_id: string; job_service_id: string }[]).map((c) => [c.source_subitem_id, c])
                 );
