@@ -59,6 +59,7 @@ import {
   BLOCK_TYPE_LABELS,
   DOC_TYPE_LABELS,
   MERGE_TAGS_BY_TYPE,
+  BUTTON_LINK_OPTIONS,
   PLAIN_TEXT_DOC_TYPES,
 } from "@/types/crm-documents";
 import type {
@@ -208,6 +209,8 @@ interface BlockCanvasProps {
   active: boolean;
   onActivate: () => void;
   onChange: (content: string) => void;
+  onSettingsChange: (settings: Record<string, unknown>) => void;
+  linkOptions: { value: string; label: string }[];
   onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
@@ -217,7 +220,7 @@ interface BlockCanvasProps {
 }
 
 function BlockCanvas({
-  block, active, onActivate, onChange, onDelete,
+  block, active, onActivate, onChange, onSettingsChange, linkOptions, onDelete,
   onMoveUp, onMoveDown, isFirst, isLast, editorRef,
 }: BlockCanvasProps) {
   const isVisual = block.blockType === "divider" || block.blockType === "spacer";
@@ -270,16 +273,49 @@ function BlockCanvas({
         ) : block.blockType === "image" ? (
           <ImageBlockContent url={block.content} onChange={onChange} />
         ) : block.blockType === "button" ? (
-          <input
-            type="text"
-            value={block.content ?? ""}
-            onChange={(e) => onChange(e.target.value)}
-            onClick={(e) => e.stopPropagation()}
-            placeholder="Button label"
-            className="w-full rounded-md border border-border bg-slate-50 dark:bg-muted/40 px-3 py-2 text-center text-sm font-medium text-brand-600 dark:text-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400"
-          />
+          <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="text"
+              value={block.content ?? ""}
+              onChange={(e) => onChange(e.target.value)}
+              onFocus={onActivate}
+              placeholder="Button label"
+              className="w-full rounded-md border border-border bg-slate-50 dark:bg-muted/40 px-3 py-2 text-center text-sm font-medium text-brand-600 dark:text-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400"
+            />
+            {(() => {
+              const href = typeof block.settings?.href === "string" ? block.settings.href : "";
+              const preset = linkOptions.some((o) => o.value === href);
+              // "custom" stays selected while the URL box is still empty.
+              const mode = preset ? href : "custom";
+              return (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Button links to</span>
+                  <select
+                    value={mode}
+                    onChange={(e) => onSettingsChange({ ...block.settings, href: e.target.value === "custom" ? "" : e.target.value })}
+                    className="rounded border border-border bg-slate-50 dark:bg-muted/40 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-400"
+                  >
+                    {linkOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    <option value="custom">Custom URL</option>
+                  </select>
+                  {!preset && (
+                    <input
+                      type="url"
+                      value={href}
+                      onChange={(e) => onSettingsChange({ ...block.settings, href: e.target.value })}
+                      placeholder="https://…"
+                      className="min-w-[12rem] flex-1 rounded border border-border bg-slate-50 dark:bg-muted/40 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand-400"
+                    />
+                  )}
+                </div>
+              );
+            })()}
+          </div>
         ) : useRichText ? (
-          <div onClick={(e) => e.stopPropagation()}>
+          // Activate on click/focus before stopping propagation: without this,
+          // clicking into the editor left no active block and the merge-tag
+          // buttons fell back to copying the tag to the clipboard.
+          <div onClick={(e) => { e.stopPropagation(); onActivate(); }} onFocusCapture={onActivate}>
             <RichTextEditor
               ref={editorRef}
               value={block.content ?? ""}
@@ -449,6 +485,11 @@ export function DocumentBuilder({ template }: Props) {
     toast.success(`Copied ${tag} — paste into a block`);
   }
 
+  function updateSettings(key: string, settings: Record<string, unknown>) {
+    setBlocks((prev) => prev.map((b) => b._key === key ? { ...b, settings } : b));
+    setDirty(true);
+  }
+
   function addBlock(def: BlockDef) {
     const b = newBlock(def, blocks.length);
     setBlocks((prev) => [...prev, b]);
@@ -508,6 +549,7 @@ export function DocumentBuilder({ template }: Props) {
           blockType:  b.blockType,
           orderIndex: i,
           content:    b.content,
+          settings:   b.settings,
         })),
       });
       toast.success(`Test email sent to ${sentTo}`);
@@ -698,6 +740,8 @@ export function DocumentBuilder({ template }: Props) {
                     active={activeKey === block._key}
                     onActivate={() => setActiveKey(block._key)}
                     onChange={(content) => updateContent(block._key, content)}
+                    onSettingsChange={(settings) => updateSettings(block._key, settings)}
+                    linkOptions={BUTTON_LINK_OPTIONS[template.docType] ?? []}
                     onDelete={() => deleteBlock(block._key)}
                     onMoveUp={() => moveBlock(block._key, -1)}
                     onMoveDown={() => moveBlock(block._key, 1)}
@@ -752,6 +796,7 @@ export function DocumentBuilder({ template }: Props) {
                       <button
                         key={mt.tag}
                         title={mt.label}
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => insertMergeTag(mt.tag)}
                         className={cn(
                           "rounded border px-1.5 py-0.5 text-[10px] font-mono transition-colors",
