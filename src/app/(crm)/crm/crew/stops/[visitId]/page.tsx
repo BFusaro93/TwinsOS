@@ -8,7 +8,7 @@ import {
   ArrowLeft, MapPin, Phone, Clock, Camera, MessageSquare,
   CheckSquare, Square, AlertTriangle, Play, Square as StopIcon, SkipForward,
   Image as ImageIcon, Send, Loader2, CheckCircle2, Coffee, Sparkles, FlaskConical,
-  ClipboardList,
+  ClipboardList, Package, ListChecks,
 } from "lucide-react";
 import {
   useStopDetail,
@@ -561,6 +561,23 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                         <Clock className="h-3 w-3" />
                         Budgeted: {budgeted}h
                       </p>
+                    )}
+                    {/* Products to bring and sub-services to do under this service,
+                        copied from the estimate. Names and quantities only — no prices. */}
+                    {(svc?.subitems ?? []).length > 0 && (
+                      <ul className="mt-1.5 space-y-0.5">
+                        {(svc?.subitems ?? []).map((si) => (
+                          <li key={si.id} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-neutral-400">
+                            {si.type === "product"
+                              ? <Package className="h-3 w-3 shrink-0 text-slate-400 dark:text-neutral-500" />
+                              : <ListChecks className="h-3 w-3 shrink-0 text-slate-400 dark:text-neutral-500" />}
+                            <span className="truncate">{si.name}</span>
+                            {si.qty !== 1 && (
+                              <span className="shrink-0 text-slate-400 dark:text-neutral-500">× {si.qty.toLocaleString()}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">

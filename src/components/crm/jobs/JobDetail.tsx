@@ -1532,7 +1532,21 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     )}
                     {services.map((s) => (
                       <tr key={s.id} className="group border-b last:border-0">
-                        <td className="px-4 py-3 font-medium text-slate-800 dark:text-neutral-100">{s.serviceName}</td>
+                        <td className="px-4 py-3 font-medium text-slate-800 dark:text-neutral-100">
+                          {s.serviceName}
+                          {(s.subitems ?? []).length > 0 && (
+                            // What the crew sees under this service on their stop — names and
+                            // quantities only; the sub-item dollars are already in the price.
+                            <ul className="mt-1 space-y-0.5 font-normal">
+                              {(s.subitems ?? []).map((si) => (
+                                <li key={si.id} className="text-xs text-slate-500 dark:text-neutral-400">
+                                  {si.type === "product" ? "Product" : "Task"}: {si.name}
+                                  {si.qty !== 1 && <span className="text-slate-400 dark:text-neutral-500"> × {si.qty.toLocaleString()}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </td>
                         {editingSvcId === s.id ? (
                           <>
                             <td className="px-2 py-2 text-right">

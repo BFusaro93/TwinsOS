@@ -93,6 +93,17 @@ export interface CRMJobService {
   serviceInvoiceDescription: string | null; // from crm_services.invoice_description, for the job-level invoice-desc fallback preview
   /** Days that must elapse after this service's visit completes before the next package-sequenced service is due, if this row came from a Package. */
   minDays: number | null;
+  /** Products to bring / sub-services to do under this service (copied from the estimate; no prices). */
+  subitems?: CRMJobServiceSubitem[];
+}
+
+/** A sub-item under a job service — what the crew should bring or do. Never carries money. */
+export interface CRMJobServiceSubitem {
+  id: string;
+  type: "product" | "subservice";
+  name: string;
+  qty: number;
+  sortOrder: number;
 }
 
 export interface CRMJob {

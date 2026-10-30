@@ -10,6 +10,7 @@ import {
 } from "@/lib/supabase/crew-id";
 import { groupVisitsIntoStops, visitServices } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit } from "@/types/crm-jobs";
+import { mapServiceSubitems } from "@/lib/utils/job-service-subitems";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
@@ -115,7 +116,7 @@ export async function GET(request: Request) {
       crm_jobs(crew_id, job_type, status, property_id, service_address, service_city, service_state, service_zip, budgeted_hours,
         notes_to_crew, notes_to_crew_updated_at,
         client_properties(address, city, state, zip),
-        crm_job_services(id, service_name, budgeted_hours, team_size, sort_order))
+        crm_job_services(id, service_name, budgeted_hours, team_size, sort_order, crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at)))
     `;
   const { data: unsorted, error } = await selectEffectiveCrewVisits(
     supabase,
@@ -217,6 +218,7 @@ export async function GET(request: Request) {
           budgetedHours: (s.budgeted_hours as number) ?? 0,
           teamSize: (s.team_size as number) ?? 1,
           sortOrder: (s.sort_order as number) ?? 0,
+          subitems: mapServiceSubitems(s.crm_job_service_subitems),
         }))
       : [];
     // groupVisitsIntoStops() falls back to serviceAddress+serviceCity when a

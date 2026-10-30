@@ -23,6 +23,8 @@ import { computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
 import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
 
+import { mapServiceSubitems } from "@/lib/utils/job-service-subitems";
+
 const log = logger.child("use-crm-jobs");
 
 // ── mappers ───────────────────────────────────────────────────────────────────
@@ -630,6 +632,7 @@ function mapJobServiceFull(s: any): CRMJobService {
     sortOrder: s.sort_order ?? 0,
     serviceInvoiceDescription: s.crm_services?.invoice_description ?? null,
     minDays: s.min_days ?? null,
+    subitems: mapServiceSubitems(s.crm_job_service_subitems),
   };
 }
 
@@ -2351,6 +2354,44 @@ export function useCreateJobsFromEstimate() {
           throw svcError;
         }
         insertedServiceIds = ((insertedServices ?? []) as { id: string }[]).map((r) => r.id);
+
+        // Carry each line's sub-items (products to bring, sub-services to do)
+        // onto its job service so the crew can see them. Names and quantities
+        // only: the dollars are already inside the service's price, and this
+        // table is never billed. Best-effort — the job is already created.
+        const lineToServiceId = new Map<string, string>();
+        services.forEach((sv, i) => {
+          if (sv.estimateLineItemId && insertedServiceIds[i]) lineToServiceId.set(sv.estimateLineItemId, insertedServiceIds[i]);
+        });
+        if (lineToServiceId.size > 0) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: subRows, error: subErr } = await (supabase as any)
+              .from("estimate_line_item_subitems")
+              .select("id, line_item_id, type, product_id, service_id, name, qty, sort_order")
+              .in("line_item_id", [...lineToServiceId.keys()])
+              .is("deleted_at", null);
+            if (subErr) throw subErr;
+            const copies = ((subRows ?? []) as { id: string; line_item_id: string; type: string; product_id: string | null; service_id: string | null; name: string; qty: number; sort_order: number | null }[])
+              .map((r) => ({
+                job_service_id: lineToServiceId.get(r.line_item_id) as string,
+                type: r.type,
+                product_id: r.product_id,
+                service_id: r.service_id,
+                name: r.name,
+                qty: r.qty,
+                sort_order: r.sort_order ?? 0,
+                source_subitem_id: r.id,
+              }));
+            if (copies.length > 0) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const { error: copyErr } = await (supabase as any).from("crm_job_service_subitems").insert(copies);
+              if (copyErr) throw copyErr;
+            }
+          } catch (err) {
+            log.error("copying estimate sub-items to job failed", { jobId, error: err instanceof Error ? err.message : String(err) });
+          }
+        }
       }
 
       // Same timeline row useCreateClientJob writes, so a job converted from
@@ -2610,7 +2651,7 @@ export function useJobDetail(id: string) {
           *,
           clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, client_since),
           crm_crews(name),
-          crm_job_services(*, crm_services(invoice_description))
+          crm_job_services(*, crm_services(invoice_description), crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at))
         `)
         .eq('id', id)
         .is('deleted_at', null)
