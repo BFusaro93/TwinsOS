@@ -11,6 +11,7 @@ import { ContractsGuide } from "@/components/docs/guides/contracts-guide";
 import { CrewAppGuide } from "@/components/docs/guides/crew-app-guide";
 import { DamageCasesGuide } from "@/components/docs/guides/damage-cases-guide";
 import { DispatchBoardGuide } from "@/components/docs/guides/dispatch-board-guide";
+import { DocumentsGuide } from "@/components/docs/guides/documents-guide";
 import { EstimatingGuide } from "@/components/docs/guides/estimating-guide";
 import { FormsGuide } from "@/components/docs/guides/forms-guide";
 import { ImportExportGuide } from "@/components/docs/guides/import-export-guide";
@@ -62,6 +63,7 @@ export const GUIDE_COMPONENTS: Record<string, ComponentType> = {
   "crew-app-guide": CrewAppGuide,
   "damage-cases-guide": DamageCasesGuide,
   "dispatch-board-guide": DispatchBoardGuide,
+  "documents-guide": DocumentsGuide,
   "estimating-guide": EstimatingGuide,
   "forms-guide": FormsGuide,
   "import-export-guide": ImportExportGuide,

@@ -283,6 +283,13 @@ export function QuickBooksGuide() {
                 instead.
               </td>
             </tr>
+            <tr className={ROW}>
+              <td className={CELL_LABEL}>A payment&apos;s refund or chargeback didn&apos;t update in QuickBooks</td>
+              <td className={CELL}>
+                Click Retry. Landscapt re-runs the void or the reduction on the QuickBooks payment and clears the error
+                once it goes through.
+              </td>
+            </tr>
             <tr>
               <td className={CELL_LABEL}>QuickBooks error or connection expired</td>
               <td className={CELL}>

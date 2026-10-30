@@ -553,6 +553,12 @@ export function InvoicingGuide() {
           so.
         </p>
         <p>
+          <strong>Changed the invoice total after opening Collect Payment?</strong> The dialog
+          always charges the invoice&apos;s balance as of when you click <strong>Continue</strong>.
+          If you close it and edit the invoice, or the total changes while it&apos;s open, it starts
+          over from the new balance. Open it again and the Balance Due shown matches the invoice.
+        </p>
+        <p>
           <strong>Writing off a balance.</strong> The invoice&apos;s <strong>Enter Payment</strong>{" "}
           dialog offers <strong>AR Write-off (non-cash)</strong> alongside the real payment methods.
           A write-off is capped at the invoice&apos;s balance (&quot;A write-off can&apos;t exceed the

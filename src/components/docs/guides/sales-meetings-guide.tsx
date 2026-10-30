@@ -177,6 +177,12 @@ export function SalesMeetingsGuide() {
 
       <Section id="reminders" title="Reminders: rep vs. client">
         <p>
+          <strong>Assignment notice.</strong> When a meeting is assigned or reassigned to a rep, that rep
+          gets an in-app notification and an email right away. You never get one for a meeting you
+          assigned to yourself. On <strong>My Day</strong>, a <strong>My Upcoming Meetings</strong> card
+          lists your next seven days (up to six shown).
+        </p>
+        <p>
           Two independent things happen 60 minutes before a scheduled meeting, run by a background
           job every 15 minutes:
         </p>

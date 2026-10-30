@@ -75,9 +75,16 @@ export function WaitingListGuide() {
 
       <Section id="filtering" title="Filtering and columns">
         <p>
-          The <strong>Date Window</strong> bar at the top (defaults to today through 30 days out)
-          is the primary filter — it&apos;s a server-side query, not a client-side narrow, so it
-          also controls which jobs get fetched in the first place. Below that, <strong>Select a
+          The <strong>Date Window</strong> bar at the top is the primary filter — it&apos;s a
+          server-side query, not a client-side narrow, so it also controls which jobs get fetched in
+          the first place. The dropdown on the left offers presets: <strong>Next 30 days</strong>{" "}
+          (the default), <strong>This week</strong>, <strong>This month</strong>,{" "}
+          <strong>This quarter</strong>, <strong>This year</strong>, and{" "}
+          <strong>Next 90 days</strong>. Or edit either date yourself and the preset switches to{" "}
+          <strong>Custom range</strong>. Your choice is saved to your login, so it&apos;s still
+          there after a refresh or the next time you open the page. A preset like &quot;This
+          quarter&quot; is remembered by name, so next month it still means the current quarter; a
+          custom range keeps the exact dates you picked. Below that, <strong>Select a
           Filter</strong> lets you narrow the fetched set by one field at a time: Client, Service,
           City, Zip, or Crew. Crew is picked from a list of your active crews (or Unassigned)
           rather than typed. A separate free-text Search box matches client name, service name,
@@ -134,6 +141,16 @@ export function WaitingListGuide() {
             active visit, a package service because its visit has moved past the placeholder state.
           </li>
         </ul>
+        <p>
+          <strong>From the client&apos;s record.</strong> You can also schedule a waiting-list job
+          without leaving the client. On the client&apos;s <strong>Home</strong> tab, open the job&apos;s{" "}
+          <strong>MORE</strong> menu and choose <strong>Schedule Job</strong>. It opens the same
+          Date and Crew dialog; a job with several services schedules all of them on the date you
+          pick. The item only appears while the job is still waiting (no visit yet), and only for
+          logins that have the Waiting List permission. <strong>View Upcoming</strong> in the same
+          menu lists each waiting service and has a <strong>Schedule</strong> button per service if
+          you want to send one service out and keep the others waiting.
+        </p>
         <Callout>
           Dispatching multiple selected rows at once applies the <em>same</em> date and crew to all
           of them — it&apos;s meant for a batch of jobs you&apos;re sending out together, not for
