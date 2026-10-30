@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useEstimateTemplates, useCreateEstimateTemplate, useUpdateEstimateTemplate, useDeleteEstimateTemplate, useUpsertTemplateItem, useDeleteTemplateItem } from "@/lib/hooks/use-estimate-templates";
+import { Fragment, useEffect, useState } from "react";
+import { useEstimateTemplates, useCreateEstimateTemplate, useUpdateEstimateTemplate, useDeleteEstimateTemplate, useUpsertTemplateItem, useDeleteTemplateItem, useUpsertTemplateSubitem, useDeleteTemplateSubitem } from "@/lib/hooks/use-estimate-templates";
 import { EstimateDisplaySettingsPanel } from "./EstimateDisplaySettingsPanel";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
@@ -25,7 +25,7 @@ import { Plus, Pencil, Trash2, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { centsToDisplay } from "@/lib/estimate-calc";
 import type { CRMDiscount } from "@/types/crm-discounts";
-import type { EstimateTemplate, EstimateTemplateItem } from "@/types/crm-estimates";
+import type { EstimateTemplate, EstimateTemplateItem, EstimateTemplateItemSubitem } from "@/types/crm-estimates";
 import type { BudgetMethod } from "@/types/crm-jobs";
 import { useConfirm } from "@/components/shared/useConfirm";
 
@@ -206,6 +206,174 @@ function TemplateItemRow({
   );
 }
 
+// ── bundle item sub-items (indented rows under a bundle item) ──────────────
+
+function TemplateSubitemRow({ sub }: { sub: EstimateTemplateItemSubitem }) {
+  const [qty, setQty] = useState(String(sub.qty));
+  const [rate, setRate] = useState(String(sub.rateCents / 100));
+  const { mutateAsync: upsert } = useUpsertTemplateSubitem();
+  const { mutateAsync: remove } = useDeleteTemplateSubitem();
+
+  useEffect(() => {
+    setQty(String(sub.qty));
+    setRate(String(sub.rateCents / 100));
+  }, [sub.qty, sub.rateCents]);
+
+  async function save() {
+    const nextQty = Number(qty) || 0;
+    const nextRate = Math.round((Number(rate) || 0) * 100);
+    if (nextQty === sub.qty && nextRate === sub.rateCents) return;
+    try {
+      await upsert({
+        templateItemId: sub.templateItemId,
+        item: { ...sub, qty: nextQty, rateCents: nextRate },
+      });
+    } catch {
+      toast.error("Failed to save sub-item");
+    }
+  }
+
+  return (
+    <tr className="group border-b border-slate-100 dark:border-neutral-800 bg-slate-50/60 dark:bg-muted/20 text-xs">
+      <td className="py-1 pl-8 pr-3 text-slate-600 dark:text-neutral-300">
+        <span className="mr-1.5 text-[10px] uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+          {sub.type === "product" ? "Product" : "Subservice"}
+        </span>
+        {sub.name}
+      </td>
+      <td className="px-3 py-1" />
+      <td className="px-3 py-1">
+        <input
+          type="number"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          onBlur={save}
+          className="w-14 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:outline-none"
+        />
+      </td>
+      <td className="px-3 py-1" colSpan={2} />
+      <td className="px-3 py-1">
+        <input
+          type="number"
+          value={rate}
+          onChange={(e) => setRate(e.target.value)}
+          onBlur={save}
+          className="w-20 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:outline-none"
+        />
+      </td>
+      <td className="px-3 py-1 text-right tabular-nums text-muted-foreground">
+        {centsToDisplay(Math.round(sub.qty * sub.rateCents))}
+      </td>
+      <td className="px-3 py-1" colSpan={2} />
+      <td className="px-3 py-1">
+        <button
+          onClick={() => remove(sub.id).catch(() => toast.error("Failed to delete sub-item"))}
+          className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
+          aria-label="Delete sub-item"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function AddTemplateSubitemRow({
+  item,
+  services,
+  products,
+}: {
+  item: EstimateTemplateItem;
+  services: { id: string; name: string; defaultRateCents: number | null }[];
+  products: { id: string; name: string; price: number; unitCost: number }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const { mutateAsync: upsert } = useUpsertTemplateSubitem();
+  const lc = search.trim().toLowerCase();
+  const fs = services.filter((s) => !lc || s.name.toLowerCase().includes(lc)).slice(0, 30);
+  const fp = products.filter((p) => !lc || p.name.toLowerCase().includes(lc)).slice(0, 30);
+
+  async function add(input: {
+    type: "product" | "subservice";
+    productId: string | null;
+    serviceId: string | null;
+    name: string;
+    rateCents: number;
+    costCents: number;
+  }) {
+    try {
+      await upsert({
+        templateItemId: item.id,
+        item: { ...input, qty: 1, sortOrder: (item.subitems ?? []).length },
+      });
+      setOpen(false);
+      setSearch("");
+    } catch {
+      toast.error("Failed to add sub-item");
+    }
+  }
+
+  return (
+    <tr className="border-b border-slate-100 dark:border-neutral-800 text-xs">
+      <td colSpan={10} className="py-0.5 pl-8 pr-3">
+        <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setSearch(""); }}>
+          <PopoverTrigger asChild>
+            <button className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-slate-100 dark:hover:bg-muted/40">
+              <Plus className="h-3 w-3" /> Add sub-item
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-80 p-0">
+            <div className="border-b px-2 py-1.5">
+              <Input
+                autoFocus
+                placeholder="Search products & subservices…"
+                className="h-7 text-xs"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="max-h-72 overflow-y-auto py-1">
+              {fp.length > 0 && (
+                <>
+                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Products</div>
+                  {fp.map((p) => (
+                    <button
+                      key={p.id}
+                      className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
+                      onClick={() => add({ type: "product", productId: p.id, serviceId: null, name: p.name, rateCents: p.price, costCents: p.unitCost })}
+                    >
+                      <span className="font-medium text-slate-900 dark:text-neutral-100">{p.name}</span>
+                      {p.price > 0 && <span className="ml-2 shrink-0 text-[10px] text-slate-400 dark:text-neutral-500">${(p.price / 100).toFixed(2)}</span>}
+                    </button>
+                  ))}
+                </>
+              )}
+              {fs.length > 0 && (
+                <>
+                  <div className="mt-1 border-t px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Subservices</div>
+                  {fs.map((sv) => (
+                    <button
+                      key={sv.id}
+                      className="flex w-full items-center px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
+                      onClick={() => add({ type: "subservice", productId: null, serviceId: sv.id, name: sv.name, rateCents: sv.defaultRateCents ?? 0, costCents: 0 })}
+                    >
+                      <span className="font-medium text-slate-900 dark:text-neutral-100">{sv.name}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+              {fp.length === 0 && fs.length === 0 && (
+                <div className="px-3 py-3 text-xs text-slate-400 dark:text-neutral-500">No results</div>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+      </td>
+    </tr>
+  );
+}
+
 // ── edit template dialog ──────────────────────────────────────────────────────
 
 function EditTemplateDialog({
@@ -223,6 +391,7 @@ function EditTemplateDialog({
   const materialProducts = productCatalog.filter(
     (p) => p.category === "stocked_material" || p.category === "project_material"
   );
+  const subitemProducts = productCatalog.filter((p) => p.category !== "maintenance_part");
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
   const { mutateAsync: upsert } = useUpsertTemplateItem();
@@ -337,7 +506,17 @@ function EditTemplateDialog({
               </thead>
               <tbody>
                 {(template.items ?? []).map((item) => (
-                  <TemplateItemRow key={item.id} item={item} templateId={template.id} discounts={activeDiscounts} />
+                  <Fragment key={item.id}>
+                    <TemplateItemRow item={item} templateId={template.id} discounts={activeDiscounts} />
+                    {(item.subitems ?? []).map((sub) => (
+                      <TemplateSubitemRow key={sub.id} sub={sub} />
+                    ))}
+                    <AddTemplateSubitemRow
+                      item={item}
+                      services={services ?? []}
+                      products={subitemProducts}
+                    />
+                  </Fragment>
                 ))}
               </tbody>
             </table>

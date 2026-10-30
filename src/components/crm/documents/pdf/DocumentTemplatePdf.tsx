@@ -1,5 +1,6 @@
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 import { htmlToPdfNodes } from "@/lib/utils/html-to-pdf";
+import { parseColumnsContent } from "@/lib/utils/document-template-renderer";
 import type { BlockType } from "@/types/crm-documents";
 
 export interface DocumentPdfBlock {
@@ -67,6 +68,18 @@ function renderBlock(block: DocumentPdfBlock, key: number) {
       return <View key={key}>{htmlToPdfNodes(block.content ?? "", S.paragraph)}</View>;
     case "signature":
       return <View key={key} wrap={false}>{htmlToPdfNodes(block.content ?? "", S.signature)}</View>;
+    case "columns": {
+      const { count, columns } = parseColumnsContent(block.content);
+      return (
+        <View key={key} style={{ flexDirection: "row", marginBottom: 8 }}>
+          {columns.slice(0, count).map((html, i) => (
+            <View key={i} style={{ flex: 1, paddingRight: i < count - 1 ? 8 : 0, paddingLeft: i > 0 ? 8 : 0 }}>
+              {htmlToPdfNodes(html, S.paragraph)}
+            </View>
+          ))}
+        </View>
+      );
+    }
     case "divider":
       return <View key={key} style={S.divider} />;
     case "spacer":

@@ -28,7 +28,7 @@ import { ApprovalChain } from "@/components/shared/ApprovalChain";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { CommentsSection } from "@/components/shared/CommentsSection";
-import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
+import { useEstimateTemplates, copyTemplateSubitemsToLine } from "@/lib/hooks/use-estimate-templates";
 import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
@@ -1590,7 +1590,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               discount_value: item.discountValue,
                               applied_discount_id: item.appliedDiscountId,
                             },
-                          });
+                          }).then((res) => copyTemplateSubitemsToLine(res?.id ?? "", item.subitems));
                         }),
                         ...(tpl.displaySettings
                           ? [updateEstimate({ id: estimate.id, patch: { display_settings: tpl.displaySettings } })]

@@ -31,6 +31,8 @@ export interface EstimatePDFLineItem {
   visits: number;
   totalCents: number;
   tier: "basic" | "standard" | "premium" | null;
+  /** Sub-items flagged "print on estimate", listed under this line. */
+  subitems?: { name: string; qty: number; rateCents: number; totalCents: number }[];
 }
 
 /**
@@ -400,7 +402,8 @@ function LineItemSections({
             </View>
           )}
           {section.items.map((li, i) => (
-            <View key={i} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
+            <View key={i}>
+            <View style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
               <View style={S.cellService}>
                 {li.estimateDesc ? <RichText html={li.estimateDesc} style={S.serviceDescText} /> : null}
               </View>
@@ -423,6 +426,29 @@ function LineItemSections({
                   <Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text>
                 </View>
               )}
+            </View>
+            {(li.subitems ?? []).map((sub, k) => (
+              <View key={k} style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
+                <View style={S.cellService}>
+                  <Text style={[S.serviceDescText, { paddingLeft: 12 }]}>{sub.name}</Text>
+                </View>
+                {settings.showVisits && <View style={S.cellNum} />}
+                {settings.showQuantities && (
+                  <View style={S.cellNum}><Text style={S.serviceDescText}>{sub.qty.toLocaleString()}</Text></View>
+                )}
+                {settings.showUnits && <View style={S.cellNum} />}
+                {settings.showLinePrices && (
+                  <View style={S.cellNum}>
+                    <Text style={S.serviceDescText}>{settings.hideZeroPrices && sub.rateCents === 0 ? "" : cents(sub.rateCents)}</Text>
+                  </View>
+                )}
+                {settings.showLineTotals && (
+                  <View style={S.cellTotal}>
+                    <Text style={[S.serviceDescText, { textAlign: "right" }]}>{cents(sub.totalCents)}</Text>
+                  </View>
+                )}
+              </View>
+            ))}
             </View>
           ))}
           {section.sectionName && settings.showSectionSubtotals && (

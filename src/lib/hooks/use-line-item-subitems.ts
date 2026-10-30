@@ -44,6 +44,8 @@ export interface LineItemSubitem {
   confirmQty: boolean;
   invoice: boolean;
   printOnInvoice: boolean;
+  /** Listed under its parent line on the client-facing estimate. */
+  printOnEstimate: boolean;
   createInstalledProduct: boolean;
   sortOrder: number;
   deletedAt: string | null;
@@ -67,6 +69,7 @@ function mapRow(row: any): LineItemSubitem {
     confirmQty: row.confirm_qty ?? false,
     invoice: row.invoice ?? false,
     printOnInvoice: row.print_on_invoice ?? false,
+    printOnEstimate: row.print_on_estimate ?? false,
     createInstalledProduct: row.create_installed_product ?? false,
     sortOrder: row.sort_order ?? 0,
     deletedAt: row.deleted_at ?? null,
@@ -109,6 +112,7 @@ export interface UpsertSubitemPayload {
     confirmQty?: boolean;
     invoice?: boolean;
     printOnInvoice?: boolean;
+    printOnEstimate?: boolean;
     createInstalledProduct?: boolean;
     sortOrder?: number;
   };
@@ -134,6 +138,9 @@ export function useUpsertSubitem() {
         confirm_qty: item.confirmQty ?? false,
         invoice: item.invoice ?? false,
         print_on_invoice: item.printOnInvoice ?? false,
+        // Only sent when the caller sets it: an edit that omits it keeps the stored
+        // value, and a new row takes the column default (true).
+        ...(item.printOnEstimate !== undefined ? { print_on_estimate: item.printOnEstimate } : {}),
         create_installed_product: item.createInstalledProduct ?? false,
         sort_order: item.sortOrder ?? 0,
       };
@@ -171,6 +178,37 @@ export function useDeleteSubitem() {
     onSuccess: async (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["subitems", variables.lineItemId] });
       await recalcParentEstimate(createClient(), variables.lineItemId, queryClient);
+    },
+  });
+}
+
+/** One-click toggle for a sub-item's print flags (the two icons on the estimate grid). */
+export function useToggleSubitemPrint() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      lineItemId,
+      field,
+      value,
+    }: {
+      id: string;
+      lineItemId: string;
+      field: "printOnEstimate" | "printOnInvoice";
+      value: boolean;
+    }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("estimate_line_item_subitems")
+        .update({ [field === "printOnEstimate" ? "print_on_estimate" : "print_on_invoice"]: value })
+        .eq("id", id);
+      if (error) throw error;
+      return { lineItemId };
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["subitems", variables.lineItemId] });
     },
   });
 }
