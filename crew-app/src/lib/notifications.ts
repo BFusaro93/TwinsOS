@@ -15,6 +15,42 @@ import { registerPushToken, unregisterPushTokenApi } from '@/lib/api';
 
 let hasRegistered = false;
 
+// Show pushes that arrive while the app is open (the OS suppresses them
+// otherwise). The server sends `data: { type: 'visit_assigned' | 'visit_note',
+// visitId }` — see src/lib/notifications/visit-notify.ts in the web app.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
+
+/**
+ * Subscribes to push taps and foreground arrivals. A tap opens that visit's
+ * stop screen (visitId is the visit the push was about, which is also the
+ * stop's anchor for the schedule screen's lookup when it's the anchor; if it
+ * isn't, the screen's "not in today's schedule" state is the honest fallback);
+ * an arrival just calls `onArrive` so the caller can refetch today's schedule.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToVisitNotifications(handlers: {
+  onOpenVisit: (visitId: string) => void;
+  onArrive: () => void;
+}): () => void {
+  const received = Notifications.addNotificationReceivedListener(() => handlers.onArrive());
+  const response = Notifications.addNotificationResponseReceivedListener((resp) => {
+    const data = resp.notification.request.content.data as { visitId?: string } | undefined;
+    if (data?.visitId) handlers.onOpenVisit(data.visitId);
+    handlers.onArrive();
+  });
+  return () => {
+    received.remove();
+    response.remove();
+  };
+}
+
 /**
  * Call once after sign-in (see AuthProvider/queue-context wiring in
  * src/app/_layout.tsx) to request notification permission and, if granted,

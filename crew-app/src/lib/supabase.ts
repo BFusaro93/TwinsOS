@@ -1,5 +1,6 @@
 import 'react-native-url-polyfill/auto';
 
+import { AppState } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
 import { LargeSecureStore } from './secure-storage';
 
@@ -28,4 +29,18 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false,
   },
+});
+
+// supabase-js's refresh timer doesn't run while the app is suspended, so a
+// phone that sat in a pocket past the access token's expiry came back with a
+// dead token and every API call 401'd ("Unauthorized") until a restart. The
+// documented fix for React Native: stop the ticker in the background and, on
+// returning to the foreground, restart it (which refreshes an expired session
+// immediately).
+AppState.addEventListener('change', (state) => {
+  if (state === 'active') {
+    void supabase.auth.startAutoRefresh();
+  } else {
+    void supabase.auth.stopAutoRefresh();
+  }
 });

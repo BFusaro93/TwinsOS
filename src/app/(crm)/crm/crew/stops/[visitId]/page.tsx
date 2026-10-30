@@ -29,7 +29,12 @@ import {
   useSubmitFieldUpsell,
   useJobProducts,
   useUseJobProductMaterials,
+  useCrewProductSearch,
+  useVisitRequisitions,
+  useRequestMaterials,
   type JobProductMaterial,
+  type CrewPickerProduct,
+  type VisitRequisitionStatus,
 } from "@/lib/hooks/use-crew-app";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -47,6 +52,15 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { openInMaps } from "@/lib/utils/maps";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { toast } from "sonner";
+
+const REQUISITION_STATUS_STYLE: Record<VisitRequisitionStatus, { label: string; className: string }> = {
+  draft: { label: "Submitted", className: "bg-amber-100 text-amber-700" },
+  pending_approval: { label: "Pending approval", className: "bg-amber-100 text-amber-700" },
+  approved: { label: "Approved", className: "bg-green-100 text-green-700" },
+  rejected: { label: "Rejected", className: "bg-red-100 text-red-700" },
+  ordered: { label: "Ordered", className: "bg-green-100 text-green-700" },
+  closed: { label: "Closed", className: "bg-slate-100 text-slate-600" },
+};
 
 /**
  * One row of the "Materials called for" card — mirrors crew-app's
@@ -214,6 +228,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const { data: jobProducts = [] } = useJobProducts(anchorVisitId);
   const useMaterials  = useUseJobProductMaterials();
   const [confirm, confirmDialog] = useConfirm();
+  const { data: requisitions = [] } = useVisitRequisitions(anchorVisitId);
+  const requestMaterials = useRequestMaterials();
+
+  const [requestOpen, setRequestOpen]       = useState(false);
+  const [productQuery, setProductQuery]     = useState("");
+  const [pickedProduct, setPickedProduct]   = useState<CrewPickerProduct | null>(null);
+  const [requestQty, setRequestQty]         = useState("1");
+  const [requestNote, setRequestNote]       = useState("");
+  const { data: productResults = [], isFetching: searchingProducts } = useCrewProductSearch(productQuery, requestOpen);
 
   const [noteText, setNoteText]       = useState("");
   const [upsellOpen, setUpsellOpen]       = useState(false);
@@ -333,6 +356,36 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       setUpsellPhoto(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't send the suggestion");
+    }
+  }
+
+  function closeRequest() {
+    setRequestOpen(false);
+    setProductQuery("");
+    setPickedProduct(null);
+    setRequestQty("1");
+    setRequestNote("");
+  }
+
+  async function handleSendRequest() {
+    if (!pickedProduct) return;
+    // Fractional materials (half a yard of mulch) are fine — 2 decimals, as the route requires.
+    const quantity = Math.round((Number(requestQty.replace(",", ".")) || 0) * 100) / 100;
+    if (quantity <= 0) {
+      toast.error("Enter a quantity greater than zero");
+      return;
+    }
+    try {
+      await requestMaterials.mutateAsync({
+        visitId: anchorVisitId,
+        productItemId: pickedProduct.id,
+        quantity,
+        note: requestNote.trim() || undefined,
+      });
+      toast.success("Request sent to the office");
+      closeRequest();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't send the request");
     }
   }
 
@@ -833,6 +886,35 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </div>
         )}
 
+        {/* Materials requests — an ad-hoc ask for something NOT already called
+            for on the job. Becomes a draft requisition the office prices and
+            approves. Mirrors crew-app's "Materials requests" card. */}
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800 flex items-center justify-between gap-2">
+            <h2 className="font-semibold text-slate-800 dark:text-neutral-100">Materials requests</h2>
+            <Button size="sm" variant="outline" onClick={() => setRequestOpen(true)}>
+              Request Materials
+            </Button>
+          </div>
+          {requisitions.length === 0 ? (
+            <p className="px-4 py-4 text-sm text-slate-400 dark:text-neutral-500 text-center">No materials requested for this job.</p>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-neutral-800">
+              {requisitions.map((r) => (
+                <div key={r.id} className="px-4 py-3 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm text-slate-700 dark:text-neutral-200 truncate">{r.title}</p>
+                    <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">{r.requisitionNumber}</p>
+                  </div>
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${REQUISITION_STATUS_STYLE[r.status].className}`}>
+                    {REQUISITION_STATUS_STYLE[r.status].label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Suggest work — hidden unless the office has opened up services for
             crews to suggest, which is how the feature is switched on. */}
         {upsellServices.length > 0 && (
@@ -886,6 +968,74 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </div>
         </div>
       </main>
+
+      {/* Request materials — search the stocked/project catalog (never a
+          free-text item, and no prices shown), pick a quantity, send. */}
+      <Dialog open={requestOpen} onOpenChange={(open) => (open ? setRequestOpen(true) : closeRequest())}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{pickedProduct ? pickedProduct.name : "Request materials"}</DialogTitle>
+          </DialogHeader>
+          {pickedProduct ? (
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">Quantity</p>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={requestQty}
+                  onChange={(e) => setRequestQty(e.target.value)}
+                  className="w-28"
+                />
+              </div>
+              <div>
+                <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">Note (optional)</p>
+                <Textarea
+                  value={requestNote}
+                  onChange={(e) => setRequestNote(e.target.value)}
+                  placeholder="Anything the office should know?"
+                  className="min-h-[72px] resize-none text-sm"
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPickedProduct(null)}>Back</Button>
+                <Button onClick={handleSendRequest} disabled={requestMaterials.isPending}>
+                  {requestMaterials.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send to office"}
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <Input
+                value={productQuery}
+                onChange={(e) => setProductQuery(e.target.value)}
+                placeholder="Search materials…"
+                autoFocus
+              />
+              <div className="max-h-72 overflow-y-auto flex flex-col gap-1.5">
+                {searchingProducts && productResults.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-4">Searching…</p>
+                )}
+                {!searchingProducts && productResults.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-4">No materials found.</p>
+                )}
+                {productResults.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setPickedProduct(p)}
+                    className="rounded-lg border border-slate-200 dark:border-neutral-700 px-3 py-2.5 text-left active:bg-slate-50 dark:active:bg-neutral-800"
+                  >
+                    <span className="block text-sm font-medium text-slate-800 dark:text-neutral-100">{p.name}</span>
+                    {p.partNumber && <span className="block text-xs text-slate-500">{p.partNumber}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Suggest work — crews never see or set a price here; the office prices
           it from the photo and note. */}

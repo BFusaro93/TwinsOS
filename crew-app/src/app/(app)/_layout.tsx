@@ -1,8 +1,11 @@
+import { useEffect } from 'react';
 import { ActivityIndicator } from 'react-native';
-import { Redirect, Stack } from 'expo-router';
+import { Redirect, router, Stack } from 'expo-router';
 
 import { ThemedView } from '@/components/themed-view';
 import { useAuth } from '@/lib/auth-context';
+import { subscribeToVisitNotifications } from '@/lib/notifications';
+import { emitScheduleRefresh } from '@/lib/hooks/schedule-refresh';
 
 /**
  * Guards every screen under the (app) group: unauthenticated users are
@@ -12,6 +15,14 @@ import { useAuth } from '@/lib/auth-context';
  */
 export default function AppLayout() {
   const { session, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!session) return;
+    return subscribeToVisitNotifications({
+      onOpenVisit: (visitId) => router.push({ pathname: '/visit/[id]', params: { id: visitId } }),
+      onArrive: emitScheduleRefresh,
+    });
+  }, [session]);
 
   if (isLoading) {
     return (

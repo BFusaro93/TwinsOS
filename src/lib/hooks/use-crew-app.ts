@@ -1008,6 +1008,84 @@ export function useAddCrewNote() {
   });
 }
 
+// ── ad-hoc material requests ─────────────────────────────────────────────────
+// The "Request Materials" flow: a crew asks for something NOT already called
+// for on the job, which becomes a draft requisition the office prices and
+// approves. Mirrors crew-app's request-materials screen and "Materials
+// requests" list; the routes already accept the web cookie session.
+
+export interface CrewPickerProduct {
+  id: string;
+  name: string;
+  partNumber: string | null;
+  category: "stocked_material" | "project_material";
+}
+
+export type VisitRequisitionStatus = "draft" | "pending_approval" | "approved" | "rejected" | "ordered" | "closed";
+
+export interface VisitRequisition {
+  id: string;
+  requisitionNumber: string;
+  title: string;
+  status: VisitRequisitionStatus;
+  requestedByName: string;
+  notes: string | null;
+  createdAt: string;
+}
+
+export function useCrewProductSearch(q: string, enabled: boolean) {
+  return useQuery<CrewPickerProduct[]>({
+    queryKey: ["crew-app-product-search", q],
+    enabled,
+    queryFn: async () => {
+      const res = await fetch(`/api/crm/crew/products?q=${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
+}
+
+export function useVisitRequisitions(visitId: string) {
+  return useQuery<VisitRequisition[]>({
+    queryKey: ["crew-app-requisitions", visitId],
+    enabled: !!visitId,
+    queryFn: async () => {
+      const res = await fetch(`/api/crm/crew/visits/${visitId}/requisitions`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+  });
+}
+
+export function useRequestMaterials() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      visitId,
+      productItemId,
+      quantity,
+      note,
+    }: {
+      visitId: string;
+      productItemId: string;
+      quantity: number;
+      note?: string;
+    }) => {
+      const res = await fetch(`/api/crm/crew/visits/${visitId}/requisitions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productItemId, quantity, note }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof json?.error === "string" ? json.error : "Couldn't send the request");
+      return json as VisitRequisition;
+    },
+    onSuccess: (_data, { visitId }) => {
+      qc.invalidateQueries({ queryKey: ["crew-app-requisitions", visitId] });
+    },
+  });
+}
+
 /**
  * POST /api/crm/crew/visits/:id/job-products/:jobProductId/use-materials —
  * records how much of a planned material was actually used, whether it

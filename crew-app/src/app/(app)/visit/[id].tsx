@@ -3,6 +3,9 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,12 +18,16 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { SyncStatusChip } from '@/components/sync-status-chip';
 import { ThemedText } from '@/components/themed-text';
 import {
+  confirmChemicals,
+  fetchChemicalConfirmationStatus,
   fetchJobProducts,
-  fetchVisitChemicals,
+  fetchStopChemicals,
+  fetchUpsellServices,
   fetchVisitPhotos,
   fetchVisitRequisitions,
   todayLocalDate,
 } from '@/lib/api';
+import { notesToPlainText } from '@/lib/rich-notes';
 import { C } from '@/lib/colors';
 import { useCrewStops } from '@/lib/hooks/use-crew-stops';
 import {
@@ -41,10 +48,13 @@ import type {
   RecordMaterialUsagePayload,
   RequestMaterialsPayload,
   SkipServicePayload,
+  SuggestWorkPayload,
 } from '@/lib/offline/types';
 import type {
+  ChemicalConfirmationStatus,
   CrewStopVisit,
   JobProductMaterial,
+  UpsellService,
   VisitChemicalApplication,
   VisitPhoto,
   VisitRequisition,
@@ -101,6 +111,7 @@ export default function StopDetailScreen() {
     enqueueAcknowledgeNotes,
     enqueueAddNote,
     enqueueSkipVisit,
+    enqueueSuggestWork,
     retry,
     discard,
   } = useOfflineQueue();
@@ -111,6 +122,15 @@ export default function StopDetailScreen() {
   const [requisitions, setRequisitions] = useState<VisitRequisition[]>([]);
   const [chemicals, setChemicals] = useState<VisitChemicalApplication[]>([]);
   const [plannedMaterials, setPlannedMaterials] = useState<JobProductMaterial[]>([]);
+  const [chemConfirm, setChemConfirm] = useState<ChemicalConfirmationStatus>({
+    mode: 'crew_required',
+    waivedVisitIds: [],
+  });
+  const [chemEdits, setChemEdits] = useState<Record<string, { amount: string; notUsed: boolean }>>({});
+  const [isConfirmingChemicals, setIsConfirmingChemicals] = useState(false);
+  const [chemError, setChemError] = useState<string | null>(null);
+  const [upsellServices, setUpsellServices] = useState<UpsellService[]>([]);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [skipTargetId, setSkipTargetId] = useState<string | null>(null);
   const [skipReasonText, setSkipReasonText] = useState('');
@@ -168,6 +188,33 @@ export default function StopDetailScreen() {
     new Date(anchor.acknowledgedNotesAt).getTime() < new Date(stop.notesToCrewUpdatedAt).getTime();
   const acknowledged = !!anchor?.acknowledgedNotesAt && !notesChangedSinceAck;
 
+  // Chemicals are fetched per STOP (every service's visit), not just the
+  // anchor — a stop bundles several same-day visits, and both the Chemical Mix
+  // card and the confirm-before-Stop-Job gate need all of them.
+  const stopVisitIds = useMemo(() => serverStop?.visits.map((v) => v.id) ?? [], [serverStop]);
+  const stopVisitKey = stopVisitIds.join(',');
+  const visitStatusById = new Map((stop?.visits ?? []).map((v) => [v.id, v.status as string]));
+  // A service the crew skipped (or the office cancelled) isn't being applied, so
+  // its chemicals are neither "what to mix" nor something to confirm — and the
+  // server's completion gate only looks at visits still being closed out.
+  const activeChemicals = chemicals.filter(
+    (c) => !['skipped', 'cancelled'].includes(visitStatusById.get(c.visitId) ?? '')
+  );
+  // Preloaded chemicals are only the PLANNED amount until the crew confirms what
+  // was actually used. In crew_required mode the server refuses Stop Job (409)
+  // while any is unconfirmed, so the button is held back here instead of
+  // letting the queued clock-out park as "failed".
+  const unconfirmedChemicals = chemicals.filter(
+    (c) =>
+      c.preloaded &&
+      !c.confirmedAt &&
+      !['skipped', 'cancelled', 'completed'].includes(visitStatusById.get(c.visitId) ?? '')
+  );
+  const waivedVisits = new Set(chemConfirm.waivedVisitIds);
+  const chemBlocked =
+    chemConfirm.mode === 'crew_required' && unconfirmedChemicals.some((c) => !waivedVisits.has(c.visitId));
+  const suggestQueueItems = queueItems.filter((i) => i.type === 'suggest_work');
+
   // Once every queue item for this stop clears (synced), pull fresh server
   // truth — e.g. server-computed actual_hours after a clock-out, or a newly
   // created requisition's real status.
@@ -208,14 +255,26 @@ export default function StopDetailScreen() {
   }
 
   async function loadChemicals() {
-    if (!id) return;
+    if (stopVisitIds.length === 0) return;
     try {
-      const data = await fetchVisitChemicals(id);
+      const [data, status] = await Promise.all([
+        fetchStopChemicals(stopVisitIds),
+        fetchChemicalConfirmationStatus(stopVisitIds),
+      ]);
       setChemicals(data);
+      setChemConfirm(status);
     } catch {
       // Same tolerance as loadPhotos()/loadRequisitions() above — a stale
-      // (or empty) chemical list while offline is acceptable; this is
-      // read-only reference info, not something crew acts on here.
+      // (or empty) list while offline is acceptable; the server still
+      // enforces the confirm gate regardless of what's shown here.
+    }
+  }
+
+  async function loadUpsellServices() {
+    try {
+      setUpsellServices(await fetchUpsellServices());
+    } catch {
+      // Offline or the office hasn't enabled any — "Suggest work" stays hidden.
     }
   }
 
@@ -232,10 +291,17 @@ export default function StopDetailScreen() {
   useEffect(() => {
     void loadPhotos();
     void loadRequisitions();
-    void loadChemicals();
     void loadPlannedMaterials();
+    void loadUpsellServices();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Re-runs when the stop's set of visits becomes known (the stop loads after
+  // first mount) or changes.
+  useEffect(() => {
+    void loadChemicals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stopVisitKey]);
 
   // Re-render every 30s so the "clocked in for Xh Ym"/"on break for Xh Ym" readout stays live.
   useEffect(() => {
@@ -280,6 +346,54 @@ export default function StopDetailScreen() {
     } finally {
       setIsCapturing(false);
     }
+  };
+
+  const chemEditFor = (c: { id: string; chemicalAmount: number | null }) =>
+    chemEdits[c.id] ?? { amount: c.chemicalAmount != null ? String(c.chemicalAmount) : '', notUsed: false };
+
+  const handleConfirmChemicals = async () => {
+    const items: { id: string; used: boolean; chemicalAmount?: number }[] = [];
+    for (const c of unconfirmedChemicals) {
+      const e = chemEditFor(c);
+      if (e.notUsed) {
+        items.push({ id: c.id, used: false });
+        continue;
+      }
+      const amount = parseFloat(e.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setChemError(`Enter how much ${c.productName ?? 'chemical'} was used, or mark it Not used.`);
+        return;
+      }
+      items.push({ id: c.id, used: true, chemicalAmount: amount });
+    }
+    setChemError(null);
+    setIsConfirmingChemicals(true);
+    try {
+      await confirmChemicals(items);
+      setChemEdits({});
+      await loadChemicals();
+      // A Stop Job that was refused while these were unconfirmed is parked as
+      // failed in the queue — nothing to retry automatically, the crew taps it.
+    } catch (err) {
+      // Online-only: confirmation must reach the server before Stop Job.
+      setChemError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Couldn't confirm chemicals — check your connection and try again."
+      );
+    } finally {
+      setIsConfirmingChemicals(false);
+    }
+  };
+
+  const handleSuggestWork = async (
+    service: UpsellService,
+    note: string,
+    photo: { localUri: string; mimeType: string; fileName: string } | null
+  ) => {
+    if (!stop) return;
+    await enqueueSuggestWork(stop.anchorVisitId, service.id, service.name, note.trim(), photo ?? undefined);
+    setSuggestOpen(false);
   };
 
   const handleRequestMaterials = () => {
@@ -405,16 +519,31 @@ export default function StopDetailScreen() {
         </View>
 
         <View style={styles.infoStack}>
+          {stop.partnerCrews && stop.partnerCrews.length > 0 ? (
+            <InfoRow label="Shared stop" value={`With ${stop.partnerCrews.join(', ')}`} />
+          ) : null}
           <InfoRow label="Time window" value={formatStopTimeWindow(stop)} />
-          {formatStopAddress(stop) ? <InfoRow label="Address" value={formatStopAddress(stop)!} /> : null}
-          {stop.clientPhone ? <InfoRow label="Phone" value={stop.clientPhone} /> : null}
+          {formatStopAddress(stop) ? (
+            <InfoRow
+              label="Address"
+              value={formatStopAddress(stop)!}
+              onPress={() => void openInMaps(formatStopAddress(stop)!)}
+            />
+          ) : null}
+          {stop.clientPhone ? (
+            <InfoRow
+              label="Phone"
+              value={stop.clientPhone}
+              onPress={() => void Linking.openURL(`tel:${stop.clientPhone!.replace(/[^\d+]/g, '')}`)}
+            />
+          ) : null}
         </View>
       </View>
 
       {hasNotes ? (
         <View style={[styles.amberBox, acknowledged && styles.greenAckBox]}>
           <Text style={[styles.amberBoxTitle, acknowledged && styles.greenAckTitle]}>Job Notes</Text>
-          <Text style={styles.amberBoxText}>{stop.notesToCrew}</Text>
+          <Text style={styles.amberBoxText}>{notesToPlainText(stop.notesToCrew)}</Text>
           {!acknowledged ? (
             <>
               {notesChangedSinceAck ? (
@@ -456,7 +585,19 @@ export default function StopDetailScreen() {
         onDiscardSkip={(itemId) => confirmDiscard(itemId, 'This skip will not be recorded.')}
       />
 
-      <ChemicalsSection chemicals={chemicals} />
+      {unconfirmedChemicals.length > 0 ? (
+        <ConfirmChemicalsCard
+          chemicals={unconfirmedChemicals}
+          editFor={chemEditFor}
+          onChange={(chemId, next) => setChemEdits((prev) => ({ ...prev, [chemId]: next }))}
+          onConfirm={() => void handleConfirmChemicals()}
+          isConfirming={isConfirmingChemicals}
+          error={chemError}
+          blocking={chemBlocked}
+        />
+      ) : null}
+
+      <ChemicalsSection chemicals={activeChemicals} />
 
       {progress === 'on_break' && stop.pausedAt ? (
         <View style={styles.blueBanner}>
@@ -558,7 +699,10 @@ export default function StopDetailScreen() {
       ) : null}
 
       {progress === 'clocked_in' || progress === 'on_break' ? (
-        <ActionButton label="Clock Out" variant="solidRed" onPress={handleClockOut} />
+        <ActionButton label="Clock Out" variant="solidRed" onPress={handleClockOut} disabled={chemBlocked} />
+      ) : null}
+      {(progress === 'clocked_in' || progress === 'on_break') && chemBlocked ? (
+        <Text style={styles.gateHint}>Confirm the chemicals applied (above) to clock out.</Text>
       ) : null}
 
       {progress === 'skipped' ? (
@@ -589,6 +733,23 @@ export default function StopDetailScreen() {
         onDiscard={(itemId) => confirmDiscard(itemId, "This won't be recorded as used.")}
       />
 
+      {upsellServices.length > 0 ? (
+        <SuggestWorkCard
+          queueItems={suggestQueueItems}
+          onOpen={() => setSuggestOpen(true)}
+          onRetry={(itemId) => void retry(itemId)}
+          onDiscard={(itemId) => confirmDiscard(itemId, "This suggestion won't be sent to the office.")}
+        />
+      ) : null}
+
+      <SuggestWorkModal
+        visible={suggestOpen}
+        services={upsellServices}
+        anchorVisitId={stop.anchorVisitId}
+        onClose={() => setSuggestOpen(false)}
+        onSubmit={handleSuggestWork}
+      />
+
       <MaterialsSection
         requisitions={requisitions}
         materialsQueueItems={materialsQueueItems}
@@ -612,12 +773,314 @@ export default function StopDetailScreen() {
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.infoRow}>
+/** Mirrors the web helper (src/lib/utils/maps.ts): Apple Maps on iOS, a geo: intent on Android. */
+function openInMaps(address: string): Promise<void> {
+  const encoded = encodeURIComponent(address);
+  const url = Platform.OS === 'ios' ? `https://maps.apple.com/?q=${encoded}` : `geo:0,0?q=${encoded}`;
+  return Linking.openURL(url).catch(() => {
+    Alert.alert("Couldn't open Maps", address);
+  });
+}
+
+function InfoRow({ label, value, onPress }: { label: string; value: string; onPress?: () => void }) {
+  const content = (
+    <>
       <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
+      <Text style={[styles.infoValue, onPress && styles.infoValueLink]}>{value}</Text>
+    </>
+  );
+  return onPress ? (
+    <Pressable style={styles.infoRow} onPress={onPress} accessibilityRole="link">
+      {content}
+    </Pressable>
+  ) : (
+    <View style={styles.infoRow}>{content}</View>
+  );
+}
+
+/**
+ * Preloaded chemicals are only the PLANNED amount until the crew says what was
+ * actually used — mirrors the web stop page's "Confirm chemicals applied" card.
+ * Each row is an amount (prefilled with the plan) or "Not used". Online-only:
+ * it has to reach the server before Stop Job, which the server refuses until
+ * every preloaded row is confirmed (in crew_required mode).
+ */
+function ConfirmChemicalsCard({
+  chemicals,
+  editFor,
+  onChange,
+  onConfirm,
+  isConfirming,
+  error,
+  blocking,
+}: {
+  chemicals: VisitChemicalApplication[];
+  editFor: (c: VisitChemicalApplication) => { amount: string; notUsed: boolean };
+  onChange: (id: string, next: { amount: string; notUsed: boolean }) => void;
+  onConfirm: () => void;
+  isConfirming: boolean;
+  error: string | null;
+  blocking: boolean;
+}) {
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeaderRow}>
+        <Text style={styles.cardHeaderTitle}>Confirm chemicals applied</Text>
+        <Text style={styles.serviceRowSubtitle}>
+          {blocking
+            ? 'Required before you can clock out.'
+            : 'Enter what was actually used, or mark it Not used.'}
+        </Text>
+      </View>
+      <View style={styles.cardBody}>
+        {chemicals.map((c) => {
+          const e = editFor(c);
+          return (
+            <View key={c.id} style={styles.chemicalRow}>
+              <Text style={styles.chemicalProductName}>{c.productName ?? 'Chemical'}</Text>
+              {c.chemicalAmount != null ? (
+                <Text style={styles.chemicalRateLabel}>
+                  Planned: {c.chemicalAmount} {c.unitName ?? ''}
+                </Text>
+              ) : null}
+              <View style={styles.plannedMaterialActionsRow}>
+                <TextInput
+                  style={[styles.qtyInput, e.notUsed && styles.markUsedButtonDisabled]}
+                  keyboardType="decimal-pad"
+                  editable={!e.notUsed}
+                  value={e.amount}
+                  onChangeText={(amount) => onChange(c.id, { ...e, amount })}
+                  placeholder="0"
+                  placeholderTextColor="#94a3b8"
+                />
+                <Text style={styles.chemicalAmountText}>{c.unitName ?? ''}</Text>
+                <Pressable
+                  onPress={() => onChange(c.id, { ...e, notUsed: !e.notUsed })}
+                  hitSlop={8}
+                  style={[styles.notUsedToggle, e.notUsed && styles.notUsedToggleOn]}
+                >
+                  <Text style={[styles.linkText, e.notUsed && styles.notUsedToggleTextOn]}>
+                    {e.notUsed ? '✓ Not used' : 'Not used'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          );
+        })}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <Pressable
+          style={({ pressed }) => [
+            styles.actionButton,
+            styles.actionButtonGreen,
+            pressed && styles.actionButtonPressed,
+            isConfirming && styles.actionButtonDisabled,
+          ]}
+          disabled={isConfirming}
+          onPress={onConfirm}
+        >
+          {isConfirming ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={styles.actionButtonText}>Confirm chemicals</Text>
+          )}
+        </Pressable>
+      </View>
     </View>
+  );
+}
+
+/**
+ * "Suggest work" — crew flags something the property needs (new bed, thin turf)
+ * and it lands with the office as an Upsell ticket. Hidden unless the office
+ * has opened up at least one service, which is how the feature is switched on.
+ * Mirrors the web stop page's card; sent through the offline queue, so a
+ * suggestion made in a dead zone still goes out later.
+ */
+function SuggestWorkCard({
+  queueItems,
+  onOpen,
+  onRetry,
+  onDiscard,
+}: {
+  queueItems: ReturnType<typeof useOfflineQueue>['items'];
+  onOpen: () => void;
+  onRetry: (itemId: string) => void;
+  onDiscard: (itemId: string) => void;
+}) {
+  return (
+    <View style={styles.suggestCard}>
+      <Pressable onPress={onOpen} style={({ pressed }) => [pressed && styles.actionButtonPressed]}>
+        <Text style={styles.suggestTitle}>Suggest work</Text>
+        <Text style={styles.suggestBody}>Spotted something this property needs? Send it to the office.</Text>
+      </Pressable>
+      {queueItems.map((item) => {
+        const payload = item.payload as SuggestWorkPayload;
+        return (
+          <View key={item.id} style={styles.materialsRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.materialsItemName}>{payload.serviceName}</Text>
+              {payload.note ? <Text style={styles.serviceRowSubtitle}>{payload.note}</Text> : null}
+              {item.status === 'failed' ? (
+                <Text style={[styles.errorText, styles.materialsErrorText]}>{item.lastError}</Text>
+              ) : null}
+            </View>
+            {item.status === 'failed' ? (
+              <View style={styles.materialsFailedActions}>
+                <Pressable onPress={() => onRetry(item.id)}>
+                  <Text style={styles.linkText}>Retry</Text>
+                </Pressable>
+                <Pressable onPress={() => onDiscard(item.id)}>
+                  <Text style={styles.linkText}>Discard</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={[styles.materialsStatusPill, { backgroundColor: C.amberTextStrong }]}>
+                <Text style={styles.materialsStatusPillText}>
+                  {item.status === 'syncing' ? 'Sending…' : 'Queued'}
+                </Text>
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function SuggestWorkModal({
+  visible,
+  services,
+  anchorVisitId,
+  onClose,
+  onSubmit,
+}: {
+  visible: boolean;
+  services: UpsellService[];
+  anchorVisitId: string;
+  onClose: () => void;
+  onSubmit: (
+    service: UpsellService,
+    note: string,
+    photo: { localUri: string; mimeType: string; fileName: string } | null
+  ) => Promise<void>;
+}) {
+  const [serviceId, setServiceId] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+  const [photo, setPhoto] = useState<{ localUri: string; mimeType: string; fileName: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+
+  const reset = () => {
+    setServiceId(null);
+    setNote('');
+    setPhoto(null);
+    setError(null);
+  };
+
+  const attachPhoto = async (source: 'camera' | 'library') => {
+    setError(null);
+    try {
+      const captured = await captureVisitPhoto(anchorVisitId, source);
+      if (captured) setPhoto(captured);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add photo');
+    }
+  };
+
+  const send = async () => {
+    const service = services.find((s) => s.id === serviceId);
+    if (!service) return;
+    setIsSending(true);
+    try {
+      await onSubmit(service, note, photo);
+      reset();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save the suggestion");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => {
+        reset();
+        onClose();
+      }}
+    >
+      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Text style={styles.suggestModalTitle}>Suggest work</Text>
+
+        <Text style={styles.infoLabel}>What does it need?</Text>
+        {services.map((s) => {
+          const picked = s.id === serviceId;
+          return (
+            <Pressable
+              key={s.id}
+              onPress={() => setServiceId(s.id)}
+              style={[styles.serviceChoice, picked && styles.serviceChoicePicked]}
+            >
+              <Text style={[styles.serviceChoiceName, picked && styles.serviceChoiceNamePicked]}>{s.name}</Text>
+              {s.upsellPitch ? <Text style={styles.serviceRowSubtitle}>{s.upsellPitch}</Text> : null}
+            </Pressable>
+          );
+        })}
+
+        <Text style={styles.infoLabel}>Anything the office should know?</Text>
+        <TextInput
+          style={styles.notesInput}
+          placeholder="e.g. front beds are thin, client mentioned it too"
+          placeholderTextColor="#94a3b8"
+          value={note}
+          onChangeText={setNote}
+          multiline
+        />
+
+        <Text style={styles.infoLabel}>Photo (a photo usually saves the office a trip)</Text>
+        <View style={styles.photoButtonRow}>
+          <Pressable
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+            onPress={() => void attachPhoto('camera')}
+          >
+            <Text style={styles.secondaryButtonText}>{photo ? 'Retake photo' : 'Take photo'}</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+            onPress={() => void attachPhoto('library')}
+          >
+            <Text style={styles.secondaryButtonText}>Choose from library</Text>
+          </Pressable>
+        </View>
+        {photo ? <Image source={{ uri: photo.localUri }} style={styles.photoImage} /> : null}
+
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.actionButton,
+            styles.actionButtonGreen,
+            pressed && styles.actionButtonPressed,
+            (!serviceId || isSending) && styles.actionButtonDisabled,
+          ]}
+          disabled={!serviceId || isSending}
+          onPress={() => void send()}
+        >
+          <Text style={styles.actionButtonText}>Send to office</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            reset();
+            onClose();
+          }}
+          style={styles.suggestCancel}
+        >
+          <Text style={styles.linkText}>Cancel</Text>
+        </Pressable>
+      </ScrollView>
+    </Modal>
   );
 }
 
@@ -1354,6 +1817,74 @@ function NotesToOfficeSection({
 }
 
 const styles = StyleSheet.create({
+  gateHint: {
+    textAlign: 'center',
+    color: C.amberText,
+    fontSize: 13,
+  },
+  notUsedToggle: {
+    marginLeft: 'auto',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  notUsedToggleOn: {
+    borderColor: C.amberBorder,
+    backgroundColor: C.amberBg,
+  },
+  notUsedToggleTextOn: {
+    color: C.amberText,
+  },
+  suggestCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.greenBorder,
+    backgroundColor: C.greenBg,
+    padding: 14,
+    gap: 10,
+  },
+  suggestTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.greenText,
+  },
+  suggestBody: {
+    fontSize: 12,
+    color: C.green,
+    marginTop: 2,
+  },
+  suggestModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: C.text,
+  },
+  suggestCancel: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  serviceChoice: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.card,
+    padding: 12,
+    gap: 2,
+  },
+  serviceChoicePicked: {
+    borderColor: C.green,
+    backgroundColor: C.greenBg,
+  },
+  serviceChoiceName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.text,
+  },
+  serviceChoiceNamePicked: {
+    color: C.greenText,
+  },
+
   screenBg: {
     backgroundColor: C.bg,
   },
@@ -1435,6 +1966,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     color: C.textFaint,
+  },
+  infoValueLink: {
+    color: C.blueText,
+    textDecorationLine: 'underline',
   },
   infoValue: {
     fontSize: 15,
