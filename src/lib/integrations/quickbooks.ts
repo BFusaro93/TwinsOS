@@ -1434,6 +1434,8 @@ export async function mirrorPaymentReversalToQuickBooks(
                 Id: link.qboPaymentId,
                 SyncToken: cur.SyncToken,
                 sparse: true,
+                // QuickBooks rejects a payment update without the customer, even a sparse one.
+                CustomerRef: cur.CustomerRef,
                 TotalAmt: amount,
                 Line: [{ Amount: amount, LinkedTxn: [{ TxnId: invoiceId, TxnType: "Invoice" }] }],
               })
