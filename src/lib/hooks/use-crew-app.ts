@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { downscaleImage } from "@/lib/utils/downscale-image";
 import { groupVisitsIntoStops, type Stop, type VisitWithNotesStamp } from "@/lib/utils/visit-stops";
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
+import { mapServiceSubitems } from "@/lib/utils/job-service-subitems";
 import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
 import {
   crewVisitComparator,
@@ -154,7 +155,7 @@ function crewVisitSelect(hidePricing: boolean): string {
     ${visitCols},
     clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
     crm_crews(name),
-    crm_jobs(${jobCols}, ${jobEmbeds}, crm_job_services(${serviceCols}))
+    crm_jobs(${jobCols}, ${jobEmbeds}, crm_job_services(${serviceCols}, crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at)))
   `;
 }
 
@@ -180,6 +181,7 @@ function mapJobRow(
         budgetedHours: (s.budgeted_hours as number) ?? 0,
         teamSize:      (s.team_size as number) ?? 1,
         sortOrder:     (s.sort_order as number) ?? 0,
+        subitems:      mapServiceSubitems(s.crm_job_service_subitems),
       }))
     : [];
   return {
