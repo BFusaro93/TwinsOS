@@ -24,6 +24,7 @@ import {
   useActivateClient,
 } from "@/lib/hooks/use-clients";
 import { TagEditor } from "@/components/crm/TagEditor";
+import { DispatchJobsDialog } from "@/components/crm/WaitingList";
 import { useTicket, useTickets } from "@/lib/hooks/use-tickets";
 import { useClientJobs, useUpdateJobStatus, useJobVisits, useClientAllVisits, useAllCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useInvoices, usePayments, usePayment, usePaymentAllocations, useAllocatedPaymentsFromOtherClients } from "@/lib/hooks/use-invoices";
@@ -2730,6 +2731,9 @@ function JobVisitsModal({
   // has a real visit yet, not from job_type alone.
   const { data: visits = [], isLoading } = useJobVisits(job.id);
   const isWaitingList = job.jobType === "waiting_list" && !visits.some((v) => !v.deletedAt);
+  const { can } = usePermissions();
+  const canSchedule = can("sched_waiting_list");
+  const [scheduleService, setScheduleService] = useState<CRMJobService | null>(null);
   const { data: allServices = [] } = useAllCRMServices();
   const serviceCodeMap = useMemo(() => {
     const m: Record<string, string> = {};
@@ -2802,6 +2806,7 @@ function JobVisitsModal({
                   </th>
                   <th className="px-4 py-2 text-right font-medium">Amount</th>
                   {mode === "upcoming" && <th className="px-4 py-2 text-center font-medium">Priority</th>}
+                  {isWaitingList && canSchedule && <th className="px-4 py-2" />}
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -2826,6 +2831,18 @@ function JobVisitsModal({
                           {job.priority ?? 1}
                         </span>
                       </td>
+                      {canSchedule && (
+                        <td className="px-4 py-2.5 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 px-2 text-[11px]"
+                            onClick={(e) => { e.stopPropagation(); setScheduleService(svc); }}
+                          >
+                            Schedule
+                          </Button>
+                        </td>
+                      )}
                     </tr>
                   );
                 }) : filtered.map((v: CRMJobVisit) => {
@@ -2871,6 +2888,13 @@ function JobVisitsModal({
           {isWaitingList ? `${waitingListRows.length} service${waitingListRows.length !== 1 ? "s" : ""}` : `${filtered.length} ${mode === "upcoming" ? "upcoming visit" : "visit"}${filtered.length !== 1 ? "s" : ""}`}
         </div>
       </div>
+      {scheduleService && (
+        <DispatchJobsDialog
+          items={[{ job, service: scheduleService }]}
+          onOpenChange={(open) => { if (!open) setScheduleService(null); }}
+          onDone={() => { setScheduleService(null); onClose(); }}
+        />
+      )}
     </div>
   );
 }

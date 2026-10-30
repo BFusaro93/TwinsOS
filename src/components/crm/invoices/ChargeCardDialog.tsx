@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Loader2, CreditCard, Check } from "lucide-react";
 import { toast } from "sonner";
@@ -84,17 +84,29 @@ export function ChargeCardDialog({
   const createIntent = useCreateCrmPaymentIntent();
   const chargeSaved = useChargeAutopayInvoice();
 
+  function resetState() {
+    setPaymentMethod("card");
+    setWaiveFee(false);
+    setOverrideFee(false);
+    setOverrideFeeDollars("");
+    setIntent(null);
+    setSucceeded(false);
+  }
+
   function handleOpenChange(next: boolean) {
-    if (!next) {
-      setPaymentMethod("card");
-      setWaiveFee(false);
-      setOverrideFee(false);
-      setOverrideFeeDollars("");
-      setIntent(null);
-      setSucceeded(false);
-    }
+    if (!next) resetState();
     onOpenChange(next);
   }
+
+  // The PaymentIntent is created for the balance at the time of "Continue". If
+  // the dialog is closed by the parent, or the invoice total changes while it
+  // is mounted, a kept intent would show (and charge) the old amount.
+  useEffect(() => {
+    if (!open) resetState();
+  }, [open]);
+  useEffect(() => {
+    setIntent((cur) => (cur && cur.balanceCents !== balanceCents && !succeeded ? null : cur));
+  }, [balanceCents, succeeded]);
 
   async function handleChargeSaved() {
     try {
