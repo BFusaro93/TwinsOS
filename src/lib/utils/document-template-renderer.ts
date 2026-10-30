@@ -152,6 +152,7 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[invoicetax]": "$75.00",
   "[invoicetotal]": "$1,325.00",
   "[invoicebalance]": "$1,325.00",
+  "[viewinvoiceonline]": "https://example.com/invoice/sample",
   "[paymentlink]": '<a href="#" style="color:#fff;background:#60ab45;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">Pay Now</a>',
   "[invoicegrid]": "",
 };
@@ -163,6 +164,14 @@ export const KNOWN_MERGE_TAG_KEYS = new Set(Object.keys(SAMPLE_MERGE_VALUES));
 export interface RenderableBlock {
   blockType: BlockType;
   content: string | null;
+  settings?: Record<string, unknown> | null;
+}
+
+/** A button's target: a merge tag (resolved at send time) or an http(s)/mailto/tel URL. */
+function buttonHref(settings: RenderableBlock["settings"]): string {
+  const raw = typeof settings?.href === "string" ? settings.href.trim() : "";
+  if (/^\[\w+\]$/.test(raw) || /^(https?:\/\/|mailto:|tel:)/i.test(raw)) return raw;
+  return "#";
 }
 
 function wrap(inner: string, style: string): string {
@@ -245,7 +254,7 @@ function renderBlock(
           );
     case "button":
       return wrap(
-        `<a href="#" style="display:inline-block;background:#60ab45;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">${content || "Button"}</a>`,
+        `<a href="${escapeHtml(buttonHref(block.settings))}" style="display:inline-block;background:#60ab45;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">${content || "Button"}</a>`,
         "text-align:center;margin:16px 0;"
       );
     default:

@@ -106,3 +106,39 @@ export function usePersistedColumns(viewKey: string, defaultKeys: string[]) {
 
   return [visibleKeys, setVisibleKeys] as const;
 }
+
+/**
+ * One JSON-serializable preference, persisted to the current user's profile.
+ * Renders with `defaultValue` until the saved value loads, then switches over
+ * once if `parse` accepts what was saved.
+ */
+export function usePersistedPref<T>(
+  key: string,
+  defaultValue: T,
+  parse: (saved: unknown) => T | null
+) {
+  const { data: prefs, isSuccess } = useUiPrefs();
+  const setPref = useSetUiPref();
+  const [value, setValueState] = useState<T>(defaultValue);
+  const appliedRef = useRef(false);
+
+  useEffect(() => {
+    if (isSuccess && !appliedRef.current) {
+      appliedRef.current = true;
+      const parsed = parse(prefs?.[key]);
+      if (parsed !== null) setValueState(parsed);
+    }
+    // parse is intentionally excluded: it only runs once, on first load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuccess, prefs, key]);
+
+  const setValue = useCallback(
+    (next: T) => {
+      setValueState(next);
+      setPref.mutate({ key, value: next }, { onError: () => toast.error("Couldn't save your preference") });
+    },
+    [key, setPref]
+  );
+
+  return [value, setValue] as const;
+}

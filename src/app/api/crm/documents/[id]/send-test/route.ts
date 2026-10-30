@@ -43,7 +43,7 @@ export async function POST(
 
   const body = await req.json() as {
     subject: string | null;
-    blocks: Array<{ blockType: BlockType; orderIndex: number; content: string | null }>;
+    blocks: Array<{ blockType: BlockType; orderIndex: number; content: string | null; settings?: Record<string, unknown> }>;
   };
 
   if (!Array.isArray(body.blocks) || body.blocks.length === 0) {
@@ -70,16 +70,26 @@ export async function POST(
 
   let attachments: Array<{ filename: string; content: Buffer }> | undefined;
   if (template.include_pdf) {
-    const sortedBlocks = await sanitizeImageBlocks(
-      [...body.blocks].sort((a, b) => a.orderIndex - b.orderIndex).map((b) => ({
-        ...b,
-        content: b.content ? resolveMergeTags(b.content, mergeVars) : b.content,
-      })),
-    );
-    const pdfBuffer = await renderToBuffer(
-      createElement(DocumentTemplatePdf, { blocks: sortedBlocks, title: template.name })
-    );
-    attachments = [{ filename: `${template.name.replace(/[^a-z0-9-_]+/gi, "-")}.pdf`, content: pdfBuffer }];
+    try {
+      const sortedBlocks = await sanitizeImageBlocks(
+        [...body.blocks].sort((a, b) => a.orderIndex - b.orderIndex).map((b) => ({
+          ...b,
+          content: b.content ? resolveMergeTags(b.content, mergeVars) : b.content,
+        })),
+      );
+      const pdfBuffer = await renderToBuffer(
+        createElement(DocumentTemplatePdf, { blocks: sortedBlocks, title: template.name })
+      );
+      attachments = [{ filename: `${template.name.replace(/[^a-z0-9-_]+/gi, "-")}.pdf`, content: pdfBuffer }];
+    } catch (err) {
+      // A PDF failure used to surface as an unhandled 500 and the editor just
+      // said "Failed to send test email" with no hint why.
+      console.error("[send-test-document] PDF render error:", err);
+      return NextResponse.json(
+        { error: "Couldn't build the PDF attachment for the test email. Turn off Include PDF in Settings to test without it." },
+        { status: 500 }
+      );
+    }
   }
 
   const resend = new Resend(process.env.RESEND_API_KEY!);

@@ -152,6 +152,7 @@ const INVOICE_TAGS: MergeTag[] = [
   { tag: "[invoicetotal]",        label: "Invoice Total",            group: "Invoice" },
   { tag: "[invoicebalance]",      label: "Balance Due",              group: "Invoice" },
   { tag: "[paymentlink]",         label: "Payment Link",             group: "Invoice" },
+  { tag: "[viewinvoiceonline]",   label: "Invoice Online Link (URL)", group: "Invoice" },
   { tag: "[invoicegrid]",         label: "Invoice Line Items",       group: "Invoice" },
 ];
 
@@ -177,6 +178,16 @@ export const MERGE_TAGS_BY_TYPE: Record<DocType, MergeTag[]> = {
   invoice_email: [...COMMON, ...INVOICE_TAGS],
   chemical:      [...COMMON, ...CHEMICAL_TAGS],
   text_message:  COMMON,
+};
+
+/**
+ * Where a Button block can point, per document type. `value` is stored on the
+ * block as `settings.href` and resolved at send time like any merge tag, so
+ * only tags every send route for that type actually fills in belong here.
+ * Any type can also use a custom URL.
+ */
+export const BUTTON_LINK_OPTIONS: Partial<Record<DocType, { value: string; label: string }[]>> = {
+  invoice_email: [{ value: "[viewinvoiceonline]", label: "View & pay invoice online" }],
 };
 
 export const DOC_TYPE_LABELS: Record<DocType, string> = {

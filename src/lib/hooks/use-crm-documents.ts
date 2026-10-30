@@ -279,6 +279,7 @@ export function useSendTestDocumentEmail(templateId: string) {
         blockType: BlockType;
         orderIndex: number;
         content: string | null;
+        settings?: Record<string, unknown>;
       }>;
     }): Promise<{ sentTo: string }> => {
       const res = await fetch(`/api/crm/documents/${templateId}/send-test`, {

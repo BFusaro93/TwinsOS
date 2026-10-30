@@ -45,7 +45,7 @@ import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog"
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
-import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
+import { usePersistedColumns, usePersistedPref } from "@/lib/hooks/use-ui-prefs";
 // Property-scoped defs, NOT the client-level ones: the property values these
 // columns render come from crm_property_custom_field_values, which keys off
 // crm_rate_matrix_field_defs. Reading the client-level def table here is what
@@ -149,7 +149,7 @@ const PRIORITY_FILTER_CLIENT_OPTIONS = [
 
 // ── dispatch dialog ──────────────────────────────────────────────────────────
 
-interface DispatchItem {
+export interface DispatchItem {
   job: CRMJob;
   /** When set, this item is one visit within a package/multi-service job rather than the whole job. */
   service: CRMJobService | null;
@@ -161,7 +161,7 @@ interface DispatchJobsDialogProps {
   onDone: () => void;
 }
 
-function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobsDialogProps) {
+export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobsDialogProps) {
   const { data: crews } = useCRMCrews();
   const createVisit = useCreateVisit();
   const updateVisit = useUpdateVisit();
@@ -418,17 +418,84 @@ function WaitingJobRow({
   );
 }
 
+// ── date window presets ──────────────────────────────────────────────────────
+
+type RangePreset = "next30" | "week" | "month" | "quarter" | "year" | "next90" | "custom";
+
+const RANGE_PRESETS: { value: Exclude<RangePreset, "custom">; label: string }[] = [
+  { value: "next30", label: "Next 30 days" },
+  { value: "week", label: "This week" },
+  { value: "month", label: "This month" },
+  { value: "quarter", label: "This quarter" },
+  { value: "year", label: "This year" },
+  { value: "next90", label: "Next 90 days" },
+];
+
+interface SavedRange { preset: RangePreset; start?: string; end?: string }
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseSavedRange(saved: unknown): SavedRange | null {
+  if (!saved || typeof saved !== "object") return null;
+  const { preset, start, end } = saved as Record<string, unknown>;
+  if (preset === "custom") {
+    return typeof start === "string" && typeof end === "string" && DATE_RE.test(start) && DATE_RE.test(end)
+      ? { preset, start, end }
+      : null;
+  }
+  return RANGE_PRESETS.some((p) => p.value === preset) ? { preset: preset as RangePreset } : null;
+}
+
+/** Relative presets are stored by name and resolved against today, so a saved
+ *  "This quarter" is still the current quarter next month. */
+function resolveRange(preset: Exclude<RangePreset, "custom">): { start: string; end: string } {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const d = now.getDate();
+  const ymd = (dt: Date) => toLocalDateString(dt);
+  switch (preset) {
+    case "week": {
+      const start = new Date(y, m, d - now.getDay());
+      return { start: ymd(start), end: ymd(new Date(y, m, d - now.getDay() + 6)) };
+    }
+    case "month":
+      return { start: ymd(new Date(y, m, 1)), end: ymd(new Date(y, m + 1, 0)) };
+    case "quarter": {
+      const q = Math.floor(m / 3) * 3;
+      return { start: ymd(new Date(y, q, 1)), end: ymd(new Date(y, q + 3, 0)) };
+    }
+    case "year":
+      return { start: ymd(new Date(y, 0, 1)), end: ymd(new Date(y, 11, 31)) };
+    case "next90":
+      return { start: ymd(now), end: ymd(new Date(y, m, d + 90)) };
+    case "next30":
+    default:
+      return { start: ymd(now), end: ymd(new Date(y, m, d + 30)) };
+  }
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 
 export function WaitingList() {
   const { can, isLoading: permissionsLoading } = usePermissions();
-  const today = toLocalDateString(new Date());
-  const thirtyOut = toLocalDateString(
-    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+  // The window is saved per user so a refresh keeps it. Presets are stored by
+  // name (recomputed against today); a hand-picked range stores its dates.
+  const [savedRange, setSavedRange] = usePersistedPref<SavedRange>(
+    "waiting_list_range",
+    { preset: "next30" },
+    parseSavedRange
   );
-
-  const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate] = useState(thirtyOut);
+  const { startDate, endDate } = useMemo(() => {
+    if (savedRange.preset === "custom" && savedRange.start && savedRange.end) {
+      return { startDate: savedRange.start, endDate: savedRange.end };
+    }
+    const r = resolveRange(savedRange.preset === "custom" ? "next30" : savedRange.preset);
+    return { startDate: r.start, endDate: r.end };
+  }, [savedRange]);
+  function setCustomRange(start: string, end: string) {
+    setSavedRange({ preset: "custom", start, end });
+  }
   const [search, setSearch] = useState("");
   const [activeColFilter, setActiveColFilter] = useState<ColFilterKey | null>(null);
   const [colFilterValue, setColFilterValue] = useState("");
@@ -625,18 +692,33 @@ export function WaitingList() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card px-4 py-2.5 shadow-sm">
         <ListOrdered className="h-4 w-4 shrink-0 text-slate-400 dark:text-neutral-500" />
         <span className="text-sm font-medium text-slate-700 dark:text-neutral-300">Date Window</span>
+        <select
+          value={savedRange.preset}
+          onChange={(e) => {
+            const v = e.target.value as RangePreset;
+            if (v === "custom") setCustomRange(startDate, endDate);
+            else setSavedRange({ preset: v });
+          }}
+          aria-label="Date window preset"
+          className="rounded border border-border bg-slate-50 dark:bg-muted/40 px-2 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
+        >
+          {RANGE_PRESETS.map((p) => (
+            <option key={p.value} value={p.value}>{p.label}</option>
+          ))}
+          <option value="custom">Custom range</option>
+        </select>
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"
             value={startDate}
-            onChange={(e) => e.target.value && setStartDate(e.target.value)}
+            onChange={(e) => e.target.value && setCustomRange(e.target.value, e.target.value > endDate ? e.target.value : endDate)}
             className="rounded border border-border bg-slate-50 dark:bg-muted/40 px-2 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
           />
           <span className="text-xs text-slate-400 dark:text-neutral-500">to</span>
           <input
             type="date"
             value={endDate}
-            onChange={(e) => e.target.value && setEndDate(e.target.value)}
+            onChange={(e) => e.target.value && setCustomRange(e.target.value < startDate ? e.target.value : startDate, e.target.value)}
             className="rounded border border-border bg-slate-50 dark:bg-muted/40 px-2 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
           />
         </div>
