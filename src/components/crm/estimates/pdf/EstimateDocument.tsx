@@ -405,7 +405,14 @@ function LineItemSections({
             <View key={i}>
             <View style={[S.tableRow, i % 2 === 1 ? S.tableRowAlt : {}]}>
               <View style={S.cellService}>
-                {li.estimateDesc ? <RichText html={li.estimateDesc} style={S.serviceDescText} /> : null}
+                {li.estimateDesc
+                  ? <RichText html={li.estimateDesc} style={S.serviceDescText} />
+                  // A line with no client-facing description (e.g. one added from a bundle)
+                  // used to print as a blank row; fall back to the service name, as the
+                  // emailed [estimategrid] already does.
+                  : li.serviceName
+                    ? <Text style={S.cellText}>{li.serviceName}</Text>
+                    : null}
               </View>
               {settings.showVisits && (
                 <View style={S.cellNum}><Text style={S.cellText}>{li.visits}</Text></View>
