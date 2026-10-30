@@ -6,6 +6,7 @@ import { formatCurrency } from "@/lib/utils";
 import { bpsToPercent } from "@/lib/estimate-calc";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
+import { useEstimateEquipmentCost } from "@/lib/hooks/use-equipment";
 import { hasPerTypeOverhead } from "@/lib/estimate-calc";
 import {
   Select,
@@ -109,6 +110,8 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   // never counted.
   const lineItems   = (estimate.lineItems ?? []).filter((li) => !li.deletedAt && li.status !== "lost" && li.status !== "draft");
   const directCosts = estimate.directCosts ?? [];
+  // Equipment attached to the counted lines — internal cost, folded into the Asset/Equipment row.
+  const { data: equipmentCostCents = 0 } = useEstimateEquipmentCost(lineItems.map((li) => li.id));
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
   const { data: overheadSettings } = useOverheadSettings();
@@ -200,9 +203,10 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
     costByType[dc.costType] = (costByType[dc.costType] ?? 0) + dc.totalCents;
   });
   costByType.labor += lineItems.reduce((s, li) => s + li.totalCostCents, 0);
+  costByType.asset_equipment += equipmentCostCents;
 
   const totalDirectCents  = directCosts.reduce((s, dc) => s + dc.totalCents, 0);
-  const totalCostCents    = lineItems.reduce((s, li) => s + li.totalCostCents, 0) + totalDirectCents;
+  const totalCostCents    = lineItems.reduce((s, li) => s + li.totalCostCents, 0) + totalDirectCents + equipmentCostCents;
   const rev               = estimate.revenueCents;
   // Revenue is already net of BOTH discount sources (recalcEstimateTotals
   // subtracts each line item's discount_cents before summing to subtotal,

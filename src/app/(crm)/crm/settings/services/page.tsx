@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Layers } from "lucide-react";
 import { ServicesList } from "@/components/crm/services/ServicesList";
+import { EquipmentList } from "@/components/crm/services/EquipmentList";
 import { ServiceDialog } from "@/components/crm/services/ServiceDialog";
 import { PriceAdjustmentForm } from "@/components/crm/pricing/PriceAdjustmentForm";
 import { PriceAdjustmentHistory } from "@/components/crm/pricing/PriceAdjustmentHistory";
@@ -17,7 +18,7 @@ import type { CRMService } from "@/types/crm-jobs";
  * bill. Splitting them across the sidebar hid that relationship and added a
  * tenth entry to an already-long Administration section.
  */
-type Tab = "catalog" | "adjustments" | "history";
+type Tab = "catalog" | "equipment" | "adjustments" | "history";
 
 export default function ServicesPage() {
   const { can, isLoading: permissionsLoading } = usePermissions();
@@ -53,6 +54,7 @@ export default function ServicesPage() {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "catalog", label: "Service Catalog" },
+    { key: "equipment", label: "Equipment" },
     ...(canAdjustPrices
       ? ([
           { key: "adjustments", label: "Price Adjustments" },
@@ -68,7 +70,9 @@ export default function ServicesPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           {tab === "catalog"
             ? "Manage your service catalog, pricing modes, production rates, and rate matrices."
-            : "Re-price live client work in bulk. Preview every line before it is written, and undo a whole run afterwards."}
+            : tab === "equipment"
+              ? "Machine cost rates that roll into estimate line costs. Internal only — never shown to clients."
+              : "Re-price live client work in bulk. Preview every line before it is written, and undo a whole run afterwards."}
         </p>
       </div>
 
@@ -91,6 +95,7 @@ export default function ServicesPage() {
       )}
 
       {tab === "catalog" && <ServicesList onAdd={openAdd} onEdit={openEdit} />}
+      {tab === "equipment" && <EquipmentList />}
       {tab === "adjustments" && canAdjustPrices && (
         <PriceAdjustmentForm onApplied={() => setTab("history")} />
       )}

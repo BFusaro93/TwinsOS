@@ -671,6 +671,7 @@ export function useUpsertLineItem() {
       item: Record<string, any>;
     }) => {
       const supabase = createClient();
+      let insertedId: string | null = null;
       // A blind .upsert() with a partial payload (e.g. just a discount or
       // notes patch on an existing row) fails NOT NULL validation on columns
       // like service_name that aren't in the patch — Postgres checks the
@@ -688,12 +689,16 @@ export function useUpsertLineItem() {
         if (error) throw error;
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (supabase as any)
+        const { data: inserted, error } = await (supabase as any)
           .from("estimate_line_items")
-          .insert({ estimate_id: estimateId, ...item });
+          .insert({ estimate_id: estimateId, ...item })
+          .select("id")
+          .single();
         if (error) throw error;
+        insertedId = inserted?.id ?? null;
       }
       await recalcEstimateTotals(estimateId);
+      return { id: (item.id as string | undefined) ?? insertedId };
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
