@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
+import type { ImportPreviewRow } from "@/lib/stripe/import-saved-methods";
 
 export interface CreatePaymentIntentResult {
   clientSecret: string;
@@ -53,6 +54,50 @@ export function useStartConnectOAuth() {
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to start Stripe connection");
       return body as { url: string };
+    },
+  });
+}
+
+export interface SavedMethodImportPreview {
+  rows: ImportPreviewRow[];
+  totalCustomers: number;
+  customersWithoutMethod: number;
+  truncated: boolean;
+}
+
+export interface SavedMethodImportResult {
+  imported: number;
+  failed: Array<{ customerId: string; clientId: string; error?: string }>;
+  autopayEnabled: boolean;
+}
+
+/** Dry run — reads the connected Stripe account and matches customers to clients; writes nothing. */
+export function usePreviewSavedMethodImport() {
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/crm/payments/connect/import-methods");
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to read saved payment methods from Stripe");
+      return body as SavedMethodImportPreview;
+    },
+  });
+}
+
+export function useApplySavedMethodImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { links: Array<{ customerId: string; clientId: string }>; enableAutopay: boolean }) => {
+      const res = await fetch("/api/crm/payments/connect/import-methods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(typeof body.error === "string" ? body.error : "Failed to import payment methods");
+      return body as SavedMethodImportResult;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["clients"] });
     },
   });
 }

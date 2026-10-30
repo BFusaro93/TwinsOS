@@ -6,9 +6,19 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
+      # stripe-js and react-stripe-js pin each other's major via peerDependencies,
+      # so they must always be bumped in the same PR.
+      stripe:
+        patterns: ["@stripe/*"]
+      # One weekly PR for everything low-risk. Major bumps are deliberately not
+      # grouped: each one is its own PR so a break is attributable and can be
+      # tested (or ignored) on its own.
       minor-and-patch:
         update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]

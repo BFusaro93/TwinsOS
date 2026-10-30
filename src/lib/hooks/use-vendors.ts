@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapVendor } from "@/lib/supabase/mappers";
+import type { BulkImportResult } from "@/lib/csv";
 import type { Vendor } from "@/types";
 
 export function useVendors() {
@@ -121,19 +122,15 @@ export function useUpdateVendor() {
 export function useBulkImportVendors() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user!.id).single();
 
-      const hasActiveFlag = new Set<string>();
-      const inserts = rows
-        .filter((r) => r.name?.trim())
-        .map((r) => {
-          if (r.isActive?.trim()) hasActiveFlag.add(r.name.trim().toLowerCase());
-          return r;
-        })
-        .map((r) => ({
+      const failed: BulkImportResult["failed"] = [];
+      const inserts: { rowNum: number; hasActiveFlag: boolean; row: ReturnType<typeof buildRow> }[] = [];
+      function buildRow(r: Record<string, string>) {
+        return {
           name: r.name.trim(),
           contact_name: r.contactName?.trim() || "",
           email: r.email?.trim() || "",
@@ -148,8 +145,16 @@ export function useBulkImportVendors() {
           // The export writes "Active" / "Inactive"; anything that reads as
           // "no" must stay inactive on a round trip (only "false" used to).
           is_active: !["false", "inactive", "no", "n", "0"].includes(r.isActive?.trim().toLowerCase() ?? ""),
-        }));
-      if (inserts.length === 0) return 0;
+        };
+      }
+      rows.forEach((r, i) => {
+        if (!r.name?.trim()) {
+          failed.push({ row: i + 1, error: "Missing required field: Name" });
+          return;
+        }
+        inserts.push({ rowNum: i + 1, hasActiveFlag: !!r.isActive?.trim(), row: buildRow(r) });
+      });
+      if (inserts.length === 0) return { succeeded: 0, failed };
 
       // vendors has no unique index on name, so a duplicate never raised
       // 23505 and re-importing a list (or repeating a name inside one file)
@@ -163,8 +168,10 @@ export function useBulkImportVendors() {
         if (!idByName.has(key)) idByName.set(key, v.id as string);
       }
 
-      let count = 0;
-      for (const row of inserts) {
+      // A bad row used to throw out of the loop: every later row was dropped
+      // and the earlier ones stayed imported with only an opaque error shown.
+      let succeeded = 0;
+      for (const { rowNum, hasActiveFlag, row } of inserts) {
         const key = row.name.toLowerCase();
         const existingId = idByName.get(key);
         if (existingId) {
@@ -182,19 +189,26 @@ export function useBulkImportVendors() {
             ...(row.website && { website: row.website }),
             ...(row.notes && { notes: row.notes }),
             ...(row.vendor_type && { vendor_type: row.vendor_type }),
-            ...(hasActiveFlag.has(key) && { is_active: row.is_active }),
+            ...(hasActiveFlag && { is_active: row.is_active }),
           };
-          if (Object.keys(patch).length === 0) { count++; continue; }
-          const { error } = await supabase.from("vendors").update(patch).eq("id", existingId);
-          if (error) throw error;
+          if (Object.keys(patch).length > 0) {
+            const { error } = await supabase.from("vendors").update(patch).eq("id", existingId);
+            if (error) {
+              failed.push({ row: rowNum, error: `"${row.name}": ${error.message}` });
+              continue;
+            }
+          }
         } else {
           const { data: created, error } = await supabase.from("vendors").insert(row).select("id").single();
-          if (error) throw error;
+          if (error) {
+            failed.push({ row: rowNum, error: `"${row.name}": ${error.message}` });
+            continue;
+          }
           idByName.set(key, created.id as string);
         }
-        count++;
+        succeeded++;
       }
-      return count;
+      return { succeeded, failed };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vendors"] }),
   });

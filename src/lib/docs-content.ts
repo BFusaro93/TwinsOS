@@ -578,7 +578,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Adding a meter to an asset",
             detail:
-              "Open any asset or vehicle detail and go to the Meters tab. Click '+ New Meter'. Choose the unit (miles, hours, gallons, cycles, etc.) and give it a name.",
+              "Open any asset or vehicle detail and go to the Meters tab. Click '+ New Meter'. Choose the unit (miles, hours, gallons, cycles, etc.), give it a name, and pick Cumulative (odometer, hours; readings only go up) or Level (fuel, tank; readings can go up or down, with an optional capacity).",
           },
           {
             step: "Recording a reading",
@@ -588,7 +588,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Creating a meter-threshold automation",
             detail:
-              "Go to CMMS > Automations and click '+ New Automation'. Set Trigger Type to 'Meter Threshold', select the meter, choose the operator (≥ for cumulative like mileage), and enter the threshold value.",
+              "Go to CMMS > Automations and click '+ New Automation'. Set Trigger Type to 'Meter Threshold', select the meter, choose the operator (≥ for cumulative meters like mileage; < 'drops below' for level meters like a fuel tank), and enter the threshold value. A level rule fires once when the value drops below the threshold and re-arms after a reading brings it back to or above it. Service Intervals and PM triggers are for cumulative meters only.",
           },
           {
             step: "Other trigger types",
@@ -1745,6 +1745,46 @@ export const DOC_SECTIONS: DocSection[] = [
         ],
       },
       {
+        id: "quickbooks-integration",
+        title: "Connecting QuickBooks Online",
+        summary: "Send customers, invoices and payments to QuickBooks automatically — one way, Landscapt to QuickBooks.",
+        icon: Receipt,
+        steps: [
+          {
+            step: "Connect",
+            detail:
+              "An admin goes to Landscapt Settings > Integrations (also shown under Settings > Accounting), clicks Connect QuickBooks, signs in to Intuit, picks the QuickBooks Online company and approves. The card then reads 'Connected' with the company name. QuickBooks Desktop isn't supported.",
+          },
+          {
+            step: "What syncs",
+            detail:
+              "Clients (as QuickBooks customers), invoices once they leave draft (number, lines, terms, due date, discount and sales tax), payments (including Stripe card and ACH payments, with the check/reference number), and later changes: invoice edits and voids update the same QuickBooks invoice, and refunds or chargebacks void or reduce the QuickBooks payment. AR write-offs go to QuickBooks as credit memos applied to the invoice; credits you apply from an existing prepayment aren't sent again.",
+          },
+          {
+            step: "One way, and only new records",
+            detail:
+              "Landscapt writes to QuickBooks; nothing is pulled back, so change invoices and payments in Landscapt. Only invoices and payments created after you connect are sent — existing ones are not backfilled.",
+          },
+          {
+            step: "Matching clients to customers",
+            detail:
+              "An exact name match links automatically, no match creates a new QuickBooks customer, and similar-but-not-identical names ask you to choose: open the client, find the QuickBooks section, click Sync to QuickBooks and pick a match or 'None of these — create new'.",
+          },
+          {
+            step: "Check for failures",
+            detail:
+              "Settings > Accounting > Sync Status lists anything that didn't sync, with the reason and a Retry button (needs the QB Reconciliation and QuickBooks Resync permissions). A safety-net job also re-checks every 15 minutes.",
+          },
+          {
+            step: "Full guide",
+            detail:
+              "How each field maps, timing, what doesn't sync, and fixes for each error message.",
+            href: "/settings/support/quickbooks-guide",
+            linkLabel: "Open the QuickBooks guide",
+          },
+        ],
+      },
+      {
         id: "zapier-integration",
         title: "Connecting Zapier",
         summary: "Trigger Zaps on Equipt and Landscapt events, or create records from a Zap.",
@@ -1878,7 +1918,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Do meter-based oil changes count toward PM compliance?",
-        a: "Yes. A work order from a Meter Threshold automation — created directly or converted from its request — is due 7 days after the meter tripped. Done within 7 days is on time; a request still unconverted after 7 days counts as a missed PM.",
+        a: "Yes. A work order from a cumulative Meter Threshold (≥) automation — created directly or converted from its request — is due 7 days after the meter tripped. Done within 7 days is on time; a request still unconverted after 7 days counts as a missed PM. Low-level (drops below) alerts from a level meter are not PM and don't count.",
       },
       {
         q: "What happens when a part falls below minimum stock?",
@@ -1909,6 +1949,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Landscapt (CRM)",
     items: [
+      {
+        q: "A job I skipped or cancelled a visit for is back on the Waiting List. Is that right?",
+        a: "Yes. A waiting-list job leaves the list once it has a live visit, but a skipped or cancelled visit never happened, so a job whose only visits were skipped or cancelled returns to the Waiting List. Scheduling it again creates a new visit and takes it off.",
+      },
+      {
+        q: "When does an invoice count as overdue, and who gets contract and estimate expiry reminders?",
+        a: "An unpaid invoice is overdue once its due day has passed; one on Due on Receipt terms with no due date goes overdue the day after its invoice date, and an invoice with no balance left is never overdue. About three days before an open estimate expires, its creator is reminded (its sales rep when there is no creator). Contract expiry warnings go only for signed or active contracts, never for cancelled, expired or draft ones. A snow job whose contract has ended no longer shows on the Snow Jobs board, and its completed visits bill per visit.",
+      },
+      {
+        q: "Why can't a crew member edit punches on a visit?",
+        a: "Once a visit's hours are on a live invoice, the crew app refuses changes or deletions to member punches on it and asks you to have the office correct the time. The office can still edit times. A crew note resent after a dropped connection is saved once.",
+      },
       {
         q: "How does the crew clock in for the day (Start Day / End Day)?",
         a: "On the Crew App's My Schedule screen, tap Start Day once and everyone on the crew's roster for that day is clocked in; tap End Day at the shop to clock everyone out (the app asks you to confirm if a job is still running). This is the paid shop-to-shop day that feeds payroll. Start Job and Stop Job separately clock the crew in and out of each stop for Job Costing. If nobody taps Start Day, starting the first job opens the day anyway and payroll flags it as 'Started at first job'. The Start Day button stays disabled if the crew has nobody on its roster (add people under Team > Crews > Team Assignments).",
@@ -2052,7 +2104,15 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I import existing data?",
-        a: "Go to Settings > Import / Export. Download the template for the entity you want to import, fill it in, and upload. The importer validates each row before committing.",
+        a: "Open the list for what you want to import (Clients, Parts, Products and so on), choose Import / Export, then Download Template to get a blank file with the right columns. Fill it in and upload it with Import CSV; the importer validates each row and tells you which rows failed or were skipped as duplicates. Settings > Import / Export also exports your data in the same column layout, which works as a template too.",
+      },
+      {
+        q: "What file formats and values does the CSV importer accept?",
+        a: "CSV files saved as UTF-8, Windows-1252 (Excel's 'CSV (Comma delimited)' on Windows) or UTF-16 ('Unicode Text') all import with accents and curly quotes intact, and columns can be separated by commas, semicolons or tabs. Money cells can include a $ and thousands separators ($1,250.50). The protective leading quote an export adds in front of =, +, - or @ is removed on import. If some rows fail, the dialog says how many imported and how many failed, with each failing row's reason. Rows skipped as duplicates are listed separately: clients that match an existing client's email or phone, products with no part number that match an existing product's name, and employees with no email that match an existing employee's name. Re-importing employees only updates the cells your file fills in.",
+      },
+      {
+        q: "Why can't I invite a user, or assign an approver?",
+        a: "An invite is refused when the email already belongs to a different type of account (such as a client portal login) or to a user in another organization; use a different email. In an approval flow editor, Requisition and Purchase Order steps can't be assigned to the viewer or requestor role, or to a user with one of those roles, because they can't approve; pick a manager, admin or purchaser.",
       },
       {
         q: "How is data isolated — can other companies see our data?",
@@ -2061,6 +2121,26 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I connect the Samsara integration for vehicle odometers?",
         a: "Go to Settings > Integrations and enter your Samsara API key. Once connected, vehicle odometer readings sync automatically and update the corresponding vehicle meter, which can trigger mileage-based automations.",
+      },
+      {
+        q: "How do I connect QuickBooks?",
+        a: "An admin goes to Landscapt Settings > Integrations (or Settings > Accounting), clicks Connect QuickBooks, signs in to Intuit, chooses the QuickBooks Online company and approves. Invoices and payments created from then on are sent to QuickBooks automatically. It's one-way — nothing comes back from QuickBooks — and only QuickBooks Online is supported.",
+      },
+      {
+        q: "Why isn't an invoice showing up in QuickBooks?",
+        a: "Drafts are never sent, and invoices created before you connected aren't backfilled. Otherwise check Settings > Accounting > Sync Status for the reason and click Retry. The most common cause is a client whose name only loosely matches an existing QuickBooks customer: open the client's QuickBooks section, click Sync to QuickBooks, and pick the right customer. A safety-net job also re-checks every 15 minutes.",
+      },
+      {
+        q: "If I change or void an invoice in Landscapt, does QuickBooks update?",
+        a: "Yes. Editing a sent invoice (lines, tax, number, date, terms) updates the same QuickBooks invoice about two seconds after you stop, and voiding it voids it in QuickBooks. A voided QuickBooks invoice can't be reopened, so un-voiding in Landscapt shows a sync error instead. Changes made in QuickBooks are never pulled back.",
+      },
+      {
+        q: "Do payments and refunds sync to QuickBooks?",
+        a: "Yes. Recorded payments and Stripe card/ACH payments are sent as payments against the invoice, with your check or reference number. A split payment becomes one QuickBooks payment per invoice. Refunding voids the QuickBooks payment (full refund) or reduces it (partial), and chargebacks do the same. Prepayments and credits not applied to an invoice don't sync.",
+      },
+      {
+        q: "Why is the QuickBooks total different from my Landscapt invoice?",
+        a: "Almost always sales tax: QuickBooks calculates tax itself from a tax code at the invoice's rate, and any difference is recorded under Settings > Accounting > Sync Status. Check the tax rate on the invoice and the tax setup on the QuickBooks company, then fix whichever is wrong and Retry.",
       },
       {
         q: "How do I connect Zapier?",

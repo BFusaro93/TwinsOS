@@ -30,6 +30,7 @@ export interface AppNotification {
     | "estimate_deposit_excess"
     | "ticket_created"
     | "ticket_assigned"
+    | "ticket_contributor_added"
     | "ticket_comment"
     | "contract_expiring"
     | "warranty_expiring"
@@ -38,6 +39,7 @@ export interface AppNotification {
     | "injury_reported"
     | "part_stock_short"
     | "sales_meeting_reminder"
+    | "sales_meeting_assigned"
     | "payment_disputed";
   title: string;
   body: string;

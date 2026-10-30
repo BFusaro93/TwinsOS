@@ -14,7 +14,7 @@ const STATUS_FLOW: [string, string][] = [
   ["Sent", "The proposal went to the client. Also where a signed contract lands automatically if you edit its price, dates, or line items (see the callout below)."],
   ["Signed", "You (or the client) confirmed the terms. Sets signed_at and signed_by, and fires the “Contract Signed” automation/Zapier trigger."],
   ["Active", "The contract is live and, if Auto Generate is on, eligible for automatic monthly invoicing."],
-  ["Expired", "Past its end date. The expiry-warning email/notification fires 3 days before this, for any active, non-auto-renewing contract."],
+  ["Expired", "Past its end date. The expiry-warning email/notification fires 3 days before this, for any signed or active, non-auto-renewing contract (cancelled, expired and draft contracts get no warning). A retry never posts a duplicate in-app notification."],
   ["Cancelled", "Terminated before or at its end date. No further invoices generate."],
 ];
 

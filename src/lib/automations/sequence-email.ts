@@ -70,7 +70,14 @@ export async function resolveEmailStepContent(
   // An email step saved with no subject and no body (e.g. a step dropped in and
   // never filled out) would send a blank "(no subject)" email to every client
   // it reaches. Skip it instead; the execution log records why.
-  if (!params.subjectTemplate?.trim() && !params.bodyTemplate?.trim()) {
+  // The editor saves an untouched body as empty markup (<p></p>), so test the
+  // visible text, not the raw string.
+  const visibleBody = (params.bodyTemplate ?? "")
+    .replace(/<(img|hr)\b[^>]*>/gi, "x")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .trim();
+  if (!params.subjectTemplate?.trim() && !visibleBody) {
     return { error: "email step has no subject or body (fill it in to enable it)" };
   }
 

@@ -73,9 +73,9 @@ Legend: **Required** = the app is broken or a core feature is off without it. **
 
 ## QuickBooks Online
 
-- **Variables:** `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET`, `QUICKBOOKS_ENVIRONMENT` (`sandbox` or `production`; the ID/secret pair must match).
+- **Variables:** `QUICKBOOKS_CLIENT_ID`, `QUICKBOOKS_CLIENT_SECRET`, `QUICKBOOKS_ENVIRONMENT` (`sandbox` or `production`; the ID/secret pair must match) — the default for every org. Optional per-org sandbox, like Stripe's `_TEST` keys: orgs listed in `QUICKBOOKS_SANDBOX_ORG_IDS` (comma-separated) use `QUICKBOOKS_CLIENT_ID_SANDBOX` / `QUICKBOOKS_CLIENT_SECRET_SANDBOX` and the sandbox API, everyone else uses the default pair. The environment is recorded on each connection (`integrations.config.environment`) at connect time, so refreshes keep using the keys the tokens were issued under; rows without it fall back to the resolved environment. Register the same callback URL on both Intuit key sets.
 - **Setup:** create the app at developer.intuit.com and register the redirect URI `https://<domain>/api/integrations/quickbooks/callback`.
-- **Behavior:** one-way sync (customers, invoices, payments, terms, tax, voids, Stripe payments, refunds) on a 15-minute cron plus a reconcile pass. Code in `lib/integrations/quickbooks*.ts`, routes under `/api/integrations/quickbooks/*` and `/api/cron/quickbooks-sync`. Built recently (#343); treat as the least battle-tested integration.
+- **Behavior:** one-way sync (customers, invoices, payments, terms, tax, voids, Stripe payments, refunds) on a 15-minute cron plus a reconcile pass. Code in `lib/integrations/quickbooks*.ts`, routes under `/api/integrations/quickbooks/*` and `/api/cron/quickbooks-sync`. AR write-offs push as credit memos (not cash payments), credit applications are not pushed, and payment pushes are idempotent. Built recently (#343); treat as the least battle-tested integration.
 
 ## Google Maps
 

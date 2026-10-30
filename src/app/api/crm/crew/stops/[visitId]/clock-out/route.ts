@@ -165,6 +165,11 @@ export async function POST(
     // or a double tap). Answer success, as the concurrent-race path below does —
     // a 400 here left a failed "didn't sync" card for work that had saved.
     if (stopRows.length > 0) {
+      // The office may have completed the stop while the crew was still punched
+      // in (Mark Complete never closes punches). The crew's Clock Out is then the
+      // only thing that will, or those punches stay open on the Timesheet forever.
+      // No-op when there are none (a true replay).
+      await closeStopPunches(supabase, anchor.id, anchor.clocked_out_at ?? new Date().toISOString());
       return NextResponse.json({ visitIds: stopRows.map((r) => r.id), visits: stopRows, alreadyClockedOut: true });
     }
     return NextResponse.json({ error: "Nothing to clock out for this stop" }, { status: 400 });

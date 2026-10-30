@@ -103,7 +103,7 @@ export const DOC_GUIDES: DocGuide[] = [
     slug: "meters-guide",
     kicker: "Equipt (CMMS)",
     title: "Meters & Usage-Based Automations",
-    description: "Track hours, miles, gallons, and cycles on any asset — and let Equipt open the work order for you the moment a threshold is crossed.",
+    description: "Track hours, miles, cycles, and fuel levels on any asset — and let Equipt open the work order for you the moment a threshold is crossed.",
     icon: Gauge,
   },
   {
@@ -308,6 +308,13 @@ export const DOC_GUIDES: DocGuide[] = [
     title: "Connecting Zapier",
     description: "Every trigger, every action, and exactly what fires each one.",
     icon: Workflow,
+  },
+  {
+    slug: "quickbooks-guide",
+    kicker: "Integrations",
+    title: "QuickBooks Online Sync",
+    description: "What Landscapt sends to QuickBooks, when it sends it, and what to do when something doesn't show up.",
+    icon: Calculator,
   },
   {
     slug: "samsara-guide",

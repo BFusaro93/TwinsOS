@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { BREADCRUMB_LINKABLE_PATHS } from "@/lib/breadcrumb-routes";
 import { Menu, PanelLeftClose, Plus, Search, UserCog } from "lucide-react";
 import { useUIStore, useCurrentUserStore, useQuickAddStore, useSidebarRailDefault } from "@/stores";
 import type { QuickAddType } from "@/stores/quick-add-store";
@@ -156,11 +158,12 @@ function useBreadcrumbs() {
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   return segments.map((seg, i) => {
+    const href = `/${segments.slice(0, i + 1).join("/")}`;
     if (UUID_RE.test(seg)) {
       const parent = i > 0 ? segments[i - 1] : "";
-      return detailLabels[parent] ?? "Details";
+      return { label: detailLabels[parent] ?? "Details", href };
     }
-    return labels[seg] ?? seg;
+    return { label: labels[seg] ?? seg, href };
   });
 }
 
@@ -314,7 +317,13 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
                   : "text-muted-foreground"
               )}
             >
-              {crumb}
+              {i < breadcrumbs.length - 1 && BREADCRUMB_LINKABLE_PATHS.has(crumb.href) ? (
+                <Link href={crumb.href} className="hover:text-slate-800 dark:hover:text-neutral-100 hover:underline">
+                  {crumb.label}
+                </Link>
+              ) : (
+                crumb.label
+              )}
             </span>
           </span>
         ))}

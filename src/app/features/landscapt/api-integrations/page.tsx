@@ -26,7 +26,7 @@ const ITEMS: DeepDiveItem[] = [
   {
     icon: Landmark,
     title: "QuickBooks Sync",
-    body: "A one-way sync keeps QuickBooks current with clients and invoices from Landscapt, without double-entering the same data in two systems.",
+    body: "A one-way sync keeps QuickBooks Online current with clients, invoices, and payments from Landscapt — including edits, voids, and refunds — without double-entering the same data in two systems.",
   },
   {
     icon: Zap,

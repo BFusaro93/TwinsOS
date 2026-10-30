@@ -8,6 +8,8 @@ import { toast } from "sonner";
 export interface TicketContributor {
   id: string;
   ticketId: string;
+  /** null on legacy rows whose name didn't match exactly one employee. */
+  employeeId: string | null;
   userName: string;
   addedAt: string;
 }
@@ -17,6 +19,7 @@ function mapContributor(row: any): TicketContributor {
   return {
     id: row.id,
     ticketId: row.ticket_id,
+    employeeId: row.employee_id ?? null,
     userName: row.user_name,
     addedAt: row.added_at,
   };
@@ -40,19 +43,47 @@ export function useTicketContributors(ticketId: string) {
   });
 }
 
+/** Ids of tickets where this employee is a contributor. */
+export function useContributedTicketIds(employeeId: string | null) {
+  return useQuery({
+    queryKey: ["ticket-contributions", employeeId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("ticket_contributors")
+        .select("ticket_id")
+        .eq("employee_id", employeeId as string);
+      if (error) throw error;
+      return new Set<string>((data as { ticket_id: string }[]).map((r) => r.ticket_id));
+    },
+    enabled: !!employeeId,
+  });
+}
+
 export function useAddTicketContributor() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ ticketId, userName }: { ticketId: string; userName: string }) => {
+    mutationFn: async ({ ticketId, employeeId, userName }: { ticketId: string; employeeId: string; userName: string }) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("ticket_contributors")
-        .insert({ ticket_id: ticketId, user_name: userName });
+        .insert({ ticket_id: ticketId, employee_id: employeeId, user_name: userName })
+        .select("id")
+        .single();
       if (error) throw error;
+      return data as { id: string };
     },
-    onSuccess: (_data, { ticketId }) => {
+    onSuccess: (row, { ticketId }) => {
+      // Best-effort, after the write succeeded — same pattern as the "assigned" notice.
+      fetch(`/api/crm/tickets/${ticketId}/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: "contributor_added", contributorId: row.id }),
+      }).catch(() => {});
       qc.invalidateQueries({ queryKey: ["ticket-contributors", ticketId] });
+      qc.invalidateQueries({ queryKey: ["ticket-contributions"] });
     },
     onError: () => {
       toast.error("Failed to add contributor");

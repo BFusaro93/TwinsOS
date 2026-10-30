@@ -270,25 +270,32 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
               />
             </div>
 
-            {/* Address — street, city, state, zip */}
-            <div className="sm:col-span-2 grid gap-1.5">
+            {/* Address — street, city, state, zip. Checked once, when focus leaves the
+                whole group: checking on each field's blur ran a half-typed address
+                (street only) and re-rendered the form while the user was tabbing. */}
+            <div
+              className="sm:col-span-2 grid gap-4"
+              onBlur={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                void addr.verify({ address, city, state, zip });
+              }}
+            >
+            <div className="grid gap-1.5">
               <Label htmlFor="vendor-address">Street address</Label>
               <Input
                 id="vendor-address"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                onBlur={() => void addr.verify({ address, city, state, zip })}
                 placeholder="123 Main St"
               />
             </div>
-            <div className="sm:col-span-2 grid grid-cols-[1fr_auto_auto] gap-3">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-3">
               <div className="grid gap-1.5">
                 <Label htmlFor="vendor-city">City</Label>
                 <Input
                   id="vendor-city"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  onBlur={() => void addr.verify({ address, city, state, zip })}
                   placeholder="Worcester"
                 />
               </div>
@@ -298,7 +305,6 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
                   id="vendor-state"
                   value={state}
                   onChange={(e) => setState(e.target.value)}
-                  onBlur={() => void addr.verify({ address, city, state, zip })}
                   placeholder="MA"
                 />
               </div>
@@ -308,10 +314,10 @@ export function NewVendorDialog({ open, onOpenChange, initialData, onCreated }: 
                   id="vendor-zip"
                   value={zip}
                   onChange={(e) => setZip(e.target.value)}
-                  onBlur={() => void addr.verify({ address, city, state, zip })}
                   placeholder="01605"
                 />
               </div>
+            </div>
             </div>
             <div className="sm:col-span-2">
               <AddressSuggestion

@@ -31,6 +31,7 @@ import { Separator } from "@/components/ui/separator";
 import { useApprovalFlows, useUpdateApprovalFlow, useCreateApprovalFlow } from "@/lib/hooks/use-approval-flows";
 import { useUsers } from "@/lib/hooks/use-users";
 import { useRoles } from "@/lib/hooks/use-roles";
+import { LIMITED_APPROVER_ROLES } from "@/lib/hooks/use-approval-requests";
 import { useEmployees } from "@/lib/hooks/use-employees";
 import type { ApprovalFlow, ApprovalFlowStep, ApprovalRequiredRole, Role } from "@/types";
 
@@ -119,6 +120,16 @@ function EditStepForm({
       : allUsers.filter((u) => u.role === r);
   }
 
+  // Limited Equipt roles have no approve/reject buttons — block saving them.
+  const assignedUser = allUsers.find((u) => u.id === assignedUserId);
+  const limitedProblem = isCrmEstimate
+    ? null
+    : LIMITED_APPROVER_ROLES.includes(role)
+      ? `"${role}" users can't approve. Choose manager, admin or purchaser.`
+      : assignedUser && LIMITED_APPROVER_ROLES.includes(assignedUser.role)
+        ? `${assignedUser.name} has the ${assignedUser.role} role and can't approve. Pick someone else.`
+        : null;
+
   return (
     <div className="rounded-lg border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 p-4">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400">
@@ -201,11 +212,14 @@ function EditStepForm({
           </p>
         </div>
       </div>
+      {limitedProblem && (
+        <p className="mt-3 text-xs font-medium text-red-600 dark:text-red-400">{limitedProblem}</p>
+      )}
       <div className="mt-3 flex gap-2">
         <Button
           size="sm"
           className="h-7 gap-1 text-xs"
-          disabled={!label.trim()}
+          disabled={!label.trim() || !!limitedProblem}
           onClick={() =>
             onSave({
               requiredRole: role,
@@ -343,7 +357,7 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
   const { data: allUsers = [] } = useUsers();
   const { data: crmRoles = [] } = useRoles(true);
   const { data: employees = [] } = useEmployees();
-  const { mutate: saveFlow, isPending: saving, isError: saveError } = useUpdateApprovalFlow();
+  const { mutate: saveFlow, isPending: saving, isError: saveError, error: saveErr } = useUpdateApprovalFlow();
   const [steps, setSteps] = useState<ApprovalFlowStep[]>(flow.steps);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addingNew, setAddingNew] = useState(false);
@@ -359,7 +373,7 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
   useEffect(() => {
     if (!dirty) return;
     const timer = setTimeout(() => {
-      saveFlowRef.current({ flowId: flow.id, steps: stepsRef.current }, { onSuccess: () => setDirty(false) });
+      saveFlowRef.current({ flowId: flow.id, steps: stepsRef.current, entityType: flow.entityType }, { onSuccess: () => setDirty(false) });
     }, 400);
     return () => clearTimeout(timer);
   }, [steps, dirty, flow.id]);
@@ -368,7 +382,7 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
   useEffect(() => {
     return () => {
       if (dirtyRef.current) {
-        saveFlowRef.current({ flowId: flow.id, steps: stepsRef.current });
+        saveFlowRef.current({ flowId: flow.id, steps: stepsRef.current, entityType: flow.entityType });
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -479,7 +493,16 @@ function FlowCard({ flow }: { flow: ApprovalFlow }) {
 
       {saveError && (
         <p className="mb-2 rounded-md bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-red-600 dark:text-red-400">
-          Failed to save approval flow. Please try again.
+          {saveErr instanceof Error && saveErr.message ? saveErr.message : "Failed to save approval flow. Please try again."}
+        </p>
+      )}
+
+      {!isCrmEstimate && steps.some((s) =>
+        LIMITED_APPROVER_ROLES.includes(s.requiredRole) ||
+        LIMITED_APPROVER_ROLES.includes(allUsers.find((u) => u.id === s.assignedUserId)?.role ?? "")
+      ) && (
+        <p className="mb-2 rounded-md bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          One or more steps are assigned to a viewer or requestor, who can&apos;t approve. Requests will stall at that step until you change it.
         </p>
       )}
 

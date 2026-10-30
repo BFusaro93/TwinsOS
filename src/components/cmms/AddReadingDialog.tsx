@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useAddMeterReading } from "@/lib/hooks/use-meter-readings";
+import { useAddMeterReading, levelReadingError } from "@/lib/hooks/use-meter-readings";
 import type { Meter } from "@/types";
 
 interface AddReadingDialogProps {
@@ -40,10 +40,19 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
   const addReading = useAddMeterReading();
 
   const parsedValue = readingValue !== "" ? Number(readingValue) : null;
+  const isLevel = meter.kind === "level";
+  const levelError =
+    isLevel && parsedValue !== null && !isNaN(parsedValue)
+      ? levelReadingError(parsedValue, meter.capacity, meter.unit)
+      : null;
+  // A past-dated reading on a cumulative meter is checked against its neighbours
+  // (previous/next readings) when saved, not against today's value — a missed
+  // reading from last week is legitimately lower than the current one.
+  const isBackdated = readingDate !== "" && readingDate < todayISODate();
   const isValid =
     parsedValue !== null &&
     !isNaN(parsedValue) &&
-    parsedValue >= meter.currentValue &&
+    (isLevel ? levelError === null : isBackdated ? parsedValue >= 0 : parsedValue >= meter.currentValue) &&
     readingDate !== "";
 
   function handleClose() {
@@ -56,10 +65,15 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isValid || parsedValue === null) return;
-    // Append T12:00:00 so Postgres stores it as noon local-ish time — a bare
+    // A reading for today is stamped with the real time: noon would sort BEFORE a
+    // reading logged earlier today at a later hour (e.g. a meter's starting reading
+    // created that evening), so the newer reading would never become current and a
+    // same-day higher reading would be rejected as "higher than a later reading".
+    // Past dates use T12:00:00 so Postgres stores noon local-ish time — a bare
     // YYYY-MM-DD string is parsed as UTC midnight which shifts back a day in
     // US timezones when displayed.
-    const readingAtISO = readingDate + "T12:00:00";
+    const readingAtISO =
+      readingDate === todayISODate() ? new Date().toISOString() : readingDate + "T12:00:00";
     addReading.mutate(
       {
         meterId: meter.id,
@@ -107,14 +121,23 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
               <Input
                 id="reading-value"
                 type="number"
-                min={meter.currentValue}
+                min={isLevel || isBackdated ? 0 : meter.currentValue}
+                max={isLevel && meter.capacity != null ? meter.capacity : undefined}
                 placeholder={meter.currentValue.toString()}
                 value={readingValue}
                 onChange={(e) => setReadingValue(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Must be ≥ current reading ({meter.currentValue.toLocaleString()} {meter.unit})
-              </p>
+              {levelError ? (
+                <p className="text-xs text-destructive">{levelError}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {isLevel
+                    ? `Current level; can go up or down${meter.capacity != null ? ` (0 to ${meter.capacity.toLocaleString()} ${meter.unit})` : ""}`
+                    : isBackdated
+                      ? "Must fit between the readings before and after this date"
+                      : `Must be ≥ current reading (${meter.currentValue.toLocaleString()} ${meter.unit})`}
+                </p>
+              )}
             </div>
 
             {/* Reading Date */}
@@ -142,6 +165,10 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
               />
             </div>
           </div>
+
+          {addReading.error && (
+            <p className="mt-4 text-sm text-destructive">{addReading.error.message}</p>
+          )}
 
           <DialogFooter className="mt-6">
             <Button type="button" variant="outline" onClick={handleClose}>

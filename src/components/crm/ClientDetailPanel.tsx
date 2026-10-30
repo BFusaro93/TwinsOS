@@ -261,6 +261,24 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
+// Org-defined custom fields (Settings → Custom Fields) that have a value for
+// this client — the built-in takeoff rows above never include them, so they
+// were only visible inside the Edit dialog.
+function ClientCustomFieldRows({ clientId }: { clientId: string }) {
+  const { data: defs = [] } = useCustomFieldDefs();
+  const { data: values = [] } = useClientCustomFieldValues(clientId);
+  return (
+    <>
+      {defs.map((def) => {
+        const v = values.find((x) => x.fieldDefId === def.id);
+        const raw = def.fieldType === "number" ? v?.valueNumber?.toLocaleString() : v?.valueText;
+        if (raw == null || raw === "") return null;
+        return <InfoRow key={def.id} label={def.name} value={def.unit ? `${raw} ${def.unit}` : String(raw)} />;
+      })}
+    </>
+  );
+}
+
 // ── SavedPaymentMethodSection ─────────────────────────────────────────────────
 // Card/bank on file for autopay ("Invoices to Charge" queues use this, not the
 // invoice-level default_payment_method preference above).
@@ -4045,6 +4063,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 <InfoRow label="Yards of mulch" value={client.yardsOfMulch?.toLocaleString()} />
                 <InfoRow label="Gate code" value={client.gateCode} />
                 <InfoRow label="Notes to crew" value={client.notesToCrew} />
+                <ClientCustomFieldRows clientId={clientId} />
               </div>
 
               {/* Compact address-only property list. Properties are created from

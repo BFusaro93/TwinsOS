@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { randomBytes } from "crypto";
 import { createClient } from "@/lib/supabase/server";
 import { isStripeConfigured } from "@/lib/stripe/server";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 const STATE_COOKIE = "stripe_connect_oauth_state";
 
@@ -31,6 +32,10 @@ export async function POST(request: Request) {
   if (profile.role !== "admin") {
     return NextResponse.json({ error: "Only admins can manage payment settings" }, { status: 403 });
   }
+
+  // Stripe's login belongs to the customer's own admin, and the callback writes to the caller's HOME org.
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "connecting Stripe (the customer's own admin needs to do this)");
+  if (impersonating) return impersonating;
 
   const state = randomBytes(24).toString("hex");
   const cookieStore = await cookies();
