@@ -75,7 +75,21 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120, allowIm
       StarterKit.configure({ heading: false, codeBlock: false, code: false }),
       Underline,
       TextAlign.configure({ types: ["paragraph"] }),
-      ...(allowImages ? [Image] : []),
+      ...(allowImages
+        ? [
+            Image.configure({
+              // Drag a corner to resize; width/height are saved on the <img> and
+              // carry through to the preview, email and PDF.
+              resize: {
+                enabled: true,
+                directions: ["top-left", "top-right", "bottom-left", "bottom-right"],
+                minWidth: 40,
+                minHeight: 40,
+                alwaysPreserveAspectRatio: true,
+              },
+            }),
+          ]
+        : []),
     ],
     content: value || "",
     onUpdate({ editor }) {

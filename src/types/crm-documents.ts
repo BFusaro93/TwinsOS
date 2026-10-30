@@ -9,7 +9,8 @@ export type BlockType =
   | "line_items"
   | "signature"
   | "image"
-  | "button";
+  | "button"
+  | "columns";
 
 export interface DocumentTemplate {
   id: string;
@@ -212,4 +213,5 @@ export const BLOCK_TYPE_LABELS: Record<BlockType, string> = {
   signature:  "Signature",
   image:      "Image",
   button:     "Button",
+  columns:    "Columns",
 };

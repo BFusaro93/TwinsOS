@@ -195,6 +195,11 @@ function wrap(inner: string, style: string): string {
 // inside a single block) renders with no gap between paragraphs unless we
 // inline the same spacing here.
 export function addParagraphSpacing(html: string): string {
+  // A blank line typed in the editor (Enter twice) is an empty <p></p>. The
+  // editor shows it as a full line, but an empty block has zero height in
+  // preview/email/PDF, so the author's blank lines disappeared. Give it a <br>
+  // so it keeps one line of height.
+  html = html.replace(/(<p(?:\s[^>]*)?>)\s*(<\/p>)/gi, "$1<br>$2");
   return html.replace(/<p(\s[^>]*)?>/gi, (_match, attrs: string | undefined) => {
     const existing = attrs ?? "";
     const styleMatch = existing.match(/style="([^"]*)"/i);
@@ -204,6 +209,67 @@ export function addParagraphSpacing(html: string): string {
     }
     return `<p style="margin:0 0 6px 0"${existing}>`;
   });
+}
+
+// ── Columns block ────────────────────────────────────────────────────────────
+// Stored in block.content as JSON: {"count":2|3,"columns":["<p>..</p>", ...]}.
+// `columns` may hold more entries than `count` (switching 3 → 2 keeps the third
+// column's text so switching back is lossless); only the first `count` render.
+
+export const COLUMNS_MIN = 2;
+export const COLUMNS_MAX = 3;
+
+export interface ColumnsContent {
+  count: number;
+  columns: string[];
+}
+
+export function parseColumnsContent(raw: string | null | undefined): ColumnsContent {
+  const fallback: ColumnsContent = { count: COLUMNS_MIN, columns: ["", ""] };
+  if (!raw) return fallback;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return fallback;
+    const obj = parsed as { count?: unknown; columns?: unknown };
+    const columns = Array.isArray(obj.columns)
+      ? obj.columns.map((c) => (typeof c === "string" ? c : ""))
+      : [];
+    const count =
+      typeof obj.count === "number" && obj.count >= COLUMNS_MAX ? COLUMNS_MAX : COLUMNS_MIN;
+    while (columns.length < count) columns.push("");
+    return { count, columns };
+  } catch {
+    return fallback;
+  }
+}
+
+export function serializeColumnsContent(content: ColumnsContent): string {
+  return JSON.stringify(content);
+}
+
+function renderColumnsBlock(
+  raw: string | null,
+  mergeVars: Record<string, string>,
+  options?: { preserveUnresolvedKnownTags?: boolean }
+): string {
+  const { count, columns } = parseColumnsContent(raw);
+  const cells = columns.slice(0, count).map((html) => {
+    const resolved = html ? resolveMergeTags(html, mergeVars, options) : "";
+    return addParagraphSpacing(resolved);
+  });
+  if (cells.every((c) => c.trim().length === 0)) return "";
+  const gutter = 16;
+  const widthPct = Math.floor(100 / count);
+  const tds = cells
+    .map((html, i) => {
+      const pad =
+        i === 0 ? `padding:0 ${gutter / 2}px 0 0;` :
+        i === count - 1 ? `padding:0 0 0 ${gutter / 2}px;` :
+        `padding:0 ${gutter / 2}px;`;
+      return `<td valign="top" width="${widthPct}%" style="width:${widthPct}%;vertical-align:top;${pad}font-size:14px;line-height:1.6;">${html}</td>`;
+    })
+    .join("");
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin-bottom:16px;table-layout:fixed;"><tr>${tds}</tr></table>`;
 }
 
 export function renderBlocksToHtml(
@@ -232,6 +298,9 @@ function renderBlock(
   mergeVars: Record<string, string>,
   options?: { preserveUnresolvedKnownTags?: boolean }
 ): string {
+  if (block.blockType === "columns") {
+    return renderColumnsBlock(block.content, mergeVars, options);
+  }
   const content = block.content ? resolveMergeTags(block.content, mergeVars, options) : "";
   const spacedContent = addParagraphSpacing(content);
 

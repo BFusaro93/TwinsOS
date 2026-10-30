@@ -3,8 +3,28 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
-import type { EstimateTemplate, EstimateTemplateItem } from "@/types/crm-estimates";
+import type { EstimateTemplate, EstimateTemplateItem, EstimateTemplateItemSubitem } from "@/types/crm-estimates";
 import { toDisplaySettings, type DisplaySettings } from "@/lib/estimate-display-settings";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapSubitem(row: any): EstimateTemplateItemSubitem {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    templateItemId: row.template_item_id,
+    type: row.type,
+    productId: row.product_id ?? null,
+    serviceId: row.service_id ?? null,
+    name: row.name,
+    qty: Number(row.qty),
+    rateCents: row.rate_cents,
+    costCents: row.cost_cents,
+    invoice: row.invoice ?? true,
+    printOnInvoice: row.print_on_invoice ?? true,
+    printOnEstimate: row.print_on_estimate ?? true,
+    sortOrder: row.sort_order ?? 0,
+  };
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapTemplateItem(row: any): EstimateTemplateItem {
@@ -29,6 +49,11 @@ function mapTemplateItem(row: any): EstimateTemplateItem {
     budgetMethod: row.budget_method ?? "manual",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    subitems: (row.estimate_template_item_subitems ?? [])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((r: any) => !r.deleted_at)
+      .map(mapSubitem)
+      .sort((a: EstimateTemplateItemSubitem, b: EstimateTemplateItemSubitem) => a.sortOrder - b.sortOrder),
   };
 }
 
@@ -57,7 +82,7 @@ export function useEstimateTemplates() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("estimate_templates")
-        .select("*, estimate_template_items(*)")
+        .select("*, estimate_template_items(*, estimate_template_item_subitems(*))")
         .is("deleted_at", null)
         .order("name");
       if (error) throw error;
@@ -186,4 +211,105 @@ export function useDeleteTemplateItem() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["estimate-templates"] }),
   });
+}
+
+export interface TemplateSubitemInput {
+  id?: string;
+  type: "product" | "subservice";
+  productId: string | null;
+  serviceId: string | null;
+  name: string;
+  qty: number;
+  rateCents: number;
+  costCents: number;
+  invoice?: boolean;
+  printOnInvoice?: boolean;
+  printOnEstimate?: boolean;
+  sortOrder?: number;
+}
+
+export function useUpsertTemplateSubitem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ templateItemId, item }: { templateItemId: string; item: TemplateSubitemInput }) => {
+      const supabase = createClient();
+      const row = {
+        template_item_id: templateItemId,
+        type: item.type,
+        product_id: item.productId,
+        service_id: item.serviceId,
+        name: item.name,
+        qty: item.qty,
+        rate_cents: item.rateCents,
+        cost_cents: item.costCents,
+        invoice: item.invoice ?? true,
+        print_on_invoice: item.printOnInvoice ?? true,
+        print_on_estimate: item.printOnEstimate ?? true,
+        sort_order: item.sortOrder ?? 0,
+      };
+      // Existing rows go through a real UPDATE (partial patches would trip
+      // NOT NULL checks on the INSERT side of an upsert).
+      if (item.id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
+          .from("estimate_template_item_subitems")
+          .update(row)
+          .eq("id", item.id);
+        if (error) throw error;
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from("estimate_template_item_subitems").insert(row);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["estimate-templates"] }),
+  });
+}
+
+export function useDeleteTemplateSubitem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("estimate_template_item_subitems")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["estimate-templates"] }),
+  });
+}
+
+/**
+ * Copies a bundle item's sub-items onto a freshly created estimate line.
+ * Callers must run recalcEstimateTotals(estimateId) afterwards (sub-item
+ * dollars count toward the estimate subtotal). Estimates only: jobs have no
+ * sub-item concept.
+ */
+export async function copyTemplateSubitemsToLine(
+  lineItemId: string,
+  subitems: EstimateTemplateItemSubitem[] | undefined,
+): Promise<void> {
+  if (!lineItemId || !subitems?.length) return;
+  const supabase = createClient();
+  const rows = subitems.map((s, idx) => ({
+    line_item_id: lineItemId,
+    type: s.type,
+    product_id: s.productId,
+    service_id: s.serviceId,
+    name: s.name,
+    qty: s.qty,
+    rate_cents: s.rateCents,
+    cost_cents: s.costCents,
+    total_cents: Math.round(s.qty * s.rateCents),
+    invoice: s.invoice,
+    print_on_invoice: s.printOnInvoice,
+    print_on_estimate: s.printOnEstimate,
+    sort_order: idx,
+  }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).from("estimate_line_item_subitems").insert(rows);
+  if (error) throw error;
 }

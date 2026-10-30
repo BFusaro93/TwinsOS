@@ -1,6 +1,7 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { EstimateDocument, EstimateDocumentMulti } from "@/components/crm/estimates/pdf/EstimateDocument";
+import { PRINTED_SUBITEM_SELECT, pickPrintedSubitems } from "@/lib/estimates/printed-subitems";
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { getPublishedProposal } from "@/lib/estimates/proposal-content";
@@ -22,7 +23,7 @@ async function buildEstimatePDFData(
     .select(`
       *,
       clients(display_name, billing_address, billing_city, billing_state, billing_zip),
-      estimate_line_items(*),
+      estimate_line_items(*, ${PRINTED_SUBITEM_SELECT}),
       estimate_milestones(name, amount_cents, sort_order, deleted_at)
     `)
     .eq("id", estimateId)
@@ -95,6 +96,7 @@ async function buildEstimatePDFData(
       // "750.00"). EstimateDocument scales the printed rate from this field;
       // the emailed copy already passes it.
       complexityBps: (li.complexity_bps as number | null) ?? null,
+      subitems: pickPrintedSubitems(li.estimate_line_item_subitems),
     }));
 
   const addr = (org?.address as Record<string, string>) ?? {};

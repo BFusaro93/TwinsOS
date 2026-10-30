@@ -250,6 +250,26 @@ export interface EstimateTemplateItem {
   budgetMethod: BudgetMethod;             // snapshotted from the service when the item is added
   createdAt: string;
   updatedAt: string;
+  subitems?: EstimateTemplateItemSubitem[];
+}
+
+/** A product / subservice line nested under a bundle item; copied onto the
+ *  estimate line's estimate_line_item_subitems when the bundle is applied. */
+export interface EstimateTemplateItemSubitem {
+  id: string;
+  orgId: string;
+  templateItemId: string;
+  type: 'product' | 'subservice';
+  productId: string | null;
+  serviceId: string | null;
+  name: string;
+  qty: number;
+  rateCents: number;
+  costCents: number;
+  invoice: boolean;
+  printOnInvoice: boolean;
+  printOnEstimate: boolean;
+  sortOrder: number;
 }
 
 // ── form values ────────────────────────────────────────────────────────────────

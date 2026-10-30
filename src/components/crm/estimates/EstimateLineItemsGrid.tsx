@@ -22,7 +22,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { Trash2, Copy, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical, AlertTriangle } from "lucide-react";
+import { Trash2, Copy, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical, AlertTriangle, Printer } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -49,6 +49,7 @@ import { useLineItemEquipment, useApplyServiceEquipmentDefaults } from "@/lib/ho
 import {
   useLineItemSubitems,
   useDeleteSubitem,
+  useToggleSubitemPrint,
   type LineItemSubitem,
 } from "@/lib/hooks/use-line-item-subitems";
 import type { EstimateLineItem, LineItemStatus } from "@/types/crm-estimates";
@@ -116,6 +117,7 @@ const STATUS_COLOR: Record<LineItemStatus, string> = {
 function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClick: () => void }) {
   const { data: subitems = [], isLoading } = useLineItemSubitems(lineItemId);
   const { mutateAsync: deleteSubitem } = useDeleteSubitem();
+  const { mutate: togglePrint } = useToggleSubitemPrint();
   const [editingSubitem, setEditingSubitem] = useState<LineItemSubitem | null>(null);
 
   async function handleDelete(s: LineItemSubitem) {
@@ -167,7 +169,21 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
               </button>
             </div>
           </td>
-          <td />
+          <td className="px-2 py-1">
+            <div className="flex items-center gap-1">
+              {/* Like Service Autopilot: one click shows/hides this sub-item on the
+                  client's estimate. Always visible so the state is readable. */}
+              <button
+                type="button"
+                onClick={() => togglePrint({ id: s.id, lineItemId, field: "printOnEstimate", value: !s.printOnEstimate })}
+                title={s.printOnEstimate ? "Printed on the estimate — click to hide" : "Not printed on the estimate — click to show"}
+                aria-pressed={s.printOnEstimate}
+                className={`rounded p-0.5 ${s.printOnEstimate ? "text-brand-600 dark:text-brand-400" : "text-slate-300 dark:text-neutral-600"} hover:text-brand-700 dark:hover:text-brand-400`}
+              >
+                <Printer className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </td>
         </tr>
       ))}
       <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50/40 dark:bg-muted/40">

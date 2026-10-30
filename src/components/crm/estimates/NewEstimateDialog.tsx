@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { recalcEstimateTotals, useCreateEstimate, useUpsertLineItem } from "@/lib/hooks/use-estimates";
-import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
+import { useEstimateTemplates, copyTemplateSubitemsToLine } from "@/lib/hooks/use-estimate-templates";
 import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
@@ -235,7 +235,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                 discount_value:       item.discountValue,
                 applied_discount_id:  item.appliedDiscountId,
               },
-            });
+            }).then((res) => copyTemplateSubitemsToLine(res?.id ?? "", item.subitems));
           })
         );
         // The concurrent upserts above each recalculate the estimate's rollup

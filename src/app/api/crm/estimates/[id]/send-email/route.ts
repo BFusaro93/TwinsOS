@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { EstimateDocument } from "@/components/crm/estimates/pdf/EstimateDocument";
+import { PRINTED_SUBITEM_SELECT, pickPrintedSubitems } from "@/lib/estimates/printed-subitems";
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { complexityFactor } from "@/lib/estimate-calc";
@@ -40,7 +41,11 @@ function buildEstimateGridHtml(lineItems: EstimatePDFLineItem[]): string {
       <td style="padding:6px 4px;border-bottom:1px solid #f1f5f9">${desc}</td>
       <td style="padding:6px 4px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap">${li.qty}${li.unitType ? " " + escapeHtml(li.unitType) : ""}</td>
       <td style="padding:6px 4px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap">${fmtCents(li.totalCents)}</td>
-    </tr>`;
+    </tr>${(li.subitems ?? []).map((sub) => `<tr>
+      <td style="padding:2px 4px 2px 20px;border-bottom:1px solid #f8fafc;color:#64748b;font-size:12px">${escapeHtml(sub.name)}</td>
+      <td style="padding:2px 4px;border-bottom:1px solid #f8fafc;color:#64748b;font-size:12px;text-align:right;white-space:nowrap">${sub.qty}</td>
+      <td style="padding:2px 4px;border-bottom:1px solid #f8fafc;color:#64748b;font-size:12px;text-align:right;white-space:nowrap">${fmtCents(sub.totalCents)}</td>
+    </tr>`).join("")}`;
   }).join("");
   return `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
     <thead><tr style="text-align:left;border-bottom:2px solid #e2e8f0">
@@ -144,7 +149,7 @@ export async function POST(
       *,
       clients(display_name, primary_email, email_bounced_at, billing_address, billing_city, billing_state, billing_zip),
       sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name),
-      estimate_line_items(*),
+      estimate_line_items(*, ${PRINTED_SUBITEM_SELECT}),
       estimate_milestones(name, amount_cents, sort_order, deleted_at)
     `)
     .eq("id", estimateId)
@@ -332,6 +337,7 @@ export async function POST(
       visits: li.visits ?? 1,
       totalCents: li.total_cents ?? 0,
       tier: li.tier ?? null,
+      subitems: pickPrintedSubitems(li.estimate_line_item_subitems),
     }));
 
   const installmentSummary = computeInstallmentSummary(

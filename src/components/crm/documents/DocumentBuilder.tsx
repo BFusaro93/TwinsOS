@@ -1,14 +1,18 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useSaveDocumentBlocks,
   useSendTestDocumentEmail,
   useUpdateDocumentTemplate,
 } from "@/lib/hooks/use-crm-documents";
 import {
+  COLUMNS_MAX,
+  COLUMNS_MIN,
+  parseColumnsContent,
   renderBlocksToHtml,
   SAMPLE_MERGE_VALUES,
+  serializeColumnsContent,
 } from "@/lib/utils/document-template-renderer";
 import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
 import type { RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
@@ -39,6 +43,7 @@ import {
   GripVertical,
   ImageIcon,
   List,
+  Columns2,
   Loader2,
   MinusSquare,
   Monitor,
@@ -90,6 +95,7 @@ const BLOCK_PALETTE: BlockDef[] = [
   { type: "spacer",     icon: <Move className="h-4 w-4" />,        defaultContent: "",                                      useRichText: false },
   { type: "signature",  icon: <Signature className="h-4 w-4" />,   defaultContent: "<p>[companyname]<br>[companyphone]</p>", useRichText: true },
   { type: "button",     icon: <AlignCenter className="h-4 w-4" />, defaultContent: "View Your Document",                   useRichText: false },
+  { type: "columns",    icon: <Columns2 className="h-4 w-4" />,    defaultContent: serializeColumnsContent({ count: 2, columns: ["", ""] }), useRichText: false },
 ];
 
 // ── Draft block ───────────────────────────────────────────────────────────────
@@ -202,6 +208,85 @@ function ImageBlockContent({
   );
 }
 
+// ── Columns block ─────────────────────────────────────────────────────────────
+
+function ColumnsBlockContent({
+  content,
+  onChange,
+  editorRef,
+}: {
+  content: string | null;
+  onChange: (content: string) => void;
+  editorRef: React.MutableRefObject<RichTextEditorHandle | null>;
+}) {
+  const { count, columns } = parseColumnsContent(content);
+  const columnRefs = useRef<Array<RichTextEditorHandle | null>>([]);
+  const focusedColumn = useRef(0);
+
+  // Expose one handle for the whole block so the builder's merge-tag buttons
+  // insert into whichever column was last focused.
+  useEffect(() => {
+    editorRef.current = {
+      insertContent: (text: string) => {
+        const target = columnRefs.current[Math.min(focusedColumn.current, count - 1)];
+        target?.insertContent(text);
+      },
+      focus: () => columnRefs.current[0]?.focus(),
+    };
+    return () => {
+      editorRef.current = null;
+    };
+  }, [editorRef, count]);
+
+  function setCount(next: number) {
+    const cols = [...columns];
+    while (cols.length < next) cols.push("");
+    onChange(serializeColumnsContent({ count: next, columns: cols }));
+  }
+
+  function setColumn(i: number, html: string) {
+    const cols = [...columns];
+    cols[i] = html;
+    onChange(serializeColumnsContent({ count, columns: cols }));
+  }
+
+  return (
+    <div onClick={(e) => e.stopPropagation()} className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-slate-500 dark:text-neutral-400">Columns</span>
+        {[COLUMNS_MIN, COLUMNS_MAX].map((n) => (
+          <Button
+            key={n}
+            type="button"
+            size="sm"
+            variant={count === n ? "default" : "outline"}
+            className="h-6 px-2 text-xs"
+            onClick={() => setCount(n)}
+          >
+            {n}
+          </Button>
+        ))}
+      </div>
+      <div
+        className={cn("grid gap-3", count === 3 ? "grid-cols-1 lg:grid-cols-3" : "grid-cols-1 md:grid-cols-2")}
+      >
+        {columns.slice(0, count).map((html, i) => (
+          <div key={i} className="min-w-0" onFocusCapture={() => { focusedColumn.current = i; }}>
+            <RichTextEditor
+              ref={(h) => { columnRefs.current[i] = h; }}
+              value={html}
+              onChange={(v) => setColumn(i, v)}
+              placeholder={`Column ${i + 1} — text, images, merge tags`}
+              minHeight={100}
+              allowImages
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Block canvas ──────────────────────────────────────────────────────────────
 
 interface BlockCanvasProps {
@@ -272,6 +357,8 @@ function BlockCanvas({
           </div>
         ) : block.blockType === "image" ? (
           <ImageBlockContent url={block.content} onChange={onChange} />
+        ) : block.blockType === "columns" ? (
+          <ColumnsBlockContent content={block.content} onChange={onChange} editorRef={editorRef} />
         ) : block.blockType === "button" ? (
           <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
             <input
