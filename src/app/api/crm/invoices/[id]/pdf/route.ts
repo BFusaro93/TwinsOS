@@ -22,11 +22,14 @@ export async function GET(
   // Explicit org filter as defense-in-depth alongside RLS — per CLAUDE.md,
   // org_id must always be scoped from the session, not implicit trust in a
   // policy that could itself change (e.g. a future crew-role RLS carve-out).
-  const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // my_org_id() (not profiles.org_id) so staff impersonating a customer org
+  // resolve to that org — profiles.org_id is the staff member's own org, which
+  // made every invoice of the impersonated org come back "not found".
+  const { data: orgId } = await supabase.rpc("my_org_id");
+  if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const result = await renderInvoicePDF(supabase, id, profile.org_id, user.id);
+    const result = await renderInvoicePDF(supabase, id, orgId, user.id);
     if (!result) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
 
     return new NextResponse(result.buffer as unknown as BodyInit, {

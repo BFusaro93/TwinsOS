@@ -24,14 +24,17 @@ interface ChatTurn {
 /**
  * Follow-ups like "and what if they're not linked?" carry no searchable
  * nouns of their own, so the retrieval query also folds in the previous
- * user questions from this conversation.
+ * user questions (and the last reply) from this conversation.
  */
 function retrievalQuery(question: string, history: ChatTurn[]): string {
   const earlier = history
     .filter((t) => t.role === "user")
     .slice(-2)
     .map((t) => t.content.slice(0, 500));
-  return [...earlier, question].join(" ");
+  // The last reply names the guide and menu path being discussed, so a
+  // follow-up like "I can't find that setting" keeps retrieving the same guide.
+  const lastReply = history.filter((t) => t.role === "assistant").slice(-1).map((t) => t.content.slice(0, 600));
+  return [...earlier, ...lastReply, question].join(" ");
 }
 
 function formatDocsContext(results: DocSearchResult[]): string {
