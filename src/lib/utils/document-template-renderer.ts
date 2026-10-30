@@ -175,6 +175,11 @@ function wrap(inner: string, style: string): string {
 // inside a single block) renders with no gap between paragraphs unless we
 // inline the same spacing here.
 export function addParagraphSpacing(html: string): string {
+  // A blank line typed in the editor (Enter twice) is an empty <p></p>. The
+  // editor shows it as a full line, but an empty block has zero height in
+  // preview/email/PDF, so the author's blank lines disappeared. Give it a <br>
+  // so it keeps one line of height.
+  html = html.replace(/(<p(?:\s[^>]*)?>)\s*(<\/p>)/gi, "$1<br>$2");
   return html.replace(/<p(\s[^>]*)?>/gi, (_match, attrs: string | undefined) => {
     const existing = attrs ?? "";
     const styleMatch = existing.match(/style="([^"]*)"/i);

@@ -6,6 +6,7 @@ import { EstimateDisplaySettingsPanel } from "./EstimateDisplaySettingsPanel";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
+import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -217,6 +218,7 @@ function EditTemplateDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const { data: services } = useCRMServices();
+  const { data: orgSettings } = useOrgSettings();
   const { data: productCatalog = [] } = useProducts();
   const materialProducts = productCatalog.filter(
     (p) => p.category === "stocked_material" || p.category === "project_material"
@@ -271,7 +273,7 @@ function EditTemplateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-5xl">
         <DialogHeader>
           <DialogTitle>Edit Bundle — {template.name}</DialogTitle>
         </DialogHeader>
@@ -318,8 +320,8 @@ function EditTemplateDialog({
 
           {/* Line items grid */}
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full min-w-[680px] text-xs">
-              <thead className="bg-primary text-primary-foreground">
+            <table className="w-full min-w-[760px] text-xs">
+              <thead className="text-white" style={{ backgroundColor: orgSettings?.brandColor ?? "#60ab45" }}>
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Service/Package</th>
                   <th className="px-3 py-2 text-center font-medium">Visits</th>
