@@ -191,6 +191,30 @@ export async function POST(
         if (siErr) return failAndCleanup(siErr.message);
       }
     }
+
+    // Equipment (internal cost on a line) copies as the same snapshot rows.
+    // The new table isn't in the generated Supabase types yet.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sbAny = supabase as any;
+    const { data: equipment } = await sbAny
+      .from("estimate_line_item_equipment")
+      .select("*")
+      .in("line_item_id", lineItems.map((li: Record<string, unknown>) => li.id as string))
+      .is("deleted_at", null);
+    if (equipment?.length) {
+      const newEquipment = (equipment as Record<string, unknown>[])
+        .map((eq) => {
+          const newLineItemId = newIdByOldId.get(eq.line_item_id as string);
+          if (!newLineItemId) return null;
+          const { id: _eid, created_at: _eca, updated_at: _eua, deleted_at: _eda, org_id: _eorg, line_item_id: _elid, ...eqRest } = eq;
+          return { ...eqRest, org_id: newEst.org_id, line_item_id: newLineItemId };
+        })
+        .filter((eq) => eq !== null);
+      if (newEquipment.length) {
+        const { error: eqErr } = await sbAny.from("estimate_line_item_equipment").insert(newEquipment);
+        if (eqErr) return failAndCleanup(eqErr.message);
+      }
+    }
   }
 
   // Milestone billing plan: copy the plan as fresh pending rows (never the
