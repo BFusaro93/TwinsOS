@@ -227,8 +227,11 @@ export async function fetchCompanyInfo(conn: QuickBooksConnection): Promise<{ co
 // ── Phase 2: customer matching ──────────────────────────────────────────────
 
 /** QBO's query language escapes a literal single quote by doubling it. */
+// QuickBooks' query language escapes a quote (and a backslash) with a backslash,
+// not by doubling it — "O''Brien" is a parse error, so a client like
+// "Mike's Landscaping" could never be matched or created.
 function escapeQboString(value: string): string {
-  return value.replace(/'/g, "''");
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

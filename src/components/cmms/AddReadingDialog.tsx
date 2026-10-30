@@ -45,10 +45,14 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
     isLevel && parsedValue !== null && !isNaN(parsedValue)
       ? levelReadingError(parsedValue, meter.capacity, meter.unit)
       : null;
+  // A past-dated reading on a cumulative meter is checked against its neighbours
+  // (previous/next readings) when saved, not against today's value — a missed
+  // reading from last week is legitimately lower than the current one.
+  const isBackdated = readingDate !== "" && readingDate < todayISODate();
   const isValid =
     parsedValue !== null &&
     !isNaN(parsedValue) &&
-    (isLevel ? levelError === null : parsedValue >= meter.currentValue) &&
+    (isLevel ? levelError === null : isBackdated ? parsedValue >= 0 : parsedValue >= meter.currentValue) &&
     readingDate !== "";
 
   function handleClose() {
@@ -117,7 +121,7 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
               <Input
                 id="reading-value"
                 type="number"
-                min={isLevel ? 0 : meter.currentValue}
+                min={isLevel || isBackdated ? 0 : meter.currentValue}
                 max={isLevel && meter.capacity != null ? meter.capacity : undefined}
                 placeholder={meter.currentValue.toString()}
                 value={readingValue}
@@ -129,7 +133,9 @@ export function AddReadingDialog({ open, onOpenChange, meter }: AddReadingDialog
                 <p className="text-xs text-muted-foreground">
                   {isLevel
                     ? `Current level; can go up or down${meter.capacity != null ? ` (0 to ${meter.capacity.toLocaleString()} ${meter.unit})` : ""}`
-                    : `Must be ≥ current reading (${meter.currentValue.toLocaleString()} ${meter.unit})`}
+                    : isBackdated
+                      ? "Must fit between the readings before and after this date"
+                      : `Must be ≥ current reading (${meter.currentValue.toLocaleString()} ${meter.unit})`}
                 </p>
               )}
             </div>

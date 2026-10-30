@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { notifyMeetingAssigned } from "@/lib/sales-meeting-notify";
+import { recipientFromEmployee } from "@/lib/notifications/reminder-recipients";
 
 /**
  * POST /api/crm/sales-meetings/[id]/notify
@@ -49,16 +50,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Meeting was not just assigned" }, { status: 403 });
   }
 
-  // Dedupe retries / double-fires for the same assignment.
+  // Dedupe retries / double-fires for the same assignment — per rep, so a
+  // meeting reassigned from one rep to another within the window still tells
+  // the new rep instead of being swallowed by the first rep's notice.
   const since = new Date(Date.now() - NOTIFY_WINDOW_MS).toISOString();
-  const { count } = await admin
-    .from("notifications")
-    .select("id", { count: "exact", head: true })
-    .eq("org_id", meeting.org_id)
-    .eq("entity_id", meetingId)
-    .eq("type", "sales_meeting_assigned")
-    .gte("created_at", since);
-  if ((count ?? 0) > 0) return NextResponse.json({ success: true, skipped: "already_notified" });
+  const rep = await recipientFromEmployee(admin, meeting.org_id as string, meeting.sales_rep_id as string | null);
+  if (rep?.userId) {
+    const { count } = await admin
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", meeting.org_id)
+      .eq("entity_id", meetingId)
+      .eq("type", "sales_meeting_assigned")
+      .eq("user_id", rep.userId)
+      .gte("created_at", since);
+    if ((count ?? 0) > 0) return NextResponse.json({ success: true, skipped: "already_notified" });
+  }
 
   await notifyMeetingAssigned(admin, {
     orgId: meeting.org_id as string,
