@@ -2368,11 +2368,12 @@ export function useCreateJobsFromEstimate() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: subRows, error: subErr } = await (supabase as any)
               .from("estimate_line_item_subitems")
-              .select("id, line_item_id, type, product_id, service_id, name, qty, sort_order")
+              .select("id, line_item_id, type, product_id, service_id, name, qty, cost_cents, sort_order")
               .in("line_item_id", [...lineToServiceId.keys()])
               .is("deleted_at", null);
             if (subErr) throw subErr;
-            const copies = ((subRows ?? []) as { id: string; line_item_id: string; type: string; product_id: string | null; service_id: string | null; name: string; qty: number; sort_order: number | null }[])
+            const subList = (subRows ?? []) as { id: string; line_item_id: string; type: string; product_id: string | null; service_id: string | null; name: string; qty: number; cost_cents: number | null; sort_order: number | null }[];
+            const copies = subList
               .map((r) => ({
                 job_service_id: lineToServiceId.get(r.line_item_id) as string,
                 type: r.type,
@@ -2385,8 +2386,46 @@ export function useCreateJobsFromEstimate() {
               }));
             if (copies.length > 0) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const { error: copyErr } = await (supabase as any).from("crm_job_service_subitems").insert(copies);
+              const { data: copied, error: copyErr } = await (supabase as any)
+                .from("crm_job_service_subitems")
+                .insert(copies)
+                .select("id, source_subitem_id, job_service_id");
               if (copyErr) throw copyErr;
+
+              // A catalog product under a ONE-TIME/project service becomes a pending,
+              // zero-price job product, so it lands in Materials Needed, the crew's
+              // "Materials called for" (Used / Not used) and inventory. Only for single-
+              // visit job types (one-time, project, waiting list): a job product is
+              // recorded once and then final, so a recurring or package job (many
+              // visits) would only ever account for its first visit — those keep the
+              // read-only list. job_service_subitem_id lets the invoice
+              // sweeps skip these rows (their dollars are already in the service price).
+              if (["one_time", "project", "waiting_list"].includes(jobType)) {
+                const copiedBySource = new Map(
+                  ((copied ?? []) as { id: string; source_subitem_id: string; job_service_id: string }[]).map((c) => [c.source_subitem_id, c])
+                );
+                const productRows = subList
+                  .filter((r) => r.type === "product" && r.product_id && copiedBySource.has(r.id))
+                  .map((r) => {
+                    const c = copiedBySource.get(r.id)!;
+                    return {
+                      job_id: jobId,
+                      job_service_id: c.job_service_id,
+                      product_id: r.product_id,
+                      product_name: r.name,
+                      qty: r.qty,
+                      unit_price_cents: 0,
+                      unit_cost_cents: r.cost_cents ?? null,
+                      status: "pending",
+                      job_service_subitem_id: c.id,
+                    };
+                  });
+                if (productRows.length > 0) {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const { error: prodErr } = await (supabase as any).from("crm_job_products").insert(productRows);
+                  if (prodErr) throw prodErr;
+                }
+              }
             }
           } catch (err) {
             log.error("copying estimate sub-items to job failed", { jobId, error: err instanceof Error ? err.message : String(err) });
@@ -3158,6 +3197,10 @@ export interface CRMJobProduct {
   notes: string | null;
   status: JobProductStatus;
   invoiceLineItemId: string | null;
+  /** Set when this row came from an estimate sub-item: its dollars are in the service price, so it is never invoiced. */
+  jobServiceSubitemId: string | null;
+  /** Set on per-visit rows (recurring/package sub-item products); null = job-level. */
+  visitId: string | null;
 }
 
 function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
@@ -3174,7 +3217,29 @@ function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
     notes: row.notes as string | null,
     status: (row.status as JobProductStatus) ?? "pending",
     invoiceLineItemId: row.invoice_line_item_id as string | null,
+    jobServiceSubitemId: (row.job_service_subitem_id as string | null) ?? null,
+    visitId: (row.visit_id as string | null) ?? null,
   };
+}
+
+/** How many visits each sub-item has been ticked off on, for the office view of crew progress. */
+export function useJobSubitemTicks(jobId: string) {
+  return useQuery({
+    queryKey: ['crm-job-subitem-ticks', jobId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('crm_visit_subitem_checks')
+        .select('subitem_id, crm_job_visits!inner(job_id)')
+        .eq('crm_job_visits.job_id', jobId);
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      for (const r of (data ?? []) as { subitem_id: string }[]) counts[r.subitem_id] = (counts[r.subitem_id] ?? 0) + 1;
+      return counts;
+    },
+    enabled: !!jobId,
+  });
 }
 
 export function useCRMJobProducts(jobId: string) {

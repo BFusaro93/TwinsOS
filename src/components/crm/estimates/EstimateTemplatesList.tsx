@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Pencil, Trash2, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { centsToDisplay } from "@/lib/estimate-calc";
+import { bundleTotalCents } from "@/lib/estimates/bundle-total";
 import type { CRMDiscount } from "@/types/crm-discounts";
 import type { EstimateTemplate, EstimateTemplateItem, EstimateTemplateItemSubitem } from "@/types/crm-estimates";
 import type { BudgetMethod } from "@/types/crm-jobs";
@@ -520,6 +521,14 @@ function EditTemplateDialog({
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* The table's Total column is each line on its own; this is what the bundle adds, sub-items included. */}
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Bundle total (incl. sub-items)</span>
+            <span className="font-semibold tabular-nums text-slate-800 dark:text-neutral-100">
+              {centsToDisplay(bundleTotalCents(template.items ?? []))}
+            </span>
           </div>
 
           {/* Add item */}

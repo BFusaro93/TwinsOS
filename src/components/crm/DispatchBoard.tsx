@@ -1005,7 +1005,7 @@ function JobDetailSheet({
       // invoice creation was missing, silently leaving materials off the
       // invoice and stuck on "Pending" forever.
       const productLineItems = jobProducts
-        .filter((p) => (p.status === "pending" || p.status === "used") && !p.invoiceLineItemId)
+        .filter((p) => (p.status === "pending" || p.status === "used") && !p.invoiceLineItemId && !p.jobServiceSubitemId)
         .map((p) => {
           const billedQty = p.invoiceQty ?? p.qty;
           return {

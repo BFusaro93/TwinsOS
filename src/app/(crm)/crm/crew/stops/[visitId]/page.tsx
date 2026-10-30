@@ -8,7 +8,7 @@ import {
   ArrowLeft, MapPin, Phone, Clock, Camera, MessageSquare,
   CheckSquare, Square, AlertTriangle, Play, Square as StopIcon, SkipForward,
   Image as ImageIcon, Send, Loader2, CheckCircle2, Coffee, Sparkles, FlaskConical,
-  ClipboardList, Package, ListChecks,
+  ClipboardList, Package,
 } from "lucide-react";
 import {
   useStopDetail,
@@ -29,6 +29,8 @@ import {
   useSubmitFieldUpsell,
   useJobProducts,
   useUseJobProductMaterials,
+  useVisitSubitemChecks,
+  useToggleSubitemCheck,
   useCrewProductSearch,
   useVisitRequisitions,
   useRequestMaterials,
@@ -227,6 +229,8 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const submitUpsell  = useSubmitFieldUpsell();
   const { data: jobProducts = [] } = useJobProducts(anchorVisitId);
   const useMaterials  = useUseJobProductMaterials();
+  const { data: subitemChecks } = useVisitSubitemChecks((stop?.visits ?? []).map((sv) => sv.id));
+  const toggleSubitem = useToggleSubitemCheck();
   const [confirm, confirmDialog] = useConfirm();
   const { data: requisitions = [] } = useVisitRequisitions(anchorVisitId);
   const requestMaterials = useRequestMaterials();
@@ -563,20 +567,39 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                       </p>
                     )}
                     {/* Products to bring and sub-services to do under this service,
-                        copied from the estimate. Names and quantities only — no prices. */}
+                        copied from the estimate. Names and quantities only — no prices.
+                        Sub-services are tickable per visit; products are recorded
+                        (used / not used) under Materials called for below. */}
                     {(svc?.subitems ?? []).length > 0 && (
-                      <ul className="mt-1.5 space-y-0.5">
-                        {(svc?.subitems ?? []).map((si) => (
-                          <li key={si.id} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-neutral-400">
-                            {si.type === "product"
-                              ? <Package className="h-3 w-3 shrink-0 text-slate-400 dark:text-neutral-500" />
-                              : <ListChecks className="h-3 w-3 shrink-0 text-slate-400 dark:text-neutral-500" />}
-                            <span className="truncate">{si.name}</span>
-                            {si.qty !== 1 && (
-                              <span className="shrink-0 text-slate-400 dark:text-neutral-500">× {si.qty.toLocaleString()}</span>
-                            )}
-                          </li>
-                        ))}
+                      <ul className="mt-1.5 space-y-1">
+                        {(svc?.subitems ?? []).map((si) => {
+                          const isTask = si.type === "subservice";
+                          const done = !!subitemChecks?.has(`${v.id}:${si.id}`);
+                          return (
+                            <li key={si.id} className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-neutral-400">
+                              {isTask ? (
+                                <button
+                                  type="button"
+                                  disabled={toggleSubitem.isPending || rowTerminal}
+                                  onClick={() => toggleSubitem.mutate({ visitId: v.id, subitemId: si.id, checked: !done })}
+                                  aria-pressed={done}
+                                  aria-label={`${done ? "Untick" : "Tick off"} ${si.name}`}
+                                  className="shrink-0 disabled:opacity-60"
+                                >
+                                  {done
+                                    ? <CheckSquare className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                    : <Square className="h-4 w-4 text-slate-400 dark:text-neutral-500" />}
+                                </button>
+                              ) : (
+                                <Package className="h-3 w-3 shrink-0 text-slate-400 dark:text-neutral-500" />
+                              )}
+                              <span className={`truncate ${done ? "line-through text-slate-400 dark:text-neutral-500" : ""}`}>{si.name}</span>
+                              {si.qty !== 1 && (
+                                <span className="shrink-0 text-slate-400 dark:text-neutral-500">× {si.qty.toLocaleString()}</span>
+                              )}
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </div>

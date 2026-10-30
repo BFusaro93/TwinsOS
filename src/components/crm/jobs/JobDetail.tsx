@@ -22,6 +22,7 @@ import {
   useCRMSchedules,
   useCreateCRMSchedule,
   useCRMJobProducts,
+  useJobSubitemTicks,
 } from "@/lib/hooks/use-crm-jobs";
 import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
 import { JobAssetsSection } from "@/components/crm/jobs/JobAssetsSection";
@@ -201,6 +202,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const deleteJobService = useDeleteJobService();
   const { data: crmServices = [] } = useCRMServices();
   const { data: jobProducts = [] } = useCRMJobProducts(jobId);
+  const { data: subitemTicks = {} } = useJobSubitemTicks(jobId);
   const deleteVisit = useDeleteVisit();
   const deleteVisitsByDay = useDeleteVisitsByDayOfWeek();
   const updateVisit = useUpdateVisit();
@@ -433,7 +435,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       // JobProductStatus union hasn't been widened for it yet (that file is
       // owned by another change this sprint), so a literal === comparison
       // would be a "no overlap" type error rather than a behaviour change.
-      .filter((p) => BILLABLE_JOB_PRODUCT_STATUSES.includes(p.status) && !p.invoiceLineItemId)
+      // Rows from an estimate sub-item are already in the service price — never a line of their own.
+      .filter((p) => BILLABLE_JOB_PRODUCT_STATUSES.includes(p.status) && !p.invoiceLineItemId && !p.jobServiceSubitemId)
       .map((p) => {
         // Bill the invoiceQty override when set (e.g. 5 bags used, only 4
         // invoiced) — the used qty still drives the inventory decrement via
@@ -1542,6 +1545,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                 <li key={si.id} className="text-xs text-slate-500 dark:text-neutral-400">
                                   {si.type === "product" ? "Product" : "Task"}: {si.name}
                                   {si.qty !== 1 && <span className="text-slate-400 dark:text-neutral-500"> × {si.qty.toLocaleString()}</span>}
+                                  {si.type === "subservice" && (
+                                    // Crew ticks tasks off per visit on their stop.
+                                    (subitemTicks[si.id] ?? 0) > 0
+                                      ? <span className="ml-1.5 text-green-600 dark:text-green-400">✓ done{(subitemTicks[si.id] ?? 0) > 1 ? ` on ${subitemTicks[si.id]} visits` : ""}</span>
+                                      : <span className="ml-1.5 text-slate-400 dark:text-neutral-500">not ticked yet</span>
+                                  )}
                                 </li>
                               ))}
                             </ul>

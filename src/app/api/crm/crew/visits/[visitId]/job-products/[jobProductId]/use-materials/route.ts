@@ -89,12 +89,16 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: jobProduct, error: jpError } = await (supabase as any)
     .from("crm_job_products")
-    .select("id, job_id, org_id, product_id, product_name, planned_qty, qty, status")
+    .select("id, job_id, org_id, product_id, product_name, planned_qty, qty, status, visit_id")
     .eq("id", jobProductId)
     .is("deleted_at", null)
     .maybeSingle();
   if (jpError) return NextResponse.json({ error: jpError.message }, { status: 500 });
-  if (!jobProduct || jobProduct.job_id !== visit.job_id || jobProduct.org_id !== visit.org_id) {
+  if (
+    !jobProduct || jobProduct.job_id !== visit.job_id || jobProduct.org_id !== visit.org_id ||
+    // A per-visit row (recurring sub-item product) can only be recorded on its own visit.
+    (jobProduct.visit_id && jobProduct.visit_id !== visitId)
+  ) {
     return NextResponse.json({ error: "Material not found on this job" }, { status: 404 });
   }
   if (jobProduct.status !== "pending") {

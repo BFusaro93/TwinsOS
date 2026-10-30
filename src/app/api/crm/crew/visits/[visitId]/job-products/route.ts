@@ -45,7 +45,7 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("crm_job_products")
-    .select("id, product_name, planned_qty, qty, status, updated_at")
+    .select("id, product_name, planned_qty, qty, status, updated_at, visit_id")
     .eq("job_id", visit.job_id as string)
     .is("deleted_at", null)
     .order("created_at");
@@ -62,8 +62,11 @@ export async function GET(
     (data ?? [])
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((row: any) =>
-        row.status === "pending"
-        || (row.updated_at && isoInZone(new Date(row.updated_at as string), timeZone) === serviceDate)
+        // Per-visit rows (recurring/package sub-item products) belong to ONE visit;
+        // job-level rows (visit_id null) are shared by every visit of the job.
+        (row.visit_id == null || row.visit_id === visitId) &&
+        (row.status === "pending"
+        || (row.updated_at && isoInZone(new Date(row.updated_at as string), timeZone) === serviceDate))
       )
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((row: any) => ({

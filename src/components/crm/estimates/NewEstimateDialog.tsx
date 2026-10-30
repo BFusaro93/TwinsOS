@@ -396,6 +396,11 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
                   <li key={item.id} className="text-[11px] text-brand-600 dark:text-brand-400">
                     · {item.serviceName}
                     {item.rateCents > 0 && ` — $${(item.rateCents / 100).toFixed(2)}`}
+                    {(item.subitems ?? []).map((sub) => (
+                      <span key={sub.id} className="block pl-3 text-brand-500 dark:text-brand-500">
+                        + {sub.name}{sub.qty !== 1 ? ` × ${sub.qty}` : ""}
+                      </span>
+                    ))}
                   </li>
                 ))}
                 {selectedTemplate.items.length > 5 && (
