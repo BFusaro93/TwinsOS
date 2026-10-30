@@ -466,7 +466,11 @@ async function getClientCustomFieldFacts(
 function compare(fieldValue: unknown, operator: ConditionOperator, condValue: string): boolean {
   if (operator === "is_set") return fieldValue !== null && fieldValue !== undefined && fieldValue !== "";
   if (operator === "is_not_set") return fieldValue === null || fieldValue === undefined || fieldValue === "";
-  if (fieldValue === null || fieldValue === undefined) return false;
+  if (fieldValue === null || fieldValue === undefined) {
+    // An empty field is, by definition, not equal to / not containing anything —
+    // "Map code does not equal X" must pass for a client with no map code.
+    return operator === "not_equals" || operator === "not_contains";
+  }
 
   if (operator === "before" || operator === "after" || operator === "within_days") {
     const fieldDate = new Date(String(fieldValue));

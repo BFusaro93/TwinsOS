@@ -430,9 +430,15 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
         let q = supabase
           .from("clients")
           .select("id", { count: "exact", head: true })
-          .is("deleted_at", null)
-          .gte(dateCol, start)
-          .lte(dateCol, end);
+          .is("deleted_at", null);
+        // created_at is a timestamptz: a bare end date reads as 00:00 UTC and drops
+        // the whole last day, so bound it on the org's calendar. client_since is a date.
+        if (dateCol === "created_at") {
+          const b = orgDayRangeBounds(start, end, timeZone);
+          q = q.gte(dateCol, b.gte as string).lt(dateCol, b.lt as string);
+        } else {
+          q = q.gte(dateCol, start).lte(dateCol, end);
+        }
         q = status === "lead" ? q.eq("status", "lead") : q.neq("status", "lead");
         const { count, error } = await q;
         if (error) throw new Error(error.message);
@@ -456,8 +462,8 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
           .select("id", { count: "exact", head: true })
           .is("deleted_at", null)
           .eq("type", "call")
-          .gte("created_at", start)
-          .lte("created_at", end);
+          .gte("created_at", orgDayRangeBounds(start, end, timeZone).gte as string)
+          .lt("created_at", orgDayRangeBounds(start, end, timeZone).lt as string);
         if (error) throw new Error(error.message);
         return count ?? 0;
       }

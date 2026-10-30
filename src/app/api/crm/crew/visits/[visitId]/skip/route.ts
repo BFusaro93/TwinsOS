@@ -5,6 +5,7 @@ import { formatMonthDay } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
 import { closeStopPunches } from "@/lib/crew/stop-punches";
+import { createServiceClient } from "@/lib/supabase/server";
 
 const log = logger.child("crew/skip");
 
@@ -122,7 +123,9 @@ export async function POST(
       .maybeSingle();
     if (newLead?.id) {
       const r = await applyVisitCompletionSideEffects({
-        supabase, orgId: existing.org_id, visitId: newLead.id, userId: user.id, dedupeActivity: true,
+        // Crew accounts have no RLS access to invoice tables (see stops/clock-out),
+        // so billing runs under the service client; ownership was proven above.
+        supabase: createServiceClient(), orgId: existing.org_id, visitId: newLead.id, userId: user.id, dedupeActivity: true,
       });
       if (!r.ok) log.error("promoted lead billing failed", { visitId: newLead.id, error: r.error });
     }

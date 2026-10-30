@@ -76,6 +76,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ ok: true, action: "rejected" });
   }
 
+  // Turning an automation off (or deleting it) stops its enrollments, but leaves
+  // their queued approvals pending. Approving one now would still send the
+  // email/text the admin meant to halt, so refuse and ask for a rejection.
+  {
+    const [{ data: live }, { data: seq }] = await Promise.all([
+      db.from("crm_sequence_enrollments").select("stopped_at, completed_at").eq("id", approval.enrollment_id).maybeSingle(),
+      db.from("crm_automation_sequences").select("is_active, deleted_at").eq("id", approval.sequence_id).maybeSingle(),
+    ]);
+    if (!live || live.stopped_at || live.completed_at || !seq || seq.is_active === false || seq.deleted_at) {
+      return NextResponse.json(
+        { error: "This automation was stopped or turned off — reject this step instead" },
+        { status: 409 }
+      );
+    }
+  }
+
   // Suppression can change while a step sits in the queue (unsubscribe link,
   // hard bounce). The queued content was vetted at queue time only, so
   // re-check before the send — SMS consent is re-checked inside sendClientSms.
