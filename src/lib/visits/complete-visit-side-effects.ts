@@ -358,7 +358,10 @@ export async function applyVisitCompletionSideEffects(
         const services = visitJobServiceId
           ? allServices.filter((s) => s.id === visitJobServiceId)
           : allServices;
-        const visitInvoiceDescription: string | null = visit.invoice_description ?? null;
+        // Rich-text editors store these as HTML ("<p>Lawn mow</p>"); invoice line
+        // descriptions are plain text, so flatten before they become a line.
+        const visitInvoiceDescription: string | null = visit.invoice_description ? stripHtml(visit.invoice_description) : null;
+        const jobInvoiceDescription: string | null = j.invoice_description ? stripHtml(j.invoice_description) : null;
         const visitDate: string | null = visit.scheduled_date ?? null;
 
         // Taxability (D-12): each job service snapshots is_taxable when the job
@@ -385,7 +388,7 @@ export async function applyVisitCompletionSideEffects(
         // description (set in Services settings), then its plain name.
         const serviceLines: AutoInvoiceLine[] = services.length > 0
           ? services.map((s) => {
-              const description = visitInvoiceDescription || j.invoice_description || stripHtml(s.crm_services?.invoice_description || "") || s.service_name;
+              const description = visitInvoiceDescription || jobInvoiceDescription || stripHtml(s.crm_services?.invoice_description || "") || s.service_name;
               return {
                 name: s.service_name,
                 description,
@@ -397,7 +400,7 @@ export async function applyVisitCompletionSideEffects(
               };
             })
           : j.rate_cents
-            ? [{ name: visitInvoiceDescription ?? j.invoice_description ?? "Service", description: visitInvoiceDescription ?? j.invoice_description ?? "Service", qty: 1, rate_cents: j.rate_cents, total_cents: j.rate_cents, service_date: visitDate, is_taxable: false }]
+            ? [{ name: visitInvoiceDescription ?? jobInvoiceDescription ?? "Service", description: visitInvoiceDescription ?? jobInvoiceDescription ?? "Service", qty: 1, rate_cents: j.rate_cents, total_cents: j.rate_cents, service_date: visitDate, is_taxable: false }]
             : [];
 
         // Sweep in unresolved Products/materials the office called for on this
@@ -649,7 +652,7 @@ export async function applyVisitCompletionSideEffects(
                 client_id: j.client_id,
                 crm_job_id: j.id,
                 sales_rep_id: j.sales_rep_id ?? null,
-                description: visitInvoiceDescription ?? j.invoice_description ?? "Service",
+                description: visitInvoiceDescription ?? jobInvoiceDescription ?? "Service",
                 invoice_date: newInvoiceDate,
                 terms: invoiceTerms,
                 due_date: computeDueDate(newInvoiceDate, invoiceTerms),
