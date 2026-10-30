@@ -1393,11 +1393,12 @@ export async function mirrorPaymentReversalToQuickBooks(
   orgId: string,
   paymentId: string,
   links: QuickBooksPaymentLink[]
-): Promise<void> {
-  if (links.length === 0) return;
+): Promise<{ ok: number; failed: number }> {
+  const outcome = { ok: 0, failed: 0 };
+  if (links.length === 0) return outcome;
   try {
     const conn = await getValidConnection(db, orgId);
-    if (!conn) return;
+    if (!conn) return outcome;
     const { data: remaining } = await db
       .from("crm_payment_allocations")
       .select("id, amount_cents, crm_invoices (qbo_invoice_id)")
@@ -1413,6 +1414,7 @@ export async function mirrorPaymentReversalToQuickBooks(
           // A credit memo is not cash: a refund/chargeback shouldn't touch it. If the
           // allocation is gone (reversed in full), unwind the credit; otherwise leave it.
           if (!byId.has(link.allocationId)) await voidCreditMemoLink(conn, link.qboPaymentId);
+          outcome.ok++;
           continue;
         }
         const current = await getQboPayment(conn, link.qboPaymentId);
@@ -1425,6 +1427,7 @@ export async function mirrorPaymentReversalToQuickBooks(
               (cur) => qboPaymentRequest(conn, { Id: link.qboPaymentId, SyncToken: cur.SyncToken }, "void")
             );
           }
+          outcome.ok++;
           continue;
         }
         const invoiceId = row.crm_invoices?.qbo_invoice_id;
@@ -1444,7 +1447,15 @@ export async function mirrorPaymentReversalToQuickBooks(
               })
           );
         }
+        // Reconciled (or already matching): drop an error left by an earlier failed attempt.
+        await db
+          .from("crm_payment_allocations")
+          .update({ qbo_sync_error: null, qbo_sync_attempted_at: new Date().toISOString() })
+          .eq("id", link.allocationId)
+          .not("qbo_sync_error", "is", null);
+        outcome.ok++;
       } catch (err) {
+        outcome.failed++;
         log.error("QuickBooks payment reversal failed", { err, paymentId, qboPaymentId: link.qboPaymentId, orgId });
         await db
           .from("crm_payment_allocations")
@@ -1456,4 +1467,5 @@ export async function mirrorPaymentReversalToQuickBooks(
   } catch (err) {
     log.error("QuickBooks payment reversal mirror failed", { err, paymentId, orgId });
   }
+  return outcome;
 }
