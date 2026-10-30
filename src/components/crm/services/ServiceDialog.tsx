@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { ServiceEquipmentTab } from "./ServiceEquipmentTab";
 import { ServiceJobCostingTab } from "./ServiceJobCostingTab";
 import {
   Dialog,
@@ -45,7 +46,7 @@ const UNITS = ["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"
 // Settings > Services > Service Categories.
 const FALLBACK_CATEGORIES = ["lawn", "landscape", "snow", "irrigation", "tree", "chemical", "other"];
 
-type Tab = "details" | "descriptions" | "rate_matrix" | "sub_services" | "chemicals" | "job_costing" | "audit";
+type Tab = "details" | "descriptions" | "rate_matrix" | "sub_services" | "equipment" | "chemicals" | "job_costing" | "audit";
 
 interface Props {
   open: boolean;
@@ -773,6 +774,7 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
             { key: "descriptions", label: "Descriptions" },
             { key: "rate_matrix", label: "Rate Matrix", disabled: !activeService },
             { key: "sub_services", label: "Sub-services", disabled: !activeService },
+            { key: "equipment", label: "Equipment", disabled: !activeService },
             ...(form.trackChemicals
               ? [{ key: "chemicals" as Tab, label: "Chemicals", disabled: !activeService }]
               : []),
@@ -1064,6 +1066,13 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
         {tab === "sub_services" && activeService && (
           <div className="py-2">
             <SubServicesTab parentService={activeService} />
+          </div>
+        )}
+
+        {/* Equipment Tab */}
+        {tab === "equipment" && activeService && (
+          <div className="py-2">
+            <ServiceEquipmentTab serviceId={activeService.id} />
           </div>
         )}
 

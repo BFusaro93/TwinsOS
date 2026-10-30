@@ -554,6 +554,23 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const subitems = ((rawSubitems ?? []) as any[]).filter((si) => countedLineIds.has(si.line_item_id));
 
+  // Equipment (crm_equipment snapshot rows) is internal cost on a line: it
+  // joins labor/material cost in the margin and gets equipment overhead, but is
+  // never billed or shown to the client. Same inner-join + parent-status
+  // filtering as sub-items above, for the same reason (no estimate_id column).
+  const { data: rawEquipment, error: eqError } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .from("estimate_line_item_equipment")
+    .select("line_item_id, total_cost_cents, estimate_line_items!inner(estimate_id, status, deleted_at)")
+    .eq("estimate_line_items.estimate_id", estimateId)
+    .not("estimate_line_items.status", "in", "(lost,draft)")
+    .is("estimate_line_items.deleted_at", null)
+    .is("deleted_at", null);
+  if (eqError) throw eqError;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const equipmentCostCents = ((rawEquipment ?? []) as any[])
+    .filter((eq) => countedLineIds.has(eq.line_item_id))
+    .reduce((s: number, eq) => s + (eq.total_cost_cents ?? 0), 0);
+
   const { data: overheadRow } = await supabase
     .from("crm_overhead_settings")
     .select("*")
@@ -579,7 +596,8 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   const subitemCostCents = subitems.reduce((s: number, si: any) => s + Math.round((si.cost_cents ?? 0) * (si.qty ?? 1)), 0);
   const subtotalCents = lineItemSubtotalCents + subitemRevenueCents;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalCostCents = lineItems.reduce((s: number, li: any) => s + li.total_cost_cents, 0) + subitemCostCents;
+  const laborAndSubitemCostCents = lineItems.reduce((s: number, li: any) => s + li.total_cost_cents, 0) + subitemCostCents;
+  const totalCostCents = laborAndSubitemCostCents + equipmentCostCents;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const directTotal = (directCosts ?? []).reduce((s: number, dc: any) => s + dc.total_cents, 0);
   // A "percent" discount is a % of the subtotal at whatever it is NOW, not a
@@ -616,7 +634,8 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (sum: number, dc: any) => sum + computeDirectCostOverhead(dc.cost_type, dc.total_cents, overheadSettings),
         0
-      ) + computeDirectCostOverhead("labor", totalCostCents, overheadSettings)
+      ) + computeDirectCostOverhead("labor", laborAndSubitemCostCents, overheadSettings)
+        + computeDirectCostOverhead("asset_equipment", equipmentCostCents, overheadSettings)
     : Math.round(((totalCostCents + directTotal) * (est.overhead_rate_bps ?? 0)) / 10000);
 
   const grossProfitCents = revenueCents - totalCostCents - directTotal;

@@ -44,6 +44,8 @@ import { BudgetedHoursPopover, type BudgetedHoursPatch } from "./BudgetedHoursPo
 import { LineItemComplexityPopover } from "./LineItemComplexityPopover";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { AddSubitemDialog } from "./AddSubitemDialog";
+import { LineItemEquipmentRows } from "./LineItemEquipmentRows";
+import { useLineItemEquipment, useApplyServiceEquipmentDefaults } from "@/lib/hooks/use-equipment";
 import {
   useLineItemSubitems,
   useDeleteSubitem,
@@ -327,8 +329,10 @@ function LineItemRow({
   const dragStyle = { transform: CSS.Transform.toString(transform), transition };
   const [addSubitemOpen, setAddSubitemOpen] = useState(false);
   const { data: subitems = [] } = useLineItemSubitems(item.id);
+  const { data: lineEquipment = [] } = useLineItemEquipment(item.id);
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
+  const equipmentCents = lineEquipment.reduce((sum, e) => sum + e.totalCostCents, 0);
 
   // A flat discount can't exceed the line's own (possibly now-smaller) total —
   // otherwise the line contributes NEGATIVE revenue to the estimate subtotal.
@@ -523,6 +527,10 @@ function LineItemRow({
   // than persisting a derived per-unit value that would poison the NEXT
   // Qty/Budgeted-Hours edit (see estimate-calc.ts for the corruption that
   // caused — a stale derived rate silently re-multiplied by qty again).
+  const displayMarginBps =
+    equipmentCents > 0 && row.totalCents > 0
+      ? Math.round(((row.totalCents - row.totalCostCents - equipmentCents) / row.totalCents) * 10000)
+      : row.marginBps;
   const isAutoCost = !costFocused && row.costCents === 0 && !!breakevenRateCents && row.budgetedHours > 0;
   const isComplexityAdjusted = row.complexityBps !== 10000;
   const autoCostPerUnitCents = isAutoCost
@@ -755,12 +763,17 @@ function LineItemRow({
           )}
         </td>
 
-        {/* GM% */}
-        <td className={cn(
-          "w-16 px-2 py-1.5 text-right tabular-nums",
-          row.marginBps >= 3000 ? "text-green-600 dark:text-green-400" : row.marginBps >= 1000 ? "text-muted-foreground" : "text-red-500 dark:text-red-400"
-        )}>
-          {bpsToPercent(row.marginBps)}
+        {/* GM% — display-only: equipment (internal cost on the line) is netted
+            out here, though the stored marginBps (an input to the cost/rate
+            math) stays equipment-free. */}
+        <td
+          className={cn(
+            "w-16 px-2 py-1.5 text-right tabular-nums",
+            displayMarginBps >= 3000 ? "text-green-600 dark:text-green-400" : displayMarginBps >= 1000 ? "text-muted-foreground" : "text-red-500 dark:text-red-400"
+          )}
+          title={equipmentCents > 0 ? `Margin after ${centsToDisplay(equipmentCents)} equipment (before equipment: ${bpsToPercent(row.marginBps)})` : undefined}
+        >
+          {bpsToPercent(displayMarginBps)}
         </td>
 
         {/* Cost — auto-derived value (blue) is shown but still editable:
@@ -778,8 +791,11 @@ function LineItemRow({
         </td>
 
         {/* T. Cost */}
-        <td className="w-24 px-2 py-1.5 text-right tabular-nums text-muted-foreground">
-          {centsToDisplay(row.totalCostCents)}
+        <td
+          className="w-24 px-2 py-1.5 text-right tabular-nums text-muted-foreground"
+          title={equipmentCents > 0 ? `${centsToDisplay(row.totalCostCents)} line cost + ${centsToDisplay(equipmentCents)} equipment` : undefined}
+        >
+          {centsToDisplay(row.totalCostCents + equipmentCents)}
         </td>
 
         {/* Adj Rate */}
@@ -906,6 +922,13 @@ function LineItemRow({
           onAddClick={() => setAddSubitemOpen(true)}
         />
       )}
+      {expanded && (
+        <LineItemEquipmentRows
+          lineItemId={item.id}
+          revenueCents={row.totalCents}
+          lineCostCents={row.totalCostCents}
+        />
+      )}
 
       {addSubitemOpen && (
         <AddSubitemDialog
@@ -977,6 +1000,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     (p) => p.category === "stocked_material" || p.category === "project_material"
   );
   const { mutateAsync: upsert } = useUpsertLineItem();
+  const { mutateAsync: applyEquipmentDefaults } = useApplyServiceEquipmentDefaults();
   const { mutateAsync: deleteItem } = useDeleteLineItem();
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
@@ -1176,7 +1200,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     }, breakevenRateCents);
 
     try {
-      await upsert({
+      const added = await upsert({
         estimateId,
         item: {
           service_id: svc.id ?? null,
@@ -1209,6 +1233,12 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           markup_bps: computed.markupBps,
         },
       });
+      // Pre-fill the service's default equipment (internal cost) onto the new line.
+      if (svc.id && added?.id) {
+        await applyEquipmentDefaults({ serviceId: svc.id, lineItemId: added.id, estimateId }).catch(() => {
+          toast.error("Added the item, but couldn't pre-fill its default equipment");
+        });
+      }
     } catch {
       toast.error("Failed to add item");
     }
