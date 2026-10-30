@@ -54,6 +54,31 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
       ).totalCents
     : 0;
 
+  // Different clients: offer to bill them together on their parent account
+  // (sub-accounts of one parent). The server decides whether that's valid.
+  const totalAll = invoices.reduce((sum, i) => sum + i.totalCents, 0);
+
+  async function handleConsolidate() {
+    setMerging(true);
+    try {
+      const res = await fetch("/api/crm/invoices/consolidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceIds: invoices.map((i) => i.id) }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Consolidation failed");
+      await qc.refetchQueries({ queryKey: ["crm-invoices"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      toast.success("Invoices consolidated onto the parent account");
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Consolidation failed");
+    } finally {
+      setMerging(false);
+    }
+  }
+
   async function handleMerge() {
     if (!parentId || children.length === 0 || hasLocked) return;
     setMerging(true);
@@ -81,13 +106,37 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <GitMerge className="h-4 w-4" />
-            Merge Invoices
+            {sameClient ? "Merge Invoices" : "Consolidate to Parent Account"}
           </DialogTitle>
         </DialogHeader>
 
-        {!sameClient ? (
+        {!sameClient && hasLocked ? (
           <div className="rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
-            Selected invoices belong to different clients. Merging is only allowed for invoices from the same client.
+            Invoice{lockedInvoices.length > 1 ? "s" : ""} #{lockedInvoices.map((i) => i.invoiceNumber).join(", #")} {lockedInvoices.length > 1 ? "are" : "is"} locked.
+            Unlock {lockedInvoices.length > 1 ? "them" : "it"} before consolidating.
+          </div>
+        ) : !sameClient ? (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600 dark:text-neutral-400">
+              These invoices are on different accounts. If they belong to sub-accounts of the same parent,
+              they can be billed together as one new invoice on the parent account. Each line is tagged with
+              its sub-account name and keeps the tax it was already charged. The original invoices are voided
+              and linked to the new one; any payments move with them.
+            </p>
+            <div className="space-y-1.5">
+              {invoices.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
+                  <span className="text-slate-700 dark:text-neutral-300">
+                    {inv.clientName} · Invoice #{inv.invoiceNumber ?? "draft"}
+                  </span>
+                  <span className="font-medium">{formatCurrency(inv.totalCents)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between rounded-md bg-slate-50 dark:bg-muted/40 border border-border px-4 py-3 text-sm font-semibold">
+              <span>Consolidated total</span>
+              <span>{formatCurrency(totalAll)}</span>
+            </div>
           </div>
         ) : hasLocked ? (
           <div className="rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
@@ -172,6 +221,11 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={merging}>Cancel</Button>
+          {!sameClient && !hasLocked && (
+            <Button onClick={handleConsolidate} disabled={merging}>
+              {merging ? "Consolidating…" : "Consolidate to Parent"}
+            </Button>
+          )}
           {sameClient && !hasLocked && (
             <Button onClick={handleMerge} disabled={merging || !parentId}>
               {merging ? "Merging…" : "Merge Invoices"}

@@ -902,7 +902,7 @@ export function InvoicesList({ clientId }: Props) {
                 className="flex items-center gap-2"
               >
                 <GitMerge className="h-3.5 w-3.5" />
-                Merge Invoices
+                Merge / Consolidate Invoices
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
