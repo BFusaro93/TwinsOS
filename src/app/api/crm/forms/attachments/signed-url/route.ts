@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 // POST /api/crm/forms/attachments/signed-url — staff-only attachment download.
 // The form-attachments bucket is private with no SELECT policy for anon/
@@ -14,6 +15,7 @@ export async function POST(req: Request) {
 
   const { data: profile } = await supabase
     .from("profiles").select("org_id").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
 
   if (!(await hasAnySettingsPermission(supabase, ["forms_view_submit", "forms_edit"]))) {

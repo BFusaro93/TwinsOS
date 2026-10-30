@@ -15,6 +15,7 @@ import {
   findUntouchedFutureVisits,
   pruneVisits,
 } from "@/lib/visits/prune";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 /** Default rolling horizon — a year ahead, bounded by the job's own
  *  recurrence_end and its schedule's season window. The daily cron keeps
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
   const { jobId, lookaheadDays = DEFAULT_LOOKAHEAD_DAYS, action = "generate", scheduleChanged = false } = parsed.data;
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   const sessionOrgId: string | null = profile?.org_id ?? null;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

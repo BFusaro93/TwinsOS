@@ -7,6 +7,7 @@ import type { Database } from "@/types/supabase";
 import { logger } from "@/lib/logger";
 import { GOOGLE_FAILURE_STATUSES, resolveGoogleMapsKey } from "@/lib/google-maps-key";
 import type { AddressParts, AddressVerdict, VerifyAddressResult } from "@/types/address-verification";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 /**
  * POST /api/crm/address/verify - checks one hand-entered address and returns
@@ -287,6 +288,7 @@ export async function POST(request: Request) {
     .select("org_id")
     .eq("id", user.id)
     .single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
 
   const parsed = BodySchema.safeParse(await request.json().catch(() => ({})));

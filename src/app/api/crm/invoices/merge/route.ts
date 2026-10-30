@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { computeMergedInvoiceTotals } from "@/lib/invoice-merge";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const MergeSchema = z
   .object({
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
   const allIds = [parentId, ...childIds];
 
   const { data: profile } = await supabase.from("profiles").select("org_id, name").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   const orgId: string | null = profile?.org_id ?? null;
   const actorName: string = profile?.name ?? user.email ?? "System";
 

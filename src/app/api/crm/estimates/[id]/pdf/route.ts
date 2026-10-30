@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { renderEstimatePDF } from "@/lib/estimate-pdf";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 export async function GET(
   _req: NextRequest,
@@ -24,6 +25,7 @@ export async function GET(
   // from the session, not implicit trust in a policy that could itself
   // change, e.g. a future crew-role RLS carve-out).
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // ── fetch estimate number for the filename, then render ────────────────────

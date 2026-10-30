@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { rescheduleVisitsForSchedule } from "@/lib/visits/schedule-reschedule";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const Body = z.object({
   /** preview — how many upcoming untouched visits would be replaced; apply — replace them. */
@@ -38,6 +39,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ sch
   if (!parsed.success) return NextResponse.json({ error: "action must be preview or apply" }, { status: 400 });
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile?.org_id) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
   const orgId = profile.org_id as string;
 

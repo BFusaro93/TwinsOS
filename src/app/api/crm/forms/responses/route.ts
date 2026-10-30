@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 // GET /api/crm/forms/responses?formId=<uuid>
 export async function GET(req: Request) {
@@ -15,6 +16,7 @@ export async function GET(req: Request) {
     .select("org_id")
     .eq("id", user.id)
     .single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
   {
     const denied = await rejectWithoutFormsPermission(supabase, "view");
@@ -77,6 +79,7 @@ export async function PATCH(req: Request) {
     .select("org_id")
     .eq("id", user.id)
     .single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
   {
     const denied = await rejectWithoutFormsPermission(supabase, "view");

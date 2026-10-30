@@ -7,6 +7,7 @@ import type { Database } from "@/types/supabase";
 import { logger } from "@/lib/logger";
 import { resolveGoogleMapsKey } from "@/lib/google-maps-key";
 import { embeddedOne, formatStopAddress, resolveStopAddress } from "@/lib/utils/stop-address";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 interface DistanceMatrixRow {
   elements: { status: string; duration?: { value: number } }[];
@@ -140,6 +141,7 @@ export async function POST(request: Request) {
     .select("org_id")
     .eq("id", user.id)
     .single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
 
   const sb = createClient<Database>(

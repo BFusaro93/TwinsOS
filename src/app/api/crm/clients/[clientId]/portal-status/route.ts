@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import type { PortalInviteRow, PortalUserRow } from "@/lib/portal/portal-db";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 export type ClientPortalStatus = "none" | "invited" | "active";
 
@@ -37,6 +38,7 @@ export async function GET(
     .select("org_id")
     .eq("id", user.id)
     .single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { clientId } = await params;

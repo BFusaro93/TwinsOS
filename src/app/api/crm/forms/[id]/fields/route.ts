@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 // PUT /api/crm/forms/[id]/fields — replace all fields for a form
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -16,6 +17,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     .select("org_id")
     .eq("id", user.id)
     .single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
   {
     const denied = await rejectWithoutFormsPermission(supabase, "edit");

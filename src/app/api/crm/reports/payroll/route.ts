@@ -4,6 +4,7 @@ import { getRouteAuth } from "@/lib/supabase/route-auth";
 import { computePayroll } from "@/lib/payroll/compute";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 /**
  * GET  /api/crm/reports/payroll?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -35,6 +36,7 @@ async function authorize(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any;
   const { data: profile } = await db.from("profiles").select("org_id").eq("id", user.id).maybeSingle();
+  if (profile) profile.org_id = (await getEffectiveOrgId(db)) ?? profile.org_id;
   if (!profile?.org_id) return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
   const { data: hasCrm } = await db.rpc("has_crm_access");
   if (!hasCrm) return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
