@@ -435,6 +435,8 @@ export async function applyVisitCompletionSideEffects(
           // A row already linked to a line (even if the status flip below failed)
           // is billed; sweeping it again would invoice the same material twice.
           .is("invoice_line_item_id", null)
+          // Estimate sub-item products are inside the service price already.
+          .is("job_service_subitem_id", null)
           .is("deleted_at", null);
         type PendingProductRow = {
           id: string;
