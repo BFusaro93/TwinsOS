@@ -52,7 +52,7 @@ export async function PATCH(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile } = await (supabase as any).from("profiles").select("org_id").eq("id", user.id).single();
-  if (profile) profile.org_id = (await getEffectiveOrgId((supabase as any))) ?? profile.org_id;
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
 
   const { jobId, materialId } = await params;
@@ -102,7 +102,7 @@ export async function DELETE(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile } = await (supabase as any).from("profiles").select("org_id").eq("id", user.id).single();
-  if (profile) profile.org_id = (await getEffectiveOrgId((supabase as any))) ?? profile.org_id;
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
 
   const { jobId, materialId } = await params;

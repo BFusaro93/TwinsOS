@@ -29,7 +29,7 @@ export async function POST(
     .select("org_id")
     .eq("id", user.id)
     .single();
-  if (profile) profile.org_id = (await getEffectiveOrgId((supabase as any))) ?? profile.org_id;
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   if (!profile?.org_id) {
     return NextResponse.json({ error: "Org not found" }, { status: 403 });
