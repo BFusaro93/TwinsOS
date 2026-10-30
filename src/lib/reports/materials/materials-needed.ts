@@ -326,6 +326,9 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
   interface JobProductRow {
     product_id: string | null;
     qty: number;
+    visit_id: string | null;
+    /** Set on per-visit rows (recurring/package sub-item products). */
+    crm_job_visits: { scheduled_date: string | null; status: string | null; deleted_at: string | null } | null;
     crm_jobs: {
       id: string;
       status: string | null;
@@ -343,7 +346,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     supabase
       .from("crm_job_products")
       .select(
-        "product_id, qty, crm_jobs!inner(id, status, scheduled_date, waiting_list_start, clients:client_id(display_name))"
+        "product_id, qty, visit_id, crm_job_visits(scheduled_date, status, deleted_at), crm_jobs!inner(id, status, scheduled_date, waiting_list_start, clients:client_id(display_name))"
       )
       .not("product_id", "is", null)
       .eq("status", "pending")
@@ -364,13 +367,18 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     const productId = row.product_id;
     if (!job || !productId) continue;
     if (TERMINAL_JOB_STATUSES.has(job.status ?? "")) continue;
+    // A per-visit row (recurring/package sub-item product) is demand only while its
+    // own visit is still ahead: a deleted, skipped, cancelled or completed visit
+    // needs nothing more, and the row is dated by that visit, not the job.
+    const visit = row.visit_id ? row.crm_job_visits : null;
+    if (row.visit_id && (!visit || visit.deleted_at || ["completed", "skipped", "cancelled"].includes(visit.status ?? ""))) continue;
     if (chemicalProductIds.has(productId)) continue; // chemical branch already covers this product
     const list = generalDemandByProduct.get(productId) ?? [];
     list.push({
       jobId: job.id,
       jobName: job.clients?.display_name ?? "Job",
       qty: Number(row.qty),
-      neededBy: job.scheduled_date ?? job.waiting_list_start,
+      neededBy: visit?.scheduled_date ?? job.scheduled_date ?? job.waiting_list_start,
     });
     generalDemandByProduct.set(productId, list);
   }

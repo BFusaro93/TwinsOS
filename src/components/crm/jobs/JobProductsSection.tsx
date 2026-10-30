@@ -153,7 +153,11 @@ export interface JobProductServiceOption {
  * Add/Edit rows won't submit without one picked from `services`.
  */
 export function JobProductsSection({ jobId, services }: { jobId: string; services: JobProductServiceOption[] }) {
-  const { data: jobProducts = [] } = useCRMJobProducts(jobId);
+  const { data: allJobProducts = [] } = useCRMJobProducts(jobId);
+  // Per-visit rows (a recurring service's sub-item products, one per visit) are the
+  // crew's to record visit by visit and show up in Materials Needed; listing a
+  // weekly job's dozens of them here would bury the materials the office planned.
+  const jobProducts = allJobProducts.filter((p) => !p.visitId);
   const addJobProduct = useAddCRMJobProduct();
   const updateJobProduct = useUpdateCRMJobProduct();
   const deleteJobProduct = useDeleteCRMJobProduct();

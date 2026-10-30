@@ -3199,6 +3199,8 @@ export interface CRMJobProduct {
   invoiceLineItemId: string | null;
   /** Set when this row came from an estimate sub-item: its dollars are in the service price, so it is never invoiced. */
   jobServiceSubitemId: string | null;
+  /** Set on per-visit rows (recurring/package sub-item products); null = job-level. */
+  visitId: string | null;
 }
 
 function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
@@ -3216,6 +3218,7 @@ function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
     status: (row.status as JobProductStatus) ?? "pending",
     invoiceLineItemId: row.invoice_line_item_id as string | null,
     jobServiceSubitemId: (row.job_service_subitem_id as string | null) ?? null,
+    visitId: (row.visit_id as string | null) ?? null,
   };
 }
 
