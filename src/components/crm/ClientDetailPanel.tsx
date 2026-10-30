@@ -133,6 +133,7 @@ import {
   ClipboardList,
   History,
   Calendar,
+  CalendarCheck,
   Maximize2,
   Minimize2,
   X,
@@ -2108,6 +2109,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [jobEditMode, setJobEditMode] = useState(false);
   const [visitsModal, setVisitsModal] = useState<{ job: CRMJob; jobName: string; mode: "upcoming" | "history" } | null>(null);
+  const [scheduleJob, setScheduleJob] = useState<CRMJob | null>(null);
   const [selectedEstimateId, setSelectedEstimateId] = useState<string | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
@@ -2369,6 +2371,12 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                         <DropdownMenuItem onClick={() => { setJobEditMode(false); setSelectedJobId(job.id); }}>
                           <Eye className="mr-2 h-3.5 w-3.5" /> View Details
                         </DropdownMenuItem>
+                        {/* job_type stays 'waiting_list' after dispatch, so "still waiting" means no visit yet. */}
+                        {job.jobType === "waiting_list" && job.status !== "cancelled" && (job.visits ?? []).length === 0 && can("sched_waiting_list") && (
+                          <DropdownMenuItem onClick={() => setScheduleJob(job)}>
+                            <CalendarCheck className="mr-2 h-3.5 w-3.5" /> Schedule Job
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => setVisitsModal({ job, jobName: (job.services ?? []).map((s) => s.serviceName).join(", ") || job.jobType, mode: "upcoming" })}>
                           <Calendar className="mr-2 h-3.5 w-3.5" /> View Upcoming
@@ -2657,6 +2665,15 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
         estimates={estimates ?? []}
         onClose={() => setAllEstimatesOpen(false)}
         onOpenEstimate={(id) => { setAllEstimatesOpen(false); setSelectedEstimateId(id); }}
+      />
+    )}
+    {scheduleJob && (
+      <DispatchJobsDialog
+        items={(scheduleJob.services ?? []).length > 0
+          ? (scheduleJob.services ?? []).map((service) => ({ job: scheduleJob, service }))
+          : [{ job: scheduleJob, service: null }]}
+        onOpenChange={(open) => { if (!open) setScheduleJob(null); }}
+        onDone={() => setScheduleJob(null)}
       />
     )}
     {visitsModal && (
