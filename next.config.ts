@@ -27,6 +27,18 @@ const nextConfig: NextConfig = {
   // function (seen on Vercel prod builds) — keep it external so Node
   // resolves it at runtime instead.
   serverExternalPackages: ["@react-pdf/renderer"],
+  // @react-pdf/renderer 4.9 depends on the standalone `pdfkit`, which loads its
+  // built-in font metrics (js/standard-fonts/Helvetica.cjs, ...) with a dynamic
+  // require that Vercel's file tracing cannot see. Without this every PDF render
+  // in production died with MODULE_NOT_FOUND (invoices, estimates, work orders…),
+  // which the invoice PDF route surfaced as "Invoice not found". PDFs render from
+  // many routes, so include the (small) font + data files everywhere.
+  outputFileTracingIncludes: {
+    "/**/*": [
+      "./node_modules/pdfkit/js/standard-fonts/**/*",
+      "./node_modules/pdfkit/js/data/**/*",
+    ],
+  },
   // twins-os.vercel.app serves the whole marketing site at 200, so every
   // landscapt.com page has an indexable twin on the Vercel host. The canonical
   // tags already point at landscapt.com, but a canonical is a hint — tell
