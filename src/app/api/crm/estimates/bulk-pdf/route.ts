@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { renderEstimatesPDF } from "@/lib/estimate-pdf";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 // Combines several estimates into one PDF for the Estimates list's "Print
 // Selected" bulk action — same auth/org-scoping shape as the single-estimate
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const buffer = await renderEstimatesPDF(supabase, ids, profile.org_id);

@@ -13,6 +13,7 @@ import {
   type InvoicePhotoCandidate,
   type InvoicePhotoSource,
 } from "@/types/invoice-photos";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("invoice-photos-api");
 
@@ -53,6 +54,7 @@ async function authorize(mode: "read" | "write"): Promise<Auth | NextResponse> {
 
   // org_id always comes from the session's profile, never the request.
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile?.org_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Same granular gates as the invoice edit / email routes: admins always

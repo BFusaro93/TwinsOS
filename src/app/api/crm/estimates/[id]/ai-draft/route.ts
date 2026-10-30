@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -28,6 +29,7 @@ export async function POST(
     .select("org_id")
     .eq("id", user.id)
     .single();
+  if (profile) profile.org_id = (await getEffectiveOrgId((supabase as any))) ?? profile.org_id;
 
   if (!profile?.org_id) {
     return NextResponse.json({ error: "Org not found" }, { status: 403 });

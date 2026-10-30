@@ -5,6 +5,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
 import { setWOPartStock } from "@/lib/inventory/part-stock";
 import { logger } from "@/lib/logger";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("pm-generate-wo");
 
@@ -172,6 +173,7 @@ export async function POST(
     .select("org_id, role, name")
     .eq("id", user.id)
     .single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(userClient)) ?? profile.org_id;
   if (!profile) {
     return NextResponse.json({ error: "Profile not found" }, { status: 403 });
   }

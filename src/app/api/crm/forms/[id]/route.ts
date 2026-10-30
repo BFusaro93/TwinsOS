@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 async function getOrgId(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data } = await supabase.from("profiles").select("org_id").eq("id", userId).single();
-  return data?.org_id ?? null;
+  if (!data) return null;
+  return (await getEffectiveOrgId(supabase)) ?? data.org_id ?? null;
 }
 
 // GET /api/crm/forms/[id]

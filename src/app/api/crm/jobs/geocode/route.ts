@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { Database } from "@/types/supabase";
 import { GOOGLE_FAILURE_STATUSES, resolveGoogleMapsKey } from "@/lib/google-maps-key";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 /**
  * POST /api/crm/jobs/geocode — resolves lat/lng for a batch of the org's jobs
@@ -96,6 +97,7 @@ export async function POST(request: Request) {
     .select("org_id")
     .eq("id", user.id)
     .single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
 
   const sb = createClient<Database>(

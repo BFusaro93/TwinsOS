@@ -9,6 +9,7 @@ import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { SAMPLE_INVOICE } from "@/lib/invoices/sample-invoice";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const VALID_LAYOUT_KEYS: InvoicePDFLayoutKey[] = [
   "default",
@@ -35,6 +36,7 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const requestedLayout = req.nextUrl.searchParams.get("layoutKey");

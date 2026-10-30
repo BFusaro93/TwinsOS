@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const AddMaterialSchema = z.object({
   description: z.string().min(1),
@@ -52,6 +53,7 @@ export async function GET(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile } = await (supabase as any).from("profiles").select("org_id").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId((supabase as any))) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
 
   const { jobId } = await params;
@@ -86,6 +88,7 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile } = await (supabase as any).from("profiles").select("org_id").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId((supabase as any))) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
 
   const { jobId } = await params;

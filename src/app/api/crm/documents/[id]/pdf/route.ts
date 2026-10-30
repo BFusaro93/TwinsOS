@@ -6,6 +6,7 @@ import { DocumentTemplatePdf } from "@/components/crm/documents/pdf/DocumentTemp
 import { resolveMergeTags, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-template-renderer";
 import { sanitizeImageBlocks } from "@/lib/documents/sanitize-image-blocks";
 import type { BlockType } from "@/types/crm-documents";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 interface PdfBlockInput {
   blockType: BlockType;
@@ -20,6 +21,7 @@ async function loadOrgAndTemplate(supabase: Awaited<ReturnType<typeof createClie
   if (!user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) } as const;
 
   const { data: profile } = await sb.from("profiles").select("org_id").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(sb)) ?? profile.org_id;
   if (!profile?.org_id) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) } as const;
 
   const { data: template, error: tplErr } = await sb

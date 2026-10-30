@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { cancelClientVisits } from "@/lib/visits/client-visits";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const Body = z.object({
   clientIds: z.array(z.string().uuid()).min(1).max(500),
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile?.org_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const orgId = profile.org_id as string;
 

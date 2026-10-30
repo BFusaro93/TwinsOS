@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { propagateCrewToVisits } from "@/lib/visits/propagate-crew";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const BodySchema = z.object({
   crewId: z.string().uuid().nullable(),
@@ -35,6 +36,7 @@ export async function POST(
 
   // Org always comes from the session, never the body.
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
