@@ -174,6 +174,17 @@ function buttonHref(settings: RenderableBlock["settings"]): string {
   return "#";
 }
 
+/** href attribute value: a merge tag is resolved like block text (resolveMergeTags
+ *  already escapes its output); a literal URL is escaped here. */
+function buttonHrefAttr(
+  settings: RenderableBlock["settings"],
+  mergeVars: Record<string, string>,
+  options?: { preserveUnresolvedKnownTags?: boolean }
+): string {
+  const href = buttonHref(settings);
+  return href.startsWith("[") ? resolveMergeTags(href, mergeVars, options) : escapeHtml(href);
+}
+
 function wrap(inner: string, style: string): string {
   return `<div style="${style}">${inner}</div>`;
 }
@@ -254,7 +265,7 @@ function renderBlock(
           );
     case "button":
       return wrap(
-        `<a href="${escapeHtml(buttonHref(block.settings))}" style="display:inline-block;background:#60ab45;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">${content || "Button"}</a>`,
+        `<a href="${buttonHrefAttr(block.settings, mergeVars, options)}" style="display:inline-block;background:#60ab45;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">${content || "Button"}</a>`,
         "text-align:center;margin:16px 0;"
       );
     default:
