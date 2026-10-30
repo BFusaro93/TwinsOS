@@ -3219,6 +3219,26 @@ function mapJobProduct(row: Record<string, unknown>): CRMJobProduct {
   };
 }
 
+/** How many visits each sub-item has been ticked off on, for the office view of crew progress. */
+export function useJobSubitemTicks(jobId: string) {
+  return useQuery({
+    queryKey: ['crm-job-subitem-ticks', jobId],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('crm_visit_subitem_checks')
+        .select('subitem_id, crm_job_visits!inner(job_id)')
+        .eq('crm_job_visits.job_id', jobId);
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      for (const r of (data ?? []) as { subitem_id: string }[]) counts[r.subitem_id] = (counts[r.subitem_id] ?? 0) + 1;
+      return counts;
+    },
+    enabled: !!jobId,
+  });
+}
+
 export function useCRMJobProducts(jobId: string) {
   return useQuery({
     queryKey: ['crm-job-products', jobId],

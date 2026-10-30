@@ -890,6 +890,16 @@ export default function ProposalPage() {
                         )}
                       </div>
                       {li.estimateDesc && <LineDescription html={li.estimateDesc} />}
+                      {(li.printedSubitems ?? []).length > 0 && (
+                        <ul className="mt-1.5 space-y-0.5">
+                          {(li.printedSubitems ?? []).map((sub, k) => (
+                            <li key={k} className="flex items-baseline justify-between gap-3 pl-3 text-xs text-slate-500">
+                              <span className="truncate">{sub.name}{sub.qty !== 1 ? ` × ${sub.qty}` : ""}</span>
+                              {proposal.displaySettings.showLineTotals && <span className="shrink-0">{cents(sub.totalCents)}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       {meta && <p className="mt-1 text-xs text-slate-400">{meta}</p>}
                     </div>
                     {proposal.displaySettings.showLineTotals && (
@@ -911,6 +921,16 @@ export default function ProposalPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-800">{li.serviceName ?? "Service"}</p>
                       {li.estimateDesc && <LineDescription html={li.estimateDesc} />}
+                      {(li.printedSubitems ?? []).length > 0 && (
+                        <ul className="mt-1.5 space-y-0.5">
+                          {(li.printedSubitems ?? []).map((sub, k) => (
+                            <li key={k} className="flex items-baseline justify-between gap-3 pl-3 text-xs text-slate-500">
+                              <span className="truncate">{sub.name}{sub.qty !== 1 ? ` × ${sub.qty}` : ""}</span>
+                              {proposal.displaySettings.showLineTotals && <span className="shrink-0">{cents(sub.totalCents)}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       {meta && <p className="mt-1 text-xs text-slate-400">{meta}</p>}
                     </div>
                     {proposal.displaySettings.showLineTotals && (

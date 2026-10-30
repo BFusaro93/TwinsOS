@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
+import { pickPrintedSubitems, PRINTED_SUBITEM_SELECT, type PrintedSubitem } from "@/lib/estimates/printed-subitems";
 
 /**
  * What a client sees and signs on the public proposal page — the
@@ -32,6 +33,8 @@ export interface ProposalContent {
     discountCents?: number;
     /** Sum of the line's priced sub-items. Absent on older versions too. */
     subitemTotalCents?: number;
+    /** Sub-items flagged "print on estimate", listed under the line. Absent on versions sent before this existed. */
+    printedSubitems?: PrintedSubitem[];
     status: string;
     tier: string | null;
     /** For the PDF, which prints the adjusted, complexity-scaled rate. */
@@ -77,6 +80,7 @@ export function buildProposalContent(est: Record<string, unknown>): ProposalCont
       subitemTotalCents: ((li.estimate_line_item_subitems ?? []) as Record<string, unknown>[])
         .filter((si) => !si.deleted_at)
         .reduce((sum, si) => sum + ((si.total_cents as number) ?? 0), 0),
+      printedSubitems: pickPrintedSubitems(li.estimate_line_item_subitems),
       status: li.status as string,
       tier: (li.tier as string | null) ?? null,
       adjRateCents: (li.adj_rate_cents as number | null) ?? null,
@@ -125,7 +129,7 @@ export function proposalFingerprint(content: ProposalContent): string {
  *  so an estimate sent before the field existed is not reported "changed
  *  since sent" (which would block acceptance until re-sent). Real price
  *  changes still show up in subtotal/total. */
-const LATE_LINE_KEYS = ["discountCents", "subitemTotalCents"] as const;
+const LATE_LINE_KEYS = ["discountCents", "subitemTotalCents", "printedSubitems"] as const;
 
 function alignToPublished(live: ProposalContent, published: ProposalContent): ProposalContent {
   const sample = published.lineItems?.[0] as Record<string, unknown> | undefined;
@@ -150,8 +154,7 @@ export function proposalMatchesPublished(live: ProposalContent, published: Propo
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = SupabaseClient<any>;
 
-export const PROPOSAL_ESTIMATE_SELECT =
-  "*, estimate_line_items(*, estimate_line_item_subitems(total_cents, deleted_at))";
+export const PROPOSAL_ESTIMATE_SELECT = `*, estimate_line_items(*, ${PRINTED_SUBITEM_SELECT})`;
 
 export async function loadLiveProposalContent(supabase: AnySupabase, estimateId: string): Promise<ProposalContent | null> {
   const { data } = await supabase.from("estimates").select(PROPOSAL_ESTIMATE_SELECT).eq("id", estimateId).maybeSingle();

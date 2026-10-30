@@ -205,6 +205,8 @@ export interface ProposalLineItem {
   discountCents?: number;
   /** Sum of the line's priced sub-items. Optional for the same reason. */
   subitemTotalCents?: number;
+  /** Sub-items the office chose to print on the estimate, listed under the line. */
+  printedSubitems?: { name: string; qty: number; rateCents: number; totalCents: number }[];
   status: string;
   tier: string | null;
 }

@@ -61,7 +61,7 @@ export async function GET(
       *,
       clients(display_name, billing_address, billing_city, billing_state, billing_zip),
       client_properties(address, city, state, zip),
-      estimate_line_items(*, estimate_line_item_subitems(total_cents, deleted_at))
+      estimate_line_items(*, estimate_line_item_subitems(*))
     `)
     .eq("id", shareToken.estimate_id)
     .is("deleted_at", null)
