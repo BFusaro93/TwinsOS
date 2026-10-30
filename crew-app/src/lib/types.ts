@@ -89,6 +89,8 @@ export interface CrewStop {
   /** Set while the stop is on a break — see crm_job_visits.paused_at. */
   pausedAt: string | null;
   breakMinutes: number;
+  /** Names of the OTHER crews working this same stop today (multi-crew stops). */
+  partnerCrews?: string[];
   notesToCrew: string | null;
   /**
    * When the office last edited those notes. An acknowledgment older than

@@ -519,6 +519,9 @@ export default function StopDetailScreen() {
         </View>
 
         <View style={styles.infoStack}>
+          {stop.partnerCrews && stop.partnerCrews.length > 0 ? (
+            <InfoRow label="Shared stop" value={`With ${stop.partnerCrews.join(', ')}`} />
+          ) : null}
           <InfoRow label="Time window" value={formatStopTimeWindow(stop)} />
           {formatStopAddress(stop) ? (
             <InfoRow

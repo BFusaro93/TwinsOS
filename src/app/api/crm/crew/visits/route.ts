@@ -108,7 +108,7 @@ export async function GET(request: Request) {
       start_time, end_time, status, sub_status, priority,
       notes_to_crew, notes_to_client, completion_notes, job_comments,
       men_count, actual_hours, budgeted_hours, clocked_in_at, clocked_out_at,
-      paused_at, break_minutes, skip_reason,
+      paused_at, break_minutes, skip_reason, crew_group_id,
       acknowledged_notes_at, notes_to_crew_updated_at, completed_at, created_at, updated_at,
       clients(display_name, primary_phone, service_address, service_city, service_state, service_zip,
         billing_address, billing_city, billing_state, billing_zip),
@@ -287,6 +287,20 @@ export async function GET(request: Request) {
     } as unknown as CRMJobVisit;
   });
 
+  // Multi-crew stops: the OTHER crews working the same stop today. RLS hides
+  // sibling visits from a crew login, so this goes through the same
+  // crm_visit_crew_partners RPC the web crew page uses (names only, and only
+  // for visits the caller may see). Best-effort — a failure just hides the label.
+  const groupedVisitIds = (data ?? []).filter((r) => r.crew_group_id).map((r) => r.id as string);
+  const partnersByVisit = new Map<string, string[]>();
+  if (groupedVisitIds.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: partnerRows } = await (supabase as any).rpc("crm_visit_crew_partners", { p_visit_ids: groupedVisitIds });
+    for (const row of (partnerRows ?? []) as { visit_id: string; crew_name: string }[]) {
+      partnersByVisit.set(row.visit_id, [...(partnersByVisit.get(row.visit_id) ?? []), row.crew_name]);
+    }
+  }
+
   const stops = groupVisitsIntoStops(mapped).map((stop) => ({
     key: stop.key,
     anchorVisitId: stop.anchorVisitId,
@@ -299,6 +313,7 @@ export async function GET(request: Request) {
     clockedOutAt: stop.clockedOutAt,
     pausedAt: stop.pausedAt,
     breakMinutes: Math.max(0, ...stop.visits.map((v) => v.breakMinutes ?? 0), 0),
+    partnerCrews: [...new Set(stop.visits.flatMap((v) => partnersByVisit.get(v.id) ?? []))],
     notesToCrew: stop.notesToCrew,
     notesToCrewUpdatedAt: stop.notesToCrewUpdatedAt,
     scheduledDate: stop.visits[0]?.scheduledDate ?? date,

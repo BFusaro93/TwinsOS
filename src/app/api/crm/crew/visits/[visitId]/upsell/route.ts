@@ -4,6 +4,7 @@ import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
 import { adminClient } from "@/lib/api/auth";
 import { logger } from "@/lib/logger";
 import { validateImageUpload } from "@/lib/utils/image-upload";
+import { heicToJpeg, isHeic, HEIC_MAX_BYTES } from "@/lib/utils/convert-heic";
 
 /** Categorises the ticket so the office can filter for these, and so ticket
  *  automations (which match on category) can fire on them. */
@@ -164,18 +165,29 @@ export async function POST(
   }
   if (file && upsellImage?.ok) {
     try {
-      const ext = upsellImage.ext;
+      // The attachments bucket rejects image/heic (its allowed types are
+      // JPEG/PNG/GIF/WebP), and iPhone photos — including ones from the native
+      // crew app's picker — arrive as HEIC. Convert to JPEG here exactly as the
+      // visit-photo route does, instead of silently dropping the photo.
+      const convertHeic = isHeic(file);
+      if (convertHeic && file.size > HEIC_MAX_BYTES) throw new Error("HEIC photos must be 15MB or smaller");
+      const ext = convertHeic ? "jpg" : upsellImage.ext;
+      let contentType = upsellImage.contentType;
       // org_id MUST be the first path segment: the storage policy
       // org_members_upload_attachments checks
       // storage.foldername(name)[1] = the caller's org_id, so a path led by a
       // literal like "upsells/" is rejected outright.
       const storagePath = `${visit.org_id}/upsells/${ticket.id}/${Date.now()}.${ext}`;
-      const buffer = Buffer.from(await file.arrayBuffer());
+      let buffer: Buffer = Buffer.from(await file.arrayBuffer());
+      if (convertHeic) {
+        buffer = await heicToJpeg(buffer);
+        contentType = "image/jpeg";
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: uploadError } = await (supabase as any).storage
         .from("attachments")
-        .upload(storagePath, buffer, { contentType: upsellImage.contentType });
+        .upload(storagePath, buffer, { contentType });
       if (uploadError) throw new Error(uploadError.message);
 
       // record_type 'ticket' is already allowed, so AttachmentsSection on the
@@ -186,9 +198,9 @@ export async function POST(
         created_by: user.id,
         record_type: "ticket",
         record_id: ticket.id,
-        file_name: file.name,
-        file_size: file.size,
-        file_type: upsellImage.contentType,
+        file_name: convertHeic ? file.name.replace(/\.(heic|heif)$/i, ".jpg") : file.name,
+        file_size: buffer.length,
+        file_type: contentType,
         storage_path: storagePath,
         uploaded_by_name: spotter,
       });

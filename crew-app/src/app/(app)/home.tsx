@@ -257,6 +257,9 @@ function StopCard({ stop, onPress }: { stop: ReturnType<typeof applyStopQueueOve
               </View>
             ) : null}
           </View>
+          {stop.partnerCrews && stop.partnerCrews.length > 0 ? (
+            <Text style={styles.cardPartner}>With {stop.partnerCrews.join(', ')}</Text>
+          ) : null}
           <Text style={styles.cardMeta}>{formatStopTimeWindow(stop)}</Text>
           {formatStopAddress(stop) ? (
             <Text style={styles.cardMeta} numberOfLines={1}>
@@ -451,6 +454,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: C.text,
+  },
+  cardPartner: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6d28d9',
+    marginTop: 4,
   },
   cardMeta: {
     fontSize: 13,
