@@ -26,11 +26,14 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
-  if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // my_org_id() (not profiles.org_id) so staff impersonating a customer org
+  // resolve to that org — profiles.org_id is the staff member's own org, which
+  // made every invoice of the impersonated org come back "not found".
+  const { data: orgId } = await supabase.rpc("my_org_id");
+  if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const buffer = await renderInvoicesPDF(supabase, ids, profile.org_id, user.id);
+    const buffer = await renderInvoicesPDF(supabase, ids, orgId, user.id);
     if (!buffer) {
       return NextResponse.json({ error: "None of the selected invoices could be loaded" }, { status: 404 });
     }

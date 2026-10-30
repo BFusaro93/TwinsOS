@@ -41,6 +41,7 @@ export function JobsPackagesGuide() {
           <TOCLink href="#equipment">Equipment to bring</TOCLink>
           <TOCLink href="#packages">Packages, in detail</TOCLink>
           <TOCLink href="#projects">Projects (Landscapt vs. Equipt/PO)</TOCLink>
+          <TOCLink href="#recurring-setup">Setting up a recurring job</TOCLink>
           <TOCLink href="#schedule-templates">Schedule templates</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
         </div>
@@ -378,10 +379,48 @@ export function JobsPackagesGuide() {
         </Callout>
       </Section>
 
+      <Section id="recurring-setup" title="Setting up a recurring job, step by step">
+        <p>
+          &quot;Recurring schedule&quot; can mean two different things. For recurring{" "}
+          <em>client service</em> (weekly mowing, bi-weekly maintenance) in Landscapt, follow these steps.
+          For recurring <em>equipment maintenance</em> in Equipt, see the Preventive Maintenance
+          Schedules guide instead (CMMS &gt; PM Schedules).
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>
+            <strong>Create the schedule template (once).</strong> In the sidebar, under{" "}
+            <strong>Administration</strong>, click <strong>Schedules</strong>, then{" "}
+            <strong>Add Schedule</strong>. Give it a name, a frequency, a day of the week and, if the
+            service is seasonal, a season window. Skip this step if the schedule you need already
+            exists. If the Schedule dropdown on the job is a plain text box, no schedules exist yet.
+          </li>
+          <li>
+            <strong>Add the job.</strong> Go to <strong>Jobs → Add Job</strong>, pick the client, and set
+            the Job Type to <strong>Recurring</strong>.
+          </li>
+          <li>
+            <strong>Fill in the recurring fields.</strong> Choose the service, pick your template in the{" "}
+            <strong>Schedule</strong> dropdown, set <strong>Start Recurring</strong>, and optionally an{" "}
+            <strong>End Date</strong>. With no End Date, visits are generated through the end of the year.
+          </li>
+          <li>
+            <strong>Check the preview, then save.</strong> The <strong>Upcoming Dates</strong> panel shows
+            the dates the schedule will produce. When you save, the visits are created automatically and
+            appear on the Dispatch Board (CRM &gt; Scheduling &gt; Dispatch Board).
+          </li>
+        </ol>
+        <p>
+          To drop a single date, such as a holiday, use <strong>Skip Dates</strong>, described below.
+        </p>
+      </Section>
+
       <Section id="schedule-templates" title="Schedule templates">
         <p>
-          The <strong>Schedule</strong> dropdown on a recurring job is fed by{" "}
-          <strong>Settings &gt; Schedules</strong>. Each schedule is a reusable pattern: a name, a
+          The <strong>Schedule</strong> dropdown on a recurring job is fed by the{" "}
+          <strong>Schedules</strong> page: in the Landscapt sidebar, under <strong>Administration</strong>,
+          click <strong>Schedules</strong> (CRM &gt; Schedules). It is its own sidebar item, not a tab
+          inside the Settings page, so look for it in the sidebar list. Click{" "}
+          <strong>Add Schedule</strong> to create one. Each schedule is a reusable pattern: a name, a
           frequency (Weekly, Bi-Weekly, Every 3 or 4 Weeks, Monthly, or Custom dates), a day of the
           week, and an optional season window. The <strong>Upcoming Dates</strong> panel in the
           dialog previews the dates it will produce, and those are the same dates the visit
