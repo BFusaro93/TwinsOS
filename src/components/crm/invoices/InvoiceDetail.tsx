@@ -75,6 +75,7 @@ import { useConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 import { InvoiceEmailDialog } from "@/components/crm/invoices/InvoiceEmailDialog";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Textarea } from "@/components/ui/textarea";
+import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { getDisplayInvoiceStatus } from "@/lib/invoice-status";
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -360,7 +361,7 @@ function LineItemRow({
       {/* Description */}
       <td className="px-3 py-2">
         <input
-          value={row.description}
+          value={notesToPlainText(row.description)}
           onChange={(e) => update("description", e.target.value)}
           onBlur={save}
           placeholder="Description…"
