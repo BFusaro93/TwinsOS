@@ -445,8 +445,12 @@ export function DocumentBuilder({ template }: Props) {
       }
     }
     // Fallback: copy to clipboard
-    navigator.clipboard.writeText(tag);
-    toast.success(`Copied ${tag} — paste into a block`);
+    // Clipboard writes can be rejected (Safari, insecure/blocked contexts), so surface that instead of
+    // letting the promise rejection go unhandled.
+    navigator.clipboard
+      ?.writeText(tag)
+      .then(() => toast.success(`Copied ${tag} — paste into a block`))
+      .catch(() => toast.error(`Couldn't copy ${tag} — click into a block first, then insert it`));
   }
 
   function addBlock(def: BlockDef) {
