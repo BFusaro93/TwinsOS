@@ -1382,3 +1382,39 @@ export function useSubmitFieldUpsell() {
     },
   });
 }
+
+/** "visitId:subitemId" keys the crew has ticked off, across every visit of a stop. */
+export function useVisitSubitemChecks(visitIds: string[]) {
+  const key = [...visitIds].sort().join(",");
+  return useQuery({
+    queryKey: ["crew-visit-subitem-checks", key],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_visit_subitem_checks")
+        .select("visit_id, subitem_id")
+        .in("visit_id", visitIds);
+      if (error) throw error;
+      return new Set<string>(((data ?? []) as { visit_id: string; subitem_id: string }[]).map((r) => `${r.visit_id}:${r.subitem_id}`));
+    },
+    enabled: visitIds.length > 0,
+  });
+}
+
+export function useToggleSubitemCheck() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ visitId, subitemId, checked }: { visitId: string; subitemId: string; checked: boolean }) => {
+      const res = await fetch(`/api/crm/crew/visits/${visitId}/subitems/${subitemId}/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checked }),
+      });
+      if (!res.ok) throw new Error("Couldn't save that tick");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crew-visit-subitem-checks"] }),
+    onError: () => toast.error("Couldn't save that tick — check your connection and try again"),
+  });
+}
