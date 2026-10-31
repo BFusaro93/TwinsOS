@@ -137,20 +137,22 @@ export async function POST(req: NextRequest) {
 
   // Same cross-org guard for the estimate/ticket/invoice this event pertains to, if any.
   if (body.estimateId) {
-    const { data: estimate } = await db.from("estimates").select("org_id").eq("id", body.estimateId).maybeSingle();
-    if (!estimate || estimate.org_id !== profile.org_id) {
+    const { data: estimate } = await db.from("estimates").select("org_id, client_id").eq("id", body.estimateId).maybeSingle();
+    // A record that belongs to a different client must not be used as this client's context.
+    if (!estimate || estimate.org_id !== profile.org_id || (estimate.client_id && estimate.client_id !== body.clientId)) {
       return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
     }
   }
   if (body.ticketId) {
-    const { data: ticket } = await db.from("crm_tickets").select("org_id").eq("id", body.ticketId).maybeSingle();
-    if (!ticket || ticket.org_id !== profile.org_id) {
+    const { data: ticket } = await db.from("crm_tickets").select("org_id, client_id").eq("id", body.ticketId).maybeSingle();
+    // A record that belongs to a different client must not be used as this client's context.
+    if (!ticket || ticket.org_id !== profile.org_id || (ticket.client_id && ticket.client_id !== body.clientId)) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
     }
   }
   if (body.invoiceId) {
-    const { data: invoice } = await db.from("crm_invoices").select("org_id").eq("id", body.invoiceId).maybeSingle();
-    if (!invoice || invoice.org_id !== profile.org_id) {
+    const { data: invoice } = await db.from("crm_invoices").select("org_id, client_id").eq("id", body.invoiceId).maybeSingle();
+    if (!invoice || invoice.org_id !== profile.org_id || (invoice.client_id && invoice.client_id !== body.clientId)) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
   }
