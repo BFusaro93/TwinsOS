@@ -388,9 +388,9 @@ export function EstimatesList({ clientId }: Props) {
                   )
                 }
                 onImport={async (rows) => {
-                  const { created, skipped, linesAdded } = await bulkImportEstimates(rows);
-                  if (skipped > 0) {
-                    toast.warning(`Imported ${created} estimate${created !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (unmatched or duplicate-named client, missing description, or an invalid stage/date).`);
+                  const { created, skipped, duplicates, linesAdded } = await bulkImportEstimates(rows);
+                  if (skipped > 0 || duplicates > 0) {
+                    toast.warning(`Imported ${created} estimate${created !== 1 ? "s" : ""}. ${duplicates > 0 ? `${duplicates} already existed (same client, description and date). ` : ""}${skipped > 0 ? `${skipped} row${skipped !== 1 ? "s" : ""} skipped (unmatched or duplicate-named client, missing description, or an invalid stage/date).` : ""}`);
                   } else {
                     toast.success(
                       `Successfully imported ${created} estimate${created !== 1 ? "s" : ""}${
