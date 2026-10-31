@@ -135,7 +135,12 @@ export function MetersGuide() {
           </li>
           <li>
             To log usage, click the meter and use <strong>+ Add Reading</strong>. Enter the value
-            and the date.
+            and the date. A reading dated today must be at least the current value. For a cumulative
+            meter you can also add a past-dated reading you forgot to log; it only has to fit between
+            the readings before and after that date (&quot;Must fit between the readings before and
+            after this date&quot;) and can be lower than today&apos;s value. Several readings on the
+            same day are ordered by when you entered them, so the latest one is always the current
+            value.
           </li>
           <li>
             The meter&apos;s current value always reflects the latest reading — there&apos;s no
@@ -168,6 +173,10 @@ export function MetersGuide() {
             Pick an <strong>action type</strong>. If it&apos;s Create Work Order or Create WO
             Request, you can also set a <strong>Service Interval</strong> — see the worked example
             below for what that does.
+          </li>
+          <li>
+            The Automations list and the edit dialog always show the meter&apos;s and asset&apos;s
+            current names, so renaming either one updates how the automation reads.
           </li>
           <li>
             For those two actions, <strong>Assigned To</strong> is a picker of your employees (leave

@@ -71,6 +71,15 @@ export function OnlinePaymentsGuide() {
           Landscapt organization only, and if you reconnect a different account, cards clients
           saved on the old one are cleared and need to be re-saved.
         </p>
+        <p>
+          <strong>Bring over cards your customers already saved.</strong> Once your existing account is
+          connected, <strong>Settings &gt; Accounting</strong> shows <strong>Import saved cards from
+          Stripe</strong>. Click <strong>Find saved cards</strong> and Landscapt reads your Stripe customers
+          and proposes matches to your clients. Email matches start checked, name-only matches start
+          unchecked, and expired cards can&apos;t be selected. Nothing changes until you confirm, existing saved
+          methods are never overwritten, and <strong>Turn on autopay for imported methods</strong> is off by
+          default, so turn it on only for clients who already agreed to autopay.
+        </p>
       </Section>
 
       <Section id="ach" title="Enabling bank transfer (ACH)">

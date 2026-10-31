@@ -842,7 +842,10 @@ export function DispatchBoardGuide() {
           switch in the <strong>Active</strong> column off, then confirm. The crew moves to the <strong>Inactive</strong> tab
           and stops appearing as a crew to schedule on the Dispatch Board and Crew Board; its history is kept. Turn the switch
           back on (Inactive or All tab) to restore it. This is separate from the crew&apos;s login — deactivating the login in
-          Settings → Users only blocks sign-in.
+          Settings → Users only blocks sign-in. If the crew still has active jobs or upcoming visits, the confirmation tells
+          you how many before you proceed. Those stay on the inactive crew and the crew drops out of the crew dropdowns, so
+          reassign the work first. A job whose crew has since been made inactive shows it as &quot;Name (inactive)&quot; in
+          Edit Job.
         </Callout>
       </Section>
 

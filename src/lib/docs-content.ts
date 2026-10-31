@@ -1950,6 +1950,58 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "How do I schedule a job or visit?",
+        a: "Use the Scheduling section of the Landscapt left menu, not Settings. Scheduling > Dispatch Board is where you put a visit on a day and assign it to a crew; Scheduling > Waiting List is for jobs that only have a date range and no firm date yet, where each row has a Schedule button. Scheduling > Jobs lists every job. The Schedules page under Administration only holds the reusable recurrence patterns (weekly, bi-weekly, seasonal) that a recurring job's Schedule dropdown uses.",
+      },
+      {
+        q: "How do I bill several properties together on one invoice for a parent account?",
+        a: "Sub-accounts are separate clients, so their invoices can't be merged the usual way. On the Invoices list, tick the invoices from the sub-accounts and choose Actions > Merge / Consolidate Invoices, then Consolidate to Parent. It creates one new draft invoice on the parent account with each line tagged with its sub-account name in brackets, each line keeps the tax it was already charged, and the original invoices are voided and linked to the new one. It is blocked for locked invoices, invoices synced to QuickBooks, invoices with a bank payment still processing or an open dispute, and invoices where a sub-account has already paid something. A payment the parent itself made, such as one check for several properties, moves onto the new invoice.",
+      },
+      {
+        q: "Collect Payment showed the old amount after I changed the invoice. Why?",
+        a: "Collect Payment charges the balance as of when you click Continue. It now starts over from the new balance whenever the invoice total changes or you close and reopen it. If you still see an old figure, close the dialog, confirm the invoice's Balance Due, and open Collect Payment again before clicking Continue.",
+      },
+      {
+        q: "Can I set the Waiting List date range and have it stick?",
+        a: "Yes. The Date Window on the Waiting List has a preset dropdown (Next 30 days, This week, This month, This quarter, This year, Next 90 days) and Custom range if you edit either date. Your choice is saved to your login, so it is still there after a refresh. Presets are remembered by name, so 'This quarter' still means the current quarter next month.",
+      },
+      {
+        q: "Can I schedule a waiting-list job from the client's record?",
+        a: "Yes. On the client's Home tab, open the waiting-list job's MORE menu and choose Schedule Job, pick a date and optionally a crew, and dispatch it. It then leaves the Waiting List and shows on the Dispatch Board. The item only appears while the job has no visit yet, and only for logins with the Waiting List permission. View Upcoming in the same menu has a Schedule button per service if you want to send one service out and keep the others waiting.",
+      },
+      {
+        q: "Why won't a merge tag insert in my email template?",
+        a: "Click into a text block first (Header, Paragraph, List, Signature or a Columns column), then click the tag in the Merge Tags panel and it is inserted at your cursor. If no text block is active, the tag is copied to your clipboard instead and a notice says so. Two tags with nothing between them run together, so add your own space or comma.",
+      },
+      {
+        q: "How do I make a button in an email template link to something?",
+        a: "Add a Button block, type its label, and use the Button links to control under it. Invoice Email templates offer View & pay invoice online, which links each client to their own invoice; any template can use Custom URL (https://, mailto: or tel:). The link works in the email. In an attached PDF the button is drawn but isn't clickable. See the Document & Email Templates guide.",
+      },
+      {
+        q: "The test email from the template editor failed or looks like a PDF, not an invoice. Why?",
+        a: "Send Test Email sends the template with sample data to the email address you are signed in with, with [TEST] at the start of the subject. If the template's Include PDF setting is on, the PDF attachment is the template rendered with sample values, not a real invoice. If the test fails with a message about the PDF attachment, turn off Include PDF in the template's settings to test without it.",
+      },
+      {
+        q: "What is Equipment on an estimate line, and does the client see it?",
+        a: "Equipment is an internal cost. Add machines under Administration > Services > Equipment (cost rate, optional charge rate, per hour, per day or flat), then expand an estimate line and choose + Add Equipment. Quantity times rate counts against that line's margin. The client never sees it on the proposal, PDF, portal or invoice, and it does not change the line price. A service's Equipment tab can pre-fill machines on every new line of that service.",
+      },
+      {
+        q: "What are sub-items on a service bundle or estimate line?",
+        a: "A sub-item is a product or subservice attached to a bundle item or estimate line, with its own quantity and rate. Add them with + Add sub-item in the bundle editor (Settings > Estimates > Service Bundles); they come along when the bundle is applied. On an estimate, the printer icon beside a sub-item controls whether it is printed under the line for the client. When the estimate becomes a job, the office and the crew see each service's sub-items by name and quantity only, with no prices; they never bill and don't change inventory.",
+      },
+      {
+        q: "What does the Mine / Everyone toggle on My Day do?",
+        a: "My Day opens scoped to you. Mine shows tickets assigned to you or where you're a contributor, estimates where you're the sales rep, and meetings assigned to you; Everyone shows the whole company's. A My Upcoming Meetings card lists your next seven days of meetings. Breadcrumbs across the top of list pages are clickable to jump back to the section.",
+      },
+      {
+        q: "A refund or chargeback didn't update in QuickBooks. What now?",
+        a: "Open Settings > Accounting > Sync Status. The payment is listed with the reason; click Retry (it needs the QuickBooks Resync permission) and Landscapt re-runs the void or reduction on the QuickBooks payment and clears the error once it goes through.",
+      },
+      {
+        q: "Why does an invoice line show HTML tags like <p>?",
+        a: "Older invoices created automatically from a visit copied the job's rich-text invoice description onto the line with its formatting tags. The invoice editor now shows those descriptions as plain text, and new invoice lines are created as plain text. The PDF never showed the tags.",
+      },
+      {
         q: "A job I skipped or cancelled a visit for is back on the Waiting List. Is that right?",
         a: "Yes. A waiting-list job leaves the list once it has a live visit, but a skipped or cancelled visit never happened, so a job whose only visits were skipped or cancelled returns to the Waiting List. Scheduling it again creates a new visit and takes it off.",
       },

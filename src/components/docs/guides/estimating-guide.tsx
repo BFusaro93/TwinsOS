@@ -48,6 +48,7 @@ export function EstimatingGuide() {
           <TOCLink href="#why-snapshot">Why budget method is snapshotted per-line</TOCLink>
           <TOCLink href="#complexity-and-rate-matrix">Complexity multiplier &amp; Rate Matrix pricing</TOCLink>
           <TOCLink href="#reading-the-grid">Reading the line-item grid</TOCLink>
+          <TOCLink href="#bundles-subitems">Service bundles and sub-items</TOCLink>
           <TOCLink href="#zone-measurements">Where zone measurements come from</TOCLink>
           <TOCLink href="#proposal-link">The client-facing proposal link</TOCLink>
           <TOCLink href="#deposits">Taking a deposit on acceptance</TOCLink>
@@ -346,6 +347,37 @@ export function EstimatingGuide() {
           Costing bid-rate calculator (&ldquo;Set as project rates&rdquo;), and overhead percentages
           live in the org&rsquo;s overhead settings.
         </p>
+      </Section>
+
+      <Section id="bundles-subitems" title="Service bundles and sub-items">
+        <p>
+          A <strong>service bundle</strong> is a saved set of line items you can drop onto an estimate.
+          Manage them under <strong>Settings → Estimates → Service Bundles</strong>. In the bundle
+          editor, click <strong>+ Add sub-item</strong> under any bundle item to attach a product or a
+          subservice to it. Search finds your products (not maintenance parts) and your subservices; each
+          sub-item has its own quantity (default 1) and rate, and a delete icon when you hover the row.
+          When you apply the bundle to an estimate, its sub-items come with it.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Print or hide on the estimate.</strong> On an estimate line, a printer icon beside
+            each sub-item toggles whether it is printed under the line on the client&apos;s PDF, the
+            preview and the emailed copy. New sub-items print by default; sub-items that existed before
+            this feature stay hidden so old estimates look the same.
+          </li>
+          <li>
+            <strong>On the job.</strong> When the estimate converts to a job, each service&apos;s
+            sub-items copy to the job with their names and quantities only (no prices). The office sees
+            them under the service on the job, and the crew sees them on the stop as the products to
+            bring and the tasks to do. They don&apos;t bill and don&apos;t change inventory; the sub-item
+            dollars are already inside the service price.
+          </li>
+          <li>
+            <strong>Equipment cost.</strong> A line can also carry internal equipment cost, which lowers
+            its margin but is never shown to the client. See <em>Equipment costs</em> in the Services
+            &amp; Pricing guide.
+          </li>
+        </ul>
       </Section>
 
       <Section id="zone-measurements" title="Where zone measurements come from">

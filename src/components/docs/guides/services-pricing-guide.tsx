@@ -52,6 +52,7 @@ export function ServicesPricingGuide() {
         <div className="flex flex-col gap-1">
           <TOCLink href="#where">Where it is</TOCLink>
           <TOCLink href="#layers">Where a price actually lives</TOCLink>
+          <TOCLink href="#equipment-costs">Equipment costs</TOCLink>
           <TOCLink href="#bulk-prices">Bulk Prices — changing the catalog</TOCLink>
           <TOCLink href="#adjustments">Price Adjustments — re-pricing live work</TOCLink>
           <TOCLink href="#undo">Undoing a run</TOCLink>
@@ -62,9 +63,11 @@ export function ServicesPricingGuide() {
       <Section id="where" title="Where it is">
         <p>
           <strong>CRM → Services</strong>, titled <strong>Services &amp; Pricing</strong>. It has
-          three tabs: <strong>Service Catalog</strong> (your list of services),{" "}
+          up to four tabs: <strong>Service Catalog</strong> (your list of services),{" "}
+          <strong>Equipment</strong> (machine cost rates for estimates),{" "}
           <strong>Price Adjustments</strong> (re-pricing existing client work), and{" "}
-          <strong>Adjustment History</strong> (every run, with an undo).
+          <strong>Adjustment History</strong> (every run, with an undo). The last two only show for
+          logins allowed to adjust prices.
         </p>
       </Section>
 
@@ -97,6 +100,33 @@ export function ServicesPricingGuide() {
           what gets filled in on the <em>next</em> estimate, invoice or package line. To move money on
           work that already exists, use a Price Adjustment run.
         </Callout>
+      </Section>
+
+      <Section id="equipment-costs" title="Equipment costs">
+        <p>
+          The <strong>Equipment</strong> tab holds the machines you want to count against an estimate:
+          a skid steer, an aerator, a truck day. Each one has a <strong>Name</strong>, an optional{" "}
+          <strong>Description</strong>, a <strong>Cost rate</strong> (what the machine costs you), an
+          optional <strong>Charge rate</strong> (what you bill for it, if you mark it up), and a{" "}
+          <strong>Unit</strong>: per hour, per day, or flat. Leave the charge blank for no markup, in
+          which case charge equals cost. The list shows the margin of charge over cost.
+        </p>
+        <p>
+          On an estimate, expand a line and choose <strong>+ Add Equipment</strong>. Set the quantity
+          and rate on each row; quantity times rate counts as internal cost and lowers that line&apos;s
+          margin. The line&apos;s footer shows equipment cost, the charge (your line price should cover
+          it) and the margin after equipment. Equipment is internal only: it never appears on the
+          proposal, the PDF, the client portal or the invoice, and it doesn&apos;t change the line&apos;s
+          price. Name, unit and rate are copied onto the line when you add it, so later edits to the
+          catalog don&apos;t change estimates you already priced. Duplicating an estimate copies its
+          equipment rows.
+        </p>
+        <p>
+          To pre-fill machines on every new line of a service, open that service and use its{" "}
+          <strong>Equipment</strong> tab to set default equipment and a default quantity. The quantity
+          can still be changed per estimate. (This is separate from the &quot;Equipment to bring&quot;
+          list on a job, which is about the assets a crew takes to the site.)
+        </p>
       </Section>
 
       <Section id="bulk-prices" title="Bulk Prices — changing the catalog">

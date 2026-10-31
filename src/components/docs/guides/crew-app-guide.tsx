@@ -63,6 +63,12 @@ export function CrewAppGuide() {
           them — no clients list, no invoices, no estimates, and no sidebar full of office screens.
         </p>
         <p>
+          The native app has the same crew tools as the browser version: Start Day and End Day, Edit
+          Crew (per-person attendance), Suggest Work, and Request Materials. A shared stop shows who the
+          other crew is (&quot;With &hellip;&quot;), and tapping a push notification for a new job or a
+          visit note opens that stop.
+        </p>
+        <p>
           <strong>Office staff in the field.</strong> An owner or office employee doesn&apos;t need a
           separate crew login. When their own login is attached to a crew (Team → Crews → Linked
           Login, or automatically by ticking <strong>Schedule Jobs Directly</strong> on their
@@ -94,7 +100,8 @@ export function CrewAppGuide() {
           crew with that name, the new login is attached to it instead of making a duplicate. You
           can change this any time under Team → Crews → <strong>Linked Login</strong> on that crew:
           pick a different login, or choose None to unlink. A login can only be attached to one
-          crew — once it&apos;s used, it stops appearing in the list for the others. That attachment
+          crew — once it&apos;s used, it still appears in the list for the others but greyed out and
+        labelled &quot;already on&quot; the crew that holds it. That attachment
           is what decides whose stops get shown, and the app refuses to clock in or out on a stop
           belonging to a different crew. A crew login that isn&apos;t attached to any crew (for
           example, one you unlinked, or created before this was automatic) signs in to an empty
@@ -167,12 +174,13 @@ export function CrewAppGuide() {
           same thing against the same underlying job — either side works from the same planned list.
         </p>
         <p>
-          <strong>Request Materials</strong> (in the native crew app) is the crew asking for
-          something instead. Pick a stocked or project material from the catalog, enter a quantity
+          <strong>Request Materials</strong> (in the native crew app and on the browser stop page,
+          under a <strong>Materials requests</strong> card) is the crew asking for something instead. Pick a stocked or project material from the catalog, enter a quantity
           and an optional note, and Submit Request creates a draft requisition tied to that job for
           the office to review. The quantity can be fractional, up to two decimals (half a yard of
           mulch is 0.5); maintenance parts aren&apos;t available in field requests. The crew never
-          sees prices on the request.
+          sees prices on the request. Each request is listed under the card with its status:
+          Submitted, Pending approval, Approved, Rejected, Ordered or Closed.
         </p>
       </Section>
 
@@ -240,7 +248,9 @@ export function CrewAppGuide() {
             and the first job after midnight doesn&apos;t open an overlapping shift. End Day closes
             it once. A shift that has been left open for more than 16 hours is treated as
             forgotten: End Day doesn&apos;t close it at an absurd length, it stays open and the
-            Payroll report flags it for the office to correct.
+            Payroll report flags it for the office to correct. If you export Payroll while some
+            days are still open or have no shift, Landscapt warns that hours are understated or missing
+            and asks you to confirm — fix those days first for accurate pay.
           </li>
         </ul>
         <p>
@@ -304,12 +314,21 @@ export function CrewAppGuide() {
           </tbody>
         </Table>
         <p>
+          <strong>Sub-items under a service.</strong> If the estimate&apos;s service had sub-items (the
+          products to bring and the tasks to do), the stop lists them under that service with their
+          quantities. Crews never see prices. They&apos;re for planning only and don&apos;t bill or
+          change inventory. The office sees the same list under the service on the job.
+        </p>
+        <p>
           Start Job and Stop Job apply to the <strong>whole stop</strong>. Skip is the exception —
           it&apos;s per service, so a crew can skip the hedges and still complete the mow at the same
           property. A leftover visit on a job that is On Hold or Cancelled isn&apos;t on the crew&apos;s
           list, so Start Job and Stop Job skip it rather than starting, completing and invoicing work
           nobody asked for. A double tap, or a tap queued offline that replays later, is treated as
-          already done instead of showing an error. If a crew already started the stop (Start Job
+          already done instead of showing an error. If a crew taps Start Job on a stop that was already
+          completed, skipped or cancelled, the app tells them its status instead of clocking in, and visits with no
+          client clock in the same as any other. If the office marked a stop complete while the crew was still punched
+          in, the crew&apos;s Clock Out closes those leftover punches so they don&apos;t stay open on the Timesheet. If a crew already started the stop (Start Job
           clocked them in) and then skips it, their clocks stop at the skip &mdash; as long as no
           other service at the same stop is still running &mdash; so the hours still reach the
           Timesheet and Job Costing instead of staying open.

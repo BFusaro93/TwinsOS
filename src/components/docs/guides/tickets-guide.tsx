@@ -269,7 +269,7 @@ export function TicketsGuide() {
           picked from a list and match exactly, instead of being typed. <strong>Created</strong> and{" "}
           <strong>Due Date</strong> are date-range filters (From / To). Created is compared on your
           company&apos;s calendar day, so a ticket logged in the evening lands on the day your staff
-          saw it.
+          saw it. The Calls list has the same Created and Due Date range filters.
         </p>
       </Section>
 

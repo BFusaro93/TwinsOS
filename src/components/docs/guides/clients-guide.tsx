@@ -312,6 +312,10 @@ export function ClientsGuide() {
           Access section, in addition to the one captured per property.
         </p>
         <p>
+          Any custom field you&apos;ve defined that has a value on the client also appears as a row on
+          the <strong>Details</strong> tab, with its unit after the value. Fields with no value are hidden.
+        </p>
+        <p>
           Typed takeoffs are one combined number per client. Aerial Measurement is the only place
           that breaks measurements down zone by zone and property by property.
         </p>

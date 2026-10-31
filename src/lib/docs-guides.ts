@@ -22,6 +22,7 @@ import {
   Zap,
   ClipboardList,
   Ticket,
+  FileEdit,
   AlertTriangle,
   Percent,
   HeartPulse,
@@ -196,6 +197,13 @@ export const DOC_GUIDES: DocGuide[] = [
     title: "Forms & Lead Capture",
     description: "Building, publishing, and sharing public forms — and what happens to a submission once it lands.",
     icon: ClipboardList,
+  },
+  {
+    slug: "documents-guide",
+    kicker: "Landscapt (CRM)",
+    title: "Document & Email Templates",
+    description: "Building the reusable emails and text messages that go out with invoices, estimates, campaigns and automations — blocks, merge tags, buttons, previews and test sends.",
+    icon: FileEdit,
   },
   {
     slug: "tickets-guide",

@@ -184,8 +184,7 @@ export function AutomationsGuide() {
           conditions, stop conditions and If Branches) lets you pick one of your client custom fields, then compare
           it. Text fields offer equals, not equals, contains, does not contain, is set and is not set; number fields
           offer equals, not equals, greater/less than (or equal to), is set and is not set. It reads the client&apos;s
-          saved value when the trigger fires and again each time a stop condition or If Branch is checked. A client
-          with no value only matches &quot;is not set&quot;; every other comparison is not met. If the field is
+          saved value when the trigger fires and again each time a stop condition or If Branch is checked. A client with no value matches &quot;is not set&quot;, &quot;not equals&quot; and &quot;does not contain&quot; (an empty field isn&apos;t equal to or containing anything, so &quot;Map code does not equal X&quot; passes for a client with no map code); every other comparison is not met. If the field is
           deleted, the condition is never met and the editor shows &quot;Field deleted&quot; so you can pick another.
           If you change a field&apos;s type, the stored value is read as the new type, and a value that does not fit
           counts as empty.
@@ -412,6 +411,14 @@ export function AutomationsGuide() {
           <strong>I approved an automation email and it was refused. Why?</strong> The client&apos;s
           status is re-checked at the moment you approve. If they unsubscribed or their email address
           bounced while the step was waiting, the approval is blocked — reject the step instead.
+        </p>
+        <p>
+          <strong>I approved a queued step and was told the automation was stopped.</strong> Turning an
+          automation off, or deleting it, stops its enrollments but leaves their approval requests
+          waiting. Approving one is refused (&quot;reject this step instead&quot;) so the email or text
+          you meant to halt doesn&apos;t go out. <strong>Empty email steps:</strong> an email step with no
+          subject and no visible body text is skipped rather than sent as &quot;(no subject)&quot;, so fill in at
+          least one of them.
         </p>
         <p>
           <strong>Can an automation email send itself before anyone reviews it?</strong> Only if
