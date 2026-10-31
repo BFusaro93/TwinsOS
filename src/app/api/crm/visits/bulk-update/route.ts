@@ -100,6 +100,21 @@ export async function POST(request: Request) {
     }
   }
 
+  // Same for a crew change: ownership checks key off the visit's crew, so re-crewing a
+  // stop mid-clock locks the working crew out of clock-out, pause and skip.
+  if (updates.crew_id !== undefined || updates.crew_unassigned) {
+    const running = before.filter(
+      (r) => r.clocked_in_at && !r.clocked_out_at && (updates.crew_unassigned || r.crew_id !== updates.crew_id)
+    );
+    if (running.length > 0) {
+      return NextResponse.json({
+        error: running.length === 1
+          ? "This visit is in progress (the crew has clocked in), so its crew can't be changed. Have the crew clock out first."
+          : `${running.length} of the selected visits are in progress (the crew has clocked in), so their crew can't be changed. Have the crews clock out first.`,
+      }, { status: 409 });
+    }
+  }
+
   // Completed + invoiced visits are locked against moves and status changes
   // (DB trigger trg_crm_job_visits_guard_invoiced is the floor). Block the
   // whole batch with a clear message unless an admin explicitly overrides.
