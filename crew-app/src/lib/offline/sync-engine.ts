@@ -224,7 +224,9 @@ async function processItem(item: QueueItem): Promise<void> {
       return;
     }
 
-    if (err instanceof ApiError && err.status >= 400 && err.status < 500) {
+    // 401 (token expired mid-request), 408 (timeout) and 429 (rate limit) are about the
+    // moment of the request, not the payload — they fall through to the retry path below.
+    if (err instanceof ApiError && err.status >= 400 && err.status < 500 && ![401, 408, 429].includes(err.status)) {
       // Non-retryable client error (bad request, visit not found, etc.) — retrying the
       // same payload won't change the outcome.
       await setQueueItemStatus(item.id, 'failed', {

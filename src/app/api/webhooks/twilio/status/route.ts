@@ -80,7 +80,30 @@ export async function POST(request: Request) {
     .eq("ref_table", "twilio_messages")
     .eq("ref_id", messageSid)
     .or(`status.is.null,status.not.in.(${excluded.join(",")})`);
-  if (error) console.error("[twilio status webhook] failed to update client_activity:", error);
+  if (error) {
+    console.error("[twilio status webhook] failed to update client_activity:", error);
+    // 5xx so Twilio retries the callback rather than the delivery outcome being lost.
+    return NextResponse.json({ error: "Failed to record delivery status" }, { status: 500 });
+  }
+
+  // 21610: the recipient replied STOP to the carrier/Twilio directly. Record the opt-out here
+  // too, or automations keep trying to text a number that can never receive them.
+  if (params.ErrorCode === "21610" && (messageStatus === "failed" || messageStatus === "undelivered")) {
+    const { data: activity } = await supabase
+      .from("client_activity")
+      .select("client_id, org_id")
+      .eq("ref_table", "twilio_messages")
+      .eq("ref_id", messageSid)
+      .maybeSingle();
+    if (activity?.client_id && activity.org_id) {
+      const { error: optErr } = await supabase
+        .from("clients")
+        .update({ sms_opt_in: false })
+        .eq("id", activity.client_id)
+        .eq("org_id", activity.org_id);
+      if (optErr) console.error("[twilio status webhook] failed to record opt-out:", optErr);
+    }
+  }
 
   return NextResponse.json({ received: true });
 }

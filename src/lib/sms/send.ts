@@ -1,4 +1,5 @@
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { orgHasAddon } from "@/lib/stripe/addon-access";
 import { monthStartInZone } from "@/lib/time/zone";
 import { toE164Us } from "@/lib/utils/phone";
 
@@ -25,6 +26,12 @@ export async function sendClientSms(
     createdBy?: string | null;
   }
 ): Promise<{ ok: true; sid: string | null } | { ok: false; reason: string; permanent?: boolean }> {
+  // The SMS add-on is what's billed for texting (included volume + overage); a billable plan
+  // without it has no texting. Trials bundle it until they end.
+  if (!(await orgHasAddon(supabase, params.orgId, "sms"))) {
+    return { ok: false, reason: "texting isn't included on this plan (SMS add-on)", permanent: true };
+  }
+
   // TCPA consent gate, enforced here (the actual Twilio call) rather than
   // only in the automation-content resolver, so no future call site — a
   // manual 1:1 text feature, say — can accidentally bypass it.
@@ -129,12 +136,17 @@ export async function sendClientSms(
   // one key and read under another — and a UTC-derived key already advances on
   // the evening of a month's last day.
   const periodStart = monthStartInZone(new Date(), await getOrgTimeZone(supabase, params.orgId));
+  // supabase-js returns {error} instead of throwing: surface a lost increment (under-billing)
+  // in the logs rather than swallowing it.
   await supabase
     .rpc("increment_sms_usage", {
       p_org_id: params.orgId,
       p_period_start: periodStart,
     })
-    .then(() => {}, () => {});
+    .then(
+      ({ error }: { error: unknown }) => { if (error) console.error("[sms] increment_sms_usage failed:", error); },
+      (err: unknown) => { console.error("[sms] increment_sms_usage threw:", err); }
+    );
 
   return { ok: true, sid: payload?.sid ?? null };
 }

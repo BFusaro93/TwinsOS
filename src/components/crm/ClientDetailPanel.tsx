@@ -1383,12 +1383,12 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                     "6.25" into 6.03 by re-formatting mid-keystroke (D-19). */}
                 <CurrencyInput
                   blankWhenZero
-                  placeholder={orgSettings ? `Org default (${orgSettings.taxRatePercent}%)` : "Org default"}
+                  placeholder="0% (no tax)"
                   cents={form.defaultTaxRateBps}
                   onChange={(bps) => patch("defaultTaxRateBps", bps)}
                   aria-label="Default tax rate percent"
                 />
-                <p className="text-xs text-slate-400 dark:text-neutral-500">Leave blank to use the organization default tax rate.</p>
+                <p className="text-xs text-slate-400 dark:text-neutral-500">Blank means no tax is charged. Enter a rate to tax this client\u2019s taxable work.</p>
               </div>
               <div className="flex items-center gap-2 pt-1">
                 <input
@@ -4079,7 +4079,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 <InfoRow label="Payment" value={client.paymentMethod} />
                 <InfoRow label="Terms" value={client.billingTerms} />
                 <InfoRow label="Taxable" value={client.isTaxable ? "Yes" : "No"} />
-                <InfoRow label="Tax rate" value={client.defaultTaxRateBps > 0 ? `${(client.defaultTaxRateBps / 100).toFixed(2)}%` : "Org default"} />
+                <InfoRow label="Tax rate" value={client.defaultTaxRateBps > 0 ? `${(client.defaultTaxRateBps / 100).toFixed(2)}%` : "None"} />
                 <InfoRow label="Invoice terms" value={client.defaultTerms?.replace(/_/g, " ")} />
                 <InfoRow label="Tax code" value={client.salesTaxCode} />
               </div>

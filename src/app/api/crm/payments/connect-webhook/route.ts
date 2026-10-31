@@ -586,12 +586,21 @@ async function handleDisputeEvent(
 
   const { data: payment } = await db
     .from("crm_payments")
-    .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents")
+    .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, stripe_dispute_id, dispute_status")
     .eq("stripe_payment_intent_id", paymentIntentId)
     .maybeSingle();
   if (!payment || !(await eventAccountOwnedByOrg(db, payment.org_id, eventAccount))) return "ok";
 
-  const { error: markErr } = await db
+  // A dispute only moves open -> closed. A late "updated" event (open status) arriving after
+  // the closing one must not reopen the flag, or the invoice is blocked from charging forever.
+  const OPEN_DISPUTE_STATUSES = ["needs_response", "under_review", "warning_needs_response", "warning_under_review"];
+  const CLOSED_DISPUTE_STATUSES = ["won", "lost", "warning_closed", "charge_refunded"];
+  const staleOpenEvent =
+    payment.stripe_dispute_id === dispute.id &&
+    CLOSED_DISPUTE_STATUSES.includes(payment.dispute_status ?? "") &&
+    OPEN_DISPUTE_STATUSES.includes(dispute.status);
+
+  const { error: markErr } = staleOpenEvent ? { error: null } : await db
     .from("crm_payments")
     .update({
       stripe_dispute_id: dispute.id,
@@ -607,8 +616,9 @@ async function handleDisputeEvent(
   // so out-of-order deliveries converge on the dispute's real state. Must run
   // BEFORE the reversal below, which deletes the payment's allocation rows.
   try {
-    const OPEN_DISPUTE_STATUSES = ["needs_response", "under_review", "warning_needs_response", "warning_under_review"];
-    if (OPEN_DISPUTE_STATUSES.includes(dispute.status)) {
+    if (staleOpenEvent) {
+      // Already closed here — leave the flag as the closing event set it.
+    } else if (OPEN_DISPUTE_STATUSES.includes(dispute.status)) {
       const { data: allocs } = await db
         .from("crm_payment_allocations")
         .select("invoice_id")

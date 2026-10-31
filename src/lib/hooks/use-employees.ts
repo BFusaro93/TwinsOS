@@ -359,13 +359,31 @@ export function useDeactivateEmployee() {
     mutationFn: async (id: string) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: emp } = await (supabase as any).from("crm_employees").select("user_id").eq("id", id).maybeSingle();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_employees")
         .update({ is_active: false })
         .eq("id", id);
       if (error) throw error;
+
+      // A deactivated employee must not keep their login: the CRM-side triggers only drop CRM
+      // access, leaving the Equipt permissions and notifications of an active profile. Admin-only
+      // route — best effort, so an employee deactivation by a non-admin (or of one's own linked
+      // login) still succeeds and the Users page remains the way to finish it.
+      const loginId = (emp as { user_id: string | null } | null)?.user_id;
+      if (loginId) {
+        try {
+          await fetch(`/api/users/${loginId}/deactivate`, { method: "POST" });
+        } catch {
+          // best effort
+        }
+      }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-employees"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-employees"] });
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
   });
 }
 

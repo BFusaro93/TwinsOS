@@ -180,7 +180,26 @@ export async function getValidConnection(
   const env = config.environment ?? resolveQuickBooksEnvironment(orgId);
 
   if (new Date(config.expires_at).getTime() - Date.now() < 5 * 60 * 1000) {
-    const tokens = await refreshTokens(config.refresh_token, env);
+    let tokens: Awaited<ReturnType<typeof refreshTokens>>;
+    try {
+      tokens = await refreshTokens(config.refresh_token, env);
+    } catch (err) {
+      // Intuit rotates the refresh token on use, so a request that lost the race can be refused
+      // with invalid_grant even though the winner already stored a working pair — use that.
+      const { data: fresh } = await db.from("integrations").select("config").eq("id", row.id).single();
+      const freshConfig = fresh?.config as QuickBooksIntegrationConfig | undefined;
+      if (freshConfig && freshConfig.refresh_token !== config.refresh_token) {
+        return { accessToken: freshConfig.access_token, realmId: freshConfig.realm_id, baseUrl: apiBaseUrl(env) };
+      }
+      // Genuinely expired/revoked: say so (the callers promise never to throw, and the org needs
+      // a "reconnect QuickBooks" signal instead of a stale "ok").
+      log.error("QuickBooks token refresh failed", { err, orgId });
+      await db
+        .from("integrations")
+        .update({ last_sync_at: new Date().toISOString(), last_sync_status: "error" })
+        .eq("id", row.id);
+      return null;
+    }
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
     const nextConfig: QuickBooksIntegrationConfig = {
       ...config,
@@ -647,9 +666,14 @@ function buildInvoiceBody(input: CreateInvoiceInput, forUpdate = false): Record<
 async function qboInvoiceRequest(
   conn: QuickBooksConnection,
   body: Record<string, unknown>,
-  operation?: "void"
+  operation?: "void",
+  requestId?: string
 ): Promise<Record<string, unknown>> {
-  const url = `${conn.baseUrl}/v3/company/${conn.realmId}/invoice${operation ? `?operation=${operation}` : ""}`;
+  const qs = new URLSearchParams();
+  if (operation) qs.set("operation", operation);
+  if (requestId) qs.set("requestid", requestId.slice(0, 50));
+  const q = qs.toString();
+  const url = `${conn.baseUrl}/v3/company/${conn.realmId}/invoice${q ? `?${q}` : ""}`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -677,8 +701,12 @@ function toWriteResult(invoice: Record<string, unknown>): QboWriteResult {
   return { id: String(invoice.Id), totalCents: Math.round(Number(invoice.TotalAmt ?? 0) * 100) };
 }
 
-export async function createInvoice(conn: QuickBooksConnection, input: CreateInvoiceInput): Promise<QboWriteResult> {
-  return toWriteResult(await qboInvoiceRequest(conn, buildInvoiceBody(input)));
+/**
+ * requestId makes the create idempotent at Intuit: a retry after a lost response (or a second
+ * sender racing the first) gets the original invoice back instead of creating a duplicate.
+ */
+export async function createInvoice(conn: QuickBooksConnection, input: CreateInvoiceInput, requestId?: string): Promise<QboWriteResult> {
+  return toWriteResult(await qboInvoiceRequest(conn, buildInvoiceBody(input), undefined, requestId));
 }
 
 /** The invoice as QuickBooks currently holds it — its SyncToken is required for any update or void. */
@@ -1113,7 +1141,7 @@ export async function pushInvoiceToQuickBooks(
 
     // ── not yet in QuickBooks: create it ──
     const createInput = await buildInvoicePushInput(db, conn, orgId, invoice, resolved.customerId);
-    const created = await createInvoice(conn, createInput);
+    const created = await createInvoice(conn, createInput, `inv-${invoiceId}`);
     const qboInvoiceId = created.id;
     const drift = driftMessage(createInput, created);
     await db

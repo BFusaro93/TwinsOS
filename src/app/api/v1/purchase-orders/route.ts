@@ -51,11 +51,13 @@ export async function POST(request: Request) {
   // reference the rest of the app will not resolve.
   const { data: vendor } = await db
     .from("vendors")
-    .select("org_id, name")
+    .select("org_id, name, is_active")
     .eq("id", body.vendorId)
     .is("deleted_at", null)
     .maybeSingle();
   if (!vendor || vendor.org_id !== auth.orgId) return jsonError("Vendor not found", 404);
+  // The app's vendor picker hides deactivated vendors; the API shouldn't create POs against one.
+  if (vendor.is_active === false) return jsonError("Vendor is inactive", 409);
 
   if (body.requisitionId) {
     const { data: req } = await db

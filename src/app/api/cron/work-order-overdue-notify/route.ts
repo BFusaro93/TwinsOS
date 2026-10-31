@@ -111,6 +111,21 @@ export async function GET(request: Request) {
           line: `${wo.work_order_number} — ${wo.title}${wo.asset_name ? ` (${wo.asset_name})` : ""}, due ${wo.due_date}`,
         });
 
+        // work_orders.assigned_to_id(s) are crm_employees ids, not login ids: map them to the
+        // employee's login so an assignee actually matches a recipient below.
+        const employeeIds = Array.from(new Set(overdue.flatMap((wo) => assigneeIds(wo))));
+        const loginByEmployee = new Map<string, string>();
+        if (employeeIds.length > 0) {
+          const { data: emps } = await supabase
+            .from("crm_employees")
+            .select("id, user_id")
+            .eq("org_id", orgId)
+            .in("id", employeeIds);
+          for (const e of (emps ?? []) as { id: string; user_id: string | null }[]) {
+            if (e.user_id) loginByEmployee.set(e.id, e.user_id);
+          }
+        }
+
         // Active users only; deactivated or merely invited logins never appear.
         const users = await loadOrgUsers(supabase, orgId, Array.from(new Set([...OVERSEER_ROLES, ...ASSIGNEE_ROLES])));
         const recipients: DigestRecipient[] = [];
@@ -118,7 +133,7 @@ export async function GET(request: Request) {
           if (!u.email || !prefEnabled(u.prefs, SPEC.prefKey, SPEC.defaultOn)) continue;
           const mine = OVERSEER_ROLES.includes(u.role)
             ? overdue
-            : overdue.filter((wo) => assigneeIds(wo).includes(u.id));
+            : overdue.filter((wo) => assigneeIds(wo).some((eid) => loginByEmployee.get(eid) === u.id));
           if (mine.length === 0) continue;
           recipients.push({ id: u.id, email: u.email, name: u.name, items: mine.map(toItem) });
         }

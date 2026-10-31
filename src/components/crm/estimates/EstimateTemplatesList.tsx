@@ -130,7 +130,7 @@ function TemplateItemRow({
         <input
           type="number"
           value={row.visits}
-          onChange={(e) => update("visits", Number(e.target.value))}
+          onChange={(e) => update("visits", Math.max(1, Math.round(Number(e.target.value)) || 1))}
           onBlur={save}
           className="w-14 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:outline-none"
         />
@@ -139,7 +139,7 @@ function TemplateItemRow({
         <input
           type="number"
           value={row.qty}
-          onChange={(e) => update("qty", Number(e.target.value))}
+          onChange={(e) => update("qty", Math.max(0, Number(e.target.value) || 0))}
           onBlur={save}
           className="w-14 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:outline-none"
         />
@@ -181,7 +181,7 @@ function TemplateItemRow({
         <input
           type="number"
           value={row.budgetedHours}
-          onChange={(e) => update("budgetedHours", Number(e.target.value))}
+          onChange={(e) => update("budgetedHours", Math.max(0, Number(e.target.value) || 0))}
           onBlur={save}
           className="w-16 rounded border border-border bg-card px-1.5 py-0.5 text-right text-xs focus:outline-none"
         />

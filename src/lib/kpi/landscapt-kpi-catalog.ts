@@ -384,6 +384,15 @@ export const KPI_CATALOG: KpiCatalogMetric[] = [
     source: "Estimates: won ÷ (won + lost) estimates dated in the year.",
   },
   {
+    key: "close_ratio_of_sent",
+    label: "Win Rate (All Sent Estimates)",
+    unit: "percent",
+    category: "sales",
+    auto: true,
+    defaultTarget: null,
+    source: "Estimates: won ÷ all non-draft estimates dated in the year, including ones still pending. Lower than Close Ratio when quotes go unanswered without being marked lost.",
+  },
+  {
     key: "new_leads_ytd",
     label: "New Leads YTD",
     unit: "number",

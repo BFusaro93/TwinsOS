@@ -53,7 +53,8 @@ export function computeGroupAmountCents(groupVisits: CRMJobVisit[], tiersByJobId
   if (invoiceType === "hourly") {
     return Math.round((visit.actualHours ?? 0) * (job?.rateCents ?? 0));
   }
-  const serviceTotal = (job?.services ?? []).reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0);
+  // Rounded: a fractional qty (1050 × 0.333) must not put a non-integer into an integer cents column.
+  const serviceTotal = Math.round((job?.services ?? []).reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0));
   return visit.rateCents ?? job?.rateCents ?? serviceTotal;
 }
 

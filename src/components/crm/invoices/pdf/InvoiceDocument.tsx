@@ -18,7 +18,10 @@ export interface InvoicePDFLineItem {
   description: string;
   qty: number;
   rateCents: number;
+  /** Gross line amount (qty × rate); the line's own discount comes off it. */
   totalCents: number;
+  /** Per-line discount — the invoice Subtotal is net of it, so the printed line must be too. */
+  discountCents?: number;
 }
 
 /** A photo embedded on the invoice's photo page(s). dataUri is base64 —
@@ -302,7 +305,7 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
           </View>
           <View style={S.cellNum}><Text style={S.cellText}>{li.qty.toLocaleString()}</Text></View>
           <View style={S.cellNum}><Text style={S.cellText}>{cents(li.rateCents)}</Text></View>
-          <View style={S.cellTotal}><Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text></View>
+          <View style={S.cellTotal}><Text style={[S.cellText, { textAlign: "right", fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents - (li.discountCents ?? 0))}</Text>{(li.discountCents ?? 0) > 0 ? <Text style={[S.cellText, { textAlign: "right", fontSize: 7 }]}>after {cents(li.discountCents ?? 0)} discount</Text> : null}</View>
         </View>
       ))}
 
@@ -318,9 +321,9 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
             <Text style={[S.totalsValue, { color: "#16a34a" }]}>-{cents(invoice.discountCents)}</Text>
           </View>
         )}
-        {invoice.taxRateBps > 0 && (
+        {(invoice.taxRateBps > 0 || invoice.taxCents > 0) && (
           <View style={S.totalsRow}>
-            <Text style={S.totalsLabel}>Tax ({bpsToPercent(invoice.taxRateBps)})</Text>
+            <Text style={S.totalsLabel}>{invoice.taxRateBps > 0 ? `Tax (${bpsToPercent(invoice.taxRateBps)})` : "Tax"}</Text>
             <Text style={S.totalsValue}>{cents(invoice.taxCents)}</Text>
           </View>
         )}
@@ -478,7 +481,7 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
           </View>
           <View style={SC.cellNum}><Text style={SC.cellText}>{li.qty.toLocaleString()}</Text></View>
           <View style={SC.cellNum}><Text style={SC.cellText}>{cents(li.rateCents)}</Text></View>
-          <View style={SC.cellTotal}><Text style={[SC.cellText, { fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents)}</Text></View>
+          <View style={SC.cellTotal}><Text style={[SC.cellText, { fontFamily: "Helvetica-Bold" }]}>{cents(li.totalCents - (li.discountCents ?? 0))}</Text>{(li.discountCents ?? 0) > 0 ? <Text style={[SC.cellText, { fontSize: 7 }]}>after {cents(li.discountCents ?? 0)} discount</Text> : null}</View>
         </View>
       ))}
 
@@ -493,9 +496,9 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
             <Text style={SC.totalsValue}>-{cents(invoice.discountCents)}</Text>
           </View>
         )}
-        {invoice.taxRateBps > 0 && (
+        {(invoice.taxRateBps > 0 || invoice.taxCents > 0) && (
           <View style={SC.totalsRow}>
-            <Text style={SC.totalsLabel}>Tax ({bpsToPercent(invoice.taxRateBps)})</Text>
+            <Text style={SC.totalsLabel}>{invoice.taxRateBps > 0 ? `Tax (${bpsToPercent(invoice.taxRateBps)})` : "Tax"}</Text>
             <Text style={SC.totalsValue}>{cents(invoice.taxCents)}</Text>
           </View>
         )}

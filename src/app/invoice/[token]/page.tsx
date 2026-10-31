@@ -28,7 +28,7 @@ interface PublicInvoice {
   amountPaidCents: number;
   balanceCents: number;
   clientName: string | null;
-  lineItems: { name: string | null; description: string; qty: number; rateCents: number; totalCents: number }[];
+  lineItems: { name: string | null; description: string; qty: number; rateCents: number; totalCents: number; discountCents?: number }[];
   org: { name: string; brandColor: string; logoUrl: string | null };
   photos?: { url: string; caption: string | null }[];
 }
@@ -207,7 +207,10 @@ export default function PublicInvoicePage() {
                   <td className="px-3 py-2">{li.name ?? invoice.description ?? "Service"}</td>
                   <td className="px-3 py-2 text-right">{li.qty}</td>
                   <td className="px-3 py-2 text-right">{cents(li.rateCents)}</td>
-                  <td className="px-3 py-2 text-right font-medium">{cents(li.totalCents)}</td>
+                  <td className="px-3 py-2 text-right font-medium">
+                    {cents(li.totalCents - (li.discountCents ?? 0))}
+                    {(li.discountCents ?? 0) > 0 && <div className="text-[10px] font-normal text-slate-400">incl. {cents(li.discountCents ?? 0)} discount</div>}
+                  </td>
                 </tr>
               ))}
             </tbody>

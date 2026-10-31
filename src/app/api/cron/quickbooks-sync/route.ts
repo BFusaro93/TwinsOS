@@ -103,7 +103,24 @@ export async function GET(request: Request) {
         .lt("updated_at", settledBefore)
         .order("updated_at", { ascending: false })
         .limit(MAX_UPDATES * 3);
-      const changed = ((synced ?? []) as { id: string; updated_at: string; qbo_sync_attempted_at: string | null; qbo_sync_error: string | null }[])
+      // Failed rows due a retry, oldest attempt first. The window above is the most recently
+      // updated invoices only, so with enough recent in-sync invoices an older failed one would
+      // never be seen — and never retried.
+      const { data: failedDue } = await db
+        .from("crm_invoices")
+        .select("id, updated_at, qbo_sync_attempted_at, qbo_sync_error")
+        .eq("org_id", orgId)
+        .is("deleted_at", null)
+        .not("qbo_invoice_id", "is", null)
+        .not("qbo_sync_error", "is", null)
+        .lt("qbo_sync_attempted_at", retryBefore)
+        .lt("updated_at", settledBefore)
+        .order("qbo_sync_attempted_at", { ascending: true })
+        .limit(MAX_UPDATES);
+      type SyncedRow = { id: string; updated_at: string; qbo_sync_attempted_at: string | null; qbo_sync_error: string | null };
+      const candidates = new Map<string, SyncedRow>();
+      for (const r of [...((synced ?? []) as SyncedRow[]), ...((failedDue ?? []) as SyncedRow[])]) candidates.set(r.id, r);
+      const changed = [...candidates.values()]
         .filter((r) => {
           const attempted = r.qbo_sync_attempted_at ? Date.parse(r.qbo_sync_attempted_at) : 0;
           if (!attempted || Date.parse(r.updated_at) > attempted + CHANGED_SLACK_MS) return true;
@@ -128,6 +145,9 @@ export async function GET(request: Request) {
         .or("is_credit.is.null,is_credit.eq.false", { referencedTable: "crm_payments" })
         .gte("crm_payments.created_at", connectedAt)
         .lt("crm_payments.created_at", settledBefore)
+        // Never-attempted first, then the longest-waiting: an unordered limit kept returning the
+        // same rows, so the rest were never reached.
+        .order("qbo_sync_attempted_at", { ascending: true, nullsFirst: true })
         .limit(MAX_PAYMENTS * 3);
       const paymentIds = new Set<string>();
       for (const a of (allocations ?? []) as { payment_id: string; qbo_sync_attempted_at: string | null }[]) {

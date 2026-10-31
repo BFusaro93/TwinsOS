@@ -819,6 +819,9 @@ export function useStopClockIn() {
       return res.json();
     },
     onSuccess: (_data, anchorVisitId) => {
+      // The server also opens the day shift and member punches on the first Start Job.
+      qc.invalidateQueries({ queryKey: ["crew-day"] });
+      qc.invalidateQueries({ queryKey: ["crew-member-times"] });
       qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
       qc.invalidateQueries({ queryKey: ["crew-app-visit"] });
       qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
@@ -934,6 +937,8 @@ export function useStopClockOut() {
       return res.json();
     },
     onSuccess: (_data, { anchorVisitId }) => {
+      qc.invalidateQueries({ queryKey: ["crew-day"] });
+      qc.invalidateQueries({ queryKey: ["crew-member-times"] });
       qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
       qc.invalidateQueries({ queryKey: ["crew-app-visit"] });
       qc.invalidateQueries({ queryKey: ["crew-app-visits"] });

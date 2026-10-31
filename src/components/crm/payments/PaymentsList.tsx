@@ -205,6 +205,13 @@ export function AddPaymentDialog({
   const [autoAllocate, setAutoAllocate] = useState(false);
   const [allocations, setAllocations] = useState<InvoiceAllocation[]>([]);
 
+  // The dialog stays mounted under the client panel, so it outlives a switch to another client:
+  // re-seed the client every time a new payment is opened, or it records against the old one.
+  useEffect(() => {
+    if (open && !payment) setClientId(defaultClientId ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultClientId]);
+
   // sync state when payment prop changes (edit mode re-open)
   useEffect(() => {
     if (payment) {

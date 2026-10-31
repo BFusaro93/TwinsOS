@@ -299,7 +299,8 @@ export function ReceivingDetailPanel({ receipt }: ReceivingDetailPanelProps) {
       receivedByLineItemId.set(l.lineItemId, (receivedByLineItemId.get(l.lineItemId) ?? 0) + l.quantityReceived);
     }
     const allFullyReceived = linkedPO.lineItems.every(
-      (li) => (receivedByLineItemId.get(li.id) ?? 0) >= li.quantity
+      // Quantities are numeric(10,3): float sums like 0.7 + 0.1 land just under 0.8.
+      (li) => (receivedByLineItemId.get(li.id) ?? 0) >= li.quantity - 0.0005
     );
     const newStatus = allFullyReceived ? "completed" : "partially_fulfilled";
     // Only update if different from current PO status

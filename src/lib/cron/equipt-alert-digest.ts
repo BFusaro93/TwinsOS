@@ -1,4 +1,5 @@
 import "server-only";
+import { isOrgInactive } from "@/lib/orgs/org-canceled";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { EMAIL_FROM_EQUIPT, sendEmailRetryingRateLimit } from "@/lib/email/send";
@@ -79,15 +80,15 @@ export async function inChunks<T, R>(values: T[], size: number, fn: (chunk: T[])
  */
 export async function loadEquiptOrgIds(supabase: AnyClient, orgIds: string[]): Promise<Set<string>> {
   const rows = await inChunks(orgIds, 100, async (chunk) => {
-    const { data, error } = await supabase.from("organizations").select("id, plan, is_demo, is_platform_staff_org").in("id", chunk);
+    const { data, error } = await supabase.from("organizations").select("id, plan, trial_ends_at, is_demo, is_platform_staff_org").in("id", chunk);
     if (error) throw error;
-    return (data ?? []) as { id: string; plan: string | null; is_demo: boolean; is_platform_staff_org: boolean }[];
+    return (data ?? []) as { id: string; plan: string | null; trial_ends_at: string | null; is_demo: boolean; is_platform_staff_org: boolean }[];
   });
   // A canceled org gets no background work (no digests), same rule as the other crons
   // (see src/lib/orgs/org-canceled.ts). planIncludesModule is checked first; canceled
   // plans are excluded explicitly rather than relying on that table's handling.
   return new Set(
-    rows.filter((o) => !o.is_demo && !o.is_platform_staff_org && o.plan !== "canceled" && planIncludesModule(o.plan ?? "", "equipt")).map((o) => o.id)
+    rows.filter((o) => !o.is_demo && !o.is_platform_staff_org && !isOrgInactive(o) && planIncludesModule(o.plan ?? "", "equipt")).map((o) => o.id)
   );
 }
 

@@ -152,7 +152,22 @@ export async function POST(
     .limit(1)
     .maybeSingle();
   if (recent) {
-    return NextResponse.json(shapeCrewRequisition(recent as Record<string, unknown>), { status: 200 });
+    // Only the same request is a replay: a second ask for a different amount of the same
+    // product is a new request, and swallowing it would leave the extra never ordered.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: recentLines } = await (db as any)
+      .from("requisition_line_items")
+      .select("quantity")
+      .eq("requisition_id", (recent as { id: string }).id)
+      .limit(5);
+    const sameQuantity =
+      Array.isArray(recentLines) &&
+      recentLines.length === 1 &&
+      Math.abs(Number((recentLines[0] as { quantity: unknown }).quantity) - quantity) < 0.0005;
+    const sameNote = ((recent as { notes?: string | null }).notes ?? null) === (note ?? null);
+    if (sameQuantity && sameNote) {
+      return NextResponse.json(shapeCrewRequisition(recent as Record<string, unknown>), { status: 200 });
+    }
   }
 
   const { requisition, error } = await createRequisitionRecord(

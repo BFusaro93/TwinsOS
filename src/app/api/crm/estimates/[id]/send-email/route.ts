@@ -20,6 +20,7 @@ import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token"
 import { loadLiveProposalContent } from "@/lib/estimates/proposal-content";
 import { insertEstimateVersion } from "@/lib/estimates/versions";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { embedEstimatePhoto } from "@/lib/estimate-photo-embed";
 
 const log = logger.child("send-estimate");
 
@@ -391,20 +392,9 @@ export async function POST(
 
   const photos: EstimatePDFPhoto[] = [];
   for (const p of (photoRows ?? []) as Record<string, unknown>[]) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: signed } = await (supabase as any).storage
-      .from("attachments")
-      .createSignedUrl(p.storage_path as string, 3600);
-    if (!signed?.signedUrl) continue;
-    try {
-      const imgRes = await fetch(signed.signedUrl);
-      if (!imgRes.ok) continue;
-      const buf = Buffer.from(await imgRes.arrayBuffer());
-      const mime = imgRes.headers.get("content-type") ?? "image/jpeg";
-      photos.push({ caption: (p.caption as string | null) ?? null, dataUri: `data:${mime};base64,${buf.toString("base64")}` });
-    } catch {
-      // Skip a photo that failed to download rather than failing the whole send
-    }
+    // A photo that can't be embedded is skipped rather than failing the whole send.
+    const dataUri = await embedEstimatePhoto(p.storage_path as string, est.org_id as string);
+    if (dataUri) photos.push({ caption: (p.caption as string | null) ?? null, dataUri });
   }
 
   const addr = (org?.address as Record<string, string>) ?? {};

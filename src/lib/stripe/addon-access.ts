@@ -12,7 +12,9 @@ type AnyClient = ReturnType<typeof createClient<any>>;
  * src/app/api/crm/route-optimize/route.ts, factored out here since API
  * access needs the identical check at more than one call site.
  */
-export async function orgHasAddon(db: AnyClient, orgId: string, addon: BundledAddonKey): Promise<boolean> {
+// "sms" isn't bundled by any plan — a billable plan only has it with the purchased add-on (a trial
+// bundles everything until it ends) — so it takes the same two-step check.
+export async function orgHasAddon(db: AnyClient, orgId: string, addon: BundledAddonKey | "sms"): Promise<boolean> {
   const { data: org } = await db.from("organizations").select("plan, trial_ends_at").eq("id", orgId).single();
   // A trial bundles everything, but only until it ends (null = open-ended).
   const trialExpired =

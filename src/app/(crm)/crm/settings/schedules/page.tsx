@@ -613,6 +613,19 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
                       <Label>Anchor Date <span className="text-slate-400 dark:text-neutral-500 font-normal">(optional)</span></Label>
                       <Input type="date" value={form.anchorDate} onChange={(e) => setField('anchorDate', e.target.value)} />
                       <p className="text-xs text-muted-foreground">A known service date used to determine even/odd week alignment.</p>
+                      {(() => {
+                        // Weeks are counted from the anchor's own weekday, so an anchor on a different
+                        // day than the schedule's runs the series a week off from the date entered.
+                        const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+                        const anchorDay = form.anchorDate && /^\d{4}-\d{2}-\d{2}$/.test(form.anchorDate)
+                          ? names[new Date(`${form.anchorDate}T00:00:00Z`).getUTCDay()]
+                          : null;
+                        return anchorDay && anchorDay !== form.dayOfWeek ? (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">
+                            This date is a {anchorDay}, but the schedule runs on {form.dayOfWeek}. Pick an anchor date that falls on {form.dayOfWeek}, or visits will line up a week off from what you expect.
+                          </p>
+                        ) : null;
+                      })()}
                     </div>
                   )}
 

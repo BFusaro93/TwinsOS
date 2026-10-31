@@ -50,6 +50,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!pm || pm.org_id !== auth.orgId) return jsonError("PM schedule not found", 404);
   }
   if (body.parentWorkOrderId) {
+    // A work order that is its own parent drops out of every top-level view.
+    if (body.parentWorkOrderId === id) return jsonError("A work order can't be its own parent", 400);
     const { data: parent } = await db
       .from("work_orders")
       .select("org_id")

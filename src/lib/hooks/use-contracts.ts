@@ -9,7 +9,7 @@ import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { normalizeCsvDate, parseCsvMoneyCents } from "@/lib/hooks/use-invoices";
-import { todayInZone } from "@/lib/time/zone";
+import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
 import type {
   CRMContract,
   CRMContractNote,
@@ -710,7 +710,6 @@ export function useGenerateContractInvoices() {
   return useMutation({
     mutationFn: async (contractIds: string[]): Promise<GenerateInvoicesResult[]> => {
       const supabase = createClient();
-      const now = new Date();
 
       const results: GenerateInvoicesResult[] = [];
 
@@ -743,6 +742,10 @@ export function useGenerateContractInvoices() {
         // the "bill month in advance" shift, the month key that indexes
         // monthly_amounts, and the period window — comes from the same
         // shared schedule math the daily cron uses, so the two can't drift.
+        // The org's calendar day (as a local-midnight Date, like the cron): the viewer's browser
+        // clock dates the invoice, picks the monthly_amounts month and sets the idempotency
+        // window, so a user in another timezone could bill the wrong month.
+        const now = todayInZoneAsLocalMidnight(await getOrgTimeZone(supabase, contract.org_id));
         const plan = planContractBilling(contract, now, { billNow: true });
 
         // ── prorated first-period stub ─────────────────────────────────────

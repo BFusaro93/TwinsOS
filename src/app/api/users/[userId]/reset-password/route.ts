@@ -88,6 +88,13 @@ export async function POST(
     password,
   });
   if (updateError) {
+    // Supabase's leaked-password check rejects common passwords — user-fixable, not a server error.
+    if (updateError.code === "weak_password" || updateError.message.toLowerCase().includes("weak")) {
+      return NextResponse.json(
+        { error: "That password is too common or has appeared in a known data breach. Choose a longer, less guessable password." },
+        { status: 422 }
+      );
+    }
     log.error("password update failed", { error: updateError.message });
     return NextResponse.json({ error: "Failed to reset password" }, { status: 500 });
   }

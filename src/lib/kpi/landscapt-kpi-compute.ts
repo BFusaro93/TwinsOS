@@ -198,7 +198,7 @@ async function computeInvoices(supabase: Client, w: YearWindow): Promise<Values>
       [...issuedInvoiceFilter(), ...dateFilters("invoice_date", w)],
       [
         { column: "total_cents", fn: "sum" },
-        { column: "total_cents", fn: "avg" },
+        { column: "tax_cents", fn: "sum" },
         { column: "total_cents", fn: "count" },
       ]
     ),
@@ -220,20 +220,23 @@ async function computeInvoices(supabase: Client, w: YearWindow): Promise<Values>
     ),
   ]);
 
-  const revenueCents = num(inYear?.sum_total_cents);
+  // Sales tax is collected for the state, not revenue: the revenue KPIs are net of it. DSO stays on
+  // the tax-inclusive total because AR (balance_cents) includes tax too.
+  const billedCents = num(inYear?.sum_total_cents);
+  const revenueCents = billedCents - num(inYear?.sum_tax_cents);
   const invoiceCount = num(inYear?.count_total_cents);
   const arCents = num(openAll?.sum_balance_cents);
   const arOver60Cents = num(openOver60?.sum_balance_cents);
 
   // DSO: open AR ÷ average daily issued revenue for the year so far.
   let arDays: number | null = null;
-  if (revenueCents > 0 && w.daysElapsed > 0) {
-    arDays = round(arCents / (revenueCents / w.daysElapsed));
+  if (billedCents > 0 && w.daysElapsed > 0) {
+    arDays = round(arCents / (billedCents / w.daysElapsed));
   }
 
   return {
     revenue_invoiced: invoiceCount > 0 ? dollars(revenueCents) : null,
-    avg_invoice_value: invoiceCount > 0 ? dollars(num(inYear?.avg_total_cents)) : null,
+    avg_invoice_value: invoiceCount > 0 ? dollars(revenueCents / invoiceCount) : null,
     ar_outstanding: dollars(arCents),
     ar_over_60_pct: arCents > 0 ? pctOf(arOver60Cents, arCents) : null,
     ar_days: arDays,
@@ -323,6 +326,8 @@ async function computeEstimates(supabase: Client, w: YearWindow): Promise<Values
   return {
     won_estimates_ytd: won.count > 0 ? dollars(won.cents) : null,
     close_ratio: won.count + lost.count > 0 ? pctOf(won.count, won.count + lost.count) : null,
+    // Counts every sent estimate, so quotes that were never answered (and never marked lost) still weigh.
+    close_ratio_of_sent: nonDraft.count > 0 ? pctOf(won.count, nonDraft.count) : null,
     estimates_sent_ytd: nonDraft.count > 0 || sums.size > 0 ? nonDraft.count : null,
     avg_estimate_value: nonDraft.count > 0 ? dollars(nonDraft.cents / nonDraft.count) : null,
     open_pipeline: dollars(pipelineCents),
@@ -450,12 +455,14 @@ async function computeClients(supabase: Client, w: YearWindow): Promise<Values> 
   // Maintenance retention: a "maintenance client" has a recurring or package
   // job. Base = clients with such a job created before Jan 1 who weren't
   // closed before Jan 1. Retained = still open at period end AND still holding
-  // a non-cancelled maintenance job whose recurrence hasn't ended before Jan 1.
+  // a non-cancelled maintenance job whose recurrence hasn't ended before period end.
   const hadMaintenanceBefore = new Set<string>();
   const hasLiveMaintenance = new Set<string>();
   for (const j of maintenanceJobs) {
     if (new Date(j.created_at).getTime() < jan1) hadMaintenanceBefore.add(j.client_id);
-    const ended = j.recurrence_end ? new Date(`${j.recurrence_end}T23:59:59`).getTime() < jan1 : false;
+    // Retained = still holding live maintenance at period end, so a recurrence that ended
+    // after Jan 1 but before today no longer counts.
+    const ended = j.recurrence_end ? new Date(`${j.recurrence_end}T23:59:59`).getTime() < end : false;
     if (j.status !== "cancelled" && !ended) hasLiveMaintenance.add(j.client_id);
   }
   const maintenanceBase = rows.filter(

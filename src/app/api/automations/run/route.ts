@@ -17,6 +17,7 @@ import {
 } from "@/lib/automations/cmms-automation-actions";
 import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
+import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 
 const log = logger.child("crm-processor");
 
@@ -178,6 +179,15 @@ async function handleRun(request: Request) {
         workOrderId?: string | null;
         purchaseOrderId?: string | null;
       };
+
+      // The app fires this once per status change, but nothing stops a member replaying the
+      // same POST — every replay would send the rule's email / raise another requisition or
+      // work order. Allow a couple of repeats (a legitimate reopen-and-redo) per record per
+      // status per user, then refuse.
+      const eventRecordId = workOrderId ?? purchaseOrderId ?? assetId ?? "none";
+      if (!(await checkAuthRateLimit(`auto-event:${callerUserId}:${eventTrigger}:${toStatus ?? ""}:${eventRecordId}`, 3, 600))) {
+        return NextResponse.json({ error: "This event was already processed — try again in a few minutes" }, { status: 429 });
+      }
 
       // assetId is a caller-supplied foreign key written directly onto the new
       // work_orders/maintenance_requests row's asset_id column — verify it

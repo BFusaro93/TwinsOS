@@ -25,8 +25,10 @@ export interface MonthlyClientTrend {
 export interface CloseRatioRow {
   salesRep: string;
   wonCount: number;
+  /** This rep's decided (won + lost) estimates this month. */
+  decidedCount: number;
   wonAmountCents: number;
-  /** wonCount / totalEstimatesThisMonth (all reps, all stages), percent. */
+  /** The rep's own close ratio: wonCount / decidedCount, percent. */
   countPct: number;
   /** wonAmountCents / totalWonAmountThisMonth (all reps), percent. */
   amountPct: number;
@@ -46,7 +48,15 @@ export interface EstimateSummary {
 export interface SalesSection {
   monthlyTrend: MonthlyClientTrend[];
   closeRatios: {
+    /** Decided (won + lost) estimates this month, all reps. */
     totalEstimates: number;
+    /** Non-draft estimates this month, all reps (decided + still pending). */
+    totalSent: number;
+    totalWonCount: number;
+    /** won ÷ (won + lost), percent (null when nothing was decided). */
+    closeRatioPct: number | null;
+    /** won ÷ all sent estimates incl. pending, percent (null when none were sent). */
+    closeRatioOfSentPct: number | null;
     totalWonAmountCents: number;
     rows: CloseRatioRow[];
   };
