@@ -329,10 +329,58 @@ export function useDeleteVehicle() {
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
+      const deletedAt = new Date().toISOString();
+
+      // Same safety as deleting an asset (work_orders.asset_id is polymorphic: asset OR vehicle):
+      // block while it has open work orders — they would be orphaned against a hidden vehicle.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from("vehicles").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+      const { count: openWoCount, error: woErr } = await (supabase as any)
+        .from("work_orders")
+        .select("id", { count: "exact", head: true })
+        .eq("asset_id", id)
+        .in("status", ["open", "on_hold", "in_progress"])
+        .is("deleted_at", null);
+      if (woErr) throw woErr;
+      if ((openWoCount ?? 0) > 0) {
+        throw new Error(
+          `This vehicle has ${openWoCount} open work order${openWoCount === 1 ? "" : "s"}. Complete or cancel them before deleting the vehicle.`
+        );
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("vehicles").update({ deleted_at: deletedAt }).eq("id", id);
       if (error) throw error;
+
+      // Its meters keep the vehicle's asset_id: retire them and any meter-threshold automations
+      // pointing at them so nothing keeps firing for a vehicle that no longer shows in the UI.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: vehicleMeters } = await (supabase as any)
+        .from("meters")
+        .update({ deleted_at: deletedAt })
+        .eq("asset_id", id)
+        .is("deleted_at", null)
+        .select("id");
+      const meterIds = new Set<string>(((vehicleMeters ?? []) as { id: string }[]).map((m) => m.id));
+      if (meterIds.size > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: autos } = await (supabase as any)
+          .from("automations")
+          .select("id, trigger_config")
+          .eq("trigger_type", "meter_threshold")
+          .eq("enabled", true)
+          .is("deleted_at", null);
+        const toDisable = ((autos ?? []) as { id: string; trigger_config: Record<string, unknown> | null }[])
+          .filter((a) => meterIds.has(String(a.trigger_config?.meter_id ?? "")))
+          .map((a) => a.id);
+        if (toDisable.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase as any).from("automations").update({ enabled: false }).in("id", toDisable);
+        }
+      }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["vehicles"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["meters"] });
+    },
   });
 }

@@ -312,9 +312,9 @@ function CompanyReportBody({ data }: { data: CompanyReportData }) {
           <Card
             accent="blue"
             title="Close Ratios"
-            subtitle={`${currentMonth?.label ?? ""} · ${sales.closeRatios.totalEstimates} decided estimates · ${money(sales.closeRatios.totalWonAmountCents)} won`}
+            subtitle={`${currentMonth?.label ?? ""} · ${sales.closeRatios.closeRatioPct != null ? pct(sales.closeRatios.closeRatioPct) : "—"} of ${sales.closeRatios.totalEstimates} decided · ${sales.closeRatios.closeRatioOfSentPct != null ? pct(sales.closeRatios.closeRatioOfSentPct) : "—"} of ${sales.closeRatios.totalSent} sent (incl. pending) · ${money(sales.closeRatios.totalWonAmountCents)} won`}
           >
-            <Table accent="blue" headers={["Sales Rep", "Won Count", "Count %", "Won Amount", "Amt %"]}>
+            <Table accent="blue" headers={["Sales Rep", "Won Count", "Close %", "Won Amount", "Amt %"]}>
               {sales.closeRatios.rows.map((r) => (
                 <Row
                   key={r.salesRep}

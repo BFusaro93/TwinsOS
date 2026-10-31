@@ -321,17 +321,29 @@ async function excludeInactiveParents(supabase: AnyClient, jobs: GeneratorJob[])
     for (const r of (data ?? []) as { id: string; contract_id: string }[]) contractByJob.set(r.id, r.contract_id);
   }
   const deadContracts = new Set<string>();
+  const contractEnd = new Map<string, string>();
   for (const ids of chunk([...new Set(contractByJob.values())], 100)) {
-    const { data } = await supabase.from("crm_contracts").select("id, status, deleted_at").in("id", ids);
-    for (const c of (data ?? []) as { id: string; status: string | null; deleted_at: string | null }[]) {
+    const { data } = await supabase.from("crm_contracts").select("id, status, deleted_at, end_date").in("id", ids);
+    for (const c of (data ?? []) as { id: string; status: string | null; deleted_at: string | null; end_date: string | null }[]) {
       if (c.deleted_at || c.status === "cancelled" || c.status === "expired") deadContracts.add(c.id);
+      if (c.end_date) contractEnd.set(c.id, c.end_date);
     }
   }
-  return jobs.filter((j) => {
-    if (inactiveClients.has(j.client_id)) return false;
-    const contractId = contractByJob.get(j.id);
-    return !(contractId && deadContracts.has(contractId));
-  });
+  return jobs
+    .filter((j) => {
+      if (inactiveClients.has(j.client_id)) return false;
+      const contractId = contractByJob.get(j.id);
+      return !(contractId && deadContracts.has(contractId));
+    })
+    .map((j) => {
+      // Nothing flips a contract to "expired" on its end_date (billing keys off the date), so a
+      // contract-linked job with no recurrence_end of its own kept generating visits — unbilled —
+      // after the contract ended. Stop at whichever ends first.
+      const contractId = contractByJob.get(j.id);
+      const end = contractId ? contractEnd.get(contractId) : undefined;
+      if (end && (!j.recurrence_end || end < j.recurrence_end)) return { ...j, recurrence_end: end };
+      return j;
+    });
 }
 
 export async function generateVisitsForJobs(

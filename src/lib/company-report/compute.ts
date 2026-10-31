@@ -62,6 +62,8 @@ const WON_ESTIMATE_STAGES = ["accepted", "invoiced"];
 // Decided estimates (won or lost). The close ratio's denominator — same definition as the KPI
 // Scorecard — so open drafts/quotes/sent don't dilute it.
 const DECIDED_ESTIMATE_STAGES = [...WON_ESTIMATE_STAGES, "lost"];
+// Everything that has gone out to a client (anything but a draft) — the "sent" view's denominator.
+const SENT_ESTIMATE_STAGES = ["quote", "sent", ...DECIDED_ESTIMATE_STAGES];
 
 function issuedInvoiceFilter(): AnalysisFilter[] {
   return [{ column: "status", op: "in", value: ISSUED_INVOICE_STATUSES }];
@@ -245,20 +247,25 @@ async function computeMonthlyTrend(supabase: Client, months: MonthWindow[]): Pro
 }
 
 async function computeCloseRatios(supabase: Client, month: MonthWindow) {
-  const [totals, byRep] = await Promise.all([
+  const dateFilter = dateFilters("estimate_date", month.from, month.to);
+  const [decidedByRep, sentTotal, byRep] = await Promise.all([
+    aggregate(
+      supabase,
+      "rpt_estimates",
+      [...dateFilter, { column: "stage", op: "in", value: DECIDED_ESTIMATE_STAGES }],
+      [{ column: "estimate_number", fn: "count" }],
+      ["sales_rep"]
+    ),
     total(
       supabase,
       "rpt_estimates",
-      [...dateFilters("estimate_date", month.from, month.to), { column: "stage", op: "in", value: DECIDED_ESTIMATE_STAGES }],
+      [...dateFilter, { column: "stage", op: "in", value: SENT_ESTIMATE_STAGES }],
       [{ column: "estimate_number", fn: "count" }]
     ),
     aggregate(
       supabase,
       "rpt_estimates",
-      [
-        ...dateFilters("estimate_date", month.from, month.to),
-        { column: "stage", op: "in", value: WON_ESTIMATE_STAGES },
-      ],
+      [...dateFilter, { column: "stage", op: "in", value: WON_ESTIMATE_STAGES }],
       [
         { column: "total_cents", fn: "sum" },
         { column: "total_cents", fn: "count" },
@@ -267,24 +274,39 @@ async function computeCloseRatios(supabase: Client, month: MonthWindow) {
     ),
   ]);
 
-  const totalEstimates = num(totals?.count_estimate_number);
+  const repKey = (v: unknown) => String(v ?? "(unassigned)");
+  const decidedByRepName = new Map(decidedByRep.map((r) => [repKey(r.sales_rep), num(r.count_estimate_number)]));
+  const totalEstimates = decidedByRep.reduce((s, r) => s + num(r.count_estimate_number), 0);
+  const totalSent = num(sentTotal?.count_estimate_number);
   const totalWonAmountCents = byRep.reduce((s, r) => s + num(r.sum_total_cents), 0);
+  const totalWonCount = byRep.reduce((s, r) => s + num(r.count_total_cents), 0);
 
   const rows: CloseRatioRow[] = byRep
     .map((r) => {
       const wonAmountCents = num(r.sum_total_cents);
       const wonCount = num(r.count_total_cents);
+      const decidedCount = decidedByRepName.get(repKey(r.sales_rep)) ?? wonCount;
       return {
-        salesRep: String(r.sales_rep ?? "(unassigned)"),
+        salesRep: repKey(r.sales_rep),
         wonCount,
+        decidedCount,
         wonAmountCents,
-        countPct: pctOf(wonCount, totalEstimates) ?? 0,
+        // The rep's OWN close ratio: their wins over their own decided estimates.
+        countPct: pctOf(wonCount, decidedCount) ?? 0,
         amountPct: pctOf(wonAmountCents, totalWonAmountCents) ?? 0,
       };
     })
     .sort((a, b) => b.wonAmountCents - a.wonAmountCents);
 
-  return { totalEstimates, totalWonAmountCents, rows };
+  return {
+    totalEstimates,
+    totalSent,
+    totalWonCount,
+    closeRatioPct: pctOf(totalWonCount, totalEstimates),
+    closeRatioOfSentPct: pctOf(totalWonCount, totalSent),
+    totalWonAmountCents,
+    rows,
+  };
 }
 
 async function computeOpenPipeline(supabase: Client) {
@@ -673,7 +695,7 @@ export async function computeCompanyReport(supabase: Client, timeZone: string, n
 
   const emptySales: SalesSection = {
     monthlyTrend: [],
-    closeRatios: { totalEstimates: 0, totalWonAmountCents: 0, rows: [] },
+    closeRatios: { totalEstimates: 0, totalSent: 0, totalWonCount: 0, closeRatioPct: null, closeRatioOfSentPct: null, totalWonAmountCents: 0, rows: [] },
     openPipeline: { totalAmountCents: 0, totalCount: 0, byStage: [], topEstimates: [], byRep: [] },
     wonEstimatesYtd: { totalAmountCents: 0, rows: [], openCountByRep: [] },
     newClientsThisMonth: { total: 0, byRep: [], bySource: [], ytdTopSources: [] },

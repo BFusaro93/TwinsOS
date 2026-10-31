@@ -2940,6 +2940,15 @@ export function useBulkImportCRMSchedules() {
         const dayOfWeek = SCHEDULE_DAYS.find((d) => d.toLowerCase() === r.dayOfWeek?.trim().toLowerCase())
           ?? (frequency === 'custom' ? 'Mon' : undefined);
         if (!name || !SCHEDULE_FREQUENCIES.includes(frequency) || !dayOfWeek) { skipped++; continue; }
+        // Anchor must be a real YYYY-MM-DD date and season bounds MM-DD: anything else (10/14/2026,
+        // 4-1, 2026-11-01) is stored as text and never matches, so the schedule silently
+        // generates no visits. Skip the row instead of importing a dead schedule.
+        const anchorRaw = r.anchorDate?.trim();
+        const isRealYmd = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
+        const isMonthDay = (v: string) => /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(v);
+        const seasonStartRaw = r.seasonStart?.trim();
+        const seasonEndRaw = r.seasonEnd?.trim();
+        if ((anchorRaw && !isRealYmd(anchorRaw)) || (seasonStartRaw && !isMonthDay(seasonStartRaw)) || (seasonEndRaw && !isMonthDay(seasonEndRaw))) { skipped++; continue; }
         // Duplicate name (already in the org, or repeated in this file): skip it rather than fail the import.
         if (takenNames.has(normalizeScheduleName(name))) { skipped++; continue; }
         const customDates = parseScheduleDateList(r.customDates);

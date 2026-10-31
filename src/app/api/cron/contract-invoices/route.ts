@@ -165,6 +165,8 @@ export async function GET(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const contract of ((contracts ?? []) as any[])) {
     if (contract.start_billing_mode !== "prorate_first_period") continue;
+    // A canceled org gets no background invoices — the regular loop skips them, and so must this.
+    if (await orgCanceled(contract.org_id)) continue;
     const { str: todayStr } = await orgToday(contract.org_id);
     const stub = planFirstPeriodProration(contract);
     if (!stub || todayStr < stub.periodStart) continue;

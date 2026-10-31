@@ -326,6 +326,8 @@ async function computeEstimates(supabase: Client, w: YearWindow): Promise<Values
   return {
     won_estimates_ytd: won.count > 0 ? dollars(won.cents) : null,
     close_ratio: won.count + lost.count > 0 ? pctOf(won.count, won.count + lost.count) : null,
+    // Counts every sent estimate, so quotes that were never answered (and never marked lost) still weigh.
+    close_ratio_of_sent: nonDraft.count > 0 ? pctOf(won.count, nonDraft.count) : null,
     estimates_sent_ytd: nonDraft.count > 0 || sums.size > 0 ? nonDraft.count : null,
     avg_estimate_value: nonDraft.count > 0 ? dollars(nonDraft.cents / nonDraft.count) : null,
     open_pipeline: dollars(pipelineCents),
