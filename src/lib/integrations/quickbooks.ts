@@ -1380,6 +1380,61 @@ async function voidCreditMemoLink(conn: QuickBooksConnection, link: string): Pro
   await qboPost(conn, "creditmemo", { Id: creditMemoId, SyncToken: cur.SyncToken }, { operation: "void" });
 }
 
+/** Voids the QuickBooks side of an allocation that no longer exists (a credit memo or a cash Payment). */
+async function voidRemovedQboPayment(conn: QuickBooksConnection, qboPaymentId: string): Promise<void> {
+  if (isCreditMemoLink(qboPaymentId)) {
+    await voidCreditMemoLink(conn, qboPaymentId);
+    return;
+  }
+  const current = await getQboPayment(conn, qboPaymentId);
+  if (Math.round(Number(current.TotalAmt ?? 0) * 100) <= 0) return; // already voided
+  await withFreshSyncToken(
+    () => getQboPayment(conn, qboPaymentId),
+    (cur) => qboPaymentRequest(conn, { Id: qboPaymentId, SyncToken: cur.SyncToken }, "void")
+  );
+}
+
+/**
+ * Retries voids that failed when a payment was refunded in full (see crm_qbo_pending_voids).
+ * Never throws.
+ */
+export async function retryPendingQuickBooksVoids(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  limit = 10
+): Promise<{ ok: number; failed: number }> {
+  const outcome = { ok: 0, failed: 0 };
+  try {
+    const { data: pending } = await db
+      .from("crm_qbo_pending_voids")
+      .select("id, qbo_payment_id")
+      .eq("org_id", orgId)
+      .is("resolved_at", null)
+      .order("created_at", { ascending: true })
+      .limit(limit);
+    const rows = (pending ?? []) as { id: string; qbo_payment_id: string }[];
+    if (rows.length === 0) return outcome;
+    const conn = await getValidConnection(db, orgId);
+    if (!conn) return outcome;
+    for (const row of rows) {
+      const attemptedAt = new Date().toISOString();
+      try {
+        await voidRemovedQboPayment(conn, row.qbo_payment_id);
+        await db.from("crm_qbo_pending_voids").update({ resolved_at: attemptedAt, attempted_at: attemptedAt, last_error: null, updated_at: attemptedAt }).eq("id", row.id);
+        outcome.ok++;
+      } catch (err) {
+        outcome.failed++;
+        log.error("QuickBooks pending void retry failed", { err, orgId, qboPaymentId: row.qbo_payment_id });
+        await db.from("crm_qbo_pending_voids").update({ last_error: errorMessage(err), attempted_at: attemptedAt, updated_at: attemptedAt }).eq("id", row.id);
+      }
+    }
+  } catch (err) {
+    log.error("QuickBooks pending void sweep failed", { err, orgId });
+  }
+  return outcome;
+}
+
 /**
  * Brings the QuickBooks Payments behind a payment in line with its allocations
  * after a refund or chargeback has been applied: an allocation that was
@@ -1413,23 +1468,30 @@ export async function mirrorPaymentReversalToQuickBooks(
         if (isCreditMemoLink(link.qboPaymentId)) {
           // A credit memo is not cash: a refund/chargeback shouldn't touch it. If the
           // allocation is gone (reversed in full), unwind the credit; otherwise leave it.
-          if (!byId.has(link.allocationId)) await voidCreditMemoLink(conn, link.qboPaymentId);
+          if (!byId.has(link.allocationId)) {
+            await voidRemovedQboPayment(conn, link.qboPaymentId);
+            await db
+              .from("crm_qbo_pending_voids")
+              .update({ resolved_at: new Date().toISOString() })
+              .eq("qbo_payment_id", link.qboPaymentId)
+              .is("resolved_at", null);
+          }
+          outcome.ok++;
+          continue;
+        }
+        const row = byId.get(link.allocationId);
+        if (!row) {
+          await voidRemovedQboPayment(conn, link.qboPaymentId);
+          await db
+            .from("crm_qbo_pending_voids")
+            .update({ resolved_at: new Date().toISOString() })
+            .eq("qbo_payment_id", link.qboPaymentId)
+            .is("resolved_at", null);
           outcome.ok++;
           continue;
         }
         const current = await getQboPayment(conn, link.qboPaymentId);
         const qboCents = Math.round(Number(current.TotalAmt ?? 0) * 100);
-        const row = byId.get(link.allocationId);
-        if (!row) {
-          if (qboCents > 0) {
-            await withFreshSyncToken(
-              () => getQboPayment(conn, link.qboPaymentId),
-              (cur) => qboPaymentRequest(conn, { Id: link.qboPaymentId, SyncToken: cur.SyncToken }, "void")
-            );
-          }
-          outcome.ok++;
-          continue;
-        }
         const invoiceId = row.crm_invoices?.qbo_invoice_id;
         if (row.amount_cents !== qboCents && invoiceId) {
           const amount = centsToDollars(row.amount_cents);
@@ -1457,10 +1519,21 @@ export async function mirrorPaymentReversalToQuickBooks(
       } catch (err) {
         outcome.failed++;
         log.error("QuickBooks payment reversal failed", { err, paymentId, qboPaymentId: link.qboPaymentId, orgId });
+        const attemptedAt = new Date().toISOString();
         await db
           .from("crm_payment_allocations")
-          .update({ qbo_sync_error: errorMessage(err), qbo_sync_attempted_at: new Date().toISOString() })
+          .update({ qbo_sync_error: errorMessage(err), qbo_sync_attempted_at: attemptedAt })
           .eq("id", link.allocationId);
+        // An allocation refunded in full is gone, so the row above matched nothing: keep the
+        // QuickBooks id where the cron can retry the void.
+        if (!byId.has(link.allocationId)) {
+          await db
+            .from("crm_qbo_pending_voids")
+            .upsert(
+              { org_id: orgId, payment_id: paymentId, qbo_payment_id: link.qboPaymentId, last_error: errorMessage(err), attempted_at: attemptedAt, resolved_at: null },
+              { onConflict: "qbo_payment_id" }
+            );
+        }
         await recordSyncResult(db, orgId, "error");
       }
     }

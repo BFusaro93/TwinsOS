@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
+import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -155,6 +156,11 @@ export async function POST(req: NextRequest) {
   const { data: staffProfile } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
   if (!staffProfile) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Every call spends paid AI credits.
+  if (!(await checkAuthRateLimit(`estimate-builder:${user.id}`, 20, 3600))) {
+    return NextResponse.json({ error: "Too many requests — try again later" }, { status: 429 });
   }
 
   let json: unknown;

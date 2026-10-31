@@ -73,19 +73,41 @@ export async function GET(request: Request) {
   }
 
   const orgToday = new Map<string, string>();
-  const result = await generateVisitsForJobs(supabase, jobs, {
-    horizonDays: LOOKAHEAD_DAYS,
-    packageWindowOnly: true,
-    todayFor: async (orgId) => {
-      const k = orgId ?? "";
-      let hit = orgToday.get(k);
-      if (!hit) {
-        hit = todayInZone(await getOrgTimeZone(supabase, orgId));
-        orgToday.set(k, hit);
-      }
-      return hit;
-    },
-  });
+  const todayFor = async (orgId: string | null | undefined) => {
+    const k = orgId ?? "";
+    let hit = orgToday.get(k);
+    if (!hit) {
+      hit = todayInZone(await getOrgTimeZone(supabase, orgId));
+      orgToday.set(k, hit);
+    }
+    return hit;
+  };
+
+  // One org at a time: the generator stops at the first failed query, so a single org's bad
+  // data must not stop every other org's visits from being generated.
+  const jobsByOrg = new Map<string, GeneratorJob[]>();
+  for (const job of jobs) {
+    const k = job.org_id ?? "";
+    const list = jobsByOrg.get(k);
+    if (list) list.push(job);
+    else jobsByOrg.set(k, [job]);
+  }
+  const result = { planned: 0, inserted: 0, errors: [] as unknown[] };
+  for (const [orgId, orgJobs] of jobsByOrg) {
+    try {
+      const r = await generateVisitsForJobs(supabase, orgJobs, {
+        horizonDays: LOOKAHEAD_DAYS,
+        packageWindowOnly: true,
+        todayFor,
+      });
+      result.planned += r.planned;
+      result.inserted += r.inserted;
+      result.errors.push(...r.errors);
+    } catch (err) {
+      log.error("visit generation threw for org", { err, orgId });
+      result.errors.push(err instanceof Error ? err.message : String(err));
+    }
+  }
 
   if (result.errors.length > 0) {
     log.error("visit generation errors", { errors: result.errors.slice(0, 10), count: result.errors.length });
