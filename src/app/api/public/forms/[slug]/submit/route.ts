@@ -7,6 +7,10 @@ import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
 // POST /api/public/forms/[slug]/submit — anonymous form submission
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  // A junk slug would otherwise mint a rate-limit counter row per request before the 404.
+  if (!/^[a-z0-9][a-z0-9_-]{0,99}$/i.test(slug)) {
+    return NextResponse.json({ error: "Form not found" }, { status: 404 });
+  }
   // Anonymous endpoint that creates a lead, ticket and staff emails per call: cap it per IP + form.
   if (!(await checkAuthRateLimit(`form:${slug}:${getClientIp(req)}`, 10, 600))) {
     return NextResponse.json({ error: "Too many submissions. Please try again in a few minutes." }, { status: 429 });
@@ -45,6 +49,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     return NextResponse.json({ error: "data must be an object" }, { status: 400 });
   }
   const formData = rawData as Record<string, unknown>;
+  // Bound what an anonymous caller can push into leads, tickets and activity rows.
+  const entries = Object.entries(formData);
+  if (
+    entries.length > 200 ||
+    entries.some(([k, v]) => k.length > 200 || (typeof v === "string" && v.length > 5000)) ||
+    JSON.stringify(formData).length > 200_000
+  ) {
+    return NextResponse.json({ error: "Submission is too large" }, { status: 413 });
+  }
 
   const forwardedFor = req.headers.get("x-forwarded-for");
   const turnstileResult = await verifyTurnstileToken(body.turnstileToken, forwardedFor?.split(",")[0]?.trim());

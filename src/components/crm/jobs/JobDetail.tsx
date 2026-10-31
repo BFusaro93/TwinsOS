@@ -148,15 +148,6 @@ function fmtShort(iso: string | null | undefined): string {
   return new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-// .toISOString() converts through UTC — for timezones ahead of UTC this
-// shifts "today" back a day (e.g. a crew reassignment at 8:30pm ET would
-// exclude today's still-open visits from the propagate-crew update, and a
-// waiting-list job ending today would read as overdue hours early).
-function todayLocalDateString(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 const VISIT_STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400",
   dispatched:  "bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400",
@@ -695,7 +686,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const jobServiceIds = new Set(services.map((s) => s.serviceId).filter(Boolean));
   const isChemicalJob = crmServices.some((s) => jobServiceIds.has(s.id) && s.trackChemicals);
   const effectiveStatus = (edits.status as string) ?? job.status;
-  const today = todayLocalDateString();
+  const today = orgToday();
   const isOverdue = job.jobType === "waiting_list"
     && job.waitingListEnd != null
     && job.waitingListEnd < today

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { assertOrgWritable } from "@/lib/org-writable";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import {
   buildCanSpamFooter,
@@ -39,6 +40,11 @@ export async function POST(
   if (!allowed) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  // Sending goes out through Resend before any DB write, so the canceled/expired-trial
+  // read-only RLS never fires; enforce it here (the SMS route does the same).
+  const notWritable = await assertOrgWritable(createServiceClient(), effOrgId);
+  if (notWritable) return notWritable;
 
   const { clientId } = await params;
   // `bulk` marks a one-to-many blast (the dispatch board / waiting list's

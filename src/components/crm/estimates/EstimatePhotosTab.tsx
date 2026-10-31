@@ -30,7 +30,8 @@ export function EstimatePhotosTab({ estimateId }: Props) {
   const [viewPhoto, setViewPhoto] = useState<EstimatePhoto | null>(null);
 
   async function handleFiles(files: FileList | File[]) {
-    const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    // HEIC from some browsers/OSes arrives with an empty MIME type; the server keys off the extension too.
+    const images = Array.from(files).filter((f) => f.type.startsWith("image/") || /\.hei[cf]$/i.test(f.name));
     const skipped = Array.from(files).length - images.length;
     if (skipped > 0) toast.error(`${skipped} non-image file(s) skipped`);
     if (!images.length) return;

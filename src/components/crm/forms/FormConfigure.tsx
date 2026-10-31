@@ -96,6 +96,10 @@ export function FormConfigure({ form }: Props) {
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
+    if (confirmType === "url" && !/^https?:\/\/\S+$/i.test(confirmUrl.trim())) {
+      toast.error("Redirect URL must start with http:// or https://");
+      return;
+    }
     setSaving(true);
     try {
       const tagsAddList = tagsAdd.split(",").map((t) => t.trim()).filter(Boolean);
@@ -106,7 +110,7 @@ export function FormConfigure({ form }: Props) {
           ...form.settings,
           confirmationType: confirmType,
           confirmationMessage: confirmType === "message" ? confirmMessage : null,
-          confirmationUrl: confirmType === "url" ? confirmUrl : null,
+          confirmationUrl: confirmType === "url" ? confirmUrl.trim() : null,
           emailNotifications: notifications.map(({ _key: _, ...n }) => n),
           tagsOnSubmit: {
             add: tagsAddList,

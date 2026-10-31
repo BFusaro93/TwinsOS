@@ -112,6 +112,9 @@ export async function POST(
   }
   // A Good/Better/Best proposal is accepted for exactly one tier. Without a
   // tier the fallback below would win every quote line — all three tiers.
+  // A tier only means something on a Good/Better/Best proposal; on any other a crafted
+  // selectedTier would mark every line of the other tiers lost.
+  if (!currentEstimate.tiers_enabled) body.selectedTier = undefined;
   if (currentEstimate.tiers_enabled && !body.selectedTier) {
     const { count: tieredCount } = await supabase
       .from("estimate_line_items")

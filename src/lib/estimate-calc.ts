@@ -513,29 +513,6 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
     }
   }
 
-  // Good/Better/Best: only one tier is ever bought, so only one tier counts
-  // (see tierBasis). Lines of the other open tiers — and their sub-items —
-  // are left out of every sum below.
-  const basis = tierBasis(
-    !!est.tiers_enabled,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ((rawLineItems ?? []) as any[]).map((li) => ({
-      tier: li.tier ?? null,
-      status: li.status,
-      netCents: Math.max(0, li.total_cents - (li.discount_cents ?? 0)),
-    })),
-  );
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lineItems = ((rawLineItems ?? []) as any[]).filter((li) => !basis || !li.tier || li.tier === basis);
-  const countedLineIds = new Set(lineItems.map((li) => li.id as string));
-
-  const { data: directCosts, error: dcError } = await supabase
-    .from("estimate_direct_costs")
-    .select("total_cents, cost_type")
-    .eq("estimate_id", estimateId)
-    .is("deleted_at", null);
-  if (dcError) throw dcError;
-
   // Sub-items (estimate_line_item_subitems) are real priced Product/Subservice
   // rows a user attaches under a line item (their own rate/cost/qty/total, see
   // AddSubitemDialog) — not decorative notes. They have no estimate_id column
@@ -551,6 +528,33 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
     .is("estimate_line_items.deleted_at", null)
     .is("deleted_at", null);
   if (siError) throw siError;
+  // Good/Better/Best: only one tier is ever bought, so only one tier counts
+  // (see tierBasis). Lines of the other open tiers — and their sub-items —
+  // are left out of every sum below.
+  const basis = tierBasis(
+    !!est.tiers_enabled,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((rawLineItems ?? []) as any[]).map((li) => ({
+      tier: li.tier ?? null,
+      status: li.status,
+      // Priced sub-items are part of what the tier costs the client, so the "starting at"
+      // comparison has to include them or a tier with big sub-items looks cheaper than it is.
+      netCents: Math.max(0, li.total_cents - (li.discount_cents ?? 0)) +
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ((rawSubitems ?? []) as any[]).filter((si) => si.line_item_id === li.id).reduce((a: number, si) => a + (si.total_cents ?? 0), 0),
+    })),
+  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lineItems = ((rawLineItems ?? []) as any[]).filter((li) => !basis || !li.tier || li.tier === basis);
+  const countedLineIds = new Set(lineItems.map((li) => li.id as string));
+
+  const { data: directCosts, error: dcError } = await supabase
+    .from("estimate_direct_costs")
+    .select("total_cents, cost_type")
+    .eq("estimate_id", estimateId)
+    .is("deleted_at", null);
+  if (dcError) throw dcError;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const subitems = ((rawSubitems ?? []) as any[]).filter((si) => countedLineIds.has(si.line_item_id));
 

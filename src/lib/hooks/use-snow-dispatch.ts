@@ -482,7 +482,19 @@ export function useAddJobsToStormEvent() {
       if (rows.length === 0) return 0;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("crm_job_visits").insert(rows);
-      if (error) throw error;
+      if (error) {
+        // 23505: another dispatcher added some of these jobs to the storm between our read and
+        // this insert. One conflict fails the whole batch, so retry row by row and keep the rest.
+        if ((error as { code?: string }).code !== "23505") throw error;
+        let added = 0;
+        for (const row of rows) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: rowErr } = await (supabase as any).from("crm_job_visits").insert(row);
+          if (!rowErr) added++;
+          else if ((rowErr as { code?: string }).code !== "23505") throw rowErr;
+        }
+        return added;
+      }
       return rows.length;
     },
     onSuccess: (_d, vars) => {
