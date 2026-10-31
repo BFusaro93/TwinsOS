@@ -1375,12 +1375,21 @@ export function useUpdateVisit() {
         updates.scheduled_date !== undefined ||
         updates.status ||
         updates.crew_id !== undefined ||
+        updates.crew_unassigned === true ||
         updates.notes_to_crew !== undefined
       ) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data } = await (supabase as any)
           .from('crm_job_visits').select('client_id, scheduled_date, job_id, job_service_id, status, crew_id, notes_to_crew, clocked_in_at, clocked_out_at').eq('id', id).single();
         before = data ?? null;
+      }
+      // Same lockout the visit API routes refuse: ownership checks key off the visit's crew,
+      // so re-crewing a stop mid-clock shuts the crew that is working it out of clock-out,
+      // pause and skip.
+      const recrewing =
+        (updates.crew_id !== undefined && updates.crew_id !== (before?.crew_id ?? null)) || updates.crew_unassigned === true;
+      if (recrewing && before?.clocked_in_at && !before.clocked_out_at) {
+        throw new Error("This visit is in progress (the crew has clocked in), so its crew can't be changed. Have the crew clock out first.");
       }
       if (updates.scheduled_date !== undefined) {
         dateChanged = !!before && before.scheduled_date !== updates.scheduled_date;

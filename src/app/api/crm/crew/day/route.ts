@@ -184,9 +184,21 @@ export async function POST(request: Request) {
           const outMs = new Date(punch.clocked_out_at as string).getTime();
           if (outMs < new Date(now).getTime()) {
             const away = Math.max(0, Math.round((new Date(now).getTime() - outMs) / 60_000));
-            await db.from("crm_crew_member_times")
+            const { data: reopened } = await db.from("crm_crew_member_times")
               .update({ clocked_out_at: null, break_minutes: Number(punch.break_minutes ?? 0) + away, updated_at: now })
-              .eq("id", punch.id).eq("clocked_out_at", punch.clocked_out_at);
+              .eq("id", punch.id).eq("clocked_out_at", punch.clocked_out_at).select("id");
+            if (reopened && reopened.length > 0 && away > 0) {
+              // crew_day_member_in already added this same time away to the shift's break, and
+              // payroll subtracts the job punch's break from the shift as well — take the
+              // shift's copy back off so the member isn't docked twice.
+              const { data: shiftRow } = await db.from("crm_crew_day_shifts").select("id, break_minutes")
+                .eq("crew_member_id", crewMemberId).eq("work_date", workDate).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
+              if (shiftRow) {
+                await db.from("crm_crew_day_shifts")
+                  .update({ break_minutes: Math.max(0, Number(shiftRow.break_minutes ?? 0) - away) })
+                  .eq("id", shiftRow.id);
+              }
+            }
           }
         } else if (!punch) {
           await db.from("crm_crew_member_times").upsert(

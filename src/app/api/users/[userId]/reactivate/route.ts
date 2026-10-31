@@ -44,11 +44,15 @@ export async function POST(
 
   const { data: targetProfile } = await supabase
     .from("profiles")
-    .select("org_id")
+    .select("org_id, status")
     .eq("id", userId)
     .single();
   if (!targetProfile || targetProfile.org_id !== callerProfile.org_id) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+  // A pending invite is not a deactivated account — activating it would skip the acceptance.
+  if (targetProfile.status !== "inactive") {
+    return NextResponse.json({ error: "Only a deactivated user can be reactivated" }, { status: 409 });
   }
 
   const adminClient = createServiceClient(

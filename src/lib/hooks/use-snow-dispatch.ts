@@ -337,7 +337,7 @@ export function useAddRouteStop() {
       return data;
     },
     onSuccess: (_d, vars) => {
-      qc.invalidateQueries({ queryKey: ["snow-route-stops", vars.routeId] });
+      qc.invalidateQueries({ queryKey: ["snow-route-stops"] });
       qc.invalidateQueries({ queryKey: ["snow-routes"] });
     },
   });
@@ -360,7 +360,7 @@ export function useReorderRouteStops() {
       });
       if (error) throw error;
     },
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["snow-route-stops", vars.routeId] }),
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["snow-route-stops"] }),
   });
 }
 
@@ -374,7 +374,7 @@ export function useRemoveRouteStop() {
       if (error) throw error;
     },
     onSuccess: (_d, vars) => {
-      qc.invalidateQueries({ queryKey: ["snow-route-stops", vars.routeId] });
+      qc.invalidateQueries({ queryKey: ["snow-route-stops"] });
       qc.invalidateQueries({ queryKey: ["snow-routes"] });
     },
   });
