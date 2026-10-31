@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import { getOrgReplyTo } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 export async function POST(
   req: NextRequest,
@@ -69,10 +70,11 @@ export async function POST(
 
   // Fetch org
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile?.org_id;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: org } = profile?.org_id
+  const { data: org } = effOrgId
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? await (supabase as any).from("organizations").select("name, address").eq("id", profile.org_id).single()
+    ? await (supabase as any).from("organizations").select("name, address").eq("id", effOrgId).single()
     : { data: null };
 
   const orgName = org?.name ?? "Your Service Provider";
@@ -156,7 +158,7 @@ export async function POST(
   const resolvedBody    = resolveMergeTags(body.bodyHtml, mergeVars);
 
   // Send via Resend
-  const replyTo = profile?.org_id ? await getOrgReplyTo(supabase, profile.org_id) : null;
+  const replyTo = effOrgId ? await getOrgReplyTo(supabase, effOrgId) : null;
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { data: sent, error: sendErr } = await resend.emails.send({
     from: orgEmailFrom(org?.name),
@@ -176,7 +178,7 @@ export async function POST(
   // Log the email
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from("crm_chemical_application_emails").insert({
-    org_id: profile?.org_id,
+    org_id: effOrgId,
     visit_id: visitId,
     to_email: clientEmail,
     to_name: clientDisplayName || null,
@@ -190,7 +192,7 @@ export async function POST(
   if (visit.client_id) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from("client_activity").insert({
-      org_id: profile?.org_id,
+      org_id: effOrgId,
       client_id: visit.client_id,
       activity_type: "email",
       subject: "Chemical Application Notice sent via email",
