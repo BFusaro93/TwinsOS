@@ -115,6 +115,26 @@ export async function POST(request: Request) {
     }
   }
 
+  // Completing runs the full completion (invoice, automations, job close, package recalc), which
+  // only /complete and /bulk-complete do; a bare status write would leave the visit unbilled.
+  if (updates.status === "completed" && before.some((r) => r.status !== "completed")) {
+    return NextResponse.json({ error: "Use the complete action to mark visits completed." }, { status: 400 });
+  }
+
+  // Cancelling, skipping or sending back a visit the crew is working right now would
+  // strand its open punches: the crew list drops it, so nobody can clock out and the
+  // hours never reach Job Costing or the Timesheet.
+  if (updates.status && ["cancelled", "skipped", "scheduled", "dispatched"].includes(updates.status)) {
+    const running = before.filter((r) => r.clocked_in_at && !r.clocked_out_at && r.status !== updates.status);
+    if (running.length > 0) {
+      return NextResponse.json({
+        error: running.length === 1
+          ? "This visit is in progress (the crew has clocked in), so its status can't be changed. Have the crew clock out first."
+          : `${running.length} of the selected visits are in progress (the crew has clocked in), so their status can't be changed. Have the crews clock out first.`,
+      }, { status: 409 });
+    }
+  }
+
   // Completed + invoiced visits are locked against moves and status changes
   // (DB trigger trg_crm_job_visits_guard_invoiced is the floor). Block the
   // whole batch with a clear message unless an admin explicitly overrides.
@@ -154,6 +174,11 @@ export async function POST(request: Request) {
     // An explicit crew and "unassigned" are mutually exclusive.
     ...(updates.crew_id ? { crew_unassigned: false } : {}),
     ...(updates.crew_unassigned ? { crew_id: null } : {}),
+    // Reopening a completed visit has to clear its clock stamps, or the crew app sees it as
+    // already worked (clock-in/out are no-ops) and it can't be done again.
+    ...(updates.status && ["scheduled", "dispatched", "in_progress"].includes(updates.status) && before.every((r) => r.status === "completed")
+      ? { clocked_in_at: null, clocked_out_at: null, completed_at: null, paused_at: null }
+      : {}),
     updated_at: new Date().toISOString(),
   };
   let error: { message: string; hint?: string } | null = null;

@@ -138,9 +138,9 @@ export async function POST(
   if (
     body.expiresInDays !== undefined &&
     body.expiresInDays !== null &&
-    (!Number.isFinite(body.expiresInDays) || body.expiresInDays < 0 || body.expiresInDays > 3650)
+    (!Number.isFinite(body.expiresInDays) || body.expiresInDays <= 0 || body.expiresInDays > 3650)
   ) {
-    return NextResponse.json({ error: "expiresInDays must be between 0 and 3650" }, { status: 400 });
+    return NextResponse.json({ error: "expiresInDays must be between 1 and 3650" }, { status: 400 });
   }
 
   // Fetch estimate + client

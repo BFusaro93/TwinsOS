@@ -649,7 +649,9 @@ async function createProratedFirstInvoice(
       sales_rep_id: contract.sales_rep_id ?? null,
       description: `${baseDescription}\n${stub.label}\n${stub.formula}`,
       po_number: contract.po_number ?? null,
-      invoice_date: orgToday,
+      // No later than the period's last day: (contract_id, invoice_date) is unique, so a stub
+      // dated today could block the regular invoice dated today.
+      invoice_date: orgToday < stub.periodEnd ? orgToday : stub.periodEnd,
       terms: invoiceTerms,
       due_date: computeDueDate(orgToday, invoiceTerms),
       status: "draft",
