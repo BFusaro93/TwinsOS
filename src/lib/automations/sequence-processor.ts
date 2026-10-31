@@ -1,4 +1,5 @@
 import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "./sequence-email";
+import { isOrgInactive } from "@/lib/orgs/org-canceled";
 import { resolveSmsStepContent, sendResolvedSequenceSms, nextSmsSendTime } from "./sequence-sms";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
 import { shouldStopSequence, logSequenceExecution, evaluateConditionSet, computeWaitFireAt } from "./sequence-enrollment";
@@ -224,9 +225,14 @@ export async function processDueEnrollment(
 ): Promise<ProcessOutcome> {
   // Canceled orgs are read-only — nothing goes out to their clients. The
   // enrollment is left due, so it resumes if the org resubscribes.
-  const { data: org } = await adminClient.from("organizations").select("plan").eq("id", enrollment.org_id).maybeSingle();
-  if (org?.plan === "canceled") {
-    return { skipped: { enrollmentId: enrollment.id, reason: "org subscription is canceled" } };
+  // An expired trial is the same: the database is read-only for it and the app is locked.
+  const { data: org } = await adminClient
+    .from("organizations")
+    .select("plan, trial_ends_at, is_platform_staff_org")
+    .eq("id", enrollment.org_id)
+    .maybeSingle();
+  if (isOrgInactive(org)) {
+    return { skipped: { enrollmentId: enrollment.id, reason: org?.plan === "trial" ? "org trial has ended" : "org subscription is canceled" } };
   }
   if (!(await claimEnrollmentStep(adminClient, enrollment))) {
     return { skipped: { enrollmentId: enrollment.id, reason: "already claimed by another run (or no longer due)" } };

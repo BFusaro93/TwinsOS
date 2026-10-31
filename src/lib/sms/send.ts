@@ -129,12 +129,17 @@ export async function sendClientSms(
   // one key and read under another — and a UTC-derived key already advances on
   // the evening of a month's last day.
   const periodStart = monthStartInZone(new Date(), await getOrgTimeZone(supabase, params.orgId));
+  // supabase-js returns {error} instead of throwing: surface a lost increment (under-billing)
+  // in the logs rather than swallowing it.
   await supabase
     .rpc("increment_sms_usage", {
       p_org_id: params.orgId,
       p_period_start: periodStart,
     })
-    .then(() => {}, () => {});
+    .then(
+      ({ error }: { error: unknown }) => { if (error) console.error("[sms] increment_sms_usage failed:", error); },
+      (err: unknown) => { console.error("[sms] increment_sms_usage threw:", err); }
+    );
 
   return { ok: true, sid: payload?.sid ?? null };
 }
