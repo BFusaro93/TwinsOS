@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 
 async function getSupabase() {
   const cookieStore = await cookies();
@@ -18,6 +19,10 @@ export async function PATCH(
   const supabase = await getSupabase();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!(await hasAnySettingsPermission(supabase, ["estimate_edit"]))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id: estimateId, photoId } = await params;
   const body = await request.json();
@@ -46,6 +51,10 @@ export async function DELETE(
   const supabase = await getSupabase();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!(await hasAnySettingsPermission(supabase, ["estimate_edit"]))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id: estimateId, photoId } = await params;
 

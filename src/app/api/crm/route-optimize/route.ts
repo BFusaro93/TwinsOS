@@ -149,6 +149,17 @@ export async function POST(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
+  // Optimizing spends the org's Google Maps quota and reads stop addresses, so it
+  // needs the same permission as the Dispatch Board that calls it (any org login,
+  // including crew, could previously hit this).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canDispatch } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "sched_dispatch_board",
+  });
+  if (!canDispatch) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // (The test branch below spends quota too — the platform key when the org is entitled — so it
+  // sits behind the same check.)
+
   // Lightweight health check for Settings → Integrations "Test Connection".
   // Skips the visit lookups entirely (an org may have zero visits) and just
   // proves the resolved key can reach Google.
@@ -165,14 +176,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  // Optimizing spends the org's Google Maps quota and reads stop addresses, so it
-  // needs the same permission as the Dispatch Board that calls it (any org login,
-  // including crew, could previously hit this).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: canDispatch } = await (supabase.rpc as any)("has_settings_permission", {
-    p_key: "sched_dispatch_board",
-  });
-  if (!canDispatch) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = BodySchema.safeParse(await request.json());
   if (!parsed.success) {
