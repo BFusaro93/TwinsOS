@@ -2,10 +2,15 @@ import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { submitFormResponse } from "@/lib/forms/submit-form-response";
 import { verifyTurnstileToken } from "@/lib/turnstile";
+import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
 
 // POST /api/public/forms/[slug]/submit — anonymous form submission
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  // Anonymous endpoint that creates a lead, ticket and staff emails per call: cap it per IP + form.
+  if (!(await checkAuthRateLimit(`form:${slug}:${getClientIp(req)}`, 10, 600))) {
+    return NextResponse.json({ error: "Too many submissions. Please try again in a few minutes." }, { status: 429 });
+  }
   const supabase = await createClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any;
