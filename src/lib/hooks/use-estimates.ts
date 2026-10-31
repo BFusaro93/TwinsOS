@@ -140,6 +140,7 @@ function mapEstimate(row: any): Estimate {
     tiersEnabled: row.tiers_enabled ?? false,
     tierLabels: (row.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: 'Basic', standard: 'Standard', premium: 'Premium' },
     displaySettings: toDisplaySettings(row.display_settings),
+    documentTemplateId: (row.document_template_id as string | null) ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -248,6 +249,7 @@ export function useCreateEstimate() {
       validUntilDate?: string;
       stage?: string;
       displaySettings?: DisplaySettings;
+      documentTemplateId?: string | null;
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -279,6 +281,7 @@ export function useCreateEstimate() {
           stage: values.stage ?? "draft",
           overhead_rate_bps: defaultOverheadRateBps,
           ...(values.displaySettings ? { display_settings: values.displaySettings } : {}),
+          ...(values.documentTemplateId ? { document_template_id: values.documentTemplateId } : {}),
         })
         .select()
         .single();

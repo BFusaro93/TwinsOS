@@ -1592,10 +1592,19 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             },
                           }).then((res) => copyTemplateSubitemsToLine(res?.id ?? "", item.subitems));
                         }),
-                        ...(tpl.displaySettings
-                          ? [updateEstimate({ id: estimate.id, patch: { display_settings: tpl.displaySettings } })]
+                        ...(tpl.displaySettings || tpl.documentTemplateId
+                          ? [updateEstimate({
+                              id: estimate.id,
+                              patch: {
+                                ...(tpl.displaySettings ? { display_settings: tpl.displaySettings } : {}),
+                                ...(tpl.documentTemplateId ? { document_template_id: tpl.documentTemplateId } : {}),
+                              },
+                            })]
                           : []),
                       ]);
+                      // The sub-items are copied after each line's insert, by which point
+                      // the line's sub-item query may already have cached an empty list.
+                      qc.invalidateQueries({ queryKey: ["subitems"] });
                       // Each concurrent upsert recalculates the rollup from its own
                       // read of the lines; the last write to land can be one that
                       // saw only some of the new lines. One authoritative pass after
@@ -1988,6 +1997,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         totalCents={estimate.totalCents}
         estimateDate={estimate.createdAt}
         proposalUrl={liveProposalUrl}
+        documentTemplateId={estimate.documentTemplateId}
         zeroTotalLineCount={(estimate.lineItems ?? []).filter(
           (li) => !li.deletedAt && li.status === "quote" && li.rowType !== "section" && (li.totalCents - (li.discountCents ?? 0)) <= 0
         ).length}

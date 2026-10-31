@@ -179,6 +179,8 @@ export interface Estimate {
   tiersEnabled: boolean;
   tierLabels: { basic: string; standard: string; premium: string };
   displaySettings: DisplaySettings;
+  /** Estimate document chosen via the applied bundle; Send pre-selects it. */
+  documentTemplateId: string | null;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -222,6 +224,8 @@ export interface EstimateTemplate {
   showDiscounts: boolean;
   showWhen: 'estimates' | 'jobs' | 'both';
   displaySettings: DisplaySettings;
+  /** Estimate document (crm_document_templates, doc type 'estimate') offered when sending estimates built from this bundle. */
+  documentTemplateId: string | null;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;

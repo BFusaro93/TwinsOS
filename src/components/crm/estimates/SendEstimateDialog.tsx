@@ -57,6 +57,8 @@ interface Props {
    * real [estimatelink] target in Preview. Null → the send route mints one, so the
    * preview shows a labelled placeholder instead of a dead "#" link. */
   proposalUrl?: string | null;
+  /** Estimate document linked via the estimate's bundle; pre-selected when still active. */
+  documentTemplateId?: string | null;
   open: boolean;
   onClose: () => void;
   onSent: () => void;
@@ -65,7 +67,7 @@ interface Props {
 export function SendEstimateDialog({
   estimateId, estimateNumber, clientName, clientEmail,
   salesRepName, totalCents, estimateDate, zeroTotalLineCount = 0,
-  proposalUrl = null,
+  proposalUrl = null, documentTemplateId = null,
   open, onClose, onSent,
 }: Props) {
   // Email content (subject/body) templates now live in Documents (doc type
@@ -110,10 +112,10 @@ export function SendEstimateDialog({
   // Auto-select the org's default estimate-email document template on open
   useEffect(() => {
     if (open && templates.length > 0 && !selectedTemplateId) {
-      const def = templates.find((t) => t.isDefault) ?? templates[0];
+      const def = templates.find((t) => t.id === documentTemplateId) ?? templates.find((t) => t.isDefault) ?? templates[0];
       if (def) setSelectedTemplateId(def.id);
     }
-  }, [open, templates, selectedTemplateId]);
+  }, [open, templates, selectedTemplateId, documentTemplateId]);
 
   // Preview: resolve merge tags with the same values the send route uses
   // (org name/phone from org settings, rep name falling back to the company,

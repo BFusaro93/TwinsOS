@@ -121,7 +121,7 @@ export function ContractsGuide() {
           stays Signed/Active and the daily invoicing cron bills the new terms from then on. A
           &quot;Changed since signed &mdash; needs client approval&quot; banner appears on the
           contract until you click <em>Client approved &mdash; clear flag</em> (which re-stamps the
-          signed date). The edit itself is recorded in the Audit Trail tab. Saving without changing
+          signed date). The edit itself is recorded in the Audit Trail tab (the contract&apos;s tabs are Overview, Contract Details, Other Details, Jobs Under Contract, Included Services, Notes, Attachments and Audit Trail). Saving without changing
           any of those values &mdash; say, editing only the title, PO number or sales rep &mdash;
           doesn&apos;t flag anything.
         </Callout>

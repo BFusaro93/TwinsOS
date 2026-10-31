@@ -66,6 +66,7 @@ function mapTemplate(row: any): EstimateTemplate {
     showDiscounts: row.show_discounts,
     showWhen: row.show_when,
     displaySettings: toDisplaySettings(row.display_settings),
+    documentTemplateId: row.document_template_id ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

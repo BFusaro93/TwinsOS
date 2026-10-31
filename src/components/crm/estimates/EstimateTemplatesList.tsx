@@ -6,6 +6,8 @@ import { EstimateDisplaySettingsPanel } from "./EstimateDisplaySettingsPanel";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
+import { useDocumentTemplates } from "@/lib/hooks/use-crm-documents";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { Button } from "@/components/ui/button";
@@ -395,6 +397,10 @@ function EditTemplateDialog({
   const subitemProducts = productCatalog.filter((p) => p.category !== "maintenance_part");
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
+  const { data: allDocTemplates = [] } = useDocumentTemplates();
+  const estimateDocs = allDocTemplates.filter(
+    (t) => t.docType === "estimate" && (t.status === "active" || t.id === template.documentTemplateId)
+  );
   const { mutateAsync: upsert } = useUpsertTemplateItem();
   const { mutateAsync: updateTemplate } = useUpdateEstimateTemplate();
   const [addOpen, setAddOpen] = useState(false);
@@ -448,7 +454,26 @@ function EditTemplateDialog({
           <DialogTitle>Edit Bundle — {template.name}</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3 py-2">
+        <Tabs defaultValue="details" className="py-2">
+          <TabsList>
+            <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="display">Display Settings</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="display" className="mt-3">
+            <EstimateDisplaySettingsPanel
+              title="Client view defaults"
+              description="Applied to an estimate's display settings when this bundle is selected."
+              settings={template.displaySettings}
+              onChange={(next) => {
+                updateTemplate({ id: template.id, patch: { display_settings: next } }).catch(() =>
+                  toast.error("Failed to save")
+                );
+              }}
+            />
+          </TabsContent>
+
+          <TabsContent value="details" className="mt-3 flex flex-col gap-3">
           <div className="flex flex-col gap-1.5 text-sm">
             <Label className="text-muted-foreground">Show when creating</Label>
             <Select
@@ -477,16 +502,32 @@ function EditTemplateDialog({
             )}
           </div>
 
-          <EstimateDisplaySettingsPanel
-            title="Client view defaults"
-            description="Applied to an estimate's display settings when this bundle is selected."
-            settings={template.displaySettings}
-            onChange={(next) => {
-              updateTemplate({ id: template.id, patch: { display_settings: next } }).catch(() =>
-                toast.error("Failed to save")
-              );
-            }}
-          />
+          {template.showWhen !== "jobs" && (
+            <div className="flex flex-col gap-1.5 text-sm">
+              <Label className="text-muted-foreground">Estimate document</Label>
+              <Select
+                value={template.documentTemplateId ?? "none"}
+                onValueChange={(v) => {
+                  updateTemplate({ id: template.id, patch: { document_template_id: v === "none" ? null : v } }).catch(() =>
+                    toast.error("Failed to save")
+                  );
+                }}
+              >
+                <SelectTrigger className="h-8 w-72 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Org default</SelectItem>
+                  {estimateDocs.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-slate-400 dark:text-neutral-500">
+                The document pre-selected when you send an estimate built from this bundle.
+              </p>
+            </div>
+          )}
 
           {/* Line items grid */}
           <div className="overflow-x-auto rounded-lg border">
@@ -602,7 +643,8 @@ function EditTemplateDialog({
               </div>
             </PopoverContent>
           </Popover>
-        </div>
+          </TabsContent>
+        </Tabs>
 
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)}>Done</Button>

@@ -1,3 +1,4 @@
+import { TABLE_STYLE, TD_STYLE, TH_STYLE } from "@/lib/utils/sanitize-html";
 import type { BlockType } from "@/types/crm-documents";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { stripHtml } from "@/lib/utils/strip-html";
@@ -168,6 +169,11 @@ export interface RenderableBlock {
 }
 
 /** A button's target: a merge tag (resolved at send time) or an http(s)/mailto/tel URL. */
+function imageWidthPct(settings: RenderableBlock["settings"]): number {
+  const w = Number(settings?.width);
+  return Number.isFinite(w) && w >= 10 && w <= 100 ? Math.round(w) : 100;
+}
+
 function buttonHref(settings: RenderableBlock["settings"]): string {
   const raw = typeof settings?.href === "string" ? settings.href.trim() : "";
   if (/^\[\w+\]$/.test(raw) || /^(https?:\/\/|mailto:|tel:)/i.test(raw)) return raw;
@@ -200,6 +206,14 @@ export function addParagraphSpacing(html: string): string {
   // preview/email/PDF, so the author's blank lines disappeared. Give it a <br>
   // so it keeps one line of height.
   html = html.replace(/(<p(?:\s[^>]*)?>)\s*(<\/p>)/gi, "$1<br>$2");
+  // Same reason for tables: the editor's borders/padding live in editor-only CSS.
+  html = html
+    .replace(/<table(\s[^>]*)?>/gi, `<table style="${TABLE_STYLE}">`)
+    .replace(/<(td|th)(\s[^>]*)?>/gi, (_m, tag: string, attrs: string | undefined) => {
+      const span = (name: string) => attrs?.match(new RegExp(`${name}="(\\d+)"`, "i"))?.[0] ?? "";
+      return `<${tag} ${[span("colspan"), span("rowspan")].filter(Boolean).join(" ")} style="${tag.toLowerCase() === "th" ? TH_STYLE : TD_STYLE}">`;
+    })
+    .replace(/<hr(\s[^>]*)?>/gi, `<hr style="border:none;border-top:1px solid #cbd5e1;margin:12px 0">`);
   return html.replace(/<p(\s[^>]*)?>/gi, (_match, attrs: string | undefined) => {
     const existing = attrs ?? "";
     const styleMatch = existing.match(/style="([^"]*)"/i);
@@ -325,7 +339,7 @@ function renderBlock(
     case "image":
       return block.content
         ? wrap(
-            `<img src="${escapeHtml(content)}" alt="" style="max-width:100%;height:auto;display:block;margin:0 auto;" />`,
+            `<img src="${escapeHtml(content)}" alt="" style="width:${imageWidthPct(block.settings)}%;max-width:100%;height:auto;display:block;margin:0 auto;" />`,
             "margin-bottom:16px;"
           )
         : wrap(

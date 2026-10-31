@@ -12,6 +12,7 @@ interface PdfBlockInput {
   blockType: BlockType;
   orderIndex: number;
   content: string | null;
+  settings?: Record<string, unknown> | null;
 }
 
 async function loadOrgAndTemplate(supabase: Awaited<ReturnType<typeof createClient>>, templateId: string) {
@@ -74,14 +75,15 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: blocks } = await (supabase as any)
     .from("crm_document_blocks")
-    .select("block_type, order_index, content")
+    .select("block_type, order_index, content, settings")
     .eq("template_id", templateId)
     .order("order_index", { ascending: true });
 
-  const input: PdfBlockInput[] = (blocks ?? []).map((b: { block_type: BlockType; order_index: number; content: string | null }) => ({
+  const input: PdfBlockInput[] = (blocks ?? []).map((b: { block_type: BlockType; order_index: number; content: string | null; settings: Record<string, unknown> | null }) => ({
     blockType: b.block_type,
     orderIndex: b.order_index,
     content: b.content,
+    settings: b.settings,
   }));
 
   return renderPdf(result.template.name, input, result.orgName);

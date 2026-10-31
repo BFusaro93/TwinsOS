@@ -1990,6 +1990,30 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "A sub-item is a product or subservice attached to a bundle item or estimate line, with its own quantity and rate. Add them with + Add sub-item in the bundle editor (Settings > Estimates > Service Bundles); they come along when the bundle is applied. On an estimate, the printer icon beside a sub-item controls whether it is printed under the line for the client. When the estimate becomes a job, the office and the crew see each service's sub-items by name and quantity only, with no prices; they never bill and don't change inventory.",
       },
       {
+        q: "What formatting does the text editor support? Can I add a table, change the font or highlight text?",
+        a: "Every rich-text box (document blocks, email and invoice messages, service descriptions, estimate line notes, job notes and descriptions) has the same toolbar: font and size, bold, italic, underline, strikethrough, subscript, superscript, text color, highlight color, bullet and numbered lists, alignment, indent and outdent, tables, a horizontal rule, image insert (where allowed) and an HTML source toggle. The table button inserts a 3x3 table with a header row and then adds or deletes rows and columns. All of it carries into the sent email, the proposal page and the PDF; in the PDF subscript and superscript are smaller but not raised or lowered. See the Document & Email Templates guide.",
+      },
+      {
+        q: "How do I resize an image in a document or email?",
+        a: "In a text box, hover the image and drag a corner handle; the aspect ratio is kept. An Image block in the document editor has a Size slider (10 to 100 percent). The size carries into the preview, the sent email and the PDF, and the PDF shows JPG, PNG, WEBP, GIF and AVIF images.",
+      },
+      {
+        q: "Why did my document PDF lose its blank lines or images?",
+        a: "It used to: empty paragraphs were dropped and only JPG or PNG images displayed. The PDF now keeps blank lines, indents, alignment, tables, colors and images of every supported type, including images inside text and Image blocks at the size you set.",
+      },
+      {
+        q: "Where does the document template's Send Test Email go?",
+        a: "To the email address of the person who is signed in and clicking the button, never a fixed address. The subject starts with [TEST] and the merge tags use sample values.",
+      },
+      {
+        q: "Can I link a service bundle to an estimate document?",
+        a: "Yes. Open the bundle (Settings > Estimates > Service Bundles) and pick an Estimate document on the Details tab. Estimates created from, or given, that bundle remember the document, and Send pre-selects it instead of the default. The client-view toggles for the bundle are on the Display Settings tab.",
+      },
+      {
+        q: "I applied a bundle with sub-items to an estimate and they did not show. Why?",
+        a: "Applying a bundle from the Apply bundle menu on an existing estimate used to copy the sub-items without refreshing the list, so they appeared only after a reload. They now show straight away. If a bundle's items have no sub-items in the bundle editor, there is nothing to copy.",
+      },
+      {
         q: "What does the Mine / Everyone toggle on My Day do?",
         a: "My Day opens scoped to you. Mine shows tickets assigned to you or where you're a contributor, estimates where you're the sales rep, and meetings assigned to you; Everyone shows the whole company's. A My Upcoming Meetings card lists your next seven days of meetings. Breadcrumbs across the top of list pages are clickable to jump back to the section.",
       },
