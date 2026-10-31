@@ -30,20 +30,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invite expired" }, { status: 410 });
   }
 
-  // Don't create portal logins for an org whose plan doesn't include the portal.
-  if (!(await orgHasAddon(createServiceClient<any>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  ), invite.org_id, "client_portal"))) {
-    return NextResponse.json({ error: "The client portal isn't available for this company right now." }, { status: 403 });
-  }
-
   // Use service role to create the Supabase auth user
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adminClient = createServiceClient<any>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
+
+  // Don't create portal logins for an org whose plan doesn't include the portal.
+  if (!(await orgHasAddon(adminClient, invite.org_id, "client_portal"))) {
+    return NextResponse.json({ error: "The client portal isn't available for this company right now." }, { status: 403 });
+  }
 
   // Supabase Auth users are global by email — a person who is already a
   // portal (or staff) user under a different org with the SAME email can't
