@@ -2096,6 +2096,14 @@ function jobBorderColor(job: CRMJob): string {
 
 // ── HomeTab ───────────────────────────────────────────────────────────────────
 
+/** What a waiting-list job still needs dispatching: each service with no live visit yet, or the whole job when it has no services and no visits. */
+function waitingItemsFor(job: CRMJob): { job: CRMJob; service: CRMJobService | null }[] {
+  const visits = (job.visits ?? []).filter((v) => v.status !== "cancelled");
+  const services = job.services ?? [];
+  if (services.length === 0) return visits.length === 0 ? [{ job, service: null }] : [];
+  return services.filter((sv) => !visits.some((v) => v.jobServiceId === sv.id)).map((service) => ({ job, service }));
+}
+
 function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; isLead?: boolean; onSwitchTab?: (tab: string) => void }) {
   const [confirm, confirmDialog] = useConfirm();
   const { can } = usePermissions();
@@ -2372,7 +2380,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                           <Eye className="mr-2 h-3.5 w-3.5" /> View Details
                         </DropdownMenuItem>
                         {/* job_type stays 'waiting_list' after dispatch, so "still waiting" means no visit yet. */}
-                        {job.jobType === "waiting_list" && job.status !== "cancelled" && (job.visits ?? []).length === 0 && can("sched_waiting_list") && (
+                        {job.jobType === "waiting_list" && job.status !== "cancelled" && can("sched_waiting_list") && waitingItemsFor(job).length > 0 && (
                           <DropdownMenuItem onClick={() => setScheduleJob(job)}>
                             <CalendarCheck className="mr-2 h-3.5 w-3.5" /> Schedule Job
                           </DropdownMenuItem>
@@ -2669,9 +2677,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
     )}
     {scheduleJob && (
       <DispatchJobsDialog
-        items={(scheduleJob.services ?? []).length > 0
-          ? (scheduleJob.services ?? []).map((service) => ({ job: scheduleJob, service }))
-          : [{ job: scheduleJob, service: null }]}
+        items={waitingItemsFor(scheduleJob)}
         onOpenChange={(open) => { if (!open) setScheduleJob(null); }}
         onDone={() => setScheduleJob(null)}
       />
