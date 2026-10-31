@@ -9,6 +9,7 @@ import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
 import { logger } from "@/lib/logger";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("stripe create intent");
 
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // This creates a charge against the client's card/bank — same permission as
   // autopay/charge (admins always pass inside has_settings_permission). It also
@@ -57,7 +59,7 @@ export async function POST(request: Request) {
     .from("crm_invoices")
     .select("id, org_id, client_id, invoice_number, balance_cents, status, open_dispute_payment_id")
     .eq("id", invoiceId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null)
     .single();
   if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -86,7 +88,7 @@ export async function POST(request: Request) {
     .select(
       "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
     )
-    .eq("id", profile.org_id)
+    .eq("id", effOrgId)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   if (!org.stripe_connect_account_id || !org.stripe_connect_charges_enabled) {

@@ -9,6 +9,7 @@ import {
   sendClientEmail,
 } from "@/lib/email/send";
 import { resolveReplyTo, type ReplyToMode } from "@/lib/email/reply-to";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 export async function POST(
   req: Request,
@@ -24,6 +25,7 @@ export async function POST(
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // Granular per-role permission — admins always pass, otherwise gated by
   // crm_roles.permissions.email_activity_send. The UI already hides every send
@@ -92,7 +94,7 @@ export async function POST(
       referring_client:referred_by_client_id(display_name)
     `)
     .eq("id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null)
     .single();
 
@@ -130,7 +132,7 @@ export async function POST(
   const { data: org } = await (supabase as any)
     .from("organizations")
     .select("name, address")
-    .eq("id", profile.org_id)
+    .eq("id", effOrgId)
     .single();
 
   const salesRep = client.sales_rep as { first_name: string; last_name: string } | null;
@@ -175,7 +177,7 @@ export async function POST(
     addressCity: org?.address?.city ?? null,
     addressState: org?.address?.state ?? null,
     addressZip: org?.address?.zip ?? null,
-    timeZone: await getOrgTimeZone(supabase, profile.org_id),
+    timeZone: await getOrgTimeZone(supabase, effOrgId),
   };
 
   // Two separate maps: the subject is plain text delivered verbatim to an
@@ -201,7 +203,7 @@ export async function POST(
   }
 
   const replyTo = await resolveReplyTo(supabase, {
-    orgId: profile.org_id,
+    orgId: effOrgId,
     mode: replyToMode,
     userEmail: user.email,
   });
@@ -228,7 +230,7 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from("client_activity").insert({
-    org_id: profile.org_id,
+    org_id: effOrgId,
     client_id: clientId,
     activity_type: "email",
     subject: resolvedSubject,
