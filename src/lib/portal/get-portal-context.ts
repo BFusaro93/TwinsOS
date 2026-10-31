@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { orgHasAddon } from "@/lib/stripe/addon-access";
 
 export interface PortalContext {
   userId: string;
@@ -44,6 +45,7 @@ export async function getPortalContext(): Promise<PortalContext | null> {
 
   if (rows.length === 1) {
     const row = rows[0];
+    if (!(await portalIncluded(row.org_id))) return null;
     return { userId: user.id, clientId: row.client_id, orgId: row.org_id, email: row.email };
   }
 
@@ -52,7 +54,13 @@ export async function getPortalContext(): Promise<PortalContext | null> {
   const active = rows.find((r) => r.org_id === activeOrgId);
   if (!active) return null; // ambiguous — caller should send them to the org picker
 
+  if (!(await portalIncluded(active.org_id))) return null;
   return { userId: user.id, clientId: active.client_id, orgId: active.org_id, email: active.email };
+}
+
+/** The portal is a plan add-on; an org that no longer has it can't serve one. */
+async function portalIncluded(orgId: string): Promise<boolean> {
+  return orgHasAddon(createServiceClient(), orgId, "client_portal");
 }
 
 /** Every org the currently-authenticated user has a portal account for.

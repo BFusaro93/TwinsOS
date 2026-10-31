@@ -134,7 +134,8 @@ export function MyDay() {
   const upcomingMeetings = (weekMeetings ?? []).filter(
     (m) => m.status === "scheduled" && (scope === "all" || (!!myEmployeeId && m.salesRepId === myEmployeeId))
   );
-  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  // The 1st of the month on the ORG's calendar, not the browser's — every other figure here is.
+  const startOfMonth = zoneWallClockToInstant(`${today.slice(0, 7)}-01`, "00:00", orgTimeZone)?.toISOString() ?? "";
 
   const overdueCount = (openTickets ?? []).filter(
     (t) => t.dueDate && t.dueDate < today

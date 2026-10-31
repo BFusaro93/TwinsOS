@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
 import { validateImageUpload } from "@/lib/utils/image-upload";
+import { heicToJpeg, isHeic, toJpgName, HEIC_ERROR_MESSAGE } from "@/lib/utils/convert-heic";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("estimate-photos");
@@ -55,7 +56,11 @@ export async function POST(
   // a storage path, or a crafted name could traverse out of this org's
   // prefix in the shared "attachments" bucket (same class of bug fixed in
   // the crew-app photos route).
-  const ext = imageCheck.ext;
+  // HEIC can't be shown outside Safari or embedded in a PDF, so it is stored as a JPEG.
+  // Converted up front: a failure stores nothing.
+  const heic = isHeic(file);
+  const ext = heic ? "jpg" : imageCheck.ext;
+  const contentType = heic ? "image/jpeg" : imageCheck.contentType;
   // org_id MUST be the first segment (attachments bucket INSERT policy checks
   // storage.foldername(name)[1]); the old estimate-photos/{org}/... layout was
   // rejected. Storage goes through the service client after the estimate was
@@ -63,11 +68,19 @@ export async function POST(
   // objects with a public.attachments row, so a user-scoped createSignedUrl
   // for an estimate_photos object always returned null.
   const storagePath = `${estimate.org_id}/estimate-photos/${estimateId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
+  let buffer: Buffer = Buffer.from(await file.arrayBuffer());
+  if (heic) {
+    try {
+      buffer = await heicToJpeg(buffer);
+    } catch (e) {
+      log.warn("heic conversion failed", { estimateId, error: e instanceof Error ? e.message : String(e) });
+      return NextResponse.json({ error: HEIC_ERROR_MESSAGE }, { status: 422 });
+    }
+  }
 
   const { error: uploadError } = await createServiceClient().storage
     .from("attachments")
-    .upload(storagePath, buffer, { contentType: imageCheck.contentType, upsert: false });
+    .upload(storagePath, buffer, { contentType, upsert: false });
 
   if (uploadError) {
     log.error("photo upload failed", { estimateId, error: uploadError.message });
@@ -81,9 +94,9 @@ export async function POST(
       org_id:       estimate.org_id,
       estimate_id:  estimateId,
       storage_path: storagePath,
-      file_name:    file.name,
-      file_size:    file.size,
-      mime_type:    imageCheck.contentType,
+      file_name:    heic ? toJpgName(file.name) : file.name,
+      file_size:    buffer.length,
+      mime_type:    contentType,
       caption:      caption || null,
       uploaded_by:  user.id,
     })

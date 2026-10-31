@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 import { orgHasAddon } from "@/lib/stripe/addon-access";
+import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
@@ -170,6 +171,12 @@ export async function resolveApiKey(request: Request, db: AdminClient = adminCli
 
     await db.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyRow.id);
   } else {
+    // MCP connectors authenticate with OAuth tokens, which previously skipped the limit
+    // entirely. Keyed by token in the shared per-minute counter (the api key counter is
+    // FK'd to api_keys).
+    if (!(await checkAuthRateLimit(`oauth-token:${keyRow.id}`, keyRow.rate_limit_per_min, 60))) {
+      return { ok: false, status: 429, error: "Rate limit exceeded" };
+    }
     await db.from("oauth_tokens").update({ last_used_at: new Date().toISOString() }).eq("id", keyRow.id);
   }
 

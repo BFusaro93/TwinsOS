@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { orgHasAddon } from "@/lib/stripe/addon-access";
 import { Resend } from "resend";
 import type { PortalInviteRow, PortalUserRow } from "@/lib/portal/portal-db";
 import { getOrgReplyTo } from "@/lib/email/reply-to";
@@ -22,6 +23,11 @@ export async function POST(
     .single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
+
+  // The portal is a plan add-on (bundled on Professional+, and during a trial).
+  if (!(await orgHasAddon(createServiceClient(), effOrgId as string, "client_portal"))) {
+    return NextResponse.json({ error: "The client portal isn't included on your plan. Add it in Settings → Subscription." }, { status: 403 });
+  }
 
   // Granular per-role permission (shared with portal-reset) — admins
   // always pass, otherwise gated by crm_roles.permissions.client_reset_portal_password.

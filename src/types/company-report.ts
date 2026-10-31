@@ -26,7 +26,7 @@ export interface CloseRatioRow {
   salesRep: string;
   wonCount: number;
   wonAmountCents: number;
-  /** wonCount / totalEstimatesThisMonth (all reps, all stages), percent. */
+  /** wonCount / decided (won + lost) estimates this month, all reps, percent. */
   countPct: number;
   /** wonAmountCents / totalWonAmountThisMonth (all reps), percent. */
   amountPct: number;

@@ -59,6 +59,9 @@ const AR_WRITE_OFF_METHOD = "AR Write-off";
 // which counted both "Estimate Sent" and "Estimate Drafted" as open pipeline.
 const OPEN_ESTIMATE_STAGES = ["draft", "quote", "sent"];
 const WON_ESTIMATE_STAGES = ["accepted", "invoiced"];
+// Decided estimates (won or lost). The close ratio's denominator — same definition as the KPI
+// Scorecard — so open drafts/quotes/sent don't dilute it.
+const DECIDED_ESTIMATE_STAGES = [...WON_ESTIMATE_STAGES, "lost"];
 
 function issuedInvoiceFilter(): AnalysisFilter[] {
   return [{ column: "status", op: "in", value: ISSUED_INVOICE_STATUSES }];
@@ -243,9 +246,12 @@ async function computeMonthlyTrend(supabase: Client, months: MonthWindow[]): Pro
 
 async function computeCloseRatios(supabase: Client, month: MonthWindow) {
   const [totals, byRep] = await Promise.all([
-    total(supabase, "rpt_estimates", dateFilters("estimate_date", month.from, month.to), [
-      { column: "estimate_number", fn: "count" },
-    ]),
+    total(
+      supabase,
+      "rpt_estimates",
+      [...dateFilters("estimate_date", month.from, month.to), { column: "stage", op: "in", value: DECIDED_ESTIMATE_STAGES }],
+      [{ column: "estimate_number", fn: "count" }]
+    ),
     aggregate(
       supabase,
       "rpt_estimates",
