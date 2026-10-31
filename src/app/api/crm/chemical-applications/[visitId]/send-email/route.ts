@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import { getOrgReplyTo } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
+import { escapeHtml } from "@/lib/utils/escape-html";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 export async function POST(
@@ -127,7 +128,8 @@ export async function POST(
       const amount = a.chemical_amount != null ? `${a.chemical_amount} ${a.unit?.name ?? ""}`.trim() : "";
       // Re-entry is what the client actually has to act on — same snapshot rule as the EPA #.
       const reEntry = a.re_entry_interval_snapshot ?? a.product?.re_entry_interval;
-      return `<li>${a.product?.name ?? "Chemical"}${amount ? ` — ${amount}` : ""}${epa ? ` (EPA #${epa})` : ""}${reEntry ? ` — re-entry: ${reEntry}` : ""}</li>`;
+      // These are org-authored free text going into a client email as trusted HTML.
+      return `<li>${escapeHtml(String(a.product?.name ?? "Chemical"))}${amount ? ` — ${escapeHtml(amount)}` : ""}${epa ? ` (EPA #${escapeHtml(String(epa))})` : ""}${reEntry ? ` — re-entry: ${escapeHtml(String(reEntry))}` : ""}</li>`;
     })
     .join("");
   const products = `<ul>${productsHtml}</ul>`;
@@ -139,7 +141,7 @@ export async function POST(
         .map((a) => a.product?.route_sheet_instructions)
         .filter((s): s is string => !!s?.trim())
     ),
-  ].join("<br><br>") || "Keep children and pets off the treated area until dry.";
+  ].map((s) => escapeHtml(s).replace(/\n/g, "<br>")).join("<br><br>") || "Keep children and pets off the treated area until dry.";
 
   const mergeVars: Record<string, string> = {
     "[clientfirstname]":    firstName,

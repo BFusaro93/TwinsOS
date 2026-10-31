@@ -83,6 +83,7 @@ async function buildInvoicePDFData(
       qty: Number.isFinite(Number(li.qty)) && li.qty != null ? Number(li.qty) : 1,
       rateCents: (li.rate_cents as number) ?? 0,
       totalCents: (li.total_cents as number) ?? 0,
+      discountCents: (li.discount_cents as number) ?? 0,
     }));
 
   const addr = (org?.address as Record<string, string>) ?? {};

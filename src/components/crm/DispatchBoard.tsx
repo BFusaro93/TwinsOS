@@ -823,6 +823,8 @@ function JobDetailSheet({
   // Notes state
   const qc = useQueryClient();
   const [newComment,    setNewComment]    = useState("");
+  const [addingComment, setAddingComment] = useState(false);
+  const addingCommentRef = useRef(false);
   const [notesToClient, setNotesToClient] = useState(visit.notesToClient ?? "");
   // Fall back to job-level master invoice description when visit has none
   const [invoiceDesc,   setInvoiceDesc]   = useState(visit.invoiceDescription ?? job?.invoiceDescription ?? "");
@@ -940,7 +942,9 @@ function JobDetailSheet({
   }
 
   async function addComment() {
-    if (!newComment.trim()) return;
+    if (!newComment.trim() || addingCommentRef.current) return;
+    addingCommentRef.current = true;
+    setAddingComment(true);
     const comment: JobComment = {
       id: crypto.randomUUID(),
       authorName: currentUser.name,
@@ -967,6 +971,9 @@ function JobDetailSheet({
       toast.success("Comment added");
     } catch {
       toast.error("Failed to add comment");
+    } finally {
+      addingCommentRef.current = false;
+      setAddingComment(false);
     }
   }
 
@@ -1476,7 +1483,7 @@ function JobDetailSheet({
                     }
                   }}
                 />
-                <Button size="sm" className="h-7 text-xs" onClick={addComment}>
+                <Button size="sm" className="h-7 text-xs" onClick={addComment} disabled={addingComment}>
                   Add Comment
                 </Button>
               </TabsContent>

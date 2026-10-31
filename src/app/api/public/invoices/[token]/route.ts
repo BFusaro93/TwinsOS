@@ -78,6 +78,7 @@ export async function GET(
       qty: Number.isFinite(Number(li.qty)) && li.qty != null ? Number(li.qty) : 1,
       rateCents: (li.rate_cents as number) ?? 0,
       totalCents: (li.total_cents as number) ?? 0,
+      discountCents: (li.discount_cents as number) ?? 0,
     }));
 
   // Photos attached to this invoice. Scoped by the token-resolved invoice AND

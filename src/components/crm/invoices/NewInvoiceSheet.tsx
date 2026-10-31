@@ -49,6 +49,8 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
   // setInvoiceId lands would otherwise start a second insert) — each extra
   // run left a stray empty draft behind (D-23).
   const creatingRef = useRef(false);
+  const openRef = useRef(open);
+  openRef.current = open;
 
   const orgTimeZone = useOrgTimeZone();
   const { data: clients } = useClients();
@@ -66,7 +68,16 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
       setCreating(true);
       const today = todayInZone(orgTimeZone);
       createInvoice({ clientId: defaultClientId, description: "", invoiceDate: today, projectId: defaultProjectId ?? null })
-        .then((inv) => { setInvoiceId(inv.id); setDraftClientId(defaultClientId); })
+        .then((inv) => {
+          // Closed (or switched away) before the insert returned: the draft belongs to nobody, so
+          // discard it instead of leaving an empty draft in the Invoices list.
+          if (!openRef.current) {
+            deleteInvoice({ id: inv.id, clientId: defaultClientId }).catch(() => {});
+            return;
+          }
+          setInvoiceId(inv.id);
+          setDraftClientId(defaultClientId);
+        })
         .catch(() => toast.error("Failed to create invoice"))
         .finally(() => { setCreating(false); creatingRef.current = false; });
     }

@@ -83,6 +83,12 @@ export async function GET(
 
   const photos = await Promise.all(
     ((photoRows ?? []) as Record<string, unknown>[]).map(async (p) => {
+      // Service-role signing: only sign objects inside this org's own folder, so a crafted
+      // estimate_photos row can't surface another org's file on a public link.
+      const photoPath = p.storage_path as string;
+      if (!photoPath.startsWith(`${shareToken.org_id}/`) && !photoPath.startsWith(`estimate-photos/${shareToken.org_id}/`)) {
+        return { id: p.id as string, caption: (p.caption as string | null) ?? null, signedUrl: null };
+      }
       const { data: signed } = await supabase.storage
         .from("attachments")
         .createSignedUrl(p.storage_path as string, 3600);

@@ -5,6 +5,7 @@ import { PRINTED_SUBITEM_SELECT, pickPrintedSubitems } from "@/lib/estimates/pri
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { getPublishedProposal } from "@/lib/estimates/proposal-content";
+import { embedEstimatePhoto } from "@/lib/estimate-photo-embed";
 
 // Shared by the single-estimate and bulk PDF routes, plus the
 // accepted-estimate notification email (estimate-client-notify.ts) — the
@@ -52,19 +53,9 @@ async function buildEstimatePDFData(
 
   const photos: EstimatePDFPhoto[] = [];
   for (const p of (photoRows ?? []) as Record<string, unknown>[]) {
-    const { data: signed } = await supabase.storage
-      .from("attachments")
-      .createSignedUrl(p.storage_path as string, 3600);
-    if (!signed?.signedUrl) continue;
-    try {
-      const imgRes = await fetch(signed.signedUrl);
-      if (!imgRes.ok) continue;
-      const buf = Buffer.from(await imgRes.arrayBuffer());
-      const mime = imgRes.headers.get("content-type") ?? "image/jpeg";
-      photos.push({ caption: (p.caption as string | null) ?? null, dataUri: `data:${mime};base64,${buf.toString("base64")}` });
-    } catch {
-      // Skip a photo that failed to download rather than failing the whole PDF
-    }
+    // A photo that can't be embedded is skipped rather than failing the whole PDF.
+    const dataUri = await embedEstimatePhoto(p.storage_path as string, est.org_id as string);
+    if (dataUri) photos.push({ caption: (p.caption as string | null) ?? null, dataUri });
   }
 
   const { data: org } = await supabase

@@ -3300,6 +3300,8 @@ export function useAddCRMJobProduct() {
     onSuccess: (_, v) => {
       qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
       qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail', v.jobId] });
+      // delete_job_product restores a used row's inventory.
+      qc.invalidateQueries({ queryKey: ['products'] });
     },
   });
 }

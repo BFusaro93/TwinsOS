@@ -951,6 +951,8 @@ export async function fireSimpleTrigger(
   // may be the only thing configured for this event.
   if (isZapierTriggerType(params.triggerType)) {
     await notifyZapierSubscribers(supabase, params.orgId, params.triggerType, {
+      // Zapier dedupes REST Hook items on `id`; without one every firing collapses into one.
+      id: `${params.triggerType}-${crypto.randomUUID()}`,
       triggerType: params.triggerType,
       clientId: params.clientId,
       estimateId: params.estimateId ?? null,
