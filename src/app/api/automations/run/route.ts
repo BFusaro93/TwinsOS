@@ -16,6 +16,7 @@ import {
   type AdminClient,
 } from "@/lib/automations/cmms-automation-actions";
 import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 
 const log = logger.child("crm-processor");
 
@@ -274,6 +275,11 @@ async function handleRun(request: Request) {
 
   if (callerOrgId) {
     autoQuery = autoQuery.eq("org_id", callerOrgId);
+    // Saving a meter reading POSTs here for any signed-in member (use-meter-readings), so a
+    // caller without automation access may only trigger the meter-threshold sweep.
+    if (!(await hasAnySettingsPermission(await createServerClient(), ["automation_view"]))) {
+      autoQuery = autoQuery.eq("trigger_type", "meter_threshold");
+    }
   }
 
   const { data: automations, error: autoErr } = await autoQuery;

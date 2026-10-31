@@ -38,6 +38,25 @@ function paymentBucket(method: string | null): PaymentBucket {
   return "other";
 }
 
+/**
+ * The matrix reports below have one column per calendar month, so they can show only one
+ * year: months of different years would otherwise be summed into the same column. Use the
+ * year the range ends in (the current year when open-ended) and say so when the chosen
+ * range reached further back.
+ */
+function matrixYearWindow(from: string | null, to: string | null, timeZone: string) {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone });
+  const year = Number((to ?? today).slice(0, 4));
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+  const clipped = !from || from < yearStart || (!!to && to > yearEnd);
+  return {
+    from: !from || from < yearStart ? yearStart : from,
+    to: !to || to > yearEnd ? yearEnd : to,
+    note: clipped ? `Month columns show ${year} only; the selected range was narrowed to ${year}.` : null,
+  };
+}
+
 export const REVENUE_REPORTS: PrebuiltReportDef[] = [
   {
     key: "invoice-audit-summary",
@@ -245,7 +264,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       "Shows invoiced revenue per service line item, broken out by month.",
     filters: [dateRangeFilterDef("Invoice Date", "this_year")],
     run: async ({ supabase, params, timeZone }) => {
-      const { from, to } = resolveDateRange(params, "this_year", timeZone);
+      const range = resolveDateRange(params, "this_year", timeZone);
+      const { from, to, note: yearNote } = matrixYearWindow(range.from, range.to, timeZone);
       // Rule A (issued invoices only) and the soft-delete guard are applied on
       // the joined parent; `!inner` drops line items whose invoice fails them.
       const data = await fetchAllRows<unknown>(() => {
@@ -300,7 +320,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
           col("total_cents", "Total", "money"),
         ],
         rows,
-        ["Revenue is reported on the invoice date. Draft and void invoices are excluded."]
+        ["Revenue is reported on the invoice date. Draft and void invoices are excluded.", ...(yearNote ? [yearNote] : [])]
       );
     },
   },
@@ -429,7 +449,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     description: "Compares invoiced revenue to payments collected, month by month.",
     filters: [dateRangeFilterDef("Date Range", "this_year")],
     run: async ({ supabase, params, timeZone }) => {
-      const { from, to } = resolveDateRange(params, "this_year", timeZone);
+      const range = resolveDateRange(params, "this_year", timeZone);
+      const { from, to, note: yearNote } = matrixYearWindow(range.from, range.to, timeZone);
 
       const invData = await fetchAllRows<unknown>(() => {
         let invQuery = supabase
@@ -494,6 +515,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         rows,
         [
           "Invoiced reflects the invoice date and excludes draft and void invoices. Collected reflects the payment date and is cash only — excludes account credits and AR write-offs; net of refunds.",
+          ...(yearNote ? [yearNote] : []),
         ]
       );
     },

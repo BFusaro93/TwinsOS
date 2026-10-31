@@ -11,6 +11,7 @@ import {
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 import { logger } from "@/lib/logger";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("stripe import saved methods");
 
@@ -42,6 +43,7 @@ async function gate(): Promise<Gate> {
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return { ok: false, response: NextResponse.json({ error: "Profile not found" }, { status: 403 }) };
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   const impersonating = await rejectIfImpersonating(supabase, user.id, "importing saved payment methods");
   if (impersonating) return { ok: false, response: impersonating };
@@ -61,7 +63,7 @@ async function gate(): Promise<Gate> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: org } = await (supabase.from("organizations") as any)
     .select("stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode")
-    .eq("id", profile.org_id)
+    .eq("id", effOrgId)
     .single();
   if (!org) return { ok: false, response: NextResponse.json({ error: "Organization not found" }, { status: 404 }) };
   if (!org.stripe_connect_account_id || !org.stripe_connect_charges_enabled) {
@@ -72,7 +74,7 @@ async function gate(): Promise<Gate> {
   }
   return {
     ok: true,
-    orgId: profile.org_id,
+    orgId: effOrgId,
     accountId: org.stripe_connect_account_id,
     livemode: org.stripe_connect_livemode ?? null,
     supabase,

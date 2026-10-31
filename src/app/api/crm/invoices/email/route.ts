@@ -19,6 +19,7 @@ import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError, buildClientMergeVars } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { logger } from "@/lib/logger";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("email-invoice");
 
@@ -208,10 +209,11 @@ export async function POST(req: NextRequest) {
 
   // Load org + brand color
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile?.org_id;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: org } = profile?.org_id
+  const { data: org } = effOrgId
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? await (supabase as any).from("organizations").select("name, brand_color, address, customizations").eq("id", profile.org_id).single()
+    ? await (supabase as any).from("organizations").select("name, brand_color, address, customizations").eq("id", effOrgId).single()
     : { data: null };
   const orgName = org?.name ?? "Your Service Provider";
   const orgAddr = (org?.address as Record<string, string>) ?? {};
@@ -538,20 +540,20 @@ export async function POST(req: NextRequest) {
 
   // Push to QuickBooks now that the invoice has gone out — never throws, so
   // a QuickBooks outage can't fail an invoice send.
-  if (profile?.org_id) {
-    await pushInvoiceToQuickBooks(supabase, profile.org_id, invoiceId);
+  if (effOrgId) {
+    await pushInvoiceToQuickBooks(supabase, effOrgId, invoiceId);
   }
 
-  if (inv.client_id && profile?.org_id) {
+  if (inv.client_id && effOrgId) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await fireSimpleTrigger(supabase as any, { orgId: profile.org_id, clientId: inv.client_id, invoiceId, triggerType: "invoice_sent" });
+    await fireSimpleTrigger(supabase as any, { orgId: effOrgId, clientId: inv.client_id, invoiceId, triggerType: "invoice_sent" });
   }
 
   // Log activity
   if (inv.client_id) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from("client_activity").insert({
-      org_id: profile?.org_id,
+      org_id: effOrgId,
       client_id: inv.client_id,
       activity_type: "email",
       subject: `Invoice #${inv.invoice_number} sent via email`,

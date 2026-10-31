@@ -13,6 +13,7 @@ import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
 import { logger } from "@/lib/logger";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("stripe create intent (multi)");
 
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // This creates a charge against the client's card/bank — same permission as
   // create-intent and autopay/charge (admins always pass inside
@@ -67,7 +69,7 @@ export async function POST(request: Request) {
     .from("clients")
     .select("id")
     .eq("id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null)
     .single();
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
@@ -78,7 +80,7 @@ export async function POST(request: Request) {
     .select("id, balance_cents, status, open_dispute_payment_id")
     .in("id", invoiceIds)
     .eq("client_id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null);
   if (!invoices || invoices.length !== invoiceIds.length) {
     return NextResponse.json({ error: "One or more invoices were not found for this client" }, { status: 404 });
@@ -107,7 +109,7 @@ export async function POST(request: Request) {
     .select(
       "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
     )
-    .eq("id", profile.org_id)
+    .eq("id", effOrgId)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   if (!org.stripe_connect_account_id || !org.stripe_connect_charges_enabled) {
@@ -132,7 +134,7 @@ export async function POST(request: Request) {
     stripe,
     connectedAccountId: org.stripe_connect_account_id,
     serviceDb: service,
-    orgId: profile.org_id,
+    orgId: effOrgId,
     clientId,
   });
   const refusal = await refuseIfChargeInFlight({
@@ -223,7 +225,7 @@ export async function POST(request: Request) {
       ...(customerId ? { customer: customerId } : {}),
       metadata: {
         source: "crm_invoice_multi",
-        org_id: profile.org_id,
+        org_id: effOrgId,
         client_id: clientId,
         allocations: encoded,
         fee_cents: String(feeCents),

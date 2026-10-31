@@ -7,6 +7,7 @@ import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/l
 import { chargeIdempotencyKey, refundIdempotencyKey } from "@/lib/stripe/idempotency";
 import { logger } from "@/lib/logger";
 import { syncEstimateDepositWithPayment } from "@/lib/stripe/record-estimate-deposit";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("crm payments refund");
 
@@ -57,6 +58,7 @@ export async function POST(
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // Granular per-role permission — admins always pass. Any of the three
   // card/ACH/refund-void keys grants access; the catalog doesn't split this
@@ -82,7 +84,7 @@ export async function POST(
     .from("crm_payments")
     .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, stripe_payment_intent_id, method")
     .eq("id", paymentId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     // A soft-deleted payment is gone from the books — refunding it would
     // move real money against a record nothing else counts.
     .is("deleted_at", null)
@@ -106,7 +108,7 @@ export async function POST(
     const { data: org } = await (db as any)
       .from("organizations")
       .select("stripe_connect_account_id, stripe_connect_livemode")
-      .eq("id", profile.org_id)
+      .eq("id", effOrgId)
       .single();
     if (!org?.stripe_connect_account_id) {
       return NextResponse.json({ error: "Organization has no connected Stripe account" }, { status: 400 });
@@ -185,7 +187,7 @@ export async function POST(
   // A refunded proposal deposit must stop showing as collected on its estimate.
   if (payment.stripe_payment_intent_id) {
     try {
-      await syncEstimateDepositWithPayment(db, profile.org_id, payment.stripe_payment_intent_id);
+      await syncEstimateDepositWithPayment(db, effOrgId, payment.stripe_payment_intent_id);
     } catch (err) {
       log.error("failed to sync estimate deposit after refund", { error: err, paymentId });
     }
@@ -207,11 +209,11 @@ export async function POST(
   await (db.rpc as any)("sync_client_balance", { p_client_id: payment.client_id });
 
   // Void/reduce the matching QuickBooks payments (no-op if QuickBooks isn't connected); never throws.
-  await mirrorPaymentReversalToQuickBooks(db, profile.org_id, paymentId, qboLinks);
+  await mirrorPaymentReversalToQuickBooks(db, effOrgId, paymentId, qboLinks);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (db as any).from("client_activity").insert({
-    org_id: profile.org_id,
+    org_id: effOrgId,
     client_id: payment.client_id,
     activity_type: "payment",
     subject: `Refund issued: $${(appliedCents / 100).toFixed(2)}`,

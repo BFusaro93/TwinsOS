@@ -19,6 +19,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
 import { loadLiveProposalContent } from "@/lib/estimates/proposal-content";
 import { insertEstimateVersion } from "@/lib/estimates/versions";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("send-estimate");
 
@@ -197,10 +198,11 @@ export async function POST(
 
   // Fetch org
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile?.org_id;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: org } = profile?.org_id
+  const { data: org } = effOrgId
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? await (supabase as any).from("organizations").select("name, brand_color, address, customizations").eq("id", profile.org_id).single()
+    ? await (supabase as any).from("organizations").select("name, brand_color, address, customizations").eq("id", effOrgId).single()
     : { data: null };
 
   const orgName = org?.name ?? "Your Service Provider";
@@ -256,7 +258,7 @@ export async function POST(
     const { data: inserted, error: tokenErr } = await (supabase as any)
       .from("estimate_share_tokens")
       .insert({
-        org_id: profile?.org_id,
+        org_id: effOrgId,
         estimate_id: estimateId,
         expires_at: expiresAt,
         created_by: user.id,
@@ -552,7 +554,7 @@ export async function POST(
   // Log the email
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from("estimate_emails").insert({
-    org_id: profile?.org_id,
+    org_id: effOrgId,
     estimate_id: estimateId,
     to_email: toEmailsJoined,
     to_name: clientDisplayName || null,
@@ -583,7 +585,7 @@ export async function POST(
   if (est.client_id) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from("client_activity").insert({
-      org_id: profile?.org_id,
+      org_id: effOrgId,
       client_id: est.client_id,
       activity_type: "email",
       subject: `Estimate #${est.estimate_number} sent via email`,

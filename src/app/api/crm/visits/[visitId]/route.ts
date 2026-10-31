@@ -88,6 +88,16 @@ export async function PATCH(
     );
   }
 
+  // Same for a crew change: ownership checks key off the visit's crew, so re-crewing a
+  // stop mid-clock locks the crew that is working it out of clock-out, pause and skip.
+  const recrewing = (patch.crew_id !== undefined && patch.crew_id !== (prev?.crew_id ?? null)) || patch.crew_unassigned === true;
+  if (recrewing && prev?.clocked_in_at && !prev.clocked_out_at) {
+    return NextResponse.json(
+      { error: "This visit is in progress (the crew has clocked in), so its crew can't be changed. Have the crew clock out first." },
+      { status: 409 }
+    );
+  }
+
   if (patch.scheduled_date && patch.scheduled_date !== prev?.scheduled_date) {
     const violation = await checkPackageMinDaysViolation(supabase, visitId, patch.scheduled_date);
     if (violation) {

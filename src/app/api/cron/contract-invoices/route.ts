@@ -290,7 +290,9 @@ export async function GET(request: Request) {
       // The prorated first-period stub is a separate invoice; it must not
       // count as this period's regular invoice.
       .is("proration_period_start", null)
-      .is("deleted_at", null)
+      // A source voided by Consolidate Invoices still counts as billed: its charge lives on
+      // the consolidated invoice, which carries no contract_id.
+      .or("deleted_at.is.null,consolidated_into_id.not.is.null")
       .limit(1);
     if (plan.periodStart) existingQuery = existingQuery.gte("invoice_date", plan.periodStart);
     if (plan.periodEnd) existingQuery = existingQuery.lte("invoice_date", plan.periodEnd);

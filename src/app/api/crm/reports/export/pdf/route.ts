@@ -57,6 +57,9 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // Client-portal logins are ordinary Supabase users with no profiles row; this is staff-only.
+  const { data: staffProfile } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
+  if (!staffProfile) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   let body: unknown;
   try {

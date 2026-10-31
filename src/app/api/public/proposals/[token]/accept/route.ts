@@ -411,7 +411,7 @@ export async function POST(
   // 4. Log to client_activity
   const { data: est } = await supabase
     .from("estimates")
-    .select("client_id, estimate_number, org_id, total_cents, sales_rep_id, clients(primary_email, display_name)")
+    .select("client_id, estimate_number, org_id, total_cents, sales_rep_id, clients(primary_email, display_name, email_bounced_at)")
     .eq("id", shareToken.estimate_id)
     .single();
 
@@ -453,7 +453,8 @@ export async function POST(
   const clientEmail = clientRow?.primary_email as string | null;
   const clientName = clientRow?.display_name as string | null;
 
-  if (clientEmail && est) {
+  // A hard-bounced address accepts no mail; the acceptance itself is already recorded.
+  if (clientEmail && est && !clientRow?.email_bounced_at) {
     const { data: org } = await supabase
       .from("organizations")
       .select("name, brand_color, address")

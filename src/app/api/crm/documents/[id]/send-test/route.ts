@@ -13,6 +13,7 @@ import { DocumentTemplatePdf } from "@/components/crm/documents/pdf/DocumentTemp
 import { sanitizeImageBlocks } from "@/lib/documents/sanitize-image-blocks";
 import type { BlockType } from "@/types/crm-documents";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 
 export async function POST(
   req: NextRequest,
@@ -31,6 +32,10 @@ export async function POST(
     .eq("id", user.id)
     .single();
   if (!profile?.org_id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!(await hasAnySettingsPermission(supabase, ["document_template_edit", "document_template_add"]))) {
+    return NextResponse.json({ error: "You don't have permission to send document previews" }, { status: 403 });
+  }
 
   const { data: template, error: tplErr } = await supabase
     .from("crm_document_templates")

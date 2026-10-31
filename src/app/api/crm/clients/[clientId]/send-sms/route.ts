@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { resolveSmsStepContent } from "@/lib/automations/sequence-sms";
 import { sendClientSms } from "@/lib/sms/send";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 /**
  * 1:1 text message to a client, typed by a person (the job screen's
@@ -43,6 +44,7 @@ export async function POST(
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: allowed } = await (supabase.rpc as any)("has_settings_permission", {
@@ -68,7 +70,7 @@ export async function POST(
     .from("clients")
     .select("id, display_name, primary_phone, sms_opt_in")
     .eq("id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null)
     .single();
 
@@ -88,11 +90,11 @@ export async function POST(
   // has no insert policy for ordinary authenticated users.
   const service = createServiceClient();
   // Service-role sends bypass the canceled-org read-only RLS; enforce it here.
-  const notWritable = await assertOrgWritable(service, profile.org_id);
+  const notWritable = await assertOrgWritable(service, effOrgId);
   if (notWritable) return notWritable;
 
   const resolved = await resolveSmsStepContent(service, {
-    orgId: profile.org_id,
+    orgId: effOrgId,
     clientId,
     bodyTemplate: messageBody,
   });
@@ -101,7 +103,7 @@ export async function POST(
   }
 
   const sent = await sendClientSms(service, {
-    orgId: profile.org_id,
+    orgId: effOrgId,
     clientId,
     toPhone: resolved.toPhone,
     body: resolved.bodyText,

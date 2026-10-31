@@ -14,6 +14,7 @@ import { refuseIfChargeInFlight } from "@/lib/stripe/duplicate-charge";
 import { recordStripeCharge } from "@/lib/stripe/record-charge";
 import { markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { logger } from "@/lib/logger";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("stripe multi-invoice charge");
 
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // This actually moves the client's money — gate it behind the same
   // permission that gates recording/modifying payments in the Invoices UI
@@ -68,7 +70,7 @@ export async function POST(request: Request) {
     .from("clients")
     .select("id, stripe_customer_id, saved_payment_method_id, saved_payment_method_type")
     .eq("id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null)
     .single();
   if (!client?.stripe_customer_id || !client.saved_payment_method_id || !client.saved_payment_method_type) {
@@ -81,7 +83,7 @@ export async function POST(request: Request) {
     .select("id, balance_cents, status, open_dispute_payment_id")
     .in("id", invoiceIds)
     .eq("client_id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null);
   if (!invoices || invoices.length !== invoiceIds.length) {
     return NextResponse.json({ error: "One or more invoices were not found for this client" }, { status: 404 });
@@ -110,7 +112,7 @@ export async function POST(request: Request) {
     .select(
       "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode"
     )
-    .eq("id", profile.org_id)
+    .eq("id", effOrgId)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   if (!org.stripe_connect_account_id || !org.stripe_connect_charges_enabled) {
@@ -221,7 +223,7 @@ export async function POST(request: Request) {
         confirm: true,
         metadata: {
           source: "crm_invoice_multi",
-          org_id: profile.org_id,
+          org_id: effOrgId,
           client_id: clientId,
           allocations: encoded,
           fee_cents: String(feeCents),

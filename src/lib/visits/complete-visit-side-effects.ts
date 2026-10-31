@@ -209,11 +209,24 @@ export async function applyVisitCompletionSideEffects(
   if (j && terminalTypes.has(j.job_type)) {
     const { data: siblingVisits } = await supabase
       .from("crm_job_visits")
-      .select("id, status")
+      .select("id, status, job_service_id")
       .eq("job_id", j.id)
       .is("deleted_at", null);
-    allSiblingVisitsDone = ((siblingVisits ?? []) as { id: string; status: string }[])
-      .every((sv) => sv.id === visitId || terminalVisitStatuses.has(sv.status));
+    const siblings = (siblingVisits ?? []) as { id: string; status: string; job_service_id: string | null }[];
+    allSiblingVisitsDone = siblings.every((sv) => sv.id === visitId || terminalVisitStatuses.has(sv.status));
+    // A split waiting-list job dispatches one visit per service, so a service that has
+    // no visit yet is unfinished work the sibling check above cannot see.
+    if (allSiblingVisitsDone) {
+      const { data: jobServices } = await supabase
+        .from("crm_job_services")
+        .select("id, included")
+        .eq("job_id", j.id);
+      const wholeJobVisit = siblings.some((sv) => sv.job_service_id == null);
+      const undispatched = ((jobServices ?? []) as { id: string; included: boolean | null }[])
+        .filter((js) => js.included !== false)
+        .some((js) => !wholeJobVisit && !siblings.some((sv) => sv.job_service_id === js.id));
+      if (undispatched) allSiblingVisitsDone = false;
+    }
   }
 
   if (j && terminalTypes.has(j.job_type) && allSiblingVisitsDone) {

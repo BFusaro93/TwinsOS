@@ -917,7 +917,8 @@ export async function submitFormResponse(
         : "";
       const html = resolveMergeTags(notif.body || "", htmlVars).replace(/\n/g, "<br>") + copyBlock;
       const accountSubject = resolveMergeTags(notif.subject || `New submission: ${form.name}`, accountVars);
-      const accountHtml = resolveMergeTags(notif.body || "", accountHtmlVars).replace(/\n/g, "<br>") + copyBlock;
+      // No copy block: the account address is unverified (typed by the submitter), so the free-text answers must not be relayed to it.
+      const accountHtml = resolveMergeTags(notif.body || "", accountHtmlVars).replace(/\n/g, "<br>");
       const from = notif.fromEmail ? `${notif.fromName || orgName} <${notif.fromEmail}>` : EMAIL_FROM;
 
       for (const { to, isAccount } of recipients) {

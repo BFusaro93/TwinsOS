@@ -348,8 +348,17 @@ export function useBulkImportEstimates() {
         repIdsByName.set(key, [...(repIdsByName.get(key) ?? []), e.id]);
       }
 
+      // Rows already in the system (same client + description + date) are not re-created,
+      // so re-running a file, or retrying after a timeout, can't double every estimate.
+      const existing = await fetchAllRows<{ client_id: string | null; description: string | null; estimate_date: string | null }>(() =>
+        supabase.from("estimates").select("client_id, description, estimate_date").is("deleted_at", null).order("id")
+      );
+      const dupKey = (clientId: string, description: string, date: string) => `${clientId}|${description.trim().toLowerCase()}|${date}`;
+      const seen = new Set(existing.map((e) => dupKey(e.client_id ?? "", e.description ?? "", e.estimate_date ?? "")));
+
       let created = 0;
       let skipped = 0;
+      let duplicates = 0;
       let linesAdded = 0;
 
       for (const r of rows) {
@@ -364,6 +373,10 @@ export function useBulkImportEstimates() {
         const estimateDate = r.estimateDate?.trim() ? normalizeCsvDate(r.estimateDate) : todayInZone(orgTimeZone);
         const validUntilDate = r.validUntilDate?.trim() ? normalizeCsvDate(r.validUntilDate) : null;
         if (!estimateDate || (r.validUntilDate?.trim() && !validUntilDate)) { skipped++; continue; }
+
+        const key = dupKey(clientId, description, estimateDate);
+        if (seen.has(key)) { duplicates++; continue; }
+        seen.add(key);
 
         const repMatches = r.salesperson?.trim() ? repIdsByName.get(normName(r.salesperson)) ?? [] : [];
         const probabilityPct = Number.parseFloat((r.probability ?? "").replace("%", ""));
@@ -418,7 +431,7 @@ export function useBulkImportEstimates() {
         }
       }
 
-      return { created, skipped, linesAdded };
+      return { created, skipped, duplicates, linesAdded };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["estimates"] });

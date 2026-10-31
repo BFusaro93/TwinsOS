@@ -59,7 +59,7 @@ export async function POST(
 
   const { data: ticket } = await adminClient
     .from("crm_tickets")
-    .select("id, org_id, ticket_number, subject, assigned_to, assigned_to_id, created_by, created_at")
+    .select("id, org_id, ticket_number, subject, assigned_to, assigned_to_id, created_by, created_at, updated_at")
     .eq("id", ticketId)
     .single();
   if (!ticket) return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
@@ -97,6 +97,11 @@ export async function POST(
       createdByUserId: ticket.created_by as string | null,
     });
   } else if (body.event === "assigned") {
+    // Announce an assignment only right after it was made, like the other events, so the
+    // route can't be looped to re-email the assignee about an old assignment.
+    if (!isFresh(ticket.updated_at as string | null)) {
+      return NextResponse.json({ error: "Assignment is no longer recent" }, { status: 409 });
+    }
     await notifyTicketAssigned(adminClient, { ...base, assignedToName: ticket.assigned_to as string | null, assignedByUserId: user.id });
   } else if (body.event === "comment") {
     if (!body.commentId) return NextResponse.json({ error: "commentId is required" }, { status: 400 });
