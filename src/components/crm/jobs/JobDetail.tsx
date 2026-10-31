@@ -1390,7 +1390,6 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       onChange={(html) => patch("notes_to_crew", html)}
                       placeholder="Instructions, gate codes, special conditions…"
                       minHeight={72}
-                      allowImages={false}
                     />
                   ) : (
                     <RichNotes value={job.notesToCrew ?? ""} />
@@ -1408,7 +1407,6 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       onChange={(html) => patch("notes", html)}
                       placeholder="Internal notes visible only to office staff…"
                       minHeight={72}
-                      allowImages={false}
                     />
                   ) : (
                     <RichNotes value={job.notes ?? ""} />
@@ -1990,7 +1988,6 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   onChange={(html) => patch("notes_to_crew", html)}
                   placeholder="Instructions, access codes, special conditions…"
                   minHeight={140}
-                  allowImages={false}
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -2000,7 +1997,6 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   onChange={(html) => patch("notes", html)}
                   placeholder="Internal notes visible only to office staff…"
                   minHeight={140}
-                  allowImages={false}
                 />
               </div>
               <div className="flex justify-end">

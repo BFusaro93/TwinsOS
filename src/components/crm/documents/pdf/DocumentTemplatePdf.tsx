@@ -7,6 +7,7 @@ export interface DocumentPdfBlock {
   blockType: BlockType;
   orderIndex: number;
   content: string | null;
+  settings?: Record<string, unknown> | null;
 }
 
 const S = StyleSheet.create({
@@ -84,13 +85,16 @@ function renderBlock(block: DocumentPdfBlock, key: number) {
       return <View key={key} style={S.divider} />;
     case "spacer":
       return <View key={key} style={S.spacer} />;
-    case "image":
+    case "image": {
+      const w = Number(block.settings?.width);
+      const widthPct = Number.isFinite(w) && w >= 10 && w <= 100 ? Math.round(w) : 100;
       return block.content ? (
         // eslint-disable-next-line jsx-a11y/alt-text
-        <Image key={key} src={block.content} style={S.image} />
+        <Image key={key} src={block.content} style={{ ...S.image, width: `${widthPct}%`, alignSelf: "center" }} />
       ) : (
         <Text key={key} style={S.imagePlaceholder}>[No image selected]</Text>
       );
+    }
     case "line_items":
       return (
         <Text key={key} style={S.lineItemsPlaceholder}>

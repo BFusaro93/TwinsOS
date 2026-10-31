@@ -120,12 +120,21 @@ const IMAGE_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/avif";
 const IMAGE_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
 const IMAGE_MAX_BYTES = 20 * 1024 * 1024; // keep in sync with the document-images bucket's file_size_limit
 
+function imageWidthPct(settings: Record<string, unknown> | null | undefined): number {
+  const w = Number(settings?.width);
+  return Number.isFinite(w) && w >= 10 && w <= 100 ? Math.round(w) : 100;
+}
+
 function ImageBlockContent({
   url,
   onChange,
+  widthPct,
+  onWidthChange,
 }: {
   url: string | null;
   onChange: (url: string) => void;
+  widthPct: number;
+  onWidthChange: (pct: number) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -183,7 +192,25 @@ function ImageBlockContent({
       />
       {url ? (
         <div className="space-y-2">
-          <img src={url} alt="" className="mx-auto max-h-64 rounded-md border border-border object-contain" />
+          <img
+            src={url}
+            alt=""
+            style={{ width: `${widthPct}%` }}
+            className="mx-auto h-auto rounded-md border border-border object-contain"
+          />
+          <label className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            Size
+            <input
+              type="range"
+              min={10}
+              max={100}
+              step={5}
+              value={widthPct}
+              onChange={(e) => onWidthChange(Number(e.target.value))}
+              className="w-40"
+            />
+            <span className="w-9 tabular-nums">{widthPct}%</span>
+          </label>
           <div className="flex justify-center gap-2">
             <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
               {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Replace"}
@@ -356,7 +383,12 @@ function BlockCanvas({
             Line Items Table — populated automatically from the document
           </div>
         ) : block.blockType === "image" ? (
-          <ImageBlockContent url={block.content} onChange={onChange} />
+          <ImageBlockContent
+            url={block.content}
+            onChange={onChange}
+            widthPct={imageWidthPct(block.settings)}
+            onWidthChange={(pct) => onSettingsChange({ ...block.settings, width: pct })}
+          />
         ) : block.blockType === "columns" ? (
           <ColumnsBlockContent content={block.content} onChange={onChange} editorRef={editorRef} />
         ) : block.blockType === "button" ? (

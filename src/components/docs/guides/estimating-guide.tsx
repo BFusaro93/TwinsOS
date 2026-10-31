@@ -356,7 +356,17 @@ export function EstimatingGuide() {
           editor, click <strong>+ Add sub-item</strong> under any bundle item to attach a product or a
           subservice to it. Search finds your products (not maintenance parts) and your subservices; each
           sub-item has its own quantity (default 1) and rate, and a delete icon when you hover the row.
-          When you apply the bundle to an estimate, its sub-items come with it.
+          When you apply the bundle to an estimate, its sub-items come with it, including when you
+          pick it from <strong>Apply bundle&hellip;</strong> on an estimate that already exists.
+        </p>
+        <p>
+          The bundle editor has two tabs. <strong>Details</strong> holds Show when creating, the{" "}
+          <strong>Estimate document</strong> and the line items. <strong>Display Settings</strong> holds
+          the client-view toggles (visits, quantities, prices and so on) that are copied to the
+          estimate when the bundle is used. Choosing an <strong>Estimate document</strong> links the
+          bundle to one of your estimate-type documents: estimates built from it remember that
+          document, and <strong>Send</strong> pre-selects it (otherwise your default estimate document
+          is used).
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>

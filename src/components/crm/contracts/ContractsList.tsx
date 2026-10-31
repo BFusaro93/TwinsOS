@@ -1044,7 +1044,7 @@ const NEW_TABS: { id: TabId; label: string }[] = [
   { id: "other", label: "Other Details" },
   { id: "jobs", label: "Jobs Under Contract" },
   { id: "included", label: "Included Services" },
-  { id: "notes", label: "Contract Notes" },
+  { id: "notes", label: "Notes" },
 ];
 
 // Overview needs a saved contract (invoices/visits key off contract_id), so
@@ -1052,7 +1052,7 @@ const NEW_TABS: { id: TabId; label: string }[] = [
 const EDIT_TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
   ...NEW_TABS,
-  { id: "attachments", label: "Contract Attachments" },
+  { id: "attachments", label: "Attachments" },
   { id: "audit", label: "Audit Trail" },
 ];
 

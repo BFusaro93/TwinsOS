@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -67,6 +68,7 @@ function defaultDescription(todayYmd: string) {
 
 export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreated }: Props) {
   const router = useRouter();
+  const qc = useQueryClient();
   const { today: orgToday } = useOrgDates();
   const { data: clients }   = useClients();
   const { data: allTemplates } = useEstimateTemplates();
@@ -181,6 +183,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
         stage:          values.stage,
         salesRepId:     values.salesRepId !== "none" ? values.salesRepId : undefined,
         displaySettings,
+        documentTemplateId: tpl?.documentTemplateId ?? null,
       });
 
       // Apply template line items if one was selected
@@ -243,6 +246,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
         // have seen only some of them — leaving the new estimate with a partial
         // total until someone edits it. One authoritative pass once all settle.
         await recalcEstimateTotals(estimate.id);
+        qc.invalidateQueries({ queryKey: ["subitems"] });
       }
 
       toast.success("Estimate created");

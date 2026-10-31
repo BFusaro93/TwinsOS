@@ -49,6 +49,7 @@ export function DocumentsGuide() {
           <TOCLink href="#merge-tags">Merge tags</TOCLink>
           <TOCLink href="#buttons">Buttons and where they link</TOCLink>
           <TOCLink href="#formatting">Columns, images and blank lines</TOCLink>
+          <TOCLink href="#text-toolbar">The text editor toolbar</TOCLink>
           <TOCLink href="#preview-test">Preview, PDF and test emails</TOCLink>
           <TOCLink href="#settings">Template settings</TOCLink>
         </div>
@@ -168,14 +169,46 @@ export function DocumentsGuide() {
             the third column&apos;s text, so switching back loses nothing.
           </li>
           <li>
-            <strong>Images.</strong> Where the editor allows images, drag an image&apos;s corner to resize it.
-            The aspect ratio is kept and the size carries into the preview, the email and the PDF.
+            <strong>Images.</strong> Where the editor allows images, hover an image and drag a corner
+            handle to resize it. The aspect ratio is kept and the size carries into the preview, the
+            email and the PDF. An <strong>Image</strong> block has a <strong>Size</strong> slider
+            (10&ndash;100% of the width) instead. Images work in the PDF whatever the file type
+            (JPG, PNG, WEBP, GIF or AVIF).
           </li>
           <li>
             <strong>Blank lines.</strong> Pressing Enter twice leaves a visible blank line, and it stays in
             the preview, the sent email and the PDF instead of collapsing.
           </li>
         </ul>
+      </Section>
+
+      <Section id="text-toolbar" title="The text editor toolbar">
+        <p>
+          Every rich-text box in the app uses the same toolbar: document blocks, email and invoice
+          messages, service descriptions, estimate line notes and the job&apos;s notes and descriptions.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li><strong>Font and size.</strong> Pick a font (Arial, Verdana, Trebuchet MS, Georgia, Times New Roman, Courier New) and a size from 10 to 32.</li>
+          <li><strong>Bold, italic, underline, strikethrough, subscript and superscript.</strong></li>
+          <li><strong>Text color and highlight color.</strong> Choose a swatch or a custom color; Reset removes it.</li>
+          <li><strong>Bullet and numbered lists, alignment, and indent / outdent.</strong> In a list, the indent buttons nest and un-nest the item.</li>
+          <li>
+            <strong>Tables.</strong> The table button inserts a 3&times;3 table with a header row. With
+            the cursor inside a table, the same menu adds or deletes rows and columns, toggles the header
+            row and deletes the table.
+          </li>
+          <li><strong>Horizontal rule</strong> and <strong>Insert image</strong> (not available in every box).</li>
+          <li>
+            <strong>HTML source</strong> (the <code>&lt;/&gt;</code> button). Edit the raw HTML, then click
+            the button again to return. Only the formatting the toolbar can produce is kept; anything
+            else is removed when you switch back.
+          </li>
+        </ul>
+        <Callout>
+          Formatting carries into the sent email, the public proposal page and the PDF. In the PDF,
+          subscript and superscript are shown smaller but not raised or lowered, and fonts map to the
+          closest of the PDF&apos;s own sans-serif, serif and monospace faces.
+        </Callout>
       </Section>
 
       <Section id="preview-test" title="Preview, PDF and test emails">
@@ -186,7 +219,8 @@ export function DocumentsGuide() {
             Switch between desktop and mobile width. <strong>Back to Editor</strong> returns you.
           </li>
           <li>
-            <strong>Download PDF</strong> renders the template the same way and downloads it.
+            <strong>Download PDF</strong> renders the template the same way and downloads it, including
+            blank lines, indents, tables and images.
           </li>
           <li>
             <strong>Send Test Email</strong> sends the template, with sample data, to the email address you are
