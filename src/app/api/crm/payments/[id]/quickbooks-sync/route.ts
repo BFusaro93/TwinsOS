@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { pushPaymentToQuickBooks, snapshotQuickBooksPaymentLinks, mirrorPaymentReversalToQuickBooks } from "@/lib/integrations/quickbooks";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 /**
  * POST /api/crm/payments/[id]/quickbooks-sync — pushes this payment's
@@ -20,6 +21,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // Also auto-fired after a payment is recorded, so accept the payment keys too.
   if (!(await hasAnySettingsPermission(supabase, ["quickbooks_resync", "acct_add_modify_payments"]))) {
@@ -27,7 +29,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
 
   const { id } = await params;
-  const result = await pushPaymentToQuickBooks(supabase, profile.org_id, id);
+  const result = await pushPaymentToQuickBooks(supabase, effOrgId, id);
   // Only when something is already flagged, so a brand-new payment doesn't pay for extra QuickBooks lookups.
   const { count: flagged } = await supabase
     .from("crm_payment_allocations")
@@ -37,7 +39,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     .not("qbo_sync_error", "is", null);
   if (!flagged) return NextResponse.json(result);
   const links = await snapshotQuickBooksPaymentLinks(supabase, id);
-  const reconciled = await mirrorPaymentReversalToQuickBooks(supabase, profile.org_id, id, links);
+  const reconciled = await mirrorPaymentReversalToQuickBooks(supabase, effOrgId, id, links);
   if (reconciled.failed === 0 && reconciled.ok > 0) {
     return NextResponse.json({ ...result, pushedAllocations: (result.pushedAllocations ?? 0) + reconciled.ok });
   }
