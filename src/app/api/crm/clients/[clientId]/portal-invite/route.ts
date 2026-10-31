@@ -5,6 +5,7 @@ import type { PortalInviteRow, PortalUserRow } from "@/lib/portal/portal-db";
 import { getOrgReplyTo } from "@/lib/email/reply-to";
 import { orgEmailFrom } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 export async function POST(
   req: Request,
@@ -20,6 +21,7 @@ export async function POST(
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // Granular per-role permission (shared with portal-reset) — admins
   // always pass, otherwise gated by crm_roles.permissions.client_reset_portal_password.
@@ -46,7 +48,7 @@ export async function POST(
     .from("clients")
     .select("id, display_name, email_bounced_at")
     .eq("id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null)
     .single();
 
@@ -80,7 +82,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: invite, error: inviteErr } = await (supabase as any)
     .from("client_portal_invites")
-    .insert({ org_id: profile.org_id, client_id: clientId, email, created_by: user.id })
+    .insert({ org_id: effOrgId, client_id: clientId, email, created_by: user.id })
     .select("id, token")
     .single() as { data: Pick<PortalInviteRow, "id" | "token"> | null; error: unknown };
 
@@ -105,14 +107,14 @@ export async function POST(
   const { data: org } = await (supabase as any)
     .from("organizations")
     .select("name")
-    .eq("id", profile.org_id)
+    .eq("id", effOrgId)
     .single() as { data: { name: string } | null };
 
   const orgName = org?.name ?? "Your Service Provider";
   const clientFirstName = client.display_name.split(" ")[0] ?? client.display_name;
 
   // Send invite email via Resend
-  const replyTo = await getOrgReplyTo(supabase, profile.org_id);
+  const replyTo = await getOrgReplyTo(supabase, effOrgId);
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { error: sendErr } = await resend.emails.send({
     from: orgEmailFrom(org?.name),
@@ -138,7 +140,7 @@ export async function POST(
   // send-email route (estimates, invoices, chemical applications).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from("client_activity").insert({
-    org_id: profile.org_id,
+    org_id: effOrgId,
     client_id: clientId,
     activity_type: "email",
     subject: `Client portal invite sent`,

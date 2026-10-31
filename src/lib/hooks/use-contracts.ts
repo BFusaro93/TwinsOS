@@ -796,7 +796,9 @@ export function useGenerateContractInvoices() {
           .eq("contract_id", contract.id)
           // The prorated stub is its own invoice, not this period's regular one.
           .is("proration_period_start", null)
-          .is("deleted_at", null)
+          // A source voided by Consolidate Invoices still counts as billed: its charge lives on
+          // the consolidated invoice, which carries no contract_id.
+          .or("deleted_at.is.null,consolidated_into_id.not.is.null")
           .limit(1);
         // one_time's window is unbounded (both null): any live invoice on
         // the contract at all means it's been billed.

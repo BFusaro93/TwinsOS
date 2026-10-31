@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { pushInvoiceToQuickBooks, pushPaymentToQuickBooks } from "@/lib/integrations/quickbooks";
+import { pushInvoiceToQuickBooks, pushPaymentToQuickBooks, retryPendingQuickBooksVoids } from "@/lib/integrations/quickbooks";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("quickbooks sync cron");
@@ -140,6 +140,10 @@ export async function GET(request: Request) {
         if (result.status === "pushed") counts.payments++;
         if (result.reason === "not_connected") break;
       }
+
+      // 4. Voids that failed when a payment was refunded in full (its allocation, and the
+      //    QuickBooks id with it, is gone).
+      await retryPendingQuickBooksVoids(db, orgId);
     } catch (err) {
       log.error("QuickBooks sync sweep failed for org", { err, orgId });
     }

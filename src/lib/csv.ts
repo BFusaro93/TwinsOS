@@ -139,7 +139,9 @@ function parseRow(line: string, delimiter = ","): string[] {
   let inQuotes = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (ch === '"') {
+    if (ch === '"' && (inQuotes || current === "")) {
+      // A quote only opens a quoted field at the START of a field; mid-field it is a
+      // literal (e.g. an unquoted `12" hose`), so it can't swallow the rest of the row.
       if (inQuotes && line[i + 1] === '"') {
         current += '"';
         i++;
@@ -171,7 +173,8 @@ function splitCSVRows(text: string): string[] {
   let inQuotes = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
-    if (ch === '"') {
+    const atFieldStart = current === "" || /[,;\t]$/.test(current);
+    if (ch === '"' && (inQuotes || atFieldStart)) {
       inQuotes = !inQuotes;
       current += ch;
     } else if ((ch === "\n" || ch === "\r") && !inQuotes) {

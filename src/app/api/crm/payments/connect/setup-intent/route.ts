@@ -6,6 +6,7 @@ import { getOrCreateStripeCustomer, summarizePaymentMethod } from "@/lib/stripe/
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { logger } from "@/lib/logger";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("stripe saved payment method (crm)");
 
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // Same gate as PUT: starting a save for someone who can't finish it only
   // creates orphaned Stripe customers/SetupIntents.
@@ -50,7 +52,7 @@ export async function POST(request: Request) {
     .from("clients")
     .select("id, display_name, primary_email, stripe_customer_id")
     .eq("id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null)
     .single();
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
@@ -60,7 +62,7 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: org } = await (supabase.from("organizations") as any)
     .select("stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode")
-    .eq("id", profile.org_id)
+    .eq("id", effOrgId)
     .single();
   if (!org) return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   if (!org.stripe_connect_account_id || !org.stripe_connect_charges_enabled) {
@@ -103,7 +105,7 @@ export async function POST(request: Request) {
         customer: customerId,
         payment_method_types: [paymentMethod],
         usage: "off_session",
-        metadata: { client_id: clientId, org_id: profile.org_id },
+        metadata: { client_id: clientId, org_id: effOrgId },
       },
       { stripeAccount: org.stripe_connect_account_id }
     );
@@ -137,6 +139,7 @@ export async function PUT(request: Request) {
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // Saving/removing a payment method or toggling autopay changes who gets
   // charged — gate behind the same permission as charging (admins always pass).
@@ -159,7 +162,7 @@ export async function PUT(request: Request) {
     .from("clients")
     .select("id, stripe_customer_id")
     .eq("id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null)
     .single();
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
@@ -169,7 +172,7 @@ export async function PUT(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: org } = await (supabase.from("organizations") as any)
     .select("stripe_connect_account_id, stripe_connect_livemode")
-    .eq("id", profile.org_id)
+    .eq("id", effOrgId)
     .single();
   if (!org?.stripe_connect_account_id) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { logger } from "@/lib/logger";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("stripe saved payment method (crm)");
 
@@ -15,6 +16,7 @@ export async function DELETE(request: Request) {
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // Saving/removing a payment method or toggling autopay changes who gets
   // charged — gate behind the same permission as charging (admins always pass).
@@ -37,7 +39,7 @@ export async function DELETE(request: Request) {
     .from("clients")
     .select("id, saved_payment_method_id")
     .eq("id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null)
     .single();
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
@@ -48,7 +50,7 @@ export async function DELETE(request: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: org } = await (supabase.from("organizations") as any)
       .select("stripe_connect_account_id, stripe_connect_livemode")
-      .eq("id", profile.org_id)
+      .eq("id", effOrgId)
       .single();
     if (org?.stripe_connect_account_id) {
       try {
@@ -83,6 +85,7 @@ export async function PATCH(request: Request) {
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // Saving/removing a payment method or toggling autopay changes who gets
   // charged — gate behind the same permission as charging (admins always pass).
@@ -105,7 +108,7 @@ export async function PATCH(request: Request) {
     .from("clients")
     .select("id")
     .eq("id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null)
     .single();
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });

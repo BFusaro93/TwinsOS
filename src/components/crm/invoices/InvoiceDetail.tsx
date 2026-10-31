@@ -746,6 +746,11 @@ export function InvoiceDetail({
   const [invoiceDate, setInvoiceDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState<number | "">("");
+  // Only a positive whole number is a valid invoice number; anything else keeps the current one.
+  function commitInvoiceNumber(v: string) {
+    const n = Number(v);
+    setInvoiceNumber(v.trim() !== "" && Number.isInteger(n) && n > 0 ? n : (invoice?.invoiceNumber ?? ""));
+  }
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmVoidOpen, setConfirmVoidOpen] = useState(false);
@@ -1234,10 +1239,7 @@ export function InvoiceDetail({
               Invoice #
               <InlineEdit
                 value={invoiceNumber === "" ? (invoice.invoiceNumber != null ? String(invoice.invoiceNumber) : "") : String(invoiceNumber)}
-                onSave={(v) => {
-                  const n = Number(v);
-                  setInvoiceNumber(v.trim() !== "" && Number.isFinite(n) && n > 0 ? n : (invoice.invoiceNumber ?? ""));
-                }}
+                onSave={commitInvoiceNumber}
                 type="number"
                 className="ml-1 w-20 bg-brand-700 text-white text-sm font-semibold border-brand-500"
                 disabled={invoice.locked}
@@ -1300,7 +1302,7 @@ export function InvoiceDetail({
                     <td className="py-2 text-slate-700 dark:text-neutral-300">
                       <InlineEdit
                         value={invoiceNumber === "" ? (invoice.invoiceNumber != null ? String(invoice.invoiceNumber) : "") : String(invoiceNumber)}
-                        onSave={(v) => setInvoiceNumber(Number(v) || invoice.invoiceNumber)}
+                        onSave={commitInvoiceNumber}
                         type="number"
                         className="w-28"
                         disabled={invoice.locked}

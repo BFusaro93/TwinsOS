@@ -41,6 +41,13 @@ const TERMINAL_JOB_STATUSES = new Set(["cancelled", "completed", "hold"]);
 const MIXED_UNITS_REASON = "Stops use different units — record them in one unit to get a truck total";
 const NO_UNIT_REASON = "No unit set on the application rate — set one under the product's Application Rates";
 
+/** .in() ids go on the request URL, so look them up in chunks to stay under its length cap. */
+function chunkIds<T>(ids: T[], size = 200): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < ids.length; i += size) out.push(ids.slice(i, i + size));
+  return out;
+}
+
 export interface DailyLoadListJobRef {
   jobId: string;
   visitId: string | null;
@@ -168,6 +175,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     job_id: string;
     crew_id: string | null;
     crew_unassigned: boolean | null;
+    crew_group_secondary: boolean | null;
     job_service_id: string | null;
     crm_jobs: {
       id: string;
@@ -208,7 +216,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     supabase
       .from("crm_job_visits")
       .select(
-        "id, job_id, crew_id, crew_unassigned, job_service_id, crm_jobs!inner(id, client_id, crew_id, property_id, status, service_address, service_city, service_state, service_zip, client_properties(address, city, state, zip), clients:client_id(display_name, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip), crm_job_services(id, service_id, included, crm_services:service_id(track_chemicals)))"
+        "id, job_id, crew_id, crew_unassigned, crew_group_secondary, job_service_id, crm_jobs!inner(id, client_id, crew_id, property_id, status, service_address, service_city, service_state, service_zip, client_properties(address, city, state, zip), clients:client_id(display_name, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip), crm_job_services(id, service_id, included, crm_services:service_id(track_chemicals)))"
       )
       .eq("scheduled_date", date)
       .in("status", OUTSTANDING_VISIT_STATUSES)
@@ -304,7 +312,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
   const visitIds = liveVisits.map((v) => v.id);
   const enteredByVisitProduct = new Map<string, EnteredEntry>();
   if (visitIds.length > 0) {
-    const apps = await fetchAllRows<{
+    const apps = (await Promise.all(chunkIds(visitIds).map((visitChunk) => fetchAllRows<{
       visit_id: string | null;
       product_id: string | null;
       chemical_amount: number | null;
@@ -317,9 +325,9 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
         .select(
           "visit_id, product_id, chemical_amount, solution_amount, unit_of_measure_id, solution_unit_of_measure_id"
         )
-        .in("visit_id", visitIds)
+        .in("visit_id", visitChunk)
         .is("deleted_at", null)
-    );
+    )))).flat();
     for (const a of apps) {
       if (!a.visit_id || !a.product_id || a.chemical_amount == null) continue;
       const key = `${a.visit_id}:${a.product_id}`;
@@ -516,19 +524,25 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
       product_id: string | null;
       qty: number;
       job_id: string;
+      visit_id: string | null;
       product_items: { name: string } | null;
     }
-    const jobProducts = await fetchAllRows<JobProductRow>(() =>
+    const jobProducts = (await Promise.all(chunkIds(jobIds).map((jobChunk) => fetchAllRows<JobProductRow>(() =>
       supabase
         .from("crm_job_products")
-        .select("product_id, qty, job_id, product_items:product_id(name)")
-        .in("job_id", jobIds)
+        .select("product_id, qty, job_id, visit_id, product_items:product_id(name)")
+        .in("job_id", jobChunk)
         .eq("status", "pending")
         .is("deleted_at", null)
         .not("product_id", "is", null)
-    );
+    )))).flat();
+    // Recurring/package sub-item products get one row per VISIT. Only the rows of
+    // today's live, lead (non-secondary) visits belong on today's list; the rest are
+    // future visits' (or removed visits') and would multiply the quantity.
+    const todaysLeadVisitIds = new Set(liveVisits.filter((v) => !v.crew_group_secondary).map((v) => v.id));
     for (const row of jobProducts) {
       if (!row.product_id || chemicalProductIds.has(row.product_id)) continue;
+      if (row.visit_id && !todaysLeadVisitIds.has(row.visit_id)) continue;
       const crewIds = [...(jobCrewIds.get(row.job_id) ?? new Set<string | null>([null]))];
       const meta = jobMetaMap.get(row.job_id);
       generalProductName.set(row.product_id, row.product_items?.name ?? "Material");

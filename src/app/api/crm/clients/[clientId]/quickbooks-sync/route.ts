@@ -3,6 +3,7 @@ import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { createClient } from "@/lib/supabase/server";
 import { getValidConnection, findOrCreateCustomer, createCustomer, customerExists } from "@/lib/integrations/quickbooks";
 import { logger } from "@/lib/logger";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 /** GET /api/crm/clients/[clientId]/quickbooks-sync — current link status, for the Settings UI. */
 export async function GET(_req: Request, { params }: { params: Promise<{ clientId: string }> }) {
@@ -14,13 +15,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ clientI
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   const { clientId } = await params;
   const { data: client } = await supabase
     .from("clients")
     .select("qbo_customer_id")
     .eq("id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .single();
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
@@ -46,6 +48,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ clientI
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // Also fired automatically as part of invoice sync, so accept client/invoice
   // keys as well as the explicit resync permission.
@@ -62,12 +65,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ clientI
     .from("clients")
     .select("id, display_name, primary_email, primary_phone, billing_address, billing_city, billing_state, billing_zip")
     .eq("id", clientId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", effOrgId)
     .is("deleted_at", null)
     .single();
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
-  const conn = await getValidConnection(supabase, profile.org_id);
+  const conn = await getValidConnection(supabase, effOrgId);
   if (!conn) return NextResponse.json({ error: "QuickBooks is not connected" }, { status: 400 });
 
   try {
@@ -107,7 +110,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ clientI
 
     return NextResponse.json({ status: "linked", qboCustomerId: customerId });
   } catch (err) {
-    log.error("QuickBooks client sync failed", { err, clientId, orgId: profile.org_id });
+    log.error("QuickBooks client sync failed", { err, clientId, orgId: effOrgId });
     return NextResponse.json({ error: "Failed to sync with QuickBooks" }, { status: 500 });
   }
 }
