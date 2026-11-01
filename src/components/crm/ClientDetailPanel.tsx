@@ -671,6 +671,9 @@ export const PAYMENT_METHOD_OPTIONS = [
   { value: "Credit Card- Discover", label: "Credit Card (Discover)" },
   { value: "Credit Card- MasterCard", label: "Credit Card (MC)" },
   { value: "Credit Card- Visa",     label: "Credit Card (Visa)" },
+  { value: "Debit Card- Discover",  label: "Debit Card (Discover)" },
+  { value: "Debit Card- MasterCard", label: "Debit Card (MC)" },
+  { value: "Debit Card- Visa",      label: "Debit Card (Visa)" },
   { value: "Other",                 label: "Other" },
 ];
 

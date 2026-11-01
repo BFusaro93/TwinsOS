@@ -1680,7 +1680,7 @@ function mapPaymentFull(row: any): CRMPayment {
 const PAYMENT_METHODS = [
   "ACH/E-Check", "AR Write-off", "AutoPay", "Cash", "Check",
   "Credit Card- AmEx", "Credit Card- Discover", "Credit Card- MasterCard",
-  "Credit Card- Visa", "Other",
+  "Credit Card- Visa", "Debit Card- Discover", "Debit Card- MasterCard", "Debit Card- Visa", "Other",
 ];
 
 export function useBulkImportPayments() {

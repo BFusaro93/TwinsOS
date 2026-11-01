@@ -70,6 +70,9 @@ export const PAYMENT_METHODS = [
   "Credit Card- Discover",
   "Credit Card- MasterCard",
   "Credit Card- Visa",
+  "Debit Card- Discover",
+  "Debit Card- MasterCard",
+  "Debit Card- Visa",
   "Other",
 ] as const;
 
