@@ -1257,8 +1257,9 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
    * under a section header named after the package. Each line keeps the
    * package's own pricing (its per-visit rate, falling back to the service's
    * default) and its visit count (visitsIncluded), so the line math is the
-   * ordinary qty x rate x visits. The package's "description on estimate" rides
-   * on the first line, which is what the proposal, PDF and portal print.
+   * ordinary qty x rate x visits. The package's "description on estimate" is stored on
+   * the section header (with the package id), which is what the proposal, PDF
+   * and portal print as the package's main wording.
    * Lines carry tier = null (all tiers), exactly like any other added line.
    */
   async function addPackage(pkg: CRMPackage) {
@@ -1273,6 +1274,10 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         item: {
           row_type: "section",
           section_name: pkg.name,
+          // Marks the section as a package group; its estimate_desc is the
+          // package's client-facing wording.
+          package_id: pkg.id,
+          estimate_desc: pkg.descriptionOnEstimate ? stripHtml(pkg.descriptionOnEstimate) || null : null,
           status: "quote",
           sort_order: items.length,
           service_name: "",
@@ -1284,7 +1289,6 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           calc_type: 1,
         },
       });
-      const packageDesc = pkg.descriptionOnEstimate ? stripHtml(pkg.descriptionOnEstimate) : "";
       for (let i = 0; i < steps.length; i++) {
         const step = steps[i];
         // The package step may reference its service by id or only by name
@@ -1300,9 +1304,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           productionRate: match?.productionRateSqftPerHr ?? null,
           budgetMethod: match?.budgetMethod,
           rateCents: rate,
-          // Package-level wording leads on the first line; later lines keep
-          // their own service wording.
-          estimateDesc: i === 0 ? ([packageDesc, serviceDesc].filter(Boolean).join("\n\n") || null) : (serviceDesc || null),
+          estimateDesc: serviceDesc || null,
           invoiceDesc: match?.invoiceDescription ?? null,
           visits: step.visitsIncluded || 1,
           packageId: pkg.id,

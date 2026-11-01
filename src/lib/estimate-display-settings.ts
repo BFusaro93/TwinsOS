@@ -12,6 +12,8 @@ export interface DisplaySettings {
   showSectionSubtotals: boolean;
   hideZeroTotals: boolean;
   hideZeroPrices: boolean;
+  /** A package prints as one main line (name, description, total); this also lists its visits under it. */
+  showPackageVisits: boolean;
 }
 
 export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
@@ -23,6 +25,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   showSectionSubtotals: true,
   hideZeroTotals: false,
   hideZeroPrices: false,
+  showPackageVisits: true,
 };
 
 export function toDisplaySettings(raw: unknown): DisplaySettings {
@@ -63,12 +66,20 @@ export function getOrgDefaultDisplaySettings(customizations: Record<string, unkn
 interface GroupableItem {
   rowType?: "item" | "section" | null;
   sectionName?: string | null;
+  /** On a section marker row: the package wording (estimate_desc). */
+  estimateDesc?: string | null;
+  /** Set on a package's section marker row and on each of its lines. */
+  packageId?: string | null;
   totalCents: number;
 }
 
 export interface DisplaySection<T> {
   /** null = items that appear before any section header (or when there are no sections at all) */
   sectionName: string | null;
+  /** Set when the section is an Add Package group (its marker row carries the package id). */
+  packageId?: string | null;
+  /** The package's client-facing wording. */
+  description?: string | null;
   items: T[];
   subtotalCents: number;
 }
@@ -91,7 +102,13 @@ export function groupIntoSections<T extends GroupableItem>(
   for (const item of items) {
     if (item.rowType === "section") {
       sections.push(current);
-      current = { sectionName: item.sectionName ?? null, items: [], subtotalCents: 0 };
+      current = {
+        sectionName: item.sectionName ?? null,
+        packageId: item.packageId ?? null,
+        description: item.packageId ? (item.estimateDesc ?? null) : null,
+        items: [],
+        subtotalCents: 0,
+      };
       started = true;
       continue;
     }
