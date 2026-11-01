@@ -18,11 +18,12 @@ const BLOCK_ROWS: [string, string][] = [
   ["Signature", "Rich text for the sign-off, usually your contact details as merge tags."],
   ["Button", "A coloured button with your own label that links somewhere (see below)."],
   ["Columns", "Two or three side-by-side columns. Each column holds rich text, images and merge tags."],
+  ["Estimate Grid", "Estimate documents only. A dynamic tile that shows the estimate's line items, quantities and prices wherever you place it. One per document."],
 ];
 
 const TYPE_ROWS: [string, string][] = [
   ["Client", "General emails to a client, including the emails automations send."],
-  ["Estimate", "The email that goes with an estimate. Adds the estimate merge tags."],
+  ["Estimate", "The proposal layout the client sees: your header, greeting, the Estimate Grid and your terms. Adds the estimate merge tags and the estimate settings (see below)."],
   ["Invoice Email", "The email that goes with an invoice. Adds the invoice merge tags, including the payment link."],
   ["Marketing", "Campaign emails."],
   ["Chemical", "Chemical application notices. Adds the products and care-instruction tags."],
@@ -46,12 +47,15 @@ export function DocumentsGuide() {
           <TOCLink href="#where">Where templates live</TOCLink>
           <TOCLink href="#types">Template types</TOCLink>
           <TOCLink href="#blocks">Blocks</TOCLink>
+          <TOCLink href="#estimate-docs">Estimate documents</TOCLink>
           <TOCLink href="#merge-tags">Merge tags</TOCLink>
           <TOCLink href="#buttons">Buttons and where they link</TOCLink>
           <TOCLink href="#formatting">Columns, images and blank lines</TOCLink>
           <TOCLink href="#text-toolbar">The text editor toolbar</TOCLink>
           <TOCLink href="#preview-test">Preview, PDF and test emails</TOCLink>
           <TOCLink href="#settings">Template settings</TOCLink>
+          <TOCLink href="#copy">Copying a template</TOCLink>
+          <TOCLink href="#accepted-email">The estimate-accepted confirmation email</TOCLink>
         </div>
       </div>
 
@@ -111,6 +115,117 @@ export function DocumentsGuide() {
           </tbody>
         </Table>
         <p>Click <strong>Save Changes</strong> in the top bar to keep your edits; the button reads Saved when there is nothing new.</p>
+      </Section>
+
+      <Section id="estimate-docs" title="Estimate documents">
+        <p>
+          An Estimate document is the proposal itself, built in the same editor as every other template.
+          It works together with two Client-type documents, so an estimate setup is three documents:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>The Estimate document</strong> is the layout the client sees on the online proposal
+            and in the PDF.
+          </li>
+          <li>
+            <strong>The Estimate Email</strong> is a Client-type document that carries the estimate to
+            the client. Include an <code>[estimatelink]</code> tag or a button that links to{" "}
+            <code>[estimatelink]</code> so the client can open and accept the proposal.
+          </li>
+          <li>
+            <strong>The Estimate Confirmation Email</strong> is a second Client-type document sent
+            when the client accepts.
+          </li>
+        </ul>
+        <p>
+          <strong>Building the layout.</strong> When you add a new Document of type Estimate, leave{" "}
+          <strong>Start from the standard layout</strong> ticked to begin with a company header
+          (<code>[companyname]</code>, <code>[companyaddress]</code> and the other company tags) in a
+          Columns block beside a spot for your logo, a greeting, the <strong>Estimate Grid</strong>, a
+          divider and a terms section. Click the logo box and use the Insert image button to add your
+          logo, then replace the terms text with your own. Or start blank and add the blocks yourself.
+        </p>
+        <p>
+          The <strong>Estimate Grid</strong> block appears in the Add Block panel only on Estimate
+          documents, once per document. In the editor it is a dashed box labelled Estimate Grid; the real
+          table of the estimate&apos;s line items is filled in when the proposal is sent or viewed. In
+          Preview it shows a sample table.
+        </p>
+        <p>
+          <strong>The estimate settings.</strong> On an Estimate document, <strong>Edit Settings</strong>{" "}
+          (and the New Document window) add these:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Estimate Email.</strong> Pick an active Client-type document. If it has no{" "}
+            <code>[estimatelink]</code> tag or button link, a warning says the email will not link to the
+            proposal. It does not stop you from saving.
+          </li>
+          <li>
+            <strong>Include PDF In Email.</strong> Attach the estimate as a PDF to the estimate email.
+          </li>
+          <li>
+            <strong>Estimate Confirmation Email.</strong> Pick the active Client-type document sent
+            when the client accepts. The same <code>[estimatelink]</code> warning applies.
+          </li>
+          <li>
+            <strong>Send Confirmation To.</strong> <strong>Use Contact Email By Default</strong> sends
+            to the client&apos;s primary email; <strong>Billing Email</strong> sends to their billing
+            email.
+          </li>
+          <li>
+            <strong>Send Estimate PDF in Client Confirmation.</strong> Off by default. Turn it on to
+            attach the estimate PDF to the confirmation.
+          </li>
+          <li>
+            <strong>Set What The Client Sees For This Document.</strong> Off by default. Tick it to
+            choose the client-view toggles (visits, quantities, units, line prices, line totals, section
+            subtotals, hide $0 totals, hide $0 prices) that estimates using this document start with.
+            Leave it off and the document sets none, so the service bundle or your org default applies.
+          </li>
+        </ul>
+        <p>
+          <strong>How the toggles reach an estimate.</strong> The toggles are copied onto an estimate
+          when it uses the document, so editing the document later never changes estimates you already
+          created or proposals you already sent. The order, most specific first: the
+          estimate&apos;s own toggles, then the estimate document&apos;s, then the service
+          bundle&apos;s, then the org default.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>New estimate from a bundle.</strong> If the bundle links an Estimate document that
+            sets toggles, those are used. Otherwise the bundle&apos;s own Display Settings are used,
+            then the org default.
+          </li>
+          <li>
+            <strong>Picking or changing the Estimate Document on an estimate.</strong> If the document
+            sets toggles, they are copied onto the estimate. If it sets none, the estimate keeps its
+            current toggles.
+          </li>
+          <li>
+            <strong>Applying a bundle to an existing estimate.</strong> The bundle&apos;s linked
+            document toggles (or the bundle&apos;s own) are copied on, and the bundle&apos;s document
+            replaces the estimate&apos;s document.
+          </li>
+          <li>
+            <strong>If you changed the toggles by hand first.</strong> Each of the above asks{" "}
+            <strong>Replace the client-view settings?</strong> with <strong>Keep mine</strong> or{" "}
+            <strong>Replace toggles</strong>. Keep mine still switches the document or adds the bundle
+            lines but leaves your toggles alone. No question is asked when you have not changed them,
+            or when they already match.
+          </li>
+          <li>
+            <strong>Automatic.</strong> An estimate on <strong>Automatic</strong> has no document of its
+            own, so sending or previewing uses your default estimate document, or the built-in layout if
+            none is the default. Automatic does not copy that default document&apos;s toggles onto the
+            estimate; only picking a document (or applying a bundle that links one) does.
+          </li>
+        </ul>
+        <p>
+          Leave a picker on <strong>Standard built-in email</strong> to use the built-in message instead.
+          The pickers list only active Client documents, and an Estimate document is never offered as its
+          own email. These settings are hidden on documents of other types.
+        </p>
       </Section>
 
       <Section id="merge-tags" title="Merge tags">
@@ -239,8 +354,60 @@ export function DocumentsGuide() {
         <p>
           <strong>Edit Settings</strong> in the top bar opens the template&apos;s name, type, subject line,
           description, whether it is the default for its type, and <strong>Include PDF attachment in
-          email</strong>. The subject line can use merge tags too. A template marked as the default is
+          email</strong> (Invoice Email documents). Estimate documents add the estimate settings
+          described above. The subject line can use merge tags too. A template marked as the default is
           the one preselected when you send that kind of email.
+        </p>
+      </Section>
+
+      <Section id="copy" title="Copying a template">
+        <p>
+          To start from an existing template instead of a blank one, click the three-dot menu at the end
+          of its row on the Documents list and choose <strong>Copy</strong>. A new template appears
+          named <strong>the original name (Copy)</strong>, with the same type, subject, description,
+          blocks, images, Include PDF setting and, for Estimate documents, the estimate settings. It keeps the original&apos;s Active or Inactive
+          status, and it is never marked as the default, so the original stays the preselected template
+          until you choose otherwise. Open the copy to rename and edit it. You need the permission to
+          add document templates to see Copy.
+        </p>
+      </Section>
+
+      <Section id="accepted-email" title="The estimate-accepted confirmation email">
+        <p>
+          When a client accepts a proposal from their online link, they can receive a confirmation email
+          built from one of your own templates. Go to <strong>Settings &rarr; Estimates</strong> and open
+          the <strong>Accepted Email</strong> tab.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Confirmation document.</strong> Choose any active template of type Client or
+            Estimate. The estimate and client merge tags, such as <code>[estimatenumber]</code>,{" "}
+            <code>[estimatetotal]</code> and <code>[clientfirstname]</code>, are filled in from the
+            accepted estimate, and <code>[estimatelink]</code> links to the accepted proposal. The
+            template&apos;s subject line is used; if it has none, a standard subject is used. If the
+            template you pick has no <code>[estimatelink]</code> tag, a warning says the email will not
+            link back to the proposal. It does not stop you from saving.
+          </li>
+          <li>
+            <strong>Send to.</strong> <strong>Billing email</strong> (the default) sends to the
+            client&apos;s billing email and falls back to their primary email when no billing email is
+            set. <strong>Primary email</strong> always uses the primary address.
+          </li>
+          <li>
+            <strong>Attach the estimate PDF.</strong> Off by default. Turn it on to attach the estimate as
+            a PDF to the confirmation.
+          </li>
+        </ul>
+        <p>
+          With no document selected, the standard built-in confirmation email is sent. The same happens
+          if the selected template is later deactivated or deleted, and the Accepted Email tab shows a
+          notice when that is the case. An address that has hard-bounced receives nothing; a client who
+          has opted out of marketing still receives the confirmation, because it is a service email. If
+          the confirmation cannot be sent, the acceptance itself is still recorded.
+        </p>
+        <p>
+          The Template picker in the Send Estimate window also warns when the chosen template has no{" "}
+          <code>[estimatelink]</code> tag, since the client would have no link to accept the proposal.
         </p>
       </Section>
     </DocsFontScope>

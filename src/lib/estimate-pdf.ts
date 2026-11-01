@@ -4,14 +4,16 @@ import { EstimateDocument, EstimateDocumentMulti } from "@/components/crm/estima
 import { PRINTED_SUBITEM_SELECT, pickPrintedSubitems } from "@/lib/estimates/printed-subitems";
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
-import { getPublishedProposal } from "@/lib/estimates/proposal-content";
+import { getPublishedProposal, toProposalDocument, type ProposalContent, type ProposalDocument } from "@/lib/estimates/proposal-content";
+import { resolveEstimateDocument } from "@/lib/estimates/resolve-estimate-document";
+import { loadEstimateDocumentMergeVars, resolveDocumentBlocksForPdf } from "@/lib/estimates/estimate-document-render";
 import { embedEstimatePhoto } from "@/lib/estimate-photo-embed";
 
 // Shared by the single-estimate and bulk PDF routes, plus the
 // accepted-estimate notification email (estimate-client-notify.ts) — the
 // fetch/build logic is identical either way, only what wraps the result
 // (one <EstimateDocument> vs. several inside <EstimateDocumentMulti>) differs.
-async function buildEstimatePDFData(
+export async function buildEstimatePDFData(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   estimateId: string,
@@ -172,6 +174,32 @@ async function buildEstimatePDFData(
     }
   }
 
+  // Estimate-type document layout (see resolve-estimate-document.ts). A client-
+  // facing copy (published) prints the layout recorded when the version was
+  // sent, exactly like the proposal page; versions without one, and any
+  // failure here, keep the built-in layout. Staff copies use the live document.
+  try {
+    let doc: ProposalDocument | null = null;
+    let mergeContent: ProposalContent | null = null;
+    if (opts.published) {
+      const published = await getPublishedProposal(supabase, estimateId);
+      if (published) {
+        doc = published.content.document ?? null;
+        mergeContent = published.content;
+      } else {
+        doc = toProposalDocument(await resolveEstimateDocument(supabase, estimateId));
+      }
+    } else {
+      doc = toProposalDocument(await resolveEstimateDocument(supabase, estimateId));
+    }
+    if (doc) {
+      const vars = await loadEstimateDocumentMergeVars(supabase, estimateId, { content: mergeContent, html: false });
+      estimateData.document = { blocks: resolveDocumentBlocksForPdf(doc, vars) };
+    }
+  } catch (err) {
+    console.error("Estimate document layout skipped:", err);
+  }
+
   return { estimate: estimateData, org: orgData };
 }
 
@@ -184,16 +212,22 @@ export async function renderEstimatePDF(
 ): Promise<Buffer | null> {
   const built = await buildEstimatePDFData(supabase, estimateId, orgId, opts);
   if (!built) return null;
-  try {
+  const render = async (data: typeof built) =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const buffer = await renderToBuffer(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      createElement(EstimateDocument as any, built) as any
-    );
-    return buffer as unknown as Buffer;
+    (await renderToBuffer(createElement(EstimateDocument as any, data) as any)) as unknown as Buffer;
+  try {
+    return await render(built);
   } catch (err) {
     console.error("PDF render error:", err);
-    return null;
+    // A custom document layout (e.g. an unreachable image URL) must never cost
+    // the client their PDF: retry with the built-in layout.
+    if (!built.estimate.document) return null;
+    try {
+      return await render({ ...built, estimate: { ...built.estimate, document: null } });
+    } catch (err2) {
+      console.error("PDF render error (built-in layout):", err2);
+      return null;
+    }
   }
 }
 

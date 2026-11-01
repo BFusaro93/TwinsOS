@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import Link from "next/link";
 import { EstimateTemplatesList } from "@/components/crm/estimates/EstimateTemplatesList";
+import { EstimateConfirmationPanel } from "@/components/crm/estimates/EstimateConfirmationPanel";
 import { EstimateDisplaySettingsPanel } from "@/components/crm/estimates/EstimateDisplaySettingsPanel";
 import { Button } from "@/components/ui/button";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
@@ -72,6 +73,7 @@ export default function EstimateSettingsPage() {
           <TabsTrigger value="service-bundles">Service Bundles</TabsTrigger>
           <TabsTrigger value="email-templates">Email Templates</TabsTrigger>
           <TabsTrigger value="client-view">Client View</TabsTrigger>
+          <TabsTrigger value="accepted-email">Accepted Email</TabsTrigger>
         </TabsList>
 
         <TabsContent value="service-bundles">
@@ -108,6 +110,10 @@ export default function EstimateSettingsPage() {
 
         <TabsContent value="client-view">
           <ClientViewDefaultsPanel />
+        </TabsContent>
+
+        <TabsContent value="accepted-email">
+          <EstimateConfirmationPanel />
         </TabsContent>
       </Tabs>
     </div>

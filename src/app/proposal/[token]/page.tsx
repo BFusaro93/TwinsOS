@@ -780,19 +780,30 @@ export default function ProposalPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
 
+      {/* Estimate-type document, top part: the layout blocks before its
+          estimate_grid block (company header, logo, intro text). The HTML is
+          sanitized server-side (renderProposalDocumentHtml). Absent = the
+          built-in header below, exactly as before. */}
+      {proposal.document?.beforeHtml && (
+        <div
+          className="mb-6 rounded-lg border bg-white p-6 shadow-sm"
+          dangerouslySetInnerHTML={{ __html: proposal.document.beforeHtml }}
+        />
+      )}
+
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
-          {proposal.orgLogoUrl ? (
+          {!proposal.document && (proposal.orgLogoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={proposal.orgLogoUrl} alt={proposal.orgName} className="mb-3 h-12 object-contain" />
           ) : (
             <p className="mb-3 text-xl font-bold" style={{ color: brand }}>{proposal.orgName}</p>
-          )}
+          ))}
           <h1 className="text-2xl font-bold text-slate-800">
             Estimate #{String(proposal.estimateNumber).padStart(5, "0")}
           </h1>
-          {proposal.description && (
+          {!proposal.document && proposal.description && (
             <p className="mt-1 text-slate-500">{proposal.description}</p>
           )}
         </div>
@@ -1004,6 +1015,16 @@ export default function ProposalPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Estimate-type document, bottom part: the blocks after its
+          estimate_grid block (terms and conditions), shown below the line
+          items and totals and before the client signs. */}
+      {proposal.document?.afterHtml && (
+        <div
+          className="mb-8 rounded-lg border bg-white p-6 shadow-sm"
+          dangerouslySetInnerHTML={{ __html: proposal.document.afterHtml }}
+        />
       )}
 
       {/* Deposit step — shown instead of accept section when deposit is required */}

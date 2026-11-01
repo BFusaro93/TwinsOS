@@ -1,3 +1,4 @@
+import type { DisplaySettings } from "@/lib/estimate-display-settings";
 export type DocType = "client" | "estimate" | "invoice_email" | "marketing" | "chemical" | "text_message";
 export type DocStatus = "active" | "inactive";
 export type BlockType =
@@ -10,7 +11,10 @@ export type BlockType =
   | "signature"
   | "image"
   | "button"
-  | "columns";
+  | "columns"
+  | "estimate_grid";
+
+export type ConfirmationRecipient = "primary_email" | "billing_email";
 
 export interface DocumentTemplate {
   id: string;
@@ -22,6 +26,15 @@ export interface DocumentTemplate {
   status: DocStatus;
   isDefault: boolean;
   includePdf: boolean;
+  /** Estimate docs only: Client-type document used as the estimate email. */
+  estimateEmailDocumentId: string | null;
+  /** Estimate docs only: Client-type document sent when the proposal is accepted. */
+  confirmationDocumentId: string | null;
+  confirmationRecipient: ConfirmationRecipient;
+  /** Estimate docs only: attach the estimate PDF to the confirmation email. */
+  confirmationIncludeEstimatePdf: boolean;
+  /** Estimate docs only: client-facing display toggles copied onto an estimate that picks this document. null = none set. */
+  displaySettings: DisplaySettings | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -214,4 +227,5 @@ export const BLOCK_TYPE_LABELS: Record<BlockType, string> = {
   image:      "Image",
   button:     "Button",
   columns:    "Columns",
+  estimate_grid: "Estimate Grid",
 };

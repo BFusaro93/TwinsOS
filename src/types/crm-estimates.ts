@@ -179,6 +179,8 @@ export interface Estimate {
   tiersEnabled: boolean;
   tierLabels: { basic: string; standard: string; premium: string };
   displaySettings: DisplaySettings;
+  /** Toggles last copied onto this estimate from a document / bundle / org default; differs from displaySettings once hand-edited. */
+  displaySettingsBaseline: DisplaySettings | null;
   /** Estimate document chosen via the applied bundle; Send pre-selects it. */
   documentTemplateId: string | null;
   deletedAt: string | null;

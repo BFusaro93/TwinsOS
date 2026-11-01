@@ -6,7 +6,11 @@ import {
   buildProposalContent,
   getPublishedProposal,
   proposalFingerprint,
+  proposalDocumentKey,
+  toProposalDocument,
+  withProposalDocument,
 } from "@/lib/estimates/proposal-content";
+import { resolveEstimateDocument } from "@/lib/estimates/resolve-estimate-document";
 
 const log = logger.child("estimate-versions");
 
@@ -94,9 +98,17 @@ export async function publishSharedVersion(
 ): Promise<number | null> {
   const { data: est } = await supabase.from("estimates").select(PROPOSAL_ESTIMATE_SELECT).eq("id", estimateId).maybeSingle();
   if (!est) return null;
-  const live = buildProposalContent(est as Record<string, unknown>);
+  const resolvedDoc = await resolveEstimateDocument(supabase, estimateId);
+  const live = withProposalDocument(buildProposalContent(est as Record<string, unknown>), resolvedDoc);
   const published = await getPublishedProposal(supabase, estimateId);
-  if (published && proposalFingerprint(published.content) === proposalFingerprint(live)) {
+  // The fingerprint ignores the layout document, so compare it separately: a
+  // changed template layout republishes (a new view-only version), an unchanged
+  // one doesn't pile up versions.
+  if (
+    published &&
+    proposalFingerprint(published.content) === proposalFingerprint(live) &&
+    proposalDocumentKey(published.content.document) === proposalDocumentKey(toProposalDocument(resolvedDoc))
+  ) {
     return published.versionNumber;
   }
   try {

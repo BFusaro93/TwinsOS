@@ -3,6 +3,7 @@
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { SandboxedHtmlPreview } from "@/components/shared/SandboxedHtmlPreview";
 import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@/lib/hooks/use-query";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -17,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Paperclip, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
+import { documentLacksEstimateLink } from "@/lib/estimates/confirmation-settings";
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
@@ -74,7 +76,26 @@ export function SendEstimateDialog({
   // "estimate") — a richer block-based builder than the old plain
   // subject+body records, and the single place all email templates live.
   const { data: allDocTemplates = [] } = useDocumentTemplates();
-  const templates = allDocTemplates.filter((t) => t.docType === "estimate" && t.status === "active");
+  // Estimate-type documents are proposal layouts; the email is a client-type document.
+  const templates = allDocTemplates.filter((t) => t.docType === "client" && t.status === "active");
+  // The estimate document in force (if any) names its Estimate Email + PDF default.
+  const { data: resolvedEstimateDoc } = useQuery({
+    queryKey: ["estimate-document", estimateId],
+    enabled: open,
+    queryFn: async () => {
+      try {
+        const res = await fetch(`/api/crm/estimates/${estimateId}/estimate-document`);
+        if (!res.ok) return null;
+        const j = (await res.json()) as {
+          document: { id: string; name: string; estimateEmailDocumentId: string | null; includePdf: boolean } | null;
+        };
+        return j.document;
+      } catch {
+        return null;
+      }
+    },
+  });
+  const linkedEmailDocId = resolvedEstimateDoc?.estimateEmailDocumentId ?? null;
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const { data: selectedDocTemplate } = useDocumentTemplate(selectedTemplateId);
   // Same org values the send route substitutes, so Preview matches the sent email.
@@ -106,16 +127,22 @@ export function SendEstimateDialog({
     if (!selectedDocTemplate) return;
     if (selectedDocTemplate.subject) setSubject(selectedDocTemplate.subject);
     setBodyHtml(renderBlocksToHtml(selectedDocTemplate.blocks, {}, { preserveUnresolvedKnownTags: true }));
-    setIncludePdf(selectedDocTemplate.includePdf);
-  }, [selectedDocTemplate]);
+    // The estimate document owns "Include PDF In Email" for its linked email.
+    setIncludePdf(
+      resolvedEstimateDoc && selectedDocTemplate.id === linkedEmailDocId
+        ? resolvedEstimateDoc.includePdf
+        : selectedDocTemplate.includePdf,
+    );
+  }, [selectedDocTemplate, resolvedEstimateDoc, linkedEmailDocId]);
 
   // Auto-select the org's default estimate-email document template on open
   useEffect(() => {
-    if (open && templates.length > 0 && !selectedTemplateId) {
-      const def = templates.find((t) => t.id === documentTemplateId) ?? templates.find((t) => t.isDefault) ?? templates[0];
+    // Wait for the estimate-document lookup (undefined = still loading) so a linked email wins.
+    if (open && templates.length > 0 && !selectedTemplateId && resolvedEstimateDoc !== undefined) {
+      const def = templates.find((t) => t.id === linkedEmailDocId) ?? templates.find((t) => t.id === documentTemplateId) ?? templates.find((t) => t.isDefault) ?? templates[0];
       if (def) setSelectedTemplateId(def.id);
     }
-  }, [open, templates, selectedTemplateId, documentTemplateId]);
+  }, [open, templates, selectedTemplateId, documentTemplateId, linkedEmailDocId, resolvedEstimateDoc]);
 
   // Preview: resolve merge tags with the same values the send route uses
   // (org name/phone from org settings, rep name falling back to the company,
@@ -209,6 +236,12 @@ export function SendEstimateDialog({
                 </SelectContent>
               </Select>
             </div>
+          )}
+
+          {selectedDocTemplate && documentLacksEstimateLink(selectedDocTemplate.blocks) && (
+            <p className="ml-[calc(5rem+0.75rem)] text-xs text-amber-600 dark:text-amber-400">
+              This template has no [estimatelink] tag, so the client won&apos;t get a link to accept the proposal.
+            </p>
           )}
 
           {/* Subject */}
