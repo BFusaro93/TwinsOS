@@ -1,6 +1,16 @@
 "use client";
 
 import { Fragment, useState, useCallback, useEffect } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import { bpsToPercent, centsToDisplay, clampComplexityBps, computeLineItem, getBreakevenRateCents, resolveLineDiscountCents } from "@/lib/estimate-calc";
 import { useUpsertLineItem, useDeleteLineItem } from "@/lib/hooks/use-estimates";
@@ -1054,16 +1064,20 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
 
+  // Deleting a package's header takes all of its visits with it, after a confirm.
+  const [packageDelete, setPackageDelete] = useState<{ id: string; name: string; lineIds: string[] } | null>(null);
+
   const handleDelete = useCallback(
     async (id: string) => {
-      // Deleting a package's header takes all of its visits with it.
       const target = items.find((i) => i.id === id);
       const group = target?.rowType === "section" && target.packageId
         ? items.filter((i) => i.packageId === target.packageId && i.id !== id)
         : [];
-      if (group.length > 0 && !window.confirm(`Delete "${target?.sectionName ?? "this package"}" and its ${group.length} visit${group.length !== 1 ? "s" : ""}?`)) return;
+      if (group.length > 0) {
+        setPackageDelete({ id, name: target?.sectionName ?? "this package", lineIds: group.map((i) => i.id) });
+        return;
+      }
       try {
-        for (const li of group) await deleteItem({ id: li.id, estimateId });
         await deleteItem({ id, estimateId });
       } catch {
         toast.error("Failed to delete line item");
@@ -1071,6 +1085,18 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     },
     [deleteItem, estimateId, items]
   );
+
+  async function confirmPackageDelete() {
+    const pending = packageDelete;
+    setPackageDelete(null);
+    if (!pending) return;
+    try {
+      for (const lineId of pending.lineIds) await deleteItem({ id: lineId, estimateId });
+      await deleteItem({ id: pending.id, estimateId });
+    } catch {
+      toast.error("Failed to delete the package");
+    }
+  }
 
   const handleDuplicate = useCallback(
     async (item: EstimateLineItem) => {
@@ -1601,7 +1627,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                   const next = items[idx + 1];
                   const endsPackage = !!item.packageId && item.rowType !== "section" && next?.packageId !== item.packageId;
                   const packageTotal = endsPackage
-                    ? items.filter((i) => i.packageId === item.packageId && i.rowType !== "section").reduce((sum, i) => sum + (i.totalCents ?? 0), 0)
+                    ? items.filter((i) => i.packageId === item.packageId && i.rowType !== "section" && (i.status === "quote" || i.status === "won")).reduce((sum, i) => sum + (i.totalCents ?? 0), 0)
                     : 0;
                   return (
                   <Fragment key={item.id}>
@@ -1644,6 +1670,22 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         </table>
         </DndContext>
       </div>
+
+      <AlertDialog open={packageDelete !== null} onOpenChange={(o) => { if (!o) setPackageDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete package?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &ldquo;{packageDelete?.name}&rdquo; and its {packageDelete?.lineIds.length} visit
+              {packageDelete?.lineIds.length !== 1 ? "s" : ""} will be removed from this estimate.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmPackageDelete}>Delete package</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
