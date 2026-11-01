@@ -303,10 +303,14 @@ function SectionRow({
               <button
                 type="button"
                 onClick={() => setEditingDesc(true)}
-                className="text-left text-muted-foreground hover:text-foreground"
+                className="flex w-full max-w-2xl items-start gap-1.5 rounded border border-dashed border-slate-300 dark:border-neutral-600 bg-background/60 px-2 py-1 text-left text-muted-foreground hover:border-brand-400 hover:text-foreground"
                 title="Click to edit the description the client sees"
               >
-                {item.estimateDesc ? item.estimateDesc : "Add package description for the client…"}
+                <Pencil className="mt-0.5 h-3 w-3 shrink-0" />
+                <span>
+                  <span className="font-medium text-foreground">Description on estimate: </span>
+                  {item.estimateDesc ? item.estimateDesc : "none yet — click to add the wording the client sees"}
+                </span>
               </button>
             )}
           </div>
