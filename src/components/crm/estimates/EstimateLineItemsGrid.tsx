@@ -1409,7 +1409,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
 
   function toggleSelectAll() {
     if (!onSelectionChange) return;
-    onSelectionChange(selectedIds.length === items.length ? [] : items.map((i) => i.id));
+    const selectable = items.filter((i) => i.rowType !== "section").map((i) => i.id);
+    onSelectionChange(selectedIds.length === selectable.length ? [] : selectable);
   }
 
   const activeServices = (services ?? []).filter((s) => s.isActive);
@@ -1546,7 +1547,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
               <th className="w-12 px-1 py-2 text-center">
                 <input
                   type="checkbox"
-                  checked={items.length > 0 && selectedIds.length === items.length}
+                  checked={items.some((i) => i.rowType !== "section") && selectedIds.length === items.filter((i) => i.rowType !== "section").length}
                   onChange={toggleSelectAll}
                   className="h-3.5 w-3.5 rounded border-slate-300 dark:border-neutral-700"
                 />
