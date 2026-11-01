@@ -135,7 +135,7 @@ type JobRow = {
   po_number: string | null;
   sales_rep_id: string | null;
   crm_job_services: JobServiceRow[] | null;
-  clients: { invoice_frequency: string | null; default_tax_rate_bps: number | null; default_terms: string | null } | null;
+  clients: { invoice_frequency: string | null; default_tax_rate_bps: number | null; default_terms: string | null; is_taxable: boolean | null } | null;
 };
 
 type AutoInvoiceLine = {
@@ -190,7 +190,7 @@ export async function applyVisitCompletionSideEffects(
   // ── 1. Parent-job bookkeeping ─────────────────────────────────────────────
   const { data: jobData } = await supabase
     .from("crm_jobs")
-    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, is_taxable, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms)")
+    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, is_taxable, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms, is_taxable)")
     .eq("id", visit.job_id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -393,7 +393,7 @@ export async function applyVisitCompletionSideEffects(
             .maybeSingle();
           estimateTaxRateBps = (est as { tax_rate_bps: number | null } | null)?.tax_rate_bps ?? null;
         }
-        const taxRateBps = resolveAutoInvoiceTaxRateBps(estimateTaxRateBps, j.clients?.default_tax_rate_bps);
+        const taxRateBps = resolveAutoInvoiceTaxRateBps(estimateTaxRateBps, j.clients?.default_tax_rate_bps, j.clients?.is_taxable);
 
         // Build line items from services; fall back to a single line from job rate_cents.
         // Description precedence per line: this visit's own override, then the job-level

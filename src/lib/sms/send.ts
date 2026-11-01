@@ -3,6 +3,9 @@ import { orgHasAddon } from "@/lib/stripe/addon-access";
 import { monthStartInZone } from "@/lib/time/zone";
 import { toE164Us } from "@/lib/utils/phone";
 
+/** The org whose Twilio account/campaign the TWILIO_* env fallback belongs to. */
+const SHARED_TWILIO_ORG_ID = "619de9bb-f8f8-46cf-983c-9faf54f6a7d0";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
@@ -63,6 +66,13 @@ export async function sendClientSms(
     .select("twilio_account_sid, twilio_messaging_service_sid")
     .eq("id", params.orgId)
     .single();
+
+  // The env fallback is Twins Lawn Service's own Twilio account and approved A2P campaign. Any other
+  // org texting through it would send from Twins' number under Twins' registration (and its STOP
+  // replies would be matched to the wrong org), so every other org needs its own sender first.
+  if (!org?.twilio_messaging_service_sid && params.orgId !== SHARED_TWILIO_ORG_ID) {
+    return { ok: false, reason: "SMS registration not complete for this organization", permanent: true };
+  }
 
   const hasSubaccountOverride = !!org?.twilio_account_sid;
   const accountSid = org?.twilio_account_sid || process.env.TWILIO_ACCOUNT_SID;

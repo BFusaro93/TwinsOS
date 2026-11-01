@@ -1203,6 +1203,8 @@ function AddServiceForm({ onAdded }: { onAdded: () => void }) {
         code: code.trim().toUpperCase(),
         default_rate_cents: rateCents,
         production_rate_sqft_per_hr: productionRateValue,
+        // The rate only drives estimate hours when the service budgets by it (default is manual).
+        ...(productionRateValue ? { budget_method: "production_rate" } : {}),
       });
       toast.success("Service added");
       setName("");

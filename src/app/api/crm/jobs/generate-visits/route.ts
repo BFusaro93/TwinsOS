@@ -119,6 +119,25 @@ export async function POST(request: Request) {
   return NextResponse.json({
     generated: result.inserted,
     removed,
-    ...(result.inserted === 0 ? { message: "All visits already exist." } : {}),
+    // Zero inserted also happens when nothing COULD be generated (unreadable schedule, start past the
+    // horizon, inactive client or contract), so only say "already exist" when upcoming visits do.
+    ...(result.inserted === 0 ? { message: await noNewVisitsMessage(supabase, jobId, today) } : {}),
   });
+}
+
+async function noNewVisitsMessage(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  jobId: string,
+  today: string,
+): Promise<string> {
+  const { count } = await supabase
+    .from("crm_job_visits")
+    .select("id", { count: "exact", head: true })
+    .eq("job_id", jobId)
+    .is("deleted_at", null)
+    .gte("scheduled_date", today);
+  return (count ?? 0) > 0
+    ? "All visits already exist."
+    : "No visits could be generated. Check the job's schedule, start date and end date, and that the client and any contract are active.";
 }

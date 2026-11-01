@@ -441,8 +441,9 @@ export function useCrewLogins() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, name, email, role")
-        .eq("status", "active")
+        .select("id, name, email, role, status")
+        // A freshly invited login can be linked before it accepts, like the employee dialog's picker.
+        .in("status", ["active", "invited"])
         .order("name");
       if (error) throw error;
       return (data ?? [])
@@ -451,6 +452,7 @@ export function useCrewLogins() {
           name: row.name ?? row.email ?? "Unnamed login",
           email: row.email ?? null,
           role: row.role,
+          status: row.status ?? undefined,
         }))
         .sort((a, b) => Number(b.role === "crew") - Number(a.role === "crew") || a.name.localeCompare(b.name));
     },

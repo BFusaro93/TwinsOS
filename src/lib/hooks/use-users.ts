@@ -20,7 +20,7 @@ export function useUsers() {
 export function useInviteUser() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { email: string; name: string; role: string }) => {
+    mutationFn: async (input: { email: string; name: string; role: string; crmRoleId?: string | null }) => {
       const res = await fetch("/api/users/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

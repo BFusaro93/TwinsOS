@@ -87,7 +87,7 @@ export default function SignupPage() {
         orgRes = await fetch("/api/orgs/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyName: companyName.trim(), plan: selectedPlan, contactName: name.trim(), contactEmail: email.trim(), contactPhone: phone.trim() }),
+          body: JSON.stringify({ companyName: companyName.trim(), plan: selectedPlan, contactName: name.trim(), contactEmail: email.trim(), contactPhone: phone.trim(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
         });
         orgData = await orgRes.json();
       } catch {

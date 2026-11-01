@@ -1934,6 +1934,26 @@ export function useCreateCRMService() {
 
 // ── bulk import services ──────────────────────────────────────────────────────
 
+const SERVICE_IMPORT_UNITS = ["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
+const SERVICE_IMPORT_UNIT_ALIASES: Record<string, string> = {
+  "sq ft": "sqft", "sf": "sqft", "square feet": "sqft", "square foot": "sqft", "sq. ft.": "sqft",
+  "hour": "hr", "hours": "hr", "hourly": "hr", "linear feet": "lf", "linear foot": "lf", "lin ft": "lf",
+  "cubic yard": "cuyd", "cubic yards": "cuyd", "cu yd": "cuyd", "yard": "cuyd", "yards": "cuyd",
+  "acre": "acres", "pound": "lb", "pounds": "lb", "gallon": "gal", "gallons": "gal", "ea": "each", "per visit": "visit",
+};
+function normalizeServiceImportUnit(raw: string | undefined): string {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (SERVICE_IMPORT_UNITS.includes(v)) return v;
+  return SERVICE_IMPORT_UNIT_ALIASES[v] ?? "visit";
+}
+/** "$1,200.50" -> 1200.5; blank or unreadable -> null. */
+function parseImportNumber(raw: string | undefined): number | null {
+  const cleaned = (raw ?? "").replace(/[$,\s]/g, "");
+  if (!cleaned) return null;
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function useBulkImportCRMServices() {
   const qc = useQueryClient();
   return useMutation({
@@ -1957,9 +1977,12 @@ export function useBulkImportCRMServices() {
           name,
           code,
           category: r.category?.trim() || "general",
-          unit: (["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"].includes(r.unit?.trim().toLowerCase()) ? r.unit.trim().toLowerCase() : "visit"),
-          default_rate_cents: r.defaultRate ? Math.round(parseFloat(r.defaultRate) * 100) : null,
-          production_rate_sqft_per_hr: r.productionRate ? parseFloat(r.productionRate) : null,
+          unit: normalizeServiceImportUnit(r.unit),
+          // "$45.00" and "1,200" would otherwise parse to NaN / 1 and save a null or wrong rate.
+          default_rate_cents: parseImportNumber(r.defaultRate) != null ? Math.round(parseImportNumber(r.defaultRate)! * 100) : null,
+          production_rate_sqft_per_hr: parseImportNumber(r.productionRate),
+          // A production rate only drives estimate hours when the service budgets by it.
+          ...((parseImportNumber(r.productionRate) ?? 0) > 0 ? { budget_method: "production_rate" } : {}),
           is_active: r.isActive?.trim().toLowerCase() !== "no",
         };
 

@@ -718,6 +718,8 @@ export function useUpsertLineItem() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
+      // Totals were recalculated: the list, a client's Estimates tab and the pipeline show them too.
+      qc.invalidateQueries({ queryKey: ["estimates"] });
     },
   });
 }
@@ -740,6 +742,8 @@ export function useDeleteLineItem() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
+      // Totals were recalculated: the list, a client's Estimates tab and the pipeline show them too.
+      qc.invalidateQueries({ queryKey: ["estimates"] });
     },
   });
 }
@@ -768,6 +772,8 @@ export function useUpsertDirectCost() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
+      // Totals were recalculated: the list, a client's Estimates tab and the pipeline show them too.
+      qc.invalidateQueries({ queryKey: ["estimates"] });
     },
   });
 }
@@ -791,6 +797,8 @@ export function useDeleteDirectCost() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
+      // Totals were recalculated: the list, a client's Estimates tab and the pipeline show them too.
+      qc.invalidateQueries({ queryKey: ["estimates"] });
     },
   });
 }

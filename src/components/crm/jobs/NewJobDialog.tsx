@@ -1,5 +1,6 @@
 "use client";
 
+import { parseLegacySchedule } from "@/lib/visits/recurrence";
 import { SaleTypeSelect, type SaleTypeValue } from "@/components/crm/commissions/SaleTypeSelect";
 import { useState, useEffect } from "react";
 import { parsePositiveQty } from "@/lib/utils/quantity";
@@ -606,6 +607,11 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   async function handleSubmit() {
     if (!effectiveClientId) { toast.error("Client is required"); return; }
     if (jobType === "recurring" && !schedule) { toast.error("Schedule is required for recurring jobs"); return; }
+    // Free text only works if the generator can read it; otherwise the job saves and never gets a visit.
+    if (jobType === "recurring" && (crmSchedules ?? []).length === 0 && parseLegacySchedule(schedule, null).length === 0) {
+      toast.error("That schedule isn't one we can read. Create schedules under Settings → Schedules, then pick one here.");
+      return;
+    }
     if (jobType === "package" && !packageId) { toast.error("Package is required for package jobs"); return; }
     if (services.some((s) => !s.serviceName)) { toast.error("Select a service for each row"); return; }
     if (rf.isRequired("crew") && !crewId) { toast.error("Crew is required"); return; }

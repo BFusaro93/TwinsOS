@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
   }
 
-  let body: { companyName?: string; plan?: string; contactName?: string; contactEmail?: string; contactPhone?: string };
+  let body: { companyName?: string; plan?: string; contactName?: string; contactEmail?: string; contactPhone?: string; timezone?: string };
   try {
     body = await request.json();
   } catch {
@@ -50,6 +50,19 @@ export async function POST(request: Request) {
   }
 
   const pendingPlan = body.plan && isBillablePlan(body.plan) ? body.plan : null;
+
+  // The signup form sends the browser's zone so a Pacific/Central company doesn't run on Eastern
+  // day boundaries until someone finds the setting. Anything Intl can't resolve is ignored.
+  let timezone: string | null = null;
+  if (typeof body.timezone === "string" && body.timezone.length <= 64) {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: body.timezone });
+      timezone = body.timezone;
+    } catch { /* unknown zone: keep the column default */ }
+  }
+  // Replies to invoice/estimate/automated email go to the owner until they set a company address.
+  const contactEmail = typeof body.contactEmail === "string" ? body.contactEmail.trim() : "";
+  const replyTo = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail) && contactEmail.length <= 254 ? contactEmail : null;
 
   // Service role is required — the organizations table is RLS-protected and
   // anonymous users cannot insert rows directly.
@@ -67,18 +80,31 @@ export async function POST(request: Request) {
     .slice(0, 50);
   const slug = `${baseSlug || "org"}-${randomBytes(4).toString("hex")}`;
 
-  const { data: org, error: orgErr } = await adminClient
+  const orgRow = {
+    name: companyName,
+    slug,
+    pending_plan: pendingPlan,
+    // The column defaults (7% tax, card surcharge on) were set for the first customer; a new
+    // company starts with no tax and no surcharge and opts in from Settings.
+    tax_rate_percent: 0,
+    cc_processing_fee_enabled: false,
+    ...(timezone ? { timezone } : {}),
+    ...(replyTo ? { customizations: { reply_to_email: replyTo } } : {}),
+    // No column default — without this a new org's trial never expires
+    // (use-trial-status treats a null trial_ends_at as open-ended).
+    trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+  };
+  // per_org_numbering numbers invoices/estimates/tickets from 1 instead of the global counters. It
+  // comes from migration 20261130001600; if that isn't applied to this database yet (undefined
+  // column, 42703), create the org without it rather than failing signup.
+  let { data: org, error: orgErr } = await adminClient
     .from("organizations")
-    .insert({
-      name: companyName,
-      slug,
-      pending_plan: pendingPlan,
-      // No column default — without this a new org's trial never expires
-      // (use-trial-status treats a null trial_ends_at as open-ended).
-      trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
-    })
+    .insert({ ...orgRow, per_org_numbering: true })
     .select("id")
     .single();
+  if (orgErr?.code === "42703") {
+    ({ data: org, error: orgErr } = await adminClient.from("organizations").insert(orgRow).select("id").single());
+  }
 
   if (orgErr || !org) {
     log.error("organization insert failed", { error: orgErr?.message });

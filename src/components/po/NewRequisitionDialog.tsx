@@ -137,7 +137,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
   const [vendorId, setVendorId] = useState("none");
   const [notes, setNotes] = useState("");
   const [lineItems, setLineItems] = useState<DraftLineItem[]>(() => [emptyLineItem()]);
-  const [taxRatePercent, setTaxRatePercent] = useState(() => String(orgTaxRate ?? 7));
+  const [taxRatePercent, setTaxRatePercent] = useState(() => String(orgTaxRate ?? 0));
   const [shippingCost, setShippingCost] = useState("");
   const [discountCost, setDiscountCost] = useState("");
   const [discountReducesTax, setDiscountReducesTax] = useState(false);
@@ -178,7 +178,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
       setDiscountReducesTax(initialData.discountReducesTax);
     } else if (open && !initialData) {
       // Sync tax rate from org settings when creating a new requisition
-      setTaxRatePercent(String(orgTaxRate ?? 7));
+      setTaxRatePercent(String(orgTaxRate ?? 0));
     }
   }, [open, initialData, orgTaxRate]);
 
@@ -235,7 +235,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
     setVendorId("none");
     setNotes("");
     setLineItems([emptyLineItem()]);
-    setTaxRatePercent(String(orgTaxRate ?? 7));
+    setTaxRatePercent(String(orgTaxRate ?? 0));
     setShippingCost("");
     setDiscountCost("");
     setDiscountReducesTax(false);
