@@ -655,7 +655,13 @@ function LineItemRow({
         )}
 
         {/* Service name + expand chevron */}
-        <td className="min-w-[160px] px-2 py-1.5 font-semibold text-slate-900 dark:text-neutral-100">
+        <td
+          className={cn(
+            "min-w-[160px] px-2 py-1.5 font-semibold text-slate-900 dark:text-neutral-100",
+            // A package's visits sit under its header, indented like sub-items on other lines.
+            item.packageId && "border-l-2 border-brand-300 dark:border-brand-700 pl-6"
+          )}
+        >
           <div className="flex items-center gap-1">
             <button
               onClick={() => onToggleExpand(item.id)}
@@ -1046,13 +1052,20 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
 
   const handleDelete = useCallback(
     async (id: string) => {
+      // Deleting a package's header takes all of its visits with it.
+      const target = items.find((i) => i.id === id);
+      const group = target?.rowType === "section" && target.packageId
+        ? items.filter((i) => i.packageId === target.packageId && i.id !== id)
+        : [];
+      if (group.length > 0 && !window.confirm(`Delete "${target?.sectionName ?? "this package"}" and its ${group.length} visit${group.length !== 1 ? "s" : ""}?`)) return;
       try {
+        for (const li of group) await deleteItem({ id: li.id, estimateId });
         await deleteItem({ id, estimateId });
       } catch {
         toast.error("Failed to delete line item");
       }
     },
-    [deleteItem, estimateId]
+    [deleteItem, estimateId, items]
   );
 
   const handleDuplicate = useCallback(
