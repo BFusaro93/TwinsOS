@@ -13,7 +13,7 @@ const JOB_TYPES: [string, string, string][] = [
   ["One Time", "A single visit, no recurrence.", "Convert Estimate to Job, or Jobs → Add Job"],
   ["Project", "A one-off landscaping job tracked separately from recurring service — the Landscapt equivalent of a cost-tracking bucket, for a job like a patio install or a large cleanup.", "Convert Estimate to Job, or Jobs → Add Job"],
   ["Waiting List", "No fixed date — only a date range. Surfaces on the Waiting List page for opportunistic dispatch when a crew is nearby.", "Convert Estimate to Job, or Jobs → Add Job"],
-  ["Package", "A bundled recurring service program (e.g. a 7-Step Fertilizer plan) billed as one fixed monthly amount.", "Jobs → Add Job only — not converted from an estimate"],
+  ["Package", "A bundled recurring service program (e.g. a 7-Step Fertilizer plan) billed as one fixed monthly amount.", "Convert Estimate to Job (for packages added to the estimate), or Jobs → Add Job"],
   ["Snow", "Storm-based scheduling and service entry — snow/ice events rather than calendar dates.", "Jobs → Add Job only — not converted from an estimate"],
 ];
 
@@ -90,8 +90,8 @@ export function JobsPackagesGuide() {
             <strong>Jobs → Add Job</strong> — the direct path for any type. The dialog opens with a{" "}
             <strong>Job Type</strong> selector (One Time, Recurring, Package, Project, Waiting List,
             or Snow, as available to your org); switching type swaps in that type&apos;s own fields.
-            This is the <em>only</em> way to create a <strong>Package</strong> or{" "}
-            <strong>Snow</strong> job.
+            A <strong>Snow</strong> job can only be created here. A <strong>Package</strong> job can
+            be created here, or by converting an estimate that has the package on it (see below).
           </li>
         </ul>
         <p>
@@ -337,6 +337,18 @@ export function JobsPackagesGuide() {
           amounts; the package template only guarantees they get the same services on the same
           cadence.
         </Callout>
+        <p>
+          <strong>Packages on estimates.</strong> On an estimate, <strong>Add Package</strong> puts a
+          package&apos;s services on the line-item grid, one line per package service, under a section
+          header named after the package. Each line keeps the package&apos;s visit count and its
+          per-visit price. When the client accepts, <strong>Convert to Job</strong> creates a real
+          Package job from those lines: the package, its total steps, each step&apos;s date window with
+          the Min Days spacing, the package&apos;s invoice description, and one visit per dated step.
+          The convert window&apos;s <strong>Scheduled Date</strong> becomes a Program Start Date that
+          moves every step window by the same number of days. Convert one package at a time, and not
+          together with ordinary lines. A package service with more than one included visit becomes a
+          single step on the job, billed at that line&apos;s full price.
+        </p>
         <p>
           Until a package job&apos;s recurring dates are actually set, it behaves like a Waiting List
           job — no fixed date, only a range — and surfaces on the Waiting List page the same way.
