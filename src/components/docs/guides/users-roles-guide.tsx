@@ -206,6 +206,17 @@ export function UsersRolesGuide() {
           needs the normal client edit permission. A role without the permission sees a
           &quot;You do not have permission&quot; error rather than a silent failure.
         </p>
+        <p>
+          <strong>Client notes, stored card and balance are protected on write.</strong> Changing
+          a client&apos;s Office Notes needs View Notes. Changing the stored payment method, or
+          turning autopay on, needs View Credit Card #&apos;s plus Add/Modify Payments. Changing
+          a balance directly needs View Balance plus Add/Modify Credits (balances recalculated
+          from invoices and payments are unaffected). Turning autopay off is always allowed.{" "}
+          <strong>Still hide-only:</strong> View Notes, View Credit Card #&apos;s, View Balance,
+          View Billing and Export Lists control what the screen shows and offers, but the data
+          itself is not hidden from a login that queries it directly, and exports are built in
+          the browser from rows already loaded.
+        </p>
         <Callout>
           <strong>Admins skip all of this.</strong> If <code>profiles.role === &quot;admin&quot;</code>,
           every CRM permission check passes automatically — an Admin never needs a{" "}

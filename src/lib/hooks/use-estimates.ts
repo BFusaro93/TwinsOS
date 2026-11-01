@@ -140,7 +140,7 @@ function mapEstimate(row: any): Estimate {
     tiersEnabled: row.tiers_enabled ?? false,
     tierLabels: (row.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: 'Basic', standard: 'Standard', premium: 'Premium' },
     displaySettings: toDisplaySettings(row.display_settings),
-    displaySettingsBaseline: (row as { display_settings_baseline?: unknown }).display_settings_baseline ? toDisplaySettings((row as { display_settings_baseline?: unknown }).display_settings_baseline) : null,
+    displaySettingsBaseline: row.display_settings_baseline ? toDisplaySettings(row.display_settings_baseline) : null,
     documentTemplateId: (row.document_template_id as string | null) ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,

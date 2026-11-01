@@ -92,7 +92,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, sent: 0, reason: "not pending approval" });
   }
 
-  const entityNumber = String(entity?.[meta.numberField] ?? meta.fallbackLabel);
+  // Estimate numbers are bare integers (16), unlike REQ-/PO- numbers that name themselves,
+  // so they get a "#" and the subject always leads with the record type.
+  const rawNumber = String(entity?.[meta.numberField] ?? meta.fallbackLabel);
+  const entityNumber = entityType === "crm_estimate" && /^\d+$/.test(rawNumber) ? `#${rawNumber}` : rawNumber;
 
   // Compute grand total for display (stored in cents)
   const grandTotalDisplay = entity?.[meta.totalField]
@@ -184,7 +187,7 @@ export async function POST(request: Request) {
     const sendResult = await sendEmailRetryingRateLimit(resend, {
       from: fromAddress,
       to: toEmail,
-      subject: `Action required: ${entityNumber} needs your approval`,
+      subject: `Action required: ${meta.label} ${entityNumber} needs your approval`,
       html: `
         <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Approval request</h2>

@@ -2163,6 +2163,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Users & Settings",
     items: [
       {
+        q: "Which Landscapt role permissions are actually enforced, and which only hide things?",
+        a: "Most are enforced on the server, so a role without them is refused even through another route. Newly enforced: changing a client's Office Notes needs View Notes; changing the stored card or turning autopay on needs View Credit Card #'s plus Add/Modify Payments; changing a client balance directly needs View Balance plus Add/Modify Credits. Still hide-only: View Notes, View Credit Card #'s, View Balance, View Billing and Export Lists decide what the screen shows, but a login that queries the data directly could still read it, and exports are built in the browser from rows already loaded. Admins always pass.",
+      },
+      {
         q: "What is Ask AI, and what if it can't answer my question?",
         a: "Ask AI (Help menu > Ask AI) answers how-do-I questions from these help guides and the app's data model, including whether something is actually tracked. Check anything critical, since answers are generated. Each organization can ask up to 100 questions a day. If an answer doesn't solve it, click 'Didn't answer it? Send this conversation to support', add an optional note, and send. Our team gets the whole conversation and replies to you directly: in your support chat if your plan includes chat support, otherwise by email.",
       },
