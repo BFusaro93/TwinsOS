@@ -277,7 +277,7 @@ export default function PublicInvoicePage() {
             <div className="mt-8 border-t pt-6">
               {intent.feeCents > 0 && (
                 <p className="mb-3 text-xs text-slate-500">
-                  Includes a {cents(intent.feeCents)} card processing fee, which applies to credit cards only (it isn't charged on debit or prepaid cards).
+                  Includes a {cents(intent.feeCents)} card processing fee, which applies to credit cards only (it isn&apos;t charged on debit or prepaid cards).
                 </p>
               )}
               <Elements stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
