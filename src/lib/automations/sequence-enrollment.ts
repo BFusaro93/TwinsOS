@@ -8,6 +8,8 @@ import {
 import { isZapierTriggerType, notifyZapierSubscribers } from "@/lib/integrations/zapier";
 import { logger } from "@/lib/logger";
 import { conditionRecordKind } from "./condition-applicability";
+import { applyWaitAdvancedSettings } from "./wait-schedule";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 
 const log = logger.child("sequence-enrollment");
 
@@ -27,8 +29,12 @@ type AnyClient = any;
  * config-to-delay conversion.
  */
 export function computeWaitFireAt(
-  config: Record<string, number> | null | undefined,
-  from: Date = new Date()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  config: Record<string, any> | null | undefined,
+  from: Date = new Date(),
+  // Org time zone for the advanced settings (until_time / weekdays_only);
+  // without it only the plain days/hours/minutes delay applies.
+  timeZone?: string
 ): Date {
   // The Wait dialog only sets min={0} as a browser hint, so a typed "-2" is
   // saved as-is; a negative (or non-numeric) part must not schedule the next
@@ -44,7 +50,7 @@ export function computeWaitFireAt(
   d.setDate(d.getDate() + days);
   d.setHours(d.getHours() + hours);
   d.setMinutes(d.getMinutes() + minutes);
-  return d;
+  return timeZone ? applyWaitAdvancedSettings(d, config, timeZone) : d;
 }
 
 /**
@@ -207,7 +213,7 @@ export async function enrollClientInSequence(
   let nextFireAt = new Date().toISOString();
   if (firstEvent?.event_type === "wait") {
     const cfg = firstEvent.config as Record<string, number> | null;
-    nextFireAt = computeWaitFireAt(cfg).toISOString();
+    nextFireAt = computeWaitFireAt(cfg, new Date(), await getOrgTimeZone(supabase, params.orgId)).toISOString();
   }
 
   const { data: inserted, error } = await supabase

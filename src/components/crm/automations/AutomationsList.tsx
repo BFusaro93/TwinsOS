@@ -41,6 +41,8 @@ import type { EventType, TriggerType } from "@/types/crm-automations";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { createClient } from "@/lib/supabase/client";
+import { automationActivationWarnings } from "@/lib/automations/activation-warnings";
 
 interface AutomationTemplate {
   name: string;
@@ -148,6 +150,28 @@ interface Props {
 
 export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props) {
   const [confirm, confirmDialog] = useConfirm();
+
+  async function setActive(id: string, checked: boolean) {
+    if (checked) {
+      const warnings = await automationActivationWarnings(createClient(), id).catch(() => []);
+      if (warnings.length > 0) {
+        const ok = await confirm({
+          title: "Turn on with warnings?",
+          description: (
+            <ul className="list-disc space-y-1 pl-5 text-left">
+              {warnings.map((w) => <li key={w}>{w}</li>)}
+            </ul>
+          ),
+          confirmLabel: "Turn on anyway",
+        });
+        if (!ok) return;
+      }
+    }
+    updateAutomation.mutate(
+      { id, updates: { isActive: checked } },
+      { onError: () => toast.error("Failed to update automation") }
+    );
+  }
   const router = useRouter();
   const { can } = usePermissions();
   const canModify = can("automation_create_modify");
@@ -345,12 +369,7 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
                       <Switch
                         checked={a.isActive}
                         disabled={!canStop}
-                        onCheckedChange={(checked) =>
-                          updateAutomation.mutate(
-                            { id: a.id, updates: { isActive: checked } },
-                            { onError: () => toast.error("Failed to update automation") }
-                          )
-                        }
+                        onCheckedChange={(checked) => { void setActive(a.id, checked); }}
                       />
                       {a.isActive ? (
                         <Badge variant="outline" className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400">

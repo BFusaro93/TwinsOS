@@ -71,6 +71,14 @@ export const SMS_EVENT_MERGE_TAGS = [
   { tag: "[meetingdate]",     label: "Meeting Date" },
   { tag: "[meetingtime]",     label: "Meeting Time" },
   { tag: "[meetinglocation]", label: "Meeting Location" },
+  { tag: "[invoicenumber]",   label: "Invoice Number" },
+  { tag: "[invoicetotal]",    label: "Invoice Total" },
+  { tag: "[invoicebalance]",  label: "Invoice Balance Due" },
+  { tag: "[invoiceduedate]",  label: "Invoice Due Date" },
+  { tag: "[paymentlink]",     label: "Payment Link (URL)" },
+  { tag: "[servicename]",     label: "Last Completed Service" },
+  { tag: "[servicedate]",     label: "Last Service Date" },
+  { tag: "[nextservicedate]", label: "Next Service Date" },
 ] as const;
 
 // Merge tags supported in general-purpose client email templates (Settings →
