@@ -4614,11 +4614,16 @@ export type Database = {
       }
       crm_document_templates: {
         Row: {
+          confirmation_document_id: string | null
+          confirmation_include_estimate_pdf: boolean
+          confirmation_recipient: string
           created_at: string
           created_by: string | null
           deleted_at: string | null
           description: string | null
+          display_settings: Json | null
           doc_type: string
+          estimate_email_document_id: string | null
           id: string
           include_pdf: boolean
           is_default: boolean
@@ -4629,11 +4634,16 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          confirmation_document_id?: string | null
+          confirmation_include_estimate_pdf?: boolean
+          confirmation_recipient?: string
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           description?: string | null
+          display_settings?: Json | null
           doc_type: string
+          estimate_email_document_id?: string | null
           id?: string
           include_pdf?: boolean
           is_default?: boolean
@@ -4644,11 +4654,16 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          confirmation_document_id?: string | null
+          confirmation_include_estimate_pdf?: boolean
+          confirmation_recipient?: string
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
           description?: string | null
+          display_settings?: Json | null
           doc_type?: string
+          estimate_email_document_id?: string | null
           id?: string
           include_pdf?: boolean
           is_default?: boolean
@@ -4659,6 +4674,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "crm_document_templates_confirmation_document_id_fkey"
+            columns: ["confirmation_document_id"]
+            isOneToOne: false
+            referencedRelation: "crm_document_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_document_templates_estimate_email_document_id_fkey"
+            columns: ["estimate_email_document_id"]
+            isOneToOne: false
+            referencedRelation: "crm_document_templates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "crm_document_templates_org_id_fkey"
             columns: ["org_id"]
@@ -4984,6 +5013,62 @@ export type Database = {
           },
           {
             foreignKeyName: "crm_employees_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_equipment: {
+        Row: {
+          charge_rate_cents: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          rate_cents: number
+          sort_order: number
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          charge_rate_cents?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id?: string
+          rate_cents?: number
+          sort_order?: number
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          charge_rate_cents?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          rate_cents?: number
+          sort_order?: number
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_equipment_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -5638,6 +5723,7 @@ export type Database = {
           applied_discount_id?: string | null
           balance_cents?: number
           client_id: string
+          consolidated_into_id?: string | null
           contract_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -5686,6 +5772,7 @@ export type Database = {
           applied_discount_id?: string | null
           balance_cents?: number
           client_id?: string
+          consolidated_into_id?: string | null
           contract_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -5749,6 +5836,20 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoices_consolidated_into_id_fkey"
+            columns: ["consolidated_into_id"]
+            isOneToOne: false
+            referencedRelation: "crm_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_invoices_consolidated_into_id_fkey"
+            columns: ["consolidated_into_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_invoices"
             referencedColumns: ["id"]
           },
           {
@@ -6039,6 +6140,7 @@ export type Database = {
           invoice_qty: number | null
           job_id: string
           job_service_id: string | null
+          job_service_subitem_id: string | null
           notes: string | null
           org_id: string
           planned_qty: number | null
@@ -6049,6 +6151,7 @@ export type Database = {
           unit_cost_cents: number | null
           unit_price_cents: number
           updated_at: string
+          visit_id: string | null
         }
         Insert: {
           created_at?: string
@@ -6060,6 +6163,7 @@ export type Database = {
           invoice_qty?: number | null
           job_id: string
           job_service_id?: string | null
+          job_service_subitem_id?: string | null
           notes?: string | null
           org_id?: string
           planned_qty?: number | null
@@ -6070,6 +6174,7 @@ export type Database = {
           unit_cost_cents?: number | null
           unit_price_cents?: number
           updated_at?: string
+          visit_id?: string | null
         }
         Update: {
           created_at?: string
@@ -6081,6 +6186,7 @@ export type Database = {
           invoice_qty?: number | null
           job_id?: string
           job_service_id?: string | null
+          job_service_subitem_id?: string | null
           notes?: string | null
           org_id?: string
           planned_qty?: number | null
@@ -6091,6 +6197,7 @@ export type Database = {
           unit_cost_cents?: number | null
           unit_price_cents?: number
           updated_at?: string
+          visit_id?: string | null
         }
         Relationships: [
           {
@@ -6136,6 +6243,13 @@ export type Database = {
             referencedColumns: ["job_service_id"]
           },
           {
+            foreignKeyName: "crm_job_products_job_service_subitem_id_fkey"
+            columns: ["job_service_subitem_id"]
+            isOneToOne: false
+            referencedRelation: "crm_job_service_subitems"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "crm_job_products_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
@@ -6154,6 +6268,94 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "rpt_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_products_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_products_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["visit_id"]
+          },
+          {
+            foreignKeyName: "crm_job_products_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_job_service_subitems: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          job_service_id: string
+          name: string
+          org_id: string
+          product_id: string | null
+          qty: number
+          service_id: string | null
+          sort_order: number
+          source_subitem_id: string | null
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          job_service_id: string
+          name: string
+          org_id?: string
+          product_id?: string | null
+          qty?: number
+          service_id?: string | null
+          sort_order?: number
+          source_subitem_id?: string | null
+          type?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          job_service_id?: string
+          name?: string
+          org_id?: string
+          product_id?: string | null
+          qty?: number
+          service_id?: string | null
+          sort_order?: number
+          source_subitem_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_job_service_subitems_job_service_id_fkey"
+            columns: ["job_service_id"]
+            isOneToOne: false
+            referencedRelation: "crm_job_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_job_service_subitems_job_service_id_fkey"
+            columns: ["job_service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["job_service_id"]
+          },
+          {
+            foreignKeyName: "crm_job_service_subitems_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -7750,6 +7952,53 @@ export type Database = {
           },
         ]
       }
+      crm_qbo_pending_voids: {
+        Row: {
+          attempted_at: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          last_error: string | null
+          org_id: string
+          payment_id: string | null
+          qbo_payment_id: string
+          resolved_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          attempted_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          last_error?: string | null
+          org_id: string
+          payment_id?: string | null
+          qbo_payment_id: string
+          resolved_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attempted_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          last_error?: string | null
+          org_id?: string
+          payment_id?: string | null
+          qbo_payment_id?: string
+          resolved_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_qbo_pending_voids_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_rate_matrix_field_defs: {
         Row: {
           created_at: string
@@ -8759,6 +9008,71 @@ export type Database = {
           },
         ]
       }
+      crm_service_equipment: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          default_qty: number
+          deleted_at: string | null
+          equipment_id: string
+          id: string
+          org_id: string
+          service_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          default_qty?: number
+          deleted_at?: string | null
+          equipment_id: string
+          id?: string
+          org_id?: string
+          service_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          default_qty?: number
+          deleted_at?: string | null
+          equipment_id?: string
+          id?: string
+          org_id?: string
+          service_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_service_equipment_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_service_equipment_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_service_equipment_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "crm_services"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_service_equipment_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_service_rate_matrix: {
         Row: {
           budgeted_cost_cents: number
@@ -9505,6 +9819,69 @@ export type Database = {
           },
         ]
       }
+      crm_visit_subitem_checks: {
+        Row: {
+          checked_at: string
+          checked_by: string | null
+          id: string
+          org_id: string
+          subitem_id: string
+          visit_id: string
+        }
+        Insert: {
+          checked_at?: string
+          checked_by?: string | null
+          id?: string
+          org_id?: string
+          subitem_id: string
+          visit_id: string
+        }
+        Update: {
+          checked_at?: string
+          checked_by?: string | null
+          id?: string
+          org_id?: string
+          subitem_id?: string
+          visit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_visit_subitem_checks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_visit_subitem_checks_subitem_id_fkey"
+            columns: ["subitem_id"]
+            isOneToOne: false
+            referencedRelation: "crm_job_service_subitems"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_visit_subitem_checks_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "crm_job_visits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "crm_visit_subitem_checks_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_services"
+            referencedColumns: ["visit_id"]
+          },
+          {
+            foreignKeyName: "crm_visit_subitem_checks_visit_id_fkey"
+            columns: ["visit_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_job_visits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_warranties: {
         Row: {
           client_id: string
@@ -10199,6 +10576,89 @@ export type Database = {
           },
         ]
       }
+      estimate_line_item_equipment: {
+        Row: {
+          charge_rate_cents: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          equipment_id: string | null
+          id: string
+          line_item_id: string
+          name: string
+          org_id: string
+          qty: number
+          rate_cents: number
+          sort_order: number
+          total_cost_cents: number
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          charge_rate_cents?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          equipment_id?: string | null
+          id?: string
+          line_item_id: string
+          name: string
+          org_id?: string
+          qty?: number
+          rate_cents?: number
+          sort_order?: number
+          total_cost_cents?: number
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          charge_rate_cents?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          equipment_id?: string | null
+          id?: string
+          line_item_id?: string
+          name?: string
+          org_id?: string
+          qty?: number
+          rate_cents?: number
+          sort_order?: number
+          total_cost_cents?: number
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_line_item_equipment_equipment_id_fkey"
+            columns: ["equipment_id"]
+            isOneToOne: false
+            referencedRelation: "crm_equipment"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_item_equipment_line_item_id_fkey"
+            columns: ["line_item_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_item_equipment_line_item_id_fkey"
+            columns: ["line_item_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_estimate_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_item_equipment_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate_line_item_subitems: {
         Row: {
           confirm_qty: boolean
@@ -10211,6 +10671,7 @@ export type Database = {
           line_item_id: string
           name: string
           org_id: string
+          print_on_estimate: boolean
           print_on_invoice: boolean
           product_id: string | null
           qty: number
@@ -10231,6 +10692,7 @@ export type Database = {
           line_item_id: string
           name: string
           org_id?: string
+          print_on_estimate?: boolean
           print_on_invoice?: boolean
           product_id?: string | null
           qty?: number
@@ -10251,6 +10713,7 @@ export type Database = {
           line_item_id?: string
           name?: string
           org_id?: string
+          print_on_estimate?: boolean
           print_on_invoice?: boolean
           product_id?: string | null
           qty?: number
@@ -10700,6 +11163,84 @@ export type Database = {
           },
         ]
       }
+      estimate_template_item_subitems: {
+        Row: {
+          cost_cents: number
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          invoice: boolean
+          name: string
+          org_id: string
+          print_on_estimate: boolean
+          print_on_invoice: boolean
+          product_id: string | null
+          qty: number
+          rate_cents: number
+          service_id: string | null
+          sort_order: number
+          template_item_id: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          cost_cents?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          invoice?: boolean
+          name: string
+          org_id?: string
+          print_on_estimate?: boolean
+          print_on_invoice?: boolean
+          product_id?: string | null
+          qty?: number
+          rate_cents?: number
+          service_id?: string | null
+          sort_order?: number
+          template_item_id: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          cost_cents?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          invoice?: boolean
+          name?: string
+          org_id?: string
+          print_on_estimate?: boolean
+          print_on_invoice?: boolean
+          product_id?: string | null
+          qty?: number
+          rate_cents?: number
+          service_id?: string | null
+          sort_order?: number
+          template_item_id?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_template_item_subitems_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_template_item_subitems_template_item_id_fkey"
+            columns: ["template_item_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_template_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate_template_items: {
         Row: {
           applied_discount_id: string | null
@@ -10811,6 +11352,7 @@ export type Database = {
           created_by: string | null
           deleted_at: string | null
           display_settings: Json
+          document_template_id: string | null
           id: string
           name: string
           org_id: string
@@ -10823,6 +11365,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           display_settings?: Json
+          document_template_id?: string | null
           id?: string
           name: string
           org_id?: string
@@ -10835,6 +11378,7 @@ export type Database = {
           created_by?: string | null
           deleted_at?: string | null
           display_settings?: Json
+          document_template_id?: string | null
           id?: string
           name?: string
           org_id?: string
@@ -10843,6 +11387,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "estimate_templates_document_template_id_fkey"
+            columns: ["document_template_id"]
+            isOneToOne: false
+            referencedRelation: "crm_document_templates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "estimate_templates_org_id_fkey"
             columns: ["org_id"]
@@ -10934,6 +11485,8 @@ export type Database = {
           discount_type: string | null
           discount_value: number | null
           display_settings: Json
+          display_settings_baseline: Json | null
+          document_template_id: string | null
           estimate_date: string
           estimate_number: number
           expiry_notified_at: string | null
@@ -11002,6 +11555,8 @@ export type Database = {
           discount_type?: string | null
           discount_value?: number | null
           display_settings?: Json
+          display_settings_baseline?: Json | null
+          document_template_id?: string | null
           estimate_date: string
           estimate_number?: number
           expiry_notified_at?: string | null
@@ -11070,6 +11625,8 @@ export type Database = {
           discount_type?: string | null
           discount_value?: number | null
           display_settings?: Json
+          display_settings_baseline?: Json | null
+          document_template_id?: string | null
           estimate_date?: string
           estimate_number?: number
           expiry_notified_at?: string | null
@@ -11132,6 +11689,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "rpt_clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_document_template_id_fkey"
+            columns: ["document_template_id"]
+            isOneToOne: false
+            referencedRelation: "crm_document_templates"
             referencedColumns: ["id"]
           },
           {
@@ -15512,6 +16076,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "ticket_contributors_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_contributors_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "rpt_sales_rep_month"
+            referencedColumns: ["employee_id"]
+          },
+          {
             foreignKeyName: "ticket_contributors_ticket_id_fkey"
             columns: ["ticket_id"]
             isOneToOne: false
@@ -17450,6 +18028,16 @@ export type Database = {
       crm_commission_void_statement: {
         Args: { p_statement_id: string }
         Returns: undefined
+      }
+      crm_consolidate_invoices: {
+        Args: { p_invoice_ids: string[]; p_parent_client_id: string }
+        Returns: {
+          amount_paid_cents: number
+          balance_cents: number
+          invoice_id: string
+          status: string
+          total_cents: number
+        }[]
       }
       crm_default_role_templates: {
         Args: never
