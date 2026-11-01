@@ -34,7 +34,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { Trash2, Copy, Package as PackageIcon, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical, AlertTriangle, Printer } from "lucide-react";
+import { Trash2, Copy, Package as PackageIcon, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical, AlertTriangle, Printer, ArrowDownToLine } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -222,15 +222,28 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
 
 // ── Section header row ────────────────────────────────────────────────────────
 
+export type FillDownField = "qty" | "rate" | "hours" | "cost" | "adj" | "all";
+
+const FILL_DOWN_BUTTONS: { field: FillDownField; label: string }[] = [
+  { field: "qty", label: "Qty" },
+  { field: "rate", label: "Rate" },
+  { field: "hours", label: "B.Hr" },
+  { field: "cost", label: "Cost" },
+  { field: "adj", label: "Adj Rate" },
+  { field: "all", label: "All" },
+];
+
 function SectionRow({
   item,
   estimateId,
   onDelete,
+  onFillDown,
   tiersEnabled,
 }: {
   item: EstimateLineItem;
   estimateId: string;
   onDelete: (id: string, estimateId: string) => void;
+  onFillDown: (packageId: string, field: FillDownField) => void;
   tiersEnabled?: boolean;
 }) {
   const upsert = useUpsertLineItem();
@@ -323,6 +336,23 @@ function SectionRow({
                 </span>
               </button>
             )}
+          </div>
+        )}
+        {item.packageId && (
+          <div className="mt-1 flex flex-wrap items-center gap-1 pl-12 text-[10px] text-muted-foreground">
+            <ArrowDownToLine className="h-3 w-3" />
+            <span>Copy the first visit&rsquo;s value to every visit:</span>
+            {FILL_DOWN_BUTTONS.map((b) => (
+              <button
+                key={b.field}
+                type="button"
+                onClick={() => onFillDown(item.packageId as string, b.field)}
+                className="rounded border border-slate-300 dark:border-neutral-600 px-1.5 py-0.5 hover:border-brand-400 hover:text-foreground"
+                title={b.field === "all" ? "Copy qty, rate, calc, budgeted hours, cost and adjusted rate" : `Copy ${b.label} from the first visit to the rest`}
+              >
+                {b.label}
+              </button>
+            ))}
           </div>
         )}
       </td>
@@ -1098,6 +1128,56 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     }
   }
 
+  /** SA-style fill down: copy the package's first visit's value(s) onto every other visit,
+   *  recomputing each line's totals the same way editing the cell would. */
+  async function fillPackageDown(packageId: string, field: FillDownField) {
+    const lines = items.filter((i) => i.packageId === packageId && i.rowType !== "section");
+    const [first, ...rest] = lines;
+    if (!first || rest.length === 0) return;
+    const pick = (src: EstimateLineItem): Partial<EstimateLineItem> => {
+      switch (field) {
+        case "qty": return { qty: src.qty };
+        case "rate": return { rateCents: src.rateCents };
+        case "hours": return { budgetedHours: src.budgetedHours };
+        case "cost": return { costCents: src.costCents };
+        case "adj": return { adjRateCents: src.adjRateCents };
+        default: return {
+          qty: src.qty, rateCents: src.rateCents, calcType: src.calcType,
+          budgetedHours: src.budgetedHours, costCents: src.costCents, adjRateCents: src.adjRateCents,
+        };
+      }
+    };
+    try {
+      for (const line of rest) {
+        const next = { ...line, ...pick(first) };
+        const computed = computeLineItem(next, breakevenRateCents);
+        const merged = { ...next, ...computed };
+        const withDiscount = { ...merged, discountCents: resolveLineDiscountCents(merged) };
+        await upsert({
+          estimateId,
+          item: {
+            id: line.id,
+            calc_type: withDiscount.calcType,
+            qty: withDiscount.qty,
+            rate_cents: withDiscount.rateCents,
+            total_cents: withDiscount.totalCents,
+            discount_cents: withDiscount.discountCents,
+            budgeted_hours: withDiscount.budgetedHours,
+            total_budgeted_hours: withDiscount.totalBudgetedHours,
+            cost_cents: withDiscount.costCents,
+            total_cost_cents: withDiscount.totalCostCents,
+            margin_bps: withDiscount.marginBps,
+            markup_bps: withDiscount.markupBps,
+            adj_rate_cents: withDiscount.adjRateCents,
+          },
+        });
+      }
+      toast.success(`Copied from "${first.serviceName}" to ${rest.length} other visit${rest.length !== 1 ? "s" : ""}`);
+    } catch {
+      toast.error("Failed to copy the values down");
+    }
+  }
+
   const handleDuplicate = useCallback(
     async (item: EstimateLineItem) => {
       try {
@@ -1179,7 +1259,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       : null;
     // A package step's rate is a per-visit price (lockRate), not a per-sq-ft rate:
     // never multiply it by the client's takeoff.
-    const qty = svc.lockRate ? 1 : (takeoffQty ?? 1);
+    let qty = svc.lockRate ? 1 : (takeoffQty ?? 1);
 
     // Rate Matrix override: if this service has banded rows keyed off a
     // property custom field, and the estimate has a property with a value
@@ -1194,9 +1274,11 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     let matrixBudgetedHours: number | null = svc.budgetedHours ?? null;
     let matrixCostCents: number | null = null;
     let matrixProductionRate: number | null = null;
-    // A package service carries its own per-visit price (lockRate), which the
-    // Rate Matrix must not silently replace.
-    if (svc.id && propertyId && !svc.lockRate) {
+    // A package step's own price (lockRate) is only the fallback: when the service
+    // has Rate Matrix rows keyed off a property field (e.g. Turf Sq. Ft.) that the
+    // estimate's property has a value for, the matched band prices the visit, so a
+    // package honors custom fields the same as the service added on its own.
+    if (svc.id && propertyId) {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: matrixRows } = await (supabase as any)
@@ -1265,6 +1347,11 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           // shouldn't scale with qty, and a per-unit row on a non-area unit
           // can't be stated as a sq ft/hr production rate at all — both keep
           // the manual snapshot.
+          // A per-unit band on an area line prices per sq ft, so a package visit
+          // (qty forced to 1 above) needs the client's takeoff as its quantity.
+          if (svc.lockRate && match.calcType === 1 && isAreaUnit(unit)) {
+            qty = resolveTakeoffSqft(svc.name, takeoff) ?? qty;
+          }
           if (match.calcType === 1 && match.budgetedHours > 0 && isAreaUnit(unit)) {
             matrixProductionRate = 1 / match.budgetedHours;
             budgetMethod = "production_rate";
@@ -1637,6 +1724,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                       item={item}
                       estimateId={estimateId}
                       onDelete={handleDelete}
+                      onFillDown={fillPackageDown}
                       tiersEnabled={tiersEnabled}
                     />
                   ) : (
