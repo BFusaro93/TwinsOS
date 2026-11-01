@@ -20,6 +20,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const orgId = await getOrgId(supabase, user.id);
   if (!orgId) return NextResponse.json({ error: "No profile" }, { status: 403 });
+  {
+    const denied = await rejectWithoutFormsPermission(supabase, "view");
+    if (denied) return denied;
+  }
 
   const { data: form, error } = await db
     .from("crm_forms")

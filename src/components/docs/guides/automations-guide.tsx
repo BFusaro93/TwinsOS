@@ -12,7 +12,7 @@ import { GuideLink } from "@/components/docs/GuideLink";
 const TRIGGER_GROUPS: [string, string][] = [
   [
     "Client / Lead",
-    "Client created, Client cancelled, Client reactivated, Client source updated, Lead created, Lead cancelled, Lead converted to client, Client referred a new lead/client, Credit card charge failed, Credit card about to expire, Credit card updated, Has opted in for emails, Payment method updated",
+    "Client created, Client cancelled, Client reactivated, Client source updated, Lead created, Lead cancelled, Lead converted to client, Client referred a new lead/client, Credit card charge failed, Credit card about to expire, Credit card updated, Has opted in for emails, Has opted in for texts, Payment method updated",
   ],
   ["Contract", "Contract created, Contract signed, Contract about to expire"],
   ["Damage Case", "Damage case created"],
@@ -34,25 +34,25 @@ const EVENT_TYPES: [string, string][] = [
   ["Wait", "Pauses the sequence for a set number of days, hours, and minutes before the next event runs."],
   [
     "Email",
-    "Sends an email from a chosen sender to the client's primary email, billing email, and/or all contacts marked ok-to-email. Subject and body support merge tags and can pull from a saved document template.",
+    "Sends an email from a chosen sender to the client's primary email, billing email, and/or all contacts marked ok-to-email. Subject and body support merge tags and can pull from a saved document template. The Email Category decides who is suppressed: Marketing, General and Follow-up emails are not sent to clients marked Do Not Market (and carry an unsubscribe link), while Transactional and Reminder emails still reach those clients. A hard-bounced address or a client marked not OK to email blocks every category.",
   ],
   [
     "Text Message",
-    "Sends an SMS to the client. Can require manual approval before sending, same as email.",
+    "Sends an SMS to the client's primary phone, their billing phone (a number typed Billing in the client's phone list), and/or every contact's phone, per the Send To boxes. Texting is gated by the client's SMS opt-in (contacts have no separate consent setting, so every number is texted under the client's opt-in). Can require manual approval before sending, same as email.",
   ],
   [
     "Alert",
-    "Posts an in-app alert (Info, Warning, or Urgent) to one or more chosen users — for internal heads-up, not client-facing.",
+    "Posts an in-app alert to one or more chosen users — for internal heads-up, not client-facing. The severity (Info, Warning, Urgent) shows in the alert's title in the notification bell (\"Warning: Automation Alert\", \"Urgent: Automation Alert\"). The message supports merge tags such as [clientfirstname].",
   ],
   [
     "Ticket",
-    "Creates a support ticket with a title, description, priority (Low, Normal, High, Urgent), and an assignee.",
+    "Creates a support ticket with a title, description, priority (Low, Normal, High, Urgent), and an assignee. The title and description support merge tags such as [clientfirstname].",
   ],
   [
     "If / Branch",
     "Checks one or more conditions against the client/job/estimate record. The steps inside the branch only run when every condition is met — everyone else skips the whole block and continues with whatever comes after it. See If Branch blocks below.",
   ],
-  ["Note", "Adds a note to the client's activity timeline."],
+  ["Note", "A builder-only annotation for whoever edits the sequence. It does nothing when the sequence runs: nothing is added to the client's activity timeline, and the sequence just moves on to the next step."],
   [
     "Update a field",
     "Writes a value onto the client record: sales person, client source, billing term (Due on Receipt, Net 10/15/30/45/60/90), or a custom field. Billing term sets the client&apos;s Invoice terms, so new invoices for that client use it. A Billing term condition checks the same field.",
@@ -90,6 +90,7 @@ export function AutomationsGuide() {
           <TOCLink href="#overview">Overview</TOCLink>
           <TOCLink href="#triggers">Triggers</TOCLink>
           <TOCLink href="#conditions">Trigger Conditions vs. Stop Conditions</TOCLink>
+          <TOCLink href="#copy-automation">Copying an automation</TOCLink>
           <TOCLink href="#events">Events</TOCLink>
           <TOCLink href="#if-branches">If Branch blocks</TOCLink>
           <TOCLink href="#worked-example">Worked example: New Lead sequence</TOCLink>
@@ -180,6 +181,14 @@ export function AutomationsGuide() {
           </tbody>
         </Table>
         <p>
+          <strong>Estimate, Invoice and Ticket conditions need a matching trigger.</strong> Those conditions
+          read the estimate, invoice or ticket that fired the trigger, so they are only offered when the
+          sequence&apos;s trigger is an estimate, invoice or ticket event. On any other trigger (a visit or
+          tag event, say) there is no such record, so the condition could never be met &mdash; a start condition
+          would never enroll anyone and a stop condition would never stop. The builder hides them with a hint,
+          and an old rule that already uses one is still shown (and logged as not applicable when it is checked).
+        </p>
+        <p>
           <strong>Custom field conditions.</strong> The &quot;Custom field&quot; condition (available in trigger
           conditions, stop conditions and If Branches) lets you pick one of your client custom fields, then compare
           it. Text fields offer equals, not equals, contains, does not contain, is set and is not set; number fields
@@ -204,6 +213,15 @@ export function AutomationsGuide() {
           checked on every way a client can enter &mdash; a trigger firing, a service visit, or an
           estimate or meeting date trigger &mdash; so a &quot;Residential only&quot; sequence never
           emails a commercial client. A client who doesn&apos;t qualify is simply not enrolled.
+        </p>
+      </Section>
+
+      <Section id="copy-automation" title="Copying an automation">
+        <p>
+          The copy button on an automation&apos;s row in the list duplicates it as &quot;&lt;name&gt; (Copy)&quot;
+          &mdash; all its sequences, steps (including If Branch blocks), start triggers with their conditions, stop
+          conditions and entry/re-entry settings. The copy is created <strong>disabled</strong>, so nothing enrolls or
+          sends until you review it and switch it on. Requires the Create / modify automations permission.
         </p>
       </Section>
 
@@ -315,7 +333,8 @@ export function AutomationsGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Send Mon&ndash;Fri only</strong> — skips weekends; if the event would otherwise fire
-            on a Saturday or Sunday, it waits until the next weekday.
+            on a Saturday or Sunday, it waits until the next weekday. This applies to approved emails
+            too.
           </li>
           <li>
             <strong>Send Between</strong> — a start and end time window (defaults to 8:00 AM&ndash;6:00
@@ -330,7 +349,14 @@ export function AutomationsGuide() {
             same way, with one addition: texts only go out between 8:00 AM and 9:00 PM in your
             organization&apos;s time zone, so approving a text at night shows &quot;Approved — will send
             tomorrow at 8:00 AM&quot; and it is sent then (opt-out, do-not-text and bounce checks run again
-            at the moment it actually sends).
+            at the moment it actually sends). An email approved outside its Send Between window, or on
+            a weekend with Send Mon&ndash;Fri only on, is held the same way and goes out when the
+            window opens.
+          </li>
+          <li>
+            <strong>Who is told.</strong> When a step is parked for approval, every admin and manager
+            in your organization gets an in-app notification (&quot;Automation step needs
+            approval&quot;); only admins and managers can approve or reject.
           </li>
         </ul>
       </Section>

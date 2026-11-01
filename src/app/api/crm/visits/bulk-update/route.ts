@@ -7,6 +7,8 @@ import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/re
 import { formatMonthDay } from "@/lib/utils";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
 import { notifyVisitAssigned } from "@/lib/notifications/visit-notify";
+import { fireVisitTriggers } from "@/lib/automations/fire-visit-triggers";
+import type { TriggerType } from "@/types/crm-automations";
 import {
   INVOICED_VISIT_LOCKED_CODE,
   INVOICED_VISIT_LOCKED_MESSAGE,
@@ -58,7 +60,7 @@ export async function POST(request: Request) {
   // Chunked: up to 500 ids in one `.in()` overflow the request URL (a select-all
   // on a busy day failed the whole action).
   type BeforeRow = {
-    id: string; client_id: string; job_id: string; scheduled_date: string; status: string;
+    id: string; client_id: string; job_id: string; job_service_id: string | null; scheduled_date: string; status: string;
     crew_id: string | null; start_time: string | null;
     clocked_in_at: string | null; clocked_out_at: string | null;
   };
@@ -67,7 +69,7 @@ export async function POST(request: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: beforeRows } = await (supabase as any)
       .from("crm_job_visits")
-      .select("id, client_id, job_id, scheduled_date, status, crew_id, start_time, clocked_in_at, clocked_out_at")
+      .select("id, client_id, job_id, job_service_id, scheduled_date, status, crew_id, start_time, clocked_in_at, clocked_out_at")
       .in("id", ids.slice(i, i + 100));
     before.push(...((beforeRows ?? []) as BeforeRow[]));
   }
@@ -259,6 +261,38 @@ export async function POST(request: Request) {
   if (activity.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from("client_activity").insert(activity);
+  }
+
+  // Automation triggers. The single-visit hooks fire these from the browser
+  // (useUpdateVisitStatus / useUpdateVisit); this route bypasses them, so
+  // visit_cancelled / visit_skipped / visit_dispatched / visit_date_changed
+  // sequences never ran for bulk actions. Only visits whose status/date
+  // actually changed fire (a no-op bulk re-apply fires nothing), and nothing
+  // else fires these for this route, so there is no double-firing.
+  // org_id comes from the caller's profile, never the request.
+  const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).maybeSingle();
+  const orgId = (profile as { org_id: string | null } | null)?.org_id;
+  if (orgId) {
+    const statusTriggers: Partial<Record<string, TriggerType>> = {
+      cancelled: "visit_cancelled",
+      dispatched: "visit_dispatched",
+      skipped: "visit_skipped",
+    };
+    const statusTrigger = updates.status ? statusTriggers[updates.status] : undefined;
+    if (statusTrigger) {
+      await fireVisitTriggers(supabase, {
+        orgId,
+        triggerTypes: [statusTrigger],
+        visits: before.filter((r) => r.status !== updates.status),
+      });
+    }
+    if (updates.scheduled_date) {
+      await fireVisitTriggers(supabase, {
+        orgId,
+        triggerTypes: ["visit_date_changed"],
+        visits: before.filter((r) => r.scheduled_date !== updates.scheduled_date),
+      });
+    }
   }
 
   return NextResponse.json({ updated: ids.length });

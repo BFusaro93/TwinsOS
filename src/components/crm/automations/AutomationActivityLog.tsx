@@ -37,6 +37,19 @@ const ACTION_LABELS: Record<string, string> = {
   stopped_by_condition: "Stopped (condition)",
   completed: "Completed",
   unsupported_event_type: "Unsupported step",
+  email_send_failed: "Email failed (will retry)",
+  sms_send_failed: "Text failed (will retry)",
+  alert_send_failed: "Alert failed (will retry)",
+  ticket_send_failed: "Ticket failed (will retry)",
+  update_send_failed: "Field update failed (will retry)",
+  tags_send_failed: "Tags update failed (will retry)",
+  alert_skipped: "Alert skipped",
+  ticket_skipped: "Ticket skipped",
+  update_skipped: "Field update skipped",
+  tags_skipped: "Tags update skipped",
+  stopped_send_failed: "Stopped (send kept failing)",
+  stopped_sequence_inactive: "Stopped (automation off)",
+  meeting_scheduled_at: "Meeting scheduled",
 };
 
 const ACTION_COLORS: Record<string, string> = {
@@ -59,6 +72,18 @@ const ACTION_COLORS: Record<string, string> = {
   stopped_by_condition: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
   completed: "bg-muted text-slate-600 dark:text-neutral-400 border-border",
   unsupported_event_type: "bg-muted text-muted-foreground border-border",
+  email_send_failed: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  sms_send_failed: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  alert_send_failed: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  ticket_send_failed: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  update_send_failed: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  tags_send_failed: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  stopped_send_failed: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  stopped_sequence_inactive: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  alert_skipped: "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
+  ticket_skipped: "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
+  update_skipped: "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
+  tags_skipped: "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
 };
 
 export function AutomationActivityLog() {

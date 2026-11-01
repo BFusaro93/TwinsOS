@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { duplicateLabelMessage, findDuplicateFieldLabels } from "@/lib/forms/duplicate-labels";
 
 // PUT /api/crm/forms/[id]/fields — replace all fields for a form
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -54,12 +55,24 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   // orphaned every conditional rule, with no error surfaced anywhere.
   const { data: currentFieldRows } = await db
     .from("crm_form_fields")
-    .select("id")
+    .select("id, label")
     .eq("form_id", formId)
     .eq("org_id", profile.org_id)
     .is("deleted_at", null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const currentIds = new Set<string>((currentFieldRows ?? []).map((f: any) => f.id as string));
+
+  // Answers are stored keyed by field label, so duplicate labels overwrite each
+  // other. Reject new/edited duplicates; legacy duplicates already in the DB
+  // stay saveable until someone edits one of the labels.
+  const duplicateLabels = findDuplicateFieldLabels(
+    fields.map((f) => ({ id: f.id, label: f.label ?? "", fieldType: f.fieldType })),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    new Map((currentFieldRows ?? []).map((f: any) => [f.id as string, (f.label ?? "") as string]))
+  );
+  if (duplicateLabels.length > 0) {
+    return NextResponse.json({ error: duplicateLabelMessage(duplicateLabels) }, { status: 422 });
+  }
 
   const incomingIds = new Set(
     fields.filter((f) => f.id && currentIds.has(f.id)).map((f) => f.id as string)

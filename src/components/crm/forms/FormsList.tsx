@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForms, useCreateForm, useDeleteForm, useUpdateForm } from "@/lib/hooks/use-crm-forms";
+import { useForms, useCreateForm, useDeleteForm, useUpdateForm, useCopyForm } from "@/lib/hooks/use-crm-forms";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +23,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ExternalLink, FormInput, MoreHorizontal, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { ChevronDown, Copy, ExternalLink, FormInput, MoreHorizontal, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -125,6 +125,7 @@ function FormRowMenu({ form }: { form: CRMForm }) {
   const canEdit = can("forms_edit");
   const deleteForm = useDeleteForm();
   const updateForm = useUpdateForm(form.id);
+  const copyForm = useCopyForm();
   const toggleStatus = form.status === "published" ? "draft" : "published";
 
   return (
@@ -153,6 +154,21 @@ function FormRowMenu({ form }: { form: CRMForm }) {
               }
             >
               {toggleStatus === "published" ? "Publish" : "Unpublish"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={copyForm.isPending}
+              onSelect={() =>
+                copyForm.mutate(form.id, {
+                  onSuccess: (copy) => {
+                    toast.success(`Created "${copy.name}" as a draft`);
+                    router.push(`/crm/communication/forms/${copy.id}`);
+                  },
+                  onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to copy form"),
+                })
+              }
+            >
+              <Copy className="mr-2 h-3.5 w-3.5" />
+              Copy form
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-red-600 dark:text-red-400"

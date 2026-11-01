@@ -33,6 +33,7 @@ import {
   Settings,
 } from "lucide-react";
 import { toast } from "sonner";
+import { duplicateLabelMessage, findDuplicateFieldLabels } from "@/lib/forms/duplicate-labels";
 import type {
   CRMForm,
   CRMFormField,
@@ -371,6 +372,29 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
       return;
     }
 
+    // Answers are keyed by label, so two input fields with the same label would
+    // overwrite each other. Legacy duplicates already saved are grandfathered
+    // (see lib/forms/duplicate-labels.ts) unless the label is edited.
+    const duplicates = findDuplicateFieldLabels(
+      fields.map((f) => ({ id: f._savedId, label: f.label, fieldType: f.fieldType })),
+      new Map(form.fields.map((f) => [f.id, f.label]))
+    );
+    if (duplicates.length > 0) {
+      const dupeKey = new Set(duplicates.map((d) => d.toLowerCase()));
+      const offender = fields.find(
+        (f) => !DISPLAY_TYPES.includes(f.fieldType) && dupeKey.has(f.label.trim().toLowerCase())
+      );
+      if (offender) {
+        setActivePage(offender.pageNumber ?? 1);
+        setInvalidFieldKey(offender._key);
+        requestAnimationFrame(() => {
+          document.getElementById(`field-${offender._key}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+      }
+      toast.error(duplicateLabelMessage(duplicates), { duration: 8000 });
+      return;
+    }
+
     // SMS consent has to be tied to a phone number — a form that requires
     // the opt-in checkbox but not a phone field can collect "yes, text me"
     // with nothing to text. If the form has no phone field at all, block
@@ -446,8 +470,8 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
         setDirty(false);
         toast.error("Fields saved, but rules failed to save — try again.");
       }
-    } catch {
-      toast.error("Failed to save form");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to save form");
     } finally {
       setSaving(false);
     }
@@ -455,6 +479,18 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
 
   async function togglePublish() {
     const newStatus = form.status === "published" ? "draft" : "published";
+    if (newStatus === "published") {
+      // Publishing is the point where duplicate labels start losing real
+      // submitted answers, so (unlike Save) legacy duplicates are NOT
+      // grandfathered here — rename one and publish again.
+      const duplicates = findDuplicateFieldLabels(
+        form.fields.map((f) => ({ id: f.id, label: f.label, fieldType: f.fieldType }))
+      );
+      if (duplicates.length > 0) {
+        toast.error(duplicateLabelMessage(duplicates), { duration: 8000 });
+        return;
+      }
+    }
     try {
       await updateForm.mutateAsync({ status: newStatus });
       toast.success(newStatus === "published" ? "Form published" : "Form unpublished");

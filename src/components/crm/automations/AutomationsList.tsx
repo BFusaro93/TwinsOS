@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Pencil, Trash2, Plus, Zap, Sparkles } from "lucide-react";
+import { Pencil, Trash2, Plus, Zap, Sparkles, Copy } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ import {
   useCreateAutomation,
   useUpdateAutomation,
   useDeleteAutomation,
+  useCopyAutomation,
   useCreateSequence,
   useCreateTrigger,
   useCreateEvent,
@@ -155,6 +156,8 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
   const createAutomation = useCreateAutomation();
   const updateAutomation = useUpdateAutomation();
   const deleteAutomation = useDeleteAutomation();
+  const copyAutomation = useCopyAutomation();
+  const [copyingId, setCopyingId] = useState<string | null>(null);
   const createSequence = useCreateSequence();
   const createTrigger = useCreateTrigger();
   const createEvent = useCreateEvent();
@@ -210,6 +213,19 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
       toast.error("Failed to add automation from template");
     } finally {
       setAddingTemplate(null);
+    }
+  }
+
+  async function handleCopy(id: string) {
+    setCopyingId(id);
+    try {
+      const copy = await copyAutomation.mutateAsync(id);
+      toast.success(`Copied as "${copy.name}" — it's disabled until you turn it on`);
+      router.push(`/crm/communication/automations/${copy.id}`);
+    } catch {
+      toast.error("Failed to copy automation");
+    } finally {
+      setCopyingId(null);
     }
   }
 
@@ -357,6 +373,17 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
                           onClick={() => router.push(`/crm/communication/automations/${a.id}`)}
                         >
                           <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Copy automation"
+                          aria-label="Copy automation"
+                          disabled={copyingId === a.id}
+                          onClick={() => void handleCopy(a.id)}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="ghost"

@@ -57,6 +57,7 @@ export function FormsGuide() {
         <div className="flex flex-col gap-1">
           <TOCLink href="#where-to-find-it">Where to find it</TOCLink>
           <TOCLink href="#building-a-form">Building a form</TOCLink>
+          <TOCLink href="#pages-and-rules">Pages, rules &amp; unique labels</TOCLink>
           <TOCLink href="#worked-example">Worked example: Free Estimate Request</TOCLink>
           <TOCLink href="#configure">Configure tab: what each setting does</TOCLink>
           <TOCLink href="#publishing">Publishing</TOCLink>
@@ -152,6 +153,33 @@ export function FormsGuide() {
         </p>
       </Section>
 
+      <Section id="pages-and-rules" title="Pages, rules & unique labels">
+        <p>
+          <strong>Every field label must be unique.</strong> Answers are stored by label, so two
+          fields with the same label would overwrite each other&apos;s answer. The builder
+          won&apos;t let you save (or publish) a form with two input fields sharing a label —
+          matching is not case-sensitive, so &quot;Email&quot; and &quot;email&quot; clash — and
+          it names the label to fix. Header, paragraph and divider elements are exempt. A form that
+          already had duplicates before this rule keeps saving as long as you don&apos;t edit one of
+          those labels, but it can&apos;t be republished until one is renamed.
+        </p>
+        <p>
+          <strong>Jump to page rules.</strong> On a multi-page form, a rule can send a visitor from
+          one page straight to another. Pages a visitor skips this way are skipped for validation
+          too: a required field on a page they never saw does not block their submission. The
+          server replays the visitor&apos;s path from page 1 using their final answers (the same
+          logic the form page uses), so this holds even when the form is submitted directly.
+          Required fields on pages they did pass through, and required fields hidden by a Hide
+          Field rule, follow the usual rules. If jump rules loop back on themselves, every page is
+          treated as visited.
+        </p>
+        <p>
+          Email fields are also validated on the server: a value that isn&apos;t a well-formed
+          email address is rejected with the field&apos;s label, not just caught in the visitor&apos;s
+          browser.
+        </p>
+      </Section>
+
       <Section id="worked-example" title="Worked example: Free Estimate Request">
         <p>
           A complete lead-capture form, built end to end, using only settings covered on this
@@ -234,10 +262,17 @@ export function FormsGuide() {
         </ul>
       </Section>
 
-      <Section id="publishing" title="Publishing">
+      <Section id="publishing" title="Publishing & copying">
         <p>
           A form has exactly two statuses: <strong>draft</strong> and <strong>published</strong>.
           Nothing else — no &quot;archived&quot; or &quot;closed&quot; state for the form itself.
+        </p>
+        <p>
+          To start a new form from an existing one, open the row menu on the Forms list and choose{" "}
+          <strong>Copy form</strong> (requires the Forms edit permission). It creates{" "}
+          <strong>&quot;&lt;name&gt; (Copy)&quot;</strong> with the same fields, pages, rules and
+          Configure settings, always as an unpublished <strong>draft</strong> with its own link —
+          rules that point at fields are re-pointed at the copied fields. Responses are not copied.
         </p>
         <Callout>
           Publishing isn&apos;t just a UI toggle — the public submit route filters on{" "}
@@ -333,6 +368,19 @@ export function FormsGuide() {
           decide whether it&apos;s a real lead, and either attach it to an existing client, let it
           create a new one, or mark it <code>spam</code>/<code>ignored</code> to clear it from the
           queue.
+        </p>
+        <p>Click a response to open its detail panel, which has these actions:</p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li><strong>Mark resolved</strong> — sets <code>completed</code> once you&apos;ve dealt with it.</li>
+          <li><strong>Move back to on hold</strong> — undoes any of the status changes.</li>
+          <li><strong>Ignore</strong> and <strong>Mark as spam</strong> — move it to the Ignored or Spam filter tab.</li>
+          <li><strong>Mark unread</strong> — puts the blue unread dot back so it stands out in the list.</li>
+          <li><strong>Delete</strong> — asks you to confirm, then removes the response from the list. Any client or ticket it created is left alone.</li>
+        </ul>
+        <p>
+          Changing a status or deleting needs the Forms edit permission; marking unread only needs
+          permission to view responses. Creating or updating a client straight from a response is
+          not available yet — attach it by hand from the client record.
         </p>
       </Section>
 
