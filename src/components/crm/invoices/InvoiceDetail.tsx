@@ -110,6 +110,9 @@ const METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "Credit Card- MasterCard",  label: "Credit Card (MC)" },
   { value: "Credit Card- AmEx",        label: "Credit Card (AmEx)" },
   { value: "Credit Card- Discover",    label: "Credit Card (Discover)" },
+  { value: "Debit Card- Visa",         label: "Debit Card (Visa)" },
+  { value: "Debit Card- MasterCard",   label: "Debit Card (MC)" },
+  { value: "Debit Card- Discover",     label: "Debit Card (Discover)" },
   { value: "ACH/E-Check",              label: "ACH / E-Check" },
   { value: "AutoPay",                  label: "AutoPay" },
   { value: "Other",                    label: "Other" },
@@ -1073,19 +1076,6 @@ export function InvoiceDetail({
             </h1>
             <p className="text-xs text-slate-400 dark:text-neutral-500">{invoice.clientName}</p>
           </div>
-          <Badge className={cn("text-[10px] capitalize", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
-            {getDisplayInvoiceStatus(invoice)}
-          </Badge>
-          {invoice.invoiceNumber == null && (
-            <span className="rounded-full bg-yellow-100 dark:bg-yellow-900/40 px-2 py-0.5 text-[10px] font-semibold text-yellow-700 dark:text-yellow-400">
-              Unsaved — click Save to assign invoice #
-            </span>
-          )}
-          {invoice.locked && (
-            <span className="flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
-              <Lock className="h-3 w-3" /> Locked
-            </span>
-          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {onDiscard && invoice.invoiceNumber == null && (
@@ -1162,6 +1152,23 @@ export function InvoiceDetail({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+      </div>
+
+      {/* Status pills live on their own row so the action buttons above never shift with them */}
+      <div className="flex flex-wrap items-center gap-2 border-b bg-card px-4 py-1.5 md:px-8">
+        <Badge className={cn("text-[10px] capitalize", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
+          {getDisplayInvoiceStatus(invoice)}
+        </Badge>
+        {invoice.invoiceNumber == null && (
+          <span className="rounded-full bg-yellow-100 dark:bg-yellow-900/40 px-2 py-0.5 text-[10px] font-semibold text-yellow-700 dark:text-yellow-400">
+            Unsaved — click Save to assign invoice #
+          </span>
+        )}
+        {invoice.locked && (
+          <span className="flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+            <Lock className="h-3 w-3" /> Locked
+          </span>
+        )}
       </div>
 
       {/* Void confirmation */}

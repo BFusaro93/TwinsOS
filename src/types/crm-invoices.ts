@@ -20,6 +20,9 @@ export type PaymentMethod =
   | 'Credit Card- Discover'
   | 'Credit Card- MasterCard'
   | 'Credit Card- Visa'
+  | 'Debit Card- Discover'
+  | 'Debit Card- MasterCard'
+  | 'Debit Card- Visa'
   | 'Other';
 
 export type ContractStatus =

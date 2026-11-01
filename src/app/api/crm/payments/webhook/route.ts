@@ -72,13 +72,15 @@ export async function POST(request: Request) {
   const supabase = createServiceClient();
 
   let cardBrand: string | null = null;
+  let cardFunding: string | null = null;
   try {
     const charges = await stripe.charges.list({ payment_intent: paymentIntent.id, limit: 1 });
     cardBrand = charges.data[0]?.payment_method_details?.card?.brand ?? null;
+    cardFunding = charges.data[0]?.payment_method_details?.card?.funding ?? null;
   } catch {
     cardBrand = null;
   }
-  const method = methodForCardBrand(cardBrand);
+  const method = methodForCardBrand(cardBrand, cardFunding);
 
   // The ledger write is ONE transaction in record_stripe_invoice_payment()
   // (20260927100100) — the same RPC src/lib/stripe/record-charge.ts uses for
