@@ -51,8 +51,9 @@ export async function POST(
 
   // Same gate as the client send-email route (email_activity_send), plus the
   // ticket permission, so a role that can't work tickets can't email from one.
+  // Called through the client, not detached: supabase.rpc reads `this`.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rpc = supabase.rpc as any;
+  const rpc = (fn: string, args: Record<string, unknown>) => (supabase as any).rpc(fn, args);
   const [{ data: canEmail }, { data: canTickets }] = await Promise.all([
     rpc("has_settings_permission", { p_key: "email_activity_send" }),
     rpc("has_settings_permission", { p_key: "tickets_view_modify" }),
