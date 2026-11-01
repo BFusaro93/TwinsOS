@@ -2006,6 +2006,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "To the email address of the person who is signed in and clicking the button, never a fixed address. The subject starts with [TEST] and the merge tags use sample values.",
       },
       {
+        q: "Can each estimate document have its own client-view toggles?",
+        a: "Yes. In the document's Edit Settings (Estimate-type documents only), tick 'Set What The Client Sees For This Document' and choose visits, quantities, units, line prices, line totals, section subtotals and the hide-$0 options. Those toggles are copied onto an estimate when it uses the document. The order, most specific first, is the estimate's own toggles, then the document's, then the service bundle's, then the org default. They are copied, so editing the document later does not change existing estimates or sent proposals.",
+      },
+      {
+        q: "What happens to an estimate's toggles if I change its Estimate Document or apply a bundle?",
+        a: "If you never changed the toggles by hand, the new document's (or bundle's) toggles are copied on silently. If you did change them on the Client View tab, you are asked 'Replace the client-view settings?' with Replace toggles or Keep mine. Keep mine still switches the document or adds the bundle's lines but leaves your toggles alone. A document that sets no toggles leaves the estimate's toggles as they are. Applying a bundle also replaces the estimate's document with the bundle's linked document.",
+      },
+      {
+        q: "What does 'Automatic' mean for an estimate's document?",
+        a: "The estimate has no document of its own picked. Sending or previewing it uses your default active Estimate document (marked default in Documents), or the built-in proposal layout if none is the default. Automatic does not copy the default document's toggles onto the estimate; only picking a document, or applying a bundle that links one, does.",
+      },
+      {
         q: "Can I link a service bundle to an estimate document?",
         a: "Yes. Open the bundle (Settings > Estimates > Service Bundles) and pick an Estimate document on the Details tab. Estimates created from, or given, that bundle remember the document, and Send pre-selects it instead of the default. The client-view toggles for the bundle are on the Display Settings tab.",
       },

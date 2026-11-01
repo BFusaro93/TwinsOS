@@ -65,6 +65,28 @@ export function useTickets(filters?: { status?: TicketStatus; clientId?: string 
   });
 }
 
+/** Soft-deleted tickets (the list's "Deleted" view). Every other query excludes them. */
+export function useDeletedTickets(filters: { clientId?: string; enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: ["crm-tickets", "deleted", filters.clientId ?? null],
+    enabled: filters.enabled ?? true,
+    queryFn: async () => {
+      const supabase = createClient();
+      const rows = await fetchAllRows<unknown>(() => {
+        let query = supabase
+          .from("crm_tickets")
+          .select("*, clients(display_name)")
+          .not("deleted_at", "is", null)
+          .order("deleted_at", { ascending: false })
+          .order("id");
+        if (filters.clientId) query = query.eq("client_id", filters.clientId);
+        return query;
+      });
+      return rows.map(mapTicket) as CRMTicket[];
+    },
+  });
+}
+
 export function useTicket(id: string) {
   return useQuery({
     queryKey: ["crm-tickets", id],
@@ -146,6 +168,15 @@ export function useCreateTicket() {
           ticketId: ticket.id,
           matchValues: values.category ? [values.category] : undefined,
         });
+        // Logged straight as closed (e.g. a finished call) is still a closed ticket.
+        if (values.status === "closed") {
+          fireAutomationTrigger({
+            triggerType: "ticket_closed",
+            clientId: values.clientId,
+            ticketId: ticket.id,
+            matchValues: values.category ? [values.category] : undefined,
+          });
+        }
       }
     },
   });
@@ -520,6 +551,45 @@ export function useDeleteTicket() {
   });
 }
 
+/**
+ * Undo a soft delete: clears deleted_at and leaves status (and everything else)
+ * as it was. Optimistically drops the rows from the Deleted view. The crm_tickets
+ * audit trigger records the UPDATE, so the restore shows in the Audit Trail.
+ */
+export function useRestoreTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_tickets")
+        .update({ deleted_at: null })
+        .eq("id", id)
+        .not("deleted_at", "is", null)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      return { restored: !!data };
+    },
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: ["crm-tickets", "deleted"] });
+      const previous = qc.getQueriesData<CRMTicket[]>({ queryKey: ["crm-tickets", "deleted"] });
+      qc.setQueriesData<CRMTicket[]>({ queryKey: ["crm-tickets", "deleted"] }, (old) =>
+        old ? old.filter((t) => t.id !== id) : old
+      );
+      return { previous };
+    },
+    onError: (_err, _id, ctx) => {
+      ctx?.previous.forEach(([key, data]) => qc.setQueryData(key, data));
+      toast.error("Failed to restore ticket");
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["crm-tickets"] });
+    },
+  });
+}
+
 export function useClearSmsConsentPendingPhone() {
   const qc = useQueryClient();
   return useMutation({
@@ -572,6 +642,96 @@ export function useCloseTicket() {
     },
     onError: () => {
       toast.error("Failed to close ticket");
+    },
+  });
+}
+
+export interface TicketEmail {
+  id: string;
+  subject: string | null;
+  sentTo: string | null;
+  sentAt: string;
+  sentBy: string | null;
+  deliveredAt: string | null;
+  openedAt: string | null;
+  clickedAt: string | null;
+  bouncedAt: string | null;
+  failedAt: string | null;
+}
+
+/** Emails sent from this ticket (client_activity rows linked via ref_table/ref_id). */
+export function useTicketEmails(ticketId: string) {
+  return useQuery({
+    queryKey: ["crm-ticket-emails", ticketId],
+    enabled: !!ticketId,
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("client_activity")
+        .select("id, subject, sent_to, occurred_at, created_by, delivered_at, opened_at, clicked_at, bounced_at, failed_at")
+        .eq("activity_type", "email")
+        .eq("ref_table", "crm_tickets")
+        .eq("ref_id", ticketId)
+        .order("occurred_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((r): TicketEmail => ({
+        id: r.id,
+        subject: r.subject,
+        sentTo: r.sent_to,
+        sentAt: r.occurred_at,
+        sentBy: r.created_by,
+        deliveredAt: r.delivered_at,
+        openedAt: r.opened_at,
+        clickedAt: r.clicked_at,
+        bouncedAt: r.bounced_at,
+        failedAt: r.failed_at,
+      }));
+    },
+  });
+}
+
+export function useSendTicketEmail() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      ticketId: string;
+      to: string;
+      subject: string;
+      bodyHtml: string;
+      statusAfter: TicketStatus;
+    }) => {
+      const res = await fetch(`/api/crm/tickets/${input.ticketId}/send-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: input.to,
+          subject: input.subject,
+          bodyHtml: input.bodyHtml,
+          statusAfter: input.statusAfter,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        wasClosed?: boolean;
+        wasReopened?: boolean;
+        clientId?: string | null;
+        category?: string | null;
+      };
+      if (!res.ok) throw new Error(json.error ?? "Failed to send email");
+      return json;
+    },
+    onSuccess: (d, { ticketId }) => {
+      if ((d.wasClosed || d.wasReopened) && d.clientId) {
+        fireAutomationTrigger({
+          triggerType: d.wasClosed ? "ticket_closed" : "ticket_reopened",
+          clientId: d.clientId,
+          ticketId,
+          matchValues: d.category ? [d.category] : undefined,
+        });
+      }
+      qc.invalidateQueries({ queryKey: ["crm-ticket-emails", ticketId] });
+      qc.invalidateQueries({ queryKey: ["crm-tickets"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
     },
   });
 }

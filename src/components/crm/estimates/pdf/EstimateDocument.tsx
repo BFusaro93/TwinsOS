@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Font,
 } from "@react-pdf/renderer";
+import { DocumentPdfBlocks, type DocumentPdfBlock } from "@/components/crm/documents/pdf/DocumentTemplatePdf";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { complexityFactor, computeInstallmentSchedule } from "@/lib/estimate-calc";
 import { groupIntoSections, type DisplaySettings, type DisplaySection } from "@/lib/estimate-display-settings";
@@ -99,6 +100,9 @@ export interface EstimatePDFData {
 
   lineItems: EstimatePDFLineItem[];
   photos: EstimatePDFPhoto[];
+  /** The Estimate-type document laying out this PDF (blocks with merge tags
+   *  already resolved). Absent = the built-in header/meta layout. */
+  document?: { blocks: DocumentPdfBlock[] } | null;
 }
 
 export interface OrgPDFData {
@@ -493,10 +497,139 @@ function EstimatePages({ estimate, org }: { estimate: EstimatePDFData; org: OrgP
       )
     : [];
 
+  // Line items, totals, payment schedule and notes: the estimate's dynamic
+  // section. In the built-in layout it follows the header/meta rows; an
+  // Estimate document places it at its estimate_grid block instead.
+  const gridNode = (
+    <>
+        {/* ── line items ─────────────────────────────────────────────── */}
+        {estimate.tiersEnabled ? (
+          TIER_ORDER.map((tierKey) => {
+            const items = estimate.lineItems.filter((li) => li.tier === tierKey);
+            if (items.length === 0) return null;
+            const tierTotalCents = items.filter((li) => li.rowType !== "section").reduce((sum, li) => sum + li.totalCents, 0);
+            const sections = groupIntoSections(items, estimate.displaySettings);
+            return (
+              <View key={tierKey} style={S.tierGroup}>
+                <View style={[S.tierBanner, { backgroundColor: accentColor }]}>
+                  <Text style={S.tierBannerText}>{estimate.tierLabels[tierKey]}</Text>
+                </View>
+                <LineItemTableHeader settings={estimate.displaySettings} backgroundColor="#1F1F1F" />
+                <LineItemSections sections={sections} settings={estimate.displaySettings} />
+                <View style={S.tierSubtotalRow}>
+                  <Text style={S.tierSubtotalLabel}>{estimate.tierLabels[tierKey]} Total</Text>
+                  <Text style={[S.tierSubtotalValue, { color: accentColor }]}>{cents(tierTotalCents)}</Text>
+                </View>
+              </View>
+            );
+          })
+        ) : (
+          <>
+            <LineItemTableHeader settings={estimate.displaySettings} backgroundColor={accentColor} />
+            <LineItemSections sections={groupIntoSections(estimate.lineItems, estimate.displaySettings)} settings={estimate.displaySettings} />
+          </>
+        )}
+
+        {/* ── totals ─────────────────────────────────────────────────── */}
+        {estimate.tiersEnabled ? (
+          (estimate.depositRequiredCents > 0 || (estimate.showDiscounts && estimate.discountCents > 0)) && (
+            <View style={S.totalsBlock}>
+              {estimate.showDiscounts && estimate.discountCents > 0 && (
+                <View style={S.totalsRow}>
+                  <Text style={[S.totalsLabel, { color: "#16a34a" }]}>Discount</Text>
+                  <Text style={[S.totalsValue, { color: "#16a34a" }]}>-{cents(estimate.discountCents)}</Text>
+                </View>
+              )}
+              {estimate.depositRequiredCents > 0 && (
+                <View style={S.totalsRow}>
+                  <Text style={[S.totalsLabel, { fontFamily: "Helvetica-Bold" }]}>Deposit Required</Text>
+                  <Text style={S.totalsValue}>{cents(estimate.depositRequiredCents)}</Text>
+                </View>
+              )}
+            </View>
+          )
+        ) : (
+          <View style={S.totalsBlock}>
+            <View style={S.totalsRow}>
+              <Text style={S.totalsLabel}>Subtotal</Text>
+              <Text style={S.totalsValue}>{cents(estimate.subtotalCents)}</Text>
+            </View>
+            {estimate.showDiscounts && estimate.discountCents > 0 && (
+              <View style={S.totalsRow}>
+                <Text style={[S.totalsLabel, { color: "#16a34a" }]}>Discount</Text>
+                <Text style={[S.totalsValue, { color: "#16a34a" }]}>-{cents(estimate.discountCents)}</Text>
+              </View>
+            )}
+            {estimate.taxRateBps > 0 && (
+              <View style={S.totalsRow}>
+                <Text style={S.totalsLabel}>Tax ({bpsToPercent(estimate.taxRateBps)})</Text>
+                <Text style={S.totalsValue}>{cents(estimate.taxCents)}</Text>
+              </View>
+            )}
+            <View style={S.totalDivider} />
+            <View style={S.grandTotalRow}>
+              <Text style={S.grandTotalLabel}>Total</Text>
+              <Text style={[S.grandTotalValue, { color: accentColor }]}>{cents(estimate.totalCents)}</Text>
+            </View>
+            {estimate.depositRequiredCents > 0 && (
+              <View style={S.totalsRow}>
+                <Text style={[S.totalsLabel, { fontFamily: "Helvetica-Bold" }]}>Deposit Required</Text>
+                <Text style={S.totalsValue}>{cents(estimate.depositRequiredCents)}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ── payment schedule ───────────────────────────────────────── */}
+        {installmentSchedule.length > 0 && (
+          <View style={S.scheduleSection}>
+            <Text style={S.scheduleLabel}>Payment Schedule</Text>
+            {installmentSchedule.map((inst) => (
+              <View key={inst.number} style={S.scheduleRow}>
+                <Text style={S.scheduleText}>Installment {inst.number} of {installmentSchedule.length} — due {formatDate(inst.dueDate)}</Text>
+                <Text style={[S.scheduleText, { fontFamily: "Helvetica-Bold" }]}>{cents(inst.amountCents)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {estimate.paymentPlanType === "milestones" && estimate.milestones.length > 0 && (
+          <View style={S.scheduleSection}>
+            <Text style={S.scheduleLabel}>Payment Schedule</Text>
+            {estimate.milestones.map((m, i) => (
+              <View key={i} style={S.scheduleRow}>
+                <Text style={S.scheduleText}>{m.name}</Text>
+                <Text style={[S.scheduleText, { fontFamily: "Helvetica-Bold" }]}>{cents(m.amountCents)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* ── notes ──────────────────────────────────────────────────── */}
+        {estimate.notes ? (
+          <View style={S.notesSection}>
+            <Text style={S.notesLabel}>Notes</Text>
+            <Text style={S.notesText}>{estimate.notes}</Text>
+          </View>
+        ) : null}
+
+    </>
+  );
+  const documentHasGrid = !!estimate.document?.blocks.some((b) => b.blockType === "estimate_grid");
+
   return (
     <>
       <Page size="LETTER" style={S.page}>
 
+        {estimate.document ? (
+          <>
+            <DocumentPdfBlocks
+              blocks={estimate.document.blocks}
+              renderGrid={documentHasGrid ? () => gridNode : undefined}
+            />
+            {documentHasGrid ? null : gridNode}
+          </>
+        ) : (
+          <>
         {/* ── header ─────────────────────────────────────────────────── */}
         <View style={S.header}>
           <View style={S.logoPlaceholder}>
@@ -678,6 +811,9 @@ function EstimatePages({ estimate, org }: { estimate: EstimatePDFData; org: OrgP
             <Text style={S.notesText}>{estimate.notes}</Text>
           </View>
         ) : null}
+
+          </>
+        )}
 
         {/* ── signature ──────────────────────────────────────────────── */}
         <View style={S.signatureSection}>

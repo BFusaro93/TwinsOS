@@ -50,6 +50,7 @@ import {
   Move,
   Plus,
   Rows3,
+  Table2,
   Send,
   Signature,
   Smartphone,
@@ -75,6 +76,10 @@ import type {
   MergeTag,
 } from "@/types/crm-documents";
 import { SearchInput } from "@/components/shared/SearchInput";
+import {
+  EstimateSettingsFields,
+} from "@/components/crm/documents/EstimateSettingsFields";
+import type { EstimateSettingsValue } from "@/components/crm/documents/EstimateSettingsFields";
 
 // ── Block palette ─────────────────────────────────────────────────────────────
 
@@ -96,6 +101,8 @@ const BLOCK_PALETTE: BlockDef[] = [
   { type: "signature",  icon: <Signature className="h-4 w-4" />,   defaultContent: "<p>[companyname]<br>[companyphone]</p>", useRichText: true },
   { type: "button",     icon: <AlignCenter className="h-4 w-4" />, defaultContent: "View Your Document",                   useRichText: false },
   { type: "columns",    icon: <Columns2 className="h-4 w-4" />,    defaultContent: serializeColumnsContent({ count: 2, columns: ["", ""] }), useRichText: false },
+  // Estimate documents only (see availablePalette): the estimate's line-items table.
+  { type: "estimate_grid", icon: <Table2 className="h-4 w-4" />,    defaultContent: "",                                      useRichText: false },
 ];
 
 // ── Draft block ───────────────────────────────────────────────────────────────
@@ -382,6 +389,12 @@ function BlockCanvas({
             <Rows3 className="mx-auto mb-2 h-6 w-6" />
             Line Items Table — populated automatically from the document
           </div>
+        ) : block.blockType === "estimate_grid" ? (
+          <div className="rounded border border-dashed border-slate-300 dark:border-neutral-700 bg-slate-50 dark:bg-muted/40 px-4 py-8 text-center text-sm text-slate-400 dark:text-neutral-500">
+            <Table2 className="mx-auto mb-2 h-6 w-6" />
+            <span className="font-medium text-slate-500 dark:text-neutral-400">Estimate Grid</span>
+            <span className="block text-xs">Dynamic content — the estimate&apos;s line items, quantities and prices fill in here when it is sent or viewed</span>
+          </div>
         ) : block.blockType === "image" ? (
           <ImageBlockContent
             url={block.content}
@@ -471,12 +484,20 @@ function SettingsDialog({
   const [desc, setDesc]             = useState(template.description ?? "");
   const [isDefault, setIsDefault]   = useState(template.isDefault);
   const [includePdf, setIncludePdf] = useState(template.includePdf);
+  const [estimateSettings, setEstimateSettings] = useState<EstimateSettingsValue>({
+    estimateEmailDocumentId: template.estimateEmailDocumentId,
+    confirmationDocumentId: template.confirmationDocumentId,
+    confirmationRecipient: template.confirmationRecipient,
+    confirmationIncludeEstimatePdf: template.confirmationIncludeEstimatePdf,
+    displaySettings: template.displaySettings,
+  });
   const [saving, setSaving]         = useState(false);
 
   async function handleSave() {
     setSaving(true);
     try {
-      await updateDoc.mutateAsync({ name, docType, subject: subject || null, description: desc || null, isDefault, includePdf });
+      await updateDoc.mutateAsync({ name, docType, subject: subject || null, description: desc || null, isDefault, includePdf,
+        ...(docType === "estimate" ? estimateSettings : {}) });
       toast.success("Settings saved");
       onOpenChange(false);
     } catch {
@@ -488,7 +509,7 @@ function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Document Settings</DialogTitle>
         </DialogHeader>
@@ -522,7 +543,16 @@ function SettingsDialog({
             <Checkbox id="is-default" checked={isDefault} onCheckedChange={(c) => setIsDefault(!!c)} />
             <Label htmlFor="is-default" className="cursor-pointer">Default document for this type</Label>
           </div>
-          {(docType === "estimate" || docType === "invoice_email") && (
+          {docType === "estimate" && (
+            <EstimateSettingsFields
+              value={estimateSettings}
+              onChange={setEstimateSettings}
+              excludeId={template.id}
+              includePdf={includePdf}
+              onIncludePdfChange={setIncludePdf}
+            />
+          )}
+          {docType === "invoice_email" && (
             <div className="flex items-center gap-3">
               <Checkbox id="include-pdf" checked={includePdf} onCheckedChange={(c) => setIncludePdf(!!c)} />
               <Label htmlFor="include-pdf" className="cursor-pointer">Include PDF attachment in email</Label>
@@ -577,9 +607,13 @@ export function DocumentBuilder({ template }: Props) {
   }
 
   // Text messages are plain SMS body text — no headers, images, buttons, etc.
+  // The Estimate Grid tile is for Estimate documents, one per document.
+  const hasGrid = blocks.some((b) => b.blockType === "estimate_grid");
   const availablePalette = PLAIN_TEXT_DOC_TYPES.includes(template.docType)
     ? BLOCK_PALETTE.filter((d) => d.type === "paragraph")
-    : BLOCK_PALETTE;
+    : BLOCK_PALETTE.filter(
+        (d) => d.type !== "estimate_grid" || (template.docType === "estimate" && !hasGrid),
+      );
 
   const mergeTags = MERGE_TAGS_BY_TYPE[template.docType] ?? [];
   const filteredMergeTags = mergeSearch

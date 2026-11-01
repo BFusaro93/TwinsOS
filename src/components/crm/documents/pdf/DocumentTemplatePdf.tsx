@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 import { htmlToPdfNodes } from "@/lib/utils/html-to-pdf";
 import { parseColumnsContent } from "@/lib/utils/document-template-renderer";
@@ -60,7 +61,7 @@ const S = StyleSheet.create({
   },
 });
 
-function renderBlock(block: DocumentPdfBlock, key: number) {
+function renderBlock(block: DocumentPdfBlock, key: number, renderGrid?: () => ReactNode) {
   switch (block.blockType) {
     case "header":
       return <View key={key} wrap={false}>{htmlToPdfNodes(block.content ?? "", S.header)}</View>;
@@ -101,6 +102,16 @@ function renderBlock(block: DocumentPdfBlock, key: number) {
           Line items will appear here automatically when this document is sent.
         </Text>
       );
+    case "estimate_grid":
+      // An Estimate document's dynamic line-items section. The estimate PDF
+      // supplies the real one; a standalone template PDF has no estimate.
+      return renderGrid ? (
+        <View key={key}>{renderGrid()}</View>
+      ) : (
+        <Text key={key} style={S.lineItemsPlaceholder}>
+          The estimate&apos;s line items and totals appear here automatically.
+        </Text>
+      );
     case "button":
       return (
         <Text key={key} style={S.button}>
@@ -110,6 +121,30 @@ function renderBlock(block: DocumentPdfBlock, key: number) {
     default:
       return null;
   }
+}
+
+/** The blocks as react-pdf nodes, in order. `renderGrid` supplies the
+ *  estimate_grid block's content (only the first grid block renders it). */
+export function DocumentPdfBlocks({
+  blocks,
+  renderGrid,
+}: {
+  blocks: DocumentPdfBlock[];
+  renderGrid?: () => ReactNode;
+}) {
+  const sorted = [...blocks].sort((a, b) => a.orderIndex - b.orderIndex);
+  let gridUsed = false;
+  return (
+    <>
+      {sorted.map((b, i) => {
+        if (b.blockType === "estimate_grid") {
+          if (gridUsed) return null;
+          gridUsed = true;
+        }
+        return renderBlock(b, i, renderGrid);
+      })}
+    </>
+  );
 }
 
 export function DocumentTemplatePdf({
@@ -123,7 +158,7 @@ export function DocumentTemplatePdf({
   return (
     <Document title={title}>
       <Page size="LETTER" style={S.page}>
-        {sorted.map((b, i) => renderBlock(b, i))}
+        <DocumentPdfBlocks blocks={sorted} />
       </Page>
     </Document>
   );

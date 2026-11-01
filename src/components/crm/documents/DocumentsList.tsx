@@ -6,6 +6,7 @@ import {
   useDocumentTemplates,
   useCreateDocumentTemplate,
   useDeleteDocumentTemplate,
+  useDuplicateDocumentTemplate,
   useUpdateDocumentTemplate,
 } from "@/lib/hooks/use-crm-documents";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DEFAULT_ESTIMATE_SETTINGS,
+  EstimateSettingsFields,
+} from "@/components/crm/documents/EstimateSettingsFields";
+import type { EstimateSettingsValue } from "@/components/crm/documents/EstimateSettingsFields";
+import { buildStandardEstimateBlocks } from "@/components/crm/documents/standard-estimate-layout";
 import { cn } from "@/lib/utils";
 import { MoreHorizontal, Plus, Trash2, FileEdit } from "lucide-react";
 import { toast } from "sonner";
@@ -70,6 +78,9 @@ function NewDocumentDialog({
   const [description, setDescription] = useState("");
   const [subject, setSubject]     = useState("");
   const [saving, setSaving]       = useState(false);
+  const [estimateSettings, setEstimateSettings] = useState<EstimateSettingsValue>(DEFAULT_ESTIMATE_SETTINGS);
+  const [includePdf, setIncludePdf] = useState(false);
+  const [useStandardLayout, setUseStandardLayout] = useState(true);
 
   async function handleCreate() {
     if (!name.trim()) { toast.error("Name is required"); return; }
@@ -80,6 +91,13 @@ function NewDocumentDialog({
         docType,
         description: description.trim() || undefined,
         subject: subject.trim() || undefined,
+        ...(docType === "estimate"
+          ? {
+              includePdf,
+              ...estimateSettings,
+              blocks: useStandardLayout ? buildStandardEstimateBlocks() : undefined,
+            }
+          : {}),
       });
       toast.success("Document created");
       onOpenChange(false);
@@ -93,12 +111,13 @@ function NewDocumentDialog({
 
   function handleClose() {
     setName(""); setDocType("client"); setDescription(""); setSubject(""); setSaving(false);
+    setEstimateSettings(DEFAULT_ESTIMATE_SETTINGS); setIncludePdf(false); setUseStandardLayout(true);
     onOpenChange(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New Document</DialogTitle>
         </DialogHeader>
@@ -128,6 +147,25 @@ function NewDocumentDialog({
             <Label>Description</Label>
             <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Optional internal note" />
           </div>
+          {docType === "estimate" && (
+            <>
+              <div className="flex items-start gap-3">
+                <Checkbox id="new-standard-layout" checked={useStandardLayout} onCheckedChange={(c) => setUseStandardLayout(!!c)} className="mt-0.5" />
+                <Label htmlFor="new-standard-layout" className="cursor-pointer leading-snug">
+                  Start from the standard layout
+                  <span className="block text-[11px] font-normal text-muted-foreground">
+                    Company header beside a logo, a greeting, the Estimate Grid, a divider and a terms section.
+                  </span>
+                </Label>
+              </div>
+              <EstimateSettingsFields
+                value={estimateSettings}
+                onChange={setEstimateSettings}
+                includePdf={includePdf}
+                onIncludePdfChange={setIncludePdf}
+              />
+            </>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={handleClose}>Cancel</Button>
@@ -291,7 +329,18 @@ function DocumentRow({
   const { can } = usePermissions();
   const canEdit = can("document_template_edit");
   const canDelete = can("document_template_delete");
+  const canCopy = can("document_template_add");
   const updateDoc = useUpdateDocumentTemplate(doc.id);
+  const duplicateDoc = useDuplicateDocumentTemplate();
+
+  async function copyDoc() {
+    try {
+      const copy = await duplicateDoc.mutateAsync(doc.id);
+      toast.success(`Created "${copy.name}"`);
+    } catch {
+      toast.error("Failed to copy document");
+    }
+  }
 
   async function toggleStatus() {
     const next: DocStatus = doc.status === "active" ? "inactive" : "active";
@@ -330,6 +379,11 @@ function DocumentRow({
                   {doc.status === "active" ? "Deactivate" : "Activate"}
                 </DropdownMenuItem>
               </>
+            )}
+            {canCopy && (
+              <DropdownMenuItem onClick={copyDoc} disabled={duplicateDoc.isPending}>
+                Copy
+              </DropdownMenuItem>
             )}
             {canDelete && (
               <>

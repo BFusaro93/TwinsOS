@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { createClient } from "@supabase/supabase-js";
 import { buildProposalContent, getPublishedProposal } from "@/lib/estimates/proposal-content";
+import { loadEstimateDocumentMergeVars, renderProposalDocumentHtml } from "@/lib/estimates/estimate-document-render";
 import { isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 
 // Public route — no auth. Uses service role to read across RLS.
@@ -124,7 +125,26 @@ export async function GET(
   const published = await getPublishedProposal(supabase, shareToken.estimate_id);
   const content = published?.content ?? buildProposalContent(est as Record<string, unknown>);
 
+  // The Estimate-type document that laid out the version being viewed, rendered
+  // to sanitized HTML around the estimate_grid position. Only a layout recorded
+  // in that version's snapshot is used (never the live template), so template
+  // edits don't change a sent proposal; versions without one, and any failure,
+  // fall back to the built-in page (document: null).
+  let document: { name: string; beforeHtml: string; afterHtml: string } | null = null;
+  if (content.document && content.document.blocks.length > 0) {
+    try {
+      const vars = await loadEstimateDocumentMergeVars(supabase, shareToken.estimate_id, { content, shareToken: token, html: true });
+      const rendered = renderProposalDocumentHtml(content.document, vars);
+      if (rendered.beforeHtml || rendered.afterHtml) {
+        document = { name: content.document.name, beforeHtml: rendered.beforeHtml, afterHtml: rendered.afterHtml };
+      }
+    } catch {
+      document = null;
+    }
+  }
+
   return NextResponse.json({
+    document,
     estimateNumber: est.estimate_number,
     description: content.description,
     createdAt: est.created_at,

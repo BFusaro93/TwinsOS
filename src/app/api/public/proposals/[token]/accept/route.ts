@@ -10,6 +10,7 @@ import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { notifyStaffOfDepositExcess } from "@/lib/estimate-deposit-excess-notify";
 import { recordAcceptedVersion } from "@/lib/estimates/versions";
 import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
+import { sendConfiguredAcceptanceConfirmation } from "@/lib/estimates/accept-confirmation";
 
 const log = logger.child("proposal-accept");
 
@@ -456,8 +457,15 @@ export async function POST(
   const clientEmail = clientRow?.primary_email as string | null;
   const clientName = clientRow?.display_name as string | null;
 
+  // An org-configured confirmation document (Settings > Estimates) replaces
+  // the built-in email. It never throws; "not_configured" (no document set, or
+  // it was deactivated/deleted) falls through to the built-in email below.
+  const configuredResult = est
+    ? await sendConfiguredAcceptanceConfirmation(supabase, { estimateId: shareToken.estimate_id, shareToken: token })
+    : "not_configured";
+
   // A hard-bounced address accepts no mail; the acceptance itself is already recorded.
-  if (clientEmail && est && !clientRow?.email_bounced_at) {
+  if (configuredResult === "not_configured" && clientEmail && est && !clientRow?.email_bounced_at) {
     const { data: org } = await supabase
       .from("organizations")
       .select("name, brand_color, address")

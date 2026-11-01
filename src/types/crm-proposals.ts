@@ -124,6 +124,9 @@ import type { DisplaySettings } from "@/lib/estimate-display-settings";
 
 // Public proposal data shape (returned by the proposal API, no auth required)
 export interface ProposalData {
+  /** Estimate-type document layout, as sanitized HTML either side of the
+   *  estimate_grid position. Null/absent = the built-in page layout. */
+  document?: { name: string; beforeHtml: string; afterHtml: string } | null;
   estimateNumber: number;
   description: string | null;
   createdAt: string;
