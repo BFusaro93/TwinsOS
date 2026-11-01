@@ -1,5 +1,5 @@
 -- "Start invoices at #N" — for orgs migrating from another system who want the next invoice to
--- continue their old sequence. Draws from the per-org counter (see 20261130001600), switching
+-- continue their old sequence. Draws from the per-org counter (see 20261203000100), switching
 -- the org onto it. (The card surcharge mode lives in organizations.customizations, no column.)
 create or replace function public.set_next_invoice_number(p_next integer)
 returns integer

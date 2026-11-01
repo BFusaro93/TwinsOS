@@ -96,7 +96,7 @@ export async function POST(request: Request) {
     trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
   };
   // per_org_numbering numbers invoices/estimates/tickets from 1 instead of the global counters. It
-  // comes from migration 20261130001600; if that isn't applied to this database yet (undefined
+  // comes from migration 20261203000100; if that isn't applied to this database yet (undefined
   // column, 42703), create the org without it rather than failing signup.
   let { data: org, error: orgErr } = await adminClient
     .from("organizations")
