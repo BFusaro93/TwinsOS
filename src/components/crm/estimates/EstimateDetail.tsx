@@ -427,7 +427,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   // then copy or open. Opening pre-creates the tab synchronously so the
   // popup blocker doesn't eat a window.open issued after an await.
   async function resolveProposalUrl(): Promise<string | null> {
-    if (liveProposalUrl) return liveProposalUrl;
+    // A live link with unpublished edits still goes through the share-link POST, which
+    // publishes the current estimate first (the banner promises "Send, or Copy link").
+    if (liveProposalUrl && !shareLink?.changedSinceSent) return liveProposalUrl;
     if (!estimate) return null;
     try {
       const res = await ensureShareLink(estimate.id);
