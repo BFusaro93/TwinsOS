@@ -107,7 +107,7 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: org } = await (supabase.from("organizations") as any)
     .select(
-      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
+      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
     )
     .eq("id", effOrgId)
     .single();
@@ -195,6 +195,7 @@ export async function POST(request: Request) {
       ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
       ccProcessingFeeBps: org.cc_processing_fee_bps,
       ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+      ccProcessingFeeMode: (org.customizations as Record<string, unknown> | null)?.cc_processing_fee_mode as string | undefined,
     },
     balanceCents,
     false
@@ -208,6 +209,7 @@ export async function POST(request: Request) {
             ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
             ccProcessingFeeBps: org.cc_processing_fee_bps,
             ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+            ccProcessingFeeMode: (org.customizations as Record<string, unknown> | null)?.cc_processing_fee_mode as string | undefined,
           },
           balanceCents,
           waiveFee ?? false,

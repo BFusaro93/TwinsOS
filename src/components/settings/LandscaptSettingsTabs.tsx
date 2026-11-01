@@ -1,5 +1,6 @@
 "use client";
 
+import { useInvoiceNumbering, useSetNextInvoiceNumber } from "@/lib/hooks/use-invoice-numbering";
 import React, { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -1567,6 +1568,7 @@ function AccountingTab() {
   const [feeEnabledDraft, setFeeEnabledDraft] = useState(true);
   const [feePercentDraft, setFeePercentDraft] = useState<string>("");
   const [feeThresholdDraft, setFeeThresholdDraft] = useState<string>("");
+  const [feeModeDraft, setFeeModeDraft] = useState<"flat" | "cover_fee">("flat");
   const [feeSaving, setFeeSaving] = useState(false);
 
   const [achSaving, setAchSaving] = useState(false);
@@ -1591,8 +1593,9 @@ function AccountingTab() {
       setFeeEnabledDraft(orgSettings.ccProcessingFeeEnabled);
       setFeePercentDraft(String(orgSettings.ccProcessingFeePercent ?? ""));
       setFeeThresholdDraft(String(orgSettings.ccProcessingFeeThresholdDollars ?? ""));
+      setFeeModeDraft(orgSettings.ccProcessingFeeMode ?? "flat");
     }
-  }, [orgSettings?.ccProcessingFeeEnabled, orgSettings?.ccProcessingFeePercent, orgSettings?.ccProcessingFeeThresholdDollars]);
+  }, [orgSettings?.ccProcessingFeeEnabled, orgSettings?.ccProcessingFeePercent, orgSettings?.ccProcessingFeeThresholdDollars, orgSettings?.ccProcessingFeeMode]);
 
   async function saveTaxRate() {
     const val = parseFloat(taxDraft);
@@ -1608,7 +1611,8 @@ function AccountingTab() {
   const feeDraftDirty =
     feeEnabledDraft !== orgSettings?.ccProcessingFeeEnabled ||
     feePercentDraft !== String(orgSettings?.ccProcessingFeePercent ?? "") ||
-    feeThresholdDraft !== String(orgSettings?.ccProcessingFeeThresholdDollars ?? "");
+    feeThresholdDraft !== String(orgSettings?.ccProcessingFeeThresholdDollars ?? "") ||
+    feeModeDraft !== (orgSettings?.ccProcessingFeeMode ?? "flat");
 
   async function saveProcessingFee() {
     const percent = parseFloat(feePercentDraft);
@@ -1621,6 +1625,7 @@ function AccountingTab() {
         ccProcessingFeeEnabled: feeEnabledDraft,
         ccProcessingFeePercent: percent,
         ccProcessingFeeThresholdDollars: threshold,
+        ccProcessingFeeMode: feeModeDraft,
       });
       toast.success("Processing fee settings saved");
     } catch { toast.error("Failed to save processing fee settings"); }
@@ -1703,6 +1708,21 @@ function AccountingTab() {
               Automatically add a processing fee on card payments
             </Label>
           </div>
+          <div className="flex flex-col gap-1.5 max-w-md">
+            <Label>How the fee is calculated</Label>
+            <UISelect value={feeModeDraft} onValueChange={(v) => setFeeModeDraft(v as "flat" | "cover_fee")} disabled={!feeEnabledDraft}>
+              <UISelectTrigger><UISelectValue /></UISelectTrigger>
+              <UISelectContent>
+                <UISelectItem value="flat">Flat percent of the invoice</UISelectItem>
+                <UISelectItem value="cover_fee">Cover the card fee exactly</UISelectItem>
+              </UISelectContent>
+            </UISelect>
+            <p className="text-xs text-slate-400 dark:text-neutral-500">
+              {feeModeDraft === "cover_fee"
+                ? "The charge is grossed up so that, after Stripe's card fee (2.9% + $0.30, taken from the whole charge including this fee), you receive the full invoice amount. The percent below is ignored."
+                : "A flat percent of the invoice balance. Stripe's card fee is taken from the whole charge, including this fee, so the fee itself costs you a little."}
+            </p>
+          </div>
           <div className="flex items-end gap-3">
             <div className="flex flex-col gap-1.5 w-48">
               <Label>Fee (%)</Label>
@@ -1711,10 +1731,10 @@ function AccountingTab() {
                 step="0.1"
                 min="0"
                 max="100"
-                placeholder="e.g. 3.50"
+                placeholder="e.g. 3.00"
                 value={feePercentDraft}
                 onChange={(e) => setFeePercentDraft(e.target.value)}
-                disabled={!feeEnabledDraft}
+                disabled={!feeEnabledDraft || feeModeDraft === "cover_fee"}
               />
             </div>
             <div className="flex flex-col gap-1.5 w-48">
@@ -1736,7 +1756,16 @@ function AccountingTab() {
           <p className="text-xs text-slate-400 dark:text-neutral-500">
             Staff can waive the fee, or override it with a custom amount, on an individual invoice when charging a card from the invoice detail view.
           </p>
+          <p className="text-xs text-slate-400 dark:text-neutral-500">
+            Some card networks and states limit or ban card surcharges (the networks cap them at 3%). It&apos;s your responsibility to set a fee that is lawful where you operate.
+          </p>
         </div>
+      </AccordionSection>
+      <AccordionSection
+        title="Invoice Numbering"
+        description="Starting in a new system? Set the next invoice number so it continues your old sequence."
+      >
+        <InvoiceNumberingSection />
       </AccordionSection>
       <AccordionSection
         title="Payment Methods"
@@ -2591,6 +2620,64 @@ export function LandscaptSettingsTabs() {
           ))}
         </div>
       </Tabs>
+    </div>
+  );
+}
+
+
+function InvoiceNumberingSection() {
+  const { data: numbering } = useInvoiceNumbering();
+  const setNext = useSetNextInvoiceNumber();
+  const [draft, setDraft] = useState("");
+
+  const parsed = Math.floor(Number(draft));
+  const valid = draft.trim() !== "" && Number.isFinite(parsed) && parsed >= 1 && parsed <= 2_000_000_000;
+  const overlaps = valid && numbering?.maxExisting != null && parsed <= numbering.maxExisting;
+
+  async function save() {
+    if (!valid) return;
+    try {
+      await setNext.mutateAsync(parsed);
+      toast.success(`The next invoice will be #${parsed}`);
+      setDraft("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to set the invoice number");
+    }
+  }
+
+  return (
+    <div className="space-y-3 p-4">
+      <p className="text-sm text-slate-600 dark:text-neutral-400">
+        Next invoice number:{" "}
+        <span className="font-semibold text-slate-900 dark:text-neutral-100">{numbering ? `#${numbering.nextNumber}` : "…"}</span>
+        {numbering?.maxExisting != null && (
+          <span className="text-slate-400 dark:text-neutral-500"> · highest existing invoice is #{numbering.maxExisting}</span>
+        )}
+      </p>
+      <div className="flex items-end gap-3">
+        <div className="flex flex-col gap-1.5 w-48">
+          <Label>Start the next invoice at</Label>
+          <Input
+            type="number"
+            min="1"
+            step="1"
+            placeholder="e.g. 1048"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        </div>
+        <Button size="sm" onClick={save} disabled={!valid || setNext.isPending}>
+          {setNext.isPending ? "Saving…" : "Set number"}
+        </Button>
+      </div>
+      {overlaps && (
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          You already have invoices up to #{numbering?.maxExisting}. Numbers an existing invoice already uses are skipped, so you won&apos;t get duplicates.
+        </p>
+      )}
+      <p className="text-xs text-slate-400 dark:text-neutral-500">
+        Applies to invoices created from now on; existing invoices keep their numbers. Estimates and tickets are numbered separately.
+      </p>
     </div>
   );
 }

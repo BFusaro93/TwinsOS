@@ -1655,6 +1655,7 @@ export function useCreateClientJob() {
           is_complete: false,
           notes: values.notes || null,
           notes_to_crew: values.notesToCrew || null,
+          invoice_description: values.invoiceDescription?.trim() || null,
           budgeted_hours: roundHours(values.services.reduce((sum, s) => sum + (s.budgetedHours || 0) * (s.teamSize || 1), 0)) || null,
         })
         .select()
@@ -2306,6 +2307,18 @@ export function useCreateJobsFromEstimate() {
         resolvedDateSold = acceptedAt ? isoInZone(new Date(acceptedAt), orgTimeZone) : todayInZone(orgTimeZone);
       }
 
+      // A custom Invoice Description set on the estimate line should reach the auto-invoice. The
+      // job-level description applies to every service on the job, so only carry it over when the
+      // job is exactly that one line.
+      let singleLineInvoiceDescription: string | null = null;
+      const singleLineId = services.length === 1 ? services[0].estimateLineItemId : null;
+      if (singleLineId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: lineRow } = await (supabase as any)
+          .from("estimate_line_items").select("invoice_desc").eq("id", singleLineId).maybeSingle();
+        singleLineInvoiceDescription = (lineRow?.invoice_desc as string | null | undefined)?.trim() || null;
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_jobs")
@@ -2314,6 +2327,7 @@ export function useCreateJobsFromEstimate() {
           client_id: clientId,
           property_id: propertyId ?? null,
           estimate_id: estimateId,
+          ...(singleLineInvoiceDescription ? { invoice_description: singleLineInvoiceDescription } : {}),
           job_type: jobType,
           project_id: jobType === "project" ? (projectId ?? null) : null,
           status: scheduledDate ? "scheduled" : "hold",

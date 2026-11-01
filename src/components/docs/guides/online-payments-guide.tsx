@@ -135,7 +135,9 @@ export function OnlinePaymentsGuide() {
           card-processing rate:
         </p>
         <ul className="list-disc space-y-2 pl-5">
-          <li>Defaults to on, at 3.5%, only applied above $500 — all three are adjustable.</li>
+          <li>Off by default for new companies. When you turn it on you set the rate (3% is the starting value) and the threshold above which it applies — for example 3% on card payments over $500.</li>
+          <li>Choose <strong>Flat percent</strong> or <strong>Cover the card fee exactly</strong>. Stripe&apos;s fee is taken from the whole charge, including the surcharge, so a flat percent can leave you slightly short; the cover-the-fee mode grosses the charge up so you receive the full invoice amount.</li>
+          <li>Card networks cap surcharges (at 3%) and some states ban them. Landscapt doesn&apos;t limit the rate — it&apos;s on you to set one that&apos;s lawful where you operate.</li>
           <li>Applies to card payments on invoices <em>and</em> to a deposit paid by card when a client accepts a proposal, on the same threshold.</li>
           <li>Never applied to Bank Transfer/ACH payments — ACH is fee-free by design.</li>
           <li>Staff can waive it or override it to a flat amount on an individual charge; clients paying through the portal or a public pay link cannot.</li>

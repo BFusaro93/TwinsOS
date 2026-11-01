@@ -331,9 +331,6 @@ function PayrollTab({
             <Field label="Resource PIN">
               <FieldInput value={form.resource_pin ?? ""} onChange={(e) => onChange("resource_pin", e.target.value)} placeholder="0000" className="h-8 w-24 text-sm" />
             </Field>
-            <Field label="Eligible for Overtime">
-              <Checkbox checked={!!form.eligible_overtime} onCheckedChange={(c) => onChange("eligible_overtime", !!c)} />
-            </Field>
           </div>
         </div>
         {/* Right: Costing Info */}
@@ -564,18 +561,6 @@ function UserSettingsTab({
               <Checkbox checked={!!form.assignable_to_jobs} onCheckedChange={(c) => onChange("assignable_to_jobs", !!c)} />
               <span className="text-xs text-muted-foreground">Appears in the job and dispatch crew dropdowns under their own name</span>
             </div>
-          </Field>
-          <Field label="Show in Calendar List">
-            <Checkbox checked={!!form.show_in_calendar} onCheckedChange={(c) => onChange("show_in_calendar", !!c)} />
-          </Field>
-          <Field label="Field Time Clock">
-            <Checkbox checked={!!form.field_time_clock} onCheckedChange={(c) => onChange("field_time_clock", !!c)} />
-          </Field>
-          <Field label="Office Time Clock">
-            <Checkbox checked={!!form.office_time_clock} onCheckedChange={(c) => onChange("office_time_clock", !!c)} />
-          </Field>
-          <Field label="Send Text Alerts">
-            <Checkbox checked={!!form.send_text_alerts} onCheckedChange={(c) => onChange("send_text_alerts", !!c)} />
           </Field>
           <Field label="User Role">
             {linkedAccountRole ? (
@@ -1013,7 +998,6 @@ function EmployeeDetail({
         <DetailRow label="Date Hired" value={formatDetailDate(employee.dateHired)} />
         {employee.dateReleased && <DetailRow label="Date Released" value={formatDetailDate(employee.dateReleased)} />}
         {employee.rehireDate && <DetailRow label="Rehire Date" value={formatDetailDate(employee.rehireDate)} />}
-        <DetailRow label="Eligible for OT" value={employee.eligibleOvertime ? "Yes" : null} />
         <DetailRow label="Compensation Type" value={employee.compensationType} />
         <DetailRow label="Payment Frequency" value={employee.paymentFrequency} />
         <DetailRow label="Vacation Days" value={employee.vacationDays > 0 ? employee.vacationDays : null} />
@@ -1065,10 +1049,6 @@ function EmployeeDetail({
         <p className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">App Access</p>
         <DetailRow label="Landscapt Role" value={roleName} />
         <DetailRow label="Sales Rep" value={employee.isSalesRep ? "Yes" : null} />
-        <DetailRow label="Show in Calendar" value={employee.showInCalendar ? "Yes" : "No"} />
-        <DetailRow label="Time Clock" value={
-          [employee.fieldTimeClock && "Field", employee.officeTimeClock && "Office"].filter(Boolean).join(", ") || null
-        } />
         <DetailRow label="Linked Login" value={employee.userId ? "Yes" : null} />
 
         {employee.notes && (

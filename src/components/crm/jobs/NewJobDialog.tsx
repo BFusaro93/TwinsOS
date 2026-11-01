@@ -670,6 +670,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         isComplete: jobType === "one_time" ? isComplete : false,
         notes: null,
         notesToCrew: notesToCrew || null,
+        invoiceDescription: jobType === "package" ? (selectedPackage?.invoiceDescription ?? null) : null,
         services: services.map((s, idx) => ({
           serviceId: s.serviceId || null,
           serviceName: s.serviceName,

@@ -50,10 +50,6 @@ import { SearchInput } from "@/components/shared/SearchInput";
 const DAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
-const ROUTE_SHEET_OPTIONS = [
-  "Standard Route Sheet", "Custom Route Sheet 1", "Custom Route Sheet 2",
-];
-
 // ── section bar ───────────────────────────────────────────────────────────────
 
 function SectionBar({ title }: { title: string }) {
@@ -461,30 +457,6 @@ function TeamDetailsTab({
                   )
                 }
                 placeholder="comma-separated tags"
-              />
-            </Field>
-            <Field label="Route Sheet Format">
-              <Select
-                value={form.route_sheet_format ?? "none"}
-                onValueChange={(v) => onChange("route_sheet_format", v === "none" ? null : v)}
-              >
-                <SelectTrigger className="h-8 text-sm w-56">
-                  <SelectValue placeholder="Select Route Sheet" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {ROUTE_SHEET_OPTIONS.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Show In Calendar">
-              <Checkbox
-                checked={!!form.show_in_calendar}
-                onCheckedChange={(c) => onChange("show_in_calendar", !!c)}
               />
             </Field>
             <Field label="Starting Address">

@@ -266,6 +266,8 @@ export interface NewClientJobFormValues {
   recurrenceEnd?: string | null;
   isComplete: boolean;
   notes: string | null;
+  /** Job-level wording for the auto-invoice line (e.g. a package's invoice description). */
+  invoiceDescription?: string | null;
   notesToCrew: string | null;
   services: NewClientJobServiceValues[];
   products: NewClientJobProductValues[];

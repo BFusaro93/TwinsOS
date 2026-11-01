@@ -27,7 +27,7 @@ const ITEMS: DeepDiveItem[] = [
   {
     icon: CreditCard,
     title: "Stripe-Powered Payments",
-    body: "Clients pay by card or bank transfer at Stripe's standard rates (2.9% + $0.30 per card charge, 0.8% per ACH transfer capped at $5). A pass-through fee to recover the card cost from clients — 3.5% above $500 by default — is on by default and adjustable per company.",
+    body: "Clients pay by card or bank transfer at Stripe's standard rates (2.9% + $0.30 per card charge, 0.8% per ACH transfer capped at $5). An optional pass-through fee to recover the card cost from clients is off by default; you set the rate and threshold, or have it cover Stripe's fee exactly, and can waive it per charge.",
   },
   {
     icon: RefreshCw,

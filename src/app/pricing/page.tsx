@@ -79,12 +79,13 @@ export default function PricingPage() {
                   Pass-through fee to clients
                 </div>
                 <div className="flex items-center justify-between py-1 text-[13.5px]">
-                  <span className="text-slate-600">Default rate</span>
-                  <span className="font-semibold text-[#0a0a0a]">3.5% above $500</span>
+                  <span className="text-slate-600">Your rate</span>
+                  <span className="font-semibold text-[#0a0a0a]">You choose (e.g. 3% above $500)</span>
                 </div>
                 <div className="py-1 text-[12px] leading-relaxed text-slate-500">
-                  On by default. Rate, threshold, and whether it&apos;s charged at all are adjustable per
-                  company — and waivable per charge.
+                  Off by default. Turn it on and set the rate and threshold, or choose &ldquo;cover the card
+                  fee exactly&rdquo; so you net the full invoice after Stripe&apos;s fee. Waivable per charge.
+                  Some card networks and states limit or ban surcharges, so check the rules where you operate.
                 </div>
               </div>
             </div>

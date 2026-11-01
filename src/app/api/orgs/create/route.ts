@@ -88,6 +88,7 @@ export async function POST(request: Request) {
     // company starts with no tax and no surcharge and opts in from Settings.
     tax_rate_percent: 0,
     cc_processing_fee_enabled: false,
+    cc_processing_fee_bps: 300,
     ...(timezone ? { timezone } : {}),
     ...(replyTo ? { customizations: { reply_to_email: replyTo } } : {}),
     // No column default — without this a new org's trial never expires
