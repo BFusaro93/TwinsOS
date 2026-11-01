@@ -104,8 +104,9 @@ export function CrewAppGuide() {
         labelled &quot;already on&quot; the crew that holds it. That attachment
           is what decides whose stops get shown, and the app refuses to clock in or out on a stop
           belonging to a different crew. A crew login that isn&apos;t attached to any crew (for
-          example, one you unlinked, or created before this was automatic) signs in to an empty
-          schedule.
+          example, one you unlinked, or created before this was automatic) signs in to a screen
+          that says &quot;Your login isn&apos;t linked to a crew&quot; rather than a quiet day. Invited users
+          who haven&apos;t accepted yet appear in the Linked Login list marked &quot;(invite pending)&quot;.
         </Callout>
         <p>
           <strong>A regular user can be a crew&apos;s Linked Login too.</strong> If someone who works
@@ -216,7 +217,10 @@ export function CrewAppGuide() {
             Mon&ndash;Wed and another Thu&ndash;Fri counts only on the crew they&apos;re scheduled
             with that day; a same-day reassignment always wins). Deactivated or terminated employees
             are never on a roster. A crew with nobody on its roster can&apos;t
-            start a day &mdash; the button stays disabled until the office adds people.
+            start a day &mdash; the button stays disabled, with a note underneath, until
+            someone is added (tap <strong>Edit Crew</strong> to add the people working, or ask the office).
+            A crew account created under Settings → Users starts with an empty roster, so add team
+            members under Team → Crews first.
           </li>
           <li>
             <strong>Forgot to tap Start Day?</strong> Starting the first job opens the day anyway, so

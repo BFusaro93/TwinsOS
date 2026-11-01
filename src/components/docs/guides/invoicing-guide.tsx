@@ -45,6 +45,7 @@ export function InvoicingGuide() {
         <div className="flex flex-col gap-1">
           <TOCLink href="#where-invoices-come-from">Where invoices come from</TOCLink>
           <TOCLink href="#tax-on-auto-invoices">Sales tax on invoices generated from jobs</TOCLink>
+          <TOCLink href="#invoice-numbering">Invoice numbers and starting at a number</TOCLink>
           <TOCLink href="#editing-and-sending">Editing and sending an invoice</TOCLink>
           <TOCLink href="#invoice-template-options">Chemical record and technician notes on invoices</TOCLink>
           <TOCLink href="#invoice-photos">Photos on an invoice</TOCLink>
@@ -112,6 +113,34 @@ export function InvoicingGuide() {
         </p>
       </Section>
 
+      <Section id="invoice-numbering" title="Invoice numbers and starting at a number">
+        <p>
+          Every invoice gets a number the first time it is saved as anything other than a draft,
+          printed or emailed. A <strong>new company</strong> starts at #1 and counts up on its own; estimates
+          and tickets are numbered the same way, each from 1. Companies created before this change keep
+          their existing numbers.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Coming over from another system?</strong> Go to <strong>Settings → Accounting → Invoice
+            Numbering</strong>, enter the number the next invoice should have (for example 1048) and click{" "}
+            <strong>Set number</strong>. New invoices continue from there; existing invoices keep their numbers.
+            Admins, managers and anyone with Landscapt settings access can change it.
+          </li>
+          <li>
+            Landscapt never reuses a number an existing invoice already has, so if you pick a number inside
+            your existing range it skips the ones in use. You can still type a number by hand in an
+            invoice&apos;s header; the same no-duplicates rule applies.
+          </li>
+          <li>
+            <strong>Other defaults for a new company.</strong> Sales tax starts at 0% (set yours under Settings
+            → Accounting), the card processing fee starts off, the company timezone is taken from the
+            browser at sign-up (change it in Settings → Organization), and the Reply-To address on invoice,
+            estimate and automated emails starts as the sign-up email so client replies reach you.
+          </li>
+        </ul>
+      </Section>
+
       <Section id="tax-on-auto-invoices" title="Sales tax on invoices generated from jobs">
         <p>
           When a completed visit drafts an invoice, each line item carries a{" "}
@@ -129,6 +158,17 @@ export function InvoicingGuide() {
             <strong>Which rate applies.</strong> A job converted from an estimate uses that
             estimate&apos;s tax rate. Any other job uses the client&apos;s default tax rate. Tax is
             computed on the taxable lines only.
+          </li>
+          <li>
+            <strong>Tax-exempt clients.</strong> A client whose <strong>Client is taxable</strong> box is unchecked is
+            never taxed on invoices drafted from jobs or on snow invoices, whatever default rate is stored or
+            what the estimate carried.
+          </li>
+          <li>
+            <strong>Wording on the line.</strong> The invoice line uses, in order, the visit&apos;s invoice
+            description, the job&apos;s, then the service&apos;s. A package job takes the package&apos;s
+            Invoice Description, and a job converted from a single-line estimate takes that line&apos;s custom
+            Invoice Description (a job converted from several lines keeps each service&apos;s own wording).
           </li>
           <li>
             <strong>Appending visits to an open draft.</strong> If a client is billed monthly and a

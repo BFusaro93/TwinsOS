@@ -13525,6 +13525,7 @@ export type Database = {
           name: string
           oauth_write_roles: string[]
           pending_plan: string | null
+          per_org_numbering: boolean
           plan: string
           portal_enabled: boolean
           seat_overage_cents_override: number | null
@@ -13571,6 +13572,7 @@ export type Database = {
           name: string
           oauth_write_roles?: string[]
           pending_plan?: string | null
+          per_org_numbering?: boolean
           plan?: string
           portal_enabled?: boolean
           seat_overage_cents_override?: number | null
@@ -13617,6 +13619,7 @@ export type Database = {
           name?: string
           oauth_write_roles?: string[]
           pending_plan?: string | null
+          per_org_numbering?: boolean
           plan?: string
           portal_enabled?: boolean
           seat_overage_cents_override?: number | null

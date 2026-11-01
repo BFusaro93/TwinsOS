@@ -189,7 +189,9 @@ export function RequiredFieldsGuide() {
           Valid Until, and both job-creation paths — New Job and Convert Estimate to Job — read
           Crew (New Job also reads Sales Rep; Convert Estimate to Job has no Sales Rep field of
           its own to enforce). Client and Ticket remain enforced the same way, via the New Client
-          dialog, the Client detail edit panel, and the New Ticket dialog.
+          dialog, the New Lead dialog (Phone, Email, Source, and Service Address when required;
+          the address fields appear only if you require them), the Client detail edit panel, and
+          the New Ticket dialog.
         </p>
       </Section>
 

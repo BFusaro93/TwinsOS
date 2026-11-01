@@ -30,7 +30,7 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
       setError(confirmError.message ?? "Payment failed");
       return;
     }
-    if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing") {
+    if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing" || paymentIntent?.status === "requires_capture") {
       onSuccess();
     } else {
       setError("Payment was not completed");
@@ -176,7 +176,7 @@ export function PayInvoiceDialog({
               </div>
               {intent.feeCents > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Processing Fee</span>
+                  <span className="text-slate-500">Processing Fee <span className="text-xs">(credit cards only)</span></span>
                   <span className="tabular-nums">{fmt(intent.feeCents)}</span>
                 </div>
               )}

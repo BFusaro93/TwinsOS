@@ -818,7 +818,10 @@ export function useStopClockIn() {
       }
       return res.json();
     },
-    onSuccess: (_data, anchorVisitId) => {
+    onSuccess: (data, anchorVisitId) => {
+      if ((data as { warnings?: string[] } | null)?.warnings?.includes("crew_roster_empty")) {
+        toast.warning("Nobody is on your crew today, so no time is being recorded for payroll. Tap Edit Crew to add the people working, or ask the office.", { duration: 10000 });
+      }
       // The server also opens the day shift and member punches on the first Start Job.
       qc.invalidateQueries({ queryKey: ["crew-day"] });
       qc.invalidateQueries({ queryKey: ["crew-member-times"] });

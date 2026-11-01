@@ -55,7 +55,7 @@ export async function POST(request: Request) {
   if (readOnly) return readOnly;
 
   // 2. Parse and validate the request body.
-  let body: { email?: string; name?: string; role?: string };
+  let body: { email?: string; name?: string; role?: string; crmRoleId?: string | null };
   try {
     body = await request.json();
   } catch {
@@ -63,6 +63,7 @@ export async function POST(request: Request) {
   }
 
   const { email: rawEmail, name, role } = body;
+  const crmRoleId = typeof body.crmRoleId === "string" && /^[0-9a-f-]{36}$/i.test(body.crmRoleId) ? body.crmRoleId : null;
   // Trimmed once and used everywhere: the untrimmed value (a pasted address with
   // a trailing space passes the format check below) was sent to the auth API and
   // to Resend, which reject it, so the invite failed with a generic 500.
@@ -172,14 +173,17 @@ export async function POST(request: Request) {
   // 4. Send the invite email via Resend's HTTP API (not SMTP).
   const resend = new Resend(process.env.RESEND_API_KEY!);
 
+  const { data: orgRow } = await adminClient.from("organizations").select("name").eq("id", callerProfile.org_id).maybeSingle();
+  const orgName = typeof orgRow?.name === "string" && orgRow.name.trim() ? orgRow.name.trim() : null;
+
   const { error: emailErr } = await resend.emails.send({
     from: EMAIL_FROM,
     to: email,
-    subject: "You've been invited to Landscapt",
+    subject: orgName ? `You've been invited to ${orgName} on Landscapt` : "You've been invited to Landscapt",
     html: `
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
-        <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">You've been invited to Landscapt</h2>
-        <p style="margin:0 0 24px;color:#475569">Hi ${escapeHtml(name)}, you've been added as a <strong>${escapeHtml(role)}</strong> on your team's Landscapt account.</p>
+        <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">You've been invited to ${orgName ? escapeHtml(orgName) + " on " : ""}Landscapt</h2>
+        <p style="margin:0 0 24px;color:#475569">Hi ${escapeHtml(name)}, you've been added as a <strong>${escapeHtml(role)}</strong> on ${orgName ? escapeHtml(orgName) + "'s" : "your team's"} Landscapt account.</p>
         <a href="${inviteUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Accept Invitation</a>
         <p style="margin:24px 0 0;font-size:12px;color:#94a3b8">This link expires in 24 hours. If you weren't expecting this, you can ignore this email.</p>
       </div>
@@ -213,6 +217,38 @@ export async function POST(request: Request) {
     if (profileUpsertErr) {
       console.error("profile upsert error:", profileUpsertErr);
       return NextResponse.json({ error: "Invite sent but the user record could not be created" }, { status: 500 });
+    }
+  }
+
+  // A non-admin only gets into Landscapt through an employee record carrying a CRM role, so
+  // choosing one here creates (or links) that record instead of leaving the invitee at a block screen.
+  if (crmRoleId && linkData.user && role !== "admin" && role !== "crew") {
+    const { data: roleRow } = await adminClient
+      .from("crm_roles").select("id").eq("id", crmRoleId).eq("org_id", callerProfile.org_id).is("deleted_at", null).maybeSingle();
+    if (roleRow) {
+      const { data: linked } = await adminClient
+        .from("crm_employees").select("id").eq("org_id", callerProfile.org_id).eq("user_id", linkData.user.id).is("deleted_at", null).maybeSingle();
+      if (linked) {
+        await adminClient.from("crm_employees").update({ crm_role_id: crmRoleId }).eq("id", linked.id);
+      } else {
+        const { data: byEmail } = await adminClient
+          .from("crm_employees").select("id").eq("org_id", callerProfile.org_id).is("user_id", null).is("deleted_at", null).ilike("email", email).limit(1).maybeSingle();
+        if (byEmail) {
+          await adminClient.from("crm_employees").update({ user_id: linkData.user.id, crm_role_id: crmRoleId }).eq("id", byEmail.id);
+        } else {
+          const parts = name.trim().split(/\s+/);
+          const firstName = parts[0];
+          const lastName = parts.slice(1).join(" ") || "-";
+          const { error: empErr } = await adminClient.from("crm_employees").insert({
+            org_id: callerProfile.org_id, first_name: firstName, last_name: lastName, email,
+            user_id: linkData.user.id, crm_role_id: crmRoleId, is_active: true, created_by: user.id,
+          });
+          if (empErr) {
+            log.error("invite: employee link failed", { error: empErr.message });
+            return NextResponse.json({ success: true, warning: "Invite sent, but the employee record could not be created — link them under Team → Employees." }, { status: 200 });
+          }
+        }
+      }
     }
   }
 

@@ -202,7 +202,9 @@ export function FormsGuide() {
           <li>
             <strong>Confirmation</strong> — what the visitor sees immediately after submitting.
             Either an on-page <em>message</em> (text you write) or a <em>url</em> redirect to
-            another page (e.g. a thank-you page on your marketing site).
+            another page (e.g. a thank-you page on your marketing site). A redirect URL must start
+            with <code>http://</code> or <code>https://</code>; anything else is refused when you
+            save, and the public form falls back to the thank-you message instead of redirecting.
           </li>
           <li>
             <strong>Email notifications</strong> — recipients, from address, subject, and body are
@@ -339,7 +341,10 @@ export function FormsGuide() {
           <strong>Attachment field limit.</strong> The server-enforced limit on the{" "}
           <code>attachment</code> field type is <strong>15 MB, images or PDF only</strong> — anything
           larger or a different file type is rejected at submission. Design any form using an
-          attachment field around that limit.
+          attachment field around that limit. Files upload through a rate-limited link created when the
+          visitor picks the file (about 20 uploads per 10 minutes per visitor and form), so a
+          visitor who keeps retrying will be asked to wait a few minutes. Submissions are also size-limited
+          (up to 200 answers, 5,000 characters each), and a lead&apos;s email is only saved when it is a valid address.
         </p>
       </Section>
 

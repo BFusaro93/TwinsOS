@@ -24,6 +24,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/settle-card-surcharges",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/contract-invoices",
       "schedule": "0 8 * * *"
     },

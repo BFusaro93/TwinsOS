@@ -105,6 +105,12 @@ export function ClientsGuide() {
           another client record, plus free-form <strong>tags</strong> for segmentation. None of
           these are required at creation — they&apos;re filled in on the full record afterward.
         </p>
+        <p>
+          <strong>Sales Rep.</strong> Edit the client and pick a <strong>Sales Rep</strong> (the list shows
+          employees flagged as sales reps; whoever is already assigned stays selectable). It feeds the
+          Sales Rep filter on the Clients list and the rep reports. <strong>Client is taxable</strong> on
+          the same screen marks a tax-exempt client: unchecked means no sales tax on their invoices.
+        </p>
       </Section>
 
       <Section id="status" title="Client status & the Lead-to-Client transition">

@@ -1045,6 +1045,8 @@ export function useUpdateClient() {
           }),
           billing_same_as_service: updates.billingSameAsService,
           source: updates.source,
+          // undefined (caller didn't touch it) is omitted; null clears the rep.
+          sales_rep_id: updates.salesRepId,
           ok_to_email: updates.okToEmail,
           do_not_market: updates.doNotMarket,
           payment_method: updates.paymentMethod,

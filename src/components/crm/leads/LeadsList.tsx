@@ -1,5 +1,7 @@
 "use client";
 
+import { useRequiredFields } from "@/lib/hooks/use-required-fields";
+import { isValidEmail } from "@/lib/utils/email";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -107,23 +109,38 @@ export function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const router = useRouter();
   // Same org-level source list the Edit Client dialog uses (A-06).
   const { options: sourceOptions } = useClientSourceOptions();
+  // Settings → Required Fields → Clients applies to leads too (same clients table); the New Client and
+  // Edit Client dialogs already enforce it.
+  const rf = useRequiredFields("client");
 
-  const [form, setForm] = useState({
+  const EMPTY_FORM = {
     displayName: "", accountType: "residential", primaryPhone: "", primaryEmail: "", source: "",
-  });
+    serviceAddress: "", serviceCity: "", serviceState: "", serviceZip: "",
+  };
+  const [form, setForm] = useState(EMPTY_FORM);
 
   function patch(k: keyof typeof form, v: string) { setForm((p) => ({ ...p, [k]: v })); }
-  function reset() { setForm({ displayName: "", accountType: "residential", primaryPhone: "", primaryEmail: "", source: "" }); }
+  function reset() { setForm(EMPTY_FORM); }
 
   async function submit() {
+    if (isPending) return;
     if (!form.displayName.trim()) { toast.error("Name is required"); return; }
+    if (rf.isRequired("primary_phone") && !form.primaryPhone.trim()) { toast.error("Phone is required"); return; }
+    if (rf.isRequired("primary_email") && !form.primaryEmail.trim()) { toast.error("Email is required"); return; }
+    if (form.primaryEmail.trim() && !isValidEmail(form.primaryEmail)) { toast.error("Enter a valid email address"); return; }
+    if (rf.isRequired("source") && !form.source.trim()) { toast.error("Source is required"); return; }
+    if (rf.isRequired("service_address") && !form.serviceAddress.trim()) { toast.error("Service address is required"); return; }
     try {
       const lead = await createLead({
         displayName: form.displayName.trim(),
         accountType: form.accountType,
         primaryPhone: form.primaryPhone,
-        primaryEmail: form.primaryEmail,
+        primaryEmail: form.primaryEmail.trim(),
         source: form.source,
+        serviceAddress: form.serviceAddress.trim(),
+        serviceCity: form.serviceCity.trim(),
+        serviceState: form.serviceState.trim(),
+        serviceZip: form.serviceZip.trim(),
       });
       toast.success("Lead created");
       reset();
@@ -154,21 +171,32 @@ export function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Source</Label>
+              <Label>Source{rf.req("source")}</Label>
               <Select value={form.source} onValueChange={(v) => patch("source", v)}>
                 <SelectTrigger><SelectValue placeholder="How found?" /></SelectTrigger>
                 <SelectContent>{sourceOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Phone</Label>
+              <Label>Phone{rf.req("primary_phone")}</Label>
               <PhoneInput value={form.primaryPhone} onChange={(v) => patch("primaryPhone", v)} placeholder="(555) 000-0000" />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Email</Label>
+              <Label>Email{rf.req("primary_email")}</Label>
               <Input type="email" value={form.primaryEmail} onChange={(e) => patch("primaryEmail", e.target.value)} placeholder="name@email.com" />
             </div>
           </div>
+          {rf.isRequired("service_address") && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Service address{rf.req("service_address")}</Label>
+              <Input value={form.serviceAddress} onChange={(e) => patch("serviceAddress", e.target.value)} placeholder="Street address" />
+              <div className="grid grid-cols-[1fr_72px_96px] gap-2">
+                <Input value={form.serviceCity} onChange={(e) => patch("serviceCity", e.target.value)} placeholder="City" />
+                <Input value={form.serviceState} onChange={(e) => patch("serviceState", e.target.value)} placeholder="State" maxLength={2} />
+                <Input value={form.serviceZip} onChange={(e) => patch("serviceZip", e.target.value)} placeholder="ZIP" />
+              </div>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => { reset(); onOpenChange(false); }}>Cancel</Button>

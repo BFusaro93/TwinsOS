@@ -125,6 +125,22 @@ export function DispatchBoardGuide() {
           &quot;visit dispatched&quot; automations and, as of now, writes to the client&apos;s Activity
           timeline, so it should always be a deliberate choice.
         </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>A visit the crew has started is protected.</strong> While a crew is clocked in (started,
+            not yet stopped), you can&apos;t cancel it, skip it or send it back to Scheduled or Dispatched
+            &mdash; the app says to have the crew clock out first, because the visit would drop off their list
+            with the clock still running and the hours would never count.
+          </li>
+          <li>
+            <strong>Reopening a completed visit</strong> (back to Scheduled, Dispatched or In Progress) clears
+            its start and stop times, so the crew can start and finish it again from the Crew App.
+          </li>
+          <li>
+            <strong>Completing a visit</strong> has to go through the Mark Complete action (it creates the
+            invoice and runs the follow-ups); setting the status to Completed any other way is refused.
+          </li>
+        </ul>
         <Table>
           <thead>
             <TableHeadRow>
@@ -832,7 +848,7 @@ export function DispatchBoardGuide() {
         </Callout>
         <Callout>
           <strong>Creating a crew:</strong> go to <strong>Team → Crews → Add Team</strong>, enter a Description (the crew&apos;s name) and Color
-          on <strong>Team Details</strong> (Team Code, Linked Login, starting address and Show In Calendar are optional), then click{" "}
+          on <strong>Team Details</strong> (Team Code, Linked Login, and starting address are optional), then click{" "}
           <strong>Create &amp; Continue</strong>. On the <strong>Team Assignments</strong> tab, use <strong>Add Assignment</strong> to
           put employees on the crew&apos;s default roster. A Linked Login is only needed if the crew will use the Crew App — creating a
           crew account under Settings → Users makes the crew and the login together.

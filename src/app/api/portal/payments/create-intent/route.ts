@@ -10,6 +10,7 @@ import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/l
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
 import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
 
 const log = logger.child("portal create-intent");
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: org } = await (supabase.from("organizations") as any)
     .select(
-      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
+      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
     )
     .eq("id", ctx.orgId)
     .single();
@@ -132,6 +133,7 @@ export async function POST(request: Request) {
             ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
             ccProcessingFeeBps: org.cc_processing_fee_bps,
             ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+            ccProcessingFeeMode: (org.customizations as Record<string, unknown> | null)?.cc_processing_fee_mode as string | undefined,
           },
           invoice.balance_cents,
           false
@@ -153,6 +155,7 @@ export async function POST(request: Request) {
       amount: totalChargeCents,
       currency: "usd",
       payment_method_types: [paymentMethod],
+      ...surchargeIntentParams(feeCents, paymentMethod === "card"),
       ...(customerId ? { customer: customerId } : {}),
       metadata: {
         source: "crm_invoice",
@@ -161,6 +164,7 @@ export async function POST(request: Request) {
         client_id: invoice.client_id,
         balance_cents: String(invoice.balance_cents),
         fee_cents: String(feeCents),
+        ...surchargeIntentMetadata(feeCents, paymentMethod === "card"),
       },
     },
     {

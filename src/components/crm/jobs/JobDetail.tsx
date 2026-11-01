@@ -529,11 +529,13 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       const data = await res.json() as { generated: number; message?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? data.message ?? "Failed");
       await qc.invalidateQueries({ queryKey: ['crm-job-visits', 'job', job.id] });
-      toast.success(
-        data.generated > 0
-          ? `${data.generated} visit${data.generated !== 1 ? "s" : ""} scheduled`
-          : "Visits already up to date"
-      );
+      if (data.generated > 0) {
+        toast.success(`${data.generated} visit${data.generated !== 1 ? "s" : ""} scheduled`);
+      } else if (data.message?.startsWith("No visits could be generated")) {
+        toast.warning(data.message);
+      } else {
+        toast.success("Visits already up to date");
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to generate visits");
     } finally {
