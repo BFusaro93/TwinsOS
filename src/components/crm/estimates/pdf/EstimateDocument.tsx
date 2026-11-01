@@ -408,6 +408,9 @@ function LineItemSections({
     return {
       ...section,
       sectionName: null,
+      // The wording is already inside the collapsed row; clearing it stops the
+      // section-level description block printing it a second time.
+      description: null,
       items: [{
         ...first,
         serviceName: section.sectionName,
