@@ -57,8 +57,10 @@ export function SmsOnboardingGuide() {
 
       <Section id="overview" title="Overview">
         <p>
-          Texting from your own number (instead of Landscapt&apos;s shared one) requires carriers to
-          approve your business under a program called <strong>A2P 10DLC</strong>. This is done from{" "}
+          Texting from your own number requires carriers to approve your business under a program called{" "}
+          <strong>A2P 10DLC</strong>. Until your registration is approved, texts from your account
+          don&apos;t send (they report &ldquo;SMS registration not complete&rdquo;): Landscapt&apos;s shared
+          number belongs to one company&apos;s approved campaign and isn&apos;t available to other accounts. This is done from{" "}
           <strong>Settings → Integrations → &quot;Your own texting number&quot;</strong>: fill in your
           business info once, save, then step through Continue Setup. Two of those steps — the
           business profile and the campaign — go to a real human reviewer and can take anywhere from a

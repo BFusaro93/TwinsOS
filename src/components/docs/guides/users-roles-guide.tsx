@@ -266,6 +266,13 @@ export function UsersRolesGuide() {
           <li>Go to <strong>Settings → Users</strong>. Only Admins see the Invite User and Create Crew Account buttons.</li>
           <li>Click <strong>Invite User</strong>, enter their name, email, and pick one of the organization roles.</li>
           <li>
+            For anyone who isn&apos;t an Admin or Crew, optionally pick a <strong>Landscapt role</strong>. Landscapt
+            access comes from a Landscapt role on an employee record, not from the login role, so choosing one
+            adds them to your employee list and links the two for you. Leave it blank and they can sign in but
+            see a &quot;No Landscapt access yet&quot; screen until an admin links them under Team → Employees.
+            The invite email names your company.
+          </li>
+          <li>
             They receive an email invitation and set their own password on first login. If the email
             is already registered elsewhere in the system, a password-reset link is sent instead so
             they land on the same set-password screen. If the email belongs to a different type of

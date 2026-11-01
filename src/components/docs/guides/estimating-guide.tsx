@@ -51,6 +51,7 @@ export function EstimatingGuide() {
           <TOCLink href="#bundles-subitems">Service bundles and sub-items</TOCLink>
           <TOCLink href="#zone-measurements">Where zone measurements come from</TOCLink>
           <TOCLink href="#proposal-link">The client-facing proposal link</TOCLink>
+          <TOCLink href="#estimate-defaults">What a new estimate starts with</TOCLink>
           <TOCLink href="#deposits">Taking a deposit on acceptance</TOCLink>
           <TOCLink href="#estimate-limits">Rate and probability limits</TOCLink>
           <TOCLink href="#converting">Converting an estimate to a job</TOCLink>
@@ -174,7 +175,9 @@ export function EstimatingGuide() {
           </li>
           <li>
             <strong>Production Rate</strong> &mdash; budgeted hours are derived:{" "}
-            <code>hours = quantity &divide; the service&rsquo;s sq ft per man-hour</code>.
+            <code>hours = quantity &divide; the service&rsquo;s sq ft per man-hour</code>. A service
+            added in Settings or imported from a CSV with a production rate is set to this method
+            automatically; change it per service in the service&rsquo;s own dialog.
           </li>
         </ul>
         <p>
@@ -416,7 +419,9 @@ export function EstimatingGuide() {
           <li>
             <strong>Get link / Copy link</strong> in the estimate header puts the proposal URL on your
             clipboard. It reads <strong>Get link</strong> when no live link exists yet (clicking it
-            creates one) and <strong>Copy link</strong> once there is.
+            creates one) and <strong>Copy link</strong> once there is. Handing out the link counts as
+            sending it: a draft or quote estimate moves to <strong>Sent</strong> (the client can only accept
+            a proposal that is Sent), the same as emailing it.
           </li>
           <li>
             <strong>Open</strong> opens that same proposal page in a new tab &mdash; handy for
@@ -612,6 +617,26 @@ export function EstimatingGuide() {
           <em>somewhere else</em> &mdash; nothing was charged here. The proposal page says so beneath
           those options whenever online payment is available.
         </Callout>
+      </Section>
+
+      <Section id="estimate-defaults" title="What a new estimate starts with">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Tax rate.</strong> A new estimate starts at the client&rsquo;s default tax rate, or at no
+            tax if the client is marked tax-exempt (<strong>Client is taxable</strong> unchecked). You can
+            change it on the estimate.
+          </li>
+          <li>
+            <strong>Good / Better / Best.</strong> Before the client chooses a tier, the estimate total, tax
+            and pipeline value use the lowest-priced tier (&ldquo;starting at&rdquo;). That comparison now
+            includes each tier&rsquo;s priced sub-items, so a tier with large sub-items is no longer mistaken
+            for the cheapest.
+          </li>
+          <li>
+            <strong>Photos.</strong> iPhone HEIC photos are accepted on an estimate&rsquo;s Photos tab and
+            converted to JPEG on upload, so they also show in the PDF and the emailed proposal.
+          </li>
+        </ul>
       </Section>
 
       <Section id="estimate-limits" title="Rate and probability limits">

@@ -113,7 +113,17 @@ export function JobsPackagesGuide() {
             visits are generated automatically the moment the job is created — no separate step.
             Later, <strong>Generate Visits</strong> on the job fills in anything missing through the
             End Date (or through the end of the year when no End Date is set), up to 60 visits per
-            run; a job whose End Date has already passed generates nothing.
+            run; a job whose End Date has already passed generates nothing. If nothing could be
+            generated (for example the schedule can&apos;t be read, the start date is past the end or the
+            horizon, or the client or contract is inactive), the button says so instead of reporting that
+            everything is up to date.
+          </li>
+          <li>
+            <strong>Schedules need to be set up first.</strong> A recurring job&apos;s schedule is picked from
+            the templates under Settings → Schedules. If your company has none yet, the dialog shows a
+            text box that only accepts wording the system can read (&ldquo;Weekly Monday&rdquo;,
+            &ldquo;Bi-weekly Thursday even&rdquo;, &ldquo;Every 3 weeks Tuesday&rdquo;); anything else is
+            refused with a pointer to Settings → Schedules, because it would save a job that never gets visits.
           </li>
           <li>
             <strong>Package</strong> — pick the package program and a Start Date. Each step&apos;s date
@@ -312,7 +322,10 @@ export function JobsPackagesGuide() {
           CRM &gt; Settings &gt; Packages bundles a set of recurring services under one named program —
           e.g. a &quot;7-Step Fertilizer&quot; plan. A package has a name, an internal code, a
           description, client-facing wording for how it appears on an estimate, separate wording for
-          how its visits appear on invoices, and a <code>visits_per_season</code> count.
+          how its visits appear on invoices, and a <code>visits_per_season</code> count. The invoice
+          wording is copied onto each package job you create and is what the visit&apos;s invoice line says;
+          the estimate wording is not used yet because packages can&apos;t be added to estimates (a visit&apos;s
+          own invoice description still wins over it).
         </p>
         <p>
           The package&apos;s <strong>Services tab</strong> is where each visit in the program is

@@ -140,6 +140,15 @@ export function OnlinePaymentsGuide() {
           <li>Card networks cap surcharges (at 3%) and some states ban them. Landscapt doesn&apos;t limit the rate — it&apos;s on you to set one that&apos;s lawful where you operate.</li>
           <li>Applies to card payments on invoices <em>and</em> to a deposit paid by card when a client accepts a proposal, on the same threshold.</li>
           <li>Never applied to Bank Transfer/ACH payments — ACH is fee-free by design.</li>
+          <li>
+            <strong>Credit cards only.</strong> Debit and prepaid cards can&apos;t be surcharged. A saved card
+            (autopay, Charge All) is checked first and a debit, prepaid or unreadable card is charged the
+            invoice amount with no fee. A card entered at checkout shows the fee beforehand, labelled
+            &ldquo;credit cards only&rdquo;; the payment is authorized for the total, and as soon as the card is
+            on it Landscapt captures the full amount for a credit card or just the invoice balance for a debit
+            or prepaid card, releasing the fee part of the hold. The payment shows as recorded within seconds
+            (at most a few minutes). If the card type can&apos;t be read, no fee is charged.
+          </li>
           <li>Staff can waive it or override it to a flat amount on an individual charge; clients paying through the portal or a public pay link cannot.</li>
           <li>Every fee collected is itemized in its own &ldquo;Credit Card Processing Fees&rdquo; report and rolled into the P&amp;L.</li>
         </ul>
