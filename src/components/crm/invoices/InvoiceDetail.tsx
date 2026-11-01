@@ -1154,23 +1154,6 @@ export function InvoiceDetail({
         </div>
       </div>
 
-      {/* Status pills live on their own row so the action buttons above never shift with them */}
-      <div className="flex flex-wrap items-center gap-2 border-b bg-card px-4 py-1.5 md:px-8">
-        <Badge className={cn("text-[10px] capitalize", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
-          {getDisplayInvoiceStatus(invoice)}
-        </Badge>
-        {invoice.invoiceNumber == null && (
-          <span className="rounded-full bg-yellow-100 dark:bg-yellow-900/40 px-2 py-0.5 text-[10px] font-semibold text-yellow-700 dark:text-yellow-400">
-            Unsaved — click Save to assign invoice #
-          </span>
-        )}
-        {invoice.locked && (
-          <span className="flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
-            <Lock className="h-3 w-3" /> Locked
-          </span>
-        )}
-      </div>
-
       {/* Void confirmation */}
       <Dialog open={confirmVoidOpen} onOpenChange={setConfirmVoidOpen}>
         <DialogContent className="max-w-sm">
@@ -1231,6 +1214,22 @@ export function InvoiceDetail({
             {tab === "audit" ? "Audit Trail" : tab === "photos" ? "Photos" : "Invoice"}
           </button>
         ))}
+        {/* Status pills sit beside the tabs so the action buttons above never shift with them */}
+        <div className="ml-3 flex shrink-0 items-center gap-2">
+          <Badge className={cn("text-[10px] capitalize", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
+            {getDisplayInvoiceStatus(invoice)}
+          </Badge>
+          {invoice.invoiceNumber == null && (
+            <span className="rounded-full bg-yellow-100 dark:bg-yellow-900/40 px-2 py-0.5 text-[10px] font-semibold text-yellow-700 dark:text-yellow-400">
+              Unsaved — click Save to assign invoice #
+            </span>
+          )}
+          {invoice.locked && (
+            <span className="flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+              <Lock className="h-3 w-3" /> Locked
+            </span>
+          )}
+        </div>
       </div>
 
       {activeTab === "photos" ? (
