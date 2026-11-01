@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { cn } from "@/lib/utils";
+import { Fragment, useState, useCallback, useEffect } from "react";
+import { cn, formatCurrency } from "@/lib/utils";
 import { bpsToPercent, centsToDisplay, clampComplexityBps, computeLineItem, getBreakevenRateCents, resolveLineDiscountCents } from "@/lib/estimate-calc";
 import { useUpsertLineItem, useDeleteLineItem } from "@/lib/hooks/use-estimates";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
@@ -225,6 +225,17 @@ function SectionRow({
 }) {
   const upsert = useUpsertLineItem();
   const [editing, setEditing] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [desc, setDesc] = useState(item.estimateDesc ?? "");
+  useEffect(() => setDesc(item.estimateDesc ?? ""), [item.estimateDesc]);
+
+  // A package section's estimate_desc is the wording the client sees as the
+  // package's main description (proposal, portal, PDF, email grid).
+  function saveDesc() {
+    setEditingDesc(false);
+    if (desc === (item.estimateDesc ?? "")) return;
+    upsert.mutate({ estimateId, item: { id: item.id, estimate_desc: desc.trim() || null } });
+  }
   const [name, setName] = useState(item.sectionName ?? "New Section");
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -275,6 +286,31 @@ function SectionRow({
             <Trash2 className="h-3 w-3" />
           </button>
         </div>
+        {item.packageId && (
+          <div className="mt-1 pl-12 text-xs">
+            {editingDesc ? (
+              <textarea
+                autoFocus
+                rows={3}
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                onBlur={saveDesc}
+                onKeyDown={(e) => { if (e.key === "Escape") { setDesc(item.estimateDesc ?? ""); setEditingDesc(false); } }}
+                placeholder="Package description shown to the client"
+                className="w-full max-w-2xl rounded border border-slate-300 dark:border-neutral-600 bg-background px-2 py-1 text-xs outline-none"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingDesc(true)}
+                className="text-left text-muted-foreground hover:text-foreground"
+                title="Click to edit the description the client sees"
+              >
+                {item.estimateDesc ? item.estimateDesc : "Add package description for the client…"}
+              </button>
+            )}
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -1533,8 +1569,15 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
               </tr>
             )}
               <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                {items.map((item) =>
-                  item.rowType === "section" ? (
+                {items.map((item, idx) => {
+                  const next = items[idx + 1];
+                  const endsPackage = !!item.packageId && item.rowType !== "section" && next?.packageId !== item.packageId;
+                  const packageTotal = endsPackage
+                    ? items.filter((i) => i.packageId === item.packageId && i.rowType !== "section").reduce((sum, i) => sum + (i.totalCents ?? 0), 0)
+                    : 0;
+                  return (
+                  <Fragment key={item.id}>
+                  {item.rowType === "section" ? (
                     <SectionRow
                       key={item.id}
                       item={item}
@@ -1544,7 +1587,6 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                     />
                   ) : (
                     <LineItemRow
-                      key={item.id}
                       item={item}
                       estimateId={estimateId}
                       onDelete={handleDelete}
@@ -1558,8 +1600,17 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                       onStatusChange={onItemStatusChange}
                       takeoff={takeoff}
                     />
-                  )
-                )}
+                  )}
+                  {endsPackage && (
+                    <tr className="border-b border-border bg-muted/40">
+                      <td colSpan={tiersEnabled ? 18 : 17} className="px-3 py-1.5 text-right text-xs font-semibold">
+                        Package subtotal: {formatCurrency(packageTotal)}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  );
+                })}
               </SortableContext>
           </tbody>
         </table>

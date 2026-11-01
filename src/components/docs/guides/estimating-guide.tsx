@@ -413,8 +413,8 @@ export function EstimatingGuide() {
           </li>
           <li>
             The <strong>Package visits</strong> toggle in the estimate&rsquo;s &ldquo;What the client
-            sees&rdquo; settings (on by default) lists each visit under the main line as plain rows.
-            Turn it off to show only the name, wording and total. It applies to the proposal page,
+            sees&rdquo; settings (off by default) lists each visit under the main line as plain rows.
+            Leave it off to show only the name, wording and total. It applies to the proposal page,
             the client portal, the PDF and the <code>[estimategrid]</code> table in emails.
           </li>
           <li>
