@@ -308,11 +308,17 @@ export async function submitFormResponse(
   const mappedPhone = mappedData["client.phone"] ?? mappedData["contact.phone"] ?? null;
   const mappedCompany = mappedData["client.company_name"] ?? null;
 
-  const submittedEmail: string | null =
+  // An anonymous submitter's address becomes the lead's primary_email and receives
+  // automation mail, so only a well-formed one is kept.
+  const rawSubmittedEmail: string | null =
     mappedEmail ??
     asString(formData["Email"]) ??
     asString(formData["Email Address"]) ??
     null;
+  const submittedEmail: string | null =
+    rawSubmittedEmail && rawSubmittedEmail.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawSubmittedEmail.trim())
+      ? rawSubmittedEmail.trim()
+      : null;
 
   const submittedFirstName: string | null =
     mappedFirstName ??

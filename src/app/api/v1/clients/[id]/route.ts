@@ -72,10 +72,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // overwrite the real consent date with today's.
   let previousStatus: string | null = null;
   let previousSmsOptIn = false;
-  if (body.status !== undefined || body.smsOptIn !== undefined) {
+  let phoneChanged = false;
+  if (body.status !== undefined || body.smsOptIn !== undefined || body.primaryPhone !== undefined) {
     const { data: current } = await db
       .from("clients")
-      .select("status, sms_opt_in")
+      .select("status, sms_opt_in, primary_phone")
       .eq("org_id", auth.orgId)
       .eq("id", id)
       .is("deleted_at", null)
@@ -83,6 +84,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!current) return jsonError("Client not found", 404);
     previousStatus = current.status as string;
     previousSmsOptIn = (current.sms_opt_in as boolean | null) ?? false;
+    const lastDigits = (v: unknown) => String(v ?? "").replace(/\D/g, "").slice(-10);
+    phoneChanged = body.primaryPhone !== undefined && lastDigits(body.primaryPhone) !== lastDigits(current.primary_phone);
   }
   const smsOptInJustEnabled = body.smsOptIn === true && !previousSmsOptIn;
   // lead -> active is a conversion: stamp client_since (the conversion date)
@@ -120,6 +123,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.referredByClientId !== undefined && { referred_by_client_id: body.referredByClientId }),
       ...(body.okToEmail !== undefined && { ok_to_email: body.okToEmail }),
       ...(body.doNotMarket !== undefined && { do_not_market: body.doNotMarket }),
+      // Consent was given for the previous number, not a new one, unless the caller sets it explicitly.
+      ...(phoneChanged && body.smsOptIn === undefined && { sms_opt_in: false }),
       ...(body.smsOptIn !== undefined && { sms_opt_in: body.smsOptIn }),
       ...(smsOptInJustEnabled && {
         sms_opt_in_at: new Date().toISOString(),

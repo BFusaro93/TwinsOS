@@ -98,6 +98,25 @@ export async function PATCH(
     );
   }
 
+  // Completing runs the full completion (invoice, automations, job close, package recalc), which
+  // only the /complete route does; a bare status write would leave the visit unbilled.
+  if (patch.status === "completed" && prev?.status !== "completed") {
+    return NextResponse.json({ error: "Use the complete action to mark a visit completed." }, { status: 400 });
+  }
+
+  // Cancelling, skipping or sending back a visit the crew is working right now would strand
+  // its open punches (the crew list drops it, so nobody can clock out).
+  if (
+    patch.status && patch.status !== prev?.status &&
+    ["cancelled", "skipped", "scheduled", "dispatched"].includes(patch.status) &&
+    prev?.clocked_in_at && !prev.clocked_out_at
+  ) {
+    return NextResponse.json(
+      { error: "This visit is in progress (the crew has clocked in), so its status can't be changed. Have the crew clock out first." },
+      { status: 409 }
+    );
+  }
+
   if (patch.scheduled_date && patch.scheduled_date !== prev?.scheduled_date) {
     const violation = await checkPackageMinDaysViolation(supabase, visitId, patch.scheduled_date);
     if (violation) {
@@ -120,6 +139,10 @@ export async function PATCH(
       // An explicit crew and "unassigned" are mutually exclusive.
       ...(patch.crew_id ? { crew_unassigned: false } : {}),
       ...(patch.crew_unassigned ? { crew_id: null } : {}),
+      // Reopening a completed visit clears its clock stamps so the crew can work it again.
+      ...(patch.status && ["scheduled", "dispatched", "in_progress"].includes(patch.status) && prev?.status === "completed"
+        ? { clocked_in_at: null, clocked_out_at: null, completed_at: null, paused_at: null }
+        : {}),
       ...(patch.status === "dispatched" && prev?.status !== "dispatched" ? { dispatched_at: new Date().toISOString() } : {}),
       updated_at: new Date().toISOString(),
     })

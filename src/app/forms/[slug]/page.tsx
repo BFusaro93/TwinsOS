@@ -4,7 +4,6 @@ import { use, useEffect, useState } from "react";
 import { BrandMark } from "@/components/shared/BrandMark";
 import { TurnstileWidget } from "@/components/shared/TurnstileWidget";
 import { createClient } from "@/lib/supabase/client";
-import { sanitizeStorageFileName } from "@/lib/hooks/use-attachments";
 
 // Unset in most environments — see .env.local.example. When unset, no widget
 // renders and no token is required, so existing forms are unaffected.
@@ -233,9 +232,17 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
     setAttachmentUploading((prev) => ({ ...prev, [fieldId]: true }));
     try {
       const supabase = createClient();
-      // Storage keys reject spaces/unicode/brackets ("Resume (1).pdf" → "Invalid key"); the original name stays in `name`.
-      const path = `${form.id}/${crypto.randomUUID()}-${sanitizeStorageFileName(file.name)}`;
-      const { error } = await supabase.storage.from("form-attachments").upload(path, file, { upsert: false });
+      // Anonymous visitors can't write to the bucket directly: the server rate-limits and mints a
+      // one-shot signed upload URL (it also builds the storage-safe key; the original name stays in `name`).
+      const urlRes = await fetch(`/api/public/forms/${encodeURIComponent(slug)}/upload-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: file.name, size: file.size, type: file.type }),
+      });
+      const urlBody = (await urlRes.json().catch(() => ({}))) as { path?: string; token?: string; error?: string };
+      if (!urlRes.ok || !urlBody.path || !urlBody.token) throw new Error(urlBody.error ?? "Upload failed");
+      const path = urlBody.path;
+      const { error } = await supabase.storage.from("form-attachments").uploadToSignedUrl(path, urlBody.token, file);
       if (error) throw error;
       setAttachments((prev) => ({ ...prev, [fieldId]: { path, name: file.name, size: file.size } }));
       if (errors[fieldId]) setErrors((prev) => { const e = { ...prev }; delete e[fieldId]; return e; });
@@ -355,8 +362,13 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
       }
 
       if (confirmationType === "url" && confirmationUrl) {
-        window.location.href = confirmationUrl;
-        return;
+        // http(s) only: a saved `javascript:` URL would run script on this origin.
+        let target: URL | null = null;
+        try { target = new URL(confirmationUrl, window.location.href); } catch { /* fall through to the thank-you state */ }
+        if (target && (target.protocol === "https:" || target.protocol === "http:")) {
+          window.location.href = target.href;
+          return;
+        }
       }
 
       setState("success");

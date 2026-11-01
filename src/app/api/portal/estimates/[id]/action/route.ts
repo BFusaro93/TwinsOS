@@ -8,6 +8,7 @@ import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { recordAcceptedVersion } from "@/lib/estimates/versions";
 import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
 import { logger } from "@/lib/logger";
+import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 
 const log = logger.child("portal-estimate-action");
 
@@ -104,6 +105,10 @@ export async function POST(
   }
 
   if (action === "request_changes") {
+    // Each request notifies every admin and manager: throttle like the public proposal twin.
+    if (!(await checkAuthRateLimit(`portal-change:${ctx.clientId}:${id}`, 5, 600))) {
+      return NextResponse.json({ error: "Too many requests. Please wait a few minutes and try again." }, { status: 429 });
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: client } = await (supabase as any)
       .from("clients")

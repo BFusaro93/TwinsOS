@@ -1,3 +1,4 @@
+import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
@@ -102,6 +103,10 @@ export async function POST(
     if (!isFresh(ticket.updated_at as string | null)) {
       return NextResponse.json({ error: "Assignment is no longer recent" }, { status: 409 });
     }
+    // The freshness window alone lets any edit keep the route "fresh": cap re-announcements per caller + ticket.
+    if (!(await checkAuthRateLimit(`ticket-assigned:${user.id}:${ticket.id}`, 2, 600))) {
+      return NextResponse.json({ error: "Assignment was already announced" }, { status: 429 });
+    }
     await notifyTicketAssigned(adminClient, { ...base, assignedToName: ticket.assigned_to as string | null, assignedByUserId: user.id });
   } else if (body.event === "comment") {
     if (!body.commentId) return NextResponse.json({ error: "commentId is required" }, { status: 400 });
@@ -120,6 +125,10 @@ export async function POST(
       !isFresh(comment.created_at as string | null)
     ) {
       return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+    }
+    // One announcement per comment: a replay would re-email everyone watching the ticket.
+    if (!(await checkAuthRateLimit(`ticket-comment:${user.id}:${comment.id}`, 1, 3600))) {
+      return NextResponse.json({ error: "Comment was already announced" }, { status: 429 });
     }
     const { data: profile } = await supabase.from("profiles").select("name").eq("id", user.id).single();
     await notifyTicketComment(adminClient, {

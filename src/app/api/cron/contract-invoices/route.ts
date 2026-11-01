@@ -192,6 +192,10 @@ export async function GET(request: Request) {
     const baseDescription = lineItems.length > 0 ? lineItems.join("\n") : contract.title;
     const description = `${baseDescription}\n${stub.label}\n${stub.formula}`;
 
+    // Dated no later than the period's last day (the day before the first regular billing
+    // day): (contract_id, invoice_date) is unique, so a stub dated "today" on the billing day
+    // itself would block that day's regular invoice and lose the cycle.
+    const stubInvoiceDate = todayStr < stub.periodEnd ? todayStr : stub.periodEnd;
     const { data: stubInvoice, error: stubErr } = await sb
       .from("crm_invoices")
       .insert({
@@ -201,7 +205,7 @@ export async function GET(request: Request) {
         sales_rep_id: contract.sales_rep_id ?? null,
         description,
         po_number: contract.po_number ?? null,
-        invoice_date: todayStr,
+        invoice_date: stubInvoiceDate,
         terms: stubTerms,
         due_date: computeDueDate(todayStr, stubTerms),
         status: "draft",

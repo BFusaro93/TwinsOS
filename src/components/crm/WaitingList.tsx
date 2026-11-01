@@ -1,5 +1,6 @@
 "use client";
 
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -166,7 +167,8 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
   const createVisit = useCreateVisit();
   const updateVisit = useUpdateVisit();
   const singleService = items.length === 1 ? items[0].service : null;
-  const [date, setDate] = useState(() => singleService?.startDate || toLocalDateString(new Date()));
+  const { today: orgToday } = useOrgDates();
+  const [date, setDate] = useState(() => singleService?.startDate || orgToday());
   // Seeded from the jobs' own crew when they all share one. Defaulting to
   // "Unassigned" wrote crew_id: null onto every visit dispatched from here, so
   // an already-crewed job landed on the board — and on the printed route

@@ -90,12 +90,11 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: est } = await (supabase as any)
-    .from("estimates").select("id, org_id, approval_status, stage").eq("id", estimateId).is("deleted_at", null).maybeSingle();
+    .from("estimates").select("id, org_id, approval_status, stage, sent_at").eq("id", estimateId).is("deleted_at", null).maybeSingle();
   if (!est) return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
 
   // A lost estimate must not hand out a live link (the public accept route
-  // would refuse it anyway, but the client would see a dead proposal). Draft
-  // behaviour is intentionally unchanged.
+  // would refuse it anyway, but the client would see a dead proposal).
   if (est.stage === "lost") {
     return NextResponse.json({ error: "This estimate is marked lost — reopen it before sharing a proposal link." }, { status: 409 });
   }
@@ -116,6 +115,21 @@ export async function POST(
   // Handing out the link is sending it: publish the current estimate so the
   // link shows what staff see right now (no-op if nothing changed).
   const publishedVersion = await publishSharedVersion(supabase, estimateId, user.id);
+
+  // Handing out the link is sending it, and the public accept route only takes proposals at
+  // stage 'sent': without this a draft/quote link showed the client a proposal they couldn't
+  // accept. Same transition (and sent_at anchor) as send-email, conditioned on the stage still
+  // being open so a client accepting meanwhile isn't reverted.
+  if (est.stage === "draft" || est.stage === "quote") {
+    const sentIso = new Date().toISOString();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from("estimates").update({
+      stage: "sent",
+      updated_at: sentIso,
+      expiry_notified_at: null,
+      ...(est.sent_at ? {} : { sent_at: sentIso }),
+    }).eq("id", estimateId).in("stage", ["draft", "quote"]);
+  }
 
   const live = await findLiveShareToken(supabase, estimateId);
   if (live) {

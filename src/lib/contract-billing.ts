@@ -219,7 +219,16 @@ export function isBillingDueOn(contract: BillingContractRow, today: Date): boole
       const last = parseYmd(contract.last_billed_date);
       if (last && monthIndex(last.y, last.m) >= billedIdx) return false;
       const anchor = billingAnchor(contract, today);
-      return dayDiff(anchor, { y: now.y, m: now.m, d: dueDay }) >= 0;
+      if (dayDiff(anchor, { y: now.y, m: now.m, d: dueDay }) >= 0) return true;
+      // Billing a month ahead: a contract that starts after this month's billing day never
+      // had a run that billed its first full month (the run that would have predates it), and
+      // the next run bills the month AFTER. It is due as soon as it exists, provided it covers
+      // some of the month being billed.
+      if (advance) {
+        const billed = fromMonthIndex(billedIdx);
+        return dayDiff(anchor, { y: billed.y, m: billed.m, d: daysInMonth(billed.y, billed.m) }) >= 0;
+      }
+      return false;
     }
 
     case "quarterly":

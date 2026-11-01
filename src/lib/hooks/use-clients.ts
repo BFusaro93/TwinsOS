@@ -915,6 +915,13 @@ export function useBulkImportClients() {
               patch.address_verified_at = null;
             }
 
+            // Text consent was given for the old number; a different number from a CSV re-import
+            // hasn't consented, so it must not inherit the opt-in.
+            const lastDigits = (v: string | null | undefined) => (v ?? "").replace(/\D/g, "").slice(-10);
+            if (patch.primary_phone && lastDigits(patch.primary_phone) !== lastDigits(existing.primary_phone)) {
+              patch.sms_opt_in = false;
+            }
+
             if (Object.keys(patch).length > 0) {
               const { error: updateError } = await supabase
                 .from("clients")

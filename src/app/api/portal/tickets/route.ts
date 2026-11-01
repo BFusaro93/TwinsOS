@@ -8,6 +8,7 @@ import type { PortalSettingsRow } from "@/lib/portal/portal-db";
 import { orgEmailFrom } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { logger } from "@/lib/logger";
+import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 
 const log = logger.child("portal/tickets");
 
@@ -51,6 +52,11 @@ export async function GET() {
 export async function POST(req: Request) {
   const ctx = await getPortalContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Each ticket emails staff and creates a notification: cap per portal client.
+  if (!(await checkAuthRateLimit(`portal-ticket:${ctx.clientId}`, 10, 600))) {
+    return NextResponse.json({ error: "Too many tickets. Please wait a few minutes and try again." }, { status: 429 });
+  }
 
   const supabase = createServiceClient();
 

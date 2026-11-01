@@ -7,7 +7,7 @@ import { useCurrentUserStore } from "@/stores";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { compressPhoto, getImageDimensions, extractGPS } from "../lib/imageCompression";
-import { buildPhotoPath, uploadOriginalPhoto } from "../lib/photoStorage";
+import { buildPhotoPath, uploadOriginalPhoto, deletePhotoFromStorage } from "../lib/photoStorage";
 import {
   MAX_PHOTO_UPLOAD_BYTES,
   ALLOWED_PHOTO_UPLOAD_MIME_TYPES,
@@ -163,7 +163,12 @@ export function usePhotoUpload(projectId: string) {
             upload_context: inp.uploadContext,
             created_by: currentUser.id,
           });
-          if (error) throw error;
+          if (error) {
+            // The original is already in storage; without a row it would be orphaned (and a retry
+            // uploads another copy under a new path).
+            await deletePhotoFromStorage(path).catch(() => {});
+            throw error;
+          }
 
           updateStatus("done");
         } catch (err) {

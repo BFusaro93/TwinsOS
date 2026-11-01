@@ -302,7 +302,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
     ? (selectedTier ?? tierBasis(true, lineItems.map((li) => ({
         tier: li.tier,
         status: li.status,
-        netCents: Math.max(0, li.totalCents - (li.discountCents ?? 0)),
+        netCents: Math.max(0, li.totalCents - (li.discountCents ?? 0)) + (subitemTotals[li.id] ?? 0),
       }))))
     : null;
   const countedLines = lineItems.filter(

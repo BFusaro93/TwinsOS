@@ -38,6 +38,7 @@ export async function POST(request: Request) {
     .from("clients")
     .select("org_id")
     .eq("id", body.clientId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (!client || client.org_id !== auth.orgId) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });

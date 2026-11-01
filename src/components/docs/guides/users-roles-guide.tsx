@@ -198,6 +198,14 @@ export function UsersRolesGuide() {
           permissions too). The same keys the buttons use are enforced on the server, so a role
           without them is refused even if it calls the action another way.
         </p>
+        <p>
+          <strong>Cancelling jobs and bulk-editing clients are enforced the same way.</strong>{" "}
+          Setting a job to Cancelled needs the Cancel Job permission, and changing a field
+          (account type, source, priority, email opt-in, do-not-market, or status to Inactive)
+          on more than one client at a time needs Bulk Edit. Editing one client at a time only
+          needs the normal client edit permission. A role without the permission sees a
+          &quot;You do not have permission&quot; error rather than a silent failure.
+        </p>
         <Callout>
           <strong>Admins skip all of this.</strong> If <code>profiles.role === &quot;admin&quot;</code>,
           every CRM permission check passes automatically — an Admin never needs a{" "}
