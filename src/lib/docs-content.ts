@@ -2007,7 +2007,27 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Can each estimate document have its own client-view toggles?",
-        a: "Yes. In the document's Edit Settings (Estimate-type documents only), tick 'Set What The Client Sees For This Document' and choose visits, quantities, units, line prices, line totals, section subtotals and the hide-$0 options. Those toggles are copied onto an estimate when it uses the document. The order, most specific first, is the estimate's own toggles, then the document's, then the service bundle's, then the org default. They are copied, so editing the document later does not change existing estimates or sent proposals.",
+        a: "Yes. In the document's Edit Settings (Estimate-type documents only), tick 'Set What The Client Sees For This Document' and choose visits, quantities, units, line prices, line totals, section subtotals, package visits and the hide-$0 options. Those toggles are copied onto an estimate when it uses the document. The order, most specific first, is the estimate's own toggles, then the document's, then the service bundle's, then the org default. They are copied, so editing the document later does not change existing estimates or sent proposals.",
+      },
+      {
+        q: "Can I put a package on an estimate?",
+        a: "Yes. On the estimate's line-item grid, click Add Package and pick a package. It adds a section header named after the package and one line per package service, each keeping the package's visit count and per-visit price. The package's Description on Estimate (Settings, Packages) becomes its wording on the proposal. Tiers, discounts and totals work the same as on any other line.",
+      },
+      {
+        q: "Can a customer accept only part of a package?",
+        a: "No. A package is all or nothing. The proposal page and client portal show it as one main line with one checkbox (name, wording and total), and the server accepts or declines every line of the package together, even if a request tries to split it.",
+      },
+      {
+        q: "How do I show or hide a package's visits on the proposal?",
+        a: "Use the Package visits toggle in the estimate's 'What the client sees' settings (it is on by default, and can also be set on an Estimate document or the org default). On lists each visit as a plain row under the package's main line. Off shows only the package name, wording and total. It applies to the proposal page, the client portal, the PDF and the [estimategrid] table in emails.",
+      },
+      {
+        q: "What happens when I convert an estimate that has a package on it?",
+        a: "Convert to Job creates a Package job instead of a plain job, with the package, its total steps, each step's date window (with Min Days spacing), the package's invoice description and one visit per dated step. Convert one package at a time, and not in the same pass as ordinary lines; the convert window has a button per package and locks Job Type to Package. Scheduled Date acts as a Program Start Date that moves every step window by the same number of days.",
+      },
+      {
+        q: "Does a package with several included visits become several steps on the job?",
+        a: "No. Each package service becomes one step on the job with one visit, billed at that line's full price. This matches how Add Job's package picker works.",
       },
       {
         q: "What happens to an estimate's toggles if I change its Estimate Document or apply a bundle?",

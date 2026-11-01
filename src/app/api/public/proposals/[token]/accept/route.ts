@@ -262,7 +262,7 @@ export async function POST(
   // were billed as accepted.
   const { data: openLines, error: openLinesErr } = await supabase
     .from("estimate_line_items")
-    .select("id, tier, row_type")
+    .select("id, tier, row_type, package_id")
     .eq("estimate_id", shareToken.estimate_id)
     .eq("status", "quote")
     .is("deleted_at", null);
@@ -274,7 +274,7 @@ export async function POST(
     await rollbackAcceptance([]);
     return NextResponse.json({ error: "Failed to record acceptance" }, { status: 500 });
   }
-  const eligibleLines = (openLines ?? []) as { id: string; tier: string | null; row_type: string | null }[];
+  const eligibleLines = (openLines ?? []) as { id: string; tier: string | null; row_type: string | null; package_id: string | null }[];
   // An explicit array — even an empty one — is a selection. Treating [] as
   // "no selection" used to accept every line, and unknown ids matched nothing
   // so the estimate was accepted at $0. Mirror the portal accept route.
@@ -291,6 +291,12 @@ export async function POST(
         return NextResponse.json({ error: "Invalid line item id" }, { status: 400 });
       }
     }
+  }
+  // A package is all-or-nothing: accepting any of its lines accepts the whole
+  // package, whatever the client sent.
+  if (acceptedIds) {
+    const acceptedPackages = new Set(eligibleLines.filter((li) => li.package_id && acceptedIds.has(li.id)).map((li) => li.package_id));
+    for (const li of eligibleLines) if (li.package_id && acceptedPackages.has(li.package_id)) acceptedIds.add(li.id);
   }
   const isWonLine = (li: { id: string; tier: string | null; row_type: string | null }) => {
     if (body.selectedTier) {

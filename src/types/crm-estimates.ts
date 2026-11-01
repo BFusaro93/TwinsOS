@@ -57,6 +57,8 @@ export interface EstimateLineItem {
   rowType: 'item' | 'section';
   sectionName: string | null;
   tier: 'basic' | 'standard' | 'premium' | null;
+  /** crm_packages row this line was added from (Add Package). Drives package-job conversion. */
+  packageId: string | null;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;

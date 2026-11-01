@@ -10763,6 +10763,7 @@ export type Database = {
           margin_bps: number
           markup_bps: number
           org_id: string
+          package_id: string | null
           production_rate_sqft_per_hr: number | null
           qty: number
           rate_cents: number
@@ -10802,6 +10803,7 @@ export type Database = {
           margin_bps?: number
           markup_bps?: number
           org_id?: string
+          package_id?: string | null
           production_rate_sqft_per_hr?: number | null
           qty?: number
           rate_cents?: number
@@ -10841,6 +10843,7 @@ export type Database = {
           margin_bps?: number
           markup_bps?: number
           org_id?: string
+          package_id?: string | null
           production_rate_sqft_per_hr?: number | null
           qty?: number
           rate_cents?: number

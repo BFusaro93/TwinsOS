@@ -445,10 +445,17 @@ export default function ProposalPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
+  // A package is all-or-nothing: ticking or unticking one of its lines
+  // flips every line of that package together.
   function toggleItem(id: string) {
+    const pkgId = proposal?.lineItems.find((li) => li.id === id)?.packageId ?? null;
+    const ids = pkgId
+      ? (proposal?.lineItems ?? []).filter((li) => li.packageId === pkgId && li.rowType !== "section").map((li) => li.id)
+      : [id];
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      const on = !next.has(id);
+      for (const x of ids) { if (on) next.add(x); else next.delete(x); }
       return next;
     });
   }
@@ -881,7 +888,48 @@ export default function ProposalPage() {
             <p className="text-xs text-white/70">Check the services you&apos;d like to include</p>
           )}
         </div>
-        {sections.map((section, si) => (
+        {sections.map((section, si) => section.packageId && section.items.length > 0 ? (
+          // A package is one main line with ONE checkbox (all-or-nothing); its
+          // visits, when shown, are plain rows underneath.
+          <div key={si} className="border-b last:border-b-0">
+            <label
+              className={`flex items-start gap-3 px-4 py-3 transition-colors ${proposal.tiersEnabled ? "" : "cursor-pointer hover:bg-slate-50"} ${!proposal.tiersEnabled && section.items.every((li) => selectedIds.has(li.id)) ? "bg-green-50/50" : ""}`}
+            >
+              {!proposal.tiersEnabled && (
+                <input
+                  type="checkbox"
+                  checked={section.items.every((li) => selectedIds.has(li.id))}
+                  onChange={() => toggleItem(section.items[0].id)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 cursor-pointer"
+                  style={{ accentColor: brand }}
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-slate-800">{section.sectionName}</p>
+                {section.description && <LineDescription html={section.description} />}
+              </div>
+              {proposal.displaySettings.showLineTotals && (
+                <p className="shrink-0 font-semibold text-slate-700">{cents(section.subtotalCents)}</p>
+              )}
+            </label>
+            {proposal.displaySettings.showPackageVisits && (
+              <ul className="divide-y border-t bg-slate-50/50">
+                {section.items.map((li: ProposalLineItem) => {
+                  const meta = lineMeta(li, proposal.displaySettings);
+                  return (
+                    <li key={li.id} className="flex items-baseline justify-between gap-3 py-2 pl-11 pr-4 text-sm text-slate-600">
+                      <span className="min-w-0">
+                        {li.serviceName ?? "Service"}
+                        {meta && <span className="ml-2 text-xs text-slate-400">{meta}</span>}
+                      </span>
+                      {proposal.displaySettings.showLineTotals && <span className="shrink-0">{cents(li.totalCents)}</span>}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        ) : (
           <div key={si}>
             {section.sectionName && (
               <div className="bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 border-b">

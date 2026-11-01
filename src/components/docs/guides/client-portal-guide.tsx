@@ -255,7 +255,8 @@ export function ClientPortalGuide() {
             <strong>Review &amp; Accept</strong> — opens a dialog rendering the estimate&apos;s line items
             (respecting the same section grouping and display settings — quantities, line totals, section
             subtotals — staff configured on the estimate itself). If the estimate has line items, each one
-            has its own checkbox, pre-checked, so a client can accept only part of an estimate; the dialog
+            has its own checkbox, pre-checked, so a client can accept only part of an estimate &mdash; except a
+            package, which shows as one line with one checkbox and is accepted or declined whole; the dialog
             recalculates the selected total live. Typing a full name into the signature field and confirming
             posts the acceptance (and which line items were accepted, if partial) to the estimate. Lines the
             client left unchecked are marked lost on the estimate and are excluded from the Accepted

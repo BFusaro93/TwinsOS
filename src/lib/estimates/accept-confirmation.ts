@@ -111,7 +111,7 @@ export async function sendConfiguredAcceptanceConfirmation(
     // Same table the Send Estimate email prints; "" when there are no lines, so
     // the renderer drops a grid-only paragraph rather than leaving a gap.
     const pdfData = await buildEstimatePDFData(supabase, args.estimateId, est.org_id as string).catch(() => null);
-    const gridHtml = buildEstimateGridHtml(pdfData?.estimate.lineItems ?? []);
+    const gridHtml = buildEstimateGridHtml(pdfData?.estimate.lineItems ?? [], pdfData?.estimate.displaySettings);
 
     const mergeVars: Record<string, string> = {
       ...buildClientMergeVars(

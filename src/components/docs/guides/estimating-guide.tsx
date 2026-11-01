@@ -49,6 +49,7 @@ export function EstimatingGuide() {
           <TOCLink href="#complexity-and-rate-matrix">Complexity multiplier &amp; Rate Matrix pricing</TOCLink>
           <TOCLink href="#reading-the-grid">Reading the line-item grid</TOCLink>
           <TOCLink href="#bundles-subitems">Service bundles and sub-items</TOCLink>
+          <TOCLink href="#packages-on-estimates">Packages on an estimate</TOCLink>
           <TOCLink href="#zone-measurements">Where zone measurements come from</TOCLink>
           <TOCLink href="#proposal-link">The client-facing proposal link</TOCLink>
           <TOCLink href="#estimate-defaults">What a new estimate starts with</TOCLink>
@@ -393,6 +394,43 @@ export function EstimatingGuide() {
         </ul>
       </Section>
 
+      <Section id="packages-on-estimates" title="Packages on an estimate">
+        <p>
+          Use <strong>Add Package</strong> (next to Add Item) to quote a package program such as a
+          5-Step Fertilization &amp; Weed Control plan. It adds a section header named after the package
+          and one line per package service, in package order. Each line keeps the package&rsquo;s
+          visit count and per-visit price (the package&rsquo;s own rate, or the service&rsquo;s default
+          if the package sets none). Quantity, tier, discounts and the estimate totals work exactly as
+          they do on any other line. The package&rsquo;s <strong>Description on Estimate</strong>,
+          set in Settings &rarr; Packages, becomes the package&rsquo;s wording on the proposal.
+        </p>
+        <h3 className="text-base font-semibold">What the client sees</h3>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            A package shows as <strong>one main line</strong> &mdash; name, wording and total &mdash;
+            with <strong>one checkbox</strong>. A package is all or nothing: the client accepts the
+            whole package or none of it, whatever they tick, and the server enforces it.
+          </li>
+          <li>
+            The <strong>Package visits</strong> toggle in the estimate&rsquo;s &ldquo;What the client
+            sees&rdquo; settings (on by default) lists each visit under the main line as plain rows.
+            Turn it off to show only the name, wording and total. It applies to the proposal page,
+            the client portal, the PDF and the <code>[estimategrid]</code> table in emails.
+          </li>
+          <li>
+            Packages added before the toggle existed, or whose section header was removed, print as an
+            ordinary section.
+          </li>
+        </ul>
+        <h3 className="text-base font-semibold">Converting</h3>
+        <p>
+          Converting an accepted package creates a <strong>Package job</strong>, not a plain job. See
+          Jobs &amp; Packages for the details. Package lines convert one package at a time, and never in
+          the same pass as ordinary lines; the convert window offers a button per package. Duplicating
+          an estimate keeps the package tags.
+        </p>
+      </Section>
+
       <Section id="zone-measurements" title="Where zone measurements come from">
         <p>
           Production-rate lines need a quantity to divide by the service&rsquo;s rate &mdash;
@@ -697,9 +735,11 @@ export function EstimatingGuide() {
           estimate&rsquo;s line total against rate × visits, not against the per-visit rate.
         </Callout>
         <Callout>
-          <strong>Package</strong> and <strong>Snow</strong> jobs aren&rsquo;t created this way
-          &mdash; they&rsquo;re created directly from <strong>Jobs &rarr; Add Job</strong> rather
-          than converted from an estimate.
+          <strong>Snow</strong> jobs aren&rsquo;t created this way &mdash; they&rsquo;re created
+          directly from <strong>Jobs &rarr; Add Job</strong>. <strong>Package</strong> jobs are
+          created here when the estimate has a package on it (<strong>Add Package</strong>): the
+          convert window locks Job Type to Package, takes the package&rsquo;s lines one package per
+          pass, and treats Scheduled Date as the program start.
         </Callout>
       </Section>
     </DocsFontScope>

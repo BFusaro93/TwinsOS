@@ -76,6 +76,8 @@ export interface ProposalContent {
     printedSubitems?: PrintedSubitem[];
     status: string;
     tier: string | null;
+    /** Package the line was added from. A package is accepted all-or-nothing. Absent on versions sent before packages existed. */
+    packageId?: string | null;
     /** For the PDF, which prints the adjusted, complexity-scaled rate. */
     adjRateCents: number | null;
     complexityBps: number | null;
@@ -127,6 +129,7 @@ export function buildProposalContent(est: Record<string, unknown>): ProposalCont
       printedSubitems: pickPrintedSubitems(li.estimate_line_item_subitems),
       status: li.status as string,
       tier: (li.tier as string | null) ?? null,
+      packageId: (li.package_id as string | null) ?? null,
       adjRateCents: (li.adj_rate_cents as number | null) ?? null,
       complexityBps: (li.complexity_bps as number | null) ?? null,
     }));
@@ -177,7 +180,7 @@ export function proposalFingerprint(content: ProposalContent): string {
  *  so an estimate sent before the field existed is not reported "changed
  *  since sent" (which would block acceptance until re-sent). Real price
  *  changes still show up in subtotal/total. */
-const LATE_LINE_KEYS = ["discountCents", "subitemTotalCents", "printedSubitems"] as const;
+const LATE_LINE_KEYS = ["discountCents", "subitemTotalCents", "printedSubitems", "packageId"] as const;
 
 function alignToPublished(live: ProposalContent, published: ProposalContent): ProposalContent {
   const sample = published.lineItems?.[0] as Record<string, unknown> | undefined;
