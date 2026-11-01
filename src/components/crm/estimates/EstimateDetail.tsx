@@ -9,6 +9,7 @@ import {
   useUpdateEstimateStage,
   useSaveEstimateFinancials,
   useUpsertLineItem,
+  useDeleteLineItem,
   useEstimateShareTokens,
   useEstimateShareLink,
   useEnsureEstimateShareLink,
@@ -409,6 +410,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
   const { data: crmServices } = useCRMServices();
   const { mutateAsync: upsertLineItem } = useUpsertLineItem();
+  const { mutateAsync: deleteLineItem } = useDeleteLineItem();
   const { mutateAsync: createInvoice, isPending: creatingInvoice } = useCreateInvoiceFromEstimate();
   const { data: changeRequests } = useEstimateChangeRequests(estimateId);
   const { mutateAsync: resolveChangeRequest } = useResolveChangeRequest();
@@ -506,6 +508,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     : [];
   const [rateIncreaseOpen, setRateIncreaseOpen] = useState(false);
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [aiDraftOpen, setAiDraftOpen] = useState(false);
   const [selectedLineItemIds, setSelectedLineItemIds] = useState<string[]>([]);
@@ -712,6 +715,23 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       },
       duration: 8000,
     });
+  }
+
+  async function handleBulkDelete() {
+    if (!estimate) return;
+    const affected = (estimate.lineItems ?? []).filter(
+      (li) => !li.deletedAt && selectedLineItemIds.includes(li.id)
+    );
+    setBulkDeleteOpen(false);
+    try {
+      // One at a time: each delete recalculates the estimate totals from the lines left.
+      for (const li of affected) await deleteLineItem({ id: li.id, estimateId: estimate.id });
+      await refreshEstimateTotals();
+      toast.success(`Deleted ${affected.length} line item${affected.length !== 1 ? "s" : ""}`);
+      setSelectedLineItemIds([]);
+    } catch {
+      toast.error("Failed to delete the selected line items");
+    }
   }
 
   async function handleBulkStatus(status: LineItemStatus) {
@@ -1709,28 +1729,34 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedLineItemIds.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={() => setRateIncreaseOpen(true)}
-                  >
-                    <TrendingUp className="mr-1 h-3.5 w-3.5" />
-                    Rate Increase ({selectedLineItemIds.length})
-                  </Button>
-                )}
-                {selectedLineItemIds.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={() => setBulkStatusOpen(true)}
-                  >
-                    Change Status ({selectedLineItemIds.length})
-                  </Button>
-                )}
               </div>
+
+              {/* Bulk actions for the ticked lines — shown right above the grid so the
+                  checkboxes visibly do something. */}
+              {selectedLineItemIds.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-brand-200 bg-brand-50 px-3 py-1.5 dark:border-neutral-700 dark:bg-neutral-800">
+                  <span className="text-xs font-medium">{selectedLineItemIds.length} selected</span>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setBulkStatusOpen(true)}>
+                    Change Status
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setRateIncreaseOpen(true)}>
+                    <TrendingUp className="mr-1 h-3.5 w-3.5" />
+                    Rate Increase
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs text-red-600 hover:text-red-700 dark:text-red-400"
+                    onClick={() => setBulkDeleteOpen(true)}
+                  >
+                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                    Delete
+                  </Button>
+                  <Button variant="ghost" size="sm" className="ml-auto h-7 text-xs" onClick={() => setSelectedLineItemIds([])}>
+                    Clear
+                  </Button>
+                </div>
+              )}
 
               {/* Line item filter tabs */}
               <div className="flex items-center gap-0 border-b">
@@ -2069,6 +2095,23 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         onApply={handleBulkStatus}
         onCancel={() => setBulkStatusOpen(false)}
       />
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedLineItemIds.length} line item{selectedLineItemIds.length !== 1 ? "s" : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The selected lines are removed from this estimate and its totals are recalculated.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={toggleConflict !== null}>
         <AlertDialogContent>

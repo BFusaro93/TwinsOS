@@ -303,10 +303,14 @@ function SectionRow({
               <button
                 type="button"
                 onClick={() => setEditingDesc(true)}
-                className="text-left text-muted-foreground hover:text-foreground"
+                className="flex w-full max-w-2xl items-start gap-1.5 rounded border border-dashed border-slate-300 dark:border-neutral-600 bg-background/60 px-2 py-1 text-left text-muted-foreground hover:border-brand-400 hover:text-foreground"
                 title="Click to edit the description the client sees"
               >
-                {item.estimateDesc ? item.estimateDesc : "Add package description for the client…"}
+                <Pencil className="mt-0.5 h-3 w-3 shrink-0" />
+                <span>
+                  <span className="font-medium text-foreground">Description on estimate: </span>
+                  {item.estimateDesc ? item.estimateDesc : "none yet — click to add the wording the client sees"}
+                </span>
               </button>
             )}
           </div>
@@ -655,7 +659,13 @@ function LineItemRow({
         )}
 
         {/* Service name + expand chevron */}
-        <td className="min-w-[160px] px-2 py-1.5 font-semibold text-slate-900 dark:text-neutral-100">
+        <td
+          className={cn(
+            "min-w-[160px] px-2 py-1.5 font-semibold text-slate-900 dark:text-neutral-100",
+            // A package's visits sit under its header, indented like sub-items on other lines.
+            item.packageId && "border-l-2 border-brand-300 dark:border-brand-700 pl-6"
+          )}
+        >
           <div className="flex items-center gap-1">
             <button
               onClick={() => onToggleExpand(item.id)}
@@ -1046,13 +1056,20 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
 
   const handleDelete = useCallback(
     async (id: string) => {
+      // Deleting a package's header takes all of its visits with it.
+      const target = items.find((i) => i.id === id);
+      const group = target?.rowType === "section" && target.packageId
+        ? items.filter((i) => i.packageId === target.packageId && i.id !== id)
+        : [];
+      if (group.length > 0 && !window.confirm(`Delete "${target?.sectionName ?? "this package"}" and its ${group.length} visit${group.length !== 1 ? "s" : ""}?`)) return;
       try {
+        for (const li of group) await deleteItem({ id: li.id, estimateId });
         await deleteItem({ id, estimateId });
       } catch {
         toast.error("Failed to delete line item");
       }
     },
-    [deleteItem, estimateId]
+    [deleteItem, estimateId, items]
   );
 
   const handleDuplicate = useCallback(
@@ -1409,7 +1426,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
 
   function toggleSelectAll() {
     if (!onSelectionChange) return;
-    onSelectionChange(selectedIds.length === items.length ? [] : items.map((i) => i.id));
+    const selectable = items.filter((i) => i.rowType !== "section").map((i) => i.id);
+    onSelectionChange(selectedIds.length === selectable.length ? [] : selectable);
   }
 
   const activeServices = (services ?? []).filter((s) => s.isActive);
@@ -1546,7 +1564,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
               <th className="w-12 px-1 py-2 text-center">
                 <input
                   type="checkbox"
-                  checked={items.length > 0 && selectedIds.length === items.length}
+                  checked={items.some((i) => i.rowType !== "section") && selectedIds.length === items.filter((i) => i.rowType !== "section").length}
                   onChange={toggleSelectAll}
                   className="h-3.5 w-3.5 rounded border-slate-300 dark:border-neutral-700"
                 />
