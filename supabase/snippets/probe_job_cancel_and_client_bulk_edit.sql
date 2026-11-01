@@ -24,7 +24,22 @@ begin
     and coalesce((cr.permissions ->> 'client_bulk_edit')::boolean, false) = false
   limit 1;
   if v_uid is null then
-    raise exception 'PROBE SETUP: no employee lacking job_cancel + client_bulk_edit';
+    -- No such employee exists (e.g. TEST has only an admin): fabricate one.
+    -- Rolled back with everything else.
+    declare
+      v_org  uuid := (select org_id from crm_jobs where deleted_at is null and status <> 'cancelled' limit 1);
+      v_role uuid;
+    begin
+      v_uid := gen_random_uuid();
+      insert into auth.users (id, email) values (v_uid, 'probe-' || v_uid || '@example.invalid');
+      insert into profiles (id, org_id, name, email, role)
+        values (v_uid, v_org, 'Probe User', 'probe-' || v_uid || '@example.invalid', 'manager')
+        on conflict (id) do update set org_id = excluded.org_id, role = 'manager';
+      insert into crm_roles (org_id, name, permissions) values (v_org, 'probe-role', '{}'::jsonb)
+        returning id into v_role;
+      insert into crm_employees (org_id, first_name, last_name, user_id, crm_role_id)
+        values (v_org, 'Probe', 'User', v_uid, v_role);
+    end;
   end if;
 
   select j.id into v_job from crm_jobs j
