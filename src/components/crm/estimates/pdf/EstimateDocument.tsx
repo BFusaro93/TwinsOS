@@ -17,6 +17,8 @@ import { groupIntoSections, type DisplaySettings, type DisplaySection } from "@/
 export interface EstimatePDFLineItem {
   rowType: "item" | "section";
   sectionName: string | null;
+  /** Add Package group: set on the section marker and its lines. */
+  packageId?: string | null;
   serviceName: string | null;
   estimateDesc: string | null;
   qty: number;
@@ -396,13 +398,42 @@ function LineItemSections({
   sections: DisplaySection<EstimatePDFLineItem>[];
   settings: DisplaySettings;
 }) {
+  // A package prints as one main line (name, wording, total) unless the
+  // estimate lists its visits (showPackageVisits), in which case its wording
+  // sits under the section header and the visits follow as usual.
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const shown = sections.map((section): DisplaySection<EstimatePDFLineItem> => {
+    if (!section.packageId || section.items.length === 0 || settings.showPackageVisits) return section;
+    const first = section.items[0];
+    return {
+      ...section,
+      sectionName: null,
+      items: [{
+        ...first,
+        serviceName: section.sectionName,
+        estimateDesc: `<p><strong>${esc(section.sectionName ?? "Package")}</strong></p>${section.description ? `<p>${esc(section.description)}</p>` : ""}`,
+        qty: 1,
+        unitType: null,
+        visits: section.items.reduce((n, li) => n + (li.visits || 1), 0),
+        rateCents: section.subtotalCents,
+        complexityBps: null,
+        totalCents: section.subtotalCents,
+        subitems: [],
+      }],
+    };
+  });
   return (
     <>
-      {sections.map((section, si) => (
+      {shown.map((section, si) => (
         <View key={si}>
           {section.sectionName && (
             <View style={S.sectionRow}>
               <Text style={S.sectionRowText}>{section.sectionName}</Text>
+            </View>
+          )}
+          {section.packageId && section.description && (
+            <View style={S.cellService}>
+              <Text style={S.serviceDescText}>{section.description}</Text>
             </View>
           )}
           {section.items.map((li, i) => (

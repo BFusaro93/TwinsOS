@@ -1,5 +1,6 @@
 import type { EstimatePDFLineItem } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { escapeHtml } from "@/lib/utils/escape-html";
+import { DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
 
 function fmtCents(cents: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -9,9 +10,36 @@ function fmtCents(cents: number): string {
 // estimate's line items, the same rows the attached PDF prints (see
 // pdfLineItems below). Registered as HTML-safe in document-template-renderer
 // so it isn't double-escaped when substituted into the email body.
-export function buildEstimateGridHtml(lineItems: EstimatePDFLineItem[]): string {
+//
+// A package (Add Package: a section row carrying packageId, then its lines)
+// prints like the page and PDF: one main row with the package name, wording and
+// total, and its visits listed beneath only when showPackageVisits is on.
+export function buildEstimateGridHtml(
+  lineItems: EstimatePDFLineItem[],
+  settings: DisplaySettings = DEFAULT_DISPLAY_SETTINGS,
+): string {
   if (lineItems.length === 0) return "";
-  const rows = lineItems.map((li) => {
+  const cell = "padding:6px 4px;border-bottom:1px solid #f1f5f9";
+  const rows = lineItems.map((li, idx) => {
+    if (li.rowType === "section" && li.packageId) {
+      const visits: EstimatePDFLineItem[] = [];
+      for (let j = idx + 1; j < lineItems.length && lineItems[j].rowType !== "section"; j++) visits.push(lineItems[j]);
+      const total = visits.reduce((sum, v) => sum + v.totalCents, 0);
+      const wording = li.estimateDesc ? `<div style="font-weight:400;color:#64748b;font-size:12px">${escapeHtml(li.estimateDesc)}</div>` : "";
+      const main = `<tr>
+      <td style="${cell};font-weight:700">${escapeHtml(li.sectionName ?? "Package")}${wording}</td>
+      <td style="${cell}"></td>
+      <td style="${cell};text-align:right;white-space:nowrap;font-weight:700">${fmtCents(total)}</td>
+    </tr>`;
+      if (!settings.showPackageVisits) return main;
+      return main + visits.map((v) => `<tr>
+      <td style="padding:2px 4px 2px 20px;border-bottom:1px solid #f8fafc;color:#64748b;font-size:12px">${escapeHtml(v.serviceName || v.estimateDesc || "")}</td>
+      <td style="padding:2px 4px;border-bottom:1px solid #f8fafc;color:#64748b;font-size:12px;text-align:right;white-space:nowrap">${v.qty}${v.unitType ? " " + escapeHtml(v.unitType) : ""}</td>
+      <td style="padding:2px 4px;border-bottom:1px solid #f8fafc;color:#64748b;font-size:12px;text-align:right;white-space:nowrap">${fmtCents(v.totalCents)}</td>
+    </tr>`).join("");
+    }
+    // A package's lines are printed by its section row above.
+    if (li.rowType !== "section" && li.packageId) return "";
     if (li.rowType === "section") {
       return `<tr><td colspan="3" style="padding:10px 4px 4px;font-weight:700;border-bottom:1px solid #e2e8f0">${escapeHtml(li.sectionName ?? "")}</td></tr>`;
     }

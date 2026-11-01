@@ -212,4 +212,6 @@ export interface ProposalLineItem {
   printedSubitems?: { name: string; qty: number; rateCents: number; totalCents: number }[];
   status: string;
   tier: string | null;
+  /** Package the line belongs to — all of a package's lines are accepted or declined together. */
+  packageId?: string | null;
 }

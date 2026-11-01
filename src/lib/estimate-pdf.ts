@@ -74,6 +74,7 @@ export async function buildEstimatePDFData(
     .map((li: Record<string, unknown>) => ({
       rowType: (li.row_type as "item" | "section") ?? "item",
       sectionName: li.section_name as string | null,
+      packageId: (li.package_id as string | null) ?? null,
       serviceName: li.service_name as string | null,
       estimateDesc: li.estimate_desc as string | null,
       qty: (li.qty as number) ?? 1,
@@ -160,6 +161,7 @@ export async function buildEstimatePDFData(
         lineItems: c.lineItems.map((li) => ({
           rowType: li.rowType,
           sectionName: li.sectionName,
+          packageId: li.packageId ?? null,
           serviceName: li.serviceName,
           estimateDesc: li.estimateDesc,
           qty: li.qty,

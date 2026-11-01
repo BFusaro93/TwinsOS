@@ -59,6 +59,7 @@ interface LineItem {
   row_type?: "item" | "section" | null;
   section_name?: string | null;
   tier?: string | null;
+  package_id?: string | null;
 }
 
 interface SignDialogProps {
@@ -85,10 +86,14 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
   const hasLineItems = itemRows.length > 0;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(allItemRows.map((li) => li.id)));
 
+  // A package is all-or-nothing: toggling one of its lines flips them all.
   function toggleItem(id: string) {
+    const pkgId = allItemRows.find((li) => li.id === id)?.package_id ?? null;
+    const ids = pkgId ? allItemRows.filter((li) => li.package_id === pkgId).map((li) => li.id) : [id];
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      const on = !next.has(id);
+      for (const x of ids) { if (on) next.add(x); else next.delete(x); }
       return next;
     });
   }
@@ -107,7 +112,7 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
       .filter((li) => li.row_type === "section" || inTier(li))
       // total_cents, not rate × qty: rate × qty ignored visits, so a 13-visit
       // mow at $55 read $55 (and the Selected Total followed) instead of $715.
-      .map((li) => ({ ...li, totalCents: li.total_cents, rowType: li.row_type ?? "item", sectionName: li.section_name ?? null })),
+      .map((li) => ({ ...li, totalCents: li.total_cents, rowType: li.row_type ?? "item", sectionName: li.section_name ?? null, estimateDesc: li.description, packageId: li.package_id ?? null })),
     settings
   );
 
@@ -177,7 +182,43 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
         {/* Per-item selection — uncheck anything you don't want to accept */}
         {hasLineItems && (!tiersEnabled || selectedTier) && (
           <div className="bg-slate-50 rounded-xl border border-slate-200 text-sm max-h-64 overflow-y-auto">
-            {sections.map((section, si) => (
+            {sections.map((section, si) => section.packageId && section.items.length > 0 ? (
+              // A package is one main line with ONE checkbox (all-or-nothing); its
+              // visits, when shown, are plain rows underneath.
+              <div key={si} className="border-b border-slate-100 last:border-b-0">
+                <label
+                  className={`flex cursor-pointer items-start gap-2.5 px-3 py-2 transition-colors ${section.items.every((li) => selectedIds.has(li.id)) ? "bg-green-50/60" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={section.items.every((li) => selectedIds.has(li.id))}
+                    onChange={() => toggleItem(section.items[0].id)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 cursor-pointer accent-brand-500"
+                  />
+                  <span className="text-slate-700 flex-1 min-w-0">
+                    <span className="font-medium">{section.sectionName}</span>
+                    {section.description && (
+                      <span className="block text-xs text-slate-500">
+                        {looksLikeHtml(section.description) ? stripHtml(section.description) : section.description}
+                      </span>
+                    )}
+                  </span>
+                  {settings.showLineTotals && <span className="text-slate-800 font-medium shrink-0">{fmt(section.subtotalCents)}</span>}
+                </label>
+                {settings.showPackageVisits && (
+                  <ul className="bg-white/60">
+                    {section.items.map((li) => (
+                      <li key={li.id} className="flex items-baseline justify-between gap-3 py-1.5 pl-9 pr-3 text-xs text-slate-500">
+                        <span className="min-w-0 truncate">
+                          {looksLikeHtml(li.description) ? stripHtml(li.description) : li.description}
+                        </span>
+                        {settings.showLineTotals && <span className="shrink-0">{fmt(li.total_cents)}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : (
               <div key={si}>
                 {section.sectionName && (
                   <div className="bg-slate-100 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">

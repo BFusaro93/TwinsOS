@@ -295,6 +295,7 @@ export async function POST(
     .map((li: any) => ({
       rowType: (li.row_type as "item" | "section") ?? "item",
       sectionName: li.section_name ?? null,
+      packageId: li.package_id ?? null,
       serviceName: li.service_name ?? null,
       estimateDesc: li.estimate_desc ?? null,
       qty: li.qty ?? 1,
@@ -335,7 +336,7 @@ export async function POST(
     "[estimatenumber]":     String(est.estimate_number).padStart(5, "0"),
     "[estimatedate]":       quoteDate,
     "[estimatetotal]":      total,
-    "[estimategrid]":       buildEstimateGridHtml(pdfLineItems),
+    "[estimategrid]":       buildEstimateGridHtml(pdfLineItems, toDisplaySettings(est.display_settings)),
     "[installmentcount]":   String(installmentSummary.count),
     "[installmentamount]":  fmtCents(installmentSummary.amountCents),
     "[salesrepname]":       salesRepName,

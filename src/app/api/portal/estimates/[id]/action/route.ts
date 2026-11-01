@@ -152,11 +152,11 @@ export async function POST(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: lineRows, error: linesErr } = await (supabase as any)
       .from("estimate_line_items")
-      .select("id, status, tier, row_type")
+      .select("id, status, tier, row_type, package_id")
       .eq("estimate_id", id)
       .eq("org_id", ctx.orgId)
       .is("deleted_at", null) as {
-        data: { id: string; status: string; tier: string | null; row_type: string | null }[] | null;
+        data: { id: string; status: string; tier: string | null; row_type: string | null; package_id: string | null }[] | null;
         error: unknown;
       };
     if (linesErr) {
@@ -182,6 +182,11 @@ export async function POST(
 
     const eligible = lines.filter((li) => li.status === "quote");
     const accepted = acceptedLineItemIds ? new Set(acceptedLineItemIds) : null;
+    // A package is all-or-nothing: accepting any of its lines accepts the whole package.
+    if (accepted) {
+      const acceptedPackages = new Set(eligible.filter((li) => li.package_id && accepted.has(li.id)).map((li) => li.package_id));
+      for (const li of eligible) if (li.package_id && acceptedPackages.has(li.package_id)) accepted.add(li.id);
+    }
     const isWon = (li: { id: string; tier: string | null; row_type: string | null }) =>
       // Section headers carry no price; keep them with the accepted scope.
       li.row_type === "section" ? true : inTier(li) && (accepted ? accepted.has(li.id) : true);

@@ -34,6 +34,7 @@ import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm-estimates";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { useConvertLeadToClient } from "@/lib/hooks/use-clients";
+import { usePackages } from "@/lib/hooks/use-packages";
 
 /**
  * A line that is part of what the client agreed to: not lost, and not a
@@ -193,9 +194,17 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
     isQuoted(li) &&
     Math.max(0, li.totalCents - (li.discountCents ?? 0)) + (subitemTotals[li.id] ?? 0) > 0 &&
     !(tierUndecided && tierOf(li));
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(lineItems.filter(isDefaultSelected).map((li) => li.id))
-  );
+  // Package lines (added with Add Package) convert to a PACKAGE job — one job
+  // per package, never mixed with ordinary lines. So the default selection is
+  // the ordinary lines, or, when the estimate is all packages, the first
+  // package's lines; the rest are one click away (quick picks below).
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    const picked = lineItems.filter(isDefaultSelected);
+    const plain = picked.filter((li) => !li.packageId);
+    if (plain.length > 0) return new Set(plain.map((li) => li.id));
+    const firstPkg = picked.find((li) => li.packageId)?.packageId;
+    return new Set(picked.filter((li) => li.packageId === firstPkg).map((li) => li.id));
+  });
   // Converted lines drop out of the selection as soon as they're known
   // (the converted-lines query resolves after mount, and after each pass).
   const convertedKey = legacyConverted ? "*" : [...convertedLineIds].sort().join(",");
@@ -269,10 +278,15 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
    *  job, its multi-visit lines on a recurring one. Also sets the job type. */
   function selectByVisits(kind: "single" | "multi") {
     const pick = convertibleLines.filter(
-      (li) => isQuoted(li) && (kind === "single" ? (li.visits || 1) <= 1 : (li.visits || 1) > 1)
+      (li) => isQuoted(li) && !li.packageId && (kind === "single" ? (li.visits || 1) <= 1 : (li.visits || 1) > 1)
     );
     setSelected(new Set(pick.map((li) => li.id)));
     setJobType(kind === "single" ? "one_time" : "recurring");
+  }
+
+  /** Quick pick: all of one package's lines, converted as a package job. */
+  function selectPackage(packageId: string) {
+    setSelected(new Set(convertibleLines.filter((li) => isQuoted(li) && li.packageId === packageId).map((li) => li.id)));
   }
 
   function toggleItem(id: string) {
@@ -311,7 +325,14 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const netByLineId = netByLine(estimate, lineItems, countedLines, subitemTotals);
   const totalCents = selectedItems.reduce((s, li) => s + (netByLineId.get(li.id) ?? 0), 0);
   const selectedMaterialItems = materialItems.filter((dc) => selectedMaterials.has(dc.id));
-  const recurring = jobType === "recurring";
+  const selectedPackageIds = [...new Set(selectedItems.map((li) => li.packageId).filter((x): x is string => !!x))];
+  const hasPackageSel = selectedPackageIds.length > 0;
+  // Package lines force a package job; the Job Type picker is locked to it.
+  const effectiveJobType = hasPackageSel ? "package" : jobType;
+  const { data: crmPackages = [] } = usePackages(true);
+  const packageName = (id: string) => crmPackages.find((p) => p.id === id)?.name ?? "Package";
+  const convertiblePackageIds = [...new Set(convertibleLines.filter((li) => isQuoted(li)).map((li) => li.packageId).filter((x): x is string => !!x))];
+  const recurring = effectiveJobType === "recurring";
   // Recurring lines whose accepted price doesn't divide evenly by their visit
   // count — the job bills a few cents less than accepted (jobServicePricing).
   const pricingShortfallCents = recurring
@@ -330,7 +351,15 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       toast.error("Select the lines for one tier only — the tier the client chose");
       return;
     }
-    if (jobType === "recurring" && !schedule) {
+    if (hasPackageSel && selectedItems.some((li) => !li.packageId)) {
+      toast.error("Package lines convert to their own package job — select the package's lines or the other lines, not both");
+      return;
+    }
+    if (selectedPackageIds.length > 1) {
+      toast.error("Select the lines of one package at a time — each package becomes its own job");
+      return;
+    }
+    if (effectiveJobType === "recurring" && !schedule) {
       toast.error("Schedule is required for recurring jobs");
       return;
     }
@@ -354,13 +383,14 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         estimateId: estimate.id,
         clientId: estimate.clientId,
         propertyId: estimate.propertyId,
-        jobType,
+        jobType: effectiveJobType,
+        packageId: hasPackageSel ? selectedPackageIds[0] : null,
         scheduledDate: scheduledDate || null,
         crewId: crewId || null,
         manCount,
-        schedule: jobType === "recurring" ? schedule : null,
+        schedule: effectiveJobType === "recurring" ? schedule : null,
         notesToCrew: notesToCrew || null,
-        projectId: jobType === "project" ? projectId : null,
+        projectId: effectiveJobType === "project" ? projectId : null,
         eacHintCents,
         salesRepId,
         dateSold: dateSold || null,
@@ -424,8 +454,8 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   }
 
   const allSelected = convertibleLines.length > 0 && convertibleLines.every((li) => selected.has(li.id));
-  const hasSingle = convertibleLines.some((li) => isQuoted(li) && (li.visits || 1) <= 1);
-  const hasMulti = convertibleLines.some((li) => isQuoted(li) && (li.visits || 1) > 1);
+  const hasSingle = convertibleLines.some((li) => isQuoted(li) && !li.packageId && (li.visits || 1) <= 1);
+  const hasMulti = convertibleLines.some((li) => isQuoted(li) && !li.packageId && (li.visits || 1) > 1);
 
   return (
     <>
@@ -475,6 +505,16 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
               <Button type="button" variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={() => selectByVisits("multi")}>
                 Recurring lines
               </Button>
+            </div>
+          )}
+          {convertiblePackageIds.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-slate-50 dark:bg-muted/40 px-3 py-2 text-xs text-slate-600 dark:text-neutral-400">
+              <span>Package lines convert to a package job, one package at a time:</span>
+              {convertiblePackageIds.map((id) => (
+                <Button key={id} type="button" variant="outline" size="sm" className="h-6 px-2 text-xs" onClick={() => selectPackage(id)}>
+                  {packageName(id)}
+                </Button>
+              ))}
             </div>
           )}
           {legacyConverted && (
@@ -581,12 +621,12 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
             <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Job Type</Label>
-            <Select value={jobType} onValueChange={setJobType}>
+            <Select value={effectiveJobType} onValueChange={setJobType} disabled={hasPackageSel}>
               <SelectTrigger className="text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {JOB_TYPES.map((jt) => (
+                {[...JOB_TYPES, ...(hasPackageSel ? [{ value: "package", label: `Package — ${packageName(selectedPackageIds[0])}` }] : [])].map((jt) => (
                   <SelectItem key={jt.value} value={jt.value}>{jt.label}</SelectItem>
                 ))}
               </SelectContent>
@@ -596,8 +636,10 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           <div className="flex flex-col gap-1">
             <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">
               <CalendarDays className="inline h-3.5 w-3.5 mr-1" />
-              Scheduled Date
-              <span className="ml-1 text-slate-400 dark:text-neutral-500 font-normal">(optional)</span>
+              {hasPackageSel ? "Program Start Date" : "Scheduled Date"}
+              <span className="ml-1 text-slate-400 dark:text-neutral-500 font-normal">
+                {hasPackageSel ? "(optional — shifts every step window)" : "(optional)"}
+              </span>
             </Label>
             <Input
               type="date"
@@ -607,7 +649,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
             />
           </div>
 
-          {jobType === "project" && (
+          {effectiveJobType === "project" && (
             <div className="flex flex-col gap-1">
               <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Project</Label>
               <div className="flex gap-2">
@@ -630,7 +672,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
             </div>
           )}
 
-          {jobType === "recurring" && (
+          {effectiveJobType === "recurring" && (
             <div className="flex flex-col gap-1">
               <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Schedule *</Label>
               {crmSchedules.length > 0 ? (

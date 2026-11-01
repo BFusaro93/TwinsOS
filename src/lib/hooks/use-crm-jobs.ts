@@ -16,6 +16,9 @@ import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
 import { jobActivityLabel } from "@/lib/utils/job-activity-label";
+import { planPackageLineSteps } from "@/lib/package-schedule";
+import { stripHtml } from "@/lib/utils/strip-html";
+import type { CRMPackageService } from "@/types/crm-packages";
 import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
 import { reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { computeBudgetedHours } from "@/lib/utils/visit-hours";
@@ -2197,6 +2200,7 @@ export function useCreateJobsFromEstimate() {
       manCount,
       salesRepId,
       dateSold,
+      packageId,
     }: {
       estimateId: string;
       clientId: string;
@@ -2247,9 +2251,15 @@ export function useCreateJobsFromEstimate() {
       /** Date Sold (YYYY-MM-DD). Omitted/null = the estimate's acceptance date (portal or public
        *  proposal), falling back to today. Feeds the Sales by Date Sold reports. */
       dateSold?: string | null;
+      /** Required when jobType === "package": the crm_packages row the lines were added from.
+       *  The job becomes a PACKAGE job (steps = the lines, windows from the package's schedule);
+       *  `scheduledDate`, if given, re-anchors the program's start instead of dating one visit. */
+      packageId?: string | null;
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+      const isPackageJob = jobType === "package";
+      if (isPackageJob && !packageId) throw new Error("Package jobs need a package — convert the package's lines on their own.");
 
       // One LINE, one job. An estimate that mixes one-time and recurring
       // lines converts in passes (one job per pass), so the old "estimate
@@ -2266,6 +2276,40 @@ export function useCreateJobsFromEstimate() {
       if (alreadyConverted.length > 0) {
         throw new Error(`Already converted to a job: ${alreadyConverted.map((sv) => sv.serviceName).join(", ")}`);
       }
+
+      // Package job: resolve the package and each line's step window up front
+      // (before anything is written) with the same schedule math NewJobDialog uses.
+      let pkgRow: { name: string; invoice_description: string | null } | null = null;
+      let pkgPlan: ReturnType<typeof planPackageLineSteps> | null = null;
+      let pkgTotalSteps = 0;
+      if (isPackageJob) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: pkg, error: pkgErr } = await (supabase as any)
+          .from("crm_packages")
+          .select("name, invoice_description, crm_package_services(*)")
+          .eq("id", packageId)
+          .is("crm_package_services.deleted_at", null)
+          .maybeSingle();
+        if (pkgErr) throw pkgErr;
+        if (!pkg) throw new Error("That package no longer exists.");
+        pkgRow = pkg as { name: string; invoice_description: string | null };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pkgServices: CRMPackageService[] = ((pkg as any).crm_package_services ?? []).map((r: any) => ({
+          id: r.id, orgId: r.org_id, packageId: r.package_id, serviceId: r.service_id ?? null,
+          serviceName: r.service_name, visitsIncluded: r.visits_included, sortOrder: r.sort_order,
+          createdAt: r.created_at, name: r.name ?? null, startDate: r.start_date ?? null,
+          endDate: r.end_date ?? null, minDays: r.min_days ?? null,
+          defaultBHrs: r.default_b_hrs ?? null, defaultRateCents: r.default_rate_cents ?? null,
+        }));
+        pkgPlan = planPackageLineSteps(
+          pkgServices,
+          services.map((sv) => ({ id: sv.estimateLineItemId ?? sv.serviceName, serviceId: sv.serviceId, serviceName: sv.serviceName })),
+          scheduledDate,
+        );
+        // Same total-steps rule as a package created from Add Job / PackageDialog.
+        pkgTotalSteps = pkgServices.reduce((sum, ps) => sum + (ps.visitsIncluded || 1), 0) || 1;
+      }
+      const stepByLine = new Map((pkgPlan?.steps ?? []).map((st) => [st.lineId, st]));
 
       const jobManCount = Math.max(1, Math.round(manCount ?? 1));
       const totalBudgetedHours = roundHours(services.reduce((s, sv) => s + (sv.budgetedHours ?? 0), 0));
@@ -2330,8 +2374,21 @@ export function useCreateJobsFromEstimate() {
           ...(singleLineInvoiceDescription ? { invoice_description: singleLineInvoiceDescription } : {}),
           job_type: jobType,
           project_id: jobType === "project" ? (projectId ?? null) : null,
-          status: scheduledDate ? "scheduled" : "hold",
-          scheduled_date: scheduledDate,
+          // A package job has no single date: it sits on the Waiting List inside
+          // its program window ('hold' would hide it from there), and each
+          // step's visit is created below.
+          status: scheduledDate || isPackageJob ? "scheduled" : "hold",
+          scheduled_date: isPackageJob ? null : scheduledDate,
+          ...(isPackageJob
+            ? {
+                package_id: packageId,
+                package_name: pkgRow?.name ?? null,
+                package_total_steps: pkgTotalSteps,
+                waiting_list_start: pkgPlan?.windowStart ?? null,
+                waiting_list_end: pkgPlan?.windowEnd ?? null,
+                invoice_description: pkgRow?.invoice_description ? stripHtml(pkgRow.invoice_description) || null : null,
+              }
+            : {}),
           crew_id: crewId,
           schedule: schedule ?? null,
           notes_to_crew: notesToCrew,
@@ -2386,6 +2443,9 @@ export function useCreateJobsFromEstimate() {
               is_taxable: s.isTaxable ?? estimateIsTaxed,
               estimate_line_item_id: s.estimateLineItemId ?? null,
               max_visits: jobType === "recurring" && s.maxVisits && s.maxVisits > 0 ? Math.round(s.maxVisits) : null,
+              start_date: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.startDate ?? null,
+              complete_by_date: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.completeByDate ?? null,
+              min_days: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.minDays ?? null,
             }))
           )
           .select("id");
@@ -2485,7 +2545,7 @@ export function useCreateJobsFromEstimate() {
       await (supabase as any).from("client_activity").insert({
         client_id: clientId,
         activity_type: "job",
-        subject: `Job created: ${jobActivityLabel({ jobType, serviceNames: services.map((sv) => sv.serviceName) })}`,
+        subject: `Job created: ${jobActivityLabel({ jobType, packageName: pkgRow?.name, serviceNames: services.map((sv) => sv.serviceName) })}`,
         ref_id: jobId,
         ref_table: "crm_jobs",
         created_by: user?.id ?? null,
@@ -2495,7 +2555,28 @@ export function useCreateJobsFromEstimate() {
       // A dated job gets its first visit here (with the crew size), so it
       // shows on the dispatch board immediately with the right MEN count
       // rather than relying on JobDetail's one_time-only auto-create effect.
-      if (scheduledDate) {
+      if (isPackageJob) {
+        // One visit per dated step (the package's own windows), linked to its
+        // service — mirrors useCreateClientJob's package branch.
+        const stepRows = services
+          .map((sv, i) => ({ sv, sid: insertedServiceIds[i], step: stepByLine.get(sv.estimateLineItemId ?? sv.serviceName) }))
+          .filter((x) => x.sid && x.step?.startDate)
+          .map((x) => ({
+            job_id: jobId,
+            client_id: clientId,
+            job_service_id: x.sid,
+            scheduled_date: x.step!.startDate,
+            status: "scheduled",
+            crew_id: crewId,
+            men_count: jobManCount,
+            notes_to_crew: notesToCrew,
+          }));
+        if (stepRows.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: stepErr } = await (supabase as any).from("crm_job_visits").insert(stepRows);
+          if (stepErr) log.error("package step visit insert failed", { jobId, error: stepErr.message });
+        }
+      } else if (scheduledDate) {
         const firstVisit = (jobServiceId: string | null, occurrence: boolean) => ({
           job_id: jobId,
           client_id: clientId,
@@ -2696,7 +2777,7 @@ export function useCreateJobsFromEstimate() {
           .is("deleted_at", null);
       }
 
-      return { jobId, clientId, jobType, projectId, estimateId, materialsFailed };
+      return { jobId, clientId, jobType, projectId, estimateId, materialsFailed, packageId: packageId ?? null };
     },
     onSuccess: (data) => {
       if (data.materialsFailed) {
@@ -2714,9 +2795,11 @@ export function useCreateJobsFromEstimate() {
       }
       fireAutomationTrigger({ triggerType: "job_created", clientId: data.clientId, matchValues: [data.jobType] });
       if (data.jobType === "package") {
-        // No packageId available in this convert-from-estimate flow — fires
-        // as "any package" (unfiltered), same as before this change.
-        fireAutomationTrigger({ triggerType: "package_created", clientId: data.clientId });
+        fireAutomationTrigger({
+          triggerType: "package_created",
+          clientId: data.clientId,
+          matchValues: data.packageId ? [data.packageId] : undefined,
+        });
       }
     },
   });
