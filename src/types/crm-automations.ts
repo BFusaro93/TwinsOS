@@ -158,6 +158,10 @@ export interface WaitConfig {
   days: number;
   hours: number;
   minutes: number;
+  /** "HH:mm" on the org's clock — after the delay, hold until that time of day. */
+  until_time?: string;
+  /** Roll a Saturday/Sunday result forward to Monday. */
+  weekdays_only?: boolean;
 }
 
 export interface EmailConfig {

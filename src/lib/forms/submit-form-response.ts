@@ -792,7 +792,14 @@ export async function submitFormResponse(
 
   // ── Create ticket ─────────────────────────────────────────────────────────────
   let relatedTicketId: string | null = null;
-  {
+  // Per-form ticket settings (Configure → Ticket). Default: always create, as
+  // forms did before the setting existed. Priority is whitelisted — settings
+  // are staff-written but travel as free JSON.
+  const ticketSettings = (form.settings?.ticket ?? {}) as { create?: unknown; priority?: unknown; category?: unknown };
+  const createTicket = ticketSettings.create !== false;
+  const ticketPriority = ["low", "normal", "high", "urgent"].includes(String(ticketSettings.priority)) ? String(ticketSettings.priority) : "normal";
+  const ticketCategory = typeof ticketSettings.category === "string" && ticketSettings.category.trim() ? ticketSettings.category.trim().slice(0, 100) : form.name;
+  if (createTicket) {
     const ticketSubject = `${form.name}${submittedName ? ` — ${submittedName}` : ""}`;
     const ticketBody = [
       submittedName ? `Name: ${submittedName}` : null,
@@ -816,8 +823,8 @@ export async function submitFormResponse(
         subject: ticketSubject,
         body: ticketBody,
         status: "open",
-        priority: "normal",
-        category: form.name,
+        priority: ticketPriority,
+        category: ticketCategory,
         type: "note",
         sms_consent_pending_phone: smsConsentPendingPhone,
       })

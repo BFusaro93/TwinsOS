@@ -31,10 +31,10 @@ const TRIGGER_GROUPS: [string, string][] = [
 ];
 
 const EVENT_TYPES: [string, string][] = [
-  ["Wait", "Pauses the sequence for a set number of days, hours, and minutes before the next event runs."],
+  ["Wait", "Pauses the sequence for a set number of days, hours, and minutes before the next event runs. Two optional settings refine when it resumes, both read on your company clock: Then wait until a time of day (e.g. wait 1 day, then continue at 9:00 AM — if that time has already passed today it rolls to tomorrow), and Weekdays only (a Saturday or Sunday result moves to Monday at the same time)."],
   [
     "Email",
-    "Sends an email from a chosen sender to the client's primary email, billing email, and/or all contacts marked ok-to-email. Subject and body support merge tags and can pull from a saved document template. The Email Category decides who is suppressed: Marketing, General and Follow-up emails are not sent to clients marked Do Not Market (and carry an unsubscribe link), while Transactional and Reminder emails still reach those clients. A hard-bounced address or a client marked not OK to email blocks every category.",
+    "Sends an email from a chosen sender to the client's primary email, billing email, and/or all contacts marked ok-to-email. Subject and body support merge tags and can pull from a saved document template. Beyond the client tags, email and text steps can use invoice tags — [invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [viewinvoiceonline], [paymentlink] — which fill in for automations started by an invoice trigger (and are blank otherwise), and service tags — [servicename], [servicedate] for the client's last completed service, [nextservicename], [nextservicedate] for their next scheduled one. The Email Category decides who is suppressed: Marketing, General and Follow-up emails are not sent to clients marked Do Not Market (and carry an unsubscribe link), while Transactional and Reminder emails still reach those clients. A hard-bounced address or a client marked not OK to email blocks every category.",
   ],
   [
     "Text Message",
@@ -222,6 +222,12 @@ export function AutomationsGuide() {
           &mdash; all its sequences, steps (including If Branch blocks), start triggers with their conditions, stop
           conditions and entry/re-entry settings. The copy is created <strong>disabled</strong>, so nothing enrolls or
           sends until you review it and switch it on. Requires the Create / modify automations permission.
+        </p>
+        <p>
+          When you switch an automation on &mdash; from the list or inside the builder &mdash; it&apos;s checked first for
+          setups that would silently do nothing: no sequences, a sequence with no start trigger or no active steps, a
+          sequence that is only Wait steps, or an Email / Text Message step with nothing written in it. These show as a{" "}
+          <strong>Turn on with warnings?</strong> prompt; choose <strong>Turn on anyway</strong> to go ahead.
         </p>
       </Section>
 

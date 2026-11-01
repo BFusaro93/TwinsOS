@@ -256,6 +256,12 @@ export function FormsGuide() {
             for the effect.
           </li>
           <li>
+            <strong>Ticket Settings</strong> — every submission creates a ticket by default so your
+            team can follow up. Turn it off if you only want the response, the email notification
+            or the client record, or set the ticket&apos;s priority and category (the category
+            defaults to the form&apos;s name).
+          </li>
+          <li>
             <strong>Tags on Submit</strong> — separate add/remove tag lists applied to the
             resulting client record on every submission.
           </li>
@@ -273,6 +279,15 @@ export function FormsGuide() {
           <strong>&quot;&lt;name&gt; (Copy)&quot;</strong> with the same fields, pages, rules and
           Configure settings, always as an unpublished <strong>draft</strong> with its own link —
           rules that point at fields are re-pointed at the copied fields. Responses are not copied.
+        </p>
+        <p>
+          Before a form goes live — from the builder&apos;s Publish button or the Forms list row
+          menu — it&apos;s checked for things that would make it quietly useless: no questions,
+          Account Management turned on with no email or phone field to match on, an email
+          notification with no recipients, or nothing set up to tell anyone about new
+          submissions. These show as a <strong>Publish with warnings?</strong> prompt you can accept
+          (<strong>Publish anyway</strong>). Two fields sharing the same label still hard-blocks
+          publishing from either place.
         </p>
         <Callout>
           Publishing isn&apos;t just a UI toggle — the public submit route filters on{" "}
