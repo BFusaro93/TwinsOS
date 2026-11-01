@@ -10,6 +10,7 @@ import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/l
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
 import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
 
 const log = logger.child("portal create-intent");
@@ -154,6 +155,7 @@ export async function POST(request: Request) {
       amount: totalChargeCents,
       currency: "usd",
       payment_method_types: [paymentMethod],
+      ...surchargeIntentParams(feeCents, paymentMethod === "card"),
       ...(customerId ? { customer: customerId } : {}),
       metadata: {
         source: "crm_invoice",
@@ -162,6 +164,7 @@ export async function POST(request: Request) {
         client_id: invoice.client_id,
         balance_cents: String(invoice.balance_cents),
         fee_cents: String(feeCents),
+        ...surchargeIntentMetadata(feeCents, paymentMethod === "card"),
       },
     },
     {

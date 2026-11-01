@@ -1,3 +1,21 @@
+/**
+ * True only when the card is positively a CREDIT card. Debit and prepaid cards can never be
+ * surcharged (federal law and the card networks' rules), so an unreadable or unknown funding type
+ * counts as "no surcharge" — undercharging the fee is recoverable, surcharging a debit card is not.
+ */
+export async function cardAllowsSurcharge(
+  stripe: { paymentMethods: { retrieve: (id: string, params: undefined, opts: { stripeAccount: string }) => Promise<{ card?: { funding?: string | null } | null }> } },
+  connectedAccountId: string,
+  paymentMethodId: string
+): Promise<boolean> {
+  try {
+    const pm = await stripe.paymentMethods.retrieve(paymentMethodId, undefined, { stripeAccount: connectedAccountId });
+    return pm.card?.funding === "credit";
+  } catch {
+    return false;
+  }
+}
+
 export interface OrgFeeSettings {
   ccProcessingFeeEnabled: boolean;
   ccProcessingFeeBps: number;

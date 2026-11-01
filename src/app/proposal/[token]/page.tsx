@@ -73,7 +73,7 @@ function DepositCardForm({
       setError(confirmError.message ?? "Payment failed");
       return;
     }
-    if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing") {
+    if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing" || paymentIntent?.status === "requires_capture") {
       // Leave `submitting` true — onPaid immediately submits the acceptance,
       // and re-enabling the Pay button in between invites a second charge.
       onPaid();
@@ -97,7 +97,7 @@ function DepositCardForm({
             <span className="tabular-nums">{cents(intent.depositCents)}</span>
           </div>
           <div className="flex justify-between text-slate-600">
-            <span>Card processing fee</span>
+            <span>Card processing fee <span className="text-xs text-slate-400">(credit cards only)</span></span>
             <span className="tabular-nums">{cents(intent.feeCents)}</span>
           </div>
           <div className="mt-1 flex justify-between border-t border-slate-200 pt-1 font-semibold text-slate-800">

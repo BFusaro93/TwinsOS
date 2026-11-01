@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
 import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
 
 // Public, unauthenticated "pay without logging in" endpoint. Mirrors the
@@ -161,6 +162,7 @@ export async function POST(
       amount: totalChargeCents,
       currency: "usd",
       payment_method_types: ["card"],
+      ...surchargeIntentParams(feeCents, true),
       ...(customerId ? { customer: customerId } : {}),
       metadata: {
         source: "crm_invoice",
@@ -169,6 +171,7 @@ export async function POST(
         client_id: invoice.client_id,
         balance_cents: String(invoice.balance_cents),
         fee_cents: String(feeCents),
+        ...surchargeIntentMetadata(feeCents, true),
       },
     },
     {

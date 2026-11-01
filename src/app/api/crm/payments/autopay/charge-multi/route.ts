@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import {
+  cardAllowsSurcharge,
   computeProcessingFee,
   encodeAllocations,
   MAX_ALLOCATION_METADATA_LENGTH,
@@ -198,6 +199,10 @@ export async function POST(request: Request) {
   }
 
   const balanceCents = allocations.reduce((sum, a) => sum + a.amountCents, 0);
+  // Debit and prepaid cards can't be surcharged: look at the saved card's funding type first.
+  const surchargeAllowed =
+    paymentMethod === "card" &&
+    (await cardAllowsSurcharge(stripe, org.stripe_connect_account_id, client.saved_payment_method_id));
   const { feeCents, totalChargeCents } =
     paymentMethod === "card"
       ? computeProcessingFee(
@@ -208,7 +213,7 @@ export async function POST(request: Request) {
             ccProcessingFeeMode: (org.customizations as Record<string, unknown> | null)?.cc_processing_fee_mode as string | undefined,
           },
           balanceCents,
-          false
+          !surchargeAllowed
         )
       : { feeCents: 0, totalChargeCents: balanceCents };
 

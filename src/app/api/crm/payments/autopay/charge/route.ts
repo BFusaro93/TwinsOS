@@ -3,7 +3,7 @@ import { applyCreditBeforeCharge } from "@/lib/stripe/apply-credit-first";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
-import { computeProcessingFee } from "@/lib/stripe/crm-payments";
+import { cardAllowsSurcharge, computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { refuseIfChargeInFlight } from "@/lib/stripe/duplicate-charge";
@@ -166,6 +166,10 @@ export async function POST(request: Request) {
   }
 
   // The processing fee only ever applies to card — ACH is the fee-free alternative by design.
+  // Debit and prepaid cards can't be surcharged: look at the saved card's funding type first.
+  const surchargeAllowed =
+    paymentMethod === "card" &&
+    (await cardAllowsSurcharge(stripe, org.stripe_connect_account_id, client.saved_payment_method_id));
   const { feeCents, totalChargeCents } =
     paymentMethod === "card"
       ? computeProcessingFee(
@@ -176,7 +180,7 @@ export async function POST(request: Request) {
             ccProcessingFeeMode: (org.customizations as Record<string, unknown> | null)?.cc_processing_fee_mode as string | undefined,
           },
           invoice.balance_cents,
-          false
+          !surchargeAllowed
         )
       : { feeCents: 0, totalChargeCents: invoice.balance_cents };
 

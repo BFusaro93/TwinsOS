@@ -6,6 +6,7 @@ import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/l
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
 
@@ -281,6 +282,7 @@ export async function POST(
       amount: totalChargeCents,
       currency: "usd",
       payment_method_types: [paymentMethod],
+      ...surchargeIntentParams(feeCents, paymentMethod === "card"),
       metadata: {
         source: "crm_estimate_deposit",
         org_id: estimate.org_id,
@@ -291,6 +293,7 @@ export async function POST(
         // recorded separately on the payment (same split as crm_invoice).
         deposit_cents: String(depositCents),
         fee_cents: String(feeCents),
+        ...surchargeIntentMetadata(feeCents, paymentMethod === "card"),
       },
     },
     {

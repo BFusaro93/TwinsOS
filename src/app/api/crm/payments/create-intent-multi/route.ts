@@ -10,6 +10,7 @@ import {
   MAX_ALLOCATION_METADATA_LENGTH,
 } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
 import { logger } from "@/lib/logger";
@@ -224,6 +225,7 @@ export async function POST(request: Request) {
       amount: totalChargeCents,
       currency: "usd",
       payment_method_types: [paymentMethod],
+      ...surchargeIntentParams(feeCents, paymentMethod === "card"),
       ...(customerId ? { customer: customerId } : {}),
       metadata: {
         source: "crm_invoice_multi",
@@ -231,6 +233,7 @@ export async function POST(request: Request) {
         client_id: clientId,
         allocations: encoded,
         fee_cents: String(feeCents),
+        ...surchargeIntentMetadata(feeCents, paymentMethod === "card"),
       },
     },
     {
