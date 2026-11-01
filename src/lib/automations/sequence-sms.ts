@@ -1,7 +1,8 @@
 import { sendClientSms } from "@/lib/sms/send";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
+import { buildInvoiceExtras, buildServiceExtras } from "./record-merge-vars";
+import { instantToZoneWallClock, shiftYmd, todayInZone, zoneWallClockToInstant } from "@/lib/time/zone";
 import type { CardExpiryContext } from "./card-expiry-context";
 import { buildAutomationMergeVars, loadAutomationClient } from "./client-merge-vars";
 
@@ -44,6 +45,7 @@ export async function resolveSmsStepContent(
     orgId: string;
     clientId: string;
     meetingId?: string | null;
+    invoiceId?: string | null;
     bodyTemplate: string;
     /** The step's "Send To" selection (client_primary_phone | billing_phone | all_contacts). Defaults to the client's primary phone. */
     toSelection?: string[];
@@ -131,6 +133,11 @@ export async function resolveSmsStepContent(
     extras["[creditcardending]"] = params.cardExpiryContext.last4;
     extras["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
   }
+  Object.assign(
+    extras,
+    await buildInvoiceExtras(supabase, { orgId: params.orgId, invoiceId: params.invoiceId, html: false }),
+    await buildServiceExtras(supabase, { orgId: params.orgId, clientId: params.clientId, today: todayInZone(await getOrgTimeZone(supabase, params.orgId)) }),
+  );
   const vars = await buildAutomationMergeVars(supabase, {
     orgId: params.orgId, client, extras, escapeHtml: (t) => t,
   });

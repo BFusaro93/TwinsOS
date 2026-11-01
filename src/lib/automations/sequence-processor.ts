@@ -443,8 +443,8 @@ async function runClaimedStep(
     // event that follows it — using the next event's config here skipped
     // this wait's delay entirely for any chain of 2+ consecutive waits.
     const nextPos = next_event_position + 1;
-    const waitConfig = (currentEvent.config as Record<string, number>) ?? {};
-    const newFireAt = computeWaitFireAt(waitConfig).toISOString();
+    const waitConfig = (currentEvent.config as Record<string, unknown>) ?? {};
+    const newFireAt = computeWaitFireAt(waitConfig, new Date(), await getOrgTimeZone(adminClient, orgId)).toISOString();
     await adminClient
       .from("crm_sequence_enrollments")
       .update({ next_event_position: nextPos, next_fire_at: newFireAt, updated_at: nowIso })
@@ -475,6 +475,7 @@ async function runClaimedStep(
       orgId,
       clientId: client_id!,
       estimateId: estimate_id ?? null,
+      invoiceId: invoice_id ?? null,
       meetingId: meeting_id ?? null,
       subjectTemplate: eventConfig.subject ?? "",
       bodyTemplate: eventConfig.bodyHtml ?? eventConfig.body ?? "",
@@ -617,6 +618,7 @@ async function runClaimedStep(
       orgId,
       clientId: client_id!,
       meetingId: meeting_id ?? null,
+      invoiceId: invoice_id ?? null,
       bodyTemplate: eventConfig.message ?? "",
       toSelection: eventConfig.to,
       cardExpiryContext,

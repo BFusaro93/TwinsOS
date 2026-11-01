@@ -19,6 +19,13 @@ export function useForms() {
 
 // ── Single form ───────────────────────────────────────────────────────────────
 
+/** One-shot read of a form with its fields — for pre-publish checks run from an event handler. */
+export async function fetchFormWithFields(id: string): Promise<CRMForm & { fields: CRMFormField[] }> {
+  const res = await fetch(`/api/crm/forms/${id}`);
+  if (!res.ok) throw new Error("Failed to fetch form");
+  return res.json();
+}
+
 export function useForm(id: string) {
   return useQuery<CRMForm & { fields: CRMFormField[] }>({
     queryKey: ["crm-form", id],

@@ -54,6 +54,16 @@ const MERGE_TAGS = [
   { tag: "[clientfullname]", label: "Client's full name" },
   { tag: "[companyname]", label: "Your company name" },
   { tag: "[quotenumber]", label: "Linked estimate/quote number" },
+  { tag: "[invoicenumber]", label: "Invoice number (invoice triggers)" },
+  { tag: "[invoicetotal]", label: "Invoice total" },
+  { tag: "[invoicebalance]", label: "Invoice balance due" },
+  { tag: "[invoiceduedate]", label: "Invoice due date" },
+  { tag: "[viewinvoiceonline]", label: "Invoice online link (URL)" },
+  { tag: "[paymentlink]", label: "Pay Now button" },
+  { tag: "[servicename]", label: "Last completed service" },
+  { tag: "[servicedate]", label: "Last service date" },
+  { tag: "[nextservicename]", label: "Next scheduled service" },
+  { tag: "[nextservicedate]", label: "Next service date" },
 ];
 
 export function EmailEventDialog({ open, onOpenChange, event }: Props) {

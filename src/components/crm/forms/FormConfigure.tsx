@@ -93,6 +93,12 @@ export function FormConfigure({ form }: Props) {
   const [tagsAdd, setTagsAdd] = useState<string>((savedTagsOnSubmit?.add ?? []).join(", "));
   const [tagsRemove, setTagsRemove] = useState<string>((savedTagsOnSubmit?.remove ?? []).join(", "));
 
+  // ── Ticket Settings ───────────────────────────────────────────────────────────
+  const savedTicket = form.settings.ticket as { create?: boolean; priority?: string; category?: string } | undefined;
+  const [ticketCreate, setTicketCreate] = useState<boolean>(savedTicket?.create !== false);
+  const [ticketPriority, setTicketPriority] = useState<string>(savedTicket?.priority ?? "normal");
+  const [ticketCategory, setTicketCategory] = useState<string>(savedTicket?.category ?? "");
+
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
@@ -115,6 +121,11 @@ export function FormConfigure({ form }: Props) {
           tagsOnSubmit: {
             add: tagsAddList,
             remove: tagsRemoveList,
+          },
+          ticket: {
+            create: ticketCreate,
+            priority: ticketPriority,
+            category: ticketCategory.trim(),
           },
         },
         autoManageAccounts: autoManage,
@@ -347,6 +358,43 @@ export function FormConfigure({ form }: Props) {
             </SelectContent>
           </Select>
         </div>
+      </section>
+
+      {/* ── Ticket Settings ───────────────────────────────────────────────────── */}
+      <section className="rounded-lg border bg-card p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Ticket Settings</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Create a ticket for every submission so your team can follow up
+            </p>
+          </div>
+          <Switch checked={ticketCreate} onCheckedChange={setTicketCreate} aria-label="Create a ticket for each submission" />
+        </div>
+        {ticketCreate && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Priority</Label>
+              <Select value={ticketPriority} onValueChange={setTicketPriority}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["low", "normal", "high", "urgent"].map((p) => (
+                    <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium text-slate-700 dark:text-neutral-300">Category</Label>
+              <Input
+                value={ticketCategory}
+                onChange={(e) => setTicketCategory(e.target.value)}
+                placeholder={form.name}
+                className="h-9 text-sm"
+              />
+            </div>
+          </div>
+        )}
       </section>
 
       {/* ── Tag Settings ──────────────────────────────────────────────────────── */}

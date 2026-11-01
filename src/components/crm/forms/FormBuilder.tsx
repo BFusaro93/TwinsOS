@@ -34,6 +34,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { duplicateLabelMessage, findDuplicateFieldLabels } from "@/lib/forms/duplicate-labels";
+import { formPublishWarnings } from "@/lib/forms/publish-warnings";
+import { useConfirm } from "@/components/shared/useConfirm";
 import type {
   CRMForm,
   CRMFormField,
@@ -185,6 +187,7 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
   const { data: savedRules } = useFormRules(form.id);
   const saveRules = useSaveFormRules(form.id);
   const updateForm = useUpdateForm(form.id);
+  const [confirm, confirmDialog] = useConfirm();
 
   const [builderTab, setBuilderTab] = useState<BuilderTab>("fields");
   const [activePage, setActivePage] = useState(1);
@@ -490,6 +493,19 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
         toast.error(duplicateLabelMessage(duplicates), { duration: 8000 });
         return;
       }
+      const warnings = formPublishWarnings(form);
+      if (warnings.length > 0) {
+        const ok = await confirm({
+          title: "Publish with warnings?",
+          description: (
+            <ul className="list-disc space-y-1 pl-5 text-left">
+              {warnings.map((w) => <li key={w}>{w}</li>)}
+            </ul>
+          ),
+          confirmLabel: "Publish anyway",
+        });
+        if (!ok) return;
+      }
     }
     try {
       await updateForm.mutateAsync({ status: newStatus });
@@ -504,6 +520,7 @@ export function FormBuilder({ form, publicBaseUrl }: Props) {
 
   return (
     <div className="flex h-full flex-col gap-4">
+      {confirmDialog}
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-4 rounded-lg border bg-card p-4 shadow-sm">
         <div className="flex items-center gap-3">

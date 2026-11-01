@@ -5,6 +5,8 @@ import { escapeHtml } from "@/lib/utils/escape-html";
 import { buildCanSpamFooter, orgEmailFrom } from "@/lib/email/send";
 import { getOrgReplyTo, isUsableReplyTo } from "@/lib/email/reply-to";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
+import { buildInvoiceExtras, buildServiceExtras } from "./record-merge-vars";
 import { computeWaitFireAt } from "./sequence-enrollment";
 import { buildAutomationMergeVars, loadAutomationClient } from "./client-merge-vars";
 import type { CardExpiryContext } from "./card-expiry-context";
@@ -52,6 +54,7 @@ export async function resolveEmailStepContent(
     orgId: string;
     clientId: string;
     estimateId: string | null;
+    invoiceId?: string | null;
     meetingId?: string | null;
     subjectTemplate: string;
     bodyTemplate: string;
@@ -220,6 +223,12 @@ export async function resolveEmailStepContent(
     extras["[creditcardending]"] = params.cardExpiryContext.last4;
     extras["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
   }
+  // Invoice tags (invoice-triggered enrollments) and last/next service tags.
+  Object.assign(
+    extras,
+    await buildInvoiceExtras(supabase, { orgId: params.orgId, invoiceId: params.invoiceId, html: true }),
+    await buildServiceExtras(supabase, { orgId: params.orgId, clientId: params.clientId, today: todayInZone(await getOrgTimeZone(supabase, params.orgId)) }),
+  );
   const vars = await buildAutomationMergeVars(supabase, { orgId: params.orgId, client, extras, escapeHtml });
   const resolve = (template: string, escapeValues: boolean) => {
     const map = escapeValues ? vars.html : vars.text;
@@ -405,11 +414,17 @@ export async function advanceEnrollmentPastStep(
   }
 
   if (nextEvent.event_type === "wait") {
-    const waitConfig = (nextEvent.config as Record<string, number>) ?? {};
-    const days = waitConfig.days ?? 0;
-    const hours = waitConfig.hours ?? 0;
-    const minutes = waitConfig.minutes ?? 0;
-    const d = computeWaitFireAt(waitConfig);
+    const waitConfig = (nextEvent.config as Record<string, number | string | boolean>) ?? {};
+    const days = Number(waitConfig.days ?? 0);
+    const hours = Number(waitConfig.hours ?? 0);
+    const minutes = Number(waitConfig.minutes ?? 0);
+    const { data: enr } = await supabase
+      .from("crm_sequence_enrollments")
+      .select("org_id")
+      .eq("id", params.enrollmentId)
+      .maybeSingle();
+    const waitTz = enr?.org_id ? await getOrgTimeZone(supabase, enr.org_id as string) : undefined;
+    const d = computeWaitFireAt(waitConfig, new Date(), waitTz);
     const { error } = await supabase
       .from("crm_sequence_enrollments")
       .update({ next_event_position: nextEvent.position + 1, next_fire_at: d.toISOString(), updated_at: params.nowIso })
