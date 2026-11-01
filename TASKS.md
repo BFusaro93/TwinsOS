@@ -30,6 +30,15 @@ The Email Activity page is now "Message Activity" with Email/Text tabs ([page.ts
 
 **Setup step outside this codebase** (same pattern as the Resend webhook): in the Twilio Console, set the Messaging Service's inbound-webhook URL to `<site-url>/api/webhooks/twilio/inbound` (Request URL, HTTP POST) so Twilio actually calls it — nothing currently does without this.
 
+## Backlog — DB-enforce client_view_credit_card and client_view_notes
+
+`job_cancel` and `client_bulk_edit` are now DB-enforced (migrations 20261202000100 / 200, on PROD + TEST). These two `crm_roles` keys are still UI-only (`PermissionGate` in `ClientDetailPanel.tsx`): any CRM login can read the columns straight from the browser. Real enforcement needs column-level `REVOKE SELECT` on `clients` (same pattern as `crm_employees`, 20260930190000/190200), staged: RPC + code first, REVOKE applied after the deploy.
+
+- [ ] **client_view_notes** — gate `clients.office_notes`. Consumers: `mapClient` + the `select("*")` reads in `src/lib/hooks/use-clients.ts` (useClients, useClient, useChildClients, insert/update returns), the update at ~line 1053, `/api/v1/clients` (shape.ts, route.ts, `[id]/route.ts`). Plan: SECURITY DEFINER RPC returning `office_notes` only when `has_settings_permission('client_view_notes')`; replace `select("*")` with an explicit non-sensitive column list; REVOKE the column from `authenticated`. Note `.insert()/.update().select()` must stop asking for the revoked column.
+- [ ] **client_view_credit_card** — gate `saved_payment_method_summary`, `saved_payment_method_type`, `autopay_enabled`, and the Stripe ids `stripe_customer_id` / `saved_payment_method_id`. Consumers on a user session: customer portal (`portal/(shell)/account/page.tsx`, `api/portal/payments/connect/*`, `api/portal/me`), `api/crm/payments/autopay/charge*`, `api/crm/payments/connect/{setup-intent,payment-method,import-methods}`, `PaymentsList.tsx`, `use-clients.ts` mapClient. The portal customer must keep reading their own card via an RPC, and the autopay/setup routes should use the service client after their existing auth checks. The Stripe ids are never needed in the browser, so they are the first columns to revoke.
+- [ ] Not feasible as column masks (documented, no action): `client_view_balance` / `client_view_billing` (same data is readable through Invoices, Payments, Reports, portal, emails) and `export_lists` (the CSV is a reformat of rows the list page already loads under RLS).
+- [ ] Gotcha: security_invoker report views and the audit trigger read `clients` columns — re-check every view referencing a revoked column before applying the REVOKE.
+
 ## Deferred — nav placement: Photos into Landscapt
 Decided 2026-08-18: Projects stays under Equipt (it's PO/procurement cost tracking — PO line items and materials assign to a Project, tightly coupled to that module). Photos (photo-docs module) is conceptually Landscapt's, not Equipt's, and should eventually move — but nav/sidebar links stay exactly where they are today until a full nav reorg happens. Do not move the Photos link into the Landscapt nav menu until explicitly asked.
 
