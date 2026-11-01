@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isVisitInProgress, reopenClearsClockStamps, CLEARED_CLOCK_STAMPS, GUARDED_STATUS_CHANGES } from "@/lib/visits/status-guards";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
@@ -66,6 +67,7 @@ export async function PATCH(
     .eq("id", visitId)
     .maybeSingle();
   const prev = before as { client_id: string; job_id: string; scheduled_date: string; status: string; crew_id: string | null; clocked_in_at: string | null; clocked_out_at: string | null } | null;
+  if (!prev) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
   const { override_invoiced: overrideInvoiced, ...patch } = parsed.data;
 
   // Completed + invoiced visits are locked against moves and status changes
@@ -81,7 +83,7 @@ export async function PATCH(
   // A visit the crew is working right now can't be moved to another day: the crew
   // app only carries over clocked-in visits scheduled BEFORE today, so the stop
   // would vanish from their list mid-stop and they couldn't clock out.
-  if (patch.scheduled_date && prev && patch.scheduled_date !== prev.scheduled_date && prev.clocked_in_at && !prev.clocked_out_at) {
+  if (patch.scheduled_date && prev && patch.scheduled_date !== prev.scheduled_date && isVisitInProgress(prev)) {
     return NextResponse.json(
       { error: "This visit is in progress (the crew has clocked in), so it can't be moved to another day. Have the crew clock out first." },
       { status: 409 }
@@ -91,7 +93,7 @@ export async function PATCH(
   // Same for a crew change: ownership checks key off the visit's crew, so re-crewing a
   // stop mid-clock locks the crew that is working it out of clock-out, pause and skip.
   const recrewing = (patch.crew_id !== undefined && patch.crew_id !== (prev?.crew_id ?? null)) || patch.crew_unassigned === true;
-  if (recrewing && prev?.clocked_in_at && !prev.clocked_out_at) {
+  if (recrewing && isVisitInProgress(prev)) {
     return NextResponse.json(
       { error: "This visit is in progress (the crew has clocked in), so its crew can't be changed. Have the crew clock out first." },
       { status: 409 }
@@ -108,8 +110,8 @@ export async function PATCH(
   // its open punches (the crew list drops it, so nobody can clock out).
   if (
     patch.status && patch.status !== prev?.status &&
-    ["cancelled", "skipped", "scheduled", "dispatched"].includes(patch.status) &&
-    prev?.clocked_in_at && !prev.clocked_out_at
+    GUARDED_STATUS_CHANGES.includes(patch.status) &&
+    isVisitInProgress(prev)
   ) {
     return NextResponse.json(
       { error: "This visit is in progress (the crew has clocked in), so its status can't be changed. Have the crew clock out first." },
@@ -139,10 +141,9 @@ export async function PATCH(
       // An explicit crew and "unassigned" are mutually exclusive.
       ...(patch.crew_id ? { crew_unassigned: false } : {}),
       ...(patch.crew_unassigned ? { crew_id: null } : {}),
-      // Reopening a completed visit clears its clock stamps so the crew can work it again.
-      ...(patch.status && ["scheduled", "dispatched", "in_progress"].includes(patch.status) && prev?.status === "completed"
-        ? { clocked_in_at: null, clocked_out_at: null, completed_at: null, paused_at: null }
-        : {}),
+      // Reopening a finished visit (completed, or skipped/cancelled after Start Job) clears
+      // its clock stamps so the crew can work it again.
+      ...(reopenClearsClockStamps(prev, patch.status) ? CLEARED_CLOCK_STAMPS : {}),
       ...(patch.status === "dispatched" && prev?.status !== "dispatched" ? { dispatched_at: new Date().toISOString() } : {}),
       updated_at: new Date().toISOString(),
     })

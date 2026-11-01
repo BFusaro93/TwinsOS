@@ -333,14 +333,17 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const packageName = (id: string) => crmPackages.find((p) => p.id === id)?.name ?? "Package";
   const convertiblePackageIds = [...new Set(convertibleLines.filter((li) => isQuoted(li)).map((li) => li.packageId).filter((x): x is string => !!x))];
   const recurring = effectiveJobType === "recurring";
-  // Recurring lines whose accepted price doesn't divide evenly by their visit
-  // count — the job bills a few cents less than accepted (jobServicePricing).
-  const pricingShortfallCents = recurring
-    ? selectedItems.reduce((s, li) => {
-        const net = netByLineId.get(li.id) ?? 0;
-        return s + (net - jobServicePricing(li, net, true).billedCents);
-      }, 0)
-    : 0;
+  // A package line's price covers every visit it includes (1 x rate x visits), so
+  // the job service is priced per visit like Add Job's package picker — otherwise
+  // the first completed visit auto-invoiced the whole program.
+  const perVisit = (li: EstimateLineItem) => recurring || (effectiveJobType === "package" && (li.visits || 1) > 1);
+  // Lines whose accepted price doesn't divide evenly by their visit count — the
+  // job bills a few cents less than accepted (jobServicePricing).
+  const pricingShortfallCents = selectedItems.reduce((s, li) => {
+    if (!perVisit(li)) return s;
+    const net = netByLineId.get(li.id) ?? 0;
+    return s + (net - jobServicePricing(li, net, true).billedCents);
+  }, 0);
 
   async function handleCreate() {
     if (selectedItems.length === 0) {
@@ -400,7 +403,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
           // discount share and sub-items all in) — see jobServicePricing.
           // Deriving from the net rather than the raw rate also carries the
           // Adj Rate column and complexity the estimate total was built on.
-          const pricing = jobServicePricing(li, net, recurring);
+          const pricing = jobServicePricing(li, net, perVisit(li));
           return {
             serviceName:   li.serviceName ?? "Service",
             serviceId:     li.serviceId ?? null,
@@ -414,7 +417,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
             budgetedHours: roundHours(budgetedHoursFromLineItem(li)),
             budgetMethod:  li.budgetMethod,
             estimateLineItemId: li.id,
-            maxVisits:     recurring ? Math.max(1, li.visits || 1) : null,
+            maxVisits:     perVisit(li) ? Math.max(1, li.visits || 1) : null,
           };
         }),
         materials: selectedMaterialItems.map((dc) => ({

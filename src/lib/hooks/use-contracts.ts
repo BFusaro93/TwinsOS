@@ -653,7 +653,8 @@ async function createProratedFirstInvoice(
       // dated today could block the regular invoice dated today.
       invoice_date: orgToday < stub.periodEnd ? orgToday : stub.periodEnd,
       terms: invoiceTerms,
-      due_date: computeDueDate(orgToday, invoiceTerms),
+      // Terms run from the invoice date, which is clamped above, not from today.
+      due_date: computeDueDate(orgToday < stub.periodEnd ? orgToday : stub.periodEnd, invoiceTerms),
       status: "draft",
       subtotal_cents: stub.amountCents,
       total_cents: stub.amountCents,
@@ -1155,8 +1156,9 @@ export function useContractServiceVisitCounts(contractId?: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_job_visits")
-        .select("job_service_id, crm_jobs!inner(contract_id)")
+        .select("job_service_id, crm_jobs!inner(contract_id, deleted_at)")
         .eq("crm_jobs.contract_id", contractId)
+        .is("crm_jobs.deleted_at", null)
         .eq("status", "completed")
         .is("deleted_at", null)
         // A multi-crew stop counts as one visit used.
@@ -1185,8 +1187,9 @@ export function useContractJobServiceRows(contractId?: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_job_services")
-        .select("id, service_id, service_name, crm_jobs!inner(contract_id)")
-        .eq("crm_jobs.contract_id", contractId);
+        .select("id, service_id, service_name, crm_jobs!inner(contract_id, deleted_at)")
+        .eq("crm_jobs.contract_id", contractId)
+        .is("crm_jobs.deleted_at", null);
       if (error) throw error;
       return (data ?? []) as { id: string; service_id: string | null; service_name: string }[];
     },

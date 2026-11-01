@@ -203,7 +203,7 @@ function BulkEditDialog({
       await onConfirm({ [field]: parsedValue });
       onOpenChange(false);
       setField(""); setValue("");
-    } catch { toast.error("Failed to update clients"); }
+    } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to update clients"); }
     finally { setSaving(false); }
   }
 

@@ -62,10 +62,14 @@ export async function POST(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: candidateRows, error: candErr } = await (supabase as any)
+  const candidateQuery = (supabase as any)
     .from("crm_job_visits")
-    .select(VISIT_SELECT)
-    .eq("client_id", anchor.client_id)
+    .select(VISIT_SELECT);
+  // .eq(col, null) matches nothing in PostgREST: a client-less visit could be started
+  // (clock-in handles this) but never clocked out, paused or resumed.
+  const { data: candidateRows, error: candErr } = await (anchor.client_id
+    ? candidateQuery.eq("client_id", anchor.client_id)
+    : candidateQuery.is("client_id", null))
     .eq("scheduled_date", anchor.scheduled_date)
     .is("deleted_at", null)
     .not("status", "in", "(cancelled,skipped)");

@@ -473,6 +473,12 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120, allowIm
           <textarea
             value={sourceText}
             onChange={(e) => setSourceText(e.target.value)}
+            // Save / Preview / Send test click away from the textarea: push the edited
+            // source up then, or those actions would persist the pre-edit content.
+            onBlur={() => {
+              const html = sanitizeHtml(sourceText);
+              onChange(html === "<p></p>" ? "" : html);
+            }}
             spellCheck={false}
             className="w-full resize-y rounded border border-border bg-card p-2 font-mono text-xs"
             style={{ minHeight }}

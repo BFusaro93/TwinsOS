@@ -1045,7 +1045,9 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
             budget_method: item.budgetMethod,
             complexity_bps: item.complexityBps,
             tier: item.tier,
-            package_id: item.packageId,
+            // The copy is an ordinary line: a package has exactly its own steps, and an
+            // extra tagged line would convert into a priced service with no visit.
+            package_id: null,
             discount_cents: item.discountCents,
             discount_type: item.discountType,
             discount_value: item.discountValue,
@@ -1096,7 +1098,9 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     const takeoffQty = budgetMethod === "production_rate" && isAreaUnit(unit)
       ? resolveTakeoffSqft(svc.name, takeoff)
       : null;
-    const qty = takeoffQty ?? 1;
+    // A package step's rate is a per-visit price (lockRate), not a per-sq-ft rate:
+    // never multiply it by the client's takeoff.
+    const qty = svc.lockRate ? 1 : (takeoffQty ?? 1);
 
     // Rate Matrix override: if this service has banded rows keyed off a
     // property custom field, and the estimate has a property with a value
@@ -1247,8 +1251,10 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           toast.error("Added the item, but couldn't pre-fill its default equipment");
         });
       }
+      return true;
     } catch {
       toast.error("Failed to add item");
+      return false;
     }
   }
 
@@ -1297,7 +1303,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           ?? activeServices.find((s) => s.name.trim().toLowerCase() === step.serviceName.trim().toLowerCase());
         const serviceDesc = match?.descriptionOnEstimate ? stripHtml(match.descriptionOnEstimate) : "";
         const rate = step.defaultRateCents || match?.defaultRateCents || 0;
-        await addService({
+        const ok = await addService({
           id: match?.id,
           name: step.serviceName,
           unit: match?.unit ?? undefined,
@@ -1312,6 +1318,10 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           budgetedHours: step.defaultBHrs ?? null,
           lockRate: !!step.defaultRateCents,
         });
+        if (!ok) {
+          toast.error(`Package added only up to "${step.serviceName}" — remove the partial package and try again`);
+          return;
+        }
       }
     } catch {
       toast.error("Failed to add package");

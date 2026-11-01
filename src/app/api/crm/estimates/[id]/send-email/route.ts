@@ -333,6 +333,7 @@ export async function POST(
     "[estimatelink]":       proposalUrl
       ? `<a href="${proposalUrl}" style="color:#fff;background:${org?.brand_color ?? "#60ab45"};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`
       : "",
+    "[estimatelinkurl]":    proposalUrl ?? "",
     "[estimatenumber]":     String(est.estimate_number).padStart(5, "0"),
     "[estimatedate]":       quoteDate,
     "[estimatetotal]":      total,

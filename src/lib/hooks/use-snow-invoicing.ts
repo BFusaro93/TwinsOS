@@ -279,6 +279,8 @@ interface SnowTaxContext {
   /** Accepted-estimate tax rate per job (only jobs converted from an estimate with a rate). */
   estimateRateByJobId: Map<string, number>;
   clientDefaultRateById: Map<string, number>;
+  /** Tax-exempt clients (is_taxable = false): never taxed, whatever an estimate or default says. */
+  exemptClientIds: Set<string>;
 }
 
 async function loadSnowTaxContext(
@@ -291,6 +293,7 @@ async function loadSnowTaxContext(
     taxableJobIds: new Set(),
     estimateRateByJobId: new Map(),
     clientDefaultRateById: new Map(),
+    exemptClientIds: new Set(),
   };
   if (jobIds.length > 0) {
     const { data: jobs, error } = await supabase
@@ -336,6 +339,7 @@ async function loadSnowTaxContext(
     for (const c of (clients ?? []) as { id: string; default_tax_rate_bps: number | null; is_taxable: boolean | null }[]) {
       // A tax-exempt client (is_taxable = false) is never taxed, whatever default rate is stored.
       ctx.clientDefaultRateById.set(c.id, c.is_taxable === false ? 0 : (c.default_tax_rate_bps ?? 0));
+      if (c.is_taxable === false) ctx.exemptClientIds.add(c.id);
     }
   }
   return ctx;
@@ -344,6 +348,7 @@ async function loadSnowTaxContext(
 /** One rate per invoice: the first of its jobs' accepted-estimate rates, else
  *  the client's default rate. */
 function snowTaxRateBps(ctx: SnowTaxContext, jobIds: string[], clientId: string): number {
+  if (ctx.exemptClientIds.has(clientId)) return 0;
   for (const jobId of jobIds) {
     const rate = ctx.estimateRateByJobId.get(jobId);
     if (rate && rate > 0) return rate;

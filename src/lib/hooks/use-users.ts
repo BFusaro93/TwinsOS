@@ -26,13 +26,16 @@ export function useInviteUser() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
         throw new Error((body as { error?: string }).error ?? "Failed to invite user");
       }
+      return body as { success: true; warning?: string };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      // A Landscapt role on the invite creates or links a crm_employees row.
+      queryClient.invalidateQueries({ queryKey: ["crm-employees"] });
     },
   });
 }

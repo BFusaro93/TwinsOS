@@ -844,6 +844,12 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   // is mid-edit doesn't clobber their unsaved typing.
   const customValuesSyncedForRef = useRef<string | null>(null);
   const consentBaseline = useRef({ doNotMarket: client.doNotMarket, smsOptIn: client.smsOptIn ?? false });
+  // Office notes as loaded; sent back only when edited. The DB rejects a notes change from a
+  // login without client_view_notes, and "" vs null counted as a change, so every save of a
+  // client with no notes failed for those logins.
+  const officeNotesBaseline = useRef(client.officeNotes ?? "");
+  const { can: canEdit } = usePermissions();
+  const canEditOfficeNotes = canEdit("client_view_notes");
 
   // fieldValues loads asynchronously — seeding customValues from it via a
   // plain useState initializer only runs once on mount and would capture it
@@ -873,6 +879,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     // What consent looked like when the dialog opened: only a field the user
     // actually toggled is written back (see the save below).
     consentBaseline.current = { doNotMarket: client.doNotMarket, smsOptIn: client.smsOptIn ?? false };
+    officeNotesBaseline.current = client.officeNotes ?? "";
     setEditTab("personal");
     setBillingSameAsService(client.billingSameAsService ?? true);
     setClientPhones(
@@ -971,10 +978,11 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
       // Consent flags are only sent when the user changed them. Sending the form's
       // snapshot of an untouched checkbox let a stale `true` overwrite an opt-out
       // that arrived (STOP reply, unsubscribe click) while the dialog was open.
-      const { doNotMarket: formDoNotMarket, smsOptIn: formSmsOptIn, ...formRest } = form;
+      const { doNotMarket: formDoNotMarket, smsOptIn: formSmsOptIn, officeNotes: formOfficeNotes, ...formRest } = form;
       const consentChanges = {
         ...(formDoNotMarket !== consentBaseline.current.doNotMarket && { doNotMarket: formDoNotMarket }),
         ...(formSmsOptIn !== consentBaseline.current.smsOptIn && { smsOptIn: formSmsOptIn }),
+        ...(canEditOfficeNotes && formOfficeNotes !== officeNotesBaseline.current && { officeNotes: formOfficeNotes }),
       };
 
       await update({
@@ -1072,7 +1080,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
             <TabsTrigger value="details" className={tabClass}>Details</TabsTrigger>
             <TabsTrigger value="billing" className={tabClass}>Billing</TabsTrigger>
             <TabsTrigger value="custom" className={tabClass}>Custom Fields</TabsTrigger>
-            <TabsTrigger value="notes" className={tabClass}>Office Notes</TabsTrigger>
+            {canEditOfficeNotes && <TabsTrigger value="notes" className={tabClass}>Office Notes</TabsTrigger>}
           </TabsList>
 
           <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -2118,7 +2126,8 @@ function jobBorderColor(job: CRMJob): string {
 
 /** What a waiting-list job still needs dispatching: each service with no live visit yet, or the whole job when it has no services and no visits. */
 function waitingItemsFor(job: CRMJob): { job: CRMJob; service: CRMJobService | null }[] {
-  const visits = (job.visits ?? []).filter((v) => v.status !== "cancelled");
+  // Matches the Waiting List's own rule: a skipped visit leaves the service undone.
+  const visits = (job.visits ?? []).filter((v) => v.status !== "cancelled" && v.status !== "skipped");
   const services = job.services ?? [];
   if (services.length === 0) return visits.length === 0 ? [{ job, service: null }] : [];
   return services.filter((sv) => !visits.some((v) => v.jobServiceId === sv.id)).map((service) => ({ job, service }));

@@ -21,6 +21,10 @@ import { stripHtml } from "@/lib/utils/strip-html";
 import type { CRMPackageService } from "@/types/crm-packages";
 import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
 import { reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
+import {
+  isVisitInProgress, reopenClearsClockStamps, CLEARED_CLOCK_STAMPS, GUARDED_STATUS_CHANGES,
+  VISIT_IN_PROGRESS_STATUS_MESSAGE, VISIT_IN_PROGRESS_DELETE_MESSAGE,
+} from "@/lib/visits/status-guards";
 import { computeBudgetedHours } from "@/lib/utils/visit-hours";
 
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
@@ -1058,9 +1062,12 @@ export function useDeleteVisit() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: row } = await (supabase as any)
         .from('crm_job_visits')
-        .select('crew_group_id')
+        .select('crew_group_id, status, clocked_in_at, clocked_out_at')
         .eq('id', visitId)
         .maybeSingle();
+      // Deleting a stop the crew is working strands its open punches (the crew list
+      // drops it, so nobody can clock out).
+      if (isVisitInProgress(row)) throw new Error(VISIT_IN_PROGRESS_DELETE_MESSAGE);
       if (row?.crew_group_id) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: rpcErr } = await (supabase as any).rpc('crm_remove_visit_crew', { p_visit_id: visitId });
@@ -1258,7 +1265,14 @@ export function useUpdateVisitStatus() {
       // Completed with an open visit under it).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: prior } = await (supabase as any)
-        .from('crm_job_visits').select('id, job_id, status').eq('id', id).maybeSingle();
+        .from('crm_job_visits').select('id, job_id, status, clocked_in_at, clocked_out_at').eq('id', id).maybeSingle();
+      // Same guards as PATCH /api/crm/visits/[id]: a status change while the crew is
+      // mid-stop strands their open punches, and reopening a finished visit must clear
+      // its clock stamps or the crew app treats it as already worked.
+      if (prior && GUARDED_STATUS_CHANGES.includes(status) && prior.status !== status && isVisitInProgress(prior)) {
+        throw new Error(VISIT_IN_PROGRESS_STATUS_MESSAGE);
+      }
+      if (reopenClearsClockStamps(prior, status)) Object.assign(patch, CLEARED_CLOCK_STAMPS);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits').update(patch).eq('id', id)
@@ -1391,7 +1405,7 @@ export function useUpdateVisit() {
       // pause and skip.
       const recrewing =
         (updates.crew_id !== undefined && updates.crew_id !== (before?.crew_id ?? null)) || updates.crew_unassigned === true;
-      if (recrewing && before?.clocked_in_at && !before.clocked_out_at) {
+      if (recrewing && isVisitInProgress(before)) {
         throw new Error("This visit is in progress (the crew has clocked in), so its crew can't be changed. Have the crew clock out first.");
       }
       if (updates.scheduled_date !== undefined) {
@@ -1402,7 +1416,7 @@ export function useUpdateVisit() {
         // vanish from their list mid-stop and they couldn't clock out. The visit API
         // routes already refuse this; the direct write here (calendar drag, visit
         // list edits, snow board) didn't.
-        if (dateChanged && before?.clocked_in_at && !before.clocked_out_at) {
+        if (dateChanged && isVisitInProgress(before)) {
           throw new Error("This visit is in progress (the crew has clocked in), so it can't be moved to another day. Have the crew clock out first.");
         }
         if (dateChanged && before?.job_id) {
@@ -1452,8 +1466,15 @@ export function useUpdateVisit() {
       // re-running /complete would repair-invoice a visit whose invoice was
       // deliberately voided.
       const isCompleting = updates.status === 'completed' && before?.status !== 'completed';
+      // Same status guards as the visit API routes (the sheet's Save sends a status).
+      if (updates.status && before && GUARDED_STATUS_CHANGES.includes(updates.status) && before.status !== updates.status && isVisitInProgress(before)) {
+        throw new Error(VISIT_IN_PROGRESS_STATUS_MESSAGE);
+      }
       const { status: _statusOmittedForCompletion, ...updatesWithoutStatus } = updates;
-      const dbUpdates = { ...(isCompleting ? updatesWithoutStatus : updates) };
+      const dbUpdates = {
+        ...(isCompleting ? updatesWithoutStatus : updates),
+        ...(reopenClearsClockStamps(before, updates.status) ? CLEARED_CLOCK_STAMPS : {}),
+      };
       // An explicit crew and "unassigned" are mutually exclusive (the DB
       // trigger enforces the same; this keeps the payload honest).
       if (dbUpdates.crew_id) dbUpdates.crew_unassigned = false;
@@ -1971,12 +1992,16 @@ export function useBulkImportCRMServices() {
       let created = 0;
       let updated = 0;
       let skipped = 0;
+      const failed: { row: number; error: string }[] = [];
 
-      for (const r of rows) {
+      for (const [idx, r] of rows.entries()) {
         const name = r.name?.trim();
         if (!name) { skipped++; continue; }
 
         const code = r.code?.trim() || null;
+        const hasRate = (r.defaultRate ?? "").trim() !== "";
+        const hasProd = (r.productionRate ?? "").trim() !== "";
+        const prodRate = parseImportNumber(r.productionRate);
         const payload = {
           name,
           code,
@@ -1984,17 +2009,27 @@ export function useBulkImportCRMServices() {
           unit: normalizeServiceImportUnit(r.unit),
           // "$45.00" and "1,200" would otherwise parse to NaN / 1 and save a null or wrong rate.
           default_rate_cents: parseImportNumber(r.defaultRate) != null ? Math.round(parseImportNumber(r.defaultRate)! * 100) : null,
-          production_rate_sqft_per_hr: parseImportNumber(r.productionRate),
+          production_rate_sqft_per_hr: prodRate,
           // A production rate only drives estimate hours when the service budgets by it.
-          ...((parseImportNumber(r.productionRate) ?? 0) > 0 ? { budget_method: "production_rate" } : {}),
+          ...((prodRate ?? 0) > 0 ? { budget_method: "production_rate" } : {}),
           is_active: r.isActive?.trim().toLowerCase() !== "no",
+        };
+        // Re-importing by code: a column the CSV doesn't carry (the export has only
+        // seven) must leave the existing value alone, not blank it or reset it.
+        const updatePayload = {
+          name,
+          ...(r.category?.trim() ? { category: payload.category } : {}),
+          ...(r.unit?.trim() ? { unit: payload.unit } : {}),
+          ...(hasRate ? { default_rate_cents: payload.default_rate_cents } : {}),
+          ...(hasProd ? { production_rate_sqft_per_hr: prodRate, budget_method: (prodRate ?? 0) > 0 ? "production_rate" : "manual" } : {}),
+          ...(r.isActive?.trim() ? { is_active: payload.is_active } : {}),
         };
 
         const existingId = code ? byCode.get(code.toLowerCase()) : undefined;
         if (existingId) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error } = await (supabase as any).from("crm_services").update(payload).eq("id", existingId);
-          if (error) throw error;
+          const { error } = await (supabase as any).from("crm_services").update(updatePayload).eq("id", existingId);
+          if (error) { failed.push({ row: idx + 2, error: error.message }); continue; }
           updated++;
         } else {
           // .select("id").single() + updating byCode below matters: two CSV
@@ -2004,13 +2039,13 @@ export function useBulkImportCRMServices() {
           // service instead of updating the one the first row just created.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: inserted, error } = await (supabase as any).from("crm_services").insert(payload).select("id").single();
-          if (error) throw error;
+          if (error) { failed.push({ row: idx + 2, error: error.message }); continue; }
           if (code && inserted?.id) byCode.set(code.toLowerCase(), inserted.id);
           created++;
         }
       }
 
-      return { created, updated, skipped };
+      return { created, updated, skipped, failed };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-services"] });
@@ -2386,7 +2421,9 @@ export function useCreateJobsFromEstimate() {
                 package_total_steps: pkgTotalSteps,
                 waiting_list_start: pkgPlan?.windowStart ?? null,
                 waiting_list_end: pkgPlan?.windowEnd ?? null,
-                invoice_description: pkgRow?.invoice_description ? stripHtml(pkgRow.invoice_description) || null : null,
+                ...(pkgRow?.invoice_description && stripHtml(pkgRow.invoice_description)
+                  ? { invoice_description: stripHtml(pkgRow.invoice_description) }
+                  : {}),
               }
             : {}),
           crew_id: crewId,
@@ -2442,7 +2479,7 @@ export function useCreateJobsFromEstimate() {
               days_count: 1,
               is_taxable: s.isTaxable ?? estimateIsTaxed,
               estimate_line_item_id: s.estimateLineItemId ?? null,
-              max_visits: jobType === "recurring" && s.maxVisits && s.maxVisits > 0 ? Math.round(s.maxVisits) : null,
+              max_visits: (jobType === "recurring" || jobType === "package") && s.maxVisits && s.maxVisits > 0 ? Math.round(s.maxVisits) : null,
               start_date: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.startDate ?? null,
               complete_by_date: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.completeByDate ?? null,
               min_days: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.minDays ?? null,
@@ -2574,7 +2611,17 @@ export function useCreateJobsFromEstimate() {
         if (stepRows.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { error: stepErr } = await (supabase as any).from("crm_job_visits").insert(stepRows);
-          if (stepErr) log.error("package step visit insert failed", { jobId, error: stepErr.message });
+          if (stepErr) {
+            // Compensate like Add Job does: a package job with no step visits never
+            // reaches the board, and "Job created" would hide that.
+            log.error("package step visit insert failed", { jobId, error: stepErr.message });
+            const deletedAt = new Date().toISOString();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any).from("crm_job_visits").update({ deleted_at: deletedAt }).eq("job_id", jobId).is("deleted_at", null);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (supabase as any).from("crm_jobs").update({ deleted_at: deletedAt }).eq("id", jobId);
+            throw new Error(`The package job's visits could not be created (${stepErr.message}). Nothing was converted.`);
+          }
         }
       } else if (scheduledDate) {
         const firstVisit = (jobServiceId: string | null, occurrence: boolean) => ({

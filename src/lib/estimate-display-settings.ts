@@ -112,6 +112,13 @@ export function groupIntoSections<T extends GroupableItem>(
       started = true;
       continue;
     }
+    // A package section holds only the lines tagged with its package: a line added
+    // after "Add Package" starts a plain section of its own instead of being priced,
+    // accepted and printed as part of the package.
+    if (current.packageId && (item.packageId ?? null) !== current.packageId) {
+      sections.push(current);
+      current = { sectionName: null, items: [], subtotalCents: 0 };
+    }
     if (settings.hideZeroTotals && item.totalCents === 0) continue;
     current.items.push(item);
     current.subtotalCents += item.totalCents;

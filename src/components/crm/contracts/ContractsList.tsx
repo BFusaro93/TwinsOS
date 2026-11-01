@@ -1459,11 +1459,16 @@ export function ContractsList({ clientId }: Props) {
     try {
       const results = await generateInvoices(ids);
       const created = results.filter((r) => r.status === "created").length;
-      const skipped = results.length - created;
+      const skippedRows = results.filter((r) => r.status !== "created");
+      const skipped = skippedRows.length;
+      // Say why: "already billed" was the only message, but the hook also skips drafts,
+      // contracts that haven't started, zero-amount months and non-anchor months.
+      const reasons = [...new Set(skippedRows.map((r) => r.reason).filter((x): x is string => !!x))];
+      const reasonText = reasons.length === 0 ? "already billed" : reasons.length === 1 ? reasons[0] : `${reasons[0]} (+${reasons.length - 1} other reason${reasons.length > 2 ? "s" : ""})`;
       if (created === 0) {
-        toast.info(skipped === 1 ? "That contract was already billed this month" : "All selected contracts were already billed this month");
+        toast.info(skipped === 1 ? `Not created: ${reasonText}` : `No invoices created — ${reasonText}`);
       } else {
-        toast.success(`${created} invoice${created !== 1 ? "s" : ""} created${skipped > 0 ? `, ${skipped} skipped (already billed)` : ""}`);
+        toast.success(`${created} invoice${created !== 1 ? "s" : ""} created${skipped > 0 ? `, ${skipped} skipped (${reasonText})` : ""}`);
       }
       const problems = results.filter((r) => r.status === "created" && r.reason);
       if (problems.length > 0) {

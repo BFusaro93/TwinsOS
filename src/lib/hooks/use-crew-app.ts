@@ -422,7 +422,8 @@ export function useStopDetail(anchorVisitId: string) {
         supabase,
         select,
         crew.id,
-        (q) => q.eq("client_id", anchor.clientId).eq("scheduled_date", anchor.scheduledDate).is("deleted_at", null)
+        // .eq(col, null) matches nothing in PostgREST; a client-less stop has no client.
+        (q) => (anchor.clientId ? q.eq("client_id", anchor.clientId) : q.is("client_id", null)).eq("scheduled_date", anchor.scheduledDate).is("deleted_at", null)
       );
       if (siblingErr) throw siblingErr;
 

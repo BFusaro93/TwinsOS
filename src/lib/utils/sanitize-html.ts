@@ -71,6 +71,11 @@ export function looksLikeHtml(value: string | null | undefined): boolean {
   return !!value && /<\/?[a-z][^>]*>/i.test(value);
 }
 
+// After the tag pass every tag left is one we emitted (allowed name, no `<` inside). Any other
+// `<` is a dangling start tag (`<a href=x onmouseover=…` with no `>`) or stray text; the browser
+// would close it at the next `>` in the surrounding markup, so it becomes a literal.
+const STRAY_LT_RE = new RegExp(`<(?!/?(?:${[...ALLOWED_TAGS].join("|")})(?:/?>|\\s[^<>]*>))`, "gi");
+
 /**
  * Strip everything but a small allowlist of structural/inline tags. Text
  * content is left untouched (it is already entity-encoded by the editor);
@@ -79,6 +84,10 @@ export function looksLikeHtml(value: string | null | undefined): boolean {
 export function sanitizeHtml(html: string | null | undefined): string {
   if (!html) return "";
   const withoutDangerous = html.replace(DROP_WITH_CONTENT, "");
+  return sanitizeTags(withoutDangerous).replace(STRAY_LT_RE, "&lt;");
+}
+
+function sanitizeTags(withoutDangerous: string): string {
   return withoutDangerous.replace(TAG_RE, (full, rawName: string, attrs: string) => {
     const name = rawName.toLowerCase();
     if (!ALLOWED_TAGS.has(name)) return "";

@@ -487,8 +487,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           toast.error("Job marked completed, but the automatic invoice failed to create — add one manually");
         }
       }
-    } catch {
-      toast.error("Failed to update status");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to update status");
     }
   }
 

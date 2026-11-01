@@ -203,7 +203,8 @@ function buttonHrefAttr(
   mergeVars: Record<string, string>,
   options?: { preserveUnresolvedKnownTags?: boolean }
 ): string {
-  const href = buttonHref(settings);
+  // [estimatelink] resolves to a whole <a> button; a Button block needs the bare URL.
+  const href = buttonHref(settings) === "[estimatelink]" ? "[estimatelinkurl]" : buttonHref(settings);
   return href.startsWith("[") ? resolveMergeTags(href, mergeVars, options) : escapeHtml(href);
 }
 
