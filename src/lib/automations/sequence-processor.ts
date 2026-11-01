@@ -1,10 +1,12 @@
-import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "./sequence-email";
+import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep, isMarketingEmailCategory } from "./sequence-email";
+import { logger } from "@/lib/logger";
 import { isOrgInactive } from "@/lib/orgs/org-canceled";
 import { resolveSmsStepContent, sendResolvedSequenceSms, nextSmsSendTime } from "./sequence-sms";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
 import { shouldStopSequence, logSequenceExecution, evaluateConditionSet, computeWaitFireAt } from "./sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
+import { resolveClientPlainText } from "./client-merge-vars";
 import { fetchCardExpiryContext, type CardExpiryContext } from "./card-expiry-context";
 import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
 
@@ -48,7 +50,7 @@ const SEND_RETRY_BASE_MS = 15 * 60 * 1000;
  * may go out now (no/invalid/zero-width window, or already inside it). A window
  * whose start is after its end ("22:00" → "06:00") runs overnight.
  */
-function emailWindowFireAt(
+export function emailWindowFireAt(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config: Record<string, any>,
   now: Date,
@@ -78,6 +80,41 @@ function emailWindowFireAt(
   const date = opensToday ? wall.date : shiftYmd(wall.date, 1);
   const hhmm = `${String(Math.floor(start / 60)).padStart(2, "0")}:${String(start % 60).padStart(2, "0")}`;
   return zoneWallClockToInstant(date, hhmm, timeZone) ?? new Date(now.getTime() + 3_600_000);
+}
+
+/**
+ * When an email step must not go out right now — "Send Mon-Fri only" on a
+ * weekend (org clock), or outside its "Send Between" window — the instant to
+ * re-check it, with a log-friendly reason; null when it may send now. Shared by
+ * the processor and the approval route, so an APPROVED email honors the same
+ * rules as one that never needed approval.
+ */
+export async function emailSendDeferral(
+  supabase: AnyClient,
+  orgId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  config: Record<string, any>,
+  now: Date = new Date()
+): Promise<{ fireAt: Date; reason: string } | null> {
+  const tz = await getOrgTimeZone(supabase, orgId);
+  // "Send Mon-Fri only" — defer to the next weekday rather than skipping the
+  // step outright; the enrollment just gets re-checked then. Weekday on the
+  // ORG's calendar — the server runs UTC, where Friday evening is already
+  // "Saturday" and Sunday evening is already Monday.
+  if (config.send_weekdays_only) {
+    const weekdayName = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: tz }).format(now);
+    const day = weekdayName === "Sun" ? 0 : weekdayName === "Sat" ? 6 : 1; // 0 = Sun, 6 = Sat
+    if (day === 0 || day === 6) {
+      return { fireAt: new Date(now.getTime() + (day === 0 ? 1 : 2) * 86400000), reason: "deferred to next weekday (send_weekdays_only)" };
+    }
+  }
+  // "Send Between" window (Email event dialog, default 08:00–18:00): defer to
+  // the next window start on the ORG's clock.
+  const windowFireAt = emailWindowFireAt(config, now, tz);
+  if (windowFireAt) {
+    return { fireAt: windowFireAt, reason: `email held until its send window opens at ${windowFireAt.toISOString()}` };
+  }
+  return null;
 }
 
 /**
@@ -208,6 +245,53 @@ async function handleSendFailure(
     .update({ next_fire_at: retryAt, updated_at: ctx.nowIso })
     .eq("id", ctx.enrollId);
   return { skipped: { enrollmentId: ctx.enrollId, reason: `${reason} — retry ${attempt + 1}/${MAX_SEND_ATTEMPTS} at ${retryAt}` } };
+}
+
+/**
+ * Tells the people who can decide it that an email/text step is waiting in the
+ * approval queue. Approvers are the org's admins and managers — the exact roles
+ * /api/crm/automations/approvals/[id] hard-codes — so a step is never parked
+ * where nobody is told to look. Best-effort: a failed notification must not
+ * fail the park. There is no actor on a processor-driven step (the processor
+ * runs from the cron / enrollment, not from a user action), so nobody is
+ * excluded; a cron-parked step has no one to suppress. org_id is the
+ * enrollment's, never a request value.
+ */
+async function notifyApproversOfParkedStep(
+  adminClient: AnyClient,
+  params: { orgId: string; sequenceId: string; clientId: string | null; channel: "email" | "sms"; preview: string }
+): Promise<void> {
+  try {
+    const { data: approvers } = await adminClient
+      .from("profiles")
+      .select("id")
+      .eq("org_id", params.orgId)
+      .in("role", ["admin", "manager"])
+      .neq("status", "inactive");
+    const ids = ((approvers ?? []) as { id: string }[]).map((p) => p.id);
+    if (ids.length === 0) return;
+    const { data: seq } = await adminClient
+      .from("crm_automation_sequences")
+      .select("name")
+      .eq("id", params.sequenceId)
+      .maybeSingle();
+    const what = params.channel === "sms" ? "text" : "email";
+    const message = `A ${what} in "${(seq as { name: string | null } | null)?.name ?? "an automation"}" is waiting for approval: ${params.preview.slice(0, 140)}`;
+    const { error } = await adminClient.from("notifications").insert(
+      ids.map((userId) => ({
+        org_id: params.orgId,
+        user_id: userId,
+        type: "automation_alert",
+        title: "Automation step needs approval",
+        message,
+        entity_id: params.clientId,
+        entity_type: params.clientId ? "client" : null,
+      }))
+    );
+    if (error) logger.error("approver notification failed", { error: error.message });
+  } catch (err) {
+    logger.error("approver notification failed", { error: err instanceof Error ? err.message : String(err) });
+  }
 }
 
 /**
@@ -374,38 +458,16 @@ async function runClaimedStep(
   }
 
   if (currentEvent.event_type === "email") {
-    // "Send Mon-Fri only" — defer to the next weekday rather than skipping
-    // the step outright; the enrollment just gets re-checked then.
-    if (eventConfig.send_weekdays_only) {
-      // Weekday on the ORG's calendar — the server runs UTC, where Friday
-      // evening is already "Saturday" and Sunday evening is already Monday.
-      const weekdayName = new Intl.DateTimeFormat("en-US", {
-        weekday: "short",
-        timeZone: await getOrgTimeZone(adminClient, orgId),
-      }).format(new Date());
-      const day = weekdayName === "Sun" ? 0 : weekdayName === "Sat" ? 6 : 1; // 0 = Sun, 6 = Sat
-      if (day === 0 || day === 6) {
-        const d = new Date(Date.now() + (day === 0 ? 1 : 2) * 86400000);
-        await adminClient
-          .from("crm_sequence_enrollments")
-          .update({ next_fire_at: d.toISOString(), updated_at: nowIso })
-          .eq("id", enrollId);
-        return { skipped: { enrollmentId: enrollId, reason: "deferred to next weekday (send_weekdays_only)" } };
-      }
-    }
-
-    // "Send Between" window (Email event dialog, default 08:00–18:00): it was
-    // saved on every email step but never read, so a step that came due at 11pm
-    // (a visit completed in the evening, a wait that ended overnight) went out
-    // at 11pm. Defer to the next window start on the ORG's clock instead.
+    // "Send Mon-Fri only" and the "Send Between" window — defer rather than
+    // skip; the enrollment is simply re-checked when it next comes due.
     {
-      const windowFireAt = emailWindowFireAt(eventConfig, new Date(), await getOrgTimeZone(adminClient, orgId));
-      if (windowFireAt) {
+      const deferral = await emailSendDeferral(adminClient, orgId, eventConfig);
+      if (deferral) {
         await adminClient
           .from("crm_sequence_enrollments")
-          .update({ next_fire_at: windowFireAt.toISOString(), updated_at: nowIso })
+          .update({ next_fire_at: deferral.fireAt.toISOString(), updated_at: nowIso })
           .eq("id", enrollId);
-        return { skipped: { enrollmentId: enrollId, reason: `email held until its send window opens at ${windowFireAt.toISOString()}` } };
+        return { skipped: { enrollmentId: enrollId, reason: deferral.reason } };
       }
     }
 
@@ -419,6 +481,7 @@ async function runClaimedStep(
       toSelection: eventConfig.to,
       fromSelection: eventConfig.from,
       cardExpiryContext,
+      category: eventConfig.category,
     });
     const failureCtx: SendFailureContext = {
       orgId, enrollId, sequenceId: sequence_id, clientId: client_id, eventId: currentEvent.id,
@@ -434,7 +497,35 @@ async function runClaimedStep(
     // "Requires approval" — park the step in the approval queue instead of
     // sending. The processor won't re-visit this enrollment (query filters on
     // awaiting_approval = false) until a human decides.
+    // An approval granted outside the step's send window / on a weekend is
+    // parked as "approved" with the enrollment rescheduled (see the approvals
+    // route); when the processor comes back for that step it must send the
+    // approved email rather than queue a second approval.
+    let approvedEmail: {
+      toEmails: string[]; toName: string | null; subject: string; bodyHtml: string; fromAddress: string | undefined; replyTo: string | null | undefined;
+    } | null = null;
     if (eventConfig.require_approval) {
+      const { data: approvedRow } = await adminClient
+        .from("crm_sequence_step_approvals")
+        .select("to_email, to_name, subject, body_html, from_address, reply_to")
+        .eq("enrollment_id", enrollId)
+        .eq("event_id", currentEvent.id)
+        .eq("status", "approved")
+        .order("decided_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (approvedRow?.body_html && approvedRow?.to_email) {
+        approvedEmail = {
+          toEmails: (approvedRow.to_email as string).split(",").map((e) => e.trim()).filter(Boolean),
+          toName: (approvedRow.to_name as string | null) ?? null,
+          subject: (approvedRow.subject as string) ?? "",
+          bodyHtml: approvedRow.body_html as string,
+          fromAddress: (approvedRow.from_address as string | null) ?? undefined,
+          replyTo: (approvedRow.reply_to as string | null) ?? undefined,
+        };
+      }
+    }
+    if (eventConfig.require_approval && !approvedEmail) {
       const { error: approvalErr } = await adminClient
         .from("crm_sequence_step_approvals")
         .insert({
@@ -469,6 +560,9 @@ async function runClaimedStep(
         eventId: currentEvent.id, eventType: "email", action: "awaiting_approval",
         detail: built.subject,
       });
+      await notifyApproversOfParkedStep(adminClient, {
+        orgId, sequenceId: sequence_id, clientId: client_id, channel: "email", preview: built.subject,
+      });
       return { fired: { enrollmentId: enrollId, action: "awaiting approval" } };
     }
 
@@ -487,16 +581,17 @@ async function runClaimedStep(
       orgId,
       clientId: client_id ?? null,
       estimateId: estimate_id ?? null,
-      toEmails: built.toEmails,
-      toName: built.toName,
-      subject: built.subject,
-      bodyHtml: built.bodyHtml,
+      toEmails: approvedEmail?.toEmails ?? built.toEmails,
+      toName: approvedEmail ? approvedEmail.toName : built.toName,
+      subject: approvedEmail?.subject ?? built.subject,
+      bodyHtml: approvedEmail?.bodyHtml ?? built.bodyHtml,
       // Carry the resolved sender ("from sales rep" or the org-branded
       // default) through; the approvals path already does this.
-      fromAddress: built.fromAddress,
+      fromAddress: approvedEmail ? approvedEmail.fromAddress : built.fromAddress,
       // …and the matching reply address, so a rep-sent step's replies reach
       // the rep rather than the org's general mailbox.
-      replyTo: built.replyTo,
+      replyTo: approvedEmail ? approvedEmail.replyTo : built.replyTo,
+      marketing: isMarketingEmailCategory(eventConfig.category),
     });
     if (!sendResult.ok) {
       return handleSendFailure(adminClient, failureCtx, sendResult.reason, sendResult.permanent === true);
@@ -523,6 +618,7 @@ async function runClaimedStep(
       clientId: client_id!,
       meetingId: meeting_id ?? null,
       bodyTemplate: eventConfig.message ?? "",
+      toSelection: eventConfig.to,
       cardExpiryContext,
     });
     const failureCtx: SendFailureContext = {
@@ -596,6 +692,9 @@ async function runClaimedStep(
         eventId: currentEvent.id, eventType: "text_message", action: "awaiting_approval",
         detail: built.bodyText,
       });
+      await notifyApproversOfParkedStep(adminClient, {
+        orgId, sequenceId: sequence_id, clientId: client_id, channel: "sms", preview: built.bodyText,
+      });
       return { fired: { enrollmentId: enrollId, action: "awaiting approval" } };
     }
 
@@ -651,7 +750,16 @@ async function runClaimedStep(
       return handleSendFailure(adminClient, stepFailure, "no recipient_user_ids configured", true);
     }
 
-    const message = (eventConfig.message as string) || "Automation alert";
+    const message = await resolveClientPlainText(adminClient, {
+      orgId, clientId: client_id ?? null, template: (eventConfig.message as string) || "Automation alert",
+    });
+    // notifications has no priority column and NotificationsBell only lists an
+    // allowlist of `type`s, so severity (AlertEventDialog's alert_type) rides in
+    // the title the bell shows: "Urgent: …" / "Warning: …" / plain for info.
+    const alertTitle =
+      eventConfig.alert_type === "urgent" ? "Urgent: Automation Alert"
+      : eventConfig.alert_type === "warning" ? "Warning: Automation Alert"
+      : "Automation Alert";
     // type/title/entity_id/entity_type are required for this row to actually
     // surface in NotificationsBell — it queries `.in("type", [...])` against
     // an explicit allowlist, so a row with no `type` (the bug this fixes)
@@ -662,7 +770,7 @@ async function runClaimedStep(
         org_id: orgId,
         user_id: userId,
         type: "automation_alert",
-        title: "Automation Alert",
+        title: alertTitle,
         message,
         entity_id: client_id ?? null,
         entity_type: client_id ? "client" : null,
@@ -686,7 +794,12 @@ async function runClaimedStep(
   }
 
   if (currentEvent.event_type === "ticket") {
-    const title = (eventConfig.title as string) || "Automation ticket";
+    const title = await resolveClientPlainText(adminClient, {
+      orgId, clientId: client_id ?? null, template: (eventConfig.title as string) || "Automation ticket",
+    });
+    const ticketDescription = await resolveClientPlainText(adminClient, {
+      orgId, clientId: client_id ?? null, template: (eventConfig.description as string) || "",
+    });
     const assignToId = (eventConfig.assign_to as string) || null;
 
     let assignedToName: string | null = null;
@@ -706,7 +819,7 @@ async function runClaimedStep(
         type: "note",
         client_id,
         subject: title,
-        body: (eventConfig.description as string) || null,
+        body: ticketDescription || null,
         priority: (eventConfig.priority as string) || "normal",
         assigned_to_id: assignToId,
         assigned_to: assignedToName,

@@ -1369,6 +1369,12 @@ export function useUpdateVisit() {
       let dateChanged = false;
       let dateChangeClientId: string | null = null;
       let dateChangeServiceIds: string[] | undefined;
+      // visit_dispatched / visit_skipped / visit_cancelled — set only on a real
+      // status transition (the visit sheet re-sends the unchanged status on every
+      // save). Covers the board's "dispatch all" and the visit-sheet status field,
+      // neither of which fired these before.
+      let statusTrigger: TriggerType | null = null;
+      let statusTriggerServiceIds: string[] | undefined;
       // Lightweight activity-timeline rows (no notifications) for the two
       // dispatcher actions that previously left no trace on the client:
       // rescheduling a visit and dispatching it.
@@ -1419,6 +1425,15 @@ export function useUpdateVisit() {
             ref_id: before.job_id,
           });
         }
+      }
+      if (
+        before?.job_id &&
+        updates.status &&
+        updates.status !== before.status &&
+        (updates.status === 'dispatched' || updates.status === 'skipped' || updates.status === 'cancelled')
+      ) {
+        statusTrigger = updates.status === 'dispatched' ? 'visit_dispatched' : updates.status === 'skipped' ? 'visit_skipped' : 'visit_cancelled';
+        statusTriggerServiceIds = await fetchVisitServiceIds(supabase, before.job_id, before.job_service_id ?? null);
       }
       if (updates.status === 'dispatched' && before && before.status !== 'dispatched') {
         activityRows.push({
@@ -1542,7 +1557,11 @@ export function useUpdateVisit() {
         }).catch(() => {});
       }
 
-      return { clientId, dateChanged, dateChangeClientId, dateChangeServiceIds, activityClientId: activityRows[0]?.client_id ?? null };
+      return {
+        clientId, dateChanged, dateChangeClientId, dateChangeServiceIds,
+        activityClientId: activityRows[0]?.client_id ?? null,
+        statusTrigger, statusTriggerClientId: before?.client_id ?? null, statusTriggerServiceIds,
+      };
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
@@ -1555,6 +1574,13 @@ export function useUpdateVisit() {
       }
       if (data?.activityClientId) qc.invalidateQueries({ queryKey: ['clients', data.activityClientId, 'activity'] });
       qc.invalidateQueries({ queryKey: ['clients'] });
+      if (data?.statusTrigger && data.statusTriggerClientId) {
+        fireAutomationTrigger({
+          triggerType: data.statusTrigger,
+          clientId: data.statusTriggerClientId,
+          matchValues: data.statusTriggerServiceIds,
+        });
+      }
       if (data?.dateChanged && data.dateChangeClientId) {
         fireAutomationTrigger({
           triggerType: 'visit_date_changed',

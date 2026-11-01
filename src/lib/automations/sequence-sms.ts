@@ -9,7 +9,9 @@ import { buildAutomationMergeVars, loadAutomationClient } from "./client-merge-v
 type AnyClient = any;
 
 interface ResolvedSmsContent {
+  /** Recipients joined with ", " — this is what an approval row stores; sendResolvedSequenceSms splits it back. */
   toPhone: string;
+  toPhones: string[];
   bodyText: string;
 }
 
@@ -43,6 +45,8 @@ export async function resolveSmsStepContent(
     clientId: string;
     meetingId?: string | null;
     bodyTemplate: string;
+    /** The step's "Send To" selection (client_primary_phone | billing_phone | all_contacts). Defaults to the client's primary phone. */
+    toSelection?: string[];
     /** Only populated for `credit_card_about_to_expire` enrollments — see fetchCardExpiryContext. */
     cardExpiryContext?: CardExpiryContext | null;
   }
@@ -50,8 +54,48 @@ export async function resolveSmsStepContent(
   const loaded = await loadAutomationClient(supabase, { orgId: params.orgId, clientId: params.clientId });
   const client = loaded?.client;
 
-  if (!client?.primary_phone) return { error: "client has no primary_phone" };
+  if (!client) return { error: "client not found" };
+  // Consent is modelled at the CLIENT level only (clients.sms_opt_in — contacts
+  // have no SMS-consent column), and sendClientSms re-checks it at the actual
+  // send. So every recipient number below (billing phone, contacts) is texted
+  // only under the client's own opt-in; there is no per-contact consent to
+  // consult. If per-contact consent is ever added, filter it here.
   if (!client.sms_opt_in) return { error: "client has not opted in to SMS" };
+
+  const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary_phone"];
+  // Keyed by digits so the same number typed two ways is one recipient.
+  const phonesByKey = new Map<string, string>();
+  const addPhone = (raw: unknown) => {
+    if (typeof raw !== "string") return;
+    const phone = raw.trim();
+    const key = phone.replace(/\D/g, "");
+    if (key.length >= 7 && !phonesByKey.has(key)) phonesByKey.set(key, phone);
+  };
+  if (toSelection.includes("client_primary_phone")) addPhone(client.primary_phone);
+  if (toSelection.includes("billing_phone")) {
+    // Billing phone = a number on the client typed "billing" in its phone list.
+    for (const p of (client.phones ?? []) as { phone: string; type: string }[]) {
+      if ((p.type ?? "").toLowerCase().includes("billing")) addPhone(p.phone);
+    }
+  }
+  if (toSelection.includes("all_contacts")) {
+    const { data: contacts } = await supabase
+      .from("client_contacts")
+      .select("phone, phones")
+      .eq("client_id", params.clientId)
+      .eq("org_id", params.orgId)
+      .is("deleted_at", null);
+    for (const contact of (contacts ?? []) as { phone: string | null; phones: unknown }[]) {
+      const typed = Array.isArray(contact.phones) ? (contact.phones as { phone?: string }[]) : [];
+      if (typed.length > 0) addPhone(typed[0]?.phone);
+      else addPhone(contact.phone);
+    }
+  }
+  if (phonesByKey.size === 0) {
+    return { error: toSelection.length === 1 && toSelection[0] === "client_primary_phone"
+      ? "client has no primary_phone"
+      : "no resolvable phone number for the selected 'send to' options" };
+  }
 
   let meetingDate = "";
   let meetingTime = "";
@@ -98,8 +142,10 @@ export async function resolveSmsStepContent(
       return KNOWN_MERGE_TAG_KEYS.has(key) ? "" : match;
     });
 
+  const toPhones = [...phonesByKey.values()];
   return {
-    toPhone: client.primary_phone as string,
+    toPhone: toPhones.join(", "),
+    toPhones,
     bodyText: resolve(params.bodyTemplate || ""),
   };
 }
@@ -112,12 +158,22 @@ export async function sendResolvedSequenceSms(
   supabase: AnyClient,
   params: { orgId: string; clientId: string | null; toPhone: string; bodyText: string }
 ): Promise<{ ok: true; sid: string | null } | { ok: false; reason: string; permanent?: boolean }> {
-  const sendResult = await sendClientSms(supabase, {
-    orgId: params.orgId,
-    clientId: params.clientId,
-    toPhone: params.toPhone,
-    body: params.bodyText,
-  });
-  if (!sendResult.ok) return sendResult;
-  return { ok: true, sid: sendResult.sid };
+  // toPhone may hold several recipients joined with ", " (billing phone / all
+  // contacts). Succeeds when at least one went out: retrying a partial failure
+  // would text the numbers that already received it a second time.
+  const phones = params.toPhone.split(",").map((p) => p.trim()).filter(Boolean);
+  let firstOk: { sid: string | null } | null = null;
+  let lastFail: { ok: false; reason: string; permanent?: boolean } | null = null;
+  for (const phone of phones) {
+    const sendResult = await sendClientSms(supabase, {
+      orgId: params.orgId,
+      clientId: params.clientId,
+      toPhone: phone,
+      body: params.bodyText,
+    });
+    if (sendResult.ok) firstOk = firstOk ?? { sid: sendResult.sid };
+    else lastFail = sendResult;
+  }
+  if (firstOk) return { ok: true, sid: firstOk.sid };
+  return lastFail ?? { ok: false, reason: "no phone number to text", permanent: true };
 }

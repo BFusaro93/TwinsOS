@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import { BrandMark } from "@/components/shared/BrandMark";
 import { TurnstileWidget } from "@/components/shared/TurnstileWidget";
 import { createClient } from "@/lib/supabase/client";
+import { EMAIL_REGEX, resolveJumpTarget, ruleConditionMatches } from "@/lib/forms/form-logic";
 
 // Unset in most environments — see .env.local.example. When unset, no widget
 // renders and no token is required, so existing forms are unaffected.
@@ -61,21 +62,6 @@ const DISPLAY_TYPES = ["header", "paragraph", "divider", "hidden"];
 // upload that Storage would reject anyway.
 const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 const ALLOWED_ATTACHMENT_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]);
-
-function ruleConditionMatches(value: string, operator: string, operand: string | null): boolean {
-  const v = value ?? "";
-  const op = operand ?? "";
-  switch (operator) {
-    case "equals":       return v === op;
-    case "not_equals":   return v !== op;
-    case "greater_than": return parseFloat(v) > parseFloat(op);
-    case "less_than":    return parseFloat(v) < parseFloat(op);
-    case "contains":     return v.toLowerCase().includes(op.toLowerCase());
-    case "is_empty":     return v.trim() === "";
-    case "is_not_empty": return v.trim() !== "";
-    default:              return false;
-  }
-}
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -155,25 +141,26 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
    *  page rules (fired at Next/Back/Submit, not on every keystroke). Recomputes
    *  from the full current answer set every time, so going back and changing
    *  an earlier answer is reflected correctly rather than accumulating stale state. */
+  function getRuleValue(fieldId: string): string {
+    return (multiValues[fieldId] ?? []).length > 0 ? multiValues[fieldId].join(",") : values[fieldId] ?? "";
+  }
+
   function evaluateRules(defaultNextPage: number) {
-    let targetPage = defaultNextPage;
+    // Jump target comes from the shared page-walk logic (src/lib/forms/form-logic.ts)
+    // that the server also uses to work out which pages this visitor skipped.
+    const targetPage = resolveJumpTarget(defaultNextPage, totalPages, form?.rules ?? [], getRuleValue);
     const hidden = new Set<string>();
     const tagsToAdd = new Set<string>();
     const tagsToRemove = new Set<string>();
 
     for (const rule of form?.rules ?? []) {
       if (!rule.sourceFieldId) continue;
-      const raw = (multiValues[rule.sourceFieldId] ?? []).length > 0
-        ? multiValues[rule.sourceFieldId].join(",")
-        : values[rule.sourceFieldId] ?? "";
+      const raw = getRuleValue(rule.sourceFieldId);
       if (!ruleConditionMatches(raw, rule.operator, rule.operand)) continue;
 
       switch (rule.action) {
-        case "jump_to_page": {
-          const p = parseInt(rule.actionValue ?? "", 10);
-          if (p) targetPage = p;
-          break;
-        }
+        case "jump_to_page":
+          break; // handled by resolveJumpTarget above
         case "hide_field":
           if (rule.actionValue) hidden.add(rule.actionValue);
           break;
@@ -188,7 +175,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
           break;
       }
     }
-    return { targetPage: Math.min(Math.max(targetPage, 1), totalPages), hidden, tagsToAdd, tagsToRemove };
+    return { targetPage, hidden, tagsToAdd, tagsToRemove };
   }
 
   // Compute the initial hidden-field set as soon as the form loads, so page 1
@@ -279,7 +266,7 @@ export default function PublicFormPage({ params }: { params: Promise<{ slug: str
       }
 
       if (field.fieldType === "email" && values[field.id]) {
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values[field.id])) {
+        if (!EMAIL_REGEX.test(values[field.id])) {
           newErrors[field.id] = "Please enter a valid email address";
         }
       }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
@@ -63,10 +64,24 @@ export async function GET(req: Request) {
   return NextResponse.json(mapped);
 }
 
-// PATCH /api/crm/forms/responses — { id, isRead } — marks a response
-// read/unread. There was previously no writer for is_read at all, so the
-// "Unread" count and blue-dot indicator never cleared once a response was
-// opened.
+// Exactly one kind of change per request. Read-flag toggles need only the
+// "view" permission (anyone who can see responses can mark them read/unread);
+// status changes and delete are "edit" (forms_edit) because they resolve or
+// remove submissions for everyone.
+const patchSchema = z
+  .object({
+    id: z.string().uuid(),
+    isRead: z.boolean().optional(),
+    status: z.enum(["on_hold", "completed", "spam", "ignored"]).optional(),
+    delete: z.literal(true).optional(),
+  })
+  .refine((v) => [v.isRead !== undefined, v.status !== undefined, v.delete === true].filter(Boolean).length === 1, {
+    message: "Provide exactly one of isRead, status, or delete",
+  });
+
+// PATCH /api/crm/forms/responses — { id, isRead } | { id, status } | { id, delete: true }
+// Marks a response read/unread, moves it between On Hold / Completed / Spam /
+// Ignored, or soft-deletes it (deleted_at; rows are never hard-deleted).
 export async function PATCH(req: Request) {
   const supabase = await createClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,23 +96,34 @@ export async function PATCH(req: Request) {
     .single();
   if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
+
+  const parsed = patchSchema.safeParse(await req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "id and exactly one of isRead, status, or delete are required" }, { status: 400 });
+  }
+  const { id, isRead, status, delete: remove } = parsed.data;
+
   {
-    const denied = await rejectWithoutFormsPermission(supabase, "view");
+    const denied = await rejectWithoutFormsPermission(supabase, isRead !== undefined ? "view" : "edit");
     if (denied) return denied;
   }
 
-  const body = await req.json().catch(() => ({}));
-  const { id, isRead } = body as { id?: string; isRead?: boolean };
-  if (!id || typeof isRead !== "boolean") {
-    return NextResponse.json({ error: "id and isRead are required" }, { status: 400 });
-  }
+  const patch: Record<string, unknown> =
+    isRead !== undefined
+      ? { is_read: isRead }
+      : status !== undefined
+        ? { status }
+        : { deleted_at: new Date().toISOString() };
 
-  const { error } = await db
+  const { data, error } = await db
     .from("crm_form_responses")
-    .update({ is_read: isRead })
+    .update(patch)
     .eq("id", id)
-    .eq("org_id", profile.org_id);
+    .eq("org_id", profile.org_id)
+    .is("deleted_at", null)
+    .select("id");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data || data.length === 0) return NextResponse.json({ error: "Response not found" }, { status: 404 });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, deleted: remove === true });
 }

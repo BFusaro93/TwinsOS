@@ -31,6 +31,20 @@ interface ResolvedEmailContent {
 }
 
 
+/**
+ * Email Category (EmailEventDialog) decides which suppression rules apply.
+ * `transactional` and `reminder` are service messages: they still go to a
+ * client who set do_not_market (that flag is a MARKETING preference). Every
+ * other category (general, marketing, follow_up, unset/unknown) is treated as
+ * marketing and respects do_not_market — the conservative default, since
+ * existing steps were all created as "general" and always honored it.
+ * email_bounced_at (dead address) and ok_to_email=false block every category.
+ */
+const SERVICE_EMAIL_CATEGORIES: ReadonlySet<string> = new Set(["transactional", "reminder"]);
+export function isMarketingEmailCategory(category: string | null | undefined): boolean {
+  return !SERVICE_EMAIL_CATEGORIES.has((category ?? "").toLowerCase());
+}
+
 /** Resolves an email step's `to`/`from` selections and [mergetag] placeholders against the client/org/estimate context. */
 export async function resolveEmailStepContent(
   supabase: AnyClient,
@@ -45,19 +59,23 @@ export async function resolveEmailStepContent(
     fromSelection?: string;
     /** Only populated for `credit_card_about_to_expire` enrollments — see fetchCardExpiryContext. */
     cardExpiryContext?: CardExpiryContext | null;
+    /** The step's Email Category; see isMarketingEmailCategory. */
+    category?: string | null;
   }
 ): Promise<ResolvedEmailContent | { error: string }> {
   const loaded = await loadAutomationClient(supabase, { orgId: params.orgId, clientId: params.clientId });
   if (!loaded) return { error: "client not found" };
   const { client, orgName: loadedOrgName } = loaded;
   // Same opt-out flag Sales Campaigns checks before sending — a client who
-  // used the unsubscribe link should stop getting automation emails too,
-  // not just campaign blasts.
-  if (client.do_not_market) return { error: "client has opted out of marketing emails (do_not_market)" };
+  // used the unsubscribe link should stop getting MARKETING automation emails
+  // too, not just campaign blasts. Service-category steps (transactional,
+  // reminder) are exempt: do_not_market is a marketing preference only.
+  if (isMarketingEmailCategory(params.category) && client.do_not_market) {
+    return { error: "client has opted out of marketing emails (do_not_market)" };
+  }
   // clients.ok_to_email is the per-client "OK to Email" preference (ClientsTable
-  // / API v1). Automations here have no service-vs-marketing purpose flag and
-  // already honor do_not_market for every step, so they honor ok_to_email the
-  // same way; transactional notices (invoice/estimate/receipt emails) go
+  // / API v1). It is a general "don't email me" switch, so it blocks every
+  // category; transactional notices (invoice/estimate/receipt emails) go
   // through their own routes and are unaffected.
   if (client.ok_to_email === false) return { error: "client is marked not OK to email (ok_to_email)" };
   // Separate from the opt-out: the address itself hard-bounced. The Resend
@@ -241,6 +259,8 @@ export async function sendResolvedSequenceEmail(
     replyTo?: string | null;
     subject: string;
     bodyHtml: string;
+    /** Marketing-category emails get the CAN-SPAM footer + one-click unsubscribe; service emails don't (default true). */
+    marketing?: boolean;
   }
 ): Promise<{ ok: true; resendId: string | null } | { ok: false; reason: string; permanent?: boolean }> {
   const resendKey = process.env.RESEND_API_KEY;
@@ -265,7 +285,7 @@ export async function sendResolvedSequenceEmail(
   // recipient's only way out is replying (and `email.complained` is the result).
   let html = params.bodyHtml;
   let unsubscribeUrl: string | null = null;
-  if (params.clientId) {
+  if (params.clientId && params.marketing !== false) {
     const [{ data: tokenRow }, { data: orgRow }] = await Promise.all([
       supabase.from("clients").select("unsubscribe_token").eq("id", params.clientId).maybeSingle(),
       supabase.from("organizations").select("name, address").eq("id", params.orgId).maybeSingle(),

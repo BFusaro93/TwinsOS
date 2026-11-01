@@ -45,6 +45,7 @@ import {
   BOOLEAN_CONDITION_FIELDS,
   DAY_COUNT_CONDITION_FIELDS,
 } from "@/lib/automations/condition-fields";
+import { conditionRecordKind, type ConditionRecordKind } from "@/lib/automations/condition-applicability";
 import type { ConditionField, ConditionOperator } from "@/types/crm-automations";
 import type { MultiSelectOption } from "@/components/shared/MultiSelectDropdown";
 
@@ -62,6 +63,12 @@ interface Props {
   emptyLabel?: string;
   addLabel?: string;
   defaultField?: ConditionField;
+  /**
+   * Record kinds (estimate / invoice / ticket) that exist for the trigger(s)
+   * this list belongs to. Condition groups for a missing kind are hidden —
+   * they could never be true — with a hint. null/omitted = offer everything.
+   */
+  availableRecordKinds?: ReadonlySet<ConditionRecordKind> | null;
 }
 
 /**
@@ -77,6 +84,7 @@ export function ConditionListEditor({
   emptyLabel = "No conditions configured.",
   addLabel = "Add Condition",
   defaultField = "client_lead_status",
+  availableRecordKinds = null,
 }: Props) {
   const orgTags = useOrgTags();
   const { data: services } = useCRMServices();
@@ -107,6 +115,10 @@ export function ConditionListEditor({
     return null;
   }
 
+  const kindOfGroup = (label: string): ConditionRecordKind | null =>
+    label === "Estimate" ? "estimate" : label === "Invoice" ? "invoice" : label === "Ticket" ? "ticket" : null;
+  const hiddenKinds = (["estimate", "invoice", "ticket"] as const).filter((k) => availableRecordKinds && !availableRecordKinds.has(k));
+
   function addCondition() {
     onChange([...conditions, { field: defaultField, operator: "equals", value: "" }]);
   }
@@ -135,6 +147,13 @@ export function ConditionListEditor({
 
       {conditions.length === 0 && <p className="text-sm text-slate-400 dark:text-neutral-500 italic">{emptyLabel}</p>}
 
+      {hiddenKinds.length > 0 && (
+        <p className="text-[11px] text-slate-400 dark:text-neutral-500">
+          {hiddenKinds.map((k) => k[0].toUpperCase() + k.slice(1)).join(", ")} conditions aren&apos;t offered here: the trigger(s) above
+          don&apos;t come with a linked {hiddenKinds.join("/")} record, so they could never match.
+        </p>
+      )}
+
       {conditions.map((c, i) => (
         <div key={i} className="flex items-start gap-2">
           {i > 0 && (
@@ -147,7 +166,12 @@ export function ConditionListEditor({
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="max-h-72">
-              {CONDITION_GROUPS.map((group) => (
+              {CONDITION_GROUPS.filter((group) => {
+                const kind = kindOfGroup(group.label);
+                // Hide groups that can't apply — but never one that this row (or
+                // any saved row) already uses, so existing rules stay editable.
+                return !kind || !availableRecordKinds || availableRecordKinds.has(kind) || conditions.some((r) => conditionRecordKind(r.field) === kind);
+              }).map((group) => (
                 <SelectGroup key={group.label}>
                   <SelectLabel>{group.label}</SelectLabel>
                   {group.items.map((item) => (

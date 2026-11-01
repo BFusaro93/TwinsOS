@@ -7,6 +7,7 @@ import {
 } from "./custom-field-condition";
 import { isZapierTriggerType, notifyZapierSubscribers } from "@/lib/integrations/zapier";
 import { logger } from "@/lib/logger";
+import { conditionRecordKind } from "./condition-applicability";
 
 const log = logger.child("sequence-enrollment");
 
@@ -598,6 +599,22 @@ export async function evaluateConditionSet(
   const csvValues = (v: string | null) => (v ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
   const results = conditions.map((c) => {
+    // A condition on an estimate/invoice/ticket needs that record, which only
+    // the matching trigger families supply. With no such record in play (e.g.
+    // an "Estimate stage" condition on a "Visit completed" trigger) the answer
+    // can never be true. We fail CLOSED rather than ignoring the row: ignoring
+    // it would let a start condition that was meant to gate sends become a
+    // no-op and enroll every client. So a start condition never enrolls and a
+    // stop condition never stops — the same as before — but it is now logged,
+    // and the builder no longer offers these combinations (see
+    // condition-applicability.ts / ConditionListEditor).
+    const recordKind = conditionRecordKind(c.field);
+    if (recordKind && !(recordKind === "estimate" ? estimateId : recordKind === "invoice" ? invoiceId : ticketId)) {
+      log.warn("condition not applicable to this trigger (no linked record); evaluated as not met", {
+        field: c.field, recordKind, join,
+      });
+      return false;
+    }
     if (c.field === "custom_field") {
       const decoded = decodeCustomFieldCondition(c.value);
       if (!decoded || !customFieldFacts) return false;

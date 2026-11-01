@@ -241,6 +241,130 @@ export function useDeleteAutomation() {
   });
 }
 
+/**
+ * Duplicates an automation — its sequences (entry/re-entry settings), steps
+ * (including IF-branch nesting and per-step active flag), start triggers with
+ * their conditions, and stop conditions — as "<name> (Copy)". The copy is
+ * created DISABLED so nothing starts enrolling or sending until the user
+ * reviews and turns it on. org_id comes from column defaults (my_org_id()) like
+ * every other create here. If any step fails, the half-built copy is
+ * soft-deleted again so no partial automation is left behind.
+ */
+export function useCopyAutomation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (sourceId: string): Promise<CRMAutomation> => {
+      const supabase = db();
+      const { data: src, error: srcErr } = await supabase
+        .from("crm_automations").select("*").eq("id", sourceId).is("deleted_at", null).single();
+      if (srcErr) throw srcErr;
+      const { data: seqRows, error: seqErr } = await supabase
+        .from("crm_automation_sequences").select("*").eq("automation_id", sourceId).is("deleted_at", null).order("position");
+      if (seqErr) throw seqErr;
+
+      const { data: created, error: createErr } = await supabase
+        .from("crm_automations")
+        .insert({ name: `${src.name} (Copy)`, description: src.description ?? null, is_active: false })
+        .select()
+        .single();
+      if (createErr) throw createErr;
+      const copy = mapAutomation(created);
+
+      try {
+        for (const seq of (seqRows ?? []) as Record<string, unknown>[]) {
+          const seqId = seq.id as string;
+          const { data: newSeq, error: newSeqErr } = await supabase
+            .from("crm_automation_sequences")
+            .insert({
+              automation_id: copy.id,
+              name: seq.name,
+              description: seq.description ?? null,
+              position: seq.position ?? 0,
+              restrict_entry_to: seq.restrict_entry_to,
+              allow_reentry: seq.allow_reentry,
+              reentry_after_minutes: seq.reentry_after_minutes,
+              is_active: seq.is_active,
+            })
+            .select("id")
+            .single();
+          if (newSeqErr) throw newSeqErr;
+
+          // Triggers + their gating conditions.
+          const { data: trigRows, error: trigErr } = await supabase
+            .from("crm_sequence_triggers").select("id, trigger_type, position, config").eq("sequence_id", seqId).order("position");
+          if (trigErr) throw trigErr;
+          for (const t of (trigRows ?? []) as { id: string; trigger_type: string; position: number; config: unknown }[]) {
+            const { data: newTrig, error: newTrigErr } = await supabase
+              .from("crm_sequence_triggers")
+              .insert({ sequence_id: newSeq.id, trigger_type: t.trigger_type, position: t.position, config: t.config ?? {} })
+              .select("id")
+              .single();
+            if (newTrigErr) throw newTrigErr;
+            const { data: condRows, error: condErr } = await supabase
+              .from("crm_sequence_trigger_conditions").select("condition_group, field, operator, value").eq("trigger_id", t.id);
+            if (condErr) throw condErr;
+            if ((condRows ?? []).length > 0) {
+              const { error: insCondErr } = await supabase.from("crm_sequence_trigger_conditions").insert(
+                (condRows as { condition_group: number; field: string; operator: string; value: string | null }[]).map((c) => ({
+                  trigger_id: newTrig.id, condition_group: c.condition_group, field: c.field, operator: c.operator, value: c.value,
+                }))
+              );
+              if (insCondErr) throw insCondErr;
+            }
+          }
+
+          // Stop conditions.
+          const { data: stopRows, error: stopErr } = await supabase
+            .from("crm_sequence_stop_conditions").select("field, operator, value").eq("sequence_id", seqId);
+          if (stopErr) throw stopErr;
+          if ((stopRows ?? []).length > 0) {
+            const { error: insStopErr } = await supabase.from("crm_sequence_stop_conditions").insert(
+              (stopRows as { field: string; operator: string; value: string | null }[]).map((c) => ({
+                sequence_id: newSeq.id, field: c.field, operator: c.operator, value: c.value,
+              }))
+            );
+            if (insStopErr) throw insStopErr;
+          }
+
+          // Steps, in position order through the same RPC every other step
+          // creation uses (which assigns positions server-side). Parents always
+          // precede their children, so the old->new id map is filled in time.
+          const { data: eventRows, error: evErr } = await supabase
+            .from("crm_sequence_events")
+            .select("id, event_type, config, parent_event_id, is_active")
+            .eq("sequence_id", seqId)
+            .is("deleted_at", null)
+            .order("position");
+          if (evErr) throw evErr;
+          const idMap = new Map<string, string>();
+          for (const e of (eventRows ?? []) as { id: string; event_type: string; config: unknown; parent_event_id: string | null; is_active: boolean }[]) {
+            const { data: newEv, error: newEvErr } = await supabase.rpc("crm_insert_sequence_event", {
+              p_sequence_id: newSeq.id,
+              p_event_type: e.event_type,
+              p_config: e.config ?? {},
+              p_parent_event_id: e.parent_event_id ? idMap.get(e.parent_event_id) ?? null : null,
+            });
+            if (newEvErr) throw newEvErr;
+            idMap.set(e.id, (newEv as { id: string }).id);
+            if (e.is_active === false) {
+              const { error: offErr } = await supabase.from("crm_sequence_events").update({ is_active: false }).eq("id", (newEv as { id: string }).id);
+              if (offErr) throw offErr;
+            }
+          }
+        }
+      } catch (err) {
+        // Don't leave a half-built copy behind.
+        await supabase.from("crm_automations").update({ deleted_at: new Date().toISOString(), is_active: false }).eq("id", copy.id);
+        throw err;
+      }
+      return copy;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-automations"] });
+    },
+  });
+}
+
 // ── sequences ─────────────────────────────────────────────────────────────────
 
 export function useSequences(automationId: string) {

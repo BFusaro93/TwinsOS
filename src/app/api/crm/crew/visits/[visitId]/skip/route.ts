@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
 import { closeStopPunches } from "@/lib/crew/stop-punches";
 import { createServiceClient } from "@/lib/supabase/server";
+import { fireVisitTriggers } from "@/lib/automations/fire-visit-triggers";
 
 const log = logger.child("crew/skip");
 
@@ -28,7 +29,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
-    .select("org_id, crew_group_id, crew_id, crew_unassigned, client_id, job_id, scheduled_date, status, clocked_in_at, crm_jobs(crew_id)")
+    .select("org_id, crew_group_id, crew_id, crew_unassigned, client_id, job_id, job_service_id, scheduled_date, status, clocked_in_at, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -154,6 +155,18 @@ export async function POST(
     });
     if (actErr) log.error("activity insert failed", { visitId, error: actErr.message });
   }
+
+  // visit_skipped automations. The dispatch board fires this from the browser
+  // (useUpdateVisitStatus); the crew app's skip never did. Only reachable on the
+  // real transition (guards above return early for already-skipped visits), so a
+  // retried request can't double-fire. Crew accounts have no RLS access to some
+  // automation tables, so this runs under the service client (ownership and org
+  // were proven above; org_id comes from the visit row, not the request).
+  await fireVisitTriggers(createServiceClient(), {
+    orgId: existing.org_id,
+    triggerTypes: ["visit_skipped"],
+    visits: [{ client_id: existing.client_id, job_id: existing.job_id, job_service_id: existing.job_service_id ?? null }],
+  });
 
   return NextResponse.json(data);
 }
