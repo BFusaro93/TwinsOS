@@ -475,6 +475,14 @@ export function EstimatingGuide() {
           <strong>Visits</strong>, <strong>Quantities</strong>, and <strong>Units</strong> are now
           three separate toggles for what shows on each line, on the page and the PDF.
         </p>
+        <p>
+          <strong>Where an estimate&rsquo;s toggles come from.</strong> They are copied onto the estimate
+          when it is created or when you pick an Estimate Document or apply a bundle: the
+          document&rsquo;s toggles win over the bundle&rsquo;s, and the bundle&rsquo;s win over the org
+          default. If you changed the toggles on the <strong>Client View</strong> tab yourself and then
+          switch document or apply a bundle, you are asked whether to <strong>Replace toggles</strong> or{" "}
+          <strong>Keep mine</strong>. See Documents &amp; Email Templates for the full rules.
+        </p>
         <Callout>
           The <strong>Send</strong> dialog&rsquo;s Preview tab renders the real proposal URL behind the
           &ldquo;View Your Proposal&rdquo; button when the estimate already has a live link, so you

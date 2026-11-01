@@ -38,6 +38,19 @@ export function toDisplaySettings(raw: unknown): DisplaySettings {
   };
 }
 
+export function displaySettingsEqual(a: DisplaySettings, b: DisplaySettings): boolean {
+  return (Object.keys(DEFAULT_DISPLAY_SETTINGS) as (keyof DisplaySettings)[]).every((k) => a[k] === b[k]);
+}
+
+/**
+ * True when an estimate's toggles were changed by hand: they differ from what was
+ * last copied onto it (the baseline). Estimates that predate the baseline are
+ * compared with the built-in defaults.
+ */
+export function hasHandSetDisplaySettings(current: DisplaySettings, baseline: DisplaySettings | null | undefined): boolean {
+  return !displaySettingsEqual(current, baseline ?? DEFAULT_DISPLAY_SETTINGS);
+}
+
 /**
  * Org-wide fallback for a brand-new estimate with no template selected — set
  * on the Settings > Estimates > Client View tab, stored the same way as

@@ -12,12 +12,14 @@ import { complexityFactor } from "@/lib/estimate-calc";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { addParagraphSpacing, resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import { escapeHtml } from "@/lib/utils/escape-html";
+import { buildEstimateGridHtml } from "@/lib/estimates/estimate-grid-html";
 import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
-import { loadLiveProposalContent } from "@/lib/estimates/proposal-content";
+import { loadLiveProposalContent, withProposalDocument } from "@/lib/estimates/proposal-content";
+import { resolveEstimateDocument } from "@/lib/estimates/resolve-estimate-document";
 import { insertEstimateVersion } from "@/lib/estimates/versions";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { embedEstimatePhoto } from "@/lib/estimate-photo-embed";
@@ -26,37 +28,6 @@ const log = logger.child("send-estimate");
 
 function fmtCents(cents: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
-}
-
-// Builds the [estimategrid] merge tag's value — an HTML table of the
-// estimate's line items, the same rows the attached PDF prints (see
-// pdfLineItems below). Registered as HTML-safe in document-template-renderer
-// so it isn't double-escaped when substituted into the email body.
-function buildEstimateGridHtml(lineItems: EstimatePDFLineItem[]): string {
-  if (lineItems.length === 0) return "";
-  const rows = lineItems.map((li) => {
-    if (li.rowType === "section") {
-      return `<tr><td colspan="3" style="padding:10px 4px 4px;font-weight:700;border-bottom:1px solid #e2e8f0">${escapeHtml(li.sectionName ?? "")}</td></tr>`;
-    }
-    const desc = escapeHtml(li.serviceName || li.estimateDesc || "");
-    return `<tr>
-      <td style="padding:6px 4px;border-bottom:1px solid #f1f5f9">${desc}</td>
-      <td style="padding:6px 4px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap">${li.qty}${li.unitType ? " " + escapeHtml(li.unitType) : ""}</td>
-      <td style="padding:6px 4px;border-bottom:1px solid #f1f5f9;text-align:right;white-space:nowrap">${fmtCents(li.totalCents)}</td>
-    </tr>${(li.subitems ?? []).map((sub) => `<tr>
-      <td style="padding:2px 4px 2px 20px;border-bottom:1px solid #f8fafc;color:#64748b;font-size:12px">${escapeHtml(sub.name)}</td>
-      <td style="padding:2px 4px;border-bottom:1px solid #f8fafc;color:#64748b;font-size:12px;text-align:right;white-space:nowrap">${sub.qty}</td>
-      <td style="padding:2px 4px;border-bottom:1px solid #f8fafc;color:#64748b;font-size:12px;text-align:right;white-space:nowrap">${fmtCents(sub.totalCents)}</td>
-    </tr>`).join("")}`;
-  }).join("");
-  return `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
-    <thead><tr style="text-align:left;border-bottom:2px solid #e2e8f0">
-      <th style="padding:6px 4px">Description</th>
-      <th style="padding:6px 4px;text-align:right">Qty</th>
-      <th style="padding:6px 4px;text-align:right">Total</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
 }
 
 // [installmentcount] / [installmentamount] — count and per-installment amount
@@ -501,6 +472,9 @@ export async function POST(
   // Skipped for a view-only resend: publishing a new version would change
   // what the (already decided) proposal link shows.
   const proposalContent = opensForAcceptance ? await loadLiveProposalContent(supabase, estimateId) : null;
+  // The estimate document (proposal layout) in force at send time, recorded so
+  // the version shows which layout the client was sent. Null = built-in layout.
+  const sentEstimateDoc = opensForAcceptance ? await resolveEstimateDocument(supabase, estimateId) : null;
   if (opensForAcceptance) await insertEstimateVersion(supabase, {
     org_id: est.org_id,
     estimate_id: estimateId,
@@ -534,7 +508,8 @@ export async function POST(
         rowType: li.row_type ?? "item",
         sectionName: li.section_name,
       })),
-      proposal: proposalContent,
+      estimateDocumentId: sentEstimateDoc?.id ?? null,
+      proposal: proposalContent && withProposalDocument(proposalContent, sentEstimateDoc),
     },
   }).catch((err: unknown) => {
     log.error("failed to record sent version", { estimateId, error: err instanceof Error ? err.message : String(err) });

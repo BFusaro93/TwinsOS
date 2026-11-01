@@ -9,6 +9,9 @@ import {
   useCreateTicket,
   useUpdateTicket,
   useBulkImportTickets,
+  useDeletedTickets,
+  useDeleteTicket,
+  useRestoreTicket,
 } from "@/lib/hooks/use-tickets";
 import { useClients } from "@/lib/hooks/use-clients";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
@@ -46,7 +49,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Plus, RotateCcw, Search, Ticket as TicketIcon, UserCheck, X } from "lucide-react";
+import { ChevronDown, Plus, RotateCcw, Trash2, Undo2, Search, Ticket as TicketIcon, UserCheck, X } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
@@ -58,6 +61,16 @@ import type {
   TicketPriority,
   NewTicketFormValues,
 } from "@/types/crm-tickets";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { DateRangeFilter } from "@/components/shared/DateRangeFilter";
 import { inDateRange } from "@/lib/utils/column-filters";
@@ -492,7 +505,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
 
   // ?status=open — dashboard deep-links (My Day's "Open Tickets" card).
   const urlStatus = useSearchParams().get("status");
-  const [statusFilter, setStatusFilter] = useState<TicketStatus | "all">(() =>
+  const [statusFilter, setStatusFilter] = useState<TicketStatus | "all" | "deleted">(() =>
     STATUS_TABS.some((t) => t.value === urlStatus) ? (urlStatus as TicketStatus) : "all"
   );
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | "all">("all");
@@ -510,10 +523,17 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
   const users = (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() }));
 
   const { data: tickets, isLoading, refetch } = useTickets({ clientId });
+  const isDeletedView = statusFilter === "deleted";
+  const { data: deletedTickets, isLoading: deletedLoading } = useDeletedTickets({ clientId, enabled: isDeletedView });
   const updateTicket = useUpdateTicket();
+  const deleteTicket = useDeleteTicket();
+  const restoreTicket = useRestoreTicket();
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const { mutateAsync: bulkImportTickets } = useBulkImportTickets();
 
-  const all = tickets ?? [];
+  const activeAll = tickets ?? [];
+  // The "Deleted" view lists soft-deleted tickets; every other view excludes them.
+  const all = isDeletedView ? (deletedTickets ?? []) : activeAll;
   const selectedTicket = selectedTicketId ? all.find((t) => t.id === selectedTicketId) ?? null : null;
 
   // Deep-link support: /crm/tickets?open=<ticketId> auto-opens the ticket's
@@ -533,7 +553,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
     weekStart.setDate(now.getDate() - now.getDay());
     weekStart.setHours(0, 0, 0, 0);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const typeFiltered = typeFilter ? all.filter((t) => t.type === typeFilter) : all;
+    const typeFiltered = typeFilter ? activeAll.filter((t) => t.type === typeFilter) : activeAll;
     return {
       open:      typeFiltered.filter((t) => t.status === "open").length,
       on_hold:   typeFiltered.filter((t) => t.status === "on_hold").length,
@@ -544,17 +564,19 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       thisMonth: typeFiltered.filter((t) => t.createdAt && new Date(t.createdAt) >= monthStart).length,
       typeTotal: typeFiltered.length,
     };
-  }, [all, typeFilter]);
+  }, [activeAll, typeFilter]);
 
-  const STATUS_QUICK: Array<{ key: TicketStatus | "all"; label: string }> = [
+  const STATUS_QUICK: Array<{ key: TicketStatus | "all" | "deleted"; label: string }> = [
     { key: "all",     label: "All" },
     { key: "open",    label: "Open" },
     { key: "on_hold", label: "On Hold" },
     { key: "pending", label: "Pending" },
     { key: "closed",  label: "Closed" },
+    { key: "deleted", label: "Deleted" },
   ];
 
-  const quickCounts: Record<TicketStatus | "all", number> = {
+  const quickCounts: Record<TicketStatus | "all" | "deleted", number> = {
+    deleted: 0,
     all:     stats.total,
     open:    stats.open,
     on_hold: stats.on_hold,
@@ -565,7 +587,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
   const filtered = useMemo(() => {
     let list = all;
     if (typeFilter) list = list.filter((t) => t.type === typeFilter);
-    if (statusFilter !== "all") list = list.filter((t) => t.status === statusFilter);
+    if (statusFilter !== "all" && statusFilter !== "deleted") list = list.filter((t) => t.status === statusFilter);
     if (priorityFilter !== "all") list = list.filter((t) => t.priority === priorityFilter);
     if (categoryFilter !== "all") list = list.filter((t) => t.category === categoryFilter);
 
@@ -626,6 +648,29 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
     const failed = results.length - succeeded;
     if (succeeded > 0) toast.success(`${succeeded} ticket${succeeded !== 1 ? "s" : ""} marked ${status}`);
     if (failed > 0) toast.error(`Failed to update ${failed} ticket${failed !== 1 ? "s" : ""}`);
+    setSelectedIds(new Set());
+  }
+
+  async function bulkDelete() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const results = await Promise.allSettled(ids.map((id) => deleteTicket.mutateAsync(id)));
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) toast.success(`${succeeded} ticket${succeeded !== 1 ? "s" : ""} deleted`);
+    if (failed > 0) toast.error(`Failed to delete ${failed} ticket${failed !== 1 ? "s" : ""}`);
+    setSelectedIds(new Set());
+    setBulkDeleteOpen(false);
+  }
+
+  async function bulkRestore() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    const results = await Promise.allSettled(ids.map((id) => restoreTicket.mutateAsync(id)));
+    const succeeded = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) toast.success(`${succeeded} ticket${succeeded !== 1 ? "s" : ""} restored`);
+    if (failed > 0) toast.error(`Failed to restore ${failed} ticket${failed !== 1 ? "s" : ""}`);
     setSelectedIds(new Set());
   }
 
@@ -832,6 +877,12 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                   <DropdownMenuSeparator />
                 </>
               )}
+              {isDeletedView ? (
+                <DropdownMenuItem disabled={!someSelected} onSelect={bulkRestore}>
+                  <Undo2 className="mr-2 h-3.5 w-3.5" />
+                  Restore
+                </DropdownMenuItem>
+              ) : (<>
               <DropdownMenuItem
                 disabled={!someSelected}
                 onSelect={() => bulkSetStatus("open")}
@@ -864,6 +915,16 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                 <UserCheck className="mr-2 h-3.5 w-3.5" />
                 Reassign
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!someSelected}
+                className="text-red-600 focus:text-red-600"
+                onSelect={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                Delete
+              </DropdownMenuItem>
+              </>)}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -881,7 +942,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
             {STATUS_QUICK.map(({ key, label }) => (
               <button
                 key={key}
-                onClick={() => setStatusFilter(key)}
+                onClick={() => { if (key === "deleted" || isDeletedView) setSelectedIds(new Set()); setStatusFilter(key); }}
                 className={cn(
                   "flex items-center gap-1 rounded px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap",
                   statusFilter === key
@@ -890,7 +951,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
                 )}
               >
                 {label}
-                {quickCounts[key] > 0 && (
+                {key !== "deleted" && quickCounts[key] > 0 && (
                   <span className={cn(
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
                     statusFilter === key ? "bg-slate-200 dark:bg-neutral-700 text-slate-700 dark:text-neutral-300" : "bg-white/20 text-white"
@@ -938,7 +999,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
             </tr>
           </thead>
           <tbody>
-            {isLoading ? (
+            {(isDeletedView ? deletedLoading : isLoading) ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b">
                   {Array.from({ length: colCount }).map((__, j) => (
@@ -1014,6 +1075,23 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
         ticket={selectedTicket}
         onClose={() => setSelectedTicketId(null)}
       />
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} ticket{selectedIds.size !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              They will be removed from the list. You can bring them back from the Deleted view.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={bulkDelete} disabled={deleteTicket.isPending}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Reassign dialog */}
       {reassignOpen && (

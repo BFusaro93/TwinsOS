@@ -1,4 +1,4 @@
-import { TABLE_STYLE, TD_STYLE, TH_STYLE } from "@/lib/utils/sanitize-html";
+import { TABLE_STYLE, TD_STYLE, TH_STYLE, sanitizeHtml } from "@/lib/utils/sanitize-html";
 import type { BlockType } from "@/types/crm-documents";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { stripHtml } from "@/lib/utils/strip-html";
@@ -86,6 +86,9 @@ export function resolveSubjectMergeTags(template: string, vars: Record<string, s
 
 // Sample values used for preview + test emails, where no real client/estimate
 // record is attached yet. Keyed to match the tags defined in crm-documents.ts.
+const SAMPLE_GRID_HTML =
+  '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px"><thead><tr style="text-align:left;border-bottom:2px solid #e2e8f0"><th style="padding:6px 4px">Description</th><th style="padding:6px 4px;text-align:right">Qty</th><th style="padding:6px 4px;text-align:right">Total</th></tr></thead><tbody><tr><td style="padding:6px 4px;border-bottom:1px solid #f1f5f9">Sample service</td><td style="padding:6px 4px;border-bottom:1px solid #f1f5f9;text-align:right">1</td><td style="padding:6px 4px;border-bottom:1px solid #f1f5f9;text-align:right">$1,250.00</td></tr></tbody></table>';
+
 export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   // Client
   "[clientname]": "Jane Homeowner",
@@ -144,7 +147,7 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[estimatelinkurl]": "https://example.com/proposal/sample",
   "[installmentcount]": "1",
   "[installmentamount]": "$1,325.00",
-  "[estimategrid]": "",
+  "[estimategrid]": SAMPLE_GRID_HTML,
   // Invoice
   "[invoicenumber]": "00042",
   "[invoicedate]": new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
@@ -155,12 +158,25 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[invoicebalance]": "$1,325.00",
   "[viewinvoiceonline]": "https://example.com/invoice/sample",
   "[paymentlink]": '<a href="#" style="color:#fff;background:#60ab45;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">Pay Now</a>',
-  "[invoicegrid]": "",
+  "[invoicegrid]": SAMPLE_GRID_HTML,
 };
 
 export const KNOWN_MERGE_TAG_KEYS = new Set(Object.keys(SAMPLE_MERGE_VALUES));
 
 // ── Block → HTML rendering (shared by preview + send-test-email) ────────────
+
+/** Options shared by the block renderers.
+ *  - preserveUnresolvedKnownTags: keep unresolved known tags literal (editable drafts).
+ *  - sanitize: run author-written block HTML through sanitizeHtml BEFORE merge-tag
+ *    substitution and only accept https/data-image image sources. For output shown
+ *    on a public page; merge values are still escaped (or are server-built HTML-safe
+ *    fragments), so nothing author-controlled reaches the page unsanitized.
+ *  - fullWidth: don't cap the wrapper at the 600px email width. */
+export interface RenderOptions {
+  preserveUnresolvedKnownTags?: boolean;
+  sanitize?: boolean;
+  fullWidth?: boolean;
+}
 
 export interface RenderableBlock {
   blockType: BlockType;
@@ -264,11 +280,11 @@ export function serializeColumnsContent(content: ColumnsContent): string {
 function renderColumnsBlock(
   raw: string | null,
   mergeVars: Record<string, string>,
-  options?: { preserveUnresolvedKnownTags?: boolean }
+  options?: RenderOptions
 ): string {
   const { count, columns } = parseColumnsContent(raw);
   const cells = columns.slice(0, count).map((html) => {
-    const resolved = html ? resolveMergeTags(html, mergeVars, options) : "";
+    const resolved = html ? resolveMergeTags(options?.sanitize ? sanitizeHtml(html) : html, mergeVars, options) : "";
     return addParagraphSpacing(resolved);
   });
   if (cells.every((c) => c.trim().length === 0)) return "";
@@ -289,10 +305,10 @@ function renderColumnsBlock(
 export function renderBlocksToHtml(
   blocks: RenderableBlock[],
   mergeVars: Record<string, string>,
-  options?: { preserveUnresolvedKnownTags?: boolean }
+  options?: RenderOptions
 ): string {
   const rows = blocks.map((block) => renderBlock(block, mergeVars, options)).join("\n");
-  return `<div style="max-width:600px;margin:0 auto;font-family:Verdana,Arial,sans-serif;color:#1e293b;">${rows}</div>`;
+  return `<div style="max-width:${options?.fullWidth ? "100%" : "600px"};margin:0 auto;font-family:Verdana,Arial,sans-serif;color:#1e293b;">${rows}</div>`;
 }
 
 // Plain-text rendering for SMS (`text_message` doc type) — the builder
@@ -307,15 +323,39 @@ export function renderBlocksToPlainText(blocks: RenderableBlock[]): string {
     .join("\n\n");
 }
 
+/** Image block source for sanitized (public) output: https or an inline raster data URI. */
+function isSafeImageSrc(src: string): boolean {
+  return /^https:\/\//i.test(src) || /^data:image\/(png|jpe?g|gif|webp);base64,[a-z0-9+/=]+$/i.test(src);
+}
+
 function renderBlock(
   block: RenderableBlock,
   mergeVars: Record<string, string>,
-  options?: { preserveUnresolvedKnownTags?: boolean }
+  options?: RenderOptions
 ): string {
   if (block.blockType === "columns") {
     return renderColumnsBlock(block.content, mergeVars, options);
   }
-  const content = block.content ? resolveMergeTags(block.content, mergeVars, options) : "";
+  // A paragraph that is only a grid tag, for a grid that resolved empty (no line
+  // items), would leave a blank gap — drop the whole block instead.
+  if (block.blockType === "paragraph" && block.content) {
+    const only = stripHtml(block.content).trim();
+    if ((only === "[estimategrid]" || only === "[invoicegrid]") && mergeVars[only] === "") return "";
+  }
+  // The estimate grid is dynamic content: the estimate's line-items table. A real
+  // estimate with no lines resolves it to "" (drop the block, no gap); a missing
+  // key is a preview with no estimate attached, so show a labelled sample.
+  if (block.blockType === "estimate_grid") {
+    const grid = mergeVars["[estimategrid]"];
+    if (grid === "") return "";
+    if (grid) return wrap(grid, "margin-bottom:16px;");
+    return wrap(
+      `<div style="font-size:11px;color:#94a3b8;text-align:center;margin-bottom:6px;">Estimate grid (sample) — the estimate's line items replace this when sent</div>${SAMPLE_GRID_HTML}`,
+      "border:1px dashed #cbd5e1;background:#f8fafc;padding:12px;margin-bottom:16px;"
+    );
+  }
+  const rawContent = block.content && options?.sanitize && block.blockType !== "image" ? sanitizeHtml(block.content) : block.content;
+  const content = rawContent ? resolveMergeTags(rawContent, mergeVars, options) : "";
   const spacedContent = addParagraphSpacing(content);
 
   switch (block.blockType) {
@@ -337,6 +377,9 @@ function renderBlock(
     case "signature":
       return wrap(spacedContent, "font-size:13px;line-height:1.6;color:#475569;margin-top:20px;");
     case "image":
+      // Public output: an unusable image source drops the block rather than
+      // showing the editor's "[No image selected]" placeholder to a client.
+      if (options?.sanitize && !(content && isSafeImageSrc(content.replace(/&amp;/g, "&").trim()))) return "";
       return block.content
         ? wrap(
             `<img src="${escapeHtml(content)}" alt="" style="width:${imageWidthPct(block.settings)}%;max-width:100%;height:auto;display:block;margin:0 auto;" />`,

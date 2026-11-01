@@ -29,6 +29,7 @@ import { useEstimateTemplates, copyTemplateSubitemsToLine } from "@/lib/hooks/us
 import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useDocumentTemplates } from "@/lib/hooks/use-crm-documents";
 import { computeLineItem, getBreakevenRateCents } from "@/lib/estimate-calc";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { getOrgDefaultDisplaySettings } from "@/lib/estimate-display-settings";
@@ -72,6 +73,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   const { today: orgToday } = useOrgDates();
   const { data: clients }   = useClients();
   const { data: allTemplates } = useEstimateTemplates();
+  const { data: docTemplates } = useDocumentTemplates();
   // Only bundles marked for estimates (or both) belong in this picker —
   // show_when is what that setting is for.
   const templates = (allTemplates ?? []).filter((t) => t.showWhen !== "jobs");
@@ -172,7 +174,11 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
       const tpl = values.templateId && values.templateId !== "none"
         ? (templates ?? []).find((t) => t.id === values.templateId)
         : undefined;
-      const displaySettings = tpl?.displaySettings ?? getOrgDefaultDisplaySettings(orgSettings?.customizations);
+      // estimate > estimate document > bundle > org default
+      const docSettings = tpl?.documentTemplateId
+        ? (docTemplates ?? []).find((t) => t.id === tpl.documentTemplateId)?.displaySettings ?? null
+        : null;
+      const displaySettings = docSettings ?? tpl?.displaySettings ?? getOrgDefaultDisplaySettings(orgSettings?.customizations);
 
       const estimate = await createEstimate({
         clientId:       values.clientId,

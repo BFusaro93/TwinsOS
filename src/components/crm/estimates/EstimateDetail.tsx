@@ -31,6 +31,7 @@ import { CommentsSection } from "@/components/shared/CommentsSection";
 import { useEstimateTemplates, copyTemplateSubitemsToLine } from "@/lib/hooks/use-estimate-templates";
 import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
+import { useDocumentTemplates } from "@/lib/hooks/use-crm-documents";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents, computeInstallmentSchedule, resolveLineDiscountCents, tierBasis } from "@/lib/estimate-calc";
 import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
@@ -66,7 +67,22 @@ import { toast } from "sonner";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { EstimatePhotosTab } from "./EstimatePhotosTab";
-import { DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
+import {
+  DEFAULT_DISPLAY_SETTINGS,
+  displaySettingsEqual,
+  hasHandSetDisplaySettings,
+  type DisplaySettings,
+} from "@/lib/estimate-display-settings";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { EstimateDisplaySettingsPanel } from "./EstimateDisplaySettingsPanel";
 import {
   ArrowLeft,
@@ -465,6 +481,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const [saving,           setSaving]           = useState(false);
   const [recalcPending,    setRecalcPending]    = useState(false);
   const [headerEdits,      setHeaderEdits]      = useState<Record<string, string | boolean | number | null>>({});
+  // Estimate documents (proposal layouts) selectable per estimate; null = automatic.
+  const { data: allDocTemplates = [] } = useDocumentTemplates();
+  const [toggleConflict, setToggleConflict] = useState<{ resolve: (replace: boolean) => void } | null>(null);
   const effectiveClientId = (headerEdits.client_id as string) ?? estimate?.clientId ?? "";
   const { data: clientProperties } = useClientProperties(effectiveClientId);
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
@@ -518,6 +537,19 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
     // 'not_required' with no gate configured, or already 'approved'
     setSendDialogOpen(true);
+  }
+
+  // Resolves true when it is fine to copy `incoming` onto the estimate: the toggles
+  // were never changed by hand, already match, or the user chose to replace them.
+  function confirmReplaceToggles(incoming: DisplaySettings): Promise<boolean> {
+    if (
+      !estimate ||
+      displaySettingsEqual(estimate.displaySettings, incoming) ||
+      !hasHandSetDisplaySettings(estimate.displaySettings, estimate.displaySettingsBaseline)
+    ) {
+      return Promise.resolve(true);
+    }
+    return new Promise((resolve) => setToggleConflict({ resolve }));
   }
 
   function patchHeader(key: string, val: string | boolean | number | null) {
@@ -1422,6 +1454,46 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             </SelectContent>
                           </Select>
                         </FieldRow>
+                        <FieldRow label="Estimate Document">
+                          <Select
+                            value={
+                              (headerEdits.document_template_id as string | null | undefined) !== undefined
+                                ? ((headerEdits.document_template_id as string | null) ?? "auto")
+                                : (estimate.documentTemplateId ?? "auto")
+                            }
+                            onValueChange={async (v) => {
+                              const val = v === "auto" ? null : v;
+                              // The document's display toggles (if it sets any) are copied onto
+                              // the estimate: estimate > document > bundle > org default.
+                              const docSettings = val ? allDocTemplates.find((t) => t.id === val)?.displaySettings ?? null : null;
+                              patchHeader("document_template_id", val);
+                              if (docSettings && (await confirmReplaceToggles(docSettings))) {
+                                patchHeader("display_settings", { ...docSettings } as unknown as boolean);
+                                saveHeader({
+                                  ...headerEdits,
+                                  document_template_id: val,
+                                  display_settings: docSettings as unknown as boolean,
+                                  display_settings_baseline: docSettings as unknown as boolean,
+                                });
+                                toast.success("Applied this document's display settings");
+                              } else {
+                                saveHeader({ ...headerEdits, document_template_id: val });
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="auto">Automatic (default)</SelectItem>
+                              {allDocTemplates
+                                .filter((t) => t.docType === "estimate" && (t.status === "active" || t.id === estimate.documentTemplateId))
+                                .map((t) => (
+                                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                        </FieldRow>
                         <FieldRow label="Tiered Proposal">
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2 h-8">
@@ -1536,8 +1608,14 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   onValueChange={async (templateId) => {
                     if (!estimate || !templateId) return;
                     const tpl = (templates ?? []).find((t) => t.id === templateId);
+                    // The bundle's linked estimate document wins over the bundle's own toggles.
+                    const tplDocSettings = tpl?.documentTemplateId
+                      ? allDocTemplates.find((t) => t.id === tpl.documentTemplateId)?.displaySettings ?? null
+                      : null;
                     if (!tpl) return;
                     if (!tpl.items?.length && !tpl.displaySettings) { toast.info("Bundle has no items"); return; }
+                    const incomingToggles = tplDocSettings ?? tpl.displaySettings;
+                    const replaceToggles = incomingToggles ? await confirmReplaceToggles(incomingToggles) : false;
                     setSaving(true);
                     try {
                       const existingCount = (estimate.lineItems ?? []).filter((li) => !li.deletedAt).length;
@@ -1592,11 +1670,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             },
                           }).then((res) => copyTemplateSubitemsToLine(res?.id ?? "", item.subitems));
                         }),
-                        ...(tpl.displaySettings || tpl.documentTemplateId
+                        ...((replaceToggles && incomingToggles) || tpl.documentTemplateId
                           ? [updateEstimate({
                               id: estimate.id,
                               patch: {
-                                ...(tpl.displaySettings ? { display_settings: tpl.displaySettings } : {}),
+                                ...(replaceToggles && incomingToggles
+                                  ? { display_settings: incomingToggles, display_settings_baseline: incomingToggles }
+                                  : {}),
                                 ...(tpl.documentTemplateId ? { document_template_id: tpl.documentTemplateId } : {}),
                               },
                             })]
@@ -1987,6 +2067,36 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         onApply={handleBulkStatus}
         onCancel={() => setBulkStatusOpen(false)}
       />
+
+      <AlertDialog open={toggleConflict !== null}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace the client-view settings?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You changed what the client sees on this estimate (visits, quantities, prices and so on). The
+              document or bundle you chose has its own settings. Replace yours with them, or keep what you set?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                toggleConflict?.resolve(false);
+                setToggleConflict(null);
+              }}
+            >
+              Keep mine
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                toggleConflict?.resolve(true);
+                setToggleConflict(null);
+              }}
+            >
+              Replace toggles
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <SendEstimateDialog
         estimateId={estimate.id}

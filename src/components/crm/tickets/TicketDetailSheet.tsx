@@ -11,6 +11,8 @@ import {
   useAddTicketLink,
   useRemoveTicketLink,
   useDeleteTicket,
+  useRestoreTicket,
+  useTicketEmails,
   useClearSmsConsentPendingPhone,
 } from "@/lib/hooks/use-tickets";
 import { useEstimates } from "@/lib/hooks/use-estimates";
@@ -56,8 +58,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { PermissionGate } from "@/components/shared/PermissionGate";
-import { AlertTriangle, Download, FileText, Globe, Loader2, Trash2, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Download, FileText, Globe, Loader2, Mail, RotateCcw, Trash2, UserPlus, X } from "lucide-react";
+import { TicketEmailDialog } from "@/components/crm/tickets/TicketEmailDialog";
 import { toast } from "sonner";
+import type { TicketEmail } from "@/lib/hooks/use-tickets";
 import type { CRMTicket, TicketStatus, TicketPriority, TicketType, NewTicketFormValues } from "@/types/crm-tickets";
 import { escapeHtml } from "@/lib/utils/escape-html";
 
@@ -723,6 +727,43 @@ function ContributorsTab({ ticket }: { ticket: CRMTicket }) {
   );
 }
 
+// ── emails tab ────────────────────────────────────────────────────────────────
+
+function emailDeliveryStatus(e: TicketEmail): { label: string; className: string } {
+  if (e.bouncedAt) return { label: "Bounced", className: "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300" };
+  if (e.failedAt) return { label: "Failed", className: "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300" };
+  if (e.clickedAt) return { label: "Clicked", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300" };
+  if (e.openedAt) return { label: "Opened", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300" };
+  if (e.deliveredAt) return { label: "Delivered", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300" };
+  return { label: "Sent", className: "bg-slate-100 text-slate-600 dark:bg-neutral-800 dark:text-neutral-300" };
+}
+
+function EmailsTab({ ticket }: { ticket: CRMTicket }) {
+  const { data: emails, isLoading } = useTicketEmails(ticket.id);
+  if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
+  if (!emails || emails.length === 0) {
+    return <div className="p-6 text-sm text-muted-foreground">No emails have been sent from this ticket yet.</div>;
+  }
+  return (
+    <div className="space-y-2 p-6">
+      {emails.map((e) => {
+        const st = emailDeliveryStatus(e);
+        return (
+          <div key={e.id} className="rounded-md border p-3">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-sm font-medium text-slate-900 dark:text-neutral-100">{e.subject ?? "(no subject)"}</span>
+              <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase", st.className)}>{st.label}</span>
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              To {e.sentTo ?? "—"} · {new Date(e.sentAt).toLocaleString()}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── main sheet ────────────────────────────────────────────────────────────────
 
 export interface TicketDetailSheetProps {
@@ -734,6 +775,11 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
   const closeTicket = useCloseTicket();
   const updateTicket = useUpdateTicket();
   const deleteTicket = useDeleteTicket();
+  const restoreTicket = useRestoreTicket();
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  const canEmail = !permissionsLoading && can("tickets_view_modify") && can("email_activity_send");
+  const canModify = !permissionsLoading && can("tickets_view_modify");
+  const [emailOpen, setEmailOpen] = useState(false);
   const { data: contributors } = useTicketContributors(ticket?.id ?? "");
   const [editing, setEditing] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -757,6 +803,14 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
     toast.success("Ticket deleted");
   }
 
+  async function handleRestore() {
+    if (!ticket) return;
+    await restoreTicket.mutateAsync(ticket.id);
+    toast.success("Ticket restored");
+    onClose();
+  }
+
+  const isDeleted = !!ticket.deletedAt;
   const isUpdating = closeTicket.isPending || updateTicket.isPending;
   const contributorCount = (contributors ?? []).length;
 
@@ -770,6 +824,11 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
       value: "comments",
       label: "Comments & History",
       content: <div className="p-6"><CommentsSection recordType="ticket" recordId={ticket.id} /></div>,
+    },
+    {
+      value: "emails",
+      label: "Emails",
+      content: <EmailsTab ticket={ticket} />,
     },
     {
       value: "files",
@@ -813,18 +872,41 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
                 <Download className="h-3.5 w-3.5" />
                 PDF
               </Button>
-              <EditButton onClick={() => setEditing((v) => !v)} />
-              <Button variant="ghost" size="icon"
-                className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
-                onClick={() => setDeleteConfirmOpen(true)}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {isDeleted ? (
+                canModify && (
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={handleRestore} disabled={restoreTicket.isPending}>
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Restore
+                  </Button>
+                )
+              ) : (
+                <>
+                  {canEmail && (
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEmailOpen(true)}>
+                      <Mail className="h-3.5 w-3.5" />
+                      Email
+                    </Button>
+                  )}
+                  <EditButton onClick={() => setEditing((v) => !v)} />
+                  <Button variant="ghost" size="icon"
+                    className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-500 dark:hover:text-red-400"
+                    onClick={() => setDeleteConfirmOpen(true)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 
+          {isDeleted && (
+            <div className="shrink-0 border-b bg-amber-50 px-5 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              This ticket was deleted. Restore it to edit it or send email.
+            </div>
+          )}
+
           {/* Edit form or tabbed content */}
           <div className="flex-1 overflow-y-auto">
-            {editing ? (
+            {editing && !isDeleted ? (
               <EditForm
                 ticket={ticket}
                 onCancel={() => setEditing(false)}
@@ -837,12 +919,14 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
         </SheetContent>
       </Sheet>
 
+      <TicketEmailDialog ticket={ticket} open={emailOpen} onClose={() => setEmailOpen(false)} />
+
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Ticket</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>Ticket #{ticket.ticketNumber}</strong>? This cannot be undone.
+              Are you sure you want to delete <strong>Ticket #{ticket.ticketNumber}</strong>? You can bring it back from the Deleted view in the Tickets list.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

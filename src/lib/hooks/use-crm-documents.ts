@@ -11,12 +11,27 @@ import type {
   DocType,
   DocStatus,
   BlockType,
+  ConfirmationRecipient,
 } from "@/types/crm-documents";
+
+import { toDisplaySettings, type DisplaySettings } from "@/lib/estimate-display-settings";
 
 const supabase = createClient();
 
-type TemplateRow = Database["public"]["Tables"]["crm_document_templates"]["Row"];
-type TemplateUpdate = Database["public"]["Tables"]["crm_document_templates"]["Update"];
+// The estimate-settings columns arrive with migration 20261202000300 and are not
+// in the generated types until `supabase gen types` is re-run; extend locally so
+// the hooks compile either way (intersection is harmless once they exist).
+interface EstimateSettingsColumns {
+  estimate_email_document_id: string | null;
+  confirmation_document_id: string | null;
+  confirmation_recipient: string | null;
+  confirmation_include_estimate_pdf: boolean | null;
+  display_settings: unknown | null;
+}
+type TemplateRow = Database["public"]["Tables"]["crm_document_templates"]["Row"] &
+  Partial<EstimateSettingsColumns>;
+type TemplateUpdate = Database["public"]["Tables"]["crm_document_templates"]["Update"] &
+  Partial<EstimateSettingsColumns>;
 type BlockRow = Database["public"]["Tables"]["crm_document_blocks"]["Row"];
 
 // ── Row mappers ───────────────────────────────────────────────────────────────
@@ -32,6 +47,11 @@ function mapTemplate(row: TemplateRow): DocumentTemplate {
     status:      row.status as DocStatus,
     isDefault:   row.is_default,
     includePdf:  row.include_pdf,
+    estimateEmailDocumentId: row.estimate_email_document_id ?? null,
+    confirmationDocumentId:  row.confirmation_document_id ?? null,
+    confirmationRecipient:   (row.confirmation_recipient === "billing_email" ? "billing_email" : "primary_email") as ConfirmationRecipient,
+    confirmationIncludeEstimatePdf: row.confirmation_include_estimate_pdf === true,
+    displaySettings: row.display_settings ? toDisplaySettings(row.display_settings) : null,
     createdAt:   row.created_at,
     updatedAt:   row.updated_at,
   };
@@ -104,7 +124,30 @@ export function useCreateDocumentTemplate() {
       docType: DocType;
       description?: string;
       subject?: string;
+      includePdf?: boolean;
+      estimateEmailDocumentId?: string | null;
+      confirmationDocumentId?: string | null;
+      confirmationRecipient?: ConfirmationRecipient;
+      confirmationIncludeEstimatePdf?: boolean;
+      displaySettings?: DisplaySettings | null;
+      /** Optional starter blocks inserted right after the template is created. */
+      blocks?: Array<{
+        blockType: BlockType;
+        orderIndex: number;
+        content: string | null;
+        settings: Record<string, unknown>;
+      }>;
     }) => {
+      const isEstimate = input.docType === "estimate";
+      const estimateCols: Partial<EstimateSettingsColumns> = isEstimate
+        ? {
+            estimate_email_document_id: input.estimateEmailDocumentId ?? null,
+            confirmation_document_id: input.confirmationDocumentId ?? null,
+            confirmation_recipient: input.confirmationRecipient ?? "primary_email",
+            confirmation_include_estimate_pdf: input.confirmationIncludeEstimatePdf ?? false,
+            display_settings: input.displaySettings ?? null,
+          }
+        : {};
       const { data: { user } } = await supabase.auth.getUser();
       const { data: profile } = await supabase
         .from("profiles")
@@ -120,12 +163,109 @@ export function useCreateDocumentTemplate() {
           doc_type:    input.docType,
           description: input.description ?? null,
           subject:     input.subject ?? null,
+          ...(input.includePdf !== undefined ? { include_pdf: input.includePdf } : {}),
+          ...estimateCols,
           created_by:  user!.id,
-        })
+        } as Database["public"]["Tables"]["crm_document_templates"]["Insert"])
         .select()
         .single();
       if (error) throw error;
+
+      if (input.blocks && input.blocks.length > 0) {
+        const { error: blocksErr } = await supabase.from("crm_document_blocks").insert(
+          input.blocks.map((b) => ({
+            template_id: data.id,
+            org_id:      profile!.org_id,
+            block_type:  b.blockType,
+            order_index: b.orderIndex,
+            content:     b.content,
+            settings:    b.settings as Json,
+          }))
+        );
+        if (blocksErr) {
+          // Don't leave an empty shell behind.
+          await supabase
+            .from("crm_document_templates")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", data.id);
+          throw blocksErr;
+        }
+      }
       return mapTemplate(data);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-document-templates"] }),
+  });
+}
+
+// ── Duplicate ─────────────────────────────────────────────────────────────────
+
+/**
+ * Copies a document template and its blocks as "<name> (Copy)". The copy keeps
+ * the source's status but is never the default (one default per type). Image
+ * blocks keep pointing at the same public files in the document-images bucket;
+ * deleting a document never removes those files, so sharing them is safe.
+ */
+export function useDuplicateDocumentTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (sourceId: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in");
+
+      const [{ data: src, error: srcErr }, { data: blocks, error: blkErr }] = await Promise.all([
+        supabase.from("crm_document_templates").select("*").eq("id", sourceId).is("deleted_at", null).single(),
+        supabase.from("crm_document_blocks").select("*").eq("template_id", sourceId).order("order_index", { ascending: true }),
+      ]);
+      if (srcErr) throw srcErr;
+      if (blkErr) throw blkErr;
+
+      const { data: created, error: insErr } = await supabase
+        .from("crm_document_templates")
+        .insert({
+          org_id:      src.org_id,
+          name:        `${src.name} (Copy)`,
+          doc_type:    src.doc_type,
+          description: src.description,
+          subject:     src.subject,
+          status:      src.status,
+          is_default:  false,
+          include_pdf: src.include_pdf,
+          ...(src.doc_type === "estimate"
+            ? {
+                estimate_email_document_id: (src as TemplateRow).estimate_email_document_id ?? null,
+                confirmation_document_id: (src as TemplateRow).confirmation_document_id ?? null,
+                confirmation_recipient: (src as TemplateRow).confirmation_recipient ?? "primary_email",
+                confirmation_include_estimate_pdf: (src as TemplateRow).confirmation_include_estimate_pdf ?? false,
+                display_settings: (src as TemplateRow).display_settings ?? null,
+              }
+            : {}),
+          created_by:  user.id,
+        } as Database["public"]["Tables"]["crm_document_templates"]["Insert"])
+        .select()
+        .single();
+      if (insErr) throw insErr;
+
+      if ((blocks ?? []).length > 0) {
+        const { error: blocksErr } = await supabase.from("crm_document_blocks").insert(
+          (blocks ?? []).map((b) => ({
+            template_id: created.id,
+            org_id:      src.org_id,
+            block_type:  b.block_type,
+            order_index: b.order_index,
+            content:     b.content,
+            settings:    b.settings,
+          }))
+        );
+        if (blocksErr) {
+          // Don't leave an empty shell behind.
+          await supabase
+            .from("crm_document_templates")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", created.id);
+          throw blocksErr;
+        }
+      }
+      return mapTemplate(created);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-document-templates"] }),
   });
@@ -144,6 +284,11 @@ export function useUpdateDocumentTemplate(id: string) {
       status: DocStatus;
       isDefault: boolean;
       includePdf: boolean;
+      estimateEmailDocumentId: string | null;
+      confirmationDocumentId: string | null;
+      confirmationRecipient: ConfirmationRecipient;
+      confirmationIncludeEstimatePdf: boolean;
+      displaySettings: DisplaySettings | null;
     }>) => {
       const payload: TemplateUpdate = {};
       if (updates.name        !== undefined) payload.name        = updates.name;
@@ -153,10 +298,15 @@ export function useUpdateDocumentTemplate(id: string) {
       if (updates.status      !== undefined) payload.status      = updates.status;
       if (updates.isDefault   !== undefined) payload.is_default  = updates.isDefault;
       if (updates.includePdf  !== undefined) payload.include_pdf = updates.includePdf;
+      if (updates.estimateEmailDocumentId !== undefined) payload.estimate_email_document_id = updates.estimateEmailDocumentId;
+      if (updates.confirmationDocumentId  !== undefined) payload.confirmation_document_id  = updates.confirmationDocumentId;
+      if (updates.confirmationRecipient   !== undefined) payload.confirmation_recipient    = updates.confirmationRecipient;
+      if (updates.confirmationIncludeEstimatePdf !== undefined) payload.confirmation_include_estimate_pdf = updates.confirmationIncludeEstimatePdf;
+      if (updates.displaySettings !== undefined) payload.display_settings = updates.displaySettings as unknown as null;
 
       const { error } = await supabase
         .from("crm_document_templates")
-        .update(payload)
+        .update(payload as Database["public"]["Tables"]["crm_document_templates"]["Update"])
         .eq("id", id);
       if (error) throw error;
 

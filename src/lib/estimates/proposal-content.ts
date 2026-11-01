@@ -1,6 +1,45 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { pickPrintedSubitems, PRINTED_SUBITEM_SELECT, type PrintedSubitem } from "@/lib/estimates/printed-subitems";
+import type { ResolvedEstimateDocument } from "@/lib/estimates/resolve-estimate-document";
+
+/** The Estimate-type document (proposal/PDF layout) in force when a version was
+ *  sent: id, name and block rows. Frozen into the snapshot so later template
+ *  edits never change a proposal the client was already sent. */
+export interface ProposalDocument {
+  id: string;
+  name: string;
+  blocks: {
+    blockType: string;
+    orderIndex: number;
+    content: string | null;
+    settings: Record<string, unknown> | null;
+  }[];
+}
+
+/** Snapshot shape of a resolved estimate document (null when none applies). */
+export function toProposalDocument(doc: ResolvedEstimateDocument | null): ProposalDocument | null {
+  if (!doc) return null;
+  return {
+    id: doc.id,
+    name: doc.name,
+    blocks: [...doc.blocks]
+      .sort((a, b) => a.order_index - b.order_index)
+      .map((b) => ({ blockType: b.block_type, orderIndex: b.order_index, content: b.content ?? null, settings: b.settings ?? null })),
+  };
+}
+
+/** `content` with the resolved document recorded on it, ready to store as
+ *  `snapshot.proposal`. Call at every point that publishes a version. */
+export function withProposalDocument(content: ProposalContent, doc: ResolvedEstimateDocument | null): ProposalContent {
+  const document = toProposalDocument(doc);
+  return document ? { ...content, document } : content;
+}
+
+/** Stable key for comparing two recorded documents (null/absent = built-in). */
+export function proposalDocumentKey(doc: ProposalDocument | null | undefined): string {
+  return doc ? JSON.stringify({ id: doc.id, blocks: doc.blocks.map((b) => [b.blockType, b.orderIndex, b.content, b.settings ?? null]) }) : "";
+}
 
 /**
  * What a client sees and signs on the public proposal page — the
@@ -53,6 +92,11 @@ export interface ProposalContent {
   tierLabels: { basic: string; standard: string; premium: string };
   displaySettings: ReturnType<typeof toDisplaySettings>;
   depositRequiredCents: number;
+  /** The Estimate-type document that laid out the page/PDF when this version
+   *  was sent. Absent on versions sent before documents existed, and when no
+   *  document applied: both render the built-in layout. Presentation only, so
+   *  it is excluded from proposalFingerprint (see there). */
+  document?: ProposalDocument | null;
 }
 
 /** Builds ProposalContent from an estimates row selected with
@@ -121,6 +165,10 @@ export function proposalFingerprint(content: ProposalContent): string {
         : v === undefined ? null : v;
   const rest: Record<string, unknown> = { ...content };
   delete rest.directCosts;
+  // The layout document is presentation, not terms: editing the template (or
+  // re-resolving it) must not by itself mark an already-sent proposal "changed
+  // since sent" and block acceptance. Price/line changes still do.
+  delete rest.document;
   return JSON.stringify(canon(rest));
 }
 

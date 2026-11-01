@@ -2413,7 +2413,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                           <History className="mr-2 h-3.5 w-3.5" /> View History
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        {job.status !== "cancelled" && (
+                        {job.status !== "cancelled" && can("job_cancel") && (
                           <DropdownMenuItem
                             className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
                             onClick={async () => {

@@ -140,6 +140,7 @@ function mapEstimate(row: any): Estimate {
     tiersEnabled: row.tiers_enabled ?? false,
     tierLabels: (row.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: 'Basic', standard: 'Standard', premium: 'Premium' },
     displaySettings: toDisplaySettings(row.display_settings),
+    displaySettingsBaseline: (row as { display_settings_baseline?: unknown }).display_settings_baseline ? toDisplaySettings((row as { display_settings_baseline?: unknown }).display_settings_baseline) : null,
     documentTemplateId: (row.document_template_id as string | null) ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
@@ -288,7 +289,7 @@ export function useCreateEstimate() {
           stage: values.stage ?? "draft",
           overhead_rate_bps: defaultOverheadRateBps,
           ...(defaultTaxRateBps > 0 ? { tax_rate_bps: defaultTaxRateBps } : {}),
-          ...(values.displaySettings ? { display_settings: values.displaySettings } : {}),
+          ...(values.displaySettings ? { display_settings: values.displaySettings, display_settings_baseline: values.displaySettings } : {}),
           ...(values.documentTemplateId ? { document_template_id: values.documentTemplateId } : {}),
         })
         .select()
