@@ -414,7 +414,8 @@ function LineItemSections({
         estimateDesc: `<p><strong>${esc(section.sectionName ?? "Package")}</strong></p>${section.description ? `<p>${esc(section.description)}</p>` : ""}`,
         qty: 1,
         unitType: null,
-        visits: section.items.reduce((n, li) => n + (li.visits || 1), 0),
+        // One printed row at the package total: Visits x Qty x Rate must still equal Total.
+        visits: 1,
         rateCents: section.subtotalCents,
         complexityBps: null,
         totalCents: section.subtotalCents,

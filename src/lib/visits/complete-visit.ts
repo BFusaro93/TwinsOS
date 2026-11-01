@@ -4,6 +4,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
 import { findInvoicedLockedVisits } from "@/lib/visits/invoiced-guard";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("visits/complete");
 
@@ -38,7 +39,9 @@ export async function completeVisit(
     .select("org_id")
     .eq("id", userId)
     .single();
-  const orgId: string | null = (profile as { org_id: string | null } | null)?.org_id ?? null;
+  // Impersonating staff act in the tenant's org; the side effects below read the
+  // visit by org_id and would otherwise roll the completion back with "Visit not found".
+  const orgId: string | null = (await getEffectiveOrgId(supabase)) ?? (profile as { org_id: string | null } | null)?.org_id ?? null;
 
   const { data: visit, error: visitErr } = await supabase
     .from("crm_job_visits")

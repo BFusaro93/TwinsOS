@@ -741,9 +741,11 @@ export function UsersPage() {
   }
 
   async function handleInvite(name: string, email: string, role: OrgUser["role"], crmRoleId: string | null) {
-    await new Promise<void>((resolve, reject) =>
+    const result = await new Promise<{ warning?: string } | undefined>((resolve, reject) =>
       inviteUser({ name, email, role, crmRoleId }, { onSuccess: resolve, onError: reject })
     );
+    // The route still sends the invite when the employee record can't be created; say so.
+    if (result?.warning) toast.warning(result.warning);
   }
 
   if (isLoading) {

@@ -170,10 +170,13 @@ export async function recomputeStopLabor(supabase: AnySupabase, anchorVisitId: s
 
     let stop = [anchor] as typeof anchor[];
     if (anchor.clocked_in_at) {
-      const { data: siblings } = await supabase
+      const siblingQuery = supabase
         .from("crm_job_visits")
-        .select("id, job_id, clocked_out_at, status, actual_hours")
-        .eq("client_id", anchor.client_id)
+        .select("id, job_id, clocked_out_at, status, actual_hours");
+      // .eq(col, null) matches nothing in PostgREST; a client-less stop has no client.
+      const { data: siblings } = await (anchor.client_id
+        ? siblingQuery.eq("client_id", anchor.client_id)
+        : siblingQuery.is("client_id", null))
         .eq("scheduled_date", anchor.scheduled_date)
         .eq("clocked_in_at", anchor.clocked_in_at)
         .is("deleted_at", null)

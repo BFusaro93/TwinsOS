@@ -760,11 +760,14 @@ export function InvoiceDetail({
   useEffect(() => {
     if (!invoice) return;
     const orgDefaultBps = Math.round((orgSettings?.taxRatePercent ?? 0) * 100);
+    // A tax-exempt client's invoice stays at 0 — the fallbacks re-taxed it on first Save.
     const resolved = invoice.taxRateBps > 0
       ? invoice.taxRateBps
-      : (invoice.clientDefaultTaxRateBps ?? 0) > 0
-        ? (invoice.clientDefaultTaxRateBps ?? 0)
-        : orgDefaultBps;
+      : invoice.clientIsTaxable === false
+        ? 0
+        : (invoice.clientDefaultTaxRateBps ?? 0) > 0
+          ? (invoice.clientDefaultTaxRateBps ?? 0)
+          : orgDefaultBps;
     setTaxRateBps(resolved);
     const resolvedTerms = invoice.terms ?? invoice.clientDefaultTerms ?? "due_on_receipt";
     setTerms(resolvedTerms);
@@ -1344,9 +1347,11 @@ export function InvoiceDetail({
                           type="button"
                           disabled={invoice.locked}
                           onClick={() => {
-                            const fallback = (invoice.clientDefaultTaxRateBps ?? 0) > 0
-                              ? invoice.clientDefaultTaxRateBps!
-                              : Math.round((orgSettings?.taxRatePercent ?? 0) * 100);
+                            const fallback = invoice.clientIsTaxable === false
+                              ? 0
+                              : (invoice.clientDefaultTaxRateBps ?? 0) > 0
+                                ? invoice.clientDefaultTaxRateBps!
+                                : Math.round((orgSettings?.taxRatePercent ?? 0) * 100);
                             setTaxRateBps(hasTax ? 0 : fallback);
                           }}
                           className={cn(

@@ -105,7 +105,7 @@ export default function SignupPage() {
       // Step 2: sign up the user. The handle_new_user trigger reads org_id,
       // name, and role from user_metadata and creates an admin profile row.
       const supabase = createClient();
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
@@ -122,6 +122,13 @@ export default function SignupPage() {
         // try again or contact support. Orphaned orgs can be cleaned up
         // in the Supabase dashboard.
         setError(signUpError.message);
+        return;
+      }
+      // With email confirmation on, Supabase answers an already-registered address with a
+      // fake success whose user has no identities — no email is sent, so "check your
+      // email" would be a dead end.
+      if (signUpData.user && (signUpData.user.identities?.length ?? 1) === 0) {
+        setError("An account with this email already exists. Sign in instead, or reset your password.");
         return;
       }
 

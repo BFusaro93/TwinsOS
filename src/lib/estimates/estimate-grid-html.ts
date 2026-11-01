@@ -20,10 +20,16 @@ export function buildEstimateGridHtml(
 ): string {
   if (lineItems.length === 0) return "";
   const cell = "padding:6px 4px;border-bottom:1px solid #f1f5f9";
+  // Lines printed under a package's section row; any package line without a
+  // section row ahead of it (header deleted or reordered) prints as a plain row.
+  const printedByPackage = new Set<number>();
   const rows = lineItems.map((li, idx) => {
     if (li.rowType === "section" && li.packageId) {
       const visits: EstimatePDFLineItem[] = [];
-      for (let j = idx + 1; j < lineItems.length && lineItems[j].rowType !== "section"; j++) visits.push(lineItems[j]);
+      for (let j = idx + 1; j < lineItems.length && lineItems[j].rowType !== "section" && lineItems[j].packageId === li.packageId; j++) {
+        visits.push(lineItems[j]);
+        printedByPackage.add(j);
+      }
       const total = visits.reduce((sum, v) => sum + v.totalCents, 0);
       const wording = li.estimateDesc ? `<div style="font-weight:400;color:#64748b;font-size:12px">${escapeHtml(li.estimateDesc)}</div>` : "";
       const main = `<tr>
@@ -39,7 +45,7 @@ export function buildEstimateGridHtml(
     </tr>`).join("");
     }
     // A package's lines are printed by its section row above.
-    if (li.rowType !== "section" && li.packageId) return "";
+    if (printedByPackage.has(idx)) return "";
     if (li.rowType === "section") {
       return `<tr><td colspan="3" style="padding:10px 4px 4px;font-weight:700;border-bottom:1px solid #e2e8f0">${escapeHtml(li.sectionName ?? "")}</td></tr>`;
     }

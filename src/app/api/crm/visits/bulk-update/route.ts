@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isVisitInProgress, reopenClearsClockStamps, CLEARED_CLOCK_STAMPS, GUARDED_STATUS_CHANGES } from "@/lib/visits/status-guards";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
@@ -90,9 +91,7 @@ export async function POST(request: Request) {
   // BEFORE today, so a stop moved to tomorrow vanishes from the crew's list
   // mid-stop, they can't clock out, and the hours are filed under the wrong day.
   if (updates.scheduled_date) {
-    const running = before.filter(
-      (r) => r.clocked_in_at && !r.clocked_out_at && r.scheduled_date !== updates.scheduled_date
-    );
+    const running = before.filter((r) => isVisitInProgress(r) && r.scheduled_date !== updates.scheduled_date);
     if (running.length > 0) {
       return NextResponse.json({
         error: running.length === 1
@@ -105,9 +104,7 @@ export async function POST(request: Request) {
   // Same for a crew change: ownership checks key off the visit's crew, so re-crewing a
   // stop mid-clock locks the working crew out of clock-out, pause and skip.
   if (updates.crew_id !== undefined || updates.crew_unassigned) {
-    const running = before.filter(
-      (r) => r.clocked_in_at && !r.clocked_out_at && (updates.crew_unassigned || r.crew_id !== updates.crew_id)
-    );
+    const running = before.filter((r) => isVisitInProgress(r) && (updates.crew_unassigned || r.crew_id !== updates.crew_id));
     if (running.length > 0) {
       return NextResponse.json({
         error: running.length === 1
@@ -126,8 +123,8 @@ export async function POST(request: Request) {
   // Cancelling, skipping or sending back a visit the crew is working right now would
   // strand its open punches: the crew list drops it, so nobody can clock out and the
   // hours never reach Job Costing or the Timesheet.
-  if (updates.status && ["cancelled", "skipped", "scheduled", "dispatched"].includes(updates.status)) {
-    const running = before.filter((r) => r.clocked_in_at && !r.clocked_out_at && r.status !== updates.status);
+  if (updates.status && GUARDED_STATUS_CHANGES.includes(updates.status)) {
+    const running = before.filter((r) => isVisitInProgress(r) && r.status !== updates.status);
     if (running.length > 0) {
       return NextResponse.json({
         error: running.length === 1
@@ -176,18 +173,24 @@ export async function POST(request: Request) {
     // An explicit crew and "unassigned" are mutually exclusive.
     ...(updates.crew_id ? { crew_unassigned: false } : {}),
     ...(updates.crew_unassigned ? { crew_id: null } : {}),
-    // Reopening a completed visit has to clear its clock stamps, or the crew app sees it as
-    // already worked (clock-in/out are no-ops) and it can't be done again.
-    ...(updates.status && ["scheduled", "dispatched", "in_progress"].includes(updates.status) && before.every((r) => r.status === "completed")
-      ? { clocked_in_at: null, clocked_out_at: null, completed_at: null, paused_at: null }
-      : {}),
     updated_at: new Date().toISOString(),
   };
+  // Reopening a finished visit (completed, or skipped/cancelled after Start Job) has to clear
+  // its clock stamps, or the crew app sees it as already worked (clock-in/out are no-ops) and
+  // it can't be done again. Decided per row: a mixed selection used to reopen its completed
+  // rows with stale stamps because only an all-completed batch was cleared.
+  const clearIds = new Set(before.filter((r) => reopenClearsClockStamps(r, updates.status)).map((r) => r.id));
+  const groups: { ids: string[]; patch: Record<string, unknown> }[] = [
+    { ids: ids.filter((id) => !clearIds.has(id)), patch },
+    { ids: ids.filter((id) => clearIds.has(id)), patch: { ...patch, ...CLEARED_CLOCK_STAMPS } },
+  ];
   let error: { message: string; hint?: string } | null = null;
-  for (let i = 0; i < ids.length && !error; i += 100) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await (supabase as any).from("crm_job_visits").update(patch).in("id", ids.slice(i, i + 100));
-    error = res.error;
+  for (const group of groups) {
+    for (let i = 0; i < group.ids.length && !error; i += 100) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res = await (supabase as any).from("crm_job_visits").update(group.patch).in("id", group.ids.slice(i, i + 100));
+      error = res.error;
+    }
   }
 
   if (error) {

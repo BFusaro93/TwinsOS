@@ -232,9 +232,13 @@ export async function POST(request: Request) {
         await adminClient.from("crm_employees").update({ crm_role_id: crmRoleId }).eq("id", linked.id);
       } else {
         const { data: byEmail } = await adminClient
-          .from("crm_employees").select("id").eq("org_id", callerProfile.org_id).is("user_id", null).is("deleted_at", null).ilike("email", email).limit(1).maybeSingle();
+          .from("crm_employees").select("id").eq("org_id", callerProfile.org_id).is("user_id", null).is("deleted_at", null)
+          // Case-insensitive exact match: `_` / `%` in an address are not wildcards.
+          .ilike("email", email.replace(/[%_\\]/g, (c) => `\\${c}`)).limit(1).maybeSingle();
         if (byEmail) {
-          await adminClient.from("crm_employees").update({ user_id: linkData.user.id, crm_role_id: crmRoleId }).eq("id", byEmail.id);
+          // A re-hired (inactive) employee record linked here must be active again, or
+          // has_crm_access() still refuses the login.
+          await adminClient.from("crm_employees").update({ user_id: linkData.user.id, crm_role_id: crmRoleId, is_active: true }).eq("id", byEmail.id);
         } else {
           const parts = name.trim().split(/\s+/);
           const firstName = parts[0];

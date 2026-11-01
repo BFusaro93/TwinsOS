@@ -232,6 +232,7 @@ export function mapInvoice(row: any): CRMInvoice {
           .filter(Boolean).join(", ")
       : null,
     clientDefaultTaxRateBps: row.clients?.default_tax_rate_bps ?? 0,
+    clientIsTaxable: row.clients?.is_taxable !== false,
     clientDefaultTerms: row.clients?.default_terms ?? "due_on_receipt",
     clientDefaultPaymentMethod: row.clients?.default_payment_method ?? null,
     clientSavedPaymentMethodType: row.clients?.saved_payment_method_type ?? null,
@@ -318,7 +319,7 @@ export function useInvoice(id: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, primary_email, billing_email, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(*), crm_payments!crm_payments_invoice_id_fkey(*, clients(display_name))")
+        .select("*, clients(display_name, primary_email, billing_email, billing_address, billing_city, billing_state, billing_zip, default_tax_rate_bps, default_terms, default_payment_method, saved_payment_method_type, saved_payment_method_summary, autopay_enabled, is_taxable), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_invoice_line_items(*), crm_payments!crm_payments_invoice_id_fkey(*, clients(display_name))")
         .eq("id", id)
         .is("deleted_at", null)
         .single();
@@ -890,10 +891,13 @@ export function useDeleteInvoice() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: current, error: currentErr } = await (supabase as any)
         .from("crm_invoices")
-        .select("amount_paid_cents, locked")
+        .select("amount_paid_cents, locked, qbo_invoice_id")
         .eq("id", id)
         .single();
       if (currentErr) throw currentErr;
+      if (current?.qbo_invoice_id) {
+        throw new Error("This invoice is synced to QuickBooks. Void it instead so QuickBooks is updated too.");
+      }
       if ((current?.amount_paid_cents ?? 0) > 0) {
         throw new Error("This invoice cannot be deleted: payments are applied to it. Refund or unapply them first.");
       }

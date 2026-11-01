@@ -186,7 +186,10 @@ const CHEMICAL_TAGS: MergeTag[] = [
 const COMMON = [...CLIENT_TAGS, ...BILLING_TAGS, ...PROPERTY_TAGS, ...COMPANY_TAGS, ...SYSTEM_TAGS];
 
 export const MERGE_TAGS_BY_TYPE: Record<DocType, MergeTag[]> = {
-  client:        COMMON,
+  // Client documents are also the Estimate Email / Confirmation Email bodies (an
+  // Estimate document links to them), so the estimate tags must be reachable here.
+  // They resolve only when the document is sent from an estimate.
+  client:        [...COMMON, ...ESTIMATE_TAGS],
   marketing:     COMMON,
   estimate:      [...COMMON, ...ESTIMATE_TAGS],
   invoice_email: [...COMMON, ...INVOICE_TAGS],
@@ -201,6 +204,7 @@ export const MERGE_TAGS_BY_TYPE: Record<DocType, MergeTag[]> = {
  * Any type can also use a custom URL.
  */
 export const BUTTON_LINK_OPTIONS: Partial<Record<DocType, { value: string; label: string }[]>> = {
+  client:        [{ value: "[estimatelinkurl]", label: "View proposal (estimate emails only)" }],
   invoice_email: [{ value: "[viewinvoiceonline]", label: "View & pay invoice online" }],
 };
 

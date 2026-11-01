@@ -175,8 +175,15 @@ function splitCSVRows(text: string): string[] {
     const ch = text[i];
     const atFieldStart = current === "" || /[,;\t]$/.test(current);
     if (ch === '"' && (inQuotes || atFieldStart)) {
-      inQuotes = !inQuotes;
-      current += ch;
+      if (inQuotes && text[i + 1] === '"') {
+        // An escaped quote ("") inside a quoted field — still inside the field, so a
+        // newline after it must not split the record (parseRow unescapes it later).
+        current += '""';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+        current += ch;
+      }
     } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
       // Skip \n after \r (CRLF)
       if (ch === "\r" && text[i + 1] === "\n") i++;

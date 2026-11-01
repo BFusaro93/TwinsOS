@@ -225,14 +225,16 @@ export async function POST(
     if (input.statusAfter === "closed") patch.closed_at = nowIso;
     else if (ticket.status === "closed") patch.closed_at = null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: statusErr } = await (supabase as any)
+    const { data: statusRows, error: statusErr } = await (supabase as any)
       .from("crm_tickets")
       .update(patch)
       .eq("id", ticket.id)
       .eq("org_id", orgId)
-      .eq("status", ticket.status);
+      .eq("status", ticket.status)
+      .select("id");
     if (statusErr) log.error("ticket status update failed", { ticketId, error: statusErr.message });
-    else statusChanged = true;
+    // Zero rows = someone else changed the status meanwhile; don't fire ticket_closed for it.
+    else statusChanged = (statusRows?.length ?? 0) > 0;
   }
 
   // Returned so the client hook can fire ticket_closed / ticket_reopened — the

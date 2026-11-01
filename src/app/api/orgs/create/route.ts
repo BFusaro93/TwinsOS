@@ -71,6 +71,20 @@ export async function POST(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
+  // An address that already has a login can't sign up again (Supabase would return a fake
+  // success with no email sent) — refuse before creating an org that would be orphaned.
+  if (replyTo) {
+    const { data: existingProfile } = await adminClient
+      .from("profiles")
+      .select("id")
+      .ilike("email", replyTo.replace(/[%_\\]/g, (c) => `\\${c}`))
+      .limit(1)
+      .maybeSingle();
+    if (existingProfile) {
+      return NextResponse.json({ error: "An account with this email already exists. Sign in instead." }, { status: 409 });
+    }
+  }
+
   // Generate a URL-safe slug from the company name and append a random suffix
   // to avoid collisions on the UNIQUE constraint.
   const baseSlug = companyName
@@ -95,17 +109,13 @@ export async function POST(request: Request) {
     // (use-trial-status treats a null trial_ends_at as open-ended).
     trial_ends_at: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
   };
-  // per_org_numbering numbers invoices/estimates/tickets from 1 instead of the global counters. It
-  // comes from migration 20261203000100; if that isn't applied to this database yet (undefined
-  // column, 42703), create the org without it rather than failing signup.
-  let { data: org, error: orgErr } = await adminClient
+  // per_org_numbering numbers invoices/estimates/tickets from 1 instead of the global counters
+  // (migration 20261203000100, applied to both projects).
+  const { data: org, error: orgErr } = await adminClient
     .from("organizations")
     .insert({ ...orgRow, per_org_numbering: true })
     .select("id")
     .single();
-  if (orgErr?.code === "42703") {
-    ({ data: org, error: orgErr } = await adminClient.from("organizations").insert(orgRow).select("id").single());
-  }
 
   if (orgErr || !org) {
     log.error("organization insert failed", { error: orgErr?.message });

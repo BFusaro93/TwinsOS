@@ -136,11 +136,12 @@ export function ServicesList({ onAdd, onEdit }: Props) {
               )
             }
             onImport={async (rows) => {
-              const { created, updated, skipped } = await bulkImportServices(rows);
+              const { created, updated, skipped, failed } = await bulkImportServices(rows);
               const parts = [`${created} created`];
               if (updated > 0) parts.push(`${updated} updated`);
               if (skipped > 0) parts.push(`${skipped} skipped (missing name)`);
-              toast[skipped > 0 ? "warning" : "success"](`Services import: ${parts.join(", ")}.`);
+              if (failed.length > 0) parts.push(`${failed.length} failed (row ${failed[0].row}: ${failed[0].error})`);
+              toast[skipped > 0 || failed.length > 0 ? "warning" : "success"](`Services import: ${parts.join(", ")}.`);
             }}
           />
           {canBulkPrice && (

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRoles, useCreateRole, useUpdateRole, useDeleteRole } from "@/lib/hooks/use-roles";
+import { useEmployees } from "@/lib/hooks/use-employees";
 import {
   PERMISSION_TABS,
   allKeysInTab,
@@ -228,6 +229,7 @@ type ActiveFilter = "active" | "inactive" | "all";
 
 export function RolesList() {
   const [confirm, confirmDialog] = useConfirm();
+  const { data: allEmployees = [] } = useEmployees(false);
   const { data: roles, isLoading } = useRoles(false);
   const { mutateAsync: update } = useUpdateRole();
   const { mutateAsync: deleteRole } = useDeleteRole();
@@ -243,10 +245,24 @@ export function RolesList() {
   );
 
   async function handleToggleActive(role: CRMRole) {
+    if (role.isActive) {
+      // An inactive role grants nothing (has_crm_access), so everyone holding it
+      // loses Landscapt on their next click.
+      const holders = allEmployees.filter((e: { crmRoleId: string | null; isActive: boolean }) => e.crmRoleId === role.id && e.isActive).length;
+      const ok = await confirm({
+        title: `Deactivate role "${role.name}"?`,
+        description: holders > 0
+          ? `${holders} employee${holders !== 1 ? "s" : ""} hold this role and will lose access to Landscapt until they are given an active role.`
+          : "Nobody holds this role right now. It will no longer be offered when assigning employees.",
+        confirmLabel: "Deactivate",
+        destructive: holders > 0,
+      });
+      if (!ok) return;
+    }
     try {
       await update({ id: role.id, updates: { is_active: !role.isActive } });
-    } catch {
-      toast.error("Failed to update role");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to update role");
     }
   }
 

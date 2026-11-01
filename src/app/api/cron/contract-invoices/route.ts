@@ -207,7 +207,8 @@ export async function GET(request: Request) {
         po_number: contract.po_number ?? null,
         invoice_date: stubInvoiceDate,
         terms: stubTerms,
-        due_date: computeDueDate(todayStr, stubTerms),
+        // Terms run from the (clamped) invoice date, not from today.
+        due_date: computeDueDate(stubInvoiceDate, stubTerms),
         status: "draft",
         subtotal_cents: stub.amountCents,
         total_cents: stub.amountCents,

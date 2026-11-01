@@ -125,6 +125,8 @@ export interface CRMInvoice {
   clientEmail?: string | null;
   clientAddress?: string | null;
   clientDefaultTaxRateBps?: number;
+  /** false = tax-exempt client: the editor never falls back to a default rate. */
+  clientIsTaxable?: boolean;
   clientDefaultTerms?: string;
   clientDefaultPaymentMethod?: string | null;
   clientSavedPaymentMethodType?: "card" | "us_bank_account" | null;

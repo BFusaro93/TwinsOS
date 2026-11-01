@@ -8,7 +8,7 @@ import { allocateStopHours } from "@/lib/utils/visit-hours";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
-import { sumPunchLaborCents, sumPunchManHours } from "@/lib/crew/visit-labor";
+import { sumPunchLaborCents, sumPunchManHours, recomputeStopLabor } from "@/lib/crew/visit-labor";
 import { closeStopPunches } from "@/lib/crew/stop-punches";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -118,10 +118,14 @@ export async function POST(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: candidateRows, error: candErr } = await (supabase as any)
+  const candidateQuery = (supabase as any)
     .from("crm_job_visits")
-    .select(VISIT_SELECT)
-    .eq("client_id", anchor.client_id)
+    .select(VISIT_SELECT);
+  // .eq(col, null) matches nothing in PostgREST: a client-less visit could be started
+  // (clock-in handles this) but never clocked out, paused or resumed.
+  const { data: candidateRows, error: candErr } = await (anchor.client_id
+    ? candidateQuery.eq("client_id", anchor.client_id)
+    : candidateQuery.is("client_id", null))
     .eq("scheduled_date", anchor.scheduled_date)
     .is("deleted_at", null)
     .not("status", "in", "(cancelled,skipped)");
@@ -170,6 +174,11 @@ export async function POST(
       // only thing that will, or those punches stay open on the Timesheet forever.
       // No-op when there are none (a true replay).
       await closeStopPunches(supabase, anchor.id, anchor.clocked_out_at ?? new Date().toISOString());
+      // ...and file the hours those punches represent (Job Costing showed 0 hours
+      // for a stop the office completed while the crew was still punched in).
+      await recomputeStopLabor(supabase, anchor.id).catch((err: unknown) => {
+        log.error("recomputeStopLabor after late clock-out failed", { visitId: anchor.id, error: err instanceof Error ? err.message : String(err) });
+      });
       return NextResponse.json({ visitIds: stopRows.map((r) => r.id), visits: stopRows, alreadyClockedOut: true });
     }
     return NextResponse.json({ error: "Nothing to clock out for this stop" }, { status: 400 });
