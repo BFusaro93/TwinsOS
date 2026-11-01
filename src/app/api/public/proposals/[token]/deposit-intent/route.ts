@@ -6,6 +6,7 @@ import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/l
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
 
@@ -160,7 +161,7 @@ export async function POST(
   const { data: org } = await supabase
     .from("organizations")
     .select(
-      "stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode, ach_payments_enabled, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents"
+      "stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode, ach_payments_enabled, cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations"
     )
     .eq("id", estimate.org_id)
     .single();
@@ -198,6 +199,7 @@ export async function POST(
             ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
             ccProcessingFeeBps: org.cc_processing_fee_bps,
             ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+            ccProcessingFeeMode: (org.customizations as Record<string, unknown> | null)?.cc_processing_fee_mode as string | undefined,
           },
           depositCents,
           false
@@ -280,6 +282,7 @@ export async function POST(
       amount: totalChargeCents,
       currency: "usd",
       payment_method_types: [paymentMethod],
+      ...surchargeIntentParams(feeCents, paymentMethod === "card"),
       metadata: {
         source: "crm_estimate_deposit",
         org_id: estimate.org_id,
@@ -290,6 +293,7 @@ export async function POST(
         // recorded separately on the payment (same split as crm_invoice).
         deposit_cents: String(depositCents),
         fee_cents: String(feeCents),
+        ...surchargeIntentMetadata(feeCents, paymentMethod === "card"),
       },
     },
     {

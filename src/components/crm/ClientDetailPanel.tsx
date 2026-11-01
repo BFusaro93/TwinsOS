@@ -101,6 +101,7 @@ import {
   useClientCustomFieldValues,
   useUpsertClientCustomFieldValue,
 } from "@/lib/hooks/use-client-custom-fields";
+import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
 import { formatCurrency, formatDate, formatHours, todayLocalISODate } from "@/lib/utils";
 import { computeActualHours } from "@/lib/utils/visit-hours";
@@ -754,6 +755,10 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   // Shared org-level source list (same one the New Lead dialog uses) — the
   // client's current value is appended if it isn't in the list so it still shows.
   const { options: sourcesOptions } = useClientSourceOptions(client.source);
+  // Reps flagged as sales reps, plus whoever is already assigned (even if since unflagged or inactive),
+  // so opening this dialog never silently drops the current rep.
+  const { data: repEmployees } = useSelectableEmployees();
+  const salesRepOptions = (repEmployees ?? []).filter((e) => e.isSalesRep || e.id === client.salesRepId);
   const { data: orgSettings } = useOrgSettings();
 
   const [editTab, setEditTab] = useState("personal");
@@ -804,6 +809,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     billingZip: client.billingZip ?? "",
     billingEmail: client.billingEmail ?? "",
     source: client.source ?? "",
+    salesRepId: client.salesRepId ?? "",
     referredBy: client.referredBy ?? "",
     referredByClientId: client.referredByClientId ?? null as string | null,
     paymentMethod: client.defaultPaymentMethod ?? client.paymentMethod ?? "",
@@ -893,6 +899,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
       billingZip: client.billingZip ?? "",
       billingEmail: client.billingEmail ?? "",
       source: client.source ?? "",
+      salesRepId: client.salesRepId ?? "",
       referredBy: client.referredBy ?? "",
       referredByClientId: client.referredByClientId ?? null,
       paymentMethod: client.defaultPaymentMethod ?? client.paymentMethod ?? "",
@@ -974,6 +981,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
         id: client.id,
         updates: {
           ...formRest,
+          salesRepId: form.salesRepId || null,
           ...consentChanges,
           ...serviceAddr,
           ...billingAddr,
@@ -1288,6 +1296,18 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                       <SelectItem value="__none__">— None —</SelectItem>
                       {sourcesOptions.map((s) => (
                         <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Sales Rep</Label>
+                  <Select value={form.salesRepId || "__none__"} onValueChange={(v) => patch("salesRepId", v === "__none__" ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="Assign sales rep…" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— None —</SelectItem>
+                      {salesRepOptions.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>{e.firstName} {e.lastName}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

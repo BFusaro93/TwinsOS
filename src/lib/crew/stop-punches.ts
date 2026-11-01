@@ -59,16 +59,18 @@ export async function resolveWorkingMemberIds(
  * alone anyone who already has an open punch (a double tap, or a member the
  * leader punched individually first). Non-throwing — a failed auto-punch must
  * never block the crew from starting the job; the office can still add punches.
+ * Reports `rosterEmpty` when nobody is on the crew that day, so the crew app can warn that
+ * no time is being recorded for payroll.
  */
 export async function openStopPunches(
   supabase: AnySupabase,
   anchor: { id: string; orgId: string; crewId: string | null; scheduledDate: string },
   clockedInAt: string
-): Promise<void> {
+): Promise<{ rosterEmpty: boolean }> {
   try {
-    if (!anchor.crewId) return;
+    if (!anchor.crewId) return { rosterEmpty: true };
     const memberIds = await resolveWorkingMemberIds(supabase, anchor.orgId, anchor.crewId, anchor.scheduledDate);
-    if (memberIds.length === 0) return;
+    if (memberIds.length === 0) return { rosterEmpty: true };
 
     const { data: existing } = await supabase
       .from("crm_crew_member_times")
@@ -87,12 +89,14 @@ export async function openStopPunches(
         deleted_at: null,
         updated_at: clockedInAt,
       }));
-    if (rows.length === 0) return;
+    if (rows.length === 0) return { rosterEmpty: false };
     await supabase
       .from("crm_crew_member_times")
       .upsert(rows, { onConflict: "visit_id,crew_member_id", ignoreDuplicates: false });
+    return { rosterEmpty: false };
   } catch {
     // Non-fatal — see above.
+    return { rosterEmpty: false };
   }
 }
 

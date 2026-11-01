@@ -117,7 +117,7 @@ export function useAddJobMaterial(jobId: string) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["crm-job-materials", jobId] });
-      void qc.invalidateQueries({ queryKey: ["crm-job-detail", jobId] });
+      void qc.invalidateQueries({ queryKey: ["crm-job-costing", jobId] });
     },
   });
 }
@@ -136,7 +136,7 @@ export function useDeleteJobMaterial(jobId: string) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["crm-job-materials", jobId] });
-      void qc.invalidateQueries({ queryKey: ["crm-job-detail", jobId] });
+      void qc.invalidateQueries({ queryKey: ["crm-job-costing", jobId] });
     },
   });
 }

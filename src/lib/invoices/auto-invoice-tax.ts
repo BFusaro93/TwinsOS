@@ -26,7 +26,10 @@ export function lineTotalCents(rateCents: number, qty: number): number {
 export function resolveAutoInvoiceTaxRateBps(
   estimateTaxRateBps: number | null | undefined,
   clientDefaultTaxRateBps: number | null | undefined,
+  /** clients.is_taxable — false marks a tax-exempt client, who is never taxed. */
+  clientIsTaxable: boolean | null | undefined = true,
 ): number {
+  if (clientIsTaxable === false) return 0;
   const est = estimateTaxRateBps ?? 0;
   if (est > 0) return est;
   return clientDefaultTaxRateBps ?? 0;

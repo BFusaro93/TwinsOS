@@ -184,7 +184,15 @@ export function ContractsGuide() {
           starting before their billing day simply bill their first full cycle on that day. Turning
           proration on for a contract that has already started regular billing doesn&apos;t bill a
           stub after the fact. The stub uses the starting month&apos;s entry in the monthly-amounts
-          grid when there is one, otherwise the flat amount.
+          grid when there is one, otherwise the flat amount. The stub invoice is dated no later than the last
+          day of its period (the day before the first billing day), not the day it is created, so it never
+          shares a date with that billing day&apos;s regular invoice.
+        </p>
+        <p>
+          <strong>Billing in advance with a mid-month start.</strong> With Bill 1 Month in Advance on, a
+          contract that starts after this month&apos;s billing day (billing day 1, start Oct 20) is picked up
+          on the next run for the month it covers, so its first full month (November) is invoiced instead of
+          being skipped until the following billing day.
         </p>
         <Callout>
           <strong>Why bill a month in advance?</strong> For recurring service, invoicing after the

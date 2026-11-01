@@ -330,11 +330,12 @@ async function loadSnowTaxContext(
   if (clientIds.length > 0) {
     const { data: clients, error } = await supabase
       .from("clients")
-      .select("id, default_tax_rate_bps")
+      .select("id, default_tax_rate_bps, is_taxable")
       .in("id", clientIds);
     if (error) throw error;
-    for (const c of (clients ?? []) as { id: string; default_tax_rate_bps: number | null }[]) {
-      ctx.clientDefaultRateById.set(c.id, c.default_tax_rate_bps ?? 0);
+    for (const c of (clients ?? []) as { id: string; default_tax_rate_bps: number | null; is_taxable: boolean | null }[]) {
+      // A tax-exempt client (is_taxable = false) is never taxed, whatever default rate is stored.
+      ctx.clientDefaultRateById.set(c.id, c.is_taxable === false ? 0 : (c.default_tax_rate_bps ?? 0));
     }
   }
   return ctx;

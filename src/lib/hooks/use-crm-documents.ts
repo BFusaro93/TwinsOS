@@ -18,20 +18,8 @@ import { toDisplaySettings, type DisplaySettings } from "@/lib/estimate-display-
 
 const supabase = createClient();
 
-// The estimate-settings columns arrive with migration 20261202000300 and are not
-// in the generated types until `supabase gen types` is re-run; extend locally so
-// the hooks compile either way (intersection is harmless once they exist).
-interface EstimateSettingsColumns {
-  estimate_email_document_id: string | null;
-  confirmation_document_id: string | null;
-  confirmation_recipient: string | null;
-  confirmation_include_estimate_pdf: boolean | null;
-  display_settings: unknown | null;
-}
-type TemplateRow = Database["public"]["Tables"]["crm_document_templates"]["Row"] &
-  Partial<EstimateSettingsColumns>;
-type TemplateUpdate = Database["public"]["Tables"]["crm_document_templates"]["Update"] &
-  Partial<EstimateSettingsColumns>;
+type TemplateRow = Database["public"]["Tables"]["crm_document_templates"]["Row"];
+type TemplateUpdate = Database["public"]["Tables"]["crm_document_templates"]["Update"];
 type BlockRow = Database["public"]["Tables"]["crm_document_blocks"]["Row"];
 
 // ── Row mappers ───────────────────────────────────────────────────────────────
@@ -139,13 +127,13 @@ export function useCreateDocumentTemplate() {
       }>;
     }) => {
       const isEstimate = input.docType === "estimate";
-      const estimateCols: Partial<EstimateSettingsColumns> = isEstimate
+      const estimateCols: Partial<TemplateRow> = isEstimate
         ? {
             estimate_email_document_id: input.estimateEmailDocumentId ?? null,
             confirmation_document_id: input.confirmationDocumentId ?? null,
             confirmation_recipient: input.confirmationRecipient ?? "primary_email",
             confirmation_include_estimate_pdf: input.confirmationIncludeEstimatePdf ?? false,
-            display_settings: input.displaySettings ?? null,
+            display_settings: (input.displaySettings ?? null) as unknown as Json | null,
           }
         : {};
       const { data: { user } } = await supabase.auth.getUser();
@@ -232,11 +220,11 @@ export function useDuplicateDocumentTemplate() {
           include_pdf: src.include_pdf,
           ...(src.doc_type === "estimate"
             ? {
-                estimate_email_document_id: (src as TemplateRow).estimate_email_document_id ?? null,
-                confirmation_document_id: (src as TemplateRow).confirmation_document_id ?? null,
-                confirmation_recipient: (src as TemplateRow).confirmation_recipient ?? "primary_email",
-                confirmation_include_estimate_pdf: (src as TemplateRow).confirmation_include_estimate_pdf ?? false,
-                display_settings: (src as TemplateRow).display_settings ?? null,
+                estimate_email_document_id: src.estimate_email_document_id ?? null,
+                confirmation_document_id: src.confirmation_document_id ?? null,
+                confirmation_recipient: src.confirmation_recipient ?? "primary_email",
+                confirmation_include_estimate_pdf: src.confirmation_include_estimate_pdf ?? false,
+                display_settings: src.display_settings ?? null,
               }
             : {}),
           created_by:  user.id,
@@ -302,11 +290,11 @@ export function useUpdateDocumentTemplate(id: string) {
       if (updates.confirmationDocumentId  !== undefined) payload.confirmation_document_id  = updates.confirmationDocumentId;
       if (updates.confirmationRecipient   !== undefined) payload.confirmation_recipient    = updates.confirmationRecipient;
       if (updates.confirmationIncludeEstimatePdf !== undefined) payload.confirmation_include_estimate_pdf = updates.confirmationIncludeEstimatePdf;
-      if (updates.displaySettings !== undefined) payload.display_settings = updates.displaySettings as unknown as null;
+      if (updates.displaySettings !== undefined) payload.display_settings = updates.displaySettings as unknown as Json | null;
 
       const { error } = await supabase
         .from("crm_document_templates")
-        .update(payload as Database["public"]["Tables"]["crm_document_templates"]["Update"])
+        .update(payload)
         .eq("id", id);
       if (error) throw error;
 

@@ -28,6 +28,8 @@ export interface OrgSettingsData {
   ccProcessingFeeEnabled: boolean;
   ccProcessingFeePercent: number;
   ccProcessingFeeThresholdDollars: number;
+  /** 'flat' or 'cover_fee' (gross up so the org nets the invoice after Stripe's card fee). */
+  ccProcessingFeeMode: "flat" | "cover_fee";
   achPaymentsEnabled: boolean;
   crewHidePricing: boolean;
   /** IANA name. The org's operating clock — what "today" and "this service
@@ -54,6 +56,7 @@ export interface UpdateOrgSettingsInput {
   ccProcessingFeeEnabled?: boolean;
   ccProcessingFeePercent?: number;
   ccProcessingFeeThresholdDollars?: number;
+  ccProcessingFeeMode?: "flat" | "cover_fee";
   achPaymentsEnabled?: boolean;
   crewHidePricing?: boolean;
   timezone?: string;
@@ -85,10 +88,11 @@ function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
     defaultBillingTerms: (row.default_billing_terms as string) ?? "due_on_receipt",
     defaultInvoiceFrequency: (row.default_invoice_frequency as string) ?? "daily",
     defaultInvoiceDelivery: (row.default_invoice_delivery as string) ?? "email",
-    ccProcessingFeeEnabled: typeof row.cc_processing_fee_enabled === "boolean" ? row.cc_processing_fee_enabled : true,
-    ccProcessingFeePercent: typeof row.cc_processing_fee_bps === "number" ? row.cc_processing_fee_bps / 100 : 3.5,
+    ccProcessingFeeEnabled: typeof row.cc_processing_fee_enabled === "boolean" ? row.cc_processing_fee_enabled : false,
+    ccProcessingFeePercent: typeof row.cc_processing_fee_bps === "number" ? row.cc_processing_fee_bps / 100 : 3,
     ccProcessingFeeThresholdDollars:
       typeof row.cc_processing_fee_threshold_cents === "number" ? row.cc_processing_fee_threshold_cents / 100 : 500,
+    ccProcessingFeeMode: ((row.customizations as Record<string, unknown>)?.cc_processing_fee_mode === "cover_fee" ? "cover_fee" : "flat"),
     achPaymentsEnabled: typeof row.ach_payments_enabled === "boolean" ? row.ach_payments_enabled : false,
     crewHidePricing: typeof row.crew_hide_pricing === "boolean" ? row.crew_hide_pricing : false,
     // coerce, don't trust: an org row predating the column reads back null,
@@ -171,6 +175,14 @@ export function useUpdateOrgSettings() {
             ...(input.customizations ?? {}),
             reply_to_email: input.replyToEmail?.trim() || null,
           },
+        };
+      }
+
+      // Surcharge mode lives in customizations too (no column to migrate).
+      if (input.ccProcessingFeeMode !== undefined) {
+        input = {
+          ...input,
+          customizations: { ...(input.customizations ?? {}), cc_processing_fee_mode: input.ccProcessingFeeMode },
         };
       }
 

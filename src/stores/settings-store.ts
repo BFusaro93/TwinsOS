@@ -359,7 +359,7 @@ interface SettingsState {
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
-  orgName: "Twins Lawn Service",
+  orgName: "",
   setOrgName: (name) => set({ orgName: name }),
 
   logoDataUrl: null,
@@ -369,7 +369,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setCompanyAddress: (partial) =>
     set((s) => ({ companyAddress: { ...s.companyAddress, ...partial } })),
 
-  taxRatePercent: 7,
+  taxRatePercent: 0,
   setTaxRatePercent: (rate) => set({ taxRatePercent: rate }),
 
   costMethod: "manual",

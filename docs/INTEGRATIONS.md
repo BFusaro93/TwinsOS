@@ -48,7 +48,7 @@ Legend: **Required** = the app is broken or a core feature is off without it. **
 - **Test-mode variants** used in code: `STRIPE_SECRET_KEY_TEST`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST`, `STRIPE_CONNECT_WEBHOOK_SECRET_TEST`. Also `STRIPE_APPLE_PAY_DOMAIN_ASSOCIATION`. These four are used in code but are **not** in `.env.local.example`; add them there.
 - **Webhook endpoints to register in the Stripe dashboard:**
   1. `/api/billing/webhook`, plan and subscription events.
-  2. `/api/crm/payments/connect-webhook`, a Connect-scoped endpoint ("Listen to events on Connected accounts") for `account.updated`, `payment_intent.succeeded`, `payment_intent.payment_failed`.
+  2. `/api/crm/payments/connect-webhook`, a Connect-scoped endpoint ("Listen to events on Connected accounts") for `account.updated`, `payment_intent.succeeded`, `payment_intent.payment_failed`, and **`payment_intent.amount_capturable_updated`** (card surcharges are authorized first, then captured once the card type is known so debit/prepaid cards aren't surcharged; `/api/cron/settle-card-surcharges` is the fallback if this event isn't subscribed).
   3. `/api/crm/payments/webhook`, legacy; remove once no pre-Connect PaymentIntents are in flight.
 - **Rules that have bitten before:** the webhook is the only writer of payment results; a refund that breaks the allocation sum makes the next charge debit the card and then fail to record it; the deposit-at-acceptance flow needs a TEST publishable key for the sandbox org.
 - A live-vs-test key mismatch between the platform key and a sandbox org's Connect account was an open decision at last notes; confirm the current state.

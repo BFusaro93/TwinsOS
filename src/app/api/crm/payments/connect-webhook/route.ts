@@ -14,6 +14,7 @@ import {
 } from "@/lib/stripe/record-estimate-deposit";
 import { clearPendingCharge, markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { decodeAllocations } from "@/lib/stripe/crm-payments";
+import { settleSurchargeAuthorization } from "@/lib/stripe/surcharge-capture";
 import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { notifyStaffOfFailedDeposit } from "@/lib/estimate-deposit-notify";
@@ -296,6 +297,22 @@ export async function POST(request: Request) {
           .maybeSingle();
         if (alreadyRecorded) break;
         await markInvoicesPendingCharge({ db, paymentIntent: pendingIntent, amountsByInvoiceId: amounts });
+      }
+      break;
+    }
+
+    // A card charge that includes a surcharge is created as an authorization (see
+    // lib/stripe/surcharge-capture.ts). Once the customer's card is on it, capture the full amount for
+    // a credit card or only the invoice balance for debit/prepaid. The sweep cron
+    // (/api/cron/settle-card-surcharges) covers a missed or failed delivery.
+    case "payment_intent.amount_capturable_updated": {
+      const authIntent = event.data.object as Stripe.PaymentIntent;
+      if (authIntent.metadata?.surcharge_pending !== "1" || !event.account) break;
+      try {
+        await settleSurchargeAuthorization(getStripeForOrg(event.livemode), authIntent, event.account);
+      } catch (err) {
+        log.error("failed to settle surcharge authorization", { error: err, paymentIntentId: authIntent.id });
+        return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
       }
       break;
     }

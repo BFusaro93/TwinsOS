@@ -135,9 +135,20 @@ export function OnlinePaymentsGuide() {
           card-processing rate:
         </p>
         <ul className="list-disc space-y-2 pl-5">
-          <li>Defaults to on, at 3.5%, only applied above $500 — all three are adjustable.</li>
+          <li>Off by default for new companies. When you turn it on you set the rate (3% is the starting value) and the threshold above which it applies — for example 3% on card payments over $500.</li>
+          <li>Choose <strong>Flat percent</strong> or <strong>Cover the card fee exactly</strong>. Stripe&apos;s fee is taken from the whole charge, including the surcharge, so a flat percent can leave you slightly short; the cover-the-fee mode grosses the charge up so you receive the full invoice amount.</li>
+          <li>Card networks cap surcharges (at 3%) and some states ban them. Landscapt doesn&apos;t limit the rate — it&apos;s on you to set one that&apos;s lawful where you operate.</li>
           <li>Applies to card payments on invoices <em>and</em> to a deposit paid by card when a client accepts a proposal, on the same threshold.</li>
           <li>Never applied to Bank Transfer/ACH payments — ACH is fee-free by design.</li>
+          <li>
+            <strong>Credit cards only.</strong> Debit and prepaid cards can&apos;t be surcharged. A saved card
+            (autopay, Charge All) is checked first and a debit, prepaid or unreadable card is charged the
+            invoice amount with no fee. A card entered at checkout shows the fee beforehand, labelled
+            &ldquo;credit cards only&rdquo;; the payment is authorized for the total, and as soon as the card is
+            on it Landscapt captures the full amount for a credit card or just the invoice balance for a debit
+            or prepaid card, releasing the fee part of the hold. The payment shows as recorded within seconds
+            (at most a few minutes). If the card type can&apos;t be read, no fee is charged.
+          </li>
           <li>Staff can waive it or override it to a flat amount on an individual charge; clients paying through the portal or a public pay link cannot.</li>
           <li>Every fee collected is itemized in its own &ldquo;Credit Card Processing Fees&rdquo; report and rolled into the P&amp;L.</li>
         </ul>

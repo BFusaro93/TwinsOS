@@ -1952,7 +1952,7 @@ export function useApplyCreditToInvoice() {
       }
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
-      qc.invalidateQueries({ queryKey: ["crm-clients"] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
     },
   });
 }
@@ -2255,7 +2255,7 @@ export function useCreateInvoiceFromJob() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: job, error: jobErr } = await (supabase as any)
         .from("crm_jobs")
-        .select("sales_rep_id, job_type, estimate_id, clients(default_tax_rate_bps, default_terms), crm_job_services(id, is_taxable, crm_services(is_taxable))")
+        .select("sales_rep_id, job_type, estimate_id, clients(default_tax_rate_bps, default_terms, is_taxable), crm_job_services(id, is_taxable, crm_services(is_taxable))")
         .eq("id", jobId)
         .single();
       if (jobErr) throw jobErr;
@@ -2263,7 +2263,7 @@ export function useCreateInvoiceFromJob() {
         sales_rep_id: string | null;
         job_type: string;
         estimate_id: string | null;
-        clients: { default_tax_rate_bps: number | null; default_terms: string | null } | null;
+        clients: { default_tax_rate_bps: number | null; default_terms: string | null; is_taxable: boolean | null } | null;
         crm_job_services: { id: string; is_taxable: boolean | null; crm_services: { is_taxable: boolean | null } | null }[] | null;
       };
 
@@ -2320,7 +2320,7 @@ export function useCreateInvoiceFromJob() {
           .from("estimates").select("tax_rate_bps").eq("id", jobRow.estimate_id).maybeSingle();
         estimateTaxRateBps = (est as { tax_rate_bps: number | null } | null)?.tax_rate_bps ?? null;
       }
-      const taxRateBps = resolveAutoInvoiceTaxRateBps(estimateTaxRateBps, jobRow.clients?.default_tax_rate_bps);
+      const taxRateBps = resolveAutoInvoiceTaxRateBps(estimateTaxRateBps, jobRow.clients?.default_tax_rate_bps, jobRow.clients?.is_taxable);
       const svcById = new Map((jobRow.crm_job_services ?? []).map((s) => [s.id, s]));
       // Product lines take the catalog product's selling-tax flag
       // (product_items.is_taxable); a zero tax rate still yields zero tax.

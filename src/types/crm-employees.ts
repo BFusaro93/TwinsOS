@@ -138,6 +138,8 @@ export interface CRMCrewLogin {
   email: string | null;
   /** profiles.role — 'crew' for shared field logins, anything else is a regular user. */
   role: string;
+  /** profiles.status — 'invited' until they accept the invite. */
+  status?: string;
 }
 
 export interface CRMCrewMember {

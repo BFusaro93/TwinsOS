@@ -141,7 +141,7 @@ function mapEstimate(row: any): Estimate {
     tiersEnabled: row.tiers_enabled ?? false,
     tierLabels: (row.tier_labels as { basic: string; standard: string; premium: string }) ?? { basic: 'Basic', standard: 'Standard', premium: 'Premium' },
     displaySettings: toDisplaySettings(row.display_settings),
-    displaySettingsBaseline: (row as { display_settings_baseline?: unknown }).display_settings_baseline ? toDisplaySettings((row as { display_settings_baseline?: unknown }).display_settings_baseline) : null,
+    displaySettingsBaseline: row.display_settings_baseline ? toDisplaySettings(row.display_settings_baseline) : null,
     documentTemplateId: (row.document_template_id as string | null) ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
@@ -269,6 +269,13 @@ export function useCreateEstimate() {
         : { data: null };
       const defaultOverheadRateBps = overheadRow?.flat_overhead_rate_bps ?? 0;
 
+      // Start from the client's own default tax rate (and none at all for a tax-exempt client) rather
+      // than 0, so the proposal and the invoices that follow it carry the tax the client normally pays.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: taxClient } = await (supabase as any)
+        .from("clients").select("default_tax_rate_bps, is_taxable").eq("id", values.clientId).maybeSingle();
+      const defaultTaxRateBps = taxClient?.is_taxable === false ? 0 : Math.max(0, Number(taxClient?.default_tax_rate_bps) || 0);
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("estimates")
@@ -282,6 +289,7 @@ export function useCreateEstimate() {
           valid_until_date: values.validUntilDate ?? null,
           stage: values.stage ?? "draft",
           overhead_rate_bps: defaultOverheadRateBps,
+          ...(defaultTaxRateBps > 0 ? { tax_rate_bps: defaultTaxRateBps } : {}),
           ...(values.displaySettings ? { display_settings: values.displaySettings, display_settings_baseline: values.displaySettings } : {}),
           ...(values.documentTemplateId ? { document_template_id: values.documentTemplateId } : {}),
         })
@@ -720,6 +728,8 @@ export function useUpsertLineItem() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
+      // Totals were recalculated: the list, a client's Estimates tab and the pipeline show them too.
+      qc.invalidateQueries({ queryKey: ["estimates"] });
     },
   });
 }
@@ -742,6 +752,8 @@ export function useDeleteLineItem() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
+      // Totals were recalculated: the list, a client's Estimates tab and the pipeline show them too.
+      qc.invalidateQueries({ queryKey: ["estimates"] });
     },
   });
 }
@@ -770,6 +782,8 @@ export function useUpsertDirectCost() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
+      // Totals were recalculated: the list, a client's Estimates tab and the pipeline show them too.
+      qc.invalidateQueries({ queryKey: ["estimates"] });
     },
   });
 }
@@ -793,6 +807,8 @@ export function useDeleteDirectCost() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["estimates", "detail", vars.estimateId] });
+      // Totals were recalculated: the list, a client's Estimates tab and the pipeline show them too.
+      qc.invalidateQueries({ queryKey: ["estimates"] });
     },
   });
 }

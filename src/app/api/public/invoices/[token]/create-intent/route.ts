@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
+import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
 import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
 
 // Public, unauthenticated "pay without logging in" endpoint. Mirrors the
@@ -86,7 +87,7 @@ export async function POST(
   const { data: org } = await supabase
     .from("organizations")
     .select(
-      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode"
+      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode"
     )
     .eq("id", invoice.org_id)
     .single();
@@ -139,6 +140,7 @@ export async function POST(
       ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
       ccProcessingFeeBps: org.cc_processing_fee_bps,
       ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+      ccProcessingFeeMode: (org.customizations as Record<string, unknown> | null)?.cc_processing_fee_mode as string | undefined,
     },
     invoice.balance_cents,
     false
@@ -160,6 +162,7 @@ export async function POST(
       amount: totalChargeCents,
       currency: "usd",
       payment_method_types: ["card"],
+      ...surchargeIntentParams(feeCents, true),
       ...(customerId ? { customer: customerId } : {}),
       metadata: {
         source: "crm_invoice",
@@ -168,6 +171,7 @@ export async function POST(
         client_id: invoice.client_id,
         balance_cents: String(invoice.balance_cents),
         fee_cents: String(feeCents),
+        ...surchargeIntentMetadata(feeCents, true),
       },
     },
     {

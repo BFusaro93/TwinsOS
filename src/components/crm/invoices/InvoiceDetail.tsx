@@ -1346,7 +1346,7 @@ export function InvoiceDetail({
                           onClick={() => {
                             const fallback = (invoice.clientDefaultTaxRateBps ?? 0) > 0
                               ? invoice.clientDefaultTaxRateBps!
-                              : Math.round((orgSettings?.taxRatePercent ?? 7) * 100);
+                              : Math.round((orgSettings?.taxRatePercent ?? 0) * 100);
                             setTaxRateBps(hasTax ? 0 : fallback);
                           }}
                           className={cn(

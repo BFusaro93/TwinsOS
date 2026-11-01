@@ -139,7 +139,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [notes, setNotes] = useState("");
   const [lineItems, setLineItems] = useState<DraftLineItem[]>(() => [emptyLineItem()]);
-  const [taxRatePercent, setTaxRatePercent] = useState(() => String(orgTaxRate ?? 7));
+  const [taxRatePercent, setTaxRatePercent] = useState(() => String(orgTaxRate ?? 0));
   const [shippingCost, setShippingCost] = useState("");
   const [discountCost, setDiscountCost] = useState("");
   const [discountReducesTax, setDiscountReducesTax] = useState(false);
@@ -188,7 +188,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     } else if (open && !initialData && prefillData?.taxRatePercent == null) {
       // Sync tax rate from org settings when creating a new PO (a
       // requisition conversion brings its own rate instead).
-      setTaxRatePercent(String(orgTaxRate ?? 7));
+      setTaxRatePercent(String(orgTaxRate ?? 0));
     }
   }, [open, initialData, orgTaxRate, prefillData?.taxRatePercent]);
 
@@ -259,7 +259,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     setInvoiceNumber("");
     setNotes("");
     setLineItems([emptyLineItem()]);
-    setTaxRatePercent(String(orgTaxRate ?? 7));
+    setTaxRatePercent(String(orgTaxRate ?? 0));
     setShippingCost("");
     setDiscountCost("");
     setDiscountReducesTax(false);

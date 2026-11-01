@@ -1,8 +1,32 @@
+/**
+ * True only when the card is positively a CREDIT card. Debit and prepaid cards can never be
+ * surcharged (federal law and the card networks' rules), so an unreadable or unknown funding type
+ * counts as "no surcharge" — undercharging the fee is recoverable, surcharging a debit card is not.
+ */
+export async function cardAllowsSurcharge(
+  stripe: { paymentMethods: { retrieve: (id: string, params: undefined, opts: { stripeAccount: string }) => Promise<{ card?: { funding?: string | null } | null }> } },
+  connectedAccountId: string,
+  paymentMethodId: string
+): Promise<boolean> {
+  try {
+    const pm = await stripe.paymentMethods.retrieve(paymentMethodId, undefined, { stripeAccount: connectedAccountId });
+    return pm.card?.funding === "credit";
+  } catch {
+    return false;
+  }
+}
+
 export interface OrgFeeSettings {
   ccProcessingFeeEnabled: boolean;
   ccProcessingFeeBps: number;
   ccProcessingFeeThresholdCents: number;
+  /** 'flat' (default) = bps of the balance; 'cover_fee' = gross up so the org nets the balance after Stripe's card fee. */
+  ccProcessingFeeMode?: string | null;
 }
+
+/** Stripe's standard US card pricing (2.9% + $0.30), used by the 'cover the card fee' surcharge mode. */
+export const STRIPE_CARD_RATE = 0.029;
+export const STRIPE_CARD_FIXED_CENTS = 30;
 
 export interface ProcessingFeeResult {
   feeCents: number;
@@ -22,6 +46,12 @@ export function computeProcessingFee(
     return { feeCents: overrideFeeCents, totalChargeCents: balanceCents + overrideFeeCents };
   }
   const eligible = org.ccProcessingFeeEnabled && !waiveFee && balanceCents > org.ccProcessingFeeThresholdCents;
+  if (eligible && org.ccProcessingFeeMode === "cover_fee") {
+    // Stripe takes RATE x total + FIXED off the whole charge, surcharge included, so charge
+    // T = (balance + FIXED) / (1 - RATE): T minus Stripe's cut is exactly the invoice balance.
+    const totalChargeCents = Math.ceil((balanceCents + STRIPE_CARD_FIXED_CENTS) / (1 - STRIPE_CARD_RATE));
+    return { feeCents: totalChargeCents - balanceCents, totalChargeCents };
+  }
   const feeCents = eligible ? Math.round((balanceCents * org.ccProcessingFeeBps) / 10000) : 0;
   return { feeCents, totalChargeCents: balanceCents + feeCents };
 }

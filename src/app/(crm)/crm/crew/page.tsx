@@ -208,14 +208,21 @@ export default function CrewSchedulePage() {
           shop. Individual exceptions (late, out, left early) are in Edit Crew. */}
       <div className="px-4 pt-4">
         {!dayStartedAt ? (
-          <Button
-            className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white h-12 text-base"
-            onClick={() => dayAction.mutate({ action: "start_day" })}
-            disabled={dayAction.isPending || dayMembers.length === 0}
-          >
-            {dayAction.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sun className="h-5 w-5" />}
-            Start Day
-          </Button>
+          <>
+            <Button
+              className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white h-12 text-base"
+              onClick={() => dayAction.mutate({ action: "start_day" })}
+              disabled={dayAction.isPending || dayMembers.length === 0}
+            >
+              {dayAction.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sun className="h-5 w-5" />}
+              Start Day
+            </Button>
+            {dayMembers.length === 0 && (
+              <p className="mt-2 text-center text-xs text-amber-700 dark:text-amber-400">
+                No one is on your crew today. Tap Edit Crew to add the people working, or ask the office to add them under Team → Crews.
+              </p>
+            )}
+          </>
         ) : dayOpen ? (
           <div className="bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
             <div>
@@ -307,8 +314,19 @@ export default function CrewSchedulePage() {
         {!isLoading && stops.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <CheckCircle2 className="h-12 w-12 text-slate-300 dark:text-neutral-500 mb-3" />
-            <p className="font-medium text-slate-600 dark:text-neutral-400">No jobs scheduled today</p>
-            <p className="text-sm text-slate-400 dark:text-neutral-500 mt-1">Check back later or contact the office.</p>
+            {crewInfo === null ? (
+              <>
+                <p className="font-medium text-slate-600 dark:text-neutral-400">Your login isn&apos;t linked to a crew</p>
+                <p className="text-sm text-slate-400 dark:text-neutral-500 mt-1">
+                  Jobs can&apos;t show up here until the office links this login to a crew (Team → Crews → Linked Login).
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-slate-600 dark:text-neutral-400">No jobs scheduled today</p>
+                <p className="text-sm text-slate-400 dark:text-neutral-500 mt-1">Check back later or contact the office.</p>
+              </>
+            )}
           </div>
         )}
 

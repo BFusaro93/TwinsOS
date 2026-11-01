@@ -1,5 +1,6 @@
 "use client";
 
+import { useRoles } from "@/lib/hooks/use-roles";
 import { useState, useMemo } from "react";
 import { useUsers, useInviteUser, useUpdateUserRole, useDeactivateUser, useReactivateUser, useUpdatePhotoModuleAccess, useCreateCrewAccount, useResetPassword } from "@/lib/hooks/use-users";
 import { useModuleAccess } from "@/lib/hooks/use-module-access";
@@ -228,7 +229,7 @@ function formatDate(iso: string): string {
 interface InviteUserDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onInvite: (name: string, email: string, role: OrgUser["role"]) => Promise<void>;
+  onInvite: (name: string, email: string, role: OrgUser["role"], crmRoleId: string | null) => Promise<void>;
   submitting?: boolean;
   showCmmsRoles?: boolean;
 }
@@ -237,12 +238,17 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false, sh
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<OrgUser["role"] | "">("");
+  const [crmRoleId, setCrmRoleId] = useState("");
   const [inviteError, setInviteError] = useState<string | null>(null);
+  // Landscapt access comes from a CRM role on a linked employee record, not the login role above.
+  const { data: crmRoles = [] } = useRoles(true);
+  const needsCrmRole = role !== "" && role !== "admin" && role !== "crew";
 
   function reset() {
     setName("");
     setEmail("");
     setRole("");
+    setCrmRoleId("");
     setInviteError(null);
   }
 
@@ -251,7 +257,7 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false, sh
     if (!name.trim() || !email.trim() || !role) return;
     setInviteError(null);
     try {
-      await onInvite(name.trim(), email.trim(), role as OrgUser["role"]);
+      await onInvite(name.trim(), email.trim(), role as OrgUser["role"], needsCrmRole && crmRoleId ? crmRoleId : null);
       reset();
       onOpenChange(false);
     } catch (err) {
@@ -311,6 +317,24 @@ function InviteUserDialog({ open, onOpenChange, onInvite, submitting = false, sh
               </SelectContent>
             </Select>
           </div>
+          {needsCrmRole && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="invite-crm-role">Landscapt role <span className="font-normal text-slate-400 dark:text-neutral-500">(optional)</span></Label>
+              <Select value={crmRoleId} onValueChange={setCrmRoleId}>
+                <SelectTrigger id="invite-crm-role">
+                  <SelectValue placeholder="No Landscapt access" />
+                </SelectTrigger>
+                <SelectContent>
+                  {crmRoles.map((r: { id: string; name: string }) => (
+                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500 dark:text-neutral-400">
+                Without a Landscapt role this person can&rsquo;t open Landscapt. Choosing one also adds them to your employee list.
+              </p>
+            </div>
+          )}
           {inviteError && (
             <p className="rounded-md bg-red-50 dark:bg-red-950/40 px-3 py-2 text-sm text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800">
               {inviteError}
@@ -416,7 +440,7 @@ function CreateCrewAccountDialog({ open, onOpenChange }: CreateCrewAccountDialog
                 </div>
               </div>
               <p className="mt-3 text-xs text-slate-600 dark:text-neutral-400">
-                {crewStatus === "created" && "A matching Landscapt crew was created and linked. Change it under Team → Crews."}
+                {crewStatus === "created" && "A matching Landscapt crew was created and linked. It starts with nobody on its roster, so add team members under Team → Crews before the crew can start its day."}
                 {crewStatus === "linked" && "Linked to your existing Landscapt crew with this name."}
                 {crewStatus === "failed" && "Could not create a Landscapt crew — link this login to one under Team → Crews."}
               </p>
@@ -716,9 +740,9 @@ export function UsersPage() {
     });
   }
 
-  async function handleInvite(name: string, email: string, role: OrgUser["role"]) {
+  async function handleInvite(name: string, email: string, role: OrgUser["role"], crmRoleId: string | null) {
     await new Promise<void>((resolve, reject) =>
-      inviteUser({ name, email, role }, { onSuccess: resolve, onError: reject })
+      inviteUser({ name, email, role, crmRoleId }, { onSuccess: resolve, onError: reject })
     );
   }
 

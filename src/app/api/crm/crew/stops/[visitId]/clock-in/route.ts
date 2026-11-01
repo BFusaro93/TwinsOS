@@ -262,7 +262,7 @@ export async function POST(
 
   // The leader's one tap clocks in the whole crew: punch every working
   // member (roster minus anyone marked absent) at the same instant.
-  await openStopPunches(
+  const { rosterEmpty } = await openStopPunches(
     supabase,
     { id: anchor.id, orgId: anchor.org_id, crewId: effectiveVisitCrewId(anchor), scheduledDate: anchor.scheduled_date },
     now
@@ -285,5 +285,10 @@ export async function POST(
     });
   }
 
-  return NextResponse.json({ visitIds: siblingIds, visits: data });
+  return NextResponse.json({
+    visitIds: siblingIds,
+    visits: data,
+    // Nobody is on the crew today, so no member punches (and no payroll time) were recorded.
+    ...(rosterEmpty ? { warnings: ["crew_roster_empty"] } : {}),
+  });
 }

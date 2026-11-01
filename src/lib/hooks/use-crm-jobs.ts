@@ -1658,6 +1658,7 @@ export function useCreateClientJob() {
           is_complete: false,
           notes: values.notes || null,
           notes_to_crew: values.notesToCrew || null,
+          invoice_description: values.invoiceDescription?.trim() || null,
           budgeted_hours: roundHours(values.services.reduce((sum, s) => sum + (s.budgetedHours || 0) * (s.teamSize || 1), 0)) || null,
         })
         .select()
@@ -1937,6 +1938,26 @@ export function useCreateCRMService() {
 
 // ── bulk import services ──────────────────────────────────────────────────────
 
+const SERVICE_IMPORT_UNITS = ["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
+const SERVICE_IMPORT_UNIT_ALIASES: Record<string, string> = {
+  "sq ft": "sqft", "sf": "sqft", "square feet": "sqft", "square foot": "sqft", "sq. ft.": "sqft",
+  "hour": "hr", "hours": "hr", "hourly": "hr", "linear feet": "lf", "linear foot": "lf", "lin ft": "lf",
+  "cubic yard": "cuyd", "cubic yards": "cuyd", "cu yd": "cuyd", "yard": "cuyd", "yards": "cuyd",
+  "acre": "acres", "pound": "lb", "pounds": "lb", "gallon": "gal", "gallons": "gal", "ea": "each", "per visit": "visit",
+};
+function normalizeServiceImportUnit(raw: string | undefined): string {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (SERVICE_IMPORT_UNITS.includes(v)) return v;
+  return SERVICE_IMPORT_UNIT_ALIASES[v] ?? "visit";
+}
+/** "$1,200.50" -> 1200.5; blank or unreadable -> null. */
+function parseImportNumber(raw: string | undefined): number | null {
+  const cleaned = (raw ?? "").replace(/[$,\s]/g, "");
+  if (!cleaned) return null;
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function useBulkImportCRMServices() {
   const qc = useQueryClient();
   return useMutation({
@@ -1960,9 +1981,12 @@ export function useBulkImportCRMServices() {
           name,
           code,
           category: r.category?.trim() || "general",
-          unit: (["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"].includes(r.unit?.trim().toLowerCase()) ? r.unit.trim().toLowerCase() : "visit"),
-          default_rate_cents: r.defaultRate ? Math.round(parseFloat(r.defaultRate) * 100) : null,
-          production_rate_sqft_per_hr: r.productionRate ? parseFloat(r.productionRate) : null,
+          unit: normalizeServiceImportUnit(r.unit),
+          // "$45.00" and "1,200" would otherwise parse to NaN / 1 and save a null or wrong rate.
+          default_rate_cents: parseImportNumber(r.defaultRate) != null ? Math.round(parseImportNumber(r.defaultRate)! * 100) : null,
+          production_rate_sqft_per_hr: parseImportNumber(r.productionRate),
+          // A production rate only drives estimate hours when the service budgets by it.
+          ...((parseImportNumber(r.productionRate) ?? 0) > 0 ? { budget_method: "production_rate" } : {}),
           is_active: r.isActive?.trim().toLowerCase() !== "no",
         };
 
@@ -2327,6 +2351,18 @@ export function useCreateJobsFromEstimate() {
         resolvedDateSold = acceptedAt ? isoInZone(new Date(acceptedAt), orgTimeZone) : todayInZone(orgTimeZone);
       }
 
+      // A custom Invoice Description set on the estimate line should reach the auto-invoice. The
+      // job-level description applies to every service on the job, so only carry it over when the
+      // job is exactly that one line.
+      let singleLineInvoiceDescription: string | null = null;
+      const singleLineId = services.length === 1 ? services[0].estimateLineItemId : null;
+      if (singleLineId) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: lineRow } = await (supabase as any)
+          .from("estimate_line_items").select("invoice_desc").eq("id", singleLineId).maybeSingle();
+        singleLineInvoiceDescription = (lineRow?.invoice_desc as string | null | undefined)?.trim() || null;
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_jobs")
@@ -2335,6 +2371,7 @@ export function useCreateJobsFromEstimate() {
           client_id: clientId,
           property_id: propertyId ?? null,
           estimate_id: estimateId,
+          ...(singleLineInvoiceDescription ? { invoice_description: singleLineInvoiceDescription } : {}),
           job_type: jobType,
           project_id: jobType === "project" ? (projectId ?? null) : null,
           // A package job has no single date: it sits on the Waiting List inside

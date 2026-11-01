@@ -62,7 +62,7 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
       setError(confirmError.message ?? "Payment failed");
       return;
     }
-    if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing") {
+    if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing" || paymentIntent?.status === "requires_capture") {
       onSuccess();
     } else {
       setError("Payment was not completed");
@@ -277,7 +277,7 @@ export default function PublicInvoicePage() {
             <div className="mt-8 border-t pt-6">
               {intent.feeCents > 0 && (
                 <p className="mb-3 text-xs text-slate-500">
-                  Includes a {cents(intent.feeCents)} card processing fee.
+                  Includes a {cents(intent.feeCents)} card processing fee, which applies to credit cards only (it isn&apos;t charged on debit or prepaid cards).
                 </p>
               )}
               <Elements stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>

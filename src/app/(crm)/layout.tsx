@@ -68,8 +68,8 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
             Your login isn&apos;t linked to a Landscapt employee record, so you don&apos;t have access to
             this section. Ask an admin to add you under Team &rarr; Employees and assign a Landscapt role.
           </p>
-          <Link href="/equipt/home" className="mt-4 inline-block text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400">
-            Go to dashboard &rarr;
+          <Link href="/home" className="mt-4 inline-block text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400">
+            Back to home &rarr;
           </Link>
         </div>
       </div>
