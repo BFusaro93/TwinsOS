@@ -16917,6 +16917,7 @@ export type Database = {
           record_id: string | null
           record_kind: string | null
           record_label: string | null
+          record_ref: string | null
         }
         Relationships: [
           {

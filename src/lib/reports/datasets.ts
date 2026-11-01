@@ -748,6 +748,7 @@ export const REPORT_DATASETS: ReportDataset[] = [
       },
       { key: "record_label", label: "Record Type", type: "text" },
       { key: "record_kind", label: "Record Type (key)", type: "text" },
+      { key: "record_ref", label: "Record", type: "text" },
       {
         key: "action",
         label: "Action",

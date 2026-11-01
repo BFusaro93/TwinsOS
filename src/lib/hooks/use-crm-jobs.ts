@@ -2367,8 +2367,9 @@ export function useCreateJobsFromEstimate() {
           services.map((sv) => ({ id: sv.estimateLineItemId ?? sv.serviceName, serviceId: sv.serviceId, serviceName: sv.serviceName })),
           scheduledDate,
         );
-        // Same total-steps rule as a package created from Add Job / PackageDialog.
-        pkgTotalSteps = pkgServices.reduce((sum, ps) => sum + (ps.visitsIncluded || 1), 0) || 1;
+        // One step per selected line, so a visit the client skipped (line set to
+        // Draft) doesn't leave the job reading "Step 3 of 5" with four visits.
+        pkgTotalSteps = services.length || 1;
       }
       const stepByLine = new Map((pkgPlan?.steps ?? []).map((st) => [st.lineId, st]));
 
