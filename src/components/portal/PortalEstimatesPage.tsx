@@ -59,6 +59,7 @@ interface LineItem {
   row_type?: "item" | "section" | null;
   section_name?: string | null;
   tier?: string | null;
+  package_id?: string | null;
 }
 
 interface SignDialogProps {
@@ -85,10 +86,14 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
   const hasLineItems = itemRows.length > 0;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(allItemRows.map((li) => li.id)));
 
+  // A package is all-or-nothing: toggling one of its lines flips them all.
   function toggleItem(id: string) {
+    const pkgId = allItemRows.find((li) => li.id === id)?.package_id ?? null;
+    const ids = pkgId ? allItemRows.filter((li) => li.package_id === pkgId).map((li) => li.id) : [id];
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      const on = !next.has(id);
+      for (const x of ids) { if (on) next.add(x); else next.delete(x); }
       return next;
     });
   }

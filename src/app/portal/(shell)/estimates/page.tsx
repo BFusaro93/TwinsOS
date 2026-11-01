@@ -18,6 +18,7 @@ interface LineItemRow {
   row_type: "item" | "section" | null;
   section_name: string | null;
   tier: string | null;
+  package_id: string | null;
 }
 
 interface EstimateRow {
@@ -60,7 +61,7 @@ export default async function EstimatesPage() {
     .from("estimates")
     .select(
       "id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
-        "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, status, sort_order, row_type, section_name, tier)"
+        "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, status, sort_order, row_type, section_name, tier, package_id)"
     )
     .eq("client_id", ctx.clientId)
     .eq("org_id", ctx.orgId)
@@ -97,6 +98,7 @@ export default async function EstimatesPage() {
           visits: li.visits,
           total_cents: li.totalCents,
           status: li.status,
+          package_id: li.packageId ?? null,
           row_type: li.rowType,
           section_name: li.sectionName,
           tier: li.tier,

@@ -445,10 +445,17 @@ export default function ProposalPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
+  // A package is all-or-nothing: ticking or unticking one of its lines
+  // flips every line of that package together.
   function toggleItem(id: string) {
+    const pkgId = proposal?.lineItems.find((li) => li.id === id)?.packageId ?? null;
+    const ids = pkgId
+      ? (proposal?.lineItems ?? []).filter((li) => li.packageId === pkgId && li.rowType !== "section").map((li) => li.id)
+      : [id];
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      const on = !next.has(id);
+      for (const x of ids) { if (on) next.add(x); else next.delete(x); }
       return next;
     });
   }
