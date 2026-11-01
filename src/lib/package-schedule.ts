@@ -64,3 +64,77 @@ export function computePackageVisitSchedule(services: CRMPackageService[]): Pack
 
   return results;
 }
+
+export interface PackageLineStep {
+  /** Estimate line id this package step prices. */
+  lineId: string;
+  startDate: string | null;
+  completeByDate: string | null;
+  minDays: number | null;
+}
+
+function toDateStr(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+function shiftStr(s: string | null, days: number): string | null {
+  return s ? toDateStr(addDays(parseDate(s), days)) : null;
+}
+
+/**
+ * Maps the lines of an estimate that were added from a package onto the
+ * package's steps, then resolves each step's window the same way
+ * NewJobDialog.pickPackage does (computePackageVisitSchedule, min-days
+ * spacing included).
+ *
+ * A line matches the next unused package step with the same service id (or,
+ * for older packages that only carry a name, the same name); the lines are
+ * taken in the order given. A line with no matching step gets no window.
+ *
+ * `anchor` (YYYY-MM-DD), when given, re-anchors the whole program: every
+ * window shifts by the days between the program's earliest scheduled date and
+ * the anchor, exactly like changing the Start Date on a new package job.
+ *
+ * `windowStart` / `windowEnd` are the program's overall range (the job's
+ * waiting-list window).
+ */
+export function planPackageLineSteps(
+  services: CRMPackageService[],
+  lines: { id: string; serviceId: string | null; serviceName: string }[],
+  anchor?: string | null,
+): { steps: PackageLineStep[]; windowStart: string | null; windowEnd: string | null } {
+  const schedule = computePackageVisitSchedule(services);
+  const unused = [...schedule];
+  const norm = (n: string) => n.trim().toLowerCase();
+
+  const matched = lines.map((line) => {
+    let idx = unused.findIndex((v) => !!line.serviceId && v.service.serviceId === line.serviceId);
+    if (idx === -1) idx = unused.findIndex((v) => norm(v.service.serviceName) === norm(line.serviceName));
+    const hit = idx === -1 ? null : unused.splice(idx, 1)[0];
+    return { line, hit };
+  });
+
+  const dated = schedule.filter((v) => v.scheduledDate);
+  let offset = 0;
+  if (anchor && dated.length > 0) {
+    const earliest = dated.reduce((min, v) => (v.scheduledDate! < min ? v.scheduledDate! : min), dated[0].scheduledDate!);
+    offset = Math.round((parseDate(anchor).getTime() - parseDate(toDateStr(earliest)).getTime()) / 86_400_000);
+  }
+
+  const steps: PackageLineStep[] = matched.map(({ line, hit }) => ({
+    lineId: line.id,
+    startDate: hit?.scheduledDate ? shiftStr(toDateStr(hit.scheduledDate), offset) : null,
+    completeByDate: shiftStr(hit?.service.endDate ?? null, offset),
+    minDays: hit?.service.minDays ?? null,
+  }));
+
+  const starts = steps.map((s) => s.startDate).filter((d): d is string => !!d).sort();
+  const ends = steps.map((s) => s.completeByDate ?? s.startDate).filter((d): d is string => !!d).sort();
+  return {
+    steps,
+    windowStart: starts[0] ?? null,
+    windowEnd: ends[ends.length - 1] ?? null,
+  };
+}

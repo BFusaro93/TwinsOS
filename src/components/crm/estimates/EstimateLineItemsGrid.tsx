@@ -13,6 +13,8 @@ import { useCustomFieldDefs, useClientCustomFieldValues } from "@/lib/hooks/use-
 import { usePropertyCustomFieldValues, lookupRateMatrixMatch, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
 import { createClient } from "@/lib/supabase/client";
 import { stripHtml } from "@/lib/utils/strip-html";
+import { usePackages } from "@/lib/hooks/use-packages";
+import type { CRMPackage } from "@/types/crm-packages";
 import { isAreaUnit, needsProductionRateUnitWarning, unitLabel } from "@/lib/estimates/units";
 import { resolveTakeoffSqft, type ClientTakeoff } from "@/lib/estimates/client-takeoff";
 import { Button } from "@/components/ui/button";
@@ -22,7 +24,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { Trash2, Copy, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical, AlertTriangle, Printer } from "lucide-react";
+import { Trash2, Copy, Package as PackageIcon, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical, AlertTriangle, Printer } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -1002,6 +1004,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
   const { mutateAsync: upsert } = useUpsertLineItem();
   const { mutateAsync: applyEquipmentDefaults } = useApplyServiceEquipmentDefaults();
   const { mutateAsync: deleteItem } = useDeleteLineItem();
+  const { data: packages = [] } = usePackages(false);
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
 
@@ -1042,6 +1045,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
             budget_method: item.budgetMethod,
             complexity_bps: item.complexityBps,
             tier: item.tier,
+            package_id: item.packageId,
             discount_cents: item.discountCents,
             discount_type: item.discountType,
             discount_value: item.discountValue,
@@ -1081,7 +1085,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     [items, upsert, estimateId]
   );
 
-  async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; budgetMethod?: BudgetMethod; rateCents?: number | null; estimateDesc?: string | null; invoiceDesc?: string | null }) {
+  async function addService(svc: { name: string; id?: string; unit?: string; productionRate?: number | null; budgetMethod?: BudgetMethod; rateCents?: number | null; estimateDesc?: string | null; invoiceDesc?: string | null; visits?: number; packageId?: string | null; sortOrder?: number; budgetedHours?: number | null; lockRate?: boolean }) {
     const unit = svc.unit ?? null;
     const prodRate = svc.productionRate ?? null;
     let budgetMethod = svc.budgetMethod ?? "manual";
@@ -1103,10 +1107,13 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     // value for the property → falls through to today's unchanged behavior.
     let calcType: 0 | 1 = 1;
     let effectiveRateCents = svc.rateCents ?? 0;
-    let matrixBudgetedHours: number | null = null;
+    const lineVisits = Math.max(1, Math.round(svc.visits ?? 1));
+    let matrixBudgetedHours: number | null = svc.budgetedHours ?? null;
     let matrixCostCents: number | null = null;
     let matrixProductionRate: number | null = null;
-    if (svc.id && propertyId) {
+    // A package service carries its own per-visit price (lockRate), which the
+    // Rate Matrix must not silently replace.
+    if (svc.id && propertyId && !svc.lockRate) {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: matrixRows } = await (supabase as any)
@@ -1190,7 +1197,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       calcType,
       qty,
       rateCents: effectiveRateCents,
-      visits: 1,
+      visits: lineVisits,
       budgetedHours: matrixBudgetedHours ?? 0, // derived from qty ÷ production rate (production_rate), a Rate Matrix match, or set manually
       costCents: matrixCostCents ?? 0,
       adjRateCents: null,
@@ -1221,10 +1228,11 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           production_rate_sqft_per_hr: matrixProductionRate ?? prodRate,
           budget_method: budgetMethod,
           rate_cents: effectiveRateCents,
-          visits: 1,
+          visits: lineVisits,
+          package_id: svc.packageId ?? null,
           cost_cents: computed.costCents,
           adj_rate_cents: null,
-          sort_order: items.length,
+          sort_order: svc.sortOrder ?? items.length,
           total_cents: computed.totalCents,
           budgeted_hours: computed.budgetedHours,
           total_budgeted_hours: computed.totalBudgetedHours,
@@ -1241,6 +1249,70 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       }
     } catch {
       toast.error("Failed to add item");
+    }
+  }
+
+  /**
+   * Adds a package as one tagged line per package service, in package order,
+   * under a section header named after the package. Each line keeps the
+   * package's own pricing (its per-visit rate, falling back to the service's
+   * default) and its visit count (visitsIncluded), so the line math is the
+   * ordinary qty x rate x visits. The package's "description on estimate" rides
+   * on the first line, which is what the proposal, PDF and portal print.
+   * Lines carry tier = null (all tiers), exactly like any other added line.
+   */
+  async function addPackage(pkg: CRMPackage) {
+    const steps = [...(pkg.services ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+    if (steps.length === 0) {
+      toast.error(`"${pkg.name}" has no services — add them in CRM Settings → Packages`);
+      return;
+    }
+    try {
+      await upsert({
+        estimateId,
+        item: {
+          row_type: "section",
+          section_name: pkg.name,
+          status: "quote",
+          sort_order: items.length,
+          service_name: "",
+          qty: 0,
+          rate_cents: 0,
+          visits: 1,
+          total_cents: 0,
+          cost_cents: 0,
+          calc_type: 1,
+        },
+      });
+      const packageDesc = pkg.descriptionOnEstimate ? stripHtml(pkg.descriptionOnEstimate) : "";
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
+        // The package step may reference its service by id or only by name
+        // (older packages) — same fallback NewJobDialog.pickPackage uses.
+        const match = activeServices.find((s) => s.id === step.serviceId)
+          ?? activeServices.find((s) => s.name.trim().toLowerCase() === step.serviceName.trim().toLowerCase());
+        const serviceDesc = match?.descriptionOnEstimate ? stripHtml(match.descriptionOnEstimate) : "";
+        const rate = step.defaultRateCents || match?.defaultRateCents || 0;
+        await addService({
+          id: match?.id,
+          name: step.serviceName,
+          unit: match?.unit ?? undefined,
+          productionRate: match?.productionRateSqftPerHr ?? null,
+          budgetMethod: match?.budgetMethod,
+          rateCents: rate,
+          // Package-level wording leads on the first line; later lines keep
+          // their own service wording.
+          estimateDesc: i === 0 ? ([packageDesc, serviceDesc].filter(Boolean).join("\n\n") || null) : (serviceDesc || null),
+          invoiceDesc: match?.invoiceDescription ?? null,
+          visits: step.visitsIncluded || 1,
+          packageId: pkg.id,
+          sortOrder: items.length + 1 + i,
+          budgetedHours: step.defaultBHrs ?? null,
+          lockRate: !!step.defaultRateCents,
+        });
+      }
+    } catch {
+      toast.error("Failed to add package");
     }
   }
 
@@ -1268,6 +1340,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
   }
 
   const [addOpen, setAddOpen] = useState(false);
+  const [pkgOpen, setPkgOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
@@ -1379,11 +1452,39 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     </Popover>
   );
 
+  const packageButton = packages.length > 0 ? (
+    <Popover open={pkgOpen} onOpenChange={setPkgOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8 text-xs">
+          <PackageIcon className="mr-1 h-3.5 w-3.5" /> Add Package
+          <ChevronDown className="ml-1 h-3 w-3 text-slate-400 dark:text-neutral-500" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-0">
+        <div className="max-h-72 overflow-y-auto py-1">
+          {packages.map((p) => (
+            <button
+              key={p.id}
+              className="flex w-full items-center justify-between px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-muted/40"
+              onClick={() => { setPkgOpen(false); void addPackage(p); }}
+            >
+              <span className="font-medium text-slate-900 dark:text-neutral-100">{p.name}</span>
+              <span className="ml-2 shrink-0 text-[10px] text-slate-400 dark:text-neutral-500">
+                {(p.services ?? []).length} service{(p.services ?? []).length === 1 ? "" : "s"}
+              </span>
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  ) : null;
+
   return (
     <div className="flex min-h-[250px] flex-col rounded-lg border bg-card shadow-sm">
       {/* Add Item toolbar — always visible at the top */}
       <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2 bg-slate-50 dark:bg-muted/40">
         {addItemButton}
+        {packageButton}
         <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" onClick={addSection}>
           <Heading2 className="mr-1 h-3.5 w-3.5" /> Add Section
         </Button>
