@@ -169,6 +169,7 @@
       "occurred_at",
       "category",
       "record_label",
+      "record_ref",
       "action",
       "changed_by",
       "description"
@@ -1037,6 +1038,9 @@
       "phone",
       "email",
       "address",
+      "city",
+      "state",
+      "zip",
       "vendor_type",
       "is_active"
     ]
