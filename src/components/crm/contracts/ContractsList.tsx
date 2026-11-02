@@ -67,7 +67,16 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Plus, Pencil, ChevronDown, Trash2, X, ArrowUp, ArrowDown, Search, FileSignature } from "lucide-react";
 import { toast } from "sonner";
-import type { CRMContract, MonthlyAmounts, ContractStatus } from "@/types/crm-invoices";
+import type { BillingFrequency, CRMContract, MonthlyAmounts, ContractStatus } from "@/types/crm-invoices";
+import { billingAnchor, normalizeBillingFrequency } from "@/lib/contract-billing";
+import {
+  BILLING_FREQUENCY_OPTIONS,
+  billingFrequencyLabel,
+  billingFrequencySuffix,
+  contractBillingMonths,
+  formatBillingMonths,
+  formatContractAmount,
+} from "@/lib/utils/contract-frequency";
 import { useConfirm } from "@/components/shared/useConfirm";
 import {
   useContractTemplates,
@@ -116,6 +125,12 @@ function ordinal(n: number) {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+/** Weekly/biweekly/one-time contracts don't bill on a day of the month (see contract-billing.ts). */
+function billingDayLabel(c: CRMContract): string {
+  const frequency = normalizeBillingFrequency(c.billingFrequency);
+  return frequency === "weekly" || frequency === "biweekly" || frequency === "one_time" ? "—" : ordinal(c.billingDayOfMonth);
 }
 
 function fmtDate(d: string | null) {
@@ -261,7 +276,10 @@ interface DetailsState {
   endDate: string;
   lineItems: string[];
   defaultService: string;
+  billingFrequency: BillingFrequency;
+  /** Monthly contracts bill from the 12-month grid; every other frequency bills this one amount. */
   monthlyAmounts: MonthlyAmounts;
+  invoiceAmountCents: number;
   billingDayOfMonth: number;
   billMonthInAdvance: boolean;
   startBillingMode: "first_full_cycle" | "prorate_first_period";
@@ -272,17 +290,73 @@ interface DetailsState {
   includeSubProperties: boolean;
 }
 
+/**
+ * The flat amount a monthly grid bills on average. Billed months are those with
+ * a positive amount — averaging over a fixed 12 undercounts seasonal contracts
+ * (e.g. 5 billed months at $750 would wrongly average to $312.50/mo instead of
+ * $750/mo).
+ */
+function averageBilledCents(amounts: MonthlyAmounts): number {
+  const billed = Object.values(amounts).filter((v) => (v ?? 0) > 0);
+  return billed.length > 0 ? Math.round(billed.reduce((s, v) => s + v, 0) / billed.length) : 0;
+}
+
+function fmtAnchor(p: { y: number; m: number; d: number }) {
+  return new Date(p.y, p.m - 1, p.d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 function ContractDetailsTab({
   state,
   onChange,
   hideClient,
   clients,
+  signedAt,
+  createdAt,
+  hadMonthOverrides,
 }: {
   state: DetailsState;
   onChange: (patch: Partial<DetailsState>) => void;
   hideClient?: boolean;
   clients: { id: string; displayName: string }[];
+  /** Fall back after the start date for the cadence anchor, as the billing engine does. */
+  signedAt?: string | null;
+  createdAt?: string | null;
+  /** A non-monthly contract (set via API/import) whose per-month amounts differ from its flat amount. */
+  hadMonthOverrides?: boolean;
 }) {
+  const isMonthly = state.billingFrequency === "monthly";
+  const subMonthly = state.billingFrequency === "weekly" || state.billingFrequency === "biweekly";
+  const scheduleRow = {
+    billing_frequency: state.billingFrequency,
+    bill_month_in_advance: state.billMonthInAdvance,
+    start_date: state.startDate || null,
+    signed_at: signedAt ?? null,
+    created_at: createdAt ?? null,
+  };
+  const anchorLabel = fmtAnchor(billingAnchor(scheduleRow, new Date()));
+  const anchorSource = state.startDate ? "the start date" : signedAt ? "the signed date" : createdAt ? "the date it was created" : "today (no start date set)";
+
+  function changeFrequency(next: BillingFrequency) {
+    if (next === state.billingFrequency) return;
+    // Carry the amount across so switching cadence never silently zeroes it.
+    // A seasonal grid (months at different amounts) is kept as-is; a flat or
+    // empty one takes the single amount.
+    if (next === "monthly") {
+      const flatGrid = new Set(MONTHS.map(({ key }) => state.monthlyAmounts[key] ?? 0)).size <= 1;
+      onChange({
+        billingFrequency: next,
+        ...(flatGrid
+          ? { monthlyAmounts: MONTHS.reduce((acc, { key }) => { acc[key] = state.invoiceAmountCents; return acc; }, {} as MonthlyAmounts) }
+          : {}),
+      });
+    } else {
+      onChange({
+        billingFrequency: next,
+        ...(isMonthly ? { invoiceAmountCents: averageBilledCents(state.monthlyAmounts) } : {}),
+      });
+    }
+  }
+
   function autoFill() {
     const v = state.monthlyAmounts.jan ?? 0;
     const filled: MonthlyAmounts = {};
@@ -366,6 +440,11 @@ function ContractDetailsTab({
 
       <Section label="Invoice Details">
         <div className="grid grid-cols-[1fr_1fr_260px] gap-x-6 gap-y-2">
+          {isMonthly ? (
+          <>
+          <p className="col-span-2 text-xs text-muted-foreground">
+            Amount per invoice for each month. A month left at $0.00 is not billed.
+          </p>
           {/* Left months */}
           <div className="flex flex-col gap-2">
             {monthsLeft.map(({ key, label }) => (
@@ -404,8 +483,56 @@ function ContractDetailsTab({
               </div>
             ))}
           </div>
+          </>
+          ) : (
+            <div className="col-span-2 flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <span className="w-36 shrink-0 text-sm text-slate-600 dark:text-neutral-400">Amount per invoice</span>
+                <CurrencyInput
+                  className="h-7 w-32 text-sm"
+                  cents={state.invoiceAmountCents}
+                  onCommit={(cents) => onChange({ invoiceAmountCents: cents })}
+                />
+                <span className="text-sm text-muted-foreground">
+                  {billingFrequencySuffix(state.billingFrequency)}
+                </span>
+              </div>
+              <p className="text-sm text-slate-600 dark:text-neutral-400">
+                {state.billingFrequency === "quarterly" || state.billingFrequency === "annual" ? (
+                  <>
+                    Invoices in <strong>{formatBillingMonths(contractBillingMonths(scheduleRow))}</strong>
+                    {" "}— counted from {anchorSource} ({anchorLabel})
+                    {state.billMonthInAdvance ? ", one month in advance" : ""}.
+                  </>
+                ) : state.billingFrequency === "one_time" ? (
+                  <>Invoices once, on or after {anchorSource} ({anchorLabel}).</>
+                ) : (
+                  <>
+                    Invoices every {state.billingFrequency === "weekly" ? "7" : "14"} days, counted from {anchorSource} ({anchorLabel}).
+                  </>
+                )}
+              </p>
+              {hadMonthOverrides && (
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  This contract had different amounts for some months. Saving replaces them with the one amount above.
+                </p>
+              )}
+            </div>
+          )}
           {/* Right-side settings */}
-          <div className="flex flex-col gap-2 pl-4 border-l border-border">
+          <div className={cn("flex flex-col gap-2 pl-4 border-l border-border", isMonthly && "row-start-1 row-span-2 col-start-3")}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-slate-600 dark:text-neutral-400">Billing Frequency</span>
+              <Select value={state.billingFrequency} onValueChange={(v) => changeFrequency(v as BillingFrequency)}>
+                <SelectTrigger className="h-7 w-36 shrink-0 text-sm" aria-label="Billing Frequency"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {BILLING_FREQUENCY_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Weekly/biweekly count days from the anchor and one-time dates its invoice the day it
+                runs, so the day of month means nothing to them (see contract-billing.ts). */}
+            {!subMonthly && state.billingFrequency !== "one_time" && (
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm text-slate-600 dark:text-neutral-400">Billing Day of Month</span>
               <Input
@@ -416,6 +543,8 @@ function ContractDetailsTab({
                 onChange={(e) => onChange({ billingDayOfMonth: Math.min(31, Math.max(1, parseInt(e.target.value) || 1)) })}
               />
             </div>
+            )}
+            {!subMonthly && (
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm text-slate-600 dark:text-neutral-400">Bill 1 Month in Advance</span>
               <Checkbox
@@ -423,6 +552,9 @@ function ContractDetailsTab({
                 onCheckedChange={(v) => onChange({ billMonthInAdvance: !!v })}
               />
             </div>
+            )}
+            {/* Proration only exists for month-anchored cycles (planFirstPeriodProration). */}
+            {!subMonthly && state.billingFrequency !== "one_time" && (
             <div className="flex flex-col gap-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm text-slate-600 dark:text-neutral-400">If Start Is Mid-Cycle</span>
@@ -443,6 +575,7 @@ function ContractDetailsTab({
                 </p>
               )}
             </div>
+            )}
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm text-slate-600 dark:text-neutral-400">Payment Type</span>
               <Select value={state.paymentType} onValueChange={(v) => onChange({ paymentType: v })}>
@@ -1081,6 +1214,7 @@ export function ContractDialog({
     endDate: contract?.endDate ?? "",
     lineItems: contract?.invoiceLineItems ?? [],
     defaultService: contract?.defaultService ?? "",
+    billingFrequency: normalizeBillingFrequency(contract?.billingFrequency),
     // Any month not explicitly configured bills at the contract's flat
     // monthlyAmountCents (same fallback the invoice-generation cron uses) —
     // pre-fill it here so the grid reflects what will actually be billed
@@ -1099,6 +1233,7 @@ export function ContractDialog({
           return acc;
         }, {} as MonthlyAmounts)
       : MONTHS.reduce((acc, { key }) => { acc[key] = 0; return acc; }, {} as MonthlyAmounts),
+    invoiceAmountCents: contract?.monthlyAmountCents ?? 0,
     billingDayOfMonth: contract?.billingDayOfMonth ?? 1,
     billMonthInAdvance: contract?.billMonthInAdvance ?? false,
     startBillingMode: contract?.startBillingMode ?? "first_full_cycle",
@@ -1165,13 +1300,14 @@ export function ContractDialog({
       toast.error("End date can't be before the start date");
       return;
     }
-    // Billed months are those with a positive amount — averaging over a fixed
-    // 12 undercounts seasonal contracts (e.g. 5 billed months at $750 would
-    // wrongly average to $312.50/mo instead of $750/mo).
-    const billedMonths = Object.values(details.monthlyAmounts).filter((v) => (v ?? 0) > 0);
-    const avgMonthlyCents = billedMonths.length > 0
-      ? Math.round(billedMonths.reduce((s, v) => s + v, 0) / billedMonths.length)
-      : 0;
+    // monthly_amount_cents is the PER-INVOICE amount at every frequency
+    // (src/lib/contract-billing.ts). A monthly contract bills from its 12-month
+    // grid; any other frequency bills one flat amount, so its month overrides
+    // are cleared — billing reads `monthly_amounts[month] ?? monthly_amount_cents`
+    // and a stale override would otherwise win in whichever month it fires.
+    const isMonthly = details.billingFrequency === "monthly";
+    const amountCents = isMonthly ? averageBilledCents(details.monthlyAmounts) : details.invoiceAmountCents;
+    const monthlyAmounts: MonthlyAmounts = isMonthly ? details.monthlyAmounts : {};
     try {
       if (isNew) {
         await createContract({
@@ -1179,7 +1315,8 @@ export function ContractDialog({
           title: details.title,
           startDate: details.startDate || undefined,
           endDate: details.endDate || undefined,
-          monthlyAmountCents: avgMonthlyCents,
+          monthlyAmountCents: amountCents,
+          billingFrequency: details.billingFrequency,
           billingDayOfMonth: details.billingDayOfMonth,
           billMonthInAdvance: details.billMonthInAdvance,
           startBillingMode: details.startBillingMode,
@@ -1191,7 +1328,7 @@ export function ContractDialog({
           source: source || undefined,
           salesRepId: salesRepId || undefined,
           saleType,
-          monthlyAmounts: details.monthlyAmounts,
+          monthlyAmounts,
           invoiceLineItems: details.lineItems,
           defaultService: details.defaultService || undefined,
         });
@@ -1204,7 +1341,8 @@ export function ContractDialog({
             title: details.title,
             start_date: details.startDate || null,
             end_date: details.endDate || null,
-            monthly_amount_cents: avgMonthlyCents,
+            monthly_amount_cents: amountCents,
+            billing_frequency: details.billingFrequency,
             billing_day_of_month: details.billingDayOfMonth,
             bill_month_in_advance: details.billMonthInAdvance,
             start_billing_mode: details.startBillingMode,
@@ -1216,7 +1354,7 @@ export function ContractDialog({
             source: source || null,
             sales_rep_id: salesRepId || null,
             sale_type: saleType,
-            monthly_amounts: details.monthlyAmounts,
+            monthly_amounts: monthlyAmounts,
             invoice_line_items: details.lineItems,
             default_service: details.defaultService || null,
           },
@@ -1322,6 +1460,13 @@ export function ContractDialog({
               onChange={patchDetails}
               hideClient={!!defaultClientId}
               clients={clients}
+              signedAt={contract?.signedAt}
+              createdAt={contract?.createdAt}
+              hadMonthOverrides={
+                !!contract &&
+                normalizeBillingFrequency(contract.billingFrequency) !== "monthly" &&
+                MONTHS.some(({ key }) => contract.monthlyAmounts[key] != null && contract.monthlyAmounts[key] !== contract.monthlyAmountCents)
+              }
             />
           )}
           {activeTab === "other" && (
@@ -1488,7 +1633,7 @@ export function ContractsList({ clientId }: Props) {
       toast.info("No contracts to export");
       return;
     }
-    const header = ["Client", "Contract", "Status", "Billing Day", "Monthly Amount", "Start Date", "End Date", "Last Bill Date"];
+    const header = ["Client", "Contract", "Status", "Billing Frequency", "Billing Day", "Amount per invoice", "Start Date", "End Date", "Last Bill Date"];
     // Shared exporter escape: quotes + formula-injection neutralization.
     const csvEscape = (v: string) => escapeCsvCell(v);
     const lines = [header.map(csvEscape).join(",")];
@@ -1497,7 +1642,8 @@ export function ContractsList({ clientId }: Props) {
         c.clientName ?? "",
         c.title,
         c.status,
-        ordinal(c.billingDayOfMonth),
+        billingFrequencyLabel(c.billingFrequency),
+        billingDayLabel(c) === "—" ? "" : billingDayLabel(c),
         c.monthlyAmountCents > 0 ? formatCurrency(c.monthlyAmountCents) : "",
         fmtDate(c.startDate),
         fmtDate(c.endDate),
@@ -1747,11 +1893,11 @@ export function ContractsList({ clientId }: Props) {
                     </td>
                   )}
                   {visibleKeys.includes("billing_day") && (
-                    <td className="px-3 py-2.5 text-sm text-muted-foreground">{ordinal(c.billingDayOfMonth)}</td>
+                    <td className="px-3 py-2.5 text-sm text-muted-foreground">{billingDayLabel(c)}</td>
                   )}
                   {visibleKeys.includes("amount") && (
                     <td className="px-3 py-2.5 text-right font-medium text-slate-700 dark:text-neutral-300">
-                      {c.monthlyAmountCents > 0 ? formatCurrency(c.monthlyAmountCents) : "—"}
+                      {c.monthlyAmountCents > 0 ? formatContractAmount(c.monthlyAmountCents, c.billingFrequency) : "—"}
                     </td>
                   )}
                   {visibleKeys.includes("start_date") && (
