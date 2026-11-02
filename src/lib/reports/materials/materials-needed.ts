@@ -309,7 +309,8 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     supabase,
     areaFieldId,
     allDemand.map((d) => d.serviceId ?? ""),
-    [...new Set(allDemand.map((d) => d.propertyId).filter(Boolean) as string[])]
+    [...new Set(allDemand.map((d) => d.propertyId).filter(Boolean) as string[])],
+    [...new Set(allDemand.map((d) => d.clientId).filter(Boolean) as string[])]
   );
 
   const defaultRateByProduct = new Map<string, ChemicalApplicationRate>();
@@ -510,7 +511,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     let unitMismatchJobs = 0;
     let unestimatedJobs = 0;
     for (const d of demand) {
-      const areaValue = resolveArea({ propertyId: d.propertyId, serviceId: d.serviceId, treatedArea: d.treatedArea });
+      const areaValue = resolveArea({ propertyId: d.propertyId, clientId: d.clientId, serviceId: d.serviceId, treatedArea: d.treatedArea });
       perJobMeta.set(d.jobId, { jobName: d.jobName, neededBy: d.neededBy });
       nextNeededBy = earliest(nextNeededBy, d.neededBy);
 

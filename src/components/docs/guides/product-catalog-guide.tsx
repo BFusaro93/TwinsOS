@@ -153,7 +153,8 @@ export function ProductCatalogGuide() {
           Services tab &mdash; for a spot treatment or just the front lawn; (2) the service&apos;s own{" "}
           <strong>Area measurement for chemical quantities</strong> (Services &amp; Pricing &rarr; the
           service &rarr; Chemicals tab), for example Parking Lot / Hardscape Sq. Ft. on a parking-lot
-          weed control service; (3) the org&apos;s Area Custom Field above. The Materials Needed report,
+          weed control service; (3) the org&apos;s Area Custom Field above. Any measurement, including a Number
+          custom field, is read from the property first and then from the client. The Materials Needed report,
           the Daily Load List, the crew&apos;s preloaded amounts and the application panel all use the same
           order, so they agree. Rate Matrix pricing is separate and still looks up the property&apos;s
           stored value.
