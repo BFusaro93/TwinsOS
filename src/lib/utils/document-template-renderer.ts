@@ -36,6 +36,9 @@ const HTML_SAFE_MERGE_TAG_KEYS = new Set([
   // client-controlled freeform text.
   "[products]",
   "[careinstructions]",
+  // Full leave-behind notice, rendered server-side by renderChemicalNoticeHtml
+  // from the visit's recorded applications.
+  "[chemicalnotice]",
 ]);
 
 export function resolveMergeTags(

@@ -135,7 +135,7 @@ export function ClientFilterPopover({
           <SlidersHorizontal className="h-3.5 w-3.5" />
           Filters
           {activeCount > 0 && (
-            <Badge className="ml-0.5 h-4 min-w-4 rounded-full px-1 text-[10px]">{activeCount}</Badge>
+            <Badge className="hover:bg-primary ml-0.5 h-4 min-w-4 rounded-full px-1 text-[10px]">{activeCount}</Badge>
           )}
         </Button>
       </PopoverTrigger>

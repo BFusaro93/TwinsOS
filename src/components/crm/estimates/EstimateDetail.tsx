@@ -989,7 +989,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               Edit Estimate (#{estimate.estimateNumber})
               <span className="ml-2 text-slate-400 dark:text-neutral-500 text-sm font-normal">—</span>
               <span className="ml-2">
-                <Badge className={cn("text-[10px]", stageColor(effectiveStage))}>
+                <Badge variant="outline" className={cn("text-[10px] border-transparent", stageColor(effectiveStage))}>
                   {stageName(effectiveStage)}
                 </Badge>
               </span>

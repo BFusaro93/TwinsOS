@@ -61,24 +61,33 @@ export function resolveJobProperty(explicit: any, clientProperties: any): any {
   return live.length === 1 ? live[0] : null;
 }
 
-/** The property-derived half of a CRMJob, from whichever property resolveJobProperty picked. */
+/**
+ * The property-derived half of a CRMJob, from whichever property resolveJobProperty picked.
+ *
+ * The client's own measurements and custom values are the default: a job for the client's
+ * address (no property chosen, or several to choose between) shows them, and a property's own
+ * value, where it has one, overrides.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapJobPropertyFields(property: any) {
+function mapJobPropertyFields(property: any, client?: any) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pick = (key: string): any => property?.[key] ?? client?.[key] ?? null;
+  type RawValue = { field_def_id: string; value_number: number | null; value_text: string | null };
+  const own = ((property?.crm_property_custom_field_values ?? []) as RawValue[]);
+  const inherited = ((client?.crm_client_custom_field_values ?? []) as RawValue[]).filter(
+    (v) => !own.some((o) => o.field_def_id === v.field_def_id && (o.value_number != null || o.value_text != null))
+  );
   return {
-    propertyTurfSqft: property?.turf_sqft ?? null,
-    propertyMulchBedSqft: property?.mulch_bed_sqft ?? null,
-    propertyGrossSqft: property?.gross_sqft ?? null,
-    propertyLinearFtPerimeter: property?.linear_ft_perimeter ?? null,
-    propertyLinearFtEdging: property?.linear_ft_edging ?? null,
-    propertyYardsOfMulch: property?.yards_of_mulch ?? null,
-    propertyParkingLotSqft: property?.parking_lot_sqft ?? null,
+    propertyTurfSqft: pick("turf_sqft"),
+    propertyMulchBedSqft: pick("mulch_bed_sqft"),
+    propertyGrossSqft: pick("gross_sqft"),
+    propertyLinearFtPerimeter: pick("linear_ft_perimeter"),
+    propertyLinearFtEdging: pick("linear_ft_edging"),
+    propertyYardsOfMulch: pick("yards_of_mulch"),
+    propertyParkingLotSqft: pick("parking_lot_sqft"),
     propertyGateCode: property?.gate_lock_code ?? null,
     propertyNotesToCrew: property?.notes_to_crew ?? null,
-    propertyCustomFieldValues: ((property?.crm_property_custom_field_values ?? []) as {
-      field_def_id: string;
-      value_number: number | null;
-      value_text: string | null;
-    }[]).map((v) => ({
+    propertyCustomFieldValues: [...own, ...inherited].map((v) => ({
       fieldDefId: v.field_def_id,
       valueNumber: v.value_number ?? null,
       valueText: v.value_text ?? null,
@@ -167,7 +176,7 @@ export function mapJob(row: any): CRMJob {
     clientTags: (row.clients?.client_tags ?? []).map((t: { tag: string }) => t.tag),
     crewName: row.crm_crews?.name ?? null,
     salesRepName: row.sales_rep ? `${row.sales_rep.first_name ?? ""} ${row.sales_rep.last_name ?? ""}`.trim() || null : null,
-    ...mapJobPropertyFields(resolveJobProperty(row.client_properties, row.clients?.client_properties)),
+    ...mapJobPropertyFields(resolveJobProperty(row.client_properties, row.clients?.client_properties), row.clients),
     services: (row.crm_job_services ?? []).map(mapJobServiceFull),
     serviceIdsWithProducts: Array.isArray(row.crm_job_products)
       ? [...new Set(
@@ -315,7 +324,7 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
           .from("crm_jobs")
           .select(`
             *,
-            clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
+            clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, crm_client_custom_field_values(field_def_id, value_number, value_text), client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
             crm_crews(name),
             sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name),
             client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)),
@@ -880,7 +889,7 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
         .from('crm_job_visits')
         .select(`
           *,
-          clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
+          clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip, priority, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, crm_client_custom_field_values(field_def_id, value_number, value_text), client_tags(tag), client_properties(id, deleted_at, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text))),
           crm_crews(name),
           crm_jobs(*, crm_crews(name), crm_job_services(*, crm_services(invoice_description)), crm_job_products(job_service_id, status, deleted_at), client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)))
         `)

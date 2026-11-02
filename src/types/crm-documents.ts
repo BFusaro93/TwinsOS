@@ -1,5 +1,5 @@
 import type { DisplaySettings } from "@/lib/estimate-display-settings";
-export type DocType = "client" | "estimate" | "invoice_email" | "marketing" | "chemical" | "text_message";
+export type DocType = "client" | "estimate" | "invoice_email" | "marketing" | "chemical" | "chemical_recommendation" | "chemical_upsell" | "text_message";
 export type DocStatus = "active" | "inactive";
 export type BlockType =
   | "header"
@@ -179,6 +179,7 @@ const CHEMICAL_TAGS: MergeTag[] = [
   { tag: "[products]",          label: "Products Applied (name, EPA #, amount)",    group: "Chemical" },
   { tag: "[conditions]",        label: "Weather Conditions",                        group: "Chemical" },
   { tag: "[careinstructions]",  label: "Post-Application Care Instructions",        group: "Chemical" },
+  { tag: "[chemicalnotice]",    label: "Full Notice of Treatment (leave-behind)",   group: "Chemical" },
 ];
 
 // ── Shared base (all doc types) ───────────────────────────────────────────────
@@ -194,6 +195,8 @@ export const MERGE_TAGS_BY_TYPE: Record<DocType, MergeTag[]> = {
   estimate:      [...COMMON, ...ESTIMATE_TAGS],
   invoice_email: [...COMMON, ...INVOICE_TAGS],
   chemical:      [...COMMON, ...CHEMICAL_TAGS],
+  chemical_recommendation: [...COMMON, ...CHEMICAL_TAGS],
+  chemical_upsell:         [...COMMON, ...CHEMICAL_TAGS],
   text_message:  COMMON,
 };
 
@@ -213,7 +216,9 @@ export const DOC_TYPE_LABELS: Record<DocType, string> = {
   estimate:      "Estimate",
   invoice_email: "Invoice Email",
   marketing:     "Marketing",
-  chemical:      "Chemical",
+  chemical:      "Chemical – Client Instruction",
+  chemical_recommendation: "Chemical – Recommendation",
+  chemical_upsell:         "Chemical – Upsale",
   text_message:  "Text Message",
 };
 

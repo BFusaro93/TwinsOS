@@ -1,3 +1,5 @@
+import { loadChemicalNoticeData, loadInvoiceTemplateBranding, noticeOrgFromRow, renderChemicalNoticeHtml } from "@/lib/chemical/application-notice";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -59,13 +61,13 @@ export async function buildInvoiceExtras(
  */
 export async function buildServiceExtras(
   supabase: AnyClient,
-  params: { orgId: string; clientId: string | null | undefined; today: string }
+  params: { orgId: string; clientId: string | null | undefined; today: string; html?: boolean }
 ): Promise<Record<string, string>> {
   if (!params.clientId) return {};
   const base = () =>
     supabase
       .from("crm_job_visits")
-      .select("scheduled_date, job_service_id, crm_job_services(service_name)")
+      .select("id, scheduled_date, job_service_id, crm_job_services(service_name)")
       .eq("org_id", params.orgId)
       .eq("client_id", params.clientId)
       .is("deleted_at", null);
@@ -75,7 +77,27 @@ export async function buildServiceExtras(
   ]);
   const nameOf = (v: { crm_job_services?: { service_name?: string } | null } | null) =>
     v?.crm_job_services?.service_name ?? "";
+  // The leave-behind record for the last completed visit. Contract clients get no
+  // invoice, so an automation after a completed visit is how they receive it.
+  // Blank when that visit logged no chemicals.
+  let chemicalNotice = "";
+  if (last?.id && params.html !== false) {
+    try {
+      const notices = await loadChemicalNoticeData(supabase, [last.id as string], "applied", params.orgId);
+      const notice = notices.get(last.id as string);
+      if (notice) {
+        const [{ data: org }, timeZone] = await Promise.all([
+          supabase.from("organizations").select("name, address, customizations, brand_color").eq("id", params.orgId).single(),
+          getOrgTimeZone(supabase, params.orgId),
+        ]);
+        chemicalNotice = renderChemicalNoticeHtml(notice, { ...noticeOrgFromRow(org), ...(await loadInvoiceTemplateBranding(supabase, params.orgId)) }, { timeZone });
+      }
+    } catch {
+      // A failed lookup must not block the email; the tag just resolves blank.
+    }
+  }
   return {
+    "[chemicalnotice]": chemicalNotice,
     "[servicename]": nameOf(last),
     "[servicedate]": fmtDay(last?.scheduled_date as string | undefined),
     "[nextservicename]": nameOf(next),

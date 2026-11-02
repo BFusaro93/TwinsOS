@@ -46,7 +46,7 @@ export function PendingApprovalsButton() {
       <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
         <Inbox className="h-4 w-4" />
         Approvals
-        {count > 0 && <Badge className="ml-1 px-1.5">{count}</Badge>}
+        {count > 0 && <Badge className="ml-1 px-1.5 hover:bg-primary">{count}</Badge>}
       </Button>
 
       <Sheet open={open} onOpenChange={setOpen}>

@@ -21,35 +21,68 @@ import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-d
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import { CHEMICAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 
-const DEFAULT_TEMPLATE_BODY = `<p>Hi [clientfirstname],</p>
+export type ChemicalEmailKind = "chemical" | "chemical_recommendation" | "chemical_upsell";
 
-<p>[companyname] applied the following on [applicationdate]:</p>
+const KIND_LABELS: Record<ChemicalEmailKind, string> = {
+  chemical: "Client Instruction",
+  chemical_recommendation: "Recommendation",
+  chemical_upsell: "Upsale",
+};
 
-[products]
+export const KIND_DEFAULTS: Record<ChemicalEmailKind, { subject: string; body: string }> = {
+  chemical: {
+    subject: "Notice of Treatment from [companyname] — [applicationdate]",
+    body: `<p>Hi [clientfirstname],</p>
 
-<p><strong>Conditions at time of application:</strong> [conditions]</p>
-<p><strong>Applicator:</strong> [applicatorname] (License #[applicatorlicense])</p>
+<p>Here is the record of today's treatment at your property from [companyname].</p>
 
-<p>[careinstructions]</p>
+[chemicalnotice]
 
-<p>Keep children and pets off the treated area until dry. If you have any questions, please don't hesitate to reach out.</p>
+<p>If you have any questions, please don't hesitate to reach out.</p>
 
-<p>Thank you,<br>[companyname]<br>[companyphonenumber]</p>`;
+<p>Thank you,<br>[companyname]<br>[companyphonenumber]</p>`,
+  },
+  chemical_recommendation: {
+    subject: "A recommendation for your property from [companyname]",
+    body: `<p>Hi [clientfirstname],</p>
 
-const DEFAULT_SUBJECT = "Notice of Treatment from [companyname] — [applicationdate]";
+<p>While we were at your property on [applicationdate], our technician noticed something we wanted to pass along:</p>
+
+<p><em>Write your recommendation here.</em></p>
+
+<p>If you'd like to talk it over, call us at [companyphonenumber].</p>
+
+<p>Thank you,<br>[companyname]</p>`,
+  },
+  chemical_upsell: {
+    subject: "Another way [companyname] can help your property",
+    body: `<p>Hi [clientfirstname],</p>
+
+<p>Thanks for letting us care for your property. Based on what we saw during your recent visit, you may be interested in:</p>
+
+<p><em>Describe the additional service here.</em></p>
+
+<p>Reply to this email or call [companyphonenumber] and we'll get you a quote.</p>
+
+<p>Thank you,<br>[companyname]</p>`,
+  },
+};
 
 interface Props {
   visitId: string;
   open: boolean;
   onClose: () => void;
   onSent: () => void;
+  /** Which kind of chemical email to start on. Defaults to the post-application Client Instruction. */
+  initialKind?: ChemicalEmailKind;
 }
 
-export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: Props) {
+export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent, initialKind = "chemical" }: Props) {
   // Email content templates live in Documents (doc type "chemical") — the
   // same block-based builder used for invoice-email/client templates.
   const { data: allDocTemplates = [] } = useDocumentTemplates();
-  const templates = allDocTemplates.filter((t) => t.docType === "chemical" && t.status === "active");
+  const [kind, setKind] = useState<ChemicalEmailKind>(initialKind);
+  const templates = allDocTemplates.filter((t) => t.docType === kind && t.status === "active");
 
   const { data: visitInfo } = useQuery({
     queryKey: ["visit-client-info", visitId],
@@ -74,9 +107,17 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const { data: selectedDocTemplate } = useDocumentTemplate(selectedTemplateId);
-  const [subject, setSubject]   = useState(DEFAULT_SUBJECT);
-  const [bodyHtml, setBodyHtml] = useState(DEFAULT_TEMPLATE_BODY);
+  const [subject, setSubject]   = useState(KIND_DEFAULTS[initialKind].subject);
+  const [bodyHtml, setBodyHtml] = useState(KIND_DEFAULTS[initialKind].body);
+
+  function changeKind(next: ChemicalEmailKind) {
+    setKind(next);
+    setSelectedTemplateId("");
+    setSubject(KIND_DEFAULTS[next].subject);
+    setBodyHtml(KIND_DEFAULTS[next].body);
+  }
   const [sending, setSending]   = useState(false);
+  const [attachPdf, setAttachPdf] = useState(true);
   const [tab, setTab]           = useState<"compose" | "preview">("compose");
   const [ccEmails, setCcEmails] = useState<string[]>([]);
   const [ccInput, setCcInput]   = useState("");
@@ -108,6 +149,7 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
       .replace(/\[applicatorlicense\]/gi, () => escapeHtml("12345"))
       .replace(/\[products\]/gi,          () => "<ul><li>Sample Product — 12 oz (EPA #12345-67)</li></ul>")
       .replace(/\[conditions\]/gi,        () => escapeHtml("72°F, Wind 5 mph NW"))
+      .replace(/\[chemicalnotice\]/gi,   () => "<p><em>[The full Notice of Treatment appears here]</em></p>")
       .replace(/\[careinstructions\]/gi,  () => escapeHtml("Keep children and pets off the treated area until dry."))
       .replace(/\[companyphonenumber\]/gi, () => escapeHtml("(555) 000-0000"));
   }
@@ -137,13 +179,13 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
       const res = await fetch(`/api/crm/chemical-applications/${visitId}/send-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, bodyHtml, ccEmails }),
+        body: JSON.stringify({ subject, bodyHtml, ccEmails, kind, attachPdf }),
       });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error ?? "Failed to send");
       }
-      toast.success(`Notice sent to ${clientEmail}`);
+      toast.success(`${KIND_LABELS[kind]} email sent to ${clientEmail}`);
       onSent();
       onClose();
     } catch (err) {
@@ -157,7 +199,7 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Send Application Notice</DialogTitle>
+          <DialogTitle>Send Chemical Email</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-1">
@@ -201,6 +243,18 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
             />
           </div>
 
+          <div className="flex items-center gap-3">
+            <Label className="w-20 shrink-0 text-xs">Email type</Label>
+            <Select value={kind} onValueChange={(v) => changeKind(v as ChemicalEmailKind)}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {(Object.keys(KIND_LABELS) as ChemicalEmailKind[]).map((k) => (
+                  <SelectItem key={k} value={k}>{KIND_LABELS[k]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {templates.length > 0 && (
             <div className="flex items-center gap-3">
               <Label className="w-20 shrink-0 text-xs">Template</Label>
@@ -215,6 +269,13 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent }: 
                 </SelectContent>
               </Select>
             </div>
+          )}
+
+          {kind === "chemical" && (
+            <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-neutral-400">
+              <input type="checkbox" checked={attachPdf} onChange={(e) => setAttachPdf(e.target.checked)} />
+              Attach the Notice of Treatment as a PDF
+            </label>
           )}
 
           <div className="flex items-center gap-3">

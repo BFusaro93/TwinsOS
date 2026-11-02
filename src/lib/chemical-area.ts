@@ -33,6 +33,11 @@ const BUILT_IN_AREA_COLUMNS: Record<string, string> = {
   parking_lot_sqft: "parking_lot_sqft",
 };
 
+/** True for the takeoff fields stored as literal columns (Turf Sq. Ft., …) rather than as custom values. */
+export function isBuiltInAreaKey(fieldKey: string | null | undefined): boolean {
+  return !!fieldKey && fieldKey in BUILT_IN_AREA_COLUMNS;
+}
+
 interface JobPropertyRef {
   client_id: string | null;
   property_id: string | null;

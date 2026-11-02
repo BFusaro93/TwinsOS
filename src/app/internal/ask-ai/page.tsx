@@ -59,9 +59,9 @@ function QuestionCard({ item }: { item: StaffAskAIQuestion }) {
   return (
     <div className="rounded-lg border bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge className={cn(meta.className)}>{meta.label}</Badge>
+        <Badge variant="outline" className={cn("border-transparent", meta.className)}>{meta.label}</Badge>
         {item.escalatedAt && (
-          <Badge className="gap-1 bg-brand-50 text-brand-700">
+          <Badge variant="outline" className="border-transparent gap-1 bg-brand-50 text-brand-700">
             <LifeBuoy className="h-3 w-3" />
             Sent to support
           </Badge>

@@ -136,7 +136,7 @@ export async function resolveSmsStepContent(
   Object.assign(
     extras,
     await buildInvoiceExtras(supabase, { orgId: params.orgId, invoiceId: params.invoiceId, html: false }),
-    await buildServiceExtras(supabase, { orgId: params.orgId, clientId: params.clientId, today: todayInZone(await getOrgTimeZone(supabase, params.orgId)) }),
+    await buildServiceExtras(supabase, { orgId: params.orgId, clientId: params.clientId, today: todayInZone(await getOrgTimeZone(supabase, params.orgId)), html: false }),
   );
   const vars = await buildAutomationMergeVars(supabase, {
     orgId: params.orgId, client, extras, escapeHtml: (t) => t,

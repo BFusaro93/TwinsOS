@@ -152,6 +152,10 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     .select("area_custom_field_id")
     .maybeSingle();
   const areaFieldId = settings?.area_custom_field_id ?? null;
+  const { data: areaDef } = areaFieldId
+    ? await supabase.from("crm_rate_matrix_field_defs").select("field_label").eq("id", areaFieldId).maybeSingle()
+    : { data: null };
+  const areaFieldName = (areaDef as { field_label?: string } | null)?.field_label ?? null;
   if (!areaFieldId) {
     notes.push(
       "Set an Area Custom Field under Settings > Chemical Tracking to estimate concentrate quantities for visits without an entered application record."
@@ -366,6 +370,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     entered: boolean;
   }
   const demandByKey = new Map<string, ChemDemand>();
+  const skippedReasons = new Set<string>();
 
   const jobCrewIds = new Map<string, Set<string | null>>();
   const jobMetaMap = new Map<string, { clientName: string; address: string | null }>();
@@ -414,7 +419,16 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
         const rate = defaultRateByProduct.get(pid);
         const propertyId = jobPropertyId(job);
         const areaValue = resolveArea({ propertyId, clientId: job.client_id, serviceId: sid, treatedArea });
-        if (!rate || areaValue == null) continue;
+        if (!rate || areaValue == null) {
+          // Say why instead of silently leaving the stop off the truck list.
+          const what = chemProductName.get(pid) ?? "a chemical";
+          skippedReasons.add(
+            !rate
+              ? `${clientName}: ${what} has no default Application Rate, so no amount could be estimated.`
+              : `${clientName}: no ${areaFieldName ?? "area"} value on the ${job.property_id ? "job's property" : "client record or its property"}, so ${what} could not be estimated. Enter it there or record the application.`
+          );
+          continue;
+        }
         // Resolved per-visit, not summed-then-converted — which of
         // chemical/solution is the rate's "primary" number depends on the
         // rate's own configured unit (see calcChemicalAndSolution).
@@ -646,6 +660,8 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
   if (crews.length === 0) {
     notes.push("No outstanding visits with chemical or material demand are scheduled for this date.");
   }
+
+  for (const reason of skippedReasons) notes.push(`Left out of the estimate — ${reason}`);
 
   return { date, crews, notes };
 }

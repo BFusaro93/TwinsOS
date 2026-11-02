@@ -1,5 +1,6 @@
 "use client";
 
+import { isBuiltInAreaKey } from "@/lib/chemical-area";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -1978,7 +1979,7 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
           </div>
           {/* Rate Matrix pricing inputs (e.g. Turf Sq Ft) — only meaningful once
               the property has an id, same as any other property-scoped panel. */}
-          {isEditing && property && <PropertyCustomFieldsSection propertyId={property.id} />}
+          {isEditing && property && <PropertyCustomFieldsSection propertyId={property.id} clientId={clientId} />}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -1989,43 +1990,61 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
   );
 }
 
-// Numeric custom field values used as Rate Matrix pricing lookups (e.g.
-// "Turf Sq Ft: 12,000"). Auto-saves per field on blur — independent of the
-// dialog's own Save button, same pattern as other property sub-panels.
-function PropertyCustomFieldsSection({ propertyId }: { propertyId: string }) {
+// The client's number custom fields, as this property's own values. The client's value is
+// the default (set on Edit Client > Custom Fields); a value entered here overrides it for
+// this property only — two properties can carry two different areas. Auto-saves per field on blur — independent of the dialog's own Save button, same pattern
+// as other property sub-panels. The built-in takeoffs are the Measurements inputs above.
+function PropertyCustomFieldsSection({ propertyId, clientId }: { propertyId: string; clientId: string }) {
   const { data: fieldDefs = [] } = useRateMatrixFieldDefs("property");
-  const numericFieldDefs = fieldDefs.filter((d) => d.fieldType === "number");
+  const customDefs = fieldDefs.filter((d) => d.fieldType === "number" && !isBuiltInAreaKey(d.fieldKey));
   const { data: values = [] } = usePropertyCustomFieldValues(propertyId);
+  const { data: clientValues = [] } = useClientCustomFieldValues(clientId);
   const upsertValue = useUpsertPropertyCustomFieldValue();
 
-  if (numericFieldDefs.length === 0) return null;
+  if (customDefs.length === 0) return null;
 
-  function valueFor(fieldDefId: string): number | "" {
-    const v = values.find((x) => x.fieldDefId === fieldDefId)?.valueNumber;
-    return v ?? "";
+  function valueFor(fieldDefId: string, type: string): string {
+    const v = values.find((x) => x.fieldDefId === fieldDefId);
+    const raw = type === "number" ? v?.valueNumber : v?.valueText;
+    return raw == null ? "" : String(raw);
+  }
+  function clientDefault(clientFieldDefId: string | null | undefined, type: string): string {
+    const v = clientFieldDefId ? clientValues.find((x) => x.fieldDefId === clientFieldDefId) : undefined;
+    const raw = type === "number" ? v?.valueNumber : v?.valueText;
+    return raw == null ? "" : String(raw);
   }
 
-  function saveValue(fieldDefId: string, raw: string) {
-    const valueNumber = raw === "" ? null : Number(raw);
-    upsertValue.mutate({ propertyId, fieldDefId, valueNumber }, {
-      onError: () => toast.error("Failed to save custom field value"),
-    });
+  function saveValue(fieldDefId: string, type: string, raw: string) {
+    const blank = raw.trim() === "";
+    upsertValue.mutate(
+      type === "number"
+        ? { propertyId, fieldDefId, valueNumber: blank ? null : Number(raw) }
+        : { propertyId, fieldDefId, valueText: blank ? null : raw },
+      { onError: () => toast.error("Failed to save custom field value") }
+    );
   }
 
   return (
     <div className="flex flex-col gap-2 border-t pt-3">
-      <Label className="text-muted-foreground">Custom Fields (Rate Matrix pricing inputs)</Label>
+      <Label className="text-muted-foreground">Custom Fields</Label>
+      <p className="text-xs text-muted-foreground">
+        Leave blank to use the client&apos;s value. Enter one to override it for this property only.
+      </p>
       <div className="grid grid-cols-2 gap-3">
-        {numericFieldDefs.map((d) => (
-          <div key={d.id} className="flex flex-col gap-1.5">
-            <Label className="text-xs font-normal text-muted-foreground">{d.label}</Label>
-            <Input
-              type="number"
-              defaultValue={valueFor(d.id)}
-              onBlur={(e) => saveValue(d.id, e.target.value)}
-            />
-          </div>
-        ))}
+        {customDefs.map((d) => {
+          const inherited = clientDefault(d.clientFieldDefId, d.fieldType);
+          return (
+            <div key={d.id} className="flex flex-col gap-1.5">
+              <Label className="text-xs font-normal text-muted-foreground">{d.label}</Label>
+              <Input
+                type={d.fieldType === "number" ? "number" : "text"}
+                defaultValue={valueFor(d.id, d.fieldType)}
+                placeholder={inherited ? `Client: ${inherited}` : "Same as client"}
+                onBlur={(e) => saveValue(d.id, d.fieldType, e.target.value)}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
