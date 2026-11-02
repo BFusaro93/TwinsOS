@@ -163,9 +163,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 interface RateMatrixTabProps {
   serviceId: string;
+  form: FormState;
+  setForm: (f: FormState) => void;
 }
 
-function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
+function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
   const { data: rows = [] } = useRateMatrix(serviceId);
   const upsert = useUpsertRateMatrixRow();
   const deleteRow = useDeleteRateMatrixRow();
@@ -397,6 +399,30 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
           </div>
         </div>
       )}
+
+      <div className="rounded-lg border p-3 flex flex-col gap-2">
+        <p className="text-xs font-semibold text-slate-600 dark:text-neutral-400">Overflow rule</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500">
+          For values past the last row, step up from it instead of adding a row for every size. Saved with Save Changes.
+        </p>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          Every
+          <input type="number" value={form.matrixTailEveryQty} className={`${inputCls} w-20`}
+            onChange={(e) => setForm({ ...form, matrixTailEveryQty: e.target.value })} />
+          over
+          <input type="number" value={form.matrixTailOverQty} className={`${inputCls} w-20`}
+            onChange={(e) => setForm({ ...form, matrixTailOverQty: e.target.value })} />
+          is $
+          <input type="number" step="0.01" value={form.matrixTailRateCents} className={`${inputCls} w-20`}
+            onChange={(e) => setForm({ ...form, matrixTailRateCents: e.target.value })} />
+          more and
+          <input type="number" step="0.01" value={form.matrixTailHours} className={`${inputCls} w-20`}
+            onChange={(e) => setForm({ ...form, matrixTailHours: e.target.value })} />
+          more time with an additional cost of $
+          <input type="number" step="0.01" value={form.matrixTailCostCents} className={`${inputCls} w-20`}
+            onChange={(e) => setForm({ ...form, matrixTailCostCents: e.target.value })} />
+        </div>
+      </div>
 
       <p className="text-xs text-slate-400 dark:text-neutral-500">
         Tail rows apply when a property value exceeds all standard range rows. Mark a row as Tail to use it as the overflow rule.
@@ -1107,7 +1133,7 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
         {/* Rate Matrix Tab */}
         {tab === "rate_matrix" && activeService && (
           <div className="py-2">
-            <RateMatrixTab serviceId={activeService.id} />
+            <RateMatrixTab serviceId={activeService.id} form={form} setForm={setForm} />
           </div>
         )}
 
