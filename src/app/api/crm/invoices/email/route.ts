@@ -252,7 +252,7 @@ export async function POST(req: NextRequest) {
   const layoutKey: InvoicePDFLayoutKey = (pdfTemplate?.layout_key as InvoicePDFLayoutKey) ?? "default";
   const brandColor = (pdfTemplate?.accent_color as string) || (org?.brand_color as string) || "#60ab45";
 
-  const lineItems: { name: string | null; description: string; qty: number; rate_cents: number; total_cents: number; sort_order: number }[] =
+  const lineItems: { name: string | null; description: string; qty: number; rate_cents: number; total_cents: number; discount_cents?: number | null; sort_order: number }[] =
     (inv.crm_invoice_line_items ?? []).sort((a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order);
 
   const clientDisplayName = (inv.clients?.display_name as string) ?? "";
@@ -397,6 +397,7 @@ export async function POST(req: NextRequest) {
     qty: Number.isFinite(Number(li.qty)) && li.qty != null ? Number(li.qty) : 1,
     rateCents: li.rate_cents ?? 0,
     totalCents: li.total_cents ?? 0,
+    discountCents: li.discount_cents ?? 0,
   }));
   const addr = (org?.address as Record<string, string>) ?? {};
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};

@@ -1003,7 +1003,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Object.entries(STATUS_LABEL).map(([v, l]) => (
+                          {Object.entries(STATUS_LABEL).filter(([v]) => v !== "cancelled" || can("job_cancel") || job.status === "cancelled").map(([v, l]) => (
                             <SelectItem key={v} value={v}>{l}</SelectItem>
                           ))}
                         </SelectContent>

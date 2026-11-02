@@ -293,13 +293,16 @@ export function EstimatingGuide() {
         <p>
           <strong>Rate Matrix.</strong> A service can have banded pricing rows configured against
           one of a property&rsquo;s custom fields (e.g. price breaks by Turf Sq Ft ranges). If the
-          estimate has a <strong>property</strong> attached and that property has a value for the
-          field a service&rsquo;s matrix is keyed on, adding that service looks up the matching
-          band and uses <em>its</em> rate, budgeted hours, and cost instead of the service&rsquo;s
-          flat production rate &mdash; the line is recorded as Manual budget method going forward,
-          since its hours came from the matrix rather than a formula. No property on the estimate,
-          no matrix rows configured on the service, or no value on that field, and the line falls
-          through to the ordinary manual/production-rate behavior with nothing different. Like
+          estimate has a value for the field a service&rsquo;s matrix is keyed on, adding that
+          service looks up the matching band and uses <em>its</em> rate, budgeted hours, and cost
+          instead of the service&rsquo;s flat production rate. The value is read from the
+          <strong> property</strong> first (a built-in measurement such as Turf Sq Ft, or a custom
+          field), then from the <strong>client</strong>, so an estimate with no property still prices
+          from a client-level value. A line priced from a band is recorded as Manual budget method
+          going forward, since its hours came from the matrix rather than a formula (a per-unit band
+          on an area line is the exception and stays on the production rate). No value anywhere, or no
+          matrix rows configured on the service, and the line falls through to the ordinary
+          manual/production-rate behavior with nothing different. Like
           everything else here, the match is looked up once at add-time, not re-resolved later if
           the property&rsquo;s field value or the matrix rows change.
         </p>
@@ -468,8 +471,8 @@ export function EstimatingGuide() {
           an estimate keeps the package tags. The convert window lists each step&apos;s planned visit
           date: if the package&apos;s dates are already in the past the Program Start Date defaults to
           today, and a package with no dated steps can&apos;t be converted until its steps have dates. A
-          package service that includes several visits is priced per visit on the job, so each completed
-          visit bills its own share.
+          package service that includes several visits becomes a single step with one visit on the job,
+          billed at that line&apos;s full price when the visit is completed.
         </p>
       </Section>
 

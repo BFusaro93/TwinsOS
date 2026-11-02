@@ -92,6 +92,8 @@ function shiftStr(s: string | null, days: number): string | null {
  * A line matches the next unused package step with the same service id (or,
  * for older packages that only carry a name, the same name); the lines are
  * taken in the order given. A line with no matching step gets no window.
+ * A `skipped` line (Draft/Lost, or not selected) still uses up its step but is left out of
+ * the result, so skipping a middle step doesn't shift the later same-service steps' dates.
  *
  * `anchor` (YYYY-MM-DD), when given, re-anchors the whole program: every
  * window shifts by the days between the program's earliest scheduled date and
@@ -102,7 +104,7 @@ function shiftStr(s: string | null, days: number): string | null {
  */
 export function planPackageLineSteps(
   services: CRMPackageService[],
-  lines: { id: string; serviceId: string | null; serviceName: string }[],
+  lines: { id: string; serviceId: string | null; serviceName: string; skipped?: boolean }[],
   anchor?: string | null,
 ): { steps: PackageLineStep[]; windowStart: string | null; windowEnd: string | null } {
   const schedule = computePackageVisitSchedule(services);
@@ -123,7 +125,7 @@ export function planPackageLineSteps(
     offset = Math.round((parseDate(anchor).getTime() - parseDate(toDateStr(earliest)).getTime()) / 86_400_000);
   }
 
-  const steps: PackageLineStep[] = matched.map(({ line, hit }) => ({
+  const steps: PackageLineStep[] = matched.filter(({ line }) => !line.skipped).map(({ line, hit }) => ({
     lineId: line.id,
     startDate: hit?.scheduledDate ? shiftStr(toDateStr(hit.scheduledDate), offset) : null,
     completeByDate: shiftStr(hit?.service.endDate ?? null, offset),

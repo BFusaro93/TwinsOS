@@ -2273,6 +2273,7 @@ export function useCreateJobsFromEstimate() {
       salesRepId,
       dateSold,
       packageId,
+      packageStepLines,
     }: {
       estimateId: string;
       clientId: string;
@@ -2329,6 +2330,9 @@ export function useCreateJobsFromEstimate() {
        *  The job becomes a PACKAGE job (steps = the lines, windows from the package's schedule);
        *  `scheduledDate`, if given, re-anchors the program's start instead of dating one visit. */
       packageId?: string | null;
+      /** Package jobs: every line the package put on the estimate, in order, with the ones not
+       *  being converted flagged skipped, so a skipped middle step doesn't shift later dates. */
+      packageStepLines?: { id: string; serviceId: string | null; serviceName: string; skipped?: boolean }[];
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -2377,7 +2381,9 @@ export function useCreateJobsFromEstimate() {
         }));
         pkgPlan = planPackageLineSteps(
           pkgServices,
-          services.map((sv) => ({ id: sv.estimateLineItemId ?? sv.serviceName, serviceId: sv.serviceId, serviceName: sv.serviceName })),
+          // The estimate's full line order when given (skipped lines keep their step); otherwise
+          // just the services being created.
+          packageStepLines ?? services.map((sv) => ({ id: sv.estimateLineItemId ?? sv.serviceName, serviceId: sv.serviceId, serviceName: sv.serviceName })),
           scheduledDate,
         );
         // One step per selected line, so a visit the client skipped (line set to

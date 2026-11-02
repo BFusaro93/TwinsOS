@@ -24,7 +24,7 @@ const PRIORITIES: [string, string][] = [
 ];
 
 const TYPES: [string, string][] = [
-  ["Note", "The default type — a written ticket. What Forms always create."],
+  ["Note", "The default type — a written ticket. What Forms create when their Ticket Settings are on."],
   ["Call", "Same record shape, filtered into a dedicated Calls list (typeFilter=\"call\") elsewhere in the app."],
   ["Event", "Same record shape, filtered into an Events list (typeFilter=\"event\")."],
 ];
@@ -183,10 +183,9 @@ export function TicketsGuide() {
           </li>
           <li>
             <strong>A public form submission, automatically</strong> — every submission on a{" "}
-            <code>crm_forms</code> form creates a ticket, no matter what else the form does or how it
-            handles the matched/created client. The ticket always starts as <code>status: &quot;open&quot;</code>,{" "}
-            <code>priority: &quot;normal&quot;</code>, <code>type: &quot;note&quot;</code>, with{" "}
-            <code>category</code> set to the form&apos;s own name and the body built from the
+            <code>crm_forms</code> form creates a ticket unless Ticket Settings is turned off on that form. The ticket starts as <code>status: &quot;open&quot;</code>,{" "}
+            <code>type: &quot;note&quot;</code>, with the priority and{" "}
+            <code>category</code> chosen in Ticket Settings (normal and the form&apos;s own name by default) and the body built from the
             submitter&apos;s name/email/phone/message plus every raw field on the form.
           </li>
           <li>

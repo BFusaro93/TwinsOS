@@ -126,7 +126,11 @@ export async function POST(
       // below stays in net dollars (the fee was never credited to the client's account).
       const feeCents: number = payment.processing_fee_cents ?? 0;
       const grossRefundCents = feeCents > 0 && payment.amount_cents > 0
-        ? refundAmountCents + Math.round((feeCents * refundAmountCents) / payment.amount_cents)
+        ? refundAmountCents +
+          // Fee share from the running total, so split refunds sum to exactly the fee
+          // instead of rounding each part up and overshooting the charge.
+          (Math.round((feeCents * (payment.refunded_amount_cents + refundAmountCents)) / payment.amount_cents) -
+            Math.round((feeCents * payment.refunded_amount_cents) / payment.amount_cents))
         : refundAmountCents;
       const refund = await stripe.refunds.create(
         {

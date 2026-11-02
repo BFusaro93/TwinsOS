@@ -760,7 +760,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "The Dispatch Board",
             detail:
-              "CRM > Scheduling > Dispatch Board shows one day at a time with a week strip for picking the date. Click a visit's status pill to cycle it forward — Scheduled → Dispatched → In Progress → Completed (or Skipped) — and assign crews directly from the board.",
+              "CRM > Scheduling > Dispatch Board shows one day at a time with a week strip for picking the date. Click a visit's status pill to open a status menu (Scheduled, Dispatched, In Progress, Completed, Skipped) and pick the new status, which applies as soon as you click — and assign crews directly from the board.",
           },
           {
             step: "How actual hours are calculated",
@@ -1061,7 +1061,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Processing fees",
             detail:
-              "A processing fee is added automatically to card charges (not ACH) to cover the Stripe rate. Staff can waive the fee or override it to a custom amount on any single charge. Fees collected flow into the Profit & Loss report as 'Credit card processing fees' income, and the Credit Card Processing Fees report itemizes every fee by payment.",
+              "The card processing fee is off by default for new companies; turn it on under Settings > Payments. It applies to credit cards only (never debit or prepaid cards, never ACH), as either a flat rate or Cover the card fee mode (capped at 4%). The card is authorized first and captured with the fee included. Staff can waive the fee or override it to a custom amount on any single charge. Fees collected flow into the Profit & Loss report as 'Credit card processing fees' income, and the Credit Card Processing Fees report itemizes every fee by payment.",
           },
           {
             step: "Saving a card or bank account on file",
@@ -1156,7 +1156,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "What a ticket is",
             detail:
-              "A CRM customer-service record — distinct from a CMMS Maintenance Request, which is for asset/equipment issue triage. Every published form submission automatically creates an open ticket, in addition to manual creation and automation-driven creation.",
+              "A CRM customer-service record — distinct from a CMMS Maintenance Request, which is for asset/equipment issue triage. A published form creates an open ticket for each submission unless you turn off Ticket Settings on the form (the default is on), in addition to manual creation and automation-driven creation.",
           },
           {
             step: "Status and priority",
@@ -1955,6 +1955,38 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "How do I make an automation wait until a certain time of day, or skip weekends?",
+        a: "Edit the Wait step and turn on 'Then wait until a time of day' (for example, wait 1 day, then continue at 9:00 AM; if that time has already passed it rolls to the next day) and/or 'Weekdays only' (a Saturday or Sunday result moves to Monday at the same time). Both are read on your company clock, including daylight saving.",
+      },
+      {
+        q: "Which merge tags can an automation's email or text use?",
+        a: "The client tags, plus invoice tags ([invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [viewinvoiceonline], [paymentlink]) that fill in for automations started by an invoice trigger, and service tags: [servicename] and [servicedate] for the client's last completed service, [nextservicename] and [nextservicedate] for their next scheduled one. [chemicalnotice] adds the compact Notice of Treatment for that last completed visit and is blank when it logged no chemicals. A tag with no value is left blank.",
+      },
+      {
+        q: "Why didn't a form submission create a ticket?",
+        a: "Form tickets are controlled by Ticket Settings in the form's Configure step. Every submission creates a ticket by default, but the setting can be turned off, and it also sets the ticket's priority and category (the category defaults to the form's name). Check it on the form if tickets stopped appearing.",
+      },
+      {
+        q: "What does 'Publish with warnings?' or 'Turn on with warnings?' mean?",
+        a: "Before a form is published or an automation is switched on, Landscapt checks for setups that would quietly do nothing: a form with no questions, Account Management with no email or phone field, an email notification with no recipients, or an automation with no sequences, no start trigger, only Wait steps, or an empty email or text. You can fix the problem or choose Publish anyway / Turn on anyway. Two form fields with the same label always block publishing.",
+      },
+      {
+        q: "How do I make a new form from an existing one?",
+        a: "Open the row menu on the Forms list and choose Copy form (needs the Forms edit permission). It creates '<name> (Copy)' with the same fields, pages, rules and settings as an unpublished draft with its own link. Responses are not copied.",
+      },
+      {
+        q: "How do I save my dispatch board filters, or pick a quick date range?",
+        a: "Open Saved views next to Refresh and choose Save current as view. It stores your filters, search and visible columns (and a date range if you set it with Quick range); click a view to apply it or Update to overwrite it. Views are private to you, and applying one replaces your current visible columns. Quick range, beside the From and To dates, offers Today, Past 1/3/5 days, Next 3/5/7 days, This week and Next week.",
+      },
+      {
+        q: "How do I move a stop to another crew on a touchscreen or when dragging is refused?",
+        a: "Dragging a stop between crews on the board itself is refused with 'Use Team Assign to move a stop between crews'. Open Team Assignment and either drag the visit card to the crew's column, or tap the card to pick it up and then tap the crew column (or Unassigned). Press Escape or Cancel to put it back.",
+      },
+      {
+        q: "How do I send Notices of Treatment to several clients at once?",
+        a: "Select the chemical visits on the Dispatch Board, open Actions and choose Send Chemical Notices (n). It emails each client their Notice of Treatment with the PDF attached unless you untick that option. It needs the permission to send application notices. The route sheets dialog also has a Chemical sheets button that prints the day's chemical route sheets.",
+      },
+      {
         q: "Why does my estimate say it needs approval again?",
         a: "An approval covers the total that was approved. If lines added afterwards push the estimate above that amount, Send and Copy link resubmit it for approval, and it can't go out until it is approved again. Lowering the total doesn't need a new approval.",
       },
@@ -2349,7 +2381,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Which Landscapt role permissions are actually enforced, and which only hide things?",
-        a: "Most are enforced on the server, so a role without them is refused even through another route. Newly enforced: changing a client's Office Notes needs View Notes; changing the stored card or turning autopay on needs View Credit Card #'s plus Add/Modify Payments; changing a client balance directly needs View Balance plus Add/Modify Credits. Still hide-only: View Notes, View Credit Card #'s, View Balance, View Billing and Export Lists decide what the screen shows, but a login that queries the data directly could still read it, and exports are built in the browser from rows already loaded. Admins always pass.",
+        a: "Most are enforced on the server, so a role without them is refused even through another route. That covers creating or changing invoices and invoice lines, estimates and their lines, contracts, jobs (setting a job to Cancelled needs the Cancel permission), tickets, campaigns (scheduling and sending need Send; other edits need Edit), automations, document templates, packages, teams and running reports. The full list by permission is in the Users & Roles guide. Also enforced: changing a client's Office Notes needs View Notes; changing the stored card or turning autopay on needs View Credit Card #'s plus Add/Modify Payments; changing a client balance directly needs View Balance plus Add/Modify Credits. Still hide-only: View Notes, View Credit Card #'s, View Balance, View Billing and Export Lists decide what the screen shows, but a login that queries the data directly could still read it, and exports are built in the browser from rows already loaded. Admins always pass.",
       },
       {
         q: "What is Ask AI, and what if it can't answer my question?",

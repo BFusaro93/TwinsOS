@@ -337,12 +337,20 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   // The package job's step dates, as the convert will create them: shown before converting so
   // past-dated or missing dates are caught here, not on the board.
   const selectedPackage = hasPackageSel ? crmPackages.find((p) => p.id === selectedPackageIds[0]) ?? null : null;
+  // Every line of the package in estimate order, with the ones not being converted marked
+  // skipped: a skipped step still uses up its package step, so the later steps keep their dates.
+  const packageStepLines = selectedPackage
+    ? lineItems
+        .filter((li) => li.packageId === selectedPackage.id && li.rowType === "item")
+        .map((li) => ({
+          id: li.id,
+          serviceId: li.serviceId ?? null,
+          serviceName: li.serviceName ?? "",
+          skipped: !selectedItems.some((s) => s.id === li.id),
+        }))
+    : [];
   const packagePlan = selectedPackage
-    ? planPackageLineSteps(
-        selectedPackage.services ?? [],
-        selectedItems.map((li) => ({ id: li.id, serviceId: li.serviceId ?? null, serviceName: li.serviceName ?? "" })),
-        scheduledDate || null,
-      )
+    ? planPackageLineSteps(selectedPackage.services ?? [], packageStepLines, scheduledDate || null)
     : null;
   const packageStepDates = packagePlan
     ? selectedItems.map((li) => ({
@@ -357,11 +365,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   // A package set up last season has step dates in the past: start the program today unless
   // the user picks a date (each step keeps its spacing).
   const packageTemplateStart = selectedPackage
-    ? planPackageLineSteps(
-        selectedPackage.services ?? [],
-        selectedItems.map((li) => ({ id: li.id, serviceId: li.serviceId ?? null, serviceName: li.serviceName ?? "" })),
-        null,
-      ).windowStart
+    ? planPackageLineSteps(selectedPackage.services ?? [], packageStepLines, null).windowStart
     : null;
   useEffect(() => {
     if (!selectedPackage || scheduledDate) return;
@@ -370,10 +374,10 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   }, [selectedPackage?.id, packageTemplateStart, orgTodayStr]);
   const convertiblePackageIds = [...new Set(convertibleLines.filter((li) => isQuoted(li)).map((li) => li.packageId).filter((x): x is string => !!x))];
   const recurring = effectiveJobType === "recurring";
-  // A package line's price covers every visit it includes (1 x rate x visits), so
-  // the job service is priced per visit like Add Job's package picker — otherwise
-  // the first completed visit auto-invoiced the whole program.
-  const perVisit = (li: EstimateLineItem) => recurring || (effectiveJobType === "package" && (li.visits || 1) > 1);
+  // Only recurring lines are priced per visit. A package job gets ONE visit per step
+  // (generate.ts), so splitting a multi-visit package line's price across its visits
+  // billed a single share and lost the rest; the one step bills the line's full price.
+  const perVisit = (_li: EstimateLineItem) => recurring;
   // Lines whose accepted price doesn't divide evenly by their visit count — the
   // job bills a few cents less than accepted (jobServicePricing).
   const pricingShortfallCents = selectedItems.reduce((s, li) => {
@@ -429,6 +433,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         propertyId: estimate.propertyId,
         jobType: effectiveJobType,
         packageId: hasPackageSel ? selectedPackageIds[0] : null,
+        packageStepLines: hasPackageSel ? packageStepLines : undefined,
         scheduledDate: scheduledDate || null,
         crewId: crewId || null,
         manCount,

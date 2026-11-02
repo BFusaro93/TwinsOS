@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { sendCampaignEmails } from "@/lib/campaigns/send-campaign";
 
@@ -34,8 +35,16 @@ export async function POST(
 
   const { id: campaignId } = await params;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any;
+  // The send runs as the service role, like the scheduled-campaigns cron: the campaign
+  // guard trigger (campaign_edit) would otherwise reject the heartbeat and the final
+  // sent/failed status writes for a role that holds campaign_send but not campaign_edit,
+  // leaving the campaign stuck in "sending" after the emails went out. Permission is
+  // checked above and every query below is scoped to the session's org.
+  const db = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ) as any;
   const { data: campaign } = await db
     .from("crm_campaigns")
     .select("*")

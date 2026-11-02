@@ -168,10 +168,12 @@ function decodeEntities(s: string): string {
 function parseInline(html: string): InlineSpan[] {
   const spans: InlineSpan[] = [];
   const marks: Array<Partial<Pick<InlineSpan, "bold" | "italic" | "underline">>> = [{}];
-  const tagRe = /<(\/?)(strong|b|em|i|u)>|([^<]+)/gi;
+  // Any other tag (span colour/font, links, sub/sup, strike) is skipped so it never prints as text.
+  const tagRe = /<(\/?)(strong|b|em|i|u)>|<[^>]*>|([^<]+)/gi;
   let match: RegExpExecArray | null;
   while ((match = tagRe.exec(html))) {
     const [, closing, tag, text] = match;
+    if (text === undefined && !tag) continue;
     if (text !== undefined) {
       const decoded = decodeEntities(text);
       if (decoded) spans.push({ text: decoded, ...marks[marks.length - 1] });
