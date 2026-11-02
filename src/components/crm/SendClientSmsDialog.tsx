@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { useSmsReadiness, SMS_NOT_READY_MESSAGE } from "@/lib/hooks/use-sms-readiness";
 
 const MERGE_TAG_HINT = "[clientfirstname] [clientfullname] [companyname]";
 
@@ -43,6 +44,7 @@ export function SendClientSmsDialog({
   smsOptIn: boolean;
 }) {
   const qc = useQueryClient();
+  const { data: smsReady } = useSmsReadiness(open);
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -87,6 +89,11 @@ export function SendClientSmsDialog({
           <DialogTitle>Text {clientName}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-1">
+          {smsReady === false && (
+            <p className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+              {SMS_NOT_READY_MESSAGE}
+            </p>
+          )}
           <div className="space-y-1.5">
             <Label>To</Label>
             <Input value={clientPhone} disabled className="text-muted-foreground" />

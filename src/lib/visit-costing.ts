@@ -222,7 +222,7 @@ interface MaterialRow {
 }
 
 async function loadMaterials(supabase: Client, jobIds: string[]) {
-  return fetchByIdChunks(jobIds, (idChunk) =>
+  const materials = await fetchByIdChunks(jobIds, (idChunk) =>
     fetchAllPages<MaterialRow>((from, to) =>
       supabase
         .from("crm_job_materials")
@@ -233,6 +233,28 @@ async function loadMaterials(supabase: Client, jobIds: string[]) {
         .range(from, to)
     )
   );
+  // Catalog products recorded as used on the job are material cost as well (qty × unit cost);
+  // without them crew-used mulch, fert, etc. never reached Job Costing or COGS.
+  const products = await fetchByIdChunks(jobIds, (idChunk) =>
+    fetchAllPages<{ job_id: string; visit_id: string | null; qty: number | null; unit_cost_cents: number | null }>((from, to) =>
+      supabase
+        .from("crm_job_products")
+        .select("job_id, visit_id, qty, unit_cost_cents")
+        .in("job_id", idChunk)
+        .in("status", ["used", "used_no_invoice", "invoiced"])
+        .is("deleted_at", null)
+        .order("id")
+        .range(from, to)
+    )
+  );
+  return [
+    ...materials,
+    ...products.map((p) => ({
+      job_id: p.job_id,
+      visit_id: p.visit_id,
+      total_cost_cents: Math.round(Number(p.qty ?? 0) * (p.unit_cost_cents ?? 0)),
+    })),
+  ];
 }
 
 /** All-time completed-visit count per job (only for jobs that need pro-rating). */

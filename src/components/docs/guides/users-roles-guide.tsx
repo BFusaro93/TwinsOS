@@ -51,6 +51,7 @@ export function UsersRolesGuide() {
           <TOCLink href="#worked-example">Worked example: inviting a Staff member</TOCLink>
           <TOCLink href="#crew-portal">Crew accounts and the client portal</TOCLink>
           <TOCLink href="#gotchas">Gotchas</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -242,6 +243,19 @@ export function UsersRolesGuide() {
             <strong>New jobs</strong> need Add Job (a project also allows Add/Modify Projects).
           </li>
           <li>
+            <strong>Tickets</strong> need View/Modify Tickets to edit, close, reassign, delete or restore.
+            A crew login can still edit a ticket it created itself (for example a field upsell suggestion).
+          </li>
+          <li>
+            <strong>Campaigns</strong> need Send/Launch Campaign to be scheduled or sent (including Mark
+            Scheduled), Edit Campaign for other changes and Delete Campaign to delete.
+          </li>
+          <li>
+            <strong>Services</strong> need Add, Edit or Delete Service (or the Scheduling settings
+            permission). <strong>Settings → Accounting</strong> (tax rate, ACH, card fee, invoice
+            numbering) needs the Accounting settings permission (or Company or CRM settings).
+          </li>
+          <li>
             <strong>Automations</strong> need Create/Modify Automation; Stop Automation alone
             can only switch one on or off. <strong>Document templates</strong> and{" "}
             <strong>packages</strong> need their Add, Edit or Delete permission.{" "}
@@ -250,8 +264,10 @@ export function UsersRolesGuide() {
           </li>
         </ul>
         <p>
-          Editing an existing job, its visits and crew time stays open to every CRM role, since
-          the crew app writes those. Giving an invoice its number (which happens when it is
+          Editing an existing job, its visits and crew time stays open to every CRM role in the
+          database, since the crew app writes those. Rescheduling, re-crewing, completing and bulk-updating
+          visits from the office, generating visits and changing a job&apos;s materials need one of the
+          scheduling permissions: Dispatch Board, Waiting List, Manage Snow Dispatch, View Jobs or Add Job. Giving an invoice its number (which happens when it is
           printed, emailed or saved) is open to anyone who can see the invoice.
         </p>
         <p>
@@ -470,6 +486,31 @@ export function UsersRolesGuide() {
             real organization role and shown read-only, so it can&apos;t drift out of sync — before a
             login is linked, it&apos;s just a manually-set label. Don&apos;t confuse it with either the
             organization role or the Landscapt Role (<code>crm_role_id</code>) on the same tab.
+          </li>
+        </ul>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Deactivating a role.</strong> An inactive role grants nothing, so Landscapt asks before deactivating one and says how many active employees hold it. A role that active employees still hold can&apos;t be deactivated or deleted until they&apos;re moved to another role.
+          </li>
+          <li>
+            <strong>The owner&apos;s employee record.</strong> Signing up creates an employee record for the owner with the Owner role, so they show up in sales rep and assignee pickers and in My Day&apos;s “Mine” view from day one.
+          </li>
+          <li>
+            <strong>Who can change a role or linked login.</strong> On an employee record, only an admin can change the Landscapt Role or link and unlink a login. Other roles with Edit Employee see those controls disabled.
+          </li>
+          <li>
+            <strong>Permission changes apply within a minute.</strong> A changed role reaches people already signed in within about a minute, or as soon as they return to the browser tab.
+          </li>
+          <li>
+            <strong>Sequence approvals.</strong> Approving or rejecting a held automation message needs an admin, a manager, or Create/Modify Automation. The Approvals button is hidden from everyone else.
+          </li>
+          <li>
+            <strong>Report Center data.</strong> Running reports needs View Report Center, checked in the database as well as on the page. Crew logins can still see the dashboards shared with crews.
+          </li>
+          <li>
+            <strong>Invites.</strong> An invite can only give a Landscapt role that is active. Inviting someone whose old employee record is inactive (a re-hire) links and reactivates that record.
           </li>
         </ul>
       </Section>

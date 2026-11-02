@@ -35,6 +35,7 @@ import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { useConvertLeadToClient } from "@/lib/hooks/use-clients";
 import { usePackages } from "@/lib/hooks/use-packages";
+import { planPackageLineSteps } from "@/lib/package-schedule";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 /**
@@ -332,6 +333,41 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const effectiveJobType = hasPackageSel ? "package" : jobType;
   const { data: crmPackages = [] } = usePackages(true);
   const packageName = (id: string) => crmPackages.find((p) => p.id === id)?.name ?? "Package";
+
+  // The package job's step dates, as the convert will create them: shown before converting so
+  // past-dated or missing dates are caught here, not on the board.
+  const selectedPackage = hasPackageSel ? crmPackages.find((p) => p.id === selectedPackageIds[0]) ?? null : null;
+  const packagePlan = selectedPackage
+    ? planPackageLineSteps(
+        selectedPackage.services ?? [],
+        selectedItems.map((li) => ({ id: li.id, serviceId: li.serviceId ?? null, serviceName: li.serviceName ?? "" })),
+        scheduledDate || null,
+      )
+    : null;
+  const packageStepDates = packagePlan
+    ? selectedItems.map((li) => ({
+        id: li.id,
+        name: li.serviceName ?? "Service",
+        date: packagePlan.steps.find((s) => s.lineId === li.id)?.startDate ?? null,
+      }))
+    : [];
+  const packageHasNoDates = !!packagePlan && packageStepDates.length > 0 && packageStepDates.every((s) => !s.date);
+  const orgTodayStr = todayInZone(orgTimeZone);
+
+  // A package set up last season has step dates in the past: start the program today unless
+  // the user picks a date (each step keeps its spacing).
+  const packageTemplateStart = selectedPackage
+    ? planPackageLineSteps(
+        selectedPackage.services ?? [],
+        selectedItems.map((li) => ({ id: li.id, serviceId: li.serviceId ?? null, serviceName: li.serviceName ?? "" })),
+        null,
+      ).windowStart
+    : null;
+  useEffect(() => {
+    if (!selectedPackage || scheduledDate) return;
+    if (packageTemplateStart && packageTemplateStart < orgTodayStr) setScheduledDate(orgTodayStr);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPackage?.id, packageTemplateStart, orgTodayStr]);
   const convertiblePackageIds = [...new Set(convertibleLines.filter((li) => isQuoted(li)).map((li) => li.packageId).filter((x): x is string => !!x))];
   const recurring = effectiveJobType === "recurring";
   // A package line's price covers every visit it includes (1 x rate x visits), so
@@ -361,6 +397,10 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
     }
     if (selectedPackageIds.length > 1) {
       toast.error("Select the lines of one package at a time — each package becomes its own job");
+      return;
+    }
+    if (packageHasNoDates) {
+      toast.error("None of this package's steps have a start date, so no visits would be created. Set step dates on the package (Packages), then convert.");
       return;
     }
     if (effectiveJobType === "recurring" && !schedule) {
@@ -652,6 +692,27 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
               onChange={(e) => setScheduledDate(e.target.value)}
               className="text-sm"
             />
+            {packagePlan && packageStepDates.length > 0 && (
+              <div className="mt-1 rounded border bg-muted/40 px-2 py-1.5 text-xs">
+                <p className="mb-1 font-medium text-slate-600 dark:text-neutral-400">Planned visits</p>
+                <ul className="space-y-0.5">
+                  {packageStepDates.map((s) => (
+                    <li key={s.id} className="flex justify-between gap-2">
+                      <span className="truncate">{s.name}</span>
+                      <span className={s.date ? (s.date < orgTodayStr ? "text-amber-600 dark:text-amber-400" : "") : "text-red-600 dark:text-red-400"}>
+                        {s.date ?? "no date — no visit"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {packageHasNoDates && (
+                  <p className="mt-1 text-red-600 dark:text-red-400">This package has no step dates. Set them in Packages before converting.</p>
+                )}
+                {!packageHasNoDates && packageStepDates.some((s) => s.date && s.date < orgTodayStr) && (
+                  <p className="mt-1 text-amber-600 dark:text-amber-400">Some visits are in the past — pick a later Program Start Date.</p>
+                )}
+              </div>
+            )}
           </div>
 
           {effectiveJobType === "project" && (

@@ -62,6 +62,37 @@ export interface RecordStripeChargeArgs {
  * ARBITRARY metadata (including another org's org_id/invoice_id). Never trust
  * PaymentIntent.metadata.org_id on its own: confirm the account the charge
  * actually happened on is the one on file for that org first. */
+/**
+ * Who owns the connected account a charge fired on, relative to the org its metadata names:
+ * - owned: that org's current account
+ * - orphaned: no org has this account now (the org reconnected Stripe to a different account
+ *   while this charge was in flight — an ACH debit sits in processing for days)
+ * - foreign: another org's account (metadata forged by a Standard account owner)
+ * - unknown: the lookup failed; treat as transient
+ */
+export async function classifyChargeAccount(
+  db: Db,
+  orgId: string,
+  account: string
+): Promise<"owned" | "orphaned" | "foreign" | "unknown"> {
+  const { data: org, error } = await db
+    .from("organizations")
+    .select("stripe_connect_account_id")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error) return "unknown";
+  if (!org) return "foreign";
+  if (org.stripe_connect_account_id === account) return "owned";
+  const { data: holder, error: holderErr } = await db
+    .from("organizations")
+    .select("id")
+    .eq("stripe_connect_account_id", account)
+    .limit(1)
+    .maybeSingle();
+  if (holderErr) return "unknown";
+  return holder ? "foreign" : "orphaned";
+}
+
 export async function accountOwnedByOrg(db: Db, orgId: string, account: string): Promise<boolean> {
   const { data } = await db
     .from("organizations")

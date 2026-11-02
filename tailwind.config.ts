@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 const config: Config = {
   darkMode: ["class"],
@@ -85,7 +86,13 @@ const config: Config = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    // `touch:` — a touch-only primary pointer (phones, iPads without a trackpad).
+    // Same query globals.css uses for touch sizing. For swapping drag-only
+    // instructions and growing tap targets where there's no mouse.
+    plugin(({ addVariant }) => addVariant("touch", "@media (hover: none) and (pointer: coarse)")),
+  ],
 };
 
 export default config;

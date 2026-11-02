@@ -79,7 +79,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitError } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, job_id, org_id, crew_id, crew_unassigned, crm_jobs(crew_id)")
+    .select("id, job_id, org_id, crew_id, crew_unassigned, crm_jobs(crew_id, project_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -170,6 +170,11 @@ export async function POST(
     }
   }
 
+  const jobProjectId = ((visit as { crm_jobs?: { project_id?: string | null } | null }).crm_jobs?.project_id) ?? null;
+  const projectIdForLine =
+    jobProjectId && ["project_material", "stocked_material"].includes(String((product as { category?: string | null }).category ?? ""))
+      ? jobProjectId
+      : null;
   const { requisition, error } = await createRequisitionRecord(
     db,
     {
@@ -179,7 +184,13 @@ export async function POST(
       requestedById: user.id,
       requestedByName,
       notes: note ?? null,
-      lineItems: [{ productItemId, quantity }],
+      // On a project job, project / stocked materials carry the project so the spend reaches the
+      // project's cost and WIP (maintenance parts can't carry one — DB check).
+      lineItems: [{
+        productItemId,
+        quantity,
+        ...(projectIdForLine ? { projectId: projectIdForLine } : {}),
+      }],
     },
     new Map([[product.id as string, product]])
   );

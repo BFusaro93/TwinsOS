@@ -137,7 +137,7 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://<production-domain>/api/cro
 ## 6. Incident playbooks
 
 ### Approval emails stopped arriving
-Check, in order: Postgres settings `app.edge_function_base_url` and `app.service_role_key` exist on that project (the trigger silently skips when absent); the edge function is deployed (`npx supabase functions deploy send-approval-email`); the function's `RESEND_API_KEY` secret is valid (it is **separate** from Vercel's); Resend sender domain verified.
+Check, in order: the `public.app_config` rows `edge_function_base_url` and `service_role_key` exist on that project (the trigger silently skips when absent); the edge function is deployed to that project (`npx supabase functions deploy send-approval-email --project-ref <ref>` — the CLI's linked project is used otherwise); the function only accepts calls whose Bearer key equals its own `SUPABASE_SERVICE_ROLE_KEY` or the optional `APPROVAL_EMAIL_TRIGGER_KEY` secret, so after rotating keys update `app_config.service_role_key` or set that secret; the function's `RESEND_API_KEY` secret is valid (it is **separate** from Vercel's); Resend sender domain verified.
 
 ### Emails send from the app but delivery/bounce/complaint tracking is empty
 The Resend dashboard webhook must point to `/api/webhooks/resend` and subscribe to the events including `email.complained`; `RESEND_WEBHOOK_SECRET` must match its signing secret.
@@ -155,7 +155,7 @@ Allocations must sum to `amount_paid`. A refund that breaks this makes the next 
 Treat any cross-tenant sighting as a security incident: capture the user, org, and URL; check whether the user has a `profiles` row (NULL `my_org_id()` cases), whether a staff impersonation session is active, and the policies on the affected table. If confirmed, restrict the affected route/table first, then fix, then review recent migrations for a `drop/create` that lost a guard.
 
 ### A customer's portal user lands in the staff app, or staff are bounced to the portal
-Middleware decides by `profiles` row existence. Portal users must have none; staff must have one. Check the row.
+Middleware decides by `profiles` row existence. Portal users must have none; staff must have one. Check the row. The portal login itself decides by `client_portal_users`: a login with a live portal link may use the portal even if it also has a staff profile (an owner who is a customer of another company), and a login whose links were all removed sees "Your portal access is no longer active" rather than a login loop.
 
 ### Crew cannot log in, clock in, or upload photos
 Crew login is per crew (`crm_crews.user_id`). Photo uploads fail when storage RLS omits the `crew` role. Clock actions require the caller to resolve to the visit's effective crew (visit crew, else the job's crew).
@@ -164,10 +164,25 @@ Crew login is per crew (`crm_crews.user_id`). Photo uploads fail when storage RL
 Routes that write via the service role into the caller's home org refuse while an active impersonation grant exists (HTTP 409). End the session in the UI.
 
 ### QuickBooks sync stuck or erroring
-Settings -> Integrations shows status; `/api/cron/quickbooks-sync` runs every 15 min. Common causes: expired refresh token (reconnect), `QUICKBOOKS_ENVIRONMENT` not matching the ID/secret pair (or an org missing from / wrongly in `QUICKBOOKS_SANDBOX_ORG_IDS`), an invoice voided or edited in QuickBooks. Money handling to know when a customer asks why a write-off is not a payment in QuickBooks: AR write-offs are pushed as credit memos applied to the invoice (a zero-total linking Payment applies them), never as cash Payments, so cash received is not inflated; credit applications (using an existing prepayment or credit) are not pushed because the original payment is already in QuickBooks. Payment pushes carry a request id so a retry or an overlapping Stripe-webhook and cron push creates one QuickBooks transaction, not two. This integration is new; expect gaps.
+Settings -> Integrations shows status; `/api/cron/quickbooks-sync` runs every 15 min. Common causes: expired refresh token (reconnect), `QUICKBOOKS_ENVIRONMENT` not matching the ID/secret pair (or an org missing from / wrongly in `QUICKBOOKS_SANDBOX_ORG_IDS`), an invoice voided or edited in QuickBooks. Money handling to know when a customer asks why a write-off is not a payment in QuickBooks: AR write-offs are pushed as credit memos applied to the invoice (a zero-total linking Payment applies them), never as cash Payments, so cash received is not inflated; applying an existing prepayment is not pushed because the original payment is already in QuickBooks, but a staff-issued account credit (a credit payment) is pushed as a credit memo, like a write-off. QuickBooks ids are stored per org; disconnecting, or connecting a different QuickBooks company, clears every stored link for the org. "Name exists as a vendor or employee in QuickBooks" means the customer name collides with a vendor/employee there: the invoice stops retrying until the client is renamed or the invoice is edited. Payment pushes carry a request id so a retry or an overlapping Stripe-webhook and cron push creates one QuickBooks transaction, not two. This integration is new; expect gaps.
 
 ### Suspected leaked secret
 Follow the rotation checklist in INTEGRATIONS.md. For a Resend key, first identify which consumer (Vercel or edge function) the leaked prefix belongs to.
+
+### Texts from automations are not sending
+The org has no messaging service (`organizations.twilio_messaging_service_sid` is null) and is not the platform org. Text steps are skipped as permanent failures (`crm_sequence_execution_log` action `sms_skipped`, reason "SMS registration not complete"), the builder shows a warning, and admins get one `automation_alert` notification per 30 days. Point the customer to Settings -> Integrations -> Your own texting number.
+
+### A demo or sandbox org sends nothing
+Orgs with `organizations.is_demo = true` are muted for every outbound cron/automation email and text (sequences, campaigns, report schedules, expiry notices, reminders, past-due/card-expiry enrollments). Visit generation and contract invoicing still run. This is deliberate; do not flip `is_demo` to test sends on a real customer's data.
+
+### A customer says a job won't complete, or an estimate needs approval again
+Job Complete refuses while the job has scheduled, dispatched or in-progress visits (each visit invoices itself on completion). An approved estimate whose total grew above the largest approved `approval_requests.entity_total_cents` must be resubmitted before Send or Copy link.
+
+### Visits or contract invoices stopped for one client
+The client's status is Inactive, Lost or Cancelled (or the client is deleted). Visit generation and contract billing both skip those statuses. Reactivating resumes both on the next run.
+
+### Office can't move, re-crew or cancel a visit
+The crew is clocked in (`clocked_in_at` set, `clocked_out_at` null, status scheduled/dispatched/in_progress). Every office path refuses until the crew clocks out. A crew-skipped visit with a stale clock-in is not treated as in progress.
 
 ## 7. Routine operations
 

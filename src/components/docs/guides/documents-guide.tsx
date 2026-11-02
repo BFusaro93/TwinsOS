@@ -22,7 +22,7 @@ const BLOCK_ROWS: [string, string][] = [
 ];
 
 const TYPE_ROWS: [string, string][] = [
-  ["Client", "General emails to a client, including the emails automations send."],
+  ["Client", "General emails to a client, including the emails automations send. Client documents are also used as an Estimate Document's Estimate Email and Confirmation Email, so they offer the estimate merge tags and a “View proposal” button link; those only fill in when the email is sent from an estimate."],
   ["Estimate", "The proposal layout the client sees: your header, greeting, the Estimate Grid and your terms. Adds the estimate merge tags and the estimate settings (see below)."],
   ["Invoice Email", "The email that goes with an invoice. Adds the invoice merge tags, including the payment link."],
   ["Marketing", "Campaign emails."],
@@ -56,6 +56,7 @@ export function DocumentsGuide() {
           <TOCLink href="#settings">Template settings</TOCLink>
           <TOCLink href="#copy">Copying a template</TOCLink>
           <TOCLink href="#accepted-email">The estimate-accepted confirmation email</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -409,6 +410,19 @@ export function DocumentsGuide() {
           The Template picker in the Send Estimate window also warns when the chosen template has no{" "}
           <code>[estimatelink]</code> tag, since the client would have no link to accept the proposal.
         </p>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Editing HTML source.</strong> Changes made in the HTML source view are kept when you click Save, Preview or Send test without switching back first.
+          </li>
+          <li>
+            <strong>Ticket emails.</strong> Emailing from a ticket offers Client documents only, and warns if the one you pick is an estimate email (its estimate tags would be blank).
+          </li>
+          <li>
+            <strong>Images are fetched safely.</strong> An image block that points at a web address is fetched only from a public address, never from your network or the server&apos;s.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );

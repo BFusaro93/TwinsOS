@@ -15,6 +15,7 @@ import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/serv
 import { useClient } from "@/lib/hooks/use-clients";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { useSendTicketEmail } from "@/lib/hooks/use-tickets";
+import { blocksUseEstimateTags } from "@/lib/estimates/estimate-tags";
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import type { CRMTicket, TicketStatus } from "@/types/crm-tickets";
 
@@ -32,10 +33,11 @@ const MERGE_TAGS = [
   { tag: "[companyphonenumber]", label: "Company Phone" },
 ];
 
-// Document types that make sense to send about a ticket: plain client letters
-// and general (marketing-type) templates. Estimate / invoice / chemical / SMS
-// templates need records a ticket doesn't have.
-const ALLOWED_DOC_TYPES = ["client", "marketing"];
+// Document types that make sense to send about a ticket: plain client letters. Marketing
+// templates carry an opt-out link and belong to campaigns (a ticket reply sends no unsubscribe
+// footer and ignores do-not-market); estimate / invoice / chemical / SMS templates need records
+// a ticket doesn't have.
+const ALLOWED_DOC_TYPES = ["client"];
 
 export function TicketEmailDialog({
   ticket,
@@ -70,6 +72,9 @@ export function TicketEmailDialog({
       return;
     }
     if (!pendingDoc) return;
+    if (blocksUseEstimateTags(pendingDoc.blocks)) {
+      toast.warning("This document is an estimate email — its estimate details will be blank when sent from a ticket.");
+    }
     const html = renderBlocksToHtml(pendingDoc.blocks, {}, { preserveUnresolvedKnownTags: true });
     setBodyHtml((prev) => (prev.trim() ? `${prev}${html}` : html));
     setPendingDocId("");

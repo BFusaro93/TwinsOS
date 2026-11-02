@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { fetchOrgTriggers, fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
-import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 
 /**
  * GET /api/cron/ticket-past-due — called daily by Vercel Cron.
@@ -69,8 +69,16 @@ export async function GET(request: Request) {
   }
 
   let fired = 0;
-  const orgCanceled = createOrgCanceledResolver(supabase);
-  for (const [orgId, rows] of byOrg) {
+  let stoppedEarly = false;
+  const startedAt = Date.now();
+  const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  // Start at a different org each day and stop before maxDuration: each overdue row costs
+  // several queries, so one org with thousands of them could use up every run and the orgs
+  // after it in a fixed order were never reached.
+  const orgIds = [...byOrg.keys()].sort();
+  const offset = orgIds.length ? Math.floor(startedAt / 86_400_000) % orgIds.length : 0;
+  outer: for (const orgId of [...orgIds.slice(offset), ...orgIds.slice(0, offset)]) {
+    const rows = byOrg.get(orgId) ?? [];
     if (await orgCanceled(orgId)) continue; // canceled orgs get no automated reminders
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { count: triggerCount } = await (supabase as any)
@@ -79,9 +87,12 @@ export async function GET(request: Request) {
       .eq("org_id", orgId)
       .eq("trigger_type", "ticket_past_due");
     if (!triggerCount) continue;
+    // Loaded once per org rather than once per overdue row.
+    const orgTriggers = await fetchOrgTriggers(supabase, orgId, "ticket_past_due");
 
     const orgToday = todayInZone(await getOrgTimeZone(supabase, orgId));
     for (const ticket of rows) {
+      if (Date.now() - startedAt > 270_000) { stoppedEarly = true; break outer; }
       // Re-check on the owning org's calendar: a row due today is not past
       // due, and the UTC-bounded query above may have included one.
       if (!(ticket.due_date < orgToday)) continue;
@@ -90,10 +101,10 @@ export async function GET(request: Request) {
         clientId: ticket.client_id,
         ticketId: ticket.id,
         triggerType: "ticket_past_due",
-      });
+      }, orgTriggers);
       fired++;
     }
   }
 
-  return NextResponse.json({ checked: fired });
+  return NextResponse.json({ checked: fired, stoppedEarly });
 }

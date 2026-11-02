@@ -174,13 +174,17 @@ export function useCopyRateMatrix() {
         .single();
       if (svcErr) throw svcErr;
 
+      const failed: { serviceId: string; error: string }[] = [];
+      let copied = 0;
       for (const targetId of targetServiceIds) {
-        const { error: delErr } = await db
+        // The target's current rows, retired only AFTER the copies are in: a failed insert
+        // used to leave the target with no matrix at all.
+        const { data: oldRows, error: oldErr } = await db
           .from("crm_service_rate_matrix")
-          .update({ deleted_at: new Date().toISOString() })
+          .select("id")
           .eq("service_id", targetId)
           .is("deleted_at", null);
-        if (delErr) throw delErr;
+        if (oldErr) { failed.push({ serviceId: targetId, error: oldErr.message }); continue; }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const copies = (src ?? []).map((r: any) => ({
           service_id: targetId,
@@ -198,7 +202,15 @@ export function useCopyRateMatrix() {
         }));
         if (copies.length > 0) {
           const { error: insErr } = await db.from("crm_service_rate_matrix").insert(copies);
-          if (insErr) throw insErr;
+          if (insErr) { failed.push({ serviceId: targetId, error: insErr.message }); continue; }
+        }
+        const oldIds = ((oldRows ?? []) as { id: string }[]).map((r) => r.id);
+        if (oldIds.length > 0) {
+          const { error: delErr } = await db
+            .from("crm_service_rate_matrix")
+            .update({ deleted_at: new Date().toISOString() })
+            .in("id", oldIds);
+          if (delErr) { failed.push({ serviceId: targetId, error: `copied, but the old rows could not be removed: ${delErr.message}` }); continue; }
         }
         const { error: updErr } = await db
           .from("crm_services")
@@ -206,12 +218,15 @@ export function useCopyRateMatrix() {
             rate_matrix_field: srcSvc?.rate_matrix_field ?? null,
             rate_matrix_calc: srcSvc?.rate_matrix_calc ?? "qty_x_rate_x_visits",
           })
-          .eq("id", targetId);
-        if (updErr) throw updErr;
+          .eq("id", targetId)
+          .select("id");
+        if (updErr) { failed.push({ serviceId: targetId, error: updErr.message }); continue; }
+        copied++;
       }
-      return { count: targetServiceIds.length };
+      return { count: copied, failed };
     },
-    onSuccess: (_d, vars) => {
+    // Settled, not success: targets already changed must refresh even when a later one failed.
+    onSettled: (_d, _e, vars) => {
       for (const id of vars.targetServiceIds) qc.invalidateQueries({ queryKey: ["rate-matrix", id] });
       qc.invalidateQueries({ queryKey: ["crm-services"] });
     },

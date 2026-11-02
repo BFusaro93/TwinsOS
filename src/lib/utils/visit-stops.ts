@@ -100,7 +100,12 @@ export interface Stop {
   anchorVisitId: string;
   clientName: string | null;
   clientPhone: string | null;
+  /** Street + city (short, for list cards and the stop key). */
   address: string;
+  /** Street, city, state zip — what the crew reads and what the maps link searches. */
+  fullAddress: string;
+  /** Gate / lock code for the property (or the client), shown big on the stop. */
+  gateCode: string | null;
   propertyId: string | null;
   visits: CRMJobVisit[];
   derivedStatus: VisitStatus;
@@ -202,12 +207,16 @@ export function groupVisitsIntoStops(visits: CRMJobVisit[]): Stop[] {
     const stopVisits = byKey.get(key)!;
     const anchor = pickAnchorVisit(stopVisits);
     const address = [anchor.job?.serviceAddress, anchor.job?.serviceCity].filter(Boolean).join(", ");
+    const stateZip = [anchor.job?.serviceState, anchor.job?.serviceZip].filter(Boolean).join(" ");
+    const fullAddress = [anchor.job?.serviceAddress, anchor.job?.serviceCity, stateZip].filter(Boolean).join(", ");
     return {
       key,
       anchorVisitId: anchor.id,
       clientName: anchor.clientName ?? null,
       clientPhone: anchor.clientPhone ?? null,
       address,
+      fullAddress,
+      gateCode: stopVisits.map((v) => v.job?.propertyGateCode).find((c): c is string => !!c && c.trim().length > 0) ?? null,
       propertyId: anchor.job?.propertyId ?? null,
       visits: stopVisits,
       derivedStatus: derivedStopStatus(stopVisits),
@@ -228,7 +237,9 @@ export function groupVisitsIntoStops(visits: CRMJobVisit[]): Stop[] {
           ?? null)
         : null,
       pausedAt: stopVisits.find((v) => isRunning(v) && v.pausedAt)?.pausedAt ?? null,
-      notesToCrew: [...new Set(stopVisits.map((v) => v.notesToCrew || v.job?.notesToCrew).filter(Boolean))].join("\n") || null,
+      // Visit note, else the job's, else the property's standing note — the same fallback the
+      // dispatch board and route sheet use (and the clock-in route's acknowledgment gate).
+      notesToCrew: [...new Set(stopVisits.map((v) => v.notesToCrew || v.job?.notesToCrew || v.job?.propertyNotesToCrew).filter(Boolean))].join("\n") || null,
       notesToCrewUpdatedAt: stopVisits
         .map(notesToCrewUpdatedAt)
         .filter((s): s is string => !!s)

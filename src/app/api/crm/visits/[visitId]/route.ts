@@ -1,3 +1,4 @@
+import { rejectWithoutSchedulingPermission } from "@/lib/auth/scheduling-permission";
 import { NextResponse } from "next/server";
 import { isVisitInProgress, reopenClearsClockStamps, CLEARED_CLOCK_STAMPS, GUARDED_STATUS_CHANGES } from "@/lib/visits/status-guards";
 import { createServerClient } from "@supabase/ssr";
@@ -43,6 +44,8 @@ export async function PATCH(
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = await rejectWithoutSchedulingPermission(supabase);
+  if (denied) return denied;
 
   const { visitId } = await params;
 

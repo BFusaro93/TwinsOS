@@ -520,6 +520,7 @@ function UserSettingsTab({
   linkedAccountRole,
   users,
   linkedUserIds,
+  isExisting,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: Record<string, any>;
@@ -532,8 +533,14 @@ function UserSettingsTab({
   users: OrgUser[];
   /** Login ids already linked to OTHER employees (user_id is unique). */
   linkedUserIds: Set<string>;
+  /** Editing an existing employee (the DB guard only blocks changes, not a new record's values). */
+  isExisting: boolean;
 }) {
   const linkedUser = form.user_id ? users.find((u) => u.id === form.user_id) : undefined;
+  // The database only lets an admin change an existing employee's Landscapt role or linked
+  // login (prevent_crm_role_id_escalation); everyone else got "Failed to save" after editing.
+  const { isAdmin } = usePermissions();
+  const lockAccess = isExisting && !isAdmin;
   const linkableUsers = users.filter(
     (u) => u.status !== "inactive" && !linkedUserIds.has(u.id)
   );
@@ -589,7 +596,7 @@ function UserSettingsTab({
             )}
           </Field>
           <Field label="Landscapt Role">
-            <Select value={form.crm_role_id ?? "none"} onValueChange={(v) => onChange("crm_role_id", v === "none" ? null : v)}>
+            <Select disabled={lockAccess} value={form.crm_role_id ?? "none"} onValueChange={(v) => onChange("crm_role_id", v === "none" ? null : v)}>
               <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="No role assigned" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No role</SelectItem>
@@ -599,7 +606,9 @@ function UserSettingsTab({
               </SelectContent>
             </Select>
             <p className="mt-1 text-[11px] text-slate-400 dark:text-neutral-500">
-              Only applies to non-admin logins — an account with the Admin user role always has full access, regardless of what&apos;s selected here.
+              {lockAccess
+                ? "Only an admin can change an employee's Landscapt role."
+                : <>Only applies to non-admin logins — an account with the Admin user role always has full access, regardless of what&apos;s selected here.</>}
             </p>
           </Field>
           <Field label="Sales Meeting Color">
@@ -676,6 +685,8 @@ function UserSettingsTab({
               <Button
                 variant="outline"
                 size="sm"
+                disabled={lockAccess}
+                title={lockAccess ? "Only an admin can change an employee's linked login" : undefined}
                 className="h-8 text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400"
                 onClick={() => onChange("user_id", null)}
               >
@@ -684,9 +695,9 @@ function UserSettingsTab({
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Select value="" onValueChange={(v) => onChange("user_id", v)}>
+              <Select disabled={lockAccess} value="" onValueChange={(v) => onChange("user_id", v)}>
                 <SelectTrigger className="h-8 flex-1 text-sm">
-                  <SelectValue placeholder={linkableUsers.length ? "Select a user to link…" : "No unlinked users"} />
+                  <SelectValue placeholder={lockAccess ? "Only an admin can link a login" : linkableUsers.length ? "Select a user to link…" : "No unlinked users"} />
                 </SelectTrigger>
                 <SelectContent>
                   {linkableUsers.map((u) => (
@@ -882,6 +893,7 @@ function EmployeeDialog({
                   linkedAccountRole={linkedAccountRole}
                   users={orgUsers ?? []}
                   linkedUserIds={new Set(otherEmployees.flatMap((e) => (e.userId ? [e.userId] : [])))}
+                  isExisting={!!employee}
                 />
               </TabsContent>
             )}

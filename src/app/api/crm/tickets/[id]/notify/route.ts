@@ -1,6 +1,7 @@
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { createClient } from "@supabase/supabase-js";
 import { notifyContributorAdded, notifyStaffOfNewTicket, notifyTicketAssigned, notifyTicketComment } from "@/lib/ticket-notify";
 
@@ -39,6 +40,8 @@ export async function POST(
     .eq("id", user.id)
     .single();
   if (!callerProfile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
+  // Staff impersonating an org act in that org (their own profile org would 404 every ticket).
+  const callerOrgId: string = (await getEffectiveOrgId(supabase)) ?? callerProfile.org_id;
 
   // Tickets are Landscapt/CRM records — same gate as their RLS.
   const { data: hasCrmAccess } = await supabase.rpc("has_crm_access");
@@ -68,7 +71,7 @@ export async function POST(
   // check, any authenticated user (any org) could POST an event for a
   // ticket id belonging to a different org and trigger real staff
   // email/notification sends referencing that org's ticket data.
-  if (ticket.org_id !== callerProfile.org_id) {
+  if (ticket.org_id !== callerOrgId) {
     return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
   }
 

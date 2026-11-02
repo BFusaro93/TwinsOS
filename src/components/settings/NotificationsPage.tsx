@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Check } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Switch } from "@/components/ui/switch";
@@ -45,14 +46,19 @@ function RecipientsPicker({
   const usingDefault = !Array.isArray(configured);
   const selectedIds = new Set(usingDefault ? staff.map((u) => u.id) : configured);
 
+  const feedback = {
+    onSuccess: () => toast.success("Recipients saved"),
+    onError: (err: unknown) => toast.error(err instanceof Error && err.message ? err.message : "Failed to save recipients"),
+  };
+
   function setUsingDefault(useDefault: boolean) {
-    updateOrgSettings({ customizations: { [customizationsKey]: useDefault ? null : staff.map((u) => u.id) } });
+    updateOrgSettings({ customizations: { [customizationsKey]: useDefault ? null : staff.map((u) => u.id) } }, feedback);
   }
 
   function toggleUser(id: string) {
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
-    updateOrgSettings({ customizations: { [customizationsKey]: Array.from(next) } });
+    updateOrgSettings({ customizations: { [customizationsKey]: Array.from(next) } }, feedback);
   }
 
   return (
@@ -147,18 +153,25 @@ export function NotificationsPage({ hideHeader = false, scope = "cmms" }: Notifi
     setPrefs(remotePrefs);
   }, [remotePrefs]);
 
-  // Auto-save 600 ms after any change
+  // Auto-save 600 ms after the last change. Every key toggled inside the window is sent:
+  // sending only the last one dropped the earlier toggles.
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = useRef<Partial<NotificationPrefs>>({});
   function toggle(key: keyof NotificationPrefs) {
     setPrefs((prev) => {
       const next = { ...prev, [key]: !prev[key] };
+      pending.current = { ...pending.current, [key]: next[key] };
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => {
-        updatePrefs({ [key]: next[key] }, {
+        const changes = pending.current;
+        pending.current = {};
+        updatePrefs(changes, {
           onSuccess: () => {
             setSaved(true);
             setTimeout(() => setSaved(false), 1500);
+            if (hideHeader) toast.success("Notification preferences saved");
           },
+          onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to save notification preferences"),
         });
       }, 600);
       return next;

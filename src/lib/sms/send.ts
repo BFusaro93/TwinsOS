@@ -4,7 +4,16 @@ import { monthStartInZone } from "@/lib/time/zone";
 import { toE164Us } from "@/lib/utils/phone";
 
 /** The org whose Twilio account/campaign the TWILIO_* env fallback belongs to. */
-const SHARED_TWILIO_ORG_ID = "619de9bb-f8f8-46cf-983c-9faf54f6a7d0";
+export const SHARED_TWILIO_ORG_ID = "619de9bb-f8f8-46cf-983c-9faf54f6a7d0";
+export const SMS_NOT_REGISTERED_REASON = "SMS registration not complete for this organization";
+
+/** True when this org can actually send texts (its own messaging service, or the platform org). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function orgCanSendSms(supabase: any, orgId: string): Promise<boolean> {
+  if (orgId === SHARED_TWILIO_ORG_ID) return true;
+  const { data } = await supabase.from("organizations").select("twilio_messaging_service_sid").eq("id", orgId).maybeSingle();
+  return !!data?.twilio_messaging_service_sid;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -71,7 +80,7 @@ export async function sendClientSms(
   // org texting through it would send from Twins' number under Twins' registration (and its STOP
   // replies would be matched to the wrong org), so every other org needs its own sender first.
   if (!org?.twilio_messaging_service_sid && params.orgId !== SHARED_TWILIO_ORG_ID) {
-    return { ok: false, reason: "SMS registration not complete for this organization", permanent: true };
+    return { ok: false, reason: SMS_NOT_REGISTERED_REASON, permanent: true };
   }
 
   const hasSubaccountOverride = !!org?.twilio_account_sid;

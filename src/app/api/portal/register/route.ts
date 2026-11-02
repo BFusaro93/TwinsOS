@@ -6,9 +6,11 @@ import { createClient as createServiceClient } from "@supabase/supabase-js";
 import type { PortalInviteRow } from "@/lib/portal/portal-db";
 
 export async function POST(req: Request) {
-  const { token, password } = await req.json();
+  const { token, password } = (await req.json().catch(() => ({}))) as { token?: string; password?: string };
 
-  if (!token || !password || password.length < 8) {
+  // The password is only needed to create a NEW login; linking an existing account (signed in
+  // in this browser) sends none.
+  if (!token || (password != null && typeof password !== "string")) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
@@ -54,7 +56,7 @@ export async function POST(req: Request) {
     NextResponse.json(
       {
         error:
-          "An account already exists for this email. Sign in to the portal with that account first, then open this invite link again to add this company.",
+          "An account already exists for this email. Sign in with it first — at the portal login, or at the main Landscapt login for a staff account — then open this invite link again to add this company.",
         code: "sign_in_required",
       },
       { status: 409 }
@@ -122,6 +124,10 @@ export async function POST(req: Request) {
   if (existingUserId) {
     userId = existingUserId;
   } else {
+    if (!password || password.length < 8) {
+      await releaseClaim();
+      return NextResponse.json({ error: "Choose a password of at least 8 characters" }, { status: 400 });
+    }
     const { data: authData, error: authErr } = await adminClient.auth.admin.createUser({
       email: invite.email,
       password,

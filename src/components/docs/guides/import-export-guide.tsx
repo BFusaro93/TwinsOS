@@ -20,14 +20,14 @@ const EQUIPT_ENTITIES: [string, string, string][] = [
 ];
 
 const LANDSCAPT_ENTITIES: [string, string, string][] = [
-  ["Clients", "displayName", "accountType, primaryPhone, primaryEmail, billingAddress/City/State/Zip, serviceAddress/City/State/Zip, source, accountNumber"],
+  ["Clients", "displayName", "firstName, lastName, accountType, status (active, lead, inactive, cancelled, lost; anything else imports as active with a warning), clientSince, primaryPhone, primaryEmail, billingEmail, billingAddress/City/State/Zip, serviceAddress/City/State/Zip, source, accountNumber, parentAccountNumber (links the row as a sub-account of that account), tags (separate with |), notesToCrew"],
   ["Leads", "displayName", "accountType, primaryPhone, primaryEmail, billingAddress/City/State/Zip, source"],
   ["Estimates", "clientName, description", "estimateDate, validUntilDate, poNumber, stage, amount, salesperson, probability, externalRef"],
   ["Invoices", "clientName, service, description, amount", "invoiceDate, dueDate, poNumber, status, taxAmount"],
   ["Contracts", "clientName, title", "status, startDate, endDate, monthlyAmount, billingFrequency, billingDayOfMonth, billMonthInAdvance, paymentType, poNumber, autoGenerate, isActive, includeSubProperties, defaultService, invoiceLineItems (separate lines with |), janAmount … decAmount (optional seasonal amounts)"],
   ["Payments", "clientName, amount", "paymentDate, method, reference, memo, invoiceNumber"],
   ["Tickets", "subject", "clientName, type, status, priority, category, body, dueDate"],
-  ["Services", "name", "code, category, unit, defaultRate, productionRate, isActive. Rates may include $ and commas (\"$1,200.50\"). Units accept common wording (\"Sq Ft\", \"hour\", \"each\") and anything unrecognised falls back to \"visit\". A row with a production rate sets the service to budget by production rate."],
+  ["Services", "name", "code, category, unit, defaultRate, productionRate, isActive. Rates may include $ and commas (\"$1,200.50\"). Units accept common wording (\"Sq Ft\", \"hour\", \"each\") and anything unrecognised falls back to \"visit\". A row with a production rate sets the service to budget by production rate; a blank production rate on a re-import leaves the saved one alone."],
   ["Schedules", "name, frequency (weekly, bi_weekly, every_3_weeks, every_4_weeks, monthly, custom)", "dayOfWeek (required except for custom), weekPattern, anchorDate, seasonStart, seasonEnd, weekOfMonth, customDates (required for custom), excludedDates — date lists are separated with | , e.g. 2026-07-06 | 2026-07-20"],
   ["Employees", "firstName, lastName", "email, phone, cellPhone, address, city, state, zip, dateHired, resourceCode, hourlyRate"],
 ];
@@ -39,9 +39,9 @@ const DEDUPE_BEHAVIOR: [string, string, string][] = [
   ["Assets", "assetTag", "Existing asset is updated with only the cells the CSV filled in (make, model, year, serial, location, purchase details, asset type when a type is given). Blank cells never wipe saved values and a blank status keeps the current status."],
   ["Vehicles", "assetTag (looked up first, so a repeat import never creates a second copy)", "Existing vehicle is updated with only the cells the CSV filled in. A blank status keeps the current one, and a VIN that belongs to another vehicle is reported as a failed row."],
   ["Work Orders", "workOrderNumber", "Existing work order is updated with only the columns the CSV carries (title always). A completed work order is not reopened by a file that has no status column, and blank descriptions, assets or due dates don\u2019t erase saved ones."],
-  ["Clients", "accountNumber when the row supplies one; otherwise primaryEmail or primaryPhone", "A matching account number updates the existing client with the row's contact and address fields. A row whose account number is blank or new but whose email or phone matches an existing client is skipped as a duplicate and listed in the skipped rows. Everything else inserts as a new client and the org auto-assigns the account number."],
+  ["Clients", "accountNumber when the row supplies one; otherwise primaryEmail or primaryPhone; a row with none of those is matched on name plus service street", "A matching account number updates the existing client with the row's contact and address fields. A row whose account number is blank or new but whose email or phone matches an existing client is skipped as a duplicate and listed in the skipped rows. Everything else inserts as a new client and the org auto-assigns the account number."],
   ["Leads", "primaryEmail or primaryPhone against every existing non-deleted client", "No new record is created. Instead the matched client is tagged “imported-lead” and the row is counted separately as “matched,” not “created.”"],
-  ["Services", "code when the row has one; otherwise the row is added as a new service", "A matched service is updated with the file's name, category, unit, rates and active flag. Rows without a code create a new service every import, so give services a code if you plan to re-import."],
+  ["Services", "code when the row has one; otherwise the row is added as a new service", "A matched service is updated with only the columns the file fills in, so a file without category, unit, rate or active columns leaves those alone. Rows without a code create a new service every import, so give services a code if you plan to re-import. A row that fails is listed with its line number; the rest still import."],
   ["Employees", "email; rows with no email are matched on full name", "A matched employee is updated with only the cells your file filled in: blank phone, address or hourly rate cells never erase saved values. An employee with no email whose first and last name already exist is skipped as a duplicate. Hourly rate accepts $ and thousands separators."],
   ["Contracts", "client + contract name + start date", "The row is skipped with a note — an existing contract is never overwritten. Clients are matched by exact name; a name shared by two clients, or not found, skips the row. Status defaults to draft, so set it to active in the file for contracts that should bill. Imports don\u2019t fire automations."],
   ["Purchase Orders", "po_number (derived as PO-{year}-{csv PO #})", "The PO is skipped and listed in the failed-rows summary (\u201calready exists\u201d) — not merged, not counted as imported. Existing POs are never overwritten by a re-import."],
@@ -70,6 +70,7 @@ export function ImportExportGuide() {
           <TOCLink href="#po-import">Purchase Order import, in detail</TOCLink>
           <TOCLink href="#name-conflict">The name-conflict audit trail, worked example</TOCLink>
           <TOCLink href="#limitations">Limitations</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -450,6 +451,25 @@ export function ImportExportGuide() {
             <strong>Requisitions import has no vendor auto-create logic</strong> the way Purchase Orders
             does — check your vendor names are already in the system (or import Vendors first) if
             you&apos;re bulk-loading requisitions with a <code>vendorName</code> column.
+          </li>
+        </ul>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Client import round trip.</strong> The client export has the same columns the import accepts (including status, client since, names, billing email, tags, parent account and crew notes), so exporting and re-importing changes nothing and creates no duplicates.
+          </li>
+          <li>
+            <strong>Row numbers.</strong> Failed, skipped and warning rows are listed with the line number in your CSV file (line 1 is the header). Rows that imported with something to check, such as an unknown status, are listed as warnings.
+          </li>
+          <li>
+            <strong>New tags.</strong> Tags in a client file that aren&apos;t in Settings → Tags yet are added there when your role can edit CRM settings, so you can filter and bulk-tag by them.
+          </li>
+          <li>
+            <strong>Leads import report.</strong> The leads import lists every row that failed or matched an existing client, with its line number.
+          </li>
+          <li>
+            <strong>Quoted text with line breaks.</strong> A quoted cell that contains both doubled quotes (<code>&quot;&quot;like this&quot;&quot;</code>) and a line break imports as one cell instead of splitting the row.
           </li>
         </ul>
       </Section>

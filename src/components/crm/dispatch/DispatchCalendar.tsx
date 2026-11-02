@@ -74,7 +74,9 @@ interface Row {
  * Week calendar modeled on Aspire's schedule: a row per crew (with its roster),
  * a column per day, solid crew-colored cards with an actual-vs-budgeted hours
  * bar, per-cell and per-day totals.
- * Cards drag between cells to reschedule (day) and/or reassign (crew).
+ * Cards drag between cells to reschedule (day) and/or reassign (crew). iOS
+ * Safari never fires HTML5 drag events, so on a tablet a card is tapped to pick
+ * it up and a cell tapped to place it — both paths land in handleDrop.
  */
 export function DispatchCalendar({
   selectedDate,
@@ -93,6 +95,8 @@ export function DispatchCalendar({
   const [search, setSearch] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCell, setOverCell] = useState<string | null>(null);
+  // Tap-to-place fallback for touch (same pattern as TeamAssignDialog).
+  const [held, setHeld] = useState<{ id: string; jobId: string; label: string } | null>(null);
 
   // Read saved view prefs after mount (not in the initializer) so SSR and the
   // first client render agree.
@@ -105,6 +109,13 @@ export function DispatchCalendar({
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
+
+  useEffect(() => {
+    if (!held) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setHeld(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [held]);
 
   function setDayMode(v: DayMode) { setDayModeState(v); writePref("dispatch_cal_days", v); }
   function setHoursMode(v: HoursMode) { setHoursModeState(v); writePref("dispatch_cal_hours", v); }
@@ -176,7 +187,7 @@ export function DispatchCalendar({
 
   const visibleRows = rows.filter((r) => {
     if (crewFilter.length > 0 && !crewFilter.includes(r.id)) return false;
-    if (r.id === UNASSIGNED) return days.some((d) => byCell.get(`${r.id}|${d}`)?.length) || !!dragId;
+    if (r.id === UNASSIGNED) return days.some((d) => byCell.get(`${r.id}|${d}`)?.length) || !!dragId || !!held;
     return true;
   });
 
@@ -196,9 +207,12 @@ export function DispatchCalendar({
     onDateChange(toISODate(d));
   }
 
+  /** Drop the dragged — or tapped-up — card on a cell. Dropping it where it
+   *  already is is a no-op, which is how tapping the held card cancels. */
   function handleDrop(crewId: string, date: string) {
-    const id = dragId;
+    const id = dragId ?? held?.id;
     setDragId(null);
+    setHeld(null);
     setOverCell(null);
     const visit = visits.find((v) => v.id === id);
     if (!visit || TERMINAL.has(visit.status)) return;
@@ -303,6 +317,32 @@ export function DispatchCalendar({
         </div>
       </div>
 
+      {held ? (
+        <div className="flex items-center gap-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 dark:border-brand-800 dark:bg-brand-900/30">
+          <p className="text-xs text-brand-800 dark:text-brand-300">
+            Moving <span className="font-semibold">{held.label}</span> — pick the day and crew to place it.
+          </p>
+          <Link
+            href={`/crm/scheduling/jobs/${held.jobId}?returnTo=${encodeURIComponent(returnTo)}`}
+            className="ml-auto inline-flex shrink-0 items-center text-[11px] font-medium text-brand-700 underline-offset-2 hover:underline dark:text-brand-400 touch:-my-2 touch:h-11"
+          >
+            Open job
+          </Link>
+          <button
+            type="button"
+            onClick={() => setHeld(null)}
+            className="shrink-0 rounded border border-brand-300 bg-card px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-100 dark:border-brand-700 dark:text-brand-400 dark:hover:bg-brand-900/40 touch:-my-1 touch:h-11 touch:px-3"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">
+          <span className="touch:hidden">Drag a job to another day or crew, or click it to pick it up and click where it should go.</span>
+          <span className="hidden touch:inline">Tap a job to pick it up (or open it), then tap a day or crew to place it.</span>
+        </p>
+      )}
+
       <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-card">
         <div className="grid min-w-[1100px]" style={{ gridTemplateColumns: gridCols }}>
           <div className="sticky top-0 z-20 border-b bg-card" />
@@ -338,9 +378,11 @@ export function DispatchCalendar({
                 returnTo={returnTo}
                 dragId={dragId}
                 overCell={overCell}
-                setDragId={setDragId}
+                setDragId={(id) => { setHeld(null); setDragId(id); }}
                 setOverCell={setOverCell}
                 onDrop={handleDrop}
+                heldId={held?.id ?? null}
+                onPick={(v) => setHeld((h) => (h?.id === v.id ? null : { id: v.id, jobId: v.jobId, label: v.clientName ?? "Visit" }))}
               />
             );
           })}
@@ -380,6 +422,8 @@ function RowCells({
   setDragId,
   setOverCell,
   onDrop,
+  heldId,
+  onPick,
 }: {
   row: Row;
   returnTo: string;
@@ -392,6 +436,8 @@ function RowCells({
   setDragId: (id: string | null) => void;
   setOverCell: (key: string | null) => void;
   onDrop: (crewId: string, date: string) => void;
+  heldId: string | null;
+  onPick: (v: CRMJobVisit) => void;
 }) {
   return (
     <>
@@ -425,9 +471,11 @@ function RowCells({
               e.preventDefault();
               onDrop(row.id, d);
             }}
+            onClick={() => { if (heldId) onDrop(row.id, d); }}
             className={cn(
               "flex min-h-[110px] flex-col gap-1 border-b border-l p-1",
               d === today && "bg-brand-50/40 dark:bg-brand-900/10",
+              heldId && "cursor-pointer ring-1 ring-inset ring-brand-300 hover:bg-brand-50 dark:ring-brand-800 dark:hover:bg-brand-900/20",
               overCell === key && "ring-2 ring-inset ring-brand-400"
             )}
           >
@@ -440,6 +488,9 @@ function RowCells({
                 returnTo={returnTo}
                 onDragStart={() => setDragId(v.id)}
                 onDragEnd={() => { setDragId(null); setOverCell(null); }}
+                isHeld={heldId === v.id}
+                anyHeld={!!heldId}
+                onPick={() => onPick(v)}
               />
             ))}
             {items.length > 0 && (
@@ -461,6 +512,9 @@ function CalendarCard({
   returnTo,
   onDragStart,
   onDragEnd,
+  isHeld,
+  anyHeld,
+  onPick,
 }: {
   returnTo: string;
   visit: CRMJobVisit;
@@ -468,6 +522,10 @@ function CalendarCard({
   hoursOf: (v: CRMJobVisit, h: number | null | undefined) => number;
   onDragStart: () => void;
   onDragEnd: () => void;
+  isHeld: boolean;
+  /** Something is picked up — a tap here places it in this card's cell instead. */
+  anyHeld: boolean;
+  onPick: () => void;
 }) {
   const locked = TERMINAL.has(visit.status);
   const fg = textOn(color);
@@ -487,11 +545,28 @@ function CalendarCard({
         onDragStart();
       }}
       onDragEnd={onDragEnd}
-      className={cn("rounded-[3px] px-1.5 py-1 text-[11px] leading-snug shadow-sm", locked ? "opacity-80" : "cursor-grab active:cursor-grabbing")}
+      // With something held, let the tap through to the cell so it lands there.
+      onClick={(e) => {
+        if (anyHeld || locked) return;
+        e.stopPropagation();
+        onPick();
+      }}
+      className={cn(
+        "rounded-[3px] px-1.5 py-1 text-[11px] leading-snug shadow-sm touch:min-h-11 touch:py-1.5",
+        locked ? "opacity-80" : "cursor-grab active:cursor-grabbing",
+        isHeld && "ring-2 ring-brand-500 ring-offset-1 ring-offset-background"
+      )}
       style={{ backgroundColor: color, color: fg }}
       title={`${visit.clientName ?? ""}${services ? ` — ${services}` : ""}\n${formatHours(actual)} of ${formatHours(budget)} hrs`}
     >
-      <Link href={`/crm/scheduling/jobs/${visit.jobId}?returnTo=${encodeURIComponent(returnTo)}`} draggable={false} className="flex items-start gap-1 hover:underline">
+      <Link href={`/crm/scheduling/jobs/${visit.jobId}?returnTo=${encodeURIComponent(returnTo)}`} draggable={false}
+        // Picking a card up never opens it; with one held, the tap places it instead.
+        onClick={(e) => { if (anyHeld) e.preventDefault(); else e.stopPropagation(); }}
+        // On touch a movable card is one big pick-up target; the held bar's
+        // "Open job" link takes over opening it. Locked cards can't move, so
+        // their name stays a plain link.
+        className={cn("flex items-start gap-1 hover:underline", !locked && "touch:pointer-events-none")}
+      >
         {recurring && <Repeat className="mt-0.5 h-3 w-3 shrink-0 opacity-80" />}
         <span className="line-clamp-2 min-w-0">
           {visit.clientName ?? "Client"}

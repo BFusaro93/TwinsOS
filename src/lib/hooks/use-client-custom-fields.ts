@@ -72,17 +72,15 @@ export function useCreateCustomFieldDef() {
   return useMutation({
     mutationFn: async (input: { name: string; fieldType: "text" | "number"; unit?: string }) => {
       const supabase = createClient();
-      const { data: profile } = await supabase.auth.getUser();
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("org_id")
-        .eq("id", profile.user!.id)
-        .single();
+      // my_org_id() honors staff impersonation; profiles.org_id is the staff member's own org,
+      // which RLS rejects (or files the row under the wrong org).
+      const { data: orgId, error: orgErr } = await supabase.rpc("my_org_id");
+      if (orgErr || !orgId) throw orgErr ?? new Error("No organization for the current session");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_custom_field_defs")
         .insert({
-          org_id: prof!.org_id,
+          org_id: orgId,
           name: input.name,
           field_type: input.fieldType,
           unit: input.unit ?? null,
@@ -256,17 +254,15 @@ export function useUpsertClientCustomFieldValue() {
       valueNumber?: number | null;
     }) => {
       const supabase = createClient();
-      const { data: profile } = await supabase.auth.getUser();
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("org_id")
-        .eq("id", profile.user!.id)
-        .single();
+      // my_org_id() honors staff impersonation; profiles.org_id is the staff member's own org,
+      // which RLS rejects (or files the row under the wrong org).
+      const { data: orgId, error: orgErr } = await supabase.rpc("my_org_id");
+      if (orgErr || !orgId) throw orgErr ?? new Error("No organization for the current session");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_client_custom_field_values")
         .upsert({
-          org_id: prof!.org_id,
+          org_id: orgId,
           client_id: input.clientId,
           field_def_id: input.fieldDefId,
           value_text: input.valueText ?? null,

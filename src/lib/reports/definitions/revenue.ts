@@ -32,7 +32,8 @@ function paymentBucket(method: string | null): PaymentBucket {
   if (!method) return "other";
   if (method === "Cash") return "cash";
   if (method === "Check") return "check";
-  if (method.startsWith("Credit Card")) return "credit_card";
+  // Stripe records debit cards as "Debit Card- Visa" etc.; they are card payments too.
+  if (method.startsWith("Credit Card") || method.startsWith("Debit Card")) return "credit_card";
   if (method === "ACH/E-Check") return "ach";
   if (method === "AutoPay") return "autopay";
   return "other";
@@ -535,7 +536,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
             "payment_date, method, reference, amount_cents, refunded_amount_cents, processing_fee_cents, clients:client_id(display_name)"
           )
           .is("deleted_at", null)
-          .like("method", "Credit Card%")
+          // Debit cards ("Debit Card- Visa") are card charges with processing fees too.
+          .or("method.like.Credit Card%,method.like.Debit Card%")
           .eq("is_credit", false)
           .neq("method", AR_WRITE_OFF_METHOD);
         if (from) query = query.gte("payment_date", from);

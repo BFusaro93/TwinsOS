@@ -722,14 +722,21 @@ export function useGenerateContractInvoices() {
           .from("crm_contracts")
           .select("id, org_id, client_id, title, status, po_number, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, start_billing_mode, first_period_prorated_at, clients!inner(deleted_at, default_terms, status)")
           .eq("id", contractId)
-          // A cancelled client's contract must not keep billing (see the cron).
           .is("clients.deleted_at", null)
-          .neq("clients.status", "cancelled")
           .is("deleted_at", null)
           .single();
         if (fetchErr || !contract) {
           results.push({ contractId, status: "skipped", reason: "contract not found" });
           continue;
+        }
+        // A cancelled, inactive or lost client is off service (no visits are generated), so
+        // the contract doesn't bill either — same rule as the daily cron.
+        {
+          const clientStatus = (contract.clients as { status?: string | null } | null)?.status ?? null;
+          if (clientStatus === "cancelled" || clientStatus === "inactive" || clientStatus === "lost") {
+            results.push({ contractId, status: "skipped", reason: `client is ${clientStatus} — reactivate the client to bill this contract` });
+            continue;
+          }
         }
 
         // Same guard as the daily cron (src/app/api/cron/contract-invoices):

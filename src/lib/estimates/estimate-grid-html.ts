@@ -1,4 +1,5 @@
 import type { EstimatePDFLineItem } from "@/components/crm/estimates/pdf/EstimateDocument";
+import { packageLineNetCents } from "@/lib/estimates/package-line-net";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
 
@@ -30,7 +31,9 @@ export function buildEstimateGridHtml(
         visits.push(lineItems[j]);
         printedByPackage.add(j);
       }
-      const total = visits.reduce((sum, v) => sum + v.totalCents, 0);
+      // A package whose visits were all removed has nothing to sell — print nothing.
+      if (visits.length === 0) return "";
+      const total = visits.reduce((sum, v) => sum + packageLineNetCents(v), 0);
       const wording = li.estimateDesc ? `<div style="font-weight:400;color:#64748b;font-size:12px">${escapeHtml(li.estimateDesc)}</div>` : "";
       const main = `<tr>
       <td style="${cell};font-weight:700">${escapeHtml(li.sectionName ?? "Package")}${wording}</td>

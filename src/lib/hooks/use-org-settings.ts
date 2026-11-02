@@ -3,7 +3,10 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { fetchCurrentProfile } from "@/lib/hooks/use-current-profile";
 import type { CostMethod } from "@/lib/cost-methods";
-import type { CompanyAddress } from "@/stores/settings-store";
+import { useSettingsStore, type CompanyAddress } from "@/stores/settings-store";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("use-org-settings");
 import { coerceTimeZone } from "@/lib/time/zone";
 
 export interface OrgSettingsData {
@@ -219,15 +222,31 @@ export function useUpdateOrgSettings() {
         if (merged !== true) throw blocked();
       }
     },
-    onSuccess: (_data, input) => {
-      queryClient.invalidateQueries({ queryKey: ["org-settings"] });
+    onSuccess: async (_data, input) => {
+      await queryClient.invalidateQueries({ queryKey: ["org-settings"] });
+      // The settings store (sidebar org name, printed route sheets/projects, PO tax default) is
+      // seeded once per page load; refresh it so a saved name, address or tax rate shows up
+      // without a hard reload.
+      const fresh = queryClient.getQueryData<OrgSettingsData>(["org-settings"]);
+      if (fresh) {
+        useSettingsStore.getState().loadFromRemote({
+          orgName: fresh.name,
+          brandColor: fresh.brandColor,
+          address: fresh.address,
+          taxRatePercent: fresh.taxRatePercent,
+          costMethod: fresh.costMethod,
+          portalEnabled: fresh.portalEnabled,
+          ...((fresh.customizations as Record<string, unknown>) ?? {}),
+        } as Parameters<ReturnType<typeof useSettingsStore.getState>["loadFromRemote"]>[0]);
+      }
       // Changing the clock changes what "today" is, so every cached list that
       // was filtered or defaulted by a date is now potentially off by a day.
       if (input.timezone !== undefined) queryClient.invalidateQueries();
     },
     onError: (err) => {
-      // Surface to browser console so devs can see save failures even without a UI handler
-      console.error("[useUpdateOrgSettings] save failed:", err);
+      // Callers show their own toast (every caller passes onError or awaits mutateAsync in a
+      // try/catch); this keeps a log line for support.
+      log.error("org settings save failed", { error: err instanceof Error ? err.message : String(err) });
     },
   });
 }

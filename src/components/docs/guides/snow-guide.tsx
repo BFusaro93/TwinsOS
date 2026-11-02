@@ -50,6 +50,7 @@ export function SnowGuide() {
           <TOCLink href="#invoicing">Snow invoicing and the three rate types</TOCLink>
           <TOCLink href="#interval-billing">Interval billing (rate by inches)</TOCLink>
           <TOCLink href="#why-separate">Why snow billing has its own screen</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -401,6 +402,19 @@ export function SnowGuide() {
           dispatch is intentionally its own storm-event-centric flow rather than a daily board,
           since a storm doesn&apos;t respect calendar days the way a regular route does.
         </p>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Status icon.</strong> Tapping a stop&apos;s status icon steps it forward through Scheduled, Dispatched and In Progress, and asks before marking it Completed (which invoices it) or reopening a completed stop. Skip a stop from the outcome dialog with a reason.
+          </li>
+          <li>
+            <strong>Reordering.</strong> The up and down arrows are disabled while a new order is saving, so two quick taps can&apos;t swap the wrong stops.
+          </li>
+          <li>
+            <strong>Tax-exempt clients.</strong> Snow invoices for a client marked tax-exempt carry no tax, even when the job came from a taxed estimate.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );

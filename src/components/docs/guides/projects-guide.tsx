@@ -56,6 +56,7 @@ export function ProjectsGuide() {
           <TOCLink href="#crm-view">The CRM view of a Project</TOCLink>
           <TOCLink href="#job-costing-dashboard">The Job Costing Dashboard</TOCLink>
           <TOCLink href="#reference">Field &amp; tab reference</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -378,6 +379,25 @@ export function ProjectsGuide() {
             ))}
           </tbody>
         </Table>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Change orders keep the tax.</strong> On a project priced before tax, milestones re-priced or created by an approved change order are invoiced with sales tax added on top, so the client is billed the full taxed amount. Milestones already invoiced keep their amount when a change order is approved, even if that invoice is later voided.
+          </li>
+          <li>
+            <strong>Milestones carried from a taxed estimate.</strong> When the schedule is checked against the contract price, flat milestones carried from a taxed estimate count at their pre-tax share, so a complete schedule doesn&apos;t block invoicing.
+          </li>
+          <li>
+            <strong>Figures stay current.</strong> The project window updates as soon as a change order is approved, without closing and reopening it.
+          </li>
+          <li>
+            <strong>Drafts don&apos;t count yet.</strong> Project cost leaves out draft purchase orders and requisitions, and Invoiced, Amount Due and Remaining to Bill leave out draft invoices, matching the WIP report.
+          </li>
+          <li>
+            <strong>Crew material requests.</strong> Materials a crew requests from a project job&apos;s stop are tagged to the project, so they count toward its cost.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );

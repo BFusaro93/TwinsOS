@@ -58,6 +58,7 @@ export function ServicesPricingGuide() {
           <TOCLink href="#adjustments">Price Adjustments — re-pricing live work</TOCLink>
           <TOCLink href="#undo">Undoing a run</TOCLink>
           <TOCLink href="#permissions">Permissions</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -312,6 +313,22 @@ export function ServicesPricingGuide() {
             History tabs. Enforced in the database itself, not just hidden in the UI: applying or
             reverting a run re-checks this permission at the point the prices are written, so a user
             without it cannot re-price anything by any route.
+          </li>
+        </ul>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Deleting a service.</strong> Deleting a service in Settings asks first and says how many open jobs use it.
+          </li>
+          <li>
+            <strong>Production rate sets the budget method.</strong> Adding a production rate to a service in Settings switches it to budgeting by production rate, the same as adding a new service with one.
+          </li>
+          <li>
+            <strong>Copying a rate matrix.</strong> Copy to other services needs the Edit Service permission. It adds the copied rows before removing the target&apos;s old ones, so a failure never leaves a service with no matrix, and it reports which services couldn&apos;t be copied.
+          </li>
+          <li>
+            <strong>Blank matrix cells.</strong> Clearing a From or Hours cell in the rate matrix saves 0.
           </li>
         </ul>
       </Section>

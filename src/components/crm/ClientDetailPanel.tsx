@@ -753,7 +753,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   const rf = useRequiredFields("client");
   const svcAddr = useVerifyAddress();
   const { data: fieldDefs = [] } = useCustomFieldDefs();
-  const { data: fieldValues = [], isLoading: fieldValuesLoading } = useClientCustomFieldValues(client.id);
+  const { data: fieldValues = [], isLoading: fieldValuesLoading, isError: fieldValuesError } = useClientCustomFieldValues(client.id);
   const { mutateAsync: upsertFieldValue } = useUpsertClientCustomFieldValue();
   const { data: allClients = [] } = useClients();
   // Shared org-level source list (same one the New Lead dialog uses) — the
@@ -1027,9 +1027,12 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     // The main client fields already committed above — a failure here is a
     // separate, secondary problem, not a full save failure. Report it as
     // such instead of a generic "failed to update" that implies nothing saved.
+    // Only write custom fields the form actually loaded: if their query failed (or hasn't
+    // seeded yet) the form holds blanks, and saving them would wipe every stored value.
+    const customFieldsLoaded = !fieldValuesError && customValuesSyncedForRef.current === client.id;
     try {
       await Promise.all(
-        fieldDefs.map((def) => {
+        (customFieldsLoaded ? fieldDefs : []).map((def) => {
           const raw = customValues[def.id] ?? "";
           return upsertFieldValue({
             clientId: client.id,
@@ -1458,6 +1461,11 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
 
             {/* ── Custom Fields ── */}
             <TabsContent value="custom" className="mt-0 space-y-1">
+              {fieldValuesError && (
+                <p className="mb-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                  Custom field values couldn&apos;t be loaded, so they won&apos;t be changed by this save. Close and reopen to try again.
+                </p>
+              )}
               <p className="text-xs text-slate-400 dark:text-neutral-500 mb-3">
                 Built-in takeoff measurements + org-defined custom fields.
                 Add or remove fields in{" "}
@@ -1654,8 +1662,8 @@ function ContactDialog({
       contactType: contactType || null,
       email: email.trim() || null,
       phones: validPhones,
-      phone: validPhones[0]?.phone ?? null,
-      phoneType: validPhones[0]?.type ?? null,
+      phone: (validPhones.find((p) => p.isPrimary) ?? validPhones[0])?.phone ?? null,
+      phoneType: (validPhones.find((p) => p.isPrimary) ?? validPhones[0])?.type ?? null,
       isPrimary,
       okToEmail,
       notes: notes.trim() || null,
@@ -2053,17 +2061,25 @@ function LinkParentDialog({
     }
   }, [open, currentParentId]);
 
-  const options = (allClients ?? []).filter(
-    (c) => c.id !== clientId && c.parentClientId == null // can't link to a child
+  // One level only (DB trigger): a client that already has sub-accounts can't become one,
+  // and a sub-account can't be a parent. Offering those just ended in "Failed to update".
+  const hasChildren = (allClients ?? []).some((c) => c.parentClientId === clientId);
+  const LINK_PARENT_CAP = 50;
+  const matching = hasChildren ? [] : (allClients ?? []).filter(
+    (c) => c.id !== clientId && c.parentClientId == null && !c.deletedAt
       && (search === "" || c.displayName.toLowerCase().includes(search.toLowerCase()))
   );
+  // Thousands of clients rendered as buttons froze the dialog; show 50 until a search narrows it.
+  const options = matching.slice(0, LINK_PARENT_CAP);
+  const currentParent = currentParentId ? (allClients ?? []).find((c) => c.id === currentParentId) : null;
+  if (currentParent && !options.some((c) => c.id === currentParent.id)) options.unshift(currentParent);
 
   async function handleSave() {
     try {
       await setParent({ id: clientId, parentClientId: selectedId || null });
       toast.success(selectedId ? "Parent account linked" : "Parent link removed");
       onOpenChange(false);
-    } catch { toast.error("Failed to update parent link"); }
+    } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to update parent link"); }
   }
 
   return (
@@ -2104,9 +2120,13 @@ function LinkParentDialog({
                 )}
               </button>
             ))}
-            {options.length === 0 && (
+            {hasChildren ? (
+              <p className="px-3 py-4 text-center text-sm text-slate-400 dark:text-neutral-500">This client has sub-accounts of its own, so it can&apos;t be linked under another parent.</p>
+            ) : options.length === 0 ? (
               <p className="px-3 py-4 text-center text-sm text-slate-400 dark:text-neutral-500">No matching clients</p>
-            )}
+            ) : matching.length > LINK_PARENT_CAP ? (
+              <p className="px-3 py-2 text-center text-xs text-slate-400 dark:text-neutral-500">Showing {LINK_PARENT_CAP} of {matching.length} — type to narrow the list.</p>
+            ) : null}
           </div>
         </div>
         <DialogFooter>
@@ -2274,7 +2294,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
     {/* minmax(0,1fr), not 1fr: a bare fr track won't shrink below its content's
         min-content, so Jobs and Open Estimates were stealing width and left
         Accounting a third narrower than its share. */}
-    <div className="grid min-h-[600px] grid-cols-1 bg-card px-3 md:grid-cols-[minmax(0,1fr)_10px_minmax(0,1fr)_10px_minmax(0,1fr)]">
+    <div className="grid min-h-[600px] grid-cols-1 bg-card px-3 xl:grid-cols-[minmax(0,1fr)_10px_minmax(0,1fr)_10px_minmax(0,1fr)]">
       {/* Left — Jobs */}
       <div className="flex flex-col bg-card">
         <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
@@ -2459,7 +2479,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       </div>
 
       {/* Divider column */}
-      <div className="hidden justify-center bg-card md:flex"><div className="w-px h-full bg-slate-200 dark:bg-neutral-700" /></div>
+      <div className="hidden justify-center bg-card xl:flex"><div className="w-px h-full bg-slate-200 dark:bg-neutral-700" /></div>
 
       {/* Middle — Accounting */}
       <PermissionGate permission="client_view_billing">
@@ -2502,7 +2522,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                         <p className="whitespace-nowrap text-xs font-semibold text-slate-800 dark:text-neutral-100">
                           {row.invoiceNumber != null ? `Invoice #${row.invoiceNumber}` : "Invoice"}
                         </p>
-                        <div className="mt-0.5 flex gap-3 text-xs text-muted-foreground">
+                        <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                           <span>Amt: {formatCurrency(row.totalCents)}</span>
                           <span className={row.balanceCents > 0 ? "font-medium text-red-500 dark:text-red-400" : "text-slate-400 dark:text-neutral-500"}>
                             Bal: {formatCurrency(row.balanceCents)}
@@ -2544,7 +2564,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       </PermissionGate>
 
       {/* Divider column */}
-      <div className="hidden justify-center bg-card md:flex"><div className="w-px h-full bg-slate-200 dark:bg-neutral-700" /></div>
+      <div className="hidden justify-center bg-card xl:flex"><div className="w-px h-full bg-slate-200 dark:bg-neutral-700" /></div>
 
       {/* Right — Estimates + Contracts */}
       <div className="flex flex-col bg-card divide-y">
@@ -3513,7 +3533,8 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   async function handleConvert() {
     setConvertConfirmOpen(false);
     try {
-      await convertLead(clientId);
+      const result = await convertLead(clientId);
+      if (result && result.converted === false) { toast.error("This record is no longer a lead."); return; }
       toast.success(`${client!.displayName} converted to client`);
       router.push(`/crm/clients/${clientId}`);
     } catch { toast.error("Failed to convert lead"); }

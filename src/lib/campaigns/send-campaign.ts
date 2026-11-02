@@ -166,6 +166,11 @@ export async function sendCampaignEmails(
     query = query.eq("status", "lead");
   } else if (campaign.target_segment === "past_clients") {
     query = query.in("status", ["inactive", "cancelled"]);
+  } else {
+    // "All Clients" is customers on or recently off service: active + inactive. Lost leads
+    // ("went with a competitor") and cancelled clients are reached through the Leads / Past
+    // Clients segments instead of every general blast.
+    query = query.in("status", ["active", "inactive"]);
   }
   return query;
   };

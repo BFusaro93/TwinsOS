@@ -90,6 +90,15 @@ export async function POST(request: Request) {
   // 3. Generate a one-time link. If the user was already invited (orphaned
   //    auth record from a previous attempt), fall back to a recovery link
   //    which lets them set their password on the same /reset-password page.
+  // An inactive role grants nothing (has_crm_access requires it), so inviting someone onto one
+  // would land them on the "No Landscapt access" screen. Refuse before sending anything.
+  if (crmRoleId && role !== "admin" && role !== "crew") {
+    const { data: chosenRole } = await adminClient
+      .from("crm_roles").select("id, is_active").eq("id", crmRoleId).eq("org_id", callerProfile.org_id).is("deleted_at", null).maybeSingle();
+    if (!chosenRole) return NextResponse.json({ error: "That Landscapt role no longer exists." }, { status: 400 });
+    if (!chosenRole.is_active) return NextResponse.json({ error: "That Landscapt role is inactive. Activate it or pick another role." }, { status: 400 });
+  }
+
   let linkData: Awaited<ReturnType<typeof adminClient.auth.admin.generateLink>>["data"];
   let linkType: "invite" | "recovery" = "invite";
 

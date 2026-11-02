@@ -5,8 +5,10 @@ import { escapeHtml } from "@/lib/utils/escape-html";
 import { orgEmailFrom } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, shiftYmd, isoInZone } from "@/lib/time/zone";
-import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 import { resolveAssigneeId } from "@/lib/ticket-notify";
+// Loops every org; give it room before the default function limit.
+export const maxDuration = 300;
 
 // Called daily by Vercel Cron (see vercel.json) — Vercel Cron always sends a
 // GET request, so this must be GET, not POST, or it silently never fires.
@@ -60,7 +62,7 @@ export async function GET(req: NextRequest) {
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   let notified = 0;
-  const orgCanceled = createOrgCanceledResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase);
 
   for (const est of expiring as Record<string, unknown>[]) {
     if (await orgCanceled(est.org_id as string)) continue; // canceled orgs get no automated reminders
@@ -121,6 +123,20 @@ export async function GET(req: NextRequest) {
       estimateId: est.id as string,
     });
 
+    // Claim before sending: two overlapping or retried runs both emailed the rep, and a failed
+    // stamp after a successful send re-sent it the next day. Released if the send fails.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: claimed } = await (supabase as any)
+      .from("estimates")
+      .update({ expiry_notified_at: new Date().toISOString() })
+      .eq("id", est.id as string)
+      .is("expiry_notified_at", null)
+      .select("id");
+    if (!claimed?.length) continue;
+    const release = () =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).from("estimates").update({ expiry_notified_at: null }).eq("id", est.id as string);
+
     try {
       const { error: sendErr } = await resend.emails.send({
         from: orgEmailFrom(orgName),
@@ -128,18 +144,15 @@ export async function GET(req: NextRequest) {
         subject: `Estimate #${estimateNum} ${expiryPhrase(daysLeft)} — ${clientName}`,
         html,
       });
-      // The Resend SDK reports a rejected send (rate limit, bad address) in
-      // `error` rather than throwing. Falling through stamped
-      // expiry_notified_at on a reminder that never went out, so tomorrow's run
-      // skipped it and nobody was ever told the estimate lapsed.
-      if (sendErr) continue;
+      // The Resend SDK reports a rejected send (rate limit, bad address) in `error` rather than
+      // throwing; release the claim so tomorrow's run tries again.
+      if (sendErr) {
+        await release();
+        continue;
+      }
       notified++;
-      await supabase
-        .from("estimates")
-        .update({ expiry_notified_at: new Date().toISOString() })
-        .eq("id", est.id as string);
     } catch {
-      // continue to next estimate if one email fails
+      await release();
     }
   }
 
