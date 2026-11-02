@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   useClient,
-  useClients,
+  useClientSearch,
+  CLIENT_SEARCH_LIMIT,
   useClientContacts,
   useClientProperties,
   useChildClients,
@@ -23,6 +24,7 @@ import {
   useCancelClient,
   useActivateClient,
 } from "@/lib/hooks/use-clients";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { TagEditor } from "@/components/crm/TagEditor";
 import { DispatchJobsDialog } from "@/components/crm/WaitingList";
 import { useTicket, useTickets } from "@/lib/hooks/use-tickets";
@@ -685,7 +687,7 @@ function ClientCombobox({
   value,
   onChange,
   onSelectId,
-  clients,
+  excludeId,
   placeholder = "Search clients or type name…",
 }: {
   value: string;
@@ -693,18 +695,17 @@ function ClientCombobox({
   /** Called with a client's id when picked from the list, or null once the
    * text no longer matches that pick (free text — no real client link). */
   onSelectId?: (id: string | null) => void;
-  clients: Client[];
+  /** The client being edited — never offered as its own referrer. */
+  excludeId: string;
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
+  const term = useDebouncedValue(query);
 
-  // Show all clients on focus; filter when user types
-  const filtered = open
-    ? query.trim().length > 0
-      ? clients.filter((c) => c.displayName.toLowerCase().includes(query.toLowerCase())).slice(0, 10)
-      : clients.slice(0, 10)
-    : [];
+  // Server-side search; the first 10 on focus, matches as the user types.
+  const { data: suggestions = [] } = useClientSearch(term, { excludeIds: [excludeId], limit: 10 }, open);
+  const filtered = open ? suggestions : [];
 
   return (
     <div className="relative" data-client-combobox="">
@@ -754,7 +755,6 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   const { data: fieldDefs = [] } = useCustomFieldDefs();
   const { data: fieldValues = [], isLoading: fieldValuesLoading } = useClientCustomFieldValues(client.id);
   const { mutateAsync: upsertFieldValue } = useUpsertClientCustomFieldValue();
-  const { data: allClients = [] } = useClients();
   // Shared org-level source list (same one the New Lead dialog uses) — the
   // client's current value is appended if it isn't in the list so it still shows.
   const { options: sourcesOptions } = useClientSourceOptions(client.source);
@@ -1330,7 +1330,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                   value={form.referredBy}
                   onChange={(v) => patch("referredBy", v)}
                   onSelectId={(id) => patch("referredByClientId", id)}
-                  clients={allClients.filter((c) => c.id !== client.id)}
+                  excludeId={client.id}
                   placeholder="Search clients, or type a name…"
                 />
                 {form.referredByClientId ? (
@@ -2036,9 +2036,9 @@ function LinkParentDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const { mutateAsync: setParent, isPending } = useSetParentClient();
-  const { data: allClients } = useClients();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(currentParentId ?? "");
+  const term = useDebouncedValue(search);
 
   // Re-sync the selection to the client's actual current parent every time
   // the dialog opens. Without this, a selection made (or a search typed) but
@@ -2052,10 +2052,17 @@ function LinkParentDialog({
     }
   }, [open, currentParentId]);
 
-  const options = (allClients ?? []).filter(
-    (c) => c.id !== clientId && c.parentClientId == null // can't link to a child
-      && (search === "" || c.displayName.toLowerCase().includes(search.toLowerCase()))
+  // Only offer what prevent_client_hierarchy_cycle() accepts: one level deep,
+  // so a parent can't itself have a parent, and a client that already has
+  // sub-accounts can't be given one. Server-side search, capped at 50.
+  const { data: subAccounts, isPending: subAccountsLoading } = useChildClients(open ? clientId : "");
+  const hasSubAccounts = (subAccounts?.length ?? 0) > 0;
+  const { data: options = [], isFetching } = useClientSearch(
+    term,
+    { topLevelOnly: true, excludeIds: [clientId] },
+    open && !subAccountsLoading && !hasSubAccounts,
   );
+  const { data: currentParent } = useClient(open ? currentParentId ?? "" : "");
 
   async function handleSave() {
     try {
@@ -2076,12 +2083,17 @@ function LinkParentDialog({
           <div className="flex flex-col gap-1.5">
             <Label>Search clients</Label>
             <Input
-              placeholder="Type to filter…"
+              placeholder="Search by name, account #, address…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
             />
           </div>
+          {hasSubAccounts && (
+            <p className="rounded-md border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+              This client has sub-accounts of its own, so it can&apos;t be linked under a parent — only one level of hierarchy is supported.
+            </p>
+          )}
           <div className="max-h-56 overflow-y-auto rounded-md border divide-y">
             <button
               type="button"
@@ -2103,8 +2115,24 @@ function LinkParentDialog({
                 )}
               </button>
             ))}
-            {options.length === 0 && (
-              <p className="px-3 py-4 text-center text-sm text-slate-400 dark:text-neutral-500">No matching clients</p>
+            {/* The current parent stays visible even when it isn't in the first 50. */}
+            {currentParent && !options.some((c) => c.id === currentParent.id) && (
+              <button
+                type="button"
+                onClick={() => setSelectedId(currentParent.id)}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-muted/40 ${selectedId === currentParent.id ? "bg-brand-50 dark:bg-brand-900/30 font-medium text-brand-700 dark:text-brand-400" : "text-slate-700 dark:text-neutral-300"}`}
+              >
+                <span className="block">{currentParent.displayName}</span>
+                <span className="text-xs text-slate-400 dark:text-neutral-500">Current parent</span>
+              </button>
+            )}
+            {!hasSubAccounts && options.length === 0 && (
+              <p className="px-3 py-4 text-center text-sm text-slate-400 dark:text-neutral-500">{isFetching ? "Searching…" : "No matching clients"}</p>
+            )}
+            {options.length >= CLIENT_SEARCH_LIMIT && (
+              <p className="px-3 py-2 text-center text-xs text-slate-400 dark:text-neutral-500">
+                Showing the first {CLIENT_SEARCH_LIMIT} — type to search for others.
+              </p>
             )}
           </div>
         </div>
@@ -2684,7 +2712,6 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       onOpenChange={(o) => { if (!o) { setAddingContract(false); setEditingContract(null); } }}
       contract={editingContract ?? undefined}
       defaultClientId={clientId}
-      clients={[]}
     />
     <AddPaymentDialog
       open={addPaymentOpen}

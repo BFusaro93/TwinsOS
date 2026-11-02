@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClientsPage } from "@/lib/hooks/use-clients";
 import { useClientFilterFields } from "@/lib/hooks/use-client-filter-fields";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { useLoadMoreSentinel } from "@/lib/hooks/use-load-more-sentinel";
 import { ClientFilterPopover } from "@/components/crm/shared/ClientFilterPopover";
-import { matchesAllFilterRows, type FilterRow } from "@/lib/client-filters";
+import type { FilterRow } from "@/lib/client-filters";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Search } from "lucide-react";
@@ -17,19 +19,23 @@ export function CampaignAudiencePicker({
   selectedIds: string[];
   onChange: (ids: string[]) => void;
 }) {
-  const { data: clients = [], isLoading } = useClients();
-  const { fields, ctx } = useClientFilterFields();
+  const { fields } = useClientFilterFields();
   const [search, setSearch] = useState("");
   const [hideDoNotMarket, setHideDoNotMarket] = useState(true);
   const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
 
-  const filtered = useMemo(() => {
-    return clients.filter((c) => {
-      if (hideDoNotMarket && c.doNotMarket) return false;
-      if (search && !c.displayName.toLowerCase().includes(search.toLowerCase())) return false;
-      return matchesAllFilterRows(c, filterRows, ctx);
-    });
-  }, [clients, search, hideDoNotMarket, filterRows, ctx]);
+  // Filtered and paged server-side, same as the Clients page.
+  const debouncedSearch = useDebouncedValue(search);
+  const filters = useMemo<FilterRow[]>(
+    () => hideDoNotMarket
+      ? [...filterRows, { id: "hide-dnm", field: "do_not_market", operator: "eq", value: "no" }]
+      : filterRows,
+    [filterRows, hideDoNotMarket],
+  );
+  const { data, isPending: isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    useClientsPage({ search: debouncedSearch, filters });
+  const filtered = useMemo(() => data?.pages.flatMap((p) => p.clients) ?? [], [data]);
+  const sentinelRef = useLoadMoreSentinel({ hasNextPage, isFetchingNextPage, fetchNextPage });
 
   const selectedSet = new Set(selectedIds);
   const toggle = (id: string) => {
@@ -97,6 +103,13 @@ export function CampaignAudiencePicker({
             )}
           </tbody>
         </table>
+        {hasNextPage && (
+          <div ref={sentinelRef} className="py-1.5 text-center text-[11px] text-slate-400 dark:text-neutral-500">
+            {isFetchingNextPage ? "Loading…" : (
+              <button type="button" className="underline" onClick={() => fetchNextPage()}>Load more</button>
+            )}
+          </div>
+        )}
       </div>
 
       <p className={cn("text-[11px]", selectedIds.length === 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-400 dark:text-neutral-500")}>

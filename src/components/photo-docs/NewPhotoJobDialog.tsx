@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useCreatePhotoJob } from "@/modules/photo-docs/hooks/usePhotoJobs";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClient } from "@/lib/hooks/use-clients";
 import type { PhotoJob } from "@/modules/photo-docs/types/photo.types";
 
 interface NewPhotoJobDialogProps {
@@ -36,18 +36,18 @@ export function NewPhotoJobDialog({ open, onOpenChange, defaultClientId, onCreat
   const [zip, setZip] = useState("");
   const [notes, setNotes] = useState("");
   const createJob = useCreatePhotoJob();
-  const { data: clients = [] } = useClients();
+  const { data: defaultClient } = useClient(defaultClientId ?? "");
 
   useEffect(() => {
     if (open && defaultClientId) {
-      const client = clients.find((c) => c.id === defaultClientId);
+      const client = defaultClient;
       setCustomerName(client?.displayName ?? "");
       setAddress(client?.billingAddress ?? "");
       setCity(client?.billingCity ?? "");
       setState(client?.billingState ?? "");
       setZip(client?.billingZip ?? "");
     }
-  }, [open, defaultClientId, clients]);
+  }, [open, defaultClientId, defaultClient]);
 
   const isValid = name.trim() !== "";
 

@@ -8,7 +8,19 @@ import {
   useDeleteCampaign,
   useSendCampaign,
 } from "@/lib/hooks/use-crm-campaigns";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClientCount } from "@/lib/hooks/use-clients";
+import type { FilterRow } from "@/lib/client-filters";
+
+/** The status filter row behind each built-in campaign segment ("all" and
+ *  "custom" have none). */
+function segmentFilters(segment: string): FilterRow[] {
+  const status =
+    segment === "active_clients" ? "active"
+    : segment === "leads" ? "lead"
+    : segment === "past_clients" ? "inactive,cancelled"
+    : null;
+  return status ? [{ id: "segment", field: "status", operator: "eq", value: status }] : [];
+}
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { renderBlocksToHtml, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-template-renderer";
 import { CampaignAudiencePicker } from "./CampaignAudiencePicker";
@@ -140,7 +152,6 @@ function CampaignDialog({
   const orgTimeZone = useOrgTimeZone();
   const saving = creating || updating;
 
-  const { data: allClients = [] } = useClients();
 
   const emptyForm: NewCampaignFormValues = {
     name: "",
@@ -214,16 +225,11 @@ function CampaignDialog({
     if (!o) onClose();
   };
 
-  const segmentExclusionCount = useMemo(() => {
-    if (form.targetSegment === "custom") return 0;
-    const inSegment = allClients.filter((c) => {
-      if (form.targetSegment === "active_clients") return c.status === "active";
-      if (form.targetSegment === "leads") return c.status === "lead";
-      if (form.targetSegment === "past_clients") return c.status === "inactive" || c.status === "cancelled";
-      return true;
-    });
-    return inSegment.filter((c) => c.doNotMarket).length;
-  }, [allClients, form.targetSegment]);
+  const { data: segmentExclusionCount = 0 } = useClientCount(
+    { filters: [...segmentFilters(form.targetSegment), { id: "dnm", field: "do_not_market", operator: "eq", value: "yes" }] },
+    {},
+    open && form.targetSegment !== "custom",
+  );
 
   async function handleSubmit() {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
@@ -598,23 +604,22 @@ export function CampaignsList() {
   const [sending, setSending] = useState<CRMCampaign | null>(null);
 
   const { data: campaigns = [] as CRMCampaign[], isLoading, refetch: refetchCampaigns } = useCampaigns();
-  const { data: allClients = [] } = useClients();
   const { mutateAsync: update } = useUpdateCampaign();
   const { mutateAsync: deleteCampaign, isPending: delPending } = useDeleteCampaign();
   const { mutateAsync: sendCampaign, isPending: sendPending } = useSendCampaign();
 
-  const recipientCount = useMemo(() => {
-    if (!sending) return 0;
-    const eligible = allClients.filter((c) => !c.doNotMarket && c.okToEmail !== false && c.primaryEmail);
-    if (sending.targetSegment === "custom") {
-      const ids = new Set(sending.audienceClientIds);
-      return eligible.filter((c) => ids.has(c.id)).length;
-    }
-    if (sending.targetSegment === "active_clients") return eligible.filter((c) => c.status === "active").length;
-    if (sending.targetSegment === "leads") return eligible.filter((c) => c.status === "lead").length;
-    if (sending.targetSegment === "past_clients") return eligible.filter((c) => c.status === "inactive" || c.status === "cancelled").length;
-    return eligible.length;
-  }, [sending, allClients]);
+  // Same eligibility as the send: not Do Not Market, OK to email, has an email.
+  const { data: recipientCount = 0 } = useClientCount(
+    {
+      filters: [
+        ...(sending ? segmentFilters(sending.targetSegment) : []),
+        { id: "dnm", field: "do_not_market", operator: "eq", value: "no" },
+        { id: "ok", field: "ok_to_email", operator: "eq", value: "yes" },
+      ],
+    },
+    { withEmail: true, ids: sending?.targetSegment === "custom" ? sending.audienceClientIds : undefined },
+    !!sending,
+  );
 
   const filtered = campaigns.filter((c: CRMCampaign) => {
     if (statusTab !== "all" && c.status !== statusTab) return false;

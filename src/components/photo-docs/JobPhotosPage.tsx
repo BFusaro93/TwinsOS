@@ -9,7 +9,8 @@ import {
 import { PageHeader } from "@/components/shared/PageHeader";
 import { usePhotoJobs, useCreatePhotoJob, usePhotoJob, useUpdatePhotoJob, useArchivePhotoJob, useDeletePhotoJob } from "@/modules/photo-docs/hooks/usePhotoJobs";
 import { useProjects } from "@/lib/hooks/use-projects";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClient } from "@/lib/hooks/use-clients";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -92,7 +93,6 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
   // disconnected here just because it was archived elsewhere.
   const { data: projects = [] } = useProjects();
   const { data: allProjects = [] } = useProjects(true);
-  const { data: clients = [] } = useClients();
   const { mutate: updateJob, isPending: saving } = useUpdatePhotoJob();
   const { mutate: archiveJob, isPending: archiving } = useArchivePhotoJob();
   const { mutate: deleteJob, isPending: deleting } = useDeletePhotoJob();
@@ -162,7 +162,8 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
   }
 
   const linkedProject = job?.projectId ? allProjects.find((p) => p.id === job.projectId) ?? null : null;
-  const linkedClient = job?.clientId ? clients.find((c) => c.id === job.clientId) ?? null : null;
+  const { data: linkedClientRecord } = useClient(job?.clientId ?? "");
+  const linkedClient = job?.clientId ? linkedClientRecord ?? null : null;
   const fullAddress = job ? formatAddress(job.address, job.city, job.state, job.zip) : "";
   // Keep an already-linked archived project selectable/visible in the picker
   // even though it's excluded from the default (non-archived) project list.
@@ -360,10 +361,14 @@ function JobDetailPane({ jobId, onDeleted }: { jobId: string; onDeleted: () => v
                 {editingClientLink ? (
                   <div className="flex items-center gap-2">
                     <User className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
-                    <select className="flex-1 rounded-md border border-border px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)}>
-                      <option value="">— No client linked, matched by name only —</option>
-                      {clients.map((c) => <option key={c.id} value={c.id}>{c.displayName}</option>)}
-                    </select>
+                    <div className="min-w-0 flex-1">
+                      <ClientCombobox
+                        value={selectedClientId}
+                        onValueChange={(id) => setSelectedClientId(id)}
+                        noneLabel="— No client linked, matched by name only —"
+                        clearLabel="— No client linked, matched by name only —"
+                      />
+                    </div>
                     <button onClick={saveClientLink} disabled={saving} className="rounded-md p-1 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/30 disabled:opacity-50"><Check className="h-3.5 w-3.5" /></button>
                     <button onClick={() => setEditingClientLink(false)} className="rounded-md p-1 text-slate-400 dark:text-neutral-500 hover:bg-muted"><X className="h-3.5 w-3.5" /></button>
                   </div>
@@ -444,7 +449,6 @@ export function JobPhotosPage() {
   const { mutate: createJob, isPending: creating } = useCreatePhotoJob();
   const { mutate: deleteJob } = useDeletePhotoJob();
   const { data: projects = [] } = useProjects();
-  const { data: clients = [] } = useClients();
   const [form, setForm] = useState(EMPTY_FORM);
 
   const filtered = useMemo(() => jobs.filter((j) => {
@@ -612,10 +616,14 @@ export function JobPhotosPage() {
               </div>
               <div className="sm:col-span-2">
                 <Label className="text-xs">Link to Client (optional)</Label>
-                <select className="mt-1 w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-slate-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-brand-500" value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}>
-                  <option value="">— No client linked, matched by name only —</option>
-                  {clients.map((c) => <option key={c.id} value={c.id}>{c.displayName}</option>)}
-                </select>
+                <div className="mt-1">
+                  <ClientCombobox
+                    value={form.clientId}
+                    onValueChange={(id) => setForm((f) => ({ ...f, clientId: id }))}
+                    noneLabel="— No client linked, matched by name only —"
+                    clearLabel="— No client linked, matched by name only —"
+                  />
+                </div>
               </div>
             </div>
             <div className="mt-4 flex justify-end gap-2">

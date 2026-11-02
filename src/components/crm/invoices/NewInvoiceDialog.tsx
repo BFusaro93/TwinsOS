@@ -13,7 +13,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useCreateInvoice } from "@/lib/hooks/use-invoices";
-import { useClients } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { toast } from "sonner";
@@ -41,8 +40,6 @@ interface Props {
 export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreated }: Props) {
   // Defaults are the ORG's calendar day, not the browser's.
   const orgToday = todayInZone(useOrgTimeZone());
-  const { data: clients } = useClients();
-  const invoiceableClients = (clients ?? []).filter((c) => c.status !== "lead");
   const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { mutateAsync: create, isPending } = useCreateInvoice();
@@ -88,7 +85,7 @@ export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreate
               <ClientCombobox
                 value={watch("clientId")}
                 onValueChange={(v) => setValue("clientId", v)}
-                clients={invoiceableClients}
+                excludeStatuses={["lead"]}
                 noneLabel="Select client..."
               />
               {errors.clientId && <p className="text-xs text-red-500 dark:text-red-400">{errors.clientId.message}</p>}

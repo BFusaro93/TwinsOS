@@ -13,7 +13,7 @@ import {
   useDeleteTicket,
   useRestoreTicket,
 } from "@/lib/hooks/use-tickets";
-import { useClients } from "@/lib/hooks/use-clients";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { TicketDetailSheet } from "./TicketDetailSheet";
@@ -49,7 +49,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { ChevronDown, Plus, RotateCcw, Trash2, Undo2, Search, Ticket as TicketIcon, UserCheck, X } from "lucide-react";
+import { ChevronDown, Plus, RotateCcw, Trash2, Undo2, Ticket as TicketIcon, UserCheck, X } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
@@ -151,7 +151,6 @@ interface NewTicketDialogProps {
 }
 
 export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultType = "note" }: NewTicketDialogProps) {
-  const { data: clients } = useClients();
   const { data: employees } = useSelectableEmployees();
   const users = (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() }));
   const createTicket = useCreateTicket();
@@ -160,16 +159,6 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
   const dialogCategories = categoryOptions && categoryOptions.length > 0
     ? categoryOptions.map((o) => o.value)
     : FALLBACK_CATEGORIES;
-  const [clientSearch, setClientSearch] = useState("");
-  const [clientDropOpen, setClientDropOpen] = useState(false);
-
-  const filteredClients = useMemo(() => {
-    const all = clients ?? [];
-    if (!clientSearch.trim()) return all;
-    const q = clientSearch.toLowerCase();
-    return all.filter((c) => c.displayName.toLowerCase().includes(q));
-  }, [clients, clientSearch]);
-
   const [form, setForm] = useState<NewTicketFormValues>({
     type: defaultType,
     clientId: defaultClientId ?? null,
@@ -261,59 +250,12 @@ export function NewTicketDialog({ open, onOpenChange, defaultClientId, defaultTy
 
           <div className="space-y-1.5">
             <Label>Client{rf.req("client")}</Label>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setClientDropOpen((o) => !o)}
-                className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <span className={form.clientId ? "text-slate-900 dark:text-neutral-100" : "text-slate-400 dark:text-neutral-500"}>
-                  {form.clientId
-                    ? (clients ?? []).find((c) => c.id === form.clientId)?.displayName ?? "Select client…"
-                    : "Select client…"}
-                </span>
-                <ChevronDown className="h-4 w-4 text-slate-400 dark:text-neutral-500 shrink-0" />
-              </button>
-              {clientDropOpen && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border bg-card shadow-lg">
-                  <div className="relative border-b">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-neutral-500" />
-                    <input
-                      autoFocus
-                      value={clientSearch}
-                      onChange={(e) => setClientSearch(e.target.value)}
-                      placeholder="Search clients…"
-                      className="w-full py-1.5 pl-9 pr-2 text-sm focus:outline-none"
-                    />
-                  </div>
-                  <div className="max-h-48 overflow-y-auto py-1">
-                    <button
-                      type="button"
-                      className="w-full px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
-                      onClick={() => { set("clientId", null); setClientDropOpen(false); setClientSearch(""); }}
-                    >
-                      No client
-                    </button>
-                    {filteredClients.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className={cn(
-                          "w-full px-3 py-1.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-muted/40",
-                          form.clientId === c.id ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 font-medium" : "text-slate-800 dark:text-neutral-100"
-                        )}
-                        onClick={() => { set("clientId", c.id); setClientDropOpen(false); setClientSearch(""); }}
-                      >
-                        {c.displayName}
-                      </button>
-                    ))}
-                    {filteredClients.length === 0 && (
-                      <p className="px-3 py-2 text-sm text-slate-400 dark:text-neutral-500">No clients found</p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            <ClientCombobox
+              value={form.clientId ?? ""}
+              onValueChange={(v) => set("clientId", v || null)}
+              noneLabel="Select client…"
+              clearLabel="No client"
+            />
           </div>
 
           <div className="space-y-1.5">

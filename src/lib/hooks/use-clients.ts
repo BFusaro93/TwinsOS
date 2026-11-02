@@ -1,7 +1,7 @@
 "use client";
 
 import { phoneDedupeKey, toE164Us } from "@/lib/utils/phone";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -12,11 +12,13 @@ import type { AddressVerdict } from "@/types/address-verification";
 import { logger } from "@/lib/logger";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { BulkImportResult } from "@/lib/csv";
+import type { FilterRow } from "@/lib/client-filters";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { cancelClientVisitsRemote } from "@/lib/client-visits-api";
 import type {
   Client,
+  ClientStatus,
   ClientContact,
   ClientProperty,
   ClientActivity,
@@ -226,25 +228,244 @@ function mapActivity(row: any): ClientActivity {
   };
 }
 
-// ── list ──────────────────────────────────────────────────────────────────────
+// ── query keys ────────────────────────────────────────────────────────────────
 
-export function useClients() {
+// Every client query lives under "clients". The list-shaped ones sit under a
+// named scope as the second key part, so refreshing lists never prefix-matches
+// the per-client ["clients", id, …] detail queries (record, contacts,
+// properties, activity, children) — and invalidating one client's detail with
+// `exact: true` never re-downloads a list.
+export const clientKeys = {
+  /** useClients — every client in the org. Avoid for new screens. */
+  everyClient: ["clients", "all"] as const,
+  /** useClientsPage — the Clients page list, paged server-side. */
+  page: (params: ClientQueryParams) => ["clients", "list", normalizeParams(params)] as const,
+  /** useClientSearch — pickers (search-as-you-type, capped). */
+  search: (term: string, opts: ClientSearchOptions) => ["clients", "search", term.trim().toLowerCase(), opts] as const,
+  count: (params: ClientQueryParams, opts: ClientCountOptions) => ["clients", "count", normalizeParams(params), opts] as const,
+  filterOptions: ["clients", "filter-options"] as const,
+  leads: ["clients", "leads"] as const,
+  detail: (id: string) => ["clients", id] as const,
+};
+
+const LIST_SCOPES = new Set(["all", "list", "search", "count", "filter-options", "leads"]);
+
+/** Refreshes every client list/picker/count without touching per-client
+ *  detail queries. Lists that aren't on screen are only marked stale. */
+export function invalidateClientLists(qc: QueryClient) {
+  return qc.invalidateQueries({
+    predicate: (q) => q.queryKey[0] === "clients" && LIST_SCOPES.has(q.queryKey[1] as string),
+  });
+}
+
+/** Many clients changed at once (bulk actions): refresh the lists and every
+ *  cached client record, still leaving contacts/properties/activity alone. */
+function invalidateAllClientRecords(qc: QueryClient) {
+  invalidateClientLists(qc);
+  qc.invalidateQueries({
+    predicate: (q) => q.queryKey[0] === "clients" && q.queryKey.length === 2 && !LIST_SCOPES.has(q.queryKey[1] as string),
+  });
+}
+
+/** One client's record changed: refresh its detail record and the lists, but
+ *  not its contacts/properties/activity/children (pass those explicitly). */
+function invalidateClientRecord(qc: QueryClient, id: string) {
+  invalidateClientLists(qc);
+  qc.invalidateQueries({ queryKey: clientKeys.detail(id), exact: true });
+}
+
+const CLIENT_SELECT = "*, client_tags(tag), sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)";
+
+// ── server-side search / filter ───────────────────────────────────────────────
+
+/** Search box + filter rows, evaluated in SQL by crm_search_clients() — the
+ *  same rules src/lib/client-filters.ts applies in the browser. */
+export interface ClientQueryParams {
+  search?: string;
+  filters?: FilterRow[];
+}
+
+function normalizeParams(params: ClientQueryParams) {
+  return {
+    search: (params.search ?? "").trim(),
+    // Row ids and half-built rows (no value yet) don't change the result.
+    filters: (params.filters ?? [])
+      .filter((r) => r.value !== "")
+      .map((r) => ({ field: r.field, operator: r.operator, value: r.value })),
+  };
+}
+
+function searchClientsRpc(
+  supabase: ReturnType<typeof createClient>,
+  params: ClientQueryParams,
+  options?: { count?: "exact"; head?: boolean },
+) {
+  const { search, filters } = normalizeParams(params);
+  return supabase.rpc("crm_search_clients", { p_search: search || undefined, p_filters: filters }, options);
+}
+
+export const CLIENT_PAGE_SIZE = 100;
+
+/** The Clients page list: filtered, searched and paged on the server. */
+export function useClientsPage(params: ClientQueryParams) {
+  return useInfiniteQuery({
+    queryKey: clientKeys.page(params),
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const supabase = createClient();
+      const from = pageParam * CLIENT_PAGE_SIZE;
+      // Only the first page pays for the count — later pages reuse it.
+      const { data, error, count } = await searchClientsRpc(supabase, params, pageParam === 0 ? { count: "exact" } : undefined)
+        .select(CLIENT_SELECT)
+        .order("display_name")
+        .order("id")
+        .range(from, from + CLIENT_PAGE_SIZE - 1);
+      if (error) throw error;
+      return { clients: (data ?? []).map(mapClient), total: count };
+    },
+    getNextPageParam: (last, pages) => {
+      const total = pages[0]?.total ?? 0;
+      const loaded = pages.length * CLIENT_PAGE_SIZE;
+      return last.clients.length === CLIENT_PAGE_SIZE && loaded < total ? pages.length : undefined;
+    },
+    // Keep showing the previous result while a new search/filter loads.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Every client matching the search/filters — for CSV export and "select all
+ *  N matching". Fetched on demand, not cached. */
+export async function fetchFilteredClients(params: ClientQueryParams): Promise<Client[]> {
+  const supabase = createClient();
+  const rows = await fetchAllRows<unknown>(() =>
+    searchClientsRpc(supabase, params).select(CLIENT_SELECT).order("display_name"),
+  );
+  return rows.map(mapClient);
+}
+
+/** Every client matching the search/filters, cached — for screens that work
+ *  on a filtered subset (e.g. Statements: clients with a balance). */
+export function useFilteredClients(params: ClientQueryParams) {
   return useQuery({
-    queryKey: ["clients"],
+    queryKey: [...clientKeys.page(params), "all"] as const,
+    queryFn: () => fetchFilteredClients(params),
+  });
+}
+
+export async function fetchFilteredClientIds(params: ClientQueryParams): Promise<string[]> {
+  const supabase = createClient();
+  const rows = await fetchAllRows<{ id: string }>(() => searchClientsRpc(supabase, params).select("id"));
+  return rows.map((r) => r.id);
+}
+
+export interface ClientSearchOptions {
+  /** Leave these statuses out — e.g. ["lead"] for invoice pickers. */
+  excludeStatuses?: ClientStatus[];
+  /** Only clients with no parent of their own (Link Parent candidates). */
+  topLevelOnly?: boolean;
+  excludeIds?: string[];
+  limit?: number;
+}
+
+export const CLIENT_SEARCH_LIMIT = 50;
+
+/** Search-as-you-type for client pickers: at most `limit` (50) matches,
+ *  alphabetical. An empty term returns the first 50. */
+export function useClientSearch(term: string, opts: ClientSearchOptions = {}, enabled = true) {
+  return useQuery({
+    queryKey: clientKeys.search(term, opts),
     queryFn: async () => {
       const supabase = createClient();
-      // PostgREST caps a response at 1000 rows, so page through the whole
-      // table — `id` breaks display_name ties so pages never skip/repeat rows.
+      let q = searchClientsRpc(supabase, { search: term }).select(CLIENT_SELECT);
+      if (opts.excludeStatuses?.length) q = q.not("status", "in", `(${opts.excludeStatuses.join(",")})`);
+      if (opts.topLevelOnly) q = q.is("parent_client_id", null);
+      const exclude = (opts.excludeIds ?? []).filter(Boolean);
+      if (exclude.length > 0) q = q.not("id", "in", `(${exclude.join(",")})`);
+      const { data, error } = await q.order("display_name").order("id").limit(opts.limit ?? CLIENT_SEARCH_LIMIT);
+      if (error) throw error;
+      return (data ?? []).map(mapClient);
+    },
+    enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
+export interface ClientCountOptions {
+  /** Only clients with a primary email (campaign recipients). */
+  withEmail?: boolean;
+  /** Restrict to these client ids (a hand-picked audience). */
+  ids?: string[];
+  /** Only clients created at/after this timestamp. */
+  createdSince?: string;
+}
+
+/** How many clients match — a HEAD count, no rows downloaded. */
+export function useClientCount(params: ClientQueryParams, opts: ClientCountOptions = {}, enabled = true) {
+  return useQuery({
+    queryKey: clientKeys.count(params, opts),
+    queryFn: async () => {
+      const supabase = createClient();
+      const countOne = async (ids?: string[]) => {
+        let q = searchClientsRpc(supabase, params, { count: "exact", head: true }).select("id");
+        if (opts.withEmail) q = q.not("primary_email", "is", null).neq("primary_email", "");
+        if (opts.createdSince) q = q.gte("created_at", opts.createdSince);
+        if (ids) q = q.in("id", ids);
+        const { count, error } = await q;
+        if (error) throw error;
+        return count ?? 0;
+      };
+      if (!opts.ids) return countOne();
+      // Chunked so a large hand-picked audience doesn't overflow the URL.
+      let total = 0;
+      for (let i = 0; i < opts.ids.length; i += 200) total += await countOne(opts.ids.slice(i, i + 200));
+      return total;
+    },
+    enabled,
+  });
+}
+
+/** Distinct Client Source / Sales Rep values in use, for the filter dropdowns. */
+export function useClientFilterOptions() {
+  return useQuery({
+    queryKey: clientKeys.filterOptions,
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("crm_client_filter_options");
+      if (error) throw error;
+      const opts = (data ?? {}) as { sources?: string[]; sales_reps?: { id: string; name: string }[] };
+      return { sources: opts.sources ?? [], salesReps: opts.sales_reps ?? [] };
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+// ── every client ──────────────────────────────────────────────────────────────
+
+/**
+ * Every client in the org (paged past PostgREST's 1000-row cap). Heavy for
+ * large orgs — pickers should use useClientSearch, lists useClientsPage, and
+ * single lookups useClient.
+ */
+export function useClients() {
+  return useQuery({
+    queryKey: clientKeys.everyClient,
+    queryFn: async () => {
+      const supabase = createClient();
+      // `id` breaks display_name ties so pages never skip/repeat rows.
       const rows = await fetchAllRows<unknown>(() =>
         supabase
           .from("clients")
-          .select("*, client_tags(tag), sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
+          .select(CLIENT_SELECT)
           .is("deleted_at", null)
           .order("display_name")
           .order("id"),
       );
       return rows.map(mapClient) as Client[];
     },
+    // Mutations keep this fresh via invalidateClientLists; don't re-pull the
+    // whole org every time another screen using it mounts.
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -283,13 +504,12 @@ export function useSetParentClient() {
         await logClientActivity(supabase, id, "Parent account link removed");
       }
     },
-    onSuccess: (_data, { id, parentClientId }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", id] });
+    onSuccess: (_data, { id }) => {
+      invalidateClientRecord(qc, id);
       qc.invalidateQueries({ queryKey: ["clients", id, "activity"] });
-      if (parentClientId) {
-        qc.invalidateQueries({ queryKey: ["clients", parentClientId, "children"] });
-      }
+      // Both the new parent's and (on unlink/re-link) the old parent's
+      // sub-account lists — the old parent's id isn't known here.
+      qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === "clients" && q.queryKey[2] === "children" });
     },
   });
 }
@@ -554,7 +774,7 @@ export function useUpdateClientProperty() {
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      qc.invalidateQueries({ queryKey: clientKeys.detail(clientId), exact: true });
     },
   });
 }
@@ -642,7 +862,7 @@ export function useUpdateClientPropertyZones() {
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      qc.invalidateQueries({ queryKey: clientKeys.detail(clientId), exact: true });
     },
   });
 }
@@ -694,7 +914,7 @@ export function useCreateClient() {
       return client;
     },
     onSuccess: (client) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientLists(qc);
       fireAutomationTrigger({
         triggerType: client.status === "lead" ? "lead_created" : "client_created",
         clientId: client.id,
@@ -951,7 +1171,7 @@ export function useBulkImportClients() {
       return { succeeded, failed, skipped };
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientLists(qc);
     },
   });
 }
@@ -1132,8 +1352,7 @@ export function useUpdateClient() {
       };
     },
     onSuccess: (result, { id }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", id] });
+      invalidateClientRecord(qc, id);
       qc.invalidateQueries({ queryKey: ["clients", id, "properties"] });
       if (result?.statusChanged) {
         qc.invalidateQueries({ queryKey: ["clients", id, "activity"] });
@@ -1369,7 +1588,7 @@ export function useDeleteClient() {
       if (cancelVisits) await cancelClientVisitsRemote([id]);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
   });
@@ -1578,7 +1797,7 @@ export function useRecipientSearch(query: string) {
 
 export function useLeads() {
   return useQuery({
-    queryKey: ["clients", { status: "lead" }],
+    queryKey: clientKeys.leads,
     queryFn: async () => {
       const supabase = createClient();
       const rows = await fetchAllRows<unknown>(() =>
@@ -1650,7 +1869,7 @@ export function useCreateLead() {
       return lead;
     },
     onSuccess: (lead) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientLists(qc);
       fireAutomationTrigger({ triggerType: "lead_created", clientId: lead.id });
     },
   });
@@ -1739,7 +1958,7 @@ export function useBulkImportLeads() {
       return { created, matched, skipped, failed };
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientLists(qc);
     },
   });
 }
@@ -1773,7 +1992,7 @@ export function useConvertLeadToClient() {
       return { converted };
     },
     onSuccess: (result, id) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientRecord(qc, id);
       qc.invalidateQueries({ queryKey: ["clients", id, "activity"] });
       if (result.converted) {
         fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
@@ -1808,8 +2027,7 @@ export function useAddClientTag() {
       return { added };
     },
     onSuccess: (result, { clientId, tag }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      invalidateClientRecord(qc, clientId);
       qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
       if (result?.added) fireAutomationTrigger({ triggerType: "tag_added", clientId, matchValues: [tag] });
     },
@@ -1832,8 +2050,7 @@ export function useRemoveClientTag() {
       if (error) throw error;
     },
     onSuccess: (_d, { clientId, tag }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      invalidateClientRecord(qc, clientId);
       fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
     },
     onError: () => {
@@ -1859,7 +2076,7 @@ export function useBulkAddTag() {
       return { addedClientIds: (data ?? []).map((r) => r.client_id as string) };
     },
     onSuccess: (result, { tag }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
       // The single-client add fires tag_added; a bulk add silently skipped every
       // "when tag X is added" automation for the whole selection.
       for (const clientId of result?.addedClientIds ?? []) {
@@ -1885,7 +2102,7 @@ export function useBulkRemoveTag() {
       return { removedClientIds: (data ?? []).map((r) => r.client_id as string) };
     },
     onSuccess: (result, { tag }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
       // Mirrors the single-client remove, which fires tag_removed.
       for (const clientId of result?.removedClientIds ?? []) {
         fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
@@ -1913,8 +2130,7 @@ export function useCancelClient() {
       return { changed: (updated?.length ?? 0) > 0, wasLead: before?.status === "lead" };
     },
     onSuccess: (result, { clientId }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      invalidateClientRecord(qc, clientId);
       if (result?.changed) {
         fireAutomationTrigger({ triggerType: result.wasLead ? "lead_cancelled" : "client_cancelled", clientId });
       }
@@ -1948,8 +2164,7 @@ export function useActivateClient() {
       return { changed: true, wasLead };
     },
     onSuccess: (result, clientId) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      invalidateClientRecord(qc, clientId);
       if (result?.changed) {
         fireAutomationTrigger({
           triggerType: result.wasLead ? "lead_converted_to_client" : "client_reactivated",
@@ -1979,8 +2194,7 @@ export function useCloseLeadAsLost() {
       if (!data?.length) throw new Error("This record is no longer a lead, so it can't be closed as lost.");
     },
     onSuccess: (_d, { clientId }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      invalidateClientRecord(qc, clientId);
     },
   });
 }
@@ -2001,7 +2215,7 @@ export function useBulkCloseLeadsAsLost() {
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
     },
   });
 }
@@ -2043,7 +2257,7 @@ export function useBulkUpdateClients() {
       };
     },
     onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
       for (const id of result.sourceChangedIds) {
         fireAutomationTrigger({
           triggerType: "client_source_updated",
@@ -2086,7 +2300,7 @@ export function useBulkCancelClients() {
       };
     },
     onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
       for (const c of result.changed) {
         fireAutomationTrigger({ triggerType: c.wasLead ? "lead_cancelled" : "client_cancelled", clientId: c.id });
       }
@@ -2128,7 +2342,7 @@ export function useBulkActivateClients() {
       return { leadIds, otherIds };
     },
     onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
       for (const id of result.leadIds) fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
       for (const id of result.otherIds) fireAutomationTrigger({ triggerType: "client_reactivated", clientId: id });
     },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
-import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
+import { useClient, useClientProperties } from "@/lib/hooks/use-clients";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useTickets } from "@/lib/hooks/use-tickets";
 import {
@@ -89,7 +89,6 @@ export function SalesMeetingDialog({
   const [confirm, confirmDialog] = useConfirm();
   const tz = useOrgTimeZone();
   const { data: reps } = useSalesReps();
-  const { data: clients } = useClients();
   const createMeeting = useCreateSalesMeeting();
   const updateMeeting = useUpdateSalesMeeting();
   const deleteMeeting = useDeleteSalesMeeting();
@@ -171,6 +170,7 @@ export function SalesMeetingDialog({
   const location = watch("location");
   const meetingType = watch("meetingType");
   const { data: clientProperties } = useClientProperties(clientId);
+  const { data: client } = useClient(clientId);
   const { data: clientEstimates } = useEstimates(clientId || undefined);
   const { data: clientTickets } = useTickets(clientId ? { clientId } : undefined);
 
@@ -215,8 +215,7 @@ export function SalesMeetingDialog({
   useEffect(() => {
     if (!open || !clientId || prefilledForRef.current === clientId) return;
     if (meetingType !== "in_person") return;
-    const client = (clients ?? []).find((c) => c.id === clientId);
-    if (!client || clientProperties === undefined) return;
+    if (!client || client.id !== clientId || clientProperties === undefined) return;
     prefilledForRef.current = clientId;
     if (getValues("location")?.trim()) return;
     const join = (a: string | null | undefined, c: string | null | undefined, st: string | null | undefined, z: string | null | undefined) =>
@@ -228,17 +227,7 @@ export function SalesMeetingDialog({
         ? join(client.billingAddress, client.billingCity, client.billingState, client.billingZip)
         : "";
     if (addr) setValue("location", addr, { shouldDirty: true });
-  }, [open, clientId, clients, clientProperties, meetingType, getValues, setValue]);
-
-  const selectableClients = useMemo(
-    () => (clients ?? []).map((c) => ({
-      id: c.id,
-      // Leads are client records too (status "lead") — tag them so one picker serves both.
-      displayName: c.status === "lead" ? `${c.displayName} (Lead)` : c.displayName,
-      billingAddress: c.billingAddress,
-    })),
-    [clients]
-  );
+  }, [open, clientId, client, clientProperties, meetingType, getValues, setValue]);
 
   async function onSubmit(values: FormValues) {
     const scheduledAt = orgInstant(values.scheduledDate, values.scheduledTime, tz).toISOString();
@@ -317,7 +306,6 @@ export function SalesMeetingDialog({
           <div className="flex flex-col gap-1.5">
             <Label>Client or Lead</Label>
             <ClientCombobox
-              clients={selectableClients}
               value={clientId}
               onValueChange={(v) => {
                 setValue("clientId", v);

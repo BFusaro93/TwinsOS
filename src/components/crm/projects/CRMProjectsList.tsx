@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useProjects, useCreateProject, useUpdateProject } from "@/lib/hooks/use-projects";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClient } from "@/lib/hooks/use-clients";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { usePayments } from "@/lib/hooks/use-invoices";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ import { toast } from "sonner";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import type { Project, ProjectStatus } from "@/types/project";
+import type { Client } from "@/types/crm";
 import { SearchInput } from "@/components/shared/SearchInput";
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -521,7 +523,6 @@ function NewProjectDialog({
   /** When set, edits this project instead of creating a new one. */
   project?: Project;
 }) {
-  const { data: clients } = useClients();
   const { mutateAsync: create, isPending: creating } = useCreateProject();
   const { mutateAsync: update, isPending: updating } = useUpdateProject();
   const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
@@ -532,6 +533,7 @@ function NewProjectDialog({
   // (toISOString) is already tomorrow after ~8 PM Eastern.
   const [name, setName] = useState(project?.name ?? "");
   const [clientId, setClientId] = useState(project?.clientId ?? "");
+  const { data: selectedClient } = useClient(clientId);
   const [address, setAddress] = useState(project?.address ?? "");
   const [city, setCity] = useState(project?.city ?? "");
   const [state, setState] = useState(project?.state ?? "");
@@ -573,9 +575,8 @@ function NewProjectDialog({
 
   // Picking a client with no address typed yet pre-fills the site address
   // from the client's billing address (still editable).
-  function handleClientChange(nextClientId: string) {
+  function handleClientChange(nextClientId: string, c: Client | null) {
     setClientId(nextClientId);
-    const c = (clients ?? []).find((x) => x.id === nextClientId);
     if (c && !address && !city && !state && !zip) {
       setAddress(c.billingAddress ?? "");
       setCity(c.billingCity ?? "");
@@ -591,7 +592,6 @@ function NewProjectDialog({
     if (endBeforeStart) { toast.error("End date must be on or after the start date"); return; }
     const parsedBudgetHours = parseFloat(budgetHours);
     const budgetHoursValue = Number.isFinite(parsedBudgetHours) && parsedBudgetHours > 0 ? parsedBudgetHours : null;
-    const selectedClient = (clients ?? []).find((c) => c.id === clientId);
     try {
       if (isEditing && project) {
         await update({
@@ -652,14 +652,7 @@ function NewProjectDialog({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Client</Label>
-            <Select value={clientId} onValueChange={handleClientChange}>
-              <SelectTrigger><SelectValue placeholder="Select client…" /></SelectTrigger>
-              <SelectContent>
-                {(clients ?? []).map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ClientCombobox value={clientId} onValueChange={handleClientChange} noneLabel="Select client…" />
           </div>
 
           {/* Site address — split street / city / state / zip (mirrors the PO NewProjectDialog) */}

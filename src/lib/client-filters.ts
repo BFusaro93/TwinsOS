@@ -1,7 +1,8 @@
-// Shared client filter-row model — extracted from ClientList.tsx so other
-// audiences (Sales Campaigns, and eventually ClientsTable.tsx) can filter
-// clients the same way instead of re-implementing the same field/operator
-// logic per screen.
+// Shared client filter-row model (fields, operators, FilterRow). The Clients
+// list/table and the Sales Campaigns audience picker send these rows to
+// crm_search_clients(), whose crm_client_matches_filter() is the SQL twin of
+// matchesFilterRow() below — keep the two in step when adding a field.
+// matchesFilterRow() itself is still used in memory by the Leads list.
 import type { Client } from "@/types/crm";
 
 export type FilterOperator = "eq" | "neq" | "contains" | "starts_with" | "lt" | "gt" | "lte" | "gte";

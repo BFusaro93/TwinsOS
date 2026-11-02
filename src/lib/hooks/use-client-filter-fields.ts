@@ -1,37 +1,24 @@
 "use client";
 
 import { useMemo } from "react";
-import { useClients, useOrgTags } from "@/lib/hooks/use-clients";
-import { useCRMServices, useClientServiceHistory } from "@/lib/hooks/use-crm-jobs";
-import { useCustomFieldDefs, useAllClientCustomFieldValues } from "@/lib/hooks/use-client-custom-fields";
-import type { FilterFieldDef, FilterContext } from "@/lib/client-filters";
+import { useClientFilterOptions, useOrgTags } from "@/lib/hooks/use-clients";
+import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import type { FilterFieldDef } from "@/lib/client-filters";
 
 /** Builds the full client filter field list (status, city, zip, tags, custom
- *  fields, service history, ...) plus the lookup context those fields need —
- *  shared by anything that filters the client list (Clients page, Sales
- *  Campaigns audience picker, ...) so they stay in sync automatically. */
+ *  fields, service history, ...) — shared by anything that filters the client
+ *  list (Clients page list + table, Sales Campaigns audience picker, ...) so
+ *  they stay in sync automatically. The rows are evaluated server-side by
+ *  crm_search_clients() (see useClientsPage / useClientSearch). */
 export function useClientFilterFields() {
-  const { data: clients } = useClients();
+  const { data: filterOptions } = useClientFilterOptions();
   const orgTags = useOrgTags();
   const { data: crmServices = [] } = useCRMServices();
   const { data: customFieldDefs = [] } = useCustomFieldDefs();
-  const { data: customFieldValues = [] } = useAllClientCustomFieldValues();
-  const { data: serviceHistory } = useClientServiceHistory();
 
-  const uniqueSources = useMemo(() =>
-    Array.from(new Set((clients ?? []).map((c) => c.source).filter(Boolean) as string[])).sort(),
-    [clients]
-  );
-  const uniqueSalesReps = useMemo(() =>
-    Array.from(
-      new Map(
-        (clients ?? [])
-          .filter((c) => c.salesRepId && c.salesRepName)
-          .map((c) => [c.salesRepId!, { id: c.salesRepId!, name: c.salesRepName! }])
-      ).values()
-    ),
-    [clients]
-  );
+  const uniqueSources = filterOptions?.sources;
+  const uniqueSalesReps = filterOptions?.salesReps;
   const serviceNames = useMemo(() =>
     Array.from(new Set(crmServices.map((s: { name?: string }) => s.name).filter((n): n is string => !!n))),
     [crmServices]
@@ -43,13 +30,13 @@ export function useClientFilterFields() {
     { value: "account_type",   label: "Account Type",      type: "select",
       options: [{ v: "residential", l: "Residential" }, { v: "commercial", l: "Commercial" }] },
     { value: "balance",        label: "Balance",           type: "number" },
-    { value: "city",           label: "City",              type: "text" },
+    { value: "city",           label: "Billing City",      type: "text" },
     { value: "service_city",   label: "Service City",      type: "text" },
     { value: "zip",            label: "Zip Code",          type: "text" },
     { value: "source",         label: "Client Source",     type: "select",
-      options: uniqueSources.map((s) => ({ v: s, l: s })) },
+      options: (uniqueSources ?? []).map((s) => ({ v: s, l: s })) },
     { value: "sales_rep",      label: "Sales Rep",         type: "select",
-      options: uniqueSalesReps.map((r) => ({ v: r.id, l: r.name })) },
+      options: (uniqueSalesReps ?? []).map((r) => ({ v: r.id, l: r.name })) },
     { value: "priority",       label: "Priority",          type: "select",
       options: [{ v: "low", l: "Low" }, { v: "normal", l: "Normal" }, { v: "high", l: "High" }] },
     { value: "client_since",   label: "Client Since Date", type: "date" },
@@ -70,15 +57,5 @@ export function useClientFilterFields() {
     { value: "ok_to_email",    label: "OK to Email",       type: "boolean" },
   ], [uniqueSources, uniqueSalesReps, orgTags, serviceNames, customFieldDefs]);
 
-  const ctx: FilterContext = useMemo(() => ({
-    scheduledServiceClientIds: (name: string) => serviceHistory?.scheduled.get(name) ?? new Set<string>(),
-    completedServiceClientIds: (name: string) => serviceHistory?.completed.get(name) ?? new Set<string>(),
-    customFieldValue: (clientId: string, fieldDefId: string) => {
-      const row = customFieldValues.find((v) => v.clientId === clientId && v.fieldDefId === fieldDefId);
-      if (!row) return null;
-      return row.valueNumber ?? row.valueText ?? null;
-    },
-  }), [serviceHistory, customFieldValues]);
-
-  return { fields, ctx };
+  return { fields };
 }

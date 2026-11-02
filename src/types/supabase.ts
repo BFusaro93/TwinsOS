@@ -17989,6 +17989,11 @@ export type Database = {
         }
         Returns: string
       }
+      crm_client_filter_options: { Args: never; Returns: Json }
+      crm_client_matches_filter: {
+        Args: { c: Database["public"]["Tables"]["clients"]["Row"]; f: Json }
+        Returns: boolean
+      }
       crm_commission_create_statement: {
         Args: { p_employee_id: string; p_from: string; p_to: string }
         Returns: string
@@ -18320,6 +18325,16 @@ export type Database = {
         Returns: Json
       }
       crm_save_route_order: { Args: { p_visit_ids: string[] }; Returns: number }
+      crm_search_clients: {
+        Args: { p_filters?: Json; p_search?: string }
+        Returns: Database["public"]["Tables"]["clients"]["Row"][]
+        SetofOptions: {
+          from: "*"
+          to: "clients"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       crm_unsubscribe_client: {
         Args: { p_campaign_id?: string; p_token: string }
         Returns: string

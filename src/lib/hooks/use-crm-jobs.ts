@@ -3651,60 +3651,6 @@ export function useSetJobProductStatus() {
   });
 }
 
-// ── client service history (for audience/segment filtering) ───────────────────
-// "Has client X ever had a scheduled/completed visit for service Y" — used by
-// the Sales Campaigns filter and reusable anywhere else that needs it. Two
-// flat queries + a client-side join, rather than one query with two
-// ambiguous relationships to crm_job_services (visit.job_service_id vs the
-// job's own services), which PostgREST can't disambiguate cleanly.
-const TERMINAL_VISIT_STATUSES_HISTORY = new Set(["completed", "cancelled", "skipped"]);
-
-export function useClientServiceHistory() {
-  return useQuery({
-    queryKey: ["crm-jobs", "client-service-history"],
-    queryFn: async () => {
-      const supabase = createClient();
-      const [visitsRes, servicesRes] = await Promise.all([
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any).from("crm_job_visits").select("job_id, client_id, status, job_service_id").is("deleted_at", null),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any).from("crm_job_services").select("id, job_id, service_name"),
-      ]);
-      if (visitsRes.error) throw visitsRes.error;
-      if (servicesRes.error) throw servicesRes.error;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const services = servicesRes.data as { id: string; job_id: string; service_name: string }[];
-      const nameById = new Map(services.map((s) => [s.id, s.service_name]));
-      const namesByJobId = new Map<string, string[]>();
-      services.forEach((s) => {
-        namesByJobId.set(s.job_id, [...(namesByJobId.get(s.job_id) ?? []), s.service_name]);
-      });
-
-      const scheduled = new Map<string, Set<string>>();
-      const completed = new Map<string, Set<string>>();
-      const add = (map: Map<string, Set<string>>, name: string, clientId: string) => {
-        if (!map.has(name)) map.set(name, new Set());
-        map.get(name)!.add(clientId);
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (visitsRes.data as { job_id: string; client_id: string; status: string; job_service_id: string | null }[]).forEach((v) => {
-        const names = v.job_service_id && nameById.has(v.job_service_id)
-          ? [nameById.get(v.job_service_id)!]
-          : namesByJobId.get(v.job_id) ?? [];
-        const target = v.status === "completed" ? completed
-          : TERMINAL_VISIT_STATUSES_HISTORY.has(v.status) ? null
-          : scheduled;
-        if (!target) return;
-        names.forEach((n) => add(target, n, v.client_id));
-      });
-
-      return { scheduled, completed };
-    },
-  });
-}
-
 // ── useDrivingCrewIds ─────────────────────────────────────────────────────────
 // Office-side (dispatch board) view of which crews are CURRENTLY driving —
 // only meaningful for today, since drive time is a live clock, not a

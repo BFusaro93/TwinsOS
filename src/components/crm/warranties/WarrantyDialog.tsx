@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
-import { useClients } from "@/lib/hooks/use-clients";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import {
   useCreateWarranty,
@@ -35,7 +34,6 @@ const NO_TYPE = "none";
 
 export function WarrantyDialog({ open, onOpenChange, scope = {}, projectComplete = false, editing }: Props) {
   const { data: types = [] } = useWarrantyTypes();
-  const { data: clients = [] } = useClients();
   const { today } = useOrgDates();
   const create = useCreateWarranty();
   const update = useUpdateWarranty();
@@ -135,7 +133,7 @@ export function WarrantyDialog({ open, onOpenChange, scope = {}, projectComplete
           {!scope.clientId && !editing && (
             <div className="space-y-1.5">
               <Label>Client</Label>
-              <ClientCombobox clients={clients} value={clientId} onValueChange={setClientId} noneLabel="Select client…" />
+              <ClientCombobox value={clientId} onValueChange={setClientId} noneLabel="Select client…" />
             </div>
           )}
           <div className="space-y-1.5">
