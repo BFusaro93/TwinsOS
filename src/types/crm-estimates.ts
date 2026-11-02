@@ -59,6 +59,8 @@ export interface EstimateLineItem {
   tier: 'basic' | 'standard' | 'premium' | null;
   /** crm_packages row this line was added from (Add Package). Drives package-job conversion. */
   packageId: string | null;
+  /** Sq ft this line actually treats; overrides the property measurement for chemical quantities. Carries to the job service. */
+  treatedArea: number | null;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
