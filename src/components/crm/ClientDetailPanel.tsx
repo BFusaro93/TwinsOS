@@ -2291,6 +2291,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
               className="text-[11px] text-white/70 hover:text-white"
             >All History</button>
           </div>
+          {(can("job_add") || can("sched_add_modify_projects")) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10">
@@ -2307,13 +2308,18 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                 ["package",      "Add a package job"],
                 ["project",      "Add a project"],
                 ["snow",         "Add a snow job"],
-              ] as const).map(([type, label]) => (
+              ] as const)
+                // Job creation is checked in the database (job_add; a project
+                // also passes with sched_add_modify_projects).
+                .filter(([type]) => can("job_add") || type === "project")
+                .map(([type, label]) => (
                 <DropdownMenuItem key={type} onSelect={() => { setNewJobType(type); setNewJobOpen(true); }}>
                   {label}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
         </div>
 
         {/* Active / Completed tabs */}

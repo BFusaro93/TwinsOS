@@ -207,6 +207,45 @@ export function UsersRolesGuide() {
           &quot;You do not have permission&quot; error rather than a silent failure.
         </p>
         <p>
+          <strong>Creating and changing records is checked inside the database too.</strong>{" "}
+          These permissions are enforced on every save, not just by hiding buttons:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Invoices and invoice lines</strong> need Add/Modify Invoices. Without it, a
+            role can still print, email or QuickBooks-sync an invoice it can see (which locks it
+            and moves a draft to Printed or Sent), but not unlock it or change it. Generate Snow
+            Invoices and Create Invoices from Contracts let a role create the draft invoices those
+            screens generate. Completing a visit still creates its automatic invoice for anyone
+            allowed to complete the visit.
+          </li>
+          <li>
+            <strong>Estimates</strong> (and their line items, sub-items, equipment and direct
+            costs) need Add Estimate to create and Edit Estimate to change or delete. Add Estimate
+            alone also covers finishing a new estimate you created that hasn&apos;t been sent.
+            Send Estimate alone can mark an estimate sent, and Add Job alone can mark it accepted
+            when converting it.
+          </li>
+          <li>
+            <strong>Contracts</strong> need Add, Edit or Delete Contract for each action; Create
+            Invoices from Contracts may only record the billing dates it stamps.
+          </li>
+          <li>
+            <strong>New jobs</strong> need Add Job (a project also allows Add/Modify Projects).
+          </li>
+          <li>
+            <strong>Automations</strong> need Create/Modify Automation; Stop Automation alone
+            can only switch one on or off. <strong>Document templates</strong> and{" "}
+            <strong>packages</strong> need their Add, Edit or Delete permission.{" "}
+            <strong>Teams</strong> need Teams; the Dispatch Board permission can still add an
+            employee to a crew&apos;s roster and set a crew&apos;s default equipment.
+          </li>
+        </ul>
+        <p>
+          Editing an existing job, its visits and crew time stays open to every CRM role, since
+          the crew app writes those.
+        </p>
+        <p>
           <strong>Client notes, stored card and balance are protected on write.</strong> Changing
           a client&apos;s Office Notes needs View Notes. Changing the stored payment method, or
           turning autopay on, needs View Credit Card #&apos;s plus Add/Modify Payments. Changing

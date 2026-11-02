@@ -13,6 +13,7 @@ import {
   useUpsertLineEquipment,
   type LineItemEquipment,
 } from "@/lib/hooks/use-equipment";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 /**
  * Internal equipment cost under an estimate line. Never rendered on the
@@ -45,16 +46,16 @@ function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId:
           sortOrder: row.sortOrder,
         },
       });
-    } catch {
-      toast.error("Failed to save equipment");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save equipment"));
     }
   }
 
   async function handleDelete() {
     try {
       await remove({ id: row.id, lineItemId });
-    } catch {
-      toast.error("Failed to remove equipment");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to remove equipment"));
     }
   }
 
@@ -158,8 +159,8 @@ export function LineItemEquipmentRows({
           sortOrder: rows.length,
         },
       });
-    } catch {
-      toast.error("Failed to add equipment");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add equipment"));
     } finally {
       setPicking("");
     }

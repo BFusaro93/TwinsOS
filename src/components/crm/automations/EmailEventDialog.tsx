@@ -28,6 +28,7 @@ import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   open: boolean;
@@ -131,8 +132,8 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
         },
       });
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save email event");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save email event"));
     } finally {
       setSaving(false);
     }

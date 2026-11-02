@@ -26,6 +26,7 @@ import {
 } from "@/lib/hooks/use-line-item-subitems";
 import { useProducts } from "@/lib/hooks/use-products";
 import { CatalogItemCombobox } from "@/components/shared/CatalogItemCombobox";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   lineItemId: string;
@@ -136,8 +137,8 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
         },
       });
       onClose();
-    } catch {
-      toast.error("Failed to save sub-item");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save sub-item"));
     }
   }
 

@@ -5,6 +5,7 @@ import { todayInZone } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
 import { findInvoicedLockedVisits } from "@/lib/visits/invoiced-guard";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { createServiceClient } from "@/lib/supabase/server";
 
 const log = logger.child("visits/complete");
 
@@ -78,7 +79,7 @@ export async function completeVisit(
       return { ok: true, jobId: v.job_id, clientId: v.client_id, alreadyCompleted: true };
     }
     const repair = await applyVisitCompletionSideEffects({
-      supabase,
+      supabase: createServiceClient(),
       orgId,
       visitId,
       userId,
@@ -125,7 +126,12 @@ export async function completeVisit(
   if (!orgId) {
     return { ok: true, jobId: v.job_id, clientId: v.client_id };
   }
-  const sideEffects = await applyVisitCompletionSideEffects({ supabase, orgId, visitId, userId });
+  // The side effects (auto-invoicing, package recalc, activity, automations)
+  // run as the service role, like the crew clock-out routes: completing the
+  // visit above is what the caller needed permission for. Under their own
+  // session the invoice write guard (acct_add_modify_invoices) would refuse a
+  // Scheduler's dispatch-board completion and the visit would go unbilled.
+  const sideEffects = await applyVisitCompletionSideEffects({ supabase: createServiceClient(), orgId, visitId, userId });
   if (!sideEffects.ok && sideEffects.error) {
     // Completion and its side effects are not one transaction — restore the
     // prior status so a hard failure leaves the visit genuinely retryable.

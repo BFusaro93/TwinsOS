@@ -108,6 +108,7 @@ import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 /**
  * crm_job_products statuses that still owe the client an invoice line —
@@ -255,8 +256,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           menCount: job.manCount,
         });
         await qc.invalidateQueries({ queryKey: ['crm-job-visits', 'job', job.id] });
-      } catch {
-        toast.error("Failed to auto-schedule this job's visit — add one manually");
+      } catch (err) {
+        toast.error(mutationErrorMessage(err, "Failed to auto-schedule this job's visit — add one manually"));
       }
     })();
   }, [job, visits, visitsLoading]);
@@ -302,7 +303,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           if (!ok) return;
         }
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to check existing visits");
+        toast.error(mutationErrorMessage(e, e instanceof Error ? e.message : "Failed to check existing visits"));
         return;
       }
     }
@@ -340,8 +341,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         if (effect.regenerate) {
           try {
             await resumeJobVisits(job.id);
-          } catch {
-            toast.error("Job saved, but its visits could not be regenerated — use Generate Visits");
+          } catch (err) {
+            toast.error(mutationErrorMessage(err, "Job saved, but its visits could not be regenerated — use Generate Visits"));
           }
         }
         await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
@@ -394,8 +395,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       setEdits({});
       setEditing(false);
       toast.success("Job saved");
-    } catch {
-      toast.error("Failed to save");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save"));
     } finally {
       setSaving(false);
     }
@@ -463,7 +464,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       // already covers the job or one of its visits — invoiced first, split
       // per-service visits auto-invoiced on completion, or cancel → reopen →
       // complete — and resolves tax exactly like the server auto-invoice.
-      if (status === "completed" && job.jobType === "one_time") {
+      if (status === "completed" && job.jobType === "one_time" && !can("acct_add_modify_invoices")) {
+        // Invoice writes are checked in the database (acct_add_modify_invoices);
+        // say so instead of letting the automatic invoice fail.
+        toast.warning("Job completed. Creating its invoice needs the Add/Modify Invoices permission — ask someone in accounting to invoice it.");
+      } else if (status === "completed" && job.jobType === "one_time") {
         try {
           const today = orgToday();
           const serviceDate = job.scheduledDate ?? today;
@@ -483,12 +488,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           });
           if (created.alreadyInvoiced) return;
           toast.success("Invoice created automatically — check Accounting");
-        } catch {
-          toast.error("Job marked completed, but the automatic invoice failed to create — add one manually");
+        } catch (err) {
+          toast.error(mutationErrorMessage(err, "Job marked completed, but the automatic invoice failed to create — add one manually"));
         }
       }
     } catch (err) {
-      toast.error(err instanceof Error && err.message ? err.message : "Failed to update status");
+      toast.error(mutationErrorMessage(err, err instanceof Error && err.message ? err.message : "Failed to update status"));
     }
   }
 
@@ -512,8 +517,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       setNewVisitServiceId("");
       setNewVisitInvoiceDesc("");
       toast.success("Visit scheduled");
-    } catch {
-      toast.error("Failed to add visit");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add visit"));
     }
   }
 
@@ -537,7 +542,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         toast.success("Visits already up to date");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to generate visits");
+      toast.error(mutationErrorMessage(e, e instanceof Error ? e.message : "Failed to generate visits"));
     } finally {
       setGenerating(false);
     }
@@ -563,8 +568,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       });
       setEditingSvcId(null);
       toast.success("Service updated");
-    } catch {
-      toast.error("Failed to update service");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to update service"));
     }
   }
 
@@ -590,8 +595,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       setNewSvcBHrs("0");
       setNewSvcStartDate("");
       toast.success(newSvcStartDate ? "Service added and visit scheduled" : "Service added");
-    } catch {
-      toast.error("Failed to add service");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add service"));
     }
   }
 
@@ -599,8 +604,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     try {
       await deleteJobService.mutateAsync({ id });
       toast.success("Service removed");
-    } catch {
-      toast.error("Failed to remove service");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to remove service"));
     }
   }
 
@@ -649,8 +654,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       });
       toast.success(invoice.alreadyInvoiced ? "This job is already invoiced" : "Invoice created");
       router.push(`/crm/accounting/invoices/${invoice.id}`);
-    } catch {
-      toast.error("Failed to create invoice");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create invoice"));
     } finally {
       setInvoicing(false);
     }
@@ -807,7 +812,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               </Button>
             </PermissionGate>
           )}
-          {job.jobType !== "recurring" && job.jobType !== "package" && (
+          {job.jobType !== "recurring" && job.jobType !== "package" && can("acct_add_modify_invoices") && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               disabled={invoicing}
               onClick={handleInvoice}>
@@ -1124,7 +1129,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                   setSelectedSchedId(newSched.id);
                                   setCreatingSchedule(false);
                                   toast.success("Schedule created");
-                                } catch { toast.error("Failed to create schedule"); }
+                                } catch (err) { toast.error(mutationErrorMessage(err, "Failed to create schedule")); }
                               }}>
                                 Save Schedule
                               </Button>
@@ -1921,7 +1926,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             await deleteVisit.mutateAsync(v.id);
                             toast.success("Visit deleted");
                           } catch (err) {
-                            toast.error(err instanceof Error ? err.message : "Failed to delete visit");
+                            toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to delete visit"));
                           }
                         }}
                         onSaveNote={async (note) => {
@@ -2431,7 +2436,7 @@ function VisitRow({
                   setDispatching(false);
                 } catch (err) {
                   // e.g. package min-days violation from useUpdateVisit
-                  toast.error(err instanceof Error ? err.message : "Failed to dispatch visit");
+                  toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to dispatch visit"));
                 } finally {
                   setDispatchSaving(false);
                 }

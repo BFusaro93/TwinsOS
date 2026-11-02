@@ -13,6 +13,7 @@ import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { useConfirm } from "@/components/shared/useConfirm";
 import type { CRMInvoice } from "@/types/crm-invoices";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   open: boolean;
@@ -171,8 +172,8 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
       const inv = await createInvoice({ clientId, description: "", invoiceDate: today });
       setInvoiceId(inv.id);
       setDraftClientId(clientId);
-    } catch {
-      toast.error("Failed to create invoice");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create invoice"));
     } finally {
       setCreating(false);
       creatingRef.current = false;

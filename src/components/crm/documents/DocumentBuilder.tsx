@@ -80,6 +80,7 @@ import {
   EstimateSettingsFields,
 } from "@/components/crm/documents/EstimateSettingsFields";
 import type { EstimateSettingsValue } from "@/components/crm/documents/EstimateSettingsFields";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // ── Block palette ─────────────────────────────────────────────────────────────
 
@@ -500,8 +501,8 @@ function SettingsDialog({
         ...(docType === "estimate" ? estimateSettings : {}) });
       toast.success("Settings saved");
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save settings");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save settings"));
     } finally {
       setSaving(false);
     }
@@ -690,8 +691,8 @@ export function DocumentBuilder({ template }: Props) {
       );
       setDirty(false);
       toast.success("Saved");
-    } catch {
-      toast.error("Failed to save");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save"));
     } finally {
       setSaving(false);
     }
@@ -711,7 +712,7 @@ export function DocumentBuilder({ template }: Props) {
       });
       toast.success(`Test email sent to ${sentTo}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to send test email");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to send test email"));
     } finally {
       setSendingTest(false);
     }
@@ -740,7 +741,7 @@ export function DocumentBuilder({ template }: Props) {
       window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to generate PDF");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to generate PDF"));
     } finally {
       setDownloadingPdf(false);
     }

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { formatCurrency } from "@/lib/utils";
 import { computeMergedInvoiceTotals } from "@/lib/invoice-merge";
 import type { CRMInvoice } from "@/types/crm-invoices";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   invoices: CRMInvoice[];
@@ -73,7 +74,7 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
       toast.success("Invoices consolidated onto the parent account");
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Consolidation failed");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Consolidation failed"));
     } finally {
       setMerging(false);
     }
@@ -94,7 +95,7 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
       toast.success("Invoices merged successfully");
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Merge failed");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Merge failed"));
     } finally {
       setMerging(false);
     }

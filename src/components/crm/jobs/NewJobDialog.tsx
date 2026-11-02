@@ -46,6 +46,7 @@ import { ServiceDialog } from "@/components/crm/services/ServiceDialog";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { JobType, BudgetMethod, CRMService } from "@/types/crm-jobs";
 import { resolveStopAddress } from "@/lib/utils/stop-address";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -703,15 +704,15 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       if (parsedTiers.length > 0) {
         try {
           await saveSnowTiers.mutateAsync({ jobId: (result as { id: string }).id, tiers: parsedTiers });
-        } catch {
-          toast.error("Job created, but the rate ranges didn't save — add them from the job's Details.");
+        } catch (err) {
+          toast.error(mutationErrorMessage(err, "Job created, but the rate ranges didn't save — add them from the job's Details."));
         }
       }
       toast.success("Job created");
       onOpenChange(false);
       if (onCreated) onCreated((result as { id: string }).id);
-    } catch {
-      toast.error("Failed to create job");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create job"));
     } finally {
       setIsPending(false);
     }

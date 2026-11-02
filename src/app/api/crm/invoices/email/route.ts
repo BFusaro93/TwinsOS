@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient as createServerClient } from "@/lib/supabase/server";
+import { createClient as createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
@@ -160,8 +160,11 @@ export async function POST(req: NextRequest) {
         total_cents: computed.totalCents,
         balance_cents: Math.max(0, computed.totalCents - (inv.amount_paid_cents ?? 0)),
       };
+      // Service role: the totals are derived here from the saved lines, and a
+      // sender holding acct_send_invoices without acct_add_modify_invoices
+      // may not write invoice amounts under their own session (DB guard).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: totalsErr } = await (supabase as any).from("crm_invoices").update(patch).eq("id", invoiceId);
+      const { error: totalsErr } = await (createServiceClient() as any).from("crm_invoices").update(patch).eq("id", invoiceId);
       if (totalsErr) {
         log.error("invoice totals recompute failed before email", { invoiceId, error: totalsErr.message });
         return NextResponse.json({ error: "Could not update the invoice totals — the invoice was not sent." }, { status: 500 });

@@ -19,6 +19,7 @@ import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { toast } from "sonner";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const schema = z.object({
   clientId:    z.string().min(1, "Client required"),
@@ -71,8 +72,8 @@ export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreate
         toast.success("Invoice created");
         onOpenChange(false);
       }
-    } catch {
-      toast.error("Failed to create invoice");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create invoice"));
     }
   }
 

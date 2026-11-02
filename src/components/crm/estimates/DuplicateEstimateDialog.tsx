@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { useDuplicateEstimate } from "@/lib/hooks/use-estimates";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   estimateId: string;
@@ -48,7 +49,7 @@ export function DuplicateEstimateDialog({
       onSuccess?.(result.id);
       router.push(`/crm/estimates/${result.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to duplicate");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to duplicate"));
     }
   }
 
