@@ -648,6 +648,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Go to CRM > Clients and click '+ New Client'. The quick-create step captures Display Name, Account Type (Residential or Commercial), phone, and email — click 'Create & Continue' and the full client record opens immediately for billing info, custom fields, and office notes.",
           },
           {
+            step: "Finding clients: search, filters & export",
+            detail:
+              "The Clients list (List or Table view, which share the same search and filters) shows the total number of matches and loads clients 100 at a time as you scroll, or click 'Load more'. Search covers name, account #, email, phone (digits only once you type 3+), billing and service address, city, ZIP and tags, across every client. Filters include Status, Balance, Billing City, Service City, Tags, custom fields and Has Scheduled / Completed Job For a service. In the Table, the header checkbox selects the loaded rows and 'Select all N matching clients' selects every match. Import / Export > Export downloads every client that matches the current search and filters.",
+          },
+          {
             step: "Client status",
             detail:
               "Status is one of Active, Inactive, Lead, or Cancelled. Cancelling a client requires picking a reason — Price, Moved, Unhappy with Service, No Longer Needs Service, or Other — which is kept on the record for churn reporting.",
@@ -655,7 +660,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Commercial parent/child hierarchy",
             detail:
-              "Use 'Link Parent Account' on a commercial client to nest it under a property-manager parent. Only a client that isn't already a child itself can be picked as the parent — the hierarchy is one level deep. The parent's record shows a Sub-Accounts banner with the combined balance across all its children.",
+              "Use 'Link Parent Account' on a commercial client to nest it under a property-manager parent. Only a client that isn't already a child itself can be picked as the parent — the hierarchy is one level deep. The picker shows the first 50 eligible clients; type to search the rest. A client that already has sub-accounts can't be given a parent, and the picker says so. The parent's record shows a Sub-Accounts banner with the combined balance across all its children.",
           },
           {
             step: "Adding a property",
@@ -2084,6 +2089,26 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "What does the Mine / Everyone toggle on My Day do?",
         a: "My Day opens scoped to you. Mine shows tickets assigned to you or where you're a contributor, estimates where you're the sales rep, and meetings assigned to you; Everyone shows the whole company's. A My Upcoming Meetings card lists your next seven days of meetings. Breadcrumbs across the top of list pages are clickable to jump back to the section.",
+      },
+      {
+        q: "Why does the Clients list only show 100 clients when the count says more?",
+        a: "The list loads clients 100 at a time to stay fast for large client lists. Scroll down and the next 100 load automatically, or click 'Load more' at the bottom. The count at the top is the true number of matches, and search, filters and Export always cover every client, not just the ones on screen.",
+      },
+      {
+        q: "My City filter doesn't match the address shown in the Clients table. Why?",
+        a: "There are two city filters. 'Billing City' filters on the billing address. The table's 'Service Address' column shows where the work is done, and 'Service City' is the filter that matches it. Use Service City to find everyone serviced in a town.",
+      },
+      {
+        q: "Where did the 'Active Service' filter go?",
+        a: "It was replaced by 'Has Scheduled Job For' (clients with an upcoming visit for that service) and 'Has Completed Job For' (clients with a completed visit for it). The old Active Service filter in the Table view didn't actually filter anything; the new ones work in both List and Table, and you can pick several services at once.",
+      },
+      {
+        q: "I can't find a client in a client picker or in Link Parent Account. Where is it?",
+        a: "Client pickers search as you type and show up to 50 matches. If the client isn't in the first 50, type part of the name, the account number, a phone number or part of the address. In Link Parent Account, clients that already have a parent are never offered, and a client that has sub-accounts of its own can't be linked under a parent at all, since the hierarchy is one level deep.",
+      },
+      {
+        q: "Does exporting clients export everyone or just what I'm looking at?",
+        a: "Clients > Import / Export > Export downloads every client that matches your current search and filters, including the ones not yet loaded on screen. Clear the search box and filters first if you want the whole client list.",
       },
       {
         q: "A refund or chargeback didn't update in QuickBooks. What now?",
