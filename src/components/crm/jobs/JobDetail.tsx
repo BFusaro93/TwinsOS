@@ -26,7 +26,8 @@ import {
 } from "@/lib/hooks/use-crm-jobs";
 import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
 import { JobAssetsSection } from "@/components/crm/jobs/JobAssetsSection";
-import { useCreateInvoiceFromJob, useInvoiceForJob } from "@/lib/hooks/use-invoices";
+import { useAutoInvoiceCompletedJob, useCreateInvoiceFromJob, useInvoiceForJob } from "@/lib/hooks/use-invoices";
+import { BILLABLE_JOB_PRODUCT_STATUSES } from "@/lib/invoices/create-from-job";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -110,12 +111,6 @@ import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
-/**
- * crm_job_products statuses that still owe the client an invoice line —
- * see buildPendingProductLineItems(). `used_no_invoice` and `not_used` are
- * deliberately absent, and `invoiced` has already been billed.
- */
-const BILLABLE_JOB_PRODUCT_STATUSES: string[] = ["pending", "used"];
 
 const STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
@@ -187,6 +182,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const createVisit = useCreateVisit();
   const updateStatus = useUpdateJobStatus();
   const createInvoice = useCreateInvoiceFromJob();
+  const autoInvoice = useAutoInvoiceCompletedJob();
   const { data: existingInvoice } = useInvoiceForJob(jobId);
 
   const updateJobService = useUpdateJobService();
@@ -459,33 +455,16 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     try {
       await updateStatus.mutateAsync({ id: job.id, status, scheduledDate: job.scheduledDate ?? "" });
       toast.success(`Marked ${STATUS_LABEL[status] ?? status}`);
-      // Auto-create a draft invoice when a one-time job is completed.
-      // useCreateInvoiceFromJob skips (alreadyInvoiced) when any live invoice
+      // Auto-create a draft invoice when a one-time job is completed. Built on
+      // the server from the job's services and products (as the service role,
+      // like visit completion), so roles that may complete jobs but not write
+      // invoices still get it. It skips (alreadyInvoiced) when any live invoice
       // already covers the job or one of its visits — invoiced first, split
       // per-service visits auto-invoiced on completion, or cancel → reopen →
-      // complete — and resolves tax exactly like the server auto-invoice.
-      if (status === "completed" && job.jobType === "one_time" && !can("acct_add_modify_invoices")) {
-        // Invoice writes are checked in the database (acct_add_modify_invoices);
-        // say so instead of letting the automatic invoice fail.
-        toast.warning("Job completed. Creating its invoice needs the Add/Modify Invoices permission — ask someone in accounting to invoice it.");
-      } else if (status === "completed" && job.jobType === "one_time") {
+      // complete — and resolves tax exactly like the visit auto-invoice.
+      if (status === "completed" && job.jobType === "one_time") {
         try {
-          const today = orgToday();
-          const serviceDate = job.scheduledDate ?? today;
-          const svcs = job.services ?? [];
-          const productLineItems = buildPendingProductLineItems(serviceDate);
-          const svcLineItems = svcs.length > 0
-            ? svcs.map((s) => ({ name: s.serviceName, description: job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service", qty: s.qty ?? 1, rateCents: s.rateCents ?? 0, totalCents: lineTotalCents(s.rateCents ?? 0, s.qty ?? 1), serviceDate, jobServiceId: s.id }))
-            : productLineItems.length > 0
-              ? []
-              : [{ name: "Service", description: job.invoiceDescription || "Service", qty: 1, rateCents: job.rateCents ?? 0, totalCents: job.rateCents ?? 0, serviceDate }];
-          const created = await createInvoice.mutateAsync({
-            jobId: job.id,
-            clientId: job.clientId,
-            description: `Service: ${svcs.map((s) => s.serviceName).join(", ") || "Job"}`,
-            invoiceDate: today,
-            lineItems: [...svcLineItems, ...productLineItems],
-          });
+          const created = await autoInvoice.mutateAsync({ jobId: job.id, clientId: job.clientId });
           if (created.alreadyInvoiced) return;
           toast.success("Invoice created automatically — check Accounting");
         } catch (err) {

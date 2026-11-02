@@ -216,8 +216,8 @@ export function UsersRolesGuide() {
             role can still print, email or QuickBooks-sync an invoice it can see (which locks it
             and moves a draft to Printed or Sent), but not unlock it or change it. Generate Snow
             Invoices and Create Invoices from Contracts let a role create the draft invoices those
-            screens generate. Completing a visit still creates its automatic invoice for anyone
-            allowed to complete the visit.
+            screens generate. Completing a visit, or a one-time job, still creates its automatic
+            invoice for anyone allowed to complete it.
           </li>
           <li>
             <strong>Estimates</strong> (and their line items, sub-items, equipment and direct
