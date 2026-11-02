@@ -2163,6 +2163,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "The list loads clients 100 at a time to stay fast for large client lists. Scroll down and the next 100 load automatically, or click 'Load more' at the bottom. The count at the top is the true number of matches, and search, filters and Export always cover every client, not just the ones on screen.",
       },
       {
+        q: "The Leads list is loading leads in batches. Is that new?",
+        a: "Yes. Like Clients, the Leads list (List and Table views) loads 100 leads at a time as you scroll, or click 'Load more'. The count at the top is every matching lead, and search, filters, 'Select all N matching leads' and Export all cover every lead, not just the ones on screen. Your search and filters carry over between the two views.",
+      },
+      {
+        q: "The Leads 'Date Added' filter never returned anything. Is it fixed?",
+        a: "Yes. It used to check Client Since, which stays empty until a lead converts, so it matched nothing. It now uses the same date as the Date Added column: Client Since if set, otherwise the day the lead was created.",
+      },
+      {
         q: "My City filter doesn't match the address shown in the Clients table. Why?",
         a: "There are two city filters. 'Billing City' filters on the billing address. The table's 'Service Address' column shows where the work is done, and 'Service City' is the filter that matches it. Use Service City to find everyone serviced in a town.",
       },

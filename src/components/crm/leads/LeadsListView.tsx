@@ -1,7 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { useLeads } from "@/lib/hooks/use-clients";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { leadQueryParams, useClientsPage } from "@/lib/hooks/use-clients";
+import { useLeadFilterFields } from "@/lib/hooks/use-lead-filter-fields";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { useLoadMoreSentinel } from "@/lib/hooks/use-load-more-sentinel";
+import { ClientFilterPopover } from "@/components/crm/shared/ClientFilterPopover";
+import { Button } from "@/components/ui/button";
+import type { FilterRow } from "@/lib/client-filters";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserPlus, Building2, Home } from "lucide-react";
 import { MasterDetailLayout } from "@/components/shared/MasterDetailLayout";
@@ -62,11 +68,26 @@ interface LeadsListViewProps {
   selectedId?: string | null;
   onSelect?: (lead: Client) => void;
   onBack?: () => void;
+  /** Shared with the table view (owned by the page). */
+  search: string;
+  onSearchChange: (search: string) => void;
+  filterRows: FilterRow[];
+  onFilterRowsChange: Dispatch<SetStateAction<FilterRow[]>>;
 }
 
-export function LeadsListView({ selectedId, onSelect, onBack }: LeadsListViewProps = {}) {
-  const { data: leads, isLoading } = useLeads();
-  const [search, setSearch] = useState("");
+export function LeadsListView({
+  selectedId, onSelect, onBack,
+  search, onSearchChange: setSearch, filterRows, onFilterRowsChange: setFilterRows,
+}: LeadsListViewProps) {
+  const { fields: FILTER_FIELDS } = useLeadFilterFields();
+  // Search, filters and paging run server-side, 100 leads at a time.
+  const debouncedSearch = useDebouncedValue(search);
+  const { data, isPending: isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useClientsPage(
+    leadQueryParams({ search: debouncedSearch, filters: filterRows }),
+  );
+  const filtered = useMemo(() => data?.pages.flatMap((p) => p.clients) ?? [], [data]);
+  const total = data?.pages[0]?.total ?? filtered.length;
+  const sentinelRef = useLoadMoreSentinel({ hasNextPage, isFetchingNextPage, fetchNextPage });
   const [internalSelected, setInternalSelected] = useState<Client | null>(null);
   // Leads are shown in the same ClientDetailPanel as clients, which only
   // renders its expand-to-full-page button when handed onExpandChange. The
@@ -74,7 +95,9 @@ export function LeadsListView({ selectedId, onSelect, onBack }: LeadsListViewPro
   const [expanded, setExpanded] = useState(false);
 
   const controlled = selectedId !== undefined;
-  const selected = controlled ? (leads ?? []).find((l) => l.id === selectedId) ?? null : internalSelected;
+  // Only the id matters here (the detail panel loads its own record), so a
+  // lead picked in the table view still opens even if it isn't loaded below.
+  const selectedLeadId = controlled ? selectedId : internalSelected?.id ?? null;
   function selectLead(lead: Client) {
     // Picking a different lead collapses back to the split view, as on Clients
     // — otherwise the list stays hidden and there is no way back to it.
@@ -83,34 +106,21 @@ export function LeadsListView({ selectedId, onSelect, onBack }: LeadsListViewPro
     else setInternalSelected(lead);
   }
 
-  const filtered = (leads ?? []).filter((l) => {
-    const q = search.toLowerCase();
-    // Digits-only comparison so "9785550100" finds a phone stored as "(978) 555-0100".
-    const qDigits = q.replace(/\D/g, "");
-    if (!q) return true;
-    return (
-      l.displayName.toLowerCase().includes(q) ||
-      (l.primaryPhone ?? "").includes(q) ||
-      (qDigits.length >= 3 && (l.primaryPhone ?? "").replace(/\D/g, "").includes(qDigits)) ||
-      (l.primaryEmail ?? "").toLowerCase().includes(q) ||
-      (l.serviceCity ?? "").toLowerCase().includes(q) ||
-      (l.billingCity ?? "").toLowerCase().includes(q)
-    );
-  });
-
   const listPanel = (
     <div className="flex h-full flex-col">
-      <div className="border-b p-3">
+      <div className="flex items-center gap-2 border-b p-3">
         <SearchInput
+          className="flex-1"
           value={search}
           onChange={setSearch}
           placeholder="Search leads…"
           inputClassName="text-sm"
         />
+        <ClientFilterPopover fields={FILTER_FIELDS} rows={filterRows} onRowsChange={setFilterRows} />
       </div>
       <div className="border-b px-3 py-2">
         <span className="text-xs text-muted-foreground">
-          {isLoading ? "Loading…" : `${filtered.length} lead${filtered.length !== 1 ? "s" : ""}`}
+          {isLoading ? "Loading…" : `${total.toLocaleString()} lead${total !== 1 ? "s" : ""}`}
         </span>
       </div>
       <div className="flex-1 overflow-y-auto">
@@ -128,10 +138,17 @@ export function LeadsListView({ selectedId, onSelect, onBack }: LeadsListViewPro
               <LeadItem
                 key={lead.id}
                 lead={lead}
-                isSelected={selected?.id === lead.id}
+                isSelected={selectedLeadId === lead.id}
                 onSelect={() => selectLead(lead)}
               />
             ))}
+            {hasNextPage && (
+              <div ref={sentinelRef} className="flex justify-center p-3">
+                <Button variant="ghost" size="sm" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>
+                  {isFetchingNextPage ? "Loading…" : `Load more (${(total - filtered.length).toLocaleString()} left)`}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -140,7 +157,7 @@ export function LeadsListView({ selectedId, onSelect, onBack }: LeadsListViewPro
 
   return (
     <MasterDetailLayout
-      hasSelection={!!selected}
+      hasSelection={!!selectedLeadId}
       expanded={expanded}
       onBack={() => {
         setExpanded(false);
@@ -149,8 +166,8 @@ export function LeadsListView({ selectedId, onSelect, onBack }: LeadsListViewPro
       }}
       listPanel={listPanel}
       detailPanel={
-        selected ? (
-          <ClientDetailPanel clientId={selected.id} expanded={expanded} onExpandChange={setExpanded} />
+        selectedLeadId ? (
+          <ClientDetailPanel clientId={selectedLeadId} expanded={expanded} onExpandChange={setExpanded} />
         ) : null
       }
       emptyState={
