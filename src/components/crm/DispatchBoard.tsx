@@ -2944,7 +2944,8 @@ function VisitRow({
   selected: boolean;
   onToggleSelect: (id: string) => void;
   onDragStart: (id: string) => void;
-  onDragOver: (id: string) => void;
+  /** Returns whether this row accepts the dragged stop (same crew only). */
+  onDragOver: (id: string) => boolean;
   onDragEnd: () => void;
   isDragOver: boolean;
   isVisible: (col: string) => boolean;
@@ -3196,7 +3197,7 @@ function VisitRow({
       onClick={() => onOpen(visit)}
       draggable={manualRouteMode}
       onDragStart={() => manualRouteMode && onDragStart(visit.id)}
-      onDragOver={(e) => { if (manualRouteMode) { e.preventDefault(); onDragOver(visit.id); } }}
+      onDragOver={(e) => { if (manualRouteMode && onDragOver(visit.id)) e.preventDefault(); }}
       onDragEnd={onDragEnd}
     >
       {/* Checkbox */}
@@ -3842,6 +3843,7 @@ export function DispatchBoard() {
   const [serviceFilters,  setServiceFilters]  = useState<string[]>([]);
   const [dragId,          setDragId]          = useState<string | null>(null);
   const [dragOverId,      setDragOverId]      = useState<string | null>(null);
+  const crossCrewHintShown = useRef(false);
   const [manualOrder,     setManualOrder]     = useState<string[] | null>(null);
   // Off by default — rows are only draggable/reorderable once explicitly turned
   // on. Without this gate, every row is a native `draggable` element, so
@@ -4462,17 +4464,27 @@ export function DispatchBoard() {
 
   function handleDragStart(id: string) {
     setDragId(id);
+    crossCrewHintShown.current = false;
     // Initialize manual order from current display order if not set
     if (!manualOrder) setManualOrder(displayVisits.map((v) => v.id));
   }
 
-  function handleDragOver(overId: string) {
-    if (!dragId || dragId === overId) return;
+  /** Returns whether `overId` is a valid drop target, so the row only accepts
+   *  the drop (preventDefault) when it is. */
+  function handleDragOver(overId: string): boolean {
+    if (!dragId) return false;
+    if (dragId === overId) return true;
     // Each crew runs its own route — dropping a stop into another crew's
     // block here would silently renumber that crew's stops too, so only
-    // allow reordering within the same crew (reassigning crew is still done
-    // via the Team Assignment dialog, not by dragging rows here).
-    if (crewKeyOf(dragId) !== crewKeyOf(overId)) return;
+    // allow reordering within the same crew. Refuse the drop (no-drop cursor)
+    // and say once per drag where crew moves actually happen.
+    if (crewKeyOf(dragId) !== crewKeyOf(overId)) {
+      if (!crossCrewHintShown.current) {
+        crossCrewHintShown.current = true;
+        toast("Use Team Assign to move a stop between crews");
+      }
+      return false;
+    }
     setDragOverId(overId);
     setManualOrder((prev) => {
       const order = prev ?? displayVisits.map((v) => v.id);
@@ -4486,6 +4498,7 @@ export function DispatchBoard() {
     });
     // Clear optimized order when manually reordering
     if (optimizedOrder) { setOptimizedOrder(null); setDriveTimeMap(new Map()); setTotalDriveMins(null); }
+    return true;
   }
 
   function handleDragEnd() {
@@ -4700,7 +4713,7 @@ export function DispatchBoard() {
         {confirmDialog}
         <PageHeader
           title="Dispatch Board"
-          description="Drag a job to another day or crew — bars track actual vs. budgeted hours"
+          description="Move a job to another day or crew — bars track actual vs. budgeted hours"
           action={viewToggle}
         />
         <DispatchCalendar
