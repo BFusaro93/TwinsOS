@@ -272,6 +272,9 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
   const inputCls =
     "w-full rounded border border-border px-1.5 py-0.5 text-right text-xs focus:outline-none focus:border-brand-400";
 
+  // inputCls is w-full; the overflow sentence needs compact inline boxes.
+  const tailInputCls = inputCls.replace("w-full", "w-20");
+
   return (
     <div className="flex flex-col gap-4">
       <Field label="Lookup field">
@@ -407,19 +410,19 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
         </p>
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           Every
-          <input type="number" value={form.matrixTailEveryQty} className={`${inputCls} w-20`}
+          <input type="number" value={form.matrixTailEveryQty} className={tailInputCls}
             onChange={(e) => setForm({ ...form, matrixTailEveryQty: e.target.value })} />
           over
-          <input type="number" value={form.matrixTailOverQty} className={`${inputCls} w-20`}
+          <input type="number" value={form.matrixTailOverQty} className={tailInputCls}
             onChange={(e) => setForm({ ...form, matrixTailOverQty: e.target.value })} />
           is $
-          <input type="number" step="0.01" value={form.matrixTailRateCents} className={`${inputCls} w-20`}
+          <input type="number" step="0.01" value={form.matrixTailRateCents} className={tailInputCls}
             onChange={(e) => setForm({ ...form, matrixTailRateCents: e.target.value })} />
           more and
-          <input type="number" step="0.01" value={form.matrixTailHours} className={`${inputCls} w-20`}
+          <input type="number" step="0.01" value={form.matrixTailHours} className={tailInputCls}
             onChange={(e) => setForm({ ...form, matrixTailHours: e.target.value })} />
           more time with an additional cost of $
-          <input type="number" step="0.01" value={form.matrixTailCostCents} className={`${inputCls} w-20`}
+          <input type="number" step="0.01" value={form.matrixTailCostCents} className={tailInputCls}
             onChange={(e) => setForm({ ...form, matrixTailCostCents: e.target.value })} />
         </div>
       </div>
