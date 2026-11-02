@@ -246,7 +246,7 @@ function DayRow({ row, tz }: { row: PayrollRow; tz: string }) {
           <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} title={`Clock in (recorded ${clock(row.shiftStart)})`} className="h-8 w-28 text-xs" />
           <span className="text-xs text-muted-foreground">to</span>
           <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} title={`Clock out (recorded ${row.openShift ? "still open" : clock(row.shiftEnd)})`} className="h-8 w-28 text-xs" />
-          <Input value={breakMins} onChange={(e) => setBreakMins(e.target.value)} placeholder={`${row.breakMinutes} min off`} inputMode="numeric" title="Unpaid minutes off the clock" className="h-8 w-24 text-xs" />
+          <Input value={breakMins} onChange={(e) => setBreakMins(e.target.value)} placeholder={`${row.breakMinutes} min off`} inputMode="numeric" title="Total unpaid minutes off the clock for the day (replaces the recorded breaks, job breaks included)" className="h-8 w-24 text-xs" />
         </div>
         <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (why adjusted)" className="mt-1 h-8 text-xs" />
       </TableCell>

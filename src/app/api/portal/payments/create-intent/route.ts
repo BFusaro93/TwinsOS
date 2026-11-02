@@ -69,8 +69,10 @@ export async function POST(request: Request) {
   }
   // stripe_connect_livemode isn't in the generated Supabase types yet (added
   // by a migration this session wrote but did not apply/regenerate types for).
+  // Portal users have no profiles row, so the organizations policy (id = my_org_id()) returns
+  // nothing for their session: read the org with the service client (ctx.orgId is server-derived).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: org } = await (supabase.from("organizations") as any)
+  const { data: org } = await (createServiceClient().from("organizations") as any)
     .select(
       "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
     )

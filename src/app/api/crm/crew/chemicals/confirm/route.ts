@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
+import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { adminClient } from "@/lib/api/auth";
 
 /**
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rows, error: rowsError } = await (db as any)
     .from("crm_chemical_applications")
-    .select("id, org_id, visit_id, application_start_time, application_end_time")
+    .select("id, org_id, visit_id, application_start_time, application_end_time, chemical_amount, solution_amount, applicator_employee_id, applicator_license_number")
     .in("id", items.map((i) => i.id))
     .is("deleted_at", null);
   if (rowsError) return NextResponse.json({ error: rowsError.message }, { status: 500 });
@@ -77,17 +77,68 @@ export async function POST(request: Request) {
     }
   }
 
+  // A compliance record needs a real application window: confirming before the stop is
+  // started wrote no start time and an end time before the work began.
+  if (visitIds.some((id) => !visitById.get(id)?.clocked_in_at)) {
+    return NextResponse.json({ error: "Start the job before confirming chemicals." }, { status: 409 });
+  }
+
+  // The applicator of record is the crew's foreman (crew logins are shared per crew), with the
+  // license number snapshotted as of the application. The compliance report showed blank
+  // applicator/license for every crew-confirmed row.
+  const applicatorByVisit = new Map<string, { employeeId: string; license: string | null }>();
+  for (const visitId of visitIds) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const visit = (visits ?? []).find((v: any) => v.id === visitId);
+    const crewId = visit ? effectiveVisitCrewId(visit) : null;
+    if (!crewId) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: foreman } = await (db as any)
+      .from("crm_crew_members")
+      .select("employee_id")
+      .eq("crew_id", crewId)
+      .eq("is_foreman", true)
+      .is("deleted_at", null)
+      .not("employee_id", "is", null)
+      .limit(1)
+      .maybeSingle();
+    if (!foreman?.employee_id) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: emp } = await (db as any)
+      .from("crm_employees")
+      .select("applicator_license")
+      .eq("id", foreman.employee_id)
+      .maybeSingle();
+    applicatorByVisit.set(visitId, { employeeId: foreman.employee_id, license: emp?.applicator_license ?? null });
+  }
+
   const nowIso = new Date().toISOString();
   const itemById = new Map(items.map((i) => [i.id, i]));
-  for (const row of rows as { id: string; visit_id: string | null; application_start_time: string | null; application_end_time: string | null }[]) {
+  for (const row of rows as {
+    id: string; visit_id: string | null; application_start_time: string | null; application_end_time: string | null;
+    chemical_amount: number | null; solution_amount: number | null;
+    applicator_employee_id: string | null; applicator_license_number: string | null;
+  }[]) {
     const it = itemById.get(row.id)!;
     const visit = row.visit_id ? visitById.get(row.visit_id) : undefined;
+    const applicator = row.visit_id ? applicatorByVisit.get(row.visit_id) : undefined;
+    // The finished-mix volume was planned for the planned concentrate; keep it in proportion
+    // when the crew reports a different amount (it read 12 gal of mix next to 6 oz used).
+    const amountChanged = it.used && it.chemicalAmount !== undefined && row.chemical_amount != null
+      && row.chemical_amount > 0 && it.chemicalAmount !== row.chemical_amount;
+    const scaledSolution = amountChanged && row.solution_amount != null
+      ? Math.round(row.solution_amount * (it.chemicalAmount! / row.chemical_amount!) * 100) / 100
+      : undefined;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (db as any)
       .from("crm_chemical_applications")
       .update({
         used: it.used,
         ...(it.used && it.chemicalAmount !== undefined ? { chemical_amount: it.chemicalAmount } : {}),
+        ...(scaledSolution !== undefined ? { solution_amount: scaledSolution } : {}),
+        ...(it.used && !row.applicator_employee_id && applicator
+          ? { applicator_employee_id: applicator.employeeId, applicator_license_number: row.applicator_license_number ?? applicator.license }
+          : {}),
         // The compliance record needs when it was applied; the crew's own clock is
         // the best evidence we have (kept if someone already entered one).
         ...(it.used && !row.application_start_time && visit?.clocked_in_at

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
+import { grossToNetRefundCents } from "@/lib/stripe/refund-math";
 import { snapshotQuickBooksPaymentLinks, mirrorPaymentReversalToQuickBooks } from "@/lib/integrations/quickbooks";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getStripe, getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { statusForAccount } from "@/lib/stripe/connect";
-import { recordStripeCharge, accountOwnedByOrg } from "@/lib/stripe/record-charge";
+import { recordStripeCharge, accountOwnedByOrg, classifyChargeAccount } from "@/lib/stripe/record-charge";
 import {
   recordEstimateDepositCharge,
   markEstimateDepositPending,
@@ -262,42 +263,7 @@ export async function POST(request: Request) {
         break;
       }
 
-      if (
-        !event.account ||
-        !pendingOrgId ||
-        !isPendingChargeStatus(pendingIntent.status) ||
-        (pendingSource !== "crm_invoice" && pendingSource !== "crm_invoice_multi") ||
-        !(await eventAccountOwnedByOrg(db, pendingOrgId, event.account))
-      ) {
-        break;
-      }
-      const amounts = new Map<string, number>();
-      if (pendingSource === "crm_invoice_multi" && pendingIntent.metadata?.allocations) {
-        for (const a of decodeAllocations(pendingIntent.metadata.allocations)) {
-          amounts.set(a.invoiceId, a.amountCents);
-        }
-      } else if (pendingIntent.metadata?.invoice_id) {
-        // Balance rather than the charged amount: the amount can include a
-        // processing fee, and what's pending against the invoice is its balance.
-        amounts.set(
-          pendingIntent.metadata.invoice_id,
-          Number(pendingIntent.metadata.balance_cents) || pendingIntent.amount
-        );
-      }
-      if (amounts.size > 0) {
-        // Stripe doesn't guarantee ordering: if payment_intent.succeeded already
-        // landed and recorded this intent, a late "processing" event must not
-        // re-mark the now-paid invoice as pending (nothing would clear it).
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: alreadyRecorded } = await (db as any)
-          .from("crm_payments")
-          .select("id")
-          .eq("stripe_payment_intent_id", pendingIntent.id)
-          .limit(1)
-          .maybeSingle();
-        if (alreadyRecorded) break;
-        await markInvoicesPendingCharge({ db, paymentIntent: pendingIntent, amountsByInvoiceId: amounts });
-      }
+      await markIntentInvoicesPending(db, pendingIntent, event.account ?? null);
       break;
     }
 
@@ -308,6 +274,10 @@ export async function POST(request: Request) {
     case "payment_intent.amount_capturable_updated": {
       const authIntent = event.data.object as Stripe.PaymentIntent;
       if (authIntent.metadata?.surcharge_pending !== "1" || !event.account) break;
+      // A manual-capture card authorization never emits "processing", so without this the
+      // invoice kept its place in the To Charge queue while the hold sat on the card, and a
+      // second charge could be started if the settle step was delayed.
+      await markIntentInvoicesPending(db, authIntent, event.account);
       try {
         await settleSurchargeAuthorization(getStripeForOrg(event.livemode), authIntent, event.account);
       } catch (err) {
@@ -320,6 +290,27 @@ export async function POST(request: Request) {
     case "payment_intent.succeeded": {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const source = paymentIntent.metadata?.source;
+      // A charge that settles on a Stripe account the org no longer uses (it reconnected Stripe
+      // while an ACH debit was in flight) can never be recorded automatically. Returning 500
+      // made Stripe redeliver for three days with nothing recorded and nobody told. Acknowledge
+      // it and tell the org's admins so the payment is recorded by hand.
+      const metaOrg = paymentIntent.metadata?.org_id;
+      if (metaOrg && event.account) {
+        const ownership = await classifyChargeAccount(db, metaOrg, event.account);
+        if (ownership === "orphaned") {
+          await notifyOrphanedAccountCharge(db, metaOrg, paymentIntent);
+          await clearPendingCharge(db, paymentIntent.id);
+          break;
+        }
+        if (ownership === "foreign") {
+          log.error("payment intent metadata names an org that doesn't own the connected account — ignored", {
+            paymentIntentId: paymentIntent.id,
+            orgId: metaOrg,
+            connectedAccountId: event.account,
+          });
+          break;
+        }
+      }
       const result =
         source === "crm_estimate_deposit"
           // A proposal deposit is taken before any invoice exists, so it is
@@ -406,10 +397,12 @@ export async function POST(request: Request) {
       const qboLinks = await snapshotQuickBooksPaymentLinks(db, payment.id);
       let deltaCents = 0;
       try {
+        // A partial refund of a surcharged charge reports gross; scale it to the net the
+        // ledger tracks (a full refund already clamped, a partial one over-reversed by the fee share).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: applied, error: reconcileErr } = await (db.rpc as any)("reconcile_stripe_payment_reversal", {
           p_payment_id: payment.id,
-          p_target_reversed_cents: charge.amount_refunded,
+          p_target_reversed_cents: grossToNetRefundCents(charge.amount_refunded, payment.amount_cents ?? 0, payment.processing_fee_cents ?? 0),
         });
         if (reconcileErr) throw reconcileErr;
         deltaCents = typeof applied === "number" ? applied : 0;
@@ -461,24 +454,18 @@ export async function POST(request: Request) {
           org_id: payment.org_id,
           client_id: payment.client_id,
           activity_type: "payment",
-          subject: `Payment reversed: $${(deltaCents / 100).toFixed(2)} (${payment.method === "ACH/E-Check" ? "returned by bank" : "refunded"})`,
+          subject: `Payment refunded: $${(deltaCents / 100).toFixed(2)}`,
           ref_id: payment.id,
           ref_table: "crm_payments",
           amount_cents: -deltaCents,
         });
 
-        // Only a bank-returned ACH debit is a "failed charge" from the
-        // customer's side. A card refund is deliberate — issued from the Stripe
-        // dashboard, or from our own refund route when this webhook wins the
-        // race with it (delta > 0 here) — and must never send the customer a
-        // "your card payment failed, update your card" automation.
-        if (payment.method === "ACH/E-Check") {
-          await fireSimpleTrigger(supabase, {
-            orgId: payment.org_id,
-            clientId: payment.client_id,
-            triggerType: "credit_card_charge_failed",
-          });
-        }
+        // charge.refunded is always a deliberate refund — from the Stripe dashboard, or from our
+        // own refund route when this webhook wins the race with it. A bank-returned ACH debit
+        // never arrives here (Stripe reports a return as payment_intent.payment_failed before
+        // settlement, or as a dispute after), so this used to send customers a "your payment
+        // failed" automation for refunds the office issued on purpose. The automation stays on
+        // payment_failed only.
       } catch (err) {
         // The reversal itself is already committed (and a retry would be a
         // no-op for it), so a failed follow-up must not 500 the event.
@@ -675,6 +662,23 @@ async function handleDisputeEvent(
     }
 
     const qboLinks = await snapshotQuickBooksPaymentLinks(db, payment.id);
+    // A split payment has no direct invoice link: remember which invoices it covered before the
+    // reversal deletes the allocations, so a won dispute can re-apply the money to them
+    // (reinstate_stripe_payment_reversal). First withdrawal only, so a retry keeps the original.
+    if (!payment.invoice_id) {
+      const { data: allocRows } = await db
+        .from("crm_payment_allocations")
+        .select("invoice_id, amount_cents")
+        .eq("payment_id", payment.id);
+      if (allocRows && allocRows.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (db as any)
+          .from("crm_payments")
+          .update({ dispute_allocation_snapshot: allocRows })
+          .eq("id", payment.id)
+          .is("dispute_allocation_snapshot", null);
+      }
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: applied, error: reconcileErr } = await (db.rpc as any)("reconcile_stripe_payment_reversal", {
       p_payment_id: payment.id,
@@ -803,4 +807,89 @@ async function handleDisputeEvent(
   }
 
   return "ok";
+}
+
+/** Flags the invoices a card hold or bank debit covers as having a payment in flight (org-scoped,
+ *  only for the org that owns the connected account, never after the payment was recorded). */
+async function markIntentInvoicesPending(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  intent: Stripe.PaymentIntent,
+  account: string | null
+): Promise<void> {
+  const source = intent.metadata?.source;
+  const orgId = intent.metadata?.org_id;
+  if (
+    !account ||
+    !orgId ||
+    !isPendingChargeStatus(intent.status) ||
+    (source !== "crm_invoice" && source !== "crm_invoice_multi") ||
+    !(await eventAccountOwnedByOrg(db, orgId, account))
+  ) {
+    return;
+  }
+  const amounts = new Map<string, number>();
+  if (source === "crm_invoice_multi" && intent.metadata?.allocations) {
+    for (const a of decodeAllocations(intent.metadata.allocations)) {
+      amounts.set(a.invoiceId, a.amountCents);
+    }
+  } else if (intent.metadata?.invoice_id) {
+    // Balance rather than the charged amount: the amount can include a
+    // processing fee, and what's pending against the invoice is its balance.
+    amounts.set(intent.metadata.invoice_id, Number(intent.metadata.balance_cents) || intent.amount);
+  }
+  if (amounts.size === 0) return;
+  // Stripe doesn't guarantee ordering: if payment_intent.succeeded already
+  // landed and recorded this intent, a late event must not re-mark the
+  // now-paid invoice as pending (nothing would clear it).
+  const { data: alreadyRecorded } = await db
+    .from("crm_payments")
+    .select("id")
+    .eq("stripe_payment_intent_id", intent.id)
+    .limit(1)
+    .maybeSingle();
+  if (alreadyRecorded) return;
+  await markInvoicesPendingCharge({ db, orgId, paymentIntent: intent, amountsByInvoiceId: amounts });
+}
+
+/** One alert per intent to the org's admins: money settled on a Stripe account the org has
+ *  since disconnected, so it must be recorded by hand. */
+async function notifyOrphanedAccountCharge(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  intent: Stripe.PaymentIntent
+): Promise<void> {
+  const amount = `$${((intent.amount_received || intent.amount) / 100).toFixed(2)}`;
+  log.error("payment settled on a Stripe account the org no longer uses — needs manual recording", {
+    paymentIntentId: intent.id,
+    orgId,
+  });
+  try {
+    const { count } = await db
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("type", "automation_alert")
+      .ilike("message", `%${intent.id}%`);
+    if ((count ?? 0) > 0) return;
+    const { data: admins } = await db
+      .from("profiles")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("role", "admin")
+      .neq("status", "inactive");
+    const rows = ((admins ?? []) as { id: string }[]).map((a) => ({
+      org_id: orgId,
+      user_id: a.id,
+      type: "automation_alert",
+      title: `Payment of ${amount} needs to be recorded`,
+      message: `A ${amount} online payment settled on the Stripe account you used before reconnecting Stripe, so it couldn't be recorded automatically. Record it on the invoice by hand (Stripe payment ${intent.id}).`,
+      entity_id: intent.metadata?.invoice_id ?? null,
+      entity_type: intent.metadata?.invoice_id ? "invoice" : null,
+    }));
+    if (rows.length) await db.from("notifications").insert(rows);
+  } catch (err) {
+    log.error("failed to notify admins about an orphaned-account payment", { error: err, paymentIntentId: intent.id });
+  }
 }

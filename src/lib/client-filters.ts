@@ -1,6 +1,6 @@
 // Shared client filter-row model (fields, operators, FilterRow). The Clients
 // list/table and the Sales Campaigns audience picker send these rows to
-// crm_search_clients(), whose crm_client_matches_filter() is the SQL twin of
+// crm_search_clients(), whose inline filter CASE is the SQL twin of
 // matchesFilterRow() below — keep the two in step when adding a field.
 // matchesFilterRow() itself is still used in memory by the Leads list.
 import type { Client } from "@/types/crm";

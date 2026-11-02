@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { sendCampaignEmails, STUCK_SENDING_THRESHOLD_MS } from "@/lib/campaigns/send-campaign";
-import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 
 // This loops over every due campaign (potentially several, each with its own
 // full recipient list) in one invocation — extend the ceiling so it has room
@@ -60,7 +60,10 @@ export async function GET(request: Request) {
       `and(status.eq.scheduled,scheduled_at.not.is.null,scheduled_at.lte.${nowIso}),` +
         `and(status.eq.sending,updated_at.lt.${staleCutoffIso})`
     )
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    // Oldest-due first: an unordered list let one large campaign that sorted first use up
+    // the run (and time out) every hour while other orgs' due campaigns waited.
+    .order("scheduled_at", { ascending: true, nullsFirst: false });
 
   if (fetchErr) {
     console.error("[scheduled-campaigns] fetch error:", fetchErr);
@@ -73,12 +76,20 @@ export async function GET(request: Request) {
 
   const results: { campaignId: string; status: "sent" | "skipped"; reason?: string }[] = [];
 
-  // Canceled orgs get no automated sends (shared helper, resolved per campaign).
-  const orgCanceled = createOrgCanceledResolver(supabase);
+  // Inactive and demo orgs get no automated sends (shared helper, resolved per campaign).
+  const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  // Don't START another campaign this close to maxDuration; a campaign already sending keeps
+  // its heartbeat and is resumed (deduped per recipient) once it goes stale.
+  const startedAt = Date.now();
+  const START_BUDGET_MS = 200_000;
 
   for (const campaign of dueCampaigns) {
+    if (Date.now() - startedAt > START_BUDGET_MS) {
+      results.push({ campaignId: campaign.id, status: "skipped", reason: "deferred to the next run (time budget)" });
+      continue;
+    }
     if (await orgCanceled(campaign.org_id)) {
-      results.push({ campaignId: campaign.id, status: "skipped", reason: "org canceled" });
+      results.push({ campaignId: campaign.id, status: "skipped", reason: "org inactive or demo (outbound muted)" });
       continue;
     }
     const result = await sendCampaignEmails(db, campaign, campaign.org_id, null);

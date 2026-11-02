@@ -117,7 +117,9 @@ export async function GET(request: Request) {
         // invoicing paths only checked deleted_at, so a cancelled client kept getting
         // draft invoices every period.
         .is("clients.deleted_at", null)
-        .neq("clients.status", "cancelled")
+        // Inactive and lost clients are off service too: generate.ts stops their visits, so
+        // billing follows (reactivating the client resumes it next cycle, no backfill).
+        .not("clients.status", "in", "(cancelled,inactive,lost)")
         .eq("is_active", true)
         .eq("auto_generate", true)
         // Only a contract the client has actually agreed to should be auto-billed.

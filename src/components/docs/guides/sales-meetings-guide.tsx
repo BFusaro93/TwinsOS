@@ -49,6 +49,7 @@ export function SalesMeetingsGuide() {
           <TOCLink href="#reminders">Reminders: rep vs. client</TOCLink>
           <TOCLink href="#reschedule">Rescheduling and the reminder reset</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -243,6 +244,16 @@ export function SalesMeetingsGuide() {
           <strong>Communication Automations</strong> guide for how triggers, sequences, and
           enrollment generally work.
         </p>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Lead time for the client trigger.</strong> The client-facing “Meeting is coming up” trigger can be set as short as 5 minutes before the meeting; it is checked every 5 minutes so it fires on time.
+          </li>
+          <li>
+            <strong>Demo companies.</strong> Meeting reminders aren&apos;t emailed for demo or sandbox companies.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );

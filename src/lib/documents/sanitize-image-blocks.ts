@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { assertPublicHttpsUrl } from "@/lib/net/ssrf-guard";
+import { getPublicUrlBytes } from "@/lib/net/ssrf-guard";
 
 const DATA_IMAGE_RE = /^data:image\/(png|jpe?g|gif|webp|avif);base64,([a-z0-9+/=\s]+)$/i;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024; // matches the document-images bucket limit
@@ -21,14 +21,11 @@ async function toPdfImage(rawSrc: string): Promise<string | null> {
     if (data) {
       input = Buffer.from(data[2].replace(/\s+/g, ""), "base64");
     } else {
-      const check = await assertPublicHttpsUrl(src);
-      if (!check.ok) return null;
-      // redirect:"error" — a redirect could point somewhere assertPublicHttpsUrl never checked.
-      const res = await fetch(src, { redirect: "error", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-      if (!res.ok) return null;
-      const len = Number(res.headers.get("content-length") ?? 0);
-      if (len > MAX_IMAGE_BYTES) return null;
-      input = Buffer.from(await res.arrayBuffer());
+      // Connection pinned to the validated public address (no DNS-rebinding window between
+      // the check and the fetch), no redirects, size capped while streaming.
+      const bytes = await getPublicUrlBytes(src, { maxBytes: MAX_IMAGE_BYTES, timeoutMs: FETCH_TIMEOUT_MS });
+      if (!bytes) return null;
+      input = bytes;
     }
     if (input.length > MAX_IMAGE_BYTES) return null;
     const jpeg = await sharp(input)

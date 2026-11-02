@@ -4,7 +4,7 @@ import { useState } from "react";
 import { User, MapPin, Phone, Plus, Loader2, Check, X, ChevronDown, CreditCard } from "lucide-react";
 import { formatPhoneNumber } from "@/lib/utils/phone";
 import { SavedPaymentMethodDialog } from "@/components/portal/SavedPaymentMethodDialog";
-import { useRemovePortalPaymentMethod } from "@/lib/hooks/use-portal-saved-payment-method";
+import { useRemovePortalPaymentMethod, useSetPortalAutopay } from "@/lib/hooks/use-portal-saved-payment-method";
 
 const CONTACT_TYPES = [
   "Owner",
@@ -38,6 +38,7 @@ interface Client {
   billing_zip: string | null;
   saved_payment_method_type: string | null;
   saved_payment_method_summary: string | null;
+  autopay_enabled?: boolean | null;
 }
 
 interface Contact {
@@ -238,19 +239,36 @@ function AddContactForm({ onAdded }: { onAdded: (c: Contact) => void }) {
 
 function PaymentMethodCard({
   initialSummary,
+  initialAutopay,
 }: {
   initialSummary: string | null;
+  initialAutopay: boolean;
 }) {
   const [summary, setSummary] = useState(initialSummary);
+  const [autopay, setAutopay] = useState(initialAutopay);
+  const [autopayError, setAutopayError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [removing, setRemoving] = useState(false);
   const removeMethod = useRemovePortalPaymentMethod();
+  const setPortalAutopay = useSetPortalAutopay();
+
+  async function toggleAutopay(next: boolean) {
+    setAutopayError(null);
+    try {
+      const result = await setPortalAutopay.mutateAsync(next);
+      setAutopay(result.autopayEnabled);
+    } catch (err) {
+      setAutopayError(err instanceof Error ? err.message : "Failed to update autopay");
+    }
+  }
 
   async function handleRemove() {
     setRemoving(true);
     try {
       await removeMethod.mutateAsync();
       setSummary(null);
+      // Removing the method also turns autopay off (server side).
+      setAutopay(false);
     } catch {
       // Leave the current summary displayed — the request will show as failed via the button re-enabling.
     } finally {
@@ -284,10 +302,34 @@ function PaymentMethodCard({
           </button>
         </div>
       )}
+      {summary && (
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <label className="flex items-center justify-between gap-3 text-sm text-slate-700">
+            <span>
+              Autopay
+              <span className="block text-xs text-slate-400">
+                {autopay ? "Invoices are charged to this method automatically when due." : "Invoices are not charged automatically."}
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              className="h-5 w-5"
+              checked={autopay}
+              disabled={setPortalAutopay.isPending}
+              onChange={(e) => void toggleAutopay(e.target.checked)}
+              aria-label="Autopay"
+            />
+          </label>
+          {autopayError && <p className="mt-1 text-xs text-red-600">{autopayError}</p>}
+        </div>
+      )}
       <SavedPaymentMethodDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
-        onSaved={(newSummary) => setSummary(newSummary)}
+        onSaved={(newSummary, newAutopay) => {
+          setSummary(newSummary);
+          setAutopay(newAutopay);
+        }}
       />
     </div>
   );
@@ -355,7 +397,7 @@ export default function PortalAccountPage({
           <p className="text-sm text-slate-700">{address || "No address on file."}</p>
         </div>
 
-        <PaymentMethodCard initialSummary={client.saved_payment_method_summary} />
+        <PaymentMethodCard initialSummary={client.saved_payment_method_summary} initialAutopay={client.autopay_enabled === true} />
       </div>
 
       {/* Contacts */}

@@ -29,6 +29,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+
+/** The list (and its stat cards) cover only the newest rows; say so once the cap is reached. */
+const ACTIVITY_LIMIT = 500;
 import { SearchInput } from "@/components/shared/SearchInput";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -77,7 +80,7 @@ function useEmailActivity() {
         `)
         .eq("activity_type", "email")
         .order("occurred_at", { ascending: false })
-        .limit(500);
+        .limit(ACTIVITY_LIMIT);
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).map((row: any): EmailActivity => ({
@@ -291,6 +294,9 @@ export function EmailActivityList() {
           </div>
         ))}
       </div>
+      {total >= ACTIVITY_LIMIT && (
+        <p className="-mt-2 text-xs text-muted-foreground">Figures cover the most recent {ACTIVITY_LIMIT.toLocaleString()} emails.</p>
+      )}
 
       {/* White column filter bar */}
       <div className="flex items-center gap-1.5 border-b bg-card px-4 py-2">

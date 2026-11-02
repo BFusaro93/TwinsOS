@@ -14,11 +14,17 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePendingSequenceApprovals, useDecideSequenceApproval } from "@/lib/hooks/use-sequence-approvals";
 import { toast } from "sonner";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useCurrentUserStore } from "@/stores";
 
 export function PendingApprovalsButton() {
   const [open, setOpen] = useState(false);
   const { data: approvals } = usePendingSequenceApprovals();
   const decide = useDecideSequenceApproval();
+  // Same rule as the approvals route: admin/manager, or the automation create/modify key.
+  const { can, isLoading: permsLoading } = usePermissions();
+  const { currentUser } = useCurrentUserStore();
+  const allowed = currentUser.role === "admin" || currentUser.role === "manager" || can("automation_create_modify");
 
   const count = approvals?.length ?? 0;
 
@@ -32,6 +38,8 @@ export function PendingApprovalsButton() {
       toast.error(err instanceof Error ? err.message : "Failed to record decision");
     }
   }
+
+  if (permsLoading || !allowed) return null;
 
   return (
     <>

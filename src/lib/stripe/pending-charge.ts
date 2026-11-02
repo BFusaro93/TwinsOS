@@ -29,6 +29,9 @@ function methodLabel(paymentIntent: Stripe.PaymentIntent): string {
 export interface MarkPendingChargeArgs {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: SupabaseClient<any>;
+  /** The org verified to own the connected account: invoice ids come from intent metadata,
+   *  which a Standard account owner can forge, so the marker never crosses orgs. */
+  orgId: string;
   paymentIntent: Stripe.PaymentIntent;
   /** Amount pending per invoice, in cents. A combined charge splits across
    * several invoices, so each row records only its own share. */
@@ -44,6 +47,7 @@ export interface MarkPendingChargeArgs {
  * guard refuses the second charge. */
 export async function markInvoicesPendingCharge({
   db,
+  orgId,
   paymentIntent,
   amountsByInvoiceId,
 }: MarkPendingChargeArgs): Promise<void> {
@@ -61,7 +65,8 @@ export async function markInvoicesPendingCharge({
         pending_payment_method: method,
         pending_payment_at: at,
       })
-      .eq("id", invoiceId);
+      .eq("id", invoiceId)
+      .eq("org_id", orgId);
     if (error) {
       log.error("failed to mark invoice as having a payment in flight", {
         error,

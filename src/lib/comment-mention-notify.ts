@@ -29,10 +29,13 @@ export async function notifyMentions(
   if (!recipientIds.length) return;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // Same org, still active: a departed employee's mailbox must not get mention emails.
   const { data: recipients } = await supabase
     .from("profiles")
     .select("id, email, name, notification_prefs")
-    .in("id", recipientIds);
+    .in("id", recipientIds)
+    .eq("org_id", orgId)
+    .neq("status", "inactive");
   if (!recipients?.length) return;
 
   const plainBody = stripMentionTokens(commentBody);

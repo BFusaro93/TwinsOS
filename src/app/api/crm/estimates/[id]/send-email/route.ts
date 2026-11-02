@@ -5,7 +5,7 @@ import { Resend } from "resend";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { EstimateDocument } from "@/components/crm/estimates/pdf/EstimateDocument";
-import { PRINTED_SUBITEM_SELECT, pickPrintedSubitems } from "@/lib/estimates/printed-subitems";
+import { PRINTED_SUBITEM_SELECT, pickPrintedSubitems, sumSubitemTotals } from "@/lib/estimates/printed-subitems";
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { complexityFactor } from "@/lib/estimate-calc";
@@ -144,6 +144,31 @@ export async function POST(
       },
       { status: 409 }
     );
+  }
+
+  // An approval covers the amount that was approved. If the estimate has grown since (lines
+  // added after approval), it has to go through approval again before it reaches the client.
+  if (est.approval_status === "approved") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: approvedRows } = await (supabase as any)
+      .from("approval_requests")
+      .select("entity_total_cents")
+      .eq("entity_id", estimateId)
+      .eq("status", "approved")
+      .eq("archived", false);
+    const approvedTotals = ((approvedRows ?? []) as { entity_total_cents: number | null }[])
+      .map((r) => r.entity_total_cents)
+      .filter((n): n is number => typeof n === "number");
+    const approvedTotal = approvedTotals.length ? Math.max(...approvedTotals) : null;
+    if (approvedTotal != null && (est.total_cents ?? 0) > approvedTotal) {
+      return NextResponse.json(
+        {
+          error: `This estimate was approved at $${(approvedTotal / 100).toFixed(2)} and now totals $${((est.total_cents ?? 0) / 100).toFixed(2)}. Resubmit it for approval before sending.`,
+          code: "reapproval_required",
+        },
+        { status: 409 }
+      );
+    }
   }
 
   // Only a draft/quote/sent estimate is (re)opened for acceptance by a send.
@@ -313,6 +338,8 @@ export async function POST(
       totalCents: li.total_cents ?? 0,
       tier: li.tier ?? null,
       subitems: pickPrintedSubitems(li.estimate_line_item_subitems),
+      discountCents: li.discount_cents ?? 0,
+      subitemTotalCents: sumSubitemTotals(li.estimate_line_item_subitems),
     }));
 
   const installmentSummary = computeInstallmentSummary(

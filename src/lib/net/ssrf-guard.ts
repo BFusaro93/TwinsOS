@@ -94,7 +94,7 @@ function isPrivateOrReservedIpv6(address: string): boolean {
  * to exactly the address validated here, a DNS record flipped after
  * assertPublicHttpsUrl() (rebinding) can't reach an internal host.
  */
-const publicOnlyLookup: LookupFunction = (hostname, options, callback) => {
+export const publicOnlyLookup: LookupFunction = (hostname, options, callback) => {
   lookupCb(hostname, { ...options, all: true }, (err, addresses) => {
     if (err) return callback(err, "", 0);
     const list = addresses as unknown as LookupAddress[];
@@ -147,5 +147,59 @@ export async function postJsonToPublicUrl(
     req.on("timeout", () => req.destroy(new Error("request timed out")));
     req.on("error", (err) => resolve({ ok: false, status: 0, error: err.message }));
     req.end(body);
+  });
+}
+
+/**
+ * GETs a user-supplied https URL with the same end-to-end protection as postJsonToPublicUrl:
+ * validated URL, connection pinned to a re-validated public address (no DNS-rebinding window
+ * between the check and the fetch), no redirects, and a hard size cap enforced while the body
+ * streams in. Returns null on any refusal, non-2xx status, timeout or oversize body.
+ */
+export async function getPublicUrlBytes(
+  rawUrl: string,
+  opts: { maxBytes: number; timeoutMs?: number }
+): Promise<Buffer | null> {
+  const safety = await assertPublicHttpsUrl(rawUrl);
+  if (!safety.ok) return null;
+  const url = new URL(rawUrl);
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (value: Buffer | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const req = httpsRequest(
+      url,
+      { method: "GET", lookup: publicOnlyLookup, timeout: opts.timeoutMs ?? 8_000 },
+      (res) => {
+        const status = res.statusCode ?? 0;
+        if (status < 200 || status >= 300) {
+          res.resume();
+          return done(null);
+        }
+        const declared = Number(res.headers["content-length"] ?? 0);
+        if (declared > opts.maxBytes) {
+          res.destroy();
+          return done(null);
+        }
+        const chunks: Buffer[] = [];
+        let size = 0;
+        res.on("data", (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > opts.maxBytes) {
+            res.destroy();
+            return done(null);
+          }
+          chunks.push(chunk);
+        });
+        res.on("end", () => done(Buffer.concat(chunks)));
+        res.on("error", () => done(null));
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("request timed out")));
+    req.on("error", () => done(null));
+    req.end();
   });
 }

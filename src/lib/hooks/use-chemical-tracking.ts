@@ -641,7 +641,8 @@ export function useChemicalJobAreaValue(
         supabase,
         areaFieldId ?? null,
         serviceId ? [serviceId] : [],
-        propertyId ? [propertyId] : []
+        propertyId ? [propertyId] : [],
+        propertyId ? null : (job.client_id ?? null)
       );
       return resolveArea({ propertyId, serviceId, treatedArea }) ?? null;
     },

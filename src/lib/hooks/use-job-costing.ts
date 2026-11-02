@@ -306,13 +306,22 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: estHeader } = await (supabase as any)
           .from("estimates")
-          .select("total_cents, total_budgeted_hours")
+          .select("total_cents, tax_cents, revenue_cents, gross_profit_cents, total_budgeted_hours")
           .eq("id", estimateId)
           .single();
 
+        // Pre-tax revenue: total_cents includes sales tax, which is not the job's money — gross
+        // profit and margin read high by the tax on every estimate-backed job, and jobs without
+        // an estimate (visit revenue, pre-tax) weren't comparable.
+        let headerCostCents: number | null = null;
         if (estHeader) {
-          estimatedTotalCents = estHeader.total_cents ?? 0;
+          estimatedTotalCents = estHeader.revenue_cents ?? Math.max(0, (estHeader.total_cents ?? 0) - (estHeader.tax_cents ?? 0));
           estimatedBudgetedHours = Number(estHeader.total_budgeted_hours ?? 0);
+          // The estimate's own cost base (lines + sub-items + equipment + direct costs), exactly
+          // what its gross profit was computed from.
+          if (estHeader.revenue_cents != null && estHeader.gross_profit_cents != null) {
+            headerCostCents = Math.max(0, estHeader.revenue_cents - estHeader.gross_profit_cents);
+          }
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -358,7 +367,9 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
           (s: number, d: any) => s + (d.total_cents ?? 0),
           0
         );
-        estimatedCostCents = laborCostCents + directCostCents;
+        // Prefer the estimate's own cost base: summing lines + direct costs left out equipment and
+        // sub-item costs, so machine-heavy jobs showed less cost than the estimate itself.
+        estimatedCostCents = headerCostCents ?? laborCostCents + directCostCents;
       }
 
       // Without a source estimate (recurring / one-time jobs), the budget and
@@ -382,7 +393,19 @@ export function useJobCosting(jobId: string, estimateId?: string | null): {
         : 0;
       const targetOverUnderCents = actualRevPerManHrCents - targetRateCentsPerHr;
       const actualLaborCostCents: number = workedLaborCents;
-      const actualMaterialCostCents: number = jobRow.actual_material_cost_cents ?? 0;
+      // Catalog products the crew recorded as used (crm_job_products) are material cost too;
+      // only crm_job_materials fed actual_material_cost_cents, so mulch / fert used from the
+      // catalog showed $0 materials and an inflated margin.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: usedProducts } = await (supabase as any)
+        .from("crm_job_products")
+        .select("qty, unit_cost_cents")
+        .eq("job_id", jobId)
+        .in("status", ["used", "used_no_invoice", "invoiced"])
+        .is("deleted_at", null);
+      const productCostCents = ((usedProducts ?? []) as { qty: number | null; unit_cost_cents: number | null }[])
+        .reduce((s, p) => s + Math.round(Number(p.qty ?? 0) * (p.unit_cost_cents ?? 0)), 0);
+      const actualMaterialCostCents: number = (jobRow.actual_material_cost_cents ?? 0) + productCostCents;
 
       return {
         estimatedLines,

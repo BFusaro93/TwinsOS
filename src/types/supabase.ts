@@ -10918,6 +10918,7 @@ export type Database = {
       estimate_milestones: {
         Row: {
           amount_cents: number
+          amount_is_pretax: boolean
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -10936,6 +10937,7 @@ export type Database = {
         }
         Insert: {
           amount_cents?: number
+          amount_is_pretax?: boolean
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -10954,6 +10956,7 @@ export type Database = {
         }
         Update: {
           amount_cents?: number
+          amount_is_pretax?: boolean
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -17999,10 +18002,6 @@ export type Database = {
         Returns: string
       }
       crm_client_filter_options: { Args: never; Returns: Json }
-      crm_client_matches_filter: {
-        Args: { c: Database["public"]["Tables"]["clients"]["Row"]; f: Json }
-        Returns: boolean
-      }
       crm_commission_create_statement: {
         Args: { p_employee_id: string; p_from: string; p_to: string }
         Returns: string

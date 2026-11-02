@@ -59,6 +59,7 @@ export function InvoicingGuide() {
           <TOCLink href="#po-number">The “PO Number” field vs. the PO module</TOCLink>
           <TOCLink href="#online-payments">Online payments (Stripe)</TOCLink>
           <TOCLink href="#snow-invoicing">Snow invoicing</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -125,7 +126,9 @@ export function InvoicingGuide() {
             <strong>Coming over from another system?</strong> Go to <strong>Settings → Accounting → Invoice
             Numbering</strong>, enter the number the next invoice should have (for example 1048) and click{" "}
             <strong>Set number</strong>. New invoices continue from there; existing invoices keep their numbers.
-            Admins, managers and anyone with Landscapt settings access can change it.
+            Your estimates and tickets keep counting from their own highest numbers. Admins, managers and
+            anyone with the Accounting, CRM or Company settings permission can change it. Until you set a
+            number, an existing company&apos;s card shows &quot;assigned automatically&quot;.
           </li>
           <li>
             Landscapt never reuses a number an existing invoice already has, so if you pick a number inside
@@ -161,8 +164,9 @@ export function InvoicingGuide() {
           </li>
           <li>
             <strong>Tax-exempt clients.</strong> A client whose <strong>Client is taxable</strong> box is unchecked is
-            never taxed on invoices drafted from jobs or on snow invoices, whatever default rate is stored or
-            what the estimate carried.
+            never taxed on invoices drafted from jobs, snow invoices or project milestone invoices, whatever
+            default rate is stored or what the estimate carried. Opening and saving such an invoice keeps its
+            tax at 0%.
           </li>
           <li>
             <strong>Wording on the line.</strong> The invoice line uses, in order, the visit&apos;s invoice
@@ -767,6 +771,22 @@ export function InvoicingGuide() {
           See the <GuideLink className="underline" href="/settings/support/snow-guide">Snow Invoicing guide</GuideLink>{" "}
           for the full walkthrough — this page won&apos;t re-cover it.
         </p>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Deleting a synced invoice.</strong> An invoice that has been sent to QuickBooks can&apos;t be deleted. Void it instead so QuickBooks is updated too.
+          </li>
+          <li>
+            <strong>Consolidated due date.</strong> A consolidated invoice&apos;s due date is worked out from its own date and payment terms, so it isn&apos;t overdue the day it&apos;s created.
+          </li>
+          <li>
+            <strong>Charge from the list.</strong> Charge in the Invoices list asks for confirmation, showing the client, amount, invoice number and saved card. On a touch screen the row&apos;s Open, Charge and Void buttons sit in their own column instead of covering the row.
+          </li>
+          <li>
+            <strong>Won chargebacks.</strong> When you win a dispute on a payment that was split across several invoices, the money goes back onto those invoices (up to each one&apos;s balance), with anything left over as account credit.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );

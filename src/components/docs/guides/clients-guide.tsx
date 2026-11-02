@@ -81,6 +81,7 @@ export function ClientsGuide() {
           <TOCLink href="#contacts">Contacts</TOCLink>
           <TOCLink href="#timeline">Activity timeline</TOCLink>
           <TOCLink href="#account-statement">Account Statement</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -527,6 +528,40 @@ export function ClientsGuide() {
           for just the share applied to the child&apos;s invoices (net of any refund). The
           child&apos;s balance on the statement therefore matches what the child actually owes.
         </p>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Inactive and lost clients.</strong> Marking a client Inactive, Lost or Cancelled stops new recurring and package visits and stops their contract invoices. Reactivating resumes both.
+          </li>
+          <li>
+            <strong>Bringing back a lost lead.</strong> Reactivating a lead that was closed as lost counts as a conversion: Client Since is set, “Converted from lead to client” is logged and the Lead converted to client automation fires.
+          </li>
+          <li>
+            <strong>Changing the phone number clears text consent.</strong> Consent was given for the old number, so saving a different primary phone turns off “Opted in to text messages” and logs it, unless you tick the box yourself in the same save.
+          </li>
+          <li>
+            <strong>The timeline records more.</strong> Cancelling, closing as lost and reactivating (with the reason), adding or changing contacts and properties, removing tags, and uploading or deleting files all leave an entry on the client&apos;s activity timeline.
+          </li>
+          <li>
+            <strong>Statements to a bounced address.</strong> An account statement won&apos;t be emailed to an address that has hard-bounced. Enter a different address in the dialog to send it.
+          </li>
+          <li>
+            <strong>New Client.</strong> If Settings → Required Fields requires a source, New Client asks for it. A service address checked with the address suggestion is saved with its verified location.
+          </li>
+          <li>
+            <strong>Tags you type.</strong> A new tag typed on a client is also added to Settings → Tags (when your role can edit CRM settings), so you can filter and bulk-tag by it.
+          </li>
+          <li>
+            <strong>Custom fields that didn&apos;t load.</strong> If a client&apos;s custom fields fail to load, the Custom Fields tab says so and saving the client leaves them unchanged.
+          </li>
+          <li>
+            <strong>Link Parent.</strong> The Link Parent picker shows up to 50 clients until you search, and explains when a client can&apos;t be a sub-account because it already has sub-accounts of its own.
+          </li>
+          <li>
+            <strong>Chemical area without a property.</strong> For a client with no property records, chemical amounts use the measurement on the client&apos;s Details tab (for example Turf Sq. Ft.).
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );

@@ -4,7 +4,10 @@ import type { Database } from "@/types/supabase";
 import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet } from "@/lib/automations/sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone, shiftYmd } from "@/lib/time/zone";
-import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+// Loops every org; give it room before the default function limit.
+export const maxDuration = 300;
 
 /**
  * GET  /api/crm/estimates/automation-date-triggers — called by Vercel Cron
@@ -45,7 +48,7 @@ async function handleRun(request: Request) {
     .in("trigger_type", ["estimate_expiring", "estimate_no_response"]);
 
   let enrolled = 0;
-  const orgCanceled = createOrgCanceledResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase);
 
   for (const trigger of triggers ?? []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -71,29 +74,34 @@ async function handleRun(request: Request) {
       // hour). The query is already per-org, so resolve the day directly
       // rather than over-fetching and re-filtering.
       const orgToday = todayInZone(await getOrgTimeZone(supabase, orgId));
-      const { data } = await supabase
-        .from("estimates")
-        .select("id, client_id")
-        .eq("org_id", orgId)
-        .in("stage", ["sent", "quote"])
-        .is("deleted_at", null)
-        .not("valid_until_date", "is", null)
-        .gte("valid_until_date", orgToday)
-        .lte("valid_until_date", shiftYmd(orgToday, days));
-      matches = data ?? [];
+      // Paged: a single select stops at 1,000 rows in arbitrary order.
+      matches = await fetchAllRows<{ id: string; client_id: string }>(() =>
+        supabase
+          .from("estimates")
+          .select("id, client_id")
+          .eq("org_id", orgId)
+          .in("stage", ["sent", "quote"])
+          .is("deleted_at", null)
+          .not("valid_until_date", "is", null)
+          .gte("valid_until_date", orgToday)
+          .lte("valid_until_date", shiftYmd(orgToday, days))
+          .order("id"));
     } else {
       // estimate_no_response
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - days);
-      const { data } = await supabase
-        .from("estimates")
-        .select("id, client_id")
-        .eq("org_id", orgId)
-        .in("stage", ["sent", "quote"])
-        .is("deleted_at", null)
-        .not("sent_at", "is", null)
-        .lte("sent_at", cutoff.toISOString());
-      matches = data ?? [];
+      // Paged: this has no lower bound (every open estimate ever sent), and a single select
+      // was silently cut at 1,000 rows in arbitrary order.
+      matches = await fetchAllRows<{ id: string; client_id: string }>(() =>
+        supabase
+          .from("estimates")
+          .select("id, client_id")
+          .eq("org_id", orgId)
+          .in("stage", ["sent", "quote"])
+          .is("deleted_at", null)
+          .not("sent_at", "is", null)
+          .lte("sent_at", cutoff.toISOString())
+          .order("id"));
     }
 
     for (const est of matches) {

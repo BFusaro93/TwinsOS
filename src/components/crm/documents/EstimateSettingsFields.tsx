@@ -72,6 +72,12 @@ function DocumentPicker({
         </SelectContent>
       </Select>
       <p className="text-[11px] text-muted-foreground">{hint}</p>
+      {stale && (
+        <p className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+          The linked document was deleted or deactivated, so the standard email goes out instead. Choose another document.
+        </p>
+      )}
       {lacksLink && (
         <p className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
           <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />

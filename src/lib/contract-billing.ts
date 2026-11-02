@@ -259,8 +259,19 @@ export function isBillingDueOn(contract: BillingContractRow, today: Date): boole
     case "weekly":
     case "biweekly": {
       const step = frequency === "weekly" ? 7 : 14;
-      const elapsed = dayDiff(billingAnchor(contract, today), now);
-      return elapsed >= 0 && elapsed % step === 0;
+      const anchor = billingAnchor(contract, today);
+      const elapsed = dayDiff(anchor, now);
+      if (elapsed < 0) return false;
+      if (elapsed % step === 0) return true;
+      // Catch-up, as for the month-anchored cadences: a run missed on the period's first day
+      // (outage, timeout, skipped invocation) never matched again, so that week was silently
+      // never billed. Any later day in the same period is due while last_billed_date shows the
+      // period unbilled; callers still run their live-invoice-in-period check, and the
+      // (contract_id, invoice_date) unique index backstops a race.
+      const periodStart = addDays(anchor, Math.floor(elapsed / step) * step);
+      const last = parseYmd(contract.last_billed_date);
+      if (last && dayDiff(periodStart, last) >= 0) return false;
+      return true;
     }
 
     case "one_time":

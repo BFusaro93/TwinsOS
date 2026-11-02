@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
 import { Plus, X, Route as RouteIcon, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 
 function ManageStopsDialog({
@@ -137,6 +138,7 @@ export function SnowRoutesEditor() {
   const createRoute = useCreateSnowRoute();
   const updateRoute = useUpdateSnowRoute();
   const deleteRoute = useDeleteSnowRoute();
+  const [confirm, confirmDialog] = useConfirm();
 
   const [newName, setNewName] = useState("");
   const [stopsRouteId, setStopsRouteId] = useState<string | null>(null);
@@ -155,9 +157,10 @@ export function SnowRoutesEditor() {
 
   return (
     <div className="space-y-1 px-1">
+      {confirmDialog}
       {routes.length === 0 && <p className="py-3 text-sm text-slate-400 dark:text-neutral-500">No Master Routes yet. Add one below.</p>}
       {routes.map((route) => (
-        <div key={route.id} className="flex items-center gap-2 py-1.5 border-b last:border-b-0">
+        <div key={route.id} className="flex flex-wrap items-center gap-2 py-1.5 border-b last:border-b-0">
           <RouteIcon className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-neutral-500" />
           <span className="flex-1 text-sm font-medium text-slate-700 dark:text-neutral-300 truncate">{route.name}</span>
           <span className="text-xs text-slate-400 dark:text-neutral-500">{route.stopCount ?? 0} stop{route.stopCount === 1 ? "" : "s"}</span>
@@ -179,9 +182,18 @@ export function SnowRoutesEditor() {
             Stops…
           </Button>
           <button
-            onClick={() => deleteRoute.mutate(route.id)}
+            onClick={async () => {
+              const ok = await confirm({
+                title: `Delete route "${route.name}"?`,
+                description: "Its saved stop order is removed. Snow jobs on this route are not deleted.",
+                confirmLabel: "Delete",
+                destructive: true,
+              });
+              if (ok) deleteRoute.mutate(route.id);
+            }}
             className="text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
             title="Delete route"
+            aria-label={`Delete route ${route.name}`}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { format, parseISO } from "date-fns";
 import { Loader2, Clock, LogIn, LogOut, UserPlus } from "lucide-react";
 import {
   Dialog,
@@ -13,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCrewDay, useCrewDayAction, useSetCrewMemberAbsent } from "@/lib/hooks/use-crew-app";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 
 interface CrewInfo {
   crewId: string;
@@ -37,7 +37,10 @@ interface EditCrewDialogProps {
  * whoever leaves early.
  */
 export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCrewDialogProps) {
-  const { data: day } = useCrewDay();
+  const { data: day, isSuccess: dayLoaded } = useCrewDay();
+  const { format: orgFormat } = useOrgDates();
+  // The org's wall clock, not the phone's.
+  const clock = (iso: string) => orgFormat(iso, { hour: "numeric", minute: "2-digit" });
   const dayAction = useCrewDayAction();
   const setAbsent = useSetCrewMemberAbsent();
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -50,6 +53,8 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
     setLoadingId(memberId);
     try {
       await fn();
+    } catch {
+      /* the hook's onError already told the crew what went wrong */
     } finally {
       setLoadingId(null);
     }
@@ -71,6 +76,11 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
         </DialogHeader>
 
         <div className="space-y-2 mt-2">
+          {dayLoaded && members.length === 0 && available.length === 0 && (
+            <p className="rounded-lg bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+              Nobody is on this crew yet. Ask the office to add the people who work on it under Team → Crews.
+            </p>
+          )}
           {members.map(member => {
             const onClock = !!member.startedAt && !member.endedAt;
             const done = !!member.startedAt && !!member.endedAt;
@@ -90,8 +100,8 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
                   {member.startedAt && (
                     <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      In: {format(parseISO(member.startedAt), "h:mm a")}
-                      {member.endedAt && ` · Out: ${format(parseISO(member.endedAt), "h:mm a")}`}
+                      In: {clock(member.startedAt)}
+                      {member.endedAt && ` · Out: ${clock(member.endedAt)}`}
                     </p>
                   )}
                   {member.absent && !member.startedAt && (
@@ -104,7 +114,7 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
                     <Button
                       size="sm"
                       variant="outline"
-                      className="gap-1 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 text-xs h-8"
+                      className="gap-1 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 text-xs min-h-11"
                       onClick={() => run(member.id, () => dayAction.mutateAsync({ action: "member_out", crewMemberId: member.id, visitId }))}
                       disabled={isLoading}
                     >
@@ -117,7 +127,7 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="text-xs h-8 text-muted-foreground"
+                          className="text-xs min-h-11 text-muted-foreground"
                           onClick={() => run(member.id, () => setAbsent.mutateAsync({ crewMemberId: member.id, absent: true }))}
                           disabled={isLoading}
                         >
@@ -127,7 +137,7 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
                       <Button
                         size="sm"
                         variant="outline"
-                        className="gap-1 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40 text-xs h-8"
+                        className="gap-1 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40 text-xs min-h-11"
                         onClick={() => run(member.id, () => dayAction.mutateAsync({ action: "member_in", crewMemberId: member.id, visitId }))}
                         disabled={isLoading}
                       >

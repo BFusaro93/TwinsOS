@@ -545,8 +545,8 @@ export function useDeleteTicket() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
     },
-    onError: () => {
-      toast.error("Failed to delete ticket");
+    onError: (err) => {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to delete ticket");
     },
   });
 }

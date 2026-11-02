@@ -4,7 +4,7 @@ import { pollPendingRegistration } from "@/lib/twilio/provisioning";
 
 /**
  * POST /api/sms-onboarding/check-status — lets an org admin manually poll
- * Twilio right now instead of waiting for the hourly /api/cron/twilio-status-check
+ * Twilio right now instead of waiting for the daily (13:00 UTC) /api/cron/twilio-status-check
  * run, for the "did it get approved yet" moment right after a submission.
  */
 export async function POST() {

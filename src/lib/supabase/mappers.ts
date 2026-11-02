@@ -321,6 +321,7 @@ export function mapApprovalRequest(row: ApprovalRequestRow): ApprovalRequest {
     status: row.status as ApprovalRequestStatus,
     decidedAt: row.decided_at,
     comment: row.comment,
+    entityTotalCents: row.entity_total_cents ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

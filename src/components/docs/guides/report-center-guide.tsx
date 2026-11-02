@@ -390,7 +390,8 @@ export function ReportCenterGuide() {
           </li>
           <li>
             <strong>Correct any day.</strong> In the detail, change the <strong>clock-in and
-            clock-out times</strong>, the <strong>unpaid break minutes</strong>, or type the hours
+            clock-out times</strong>, the <strong>unpaid break minutes</strong> (the number you enter is the
+            day&apos;s whole unpaid break, replacing the recorded breaks rather than adding to them), or type the hours
             directly to override them; add <strong>Extra</strong> hours (shop time, PTO, anything not
             on the clock); write a <strong>note</strong> saying why; and click <strong>Save</strong>. An
             end time earlier than the start is read as the next morning, for storm work past

@@ -80,7 +80,10 @@ function usePermissionsQuery() {
   return useQuery({
     queryKey: ["crm-permissions"],
     queryFn: () => fetchUserPermissions(queryClient),
-    staleTime: 5 * 60 * 1000, // cache 5 min — permissions don't change often
+    // A role change used to take up to 5 minutes to reach an open tab: revoked buttons kept
+    // showing (and failing) and newly granted ones stayed hidden. Short cache + refetch on focus.
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 }
 

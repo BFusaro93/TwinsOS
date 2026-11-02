@@ -37,3 +37,10 @@ export function pickPrintedSubitems(rows: unknown): PrintedSubitem[] {
       totalCents: s.total_cents ?? 0,
     }));
 }
+
+/** Revenue of every live sub-item on a line, printed or not — the estimate total includes
+ *  them all, so a collapsed package row must too. */
+export function sumSubitemTotals(rows: unknown): number {
+  if (!Array.isArray(rows)) return 0;
+  return (rows as SubitemRow[]).filter((s) => !s.deleted_at).reduce((sum, s) => sum + (s.total_cents ?? 0), 0);
+}

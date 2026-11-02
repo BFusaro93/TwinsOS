@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, parseISO, differenceInMinutes } from "date-fns";
 import { MapPin, Clock, Users, Sun, Moon, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
-import { useMyCrewStops, useStopPartnerCrews, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive, useCrewDay, useCrewDayAction } from "@/lib/hooks/use-crew-app";
+import { useMyCrewStops, useStopPartnerCrews, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive, useCrewDay, useCrewDayAction, useCrewTap } from "@/lib/hooks/use-crew-app";
 import { useCurrentUserStore } from "@/stores";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { EditCrewDialog } from "@/components/crm/crew/EditCrewDialog";
@@ -69,13 +69,18 @@ function StopCard({ stop, partners, onClick }: { stop: Stop; partners: string[];
             </p>
           )}
           {stop.address && (
+            // max-w-full/min-w-0: a flex button sizes to its content, so without them a long
+            // address ran past the phone's edge and under the status pill.
             <button
-              onClick={(e) => { e.stopPropagation(); openInMaps(stop.address); }}
-              className="text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5 truncate"
+              onClick={(e) => { e.stopPropagation(); openInMaps(stop.fullAddress || stop.address); }}
+              className="text-sm text-blue-600 dark:text-blue-400 flex max-w-full min-w-0 items-center gap-1 mt-0.5 py-1 text-left"
             >
               <MapPin className="h-3 w-3 shrink-0" />
               <span className="truncate">{stop.address}</span>
             </button>
+          )}
+          {stop.gateCode && (
+            <p className="mt-0.5 text-xs font-semibold text-slate-700 dark:text-neutral-300">Gate code: <span className="font-mono">{stop.gateCode}</span></p>
           )}
           {services && (
             <p className="text-sm text-slate-600 dark:text-neutral-400 mt-1 truncate">{services}</p>
@@ -118,21 +123,28 @@ export default function CrewSchedulePage() {
   // The ORG's calendar day, not the tablet's — the same day /api/crm/crew/visits
   // and the dispatch board use. A device clock in another zone (or just past
   // midnight UTC-wise) used to open on a different day's route.
-  const { today: orgToday } = useOrgDates();
+  const { today: orgToday, format: orgFormat } = useOrgDates();
   const today = orgToday();
-  const { data: stops = [], isLoading } = useMyCrewStops(today, true);
+  // Times read on the org's wall clock, not the phone's.
+  const clock = (iso: string) => orgFormat(iso, { hour: "numeric", minute: "2-digit" });
+  const tap = useCrewTap();
+  const { data: stops = [], isLoading, isError: stopsError, error: stopsErr, refetch: refetchStops } = useMyCrewStops(today, true);
   const { data: partnerCrews } = useStopPartnerCrews(stops.flatMap((s) => s.visits));
   const { data: crewInfo } = useMyCrewInfo();
   const { data: drive } = useCrewDriveToday(today);
   const startDrive = useStartDrive();
   const endDrive = useEndDrive();
-  const { data: crewDay } = useCrewDay();
+  const { data: crewDay, isSuccess: crewDayLoaded } = useCrewDay();
   const dayAction = useCrewDayAction();
   const { currentUser, currentUserLoaded } = useCurrentUserStore();
   const [editCrewOpen, setEditCrewOpen] = useState(false);
 
   const completed = stops.filter(s => s.derivedStatus === "completed").length;
+  // Skipped and cancelled stops are finished too: counting them as open meant a finished day
+  // read "7 of 8 complete · 88%" forever.
+  const resolved  = stops.filter(s => s.derivedStatus === "completed" || s.derivedStatus === "skipped" || s.derivedStatus === "cancelled").length;
   const total     = stops.length;
+  const allDone   = total > 0 && resolved === total;
   const anyJobActive = stops.some(s => s.derivedStatus === "in_progress");
   // The paid day, shop to shop: started once the leader taps Start Day, ended
   // when no one is still on the clock after End Day.
@@ -145,7 +157,7 @@ export default function CrewSchedulePage() {
   return (
     <div className="flex flex-col min-h-dvh">
       {/* Header */}
-      <div className="bg-card border-b border-border px-4 pt-safe-top pb-3 sticky top-0 z-10">
+      <div className="bg-card border-b border-border px-4 pt-[env(safe-area-inset-top)] pb-3 sticky top-0 z-10">
         {/* Top row: way back to the crew home page + which crew login this
             tablet is signed in as (shared crew accounts — easy to grab the
             wrong tablet, so make it obvious). */}
@@ -176,28 +188,30 @@ export default function CrewSchedulePage() {
               {crewInfo?.crewName ?? "My Schedule"}
             </h1>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => setEditCrewOpen(true)}
-          >
-            <Users className="h-4 w-4" />
-            Edit Crew
-          </Button>
+          {/* The dialog only exists for a linked crew; the button did nothing otherwise. */}
+          {crewInfo && (
+            <Button
+              variant="outline"
+              className="gap-1.5 min-h-11"
+              onClick={() => setEditCrewOpen(true)}
+            >
+              <Users className="h-4 w-4" />
+              Edit Crew
+            </Button>
+          )}
         </div>
 
         {/* Progress bar */}
         {total > 0 && (
           <div className="mt-3">
             <div className="flex justify-between text-xs text-muted-foreground mb-1">
-              <span>{completed} of {total} complete</span>
-              <span>{Math.round((completed / total) * 100)}%</span>
+              <span>{resolved} of {total} done{resolved > completed ? ` (${resolved - completed} skipped)` : ""}</span>
+              <span>{Math.round((resolved / total) * 100)}%</span>
             </div>
             <div className="h-1.5 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-green-500 rounded-full transition-all"
-                style={{ width: `${(completed / total) * 100}%` }}
+                style={{ width: `${(resolved / total) * 100}%` }}
               />
             </div>
           </div>
@@ -212,12 +226,13 @@ export default function CrewSchedulePage() {
             <Button
               className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white h-12 text-base"
               onClick={() => dayAction.mutate({ action: "start_day" })}
-              disabled={dayAction.isPending || dayMembers.length === 0}
+              disabled={dayAction.isPending || !crewDayLoaded || dayMembers.length === 0}
             >
               {dayAction.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sun className="h-5 w-5" />}
               Start Day
             </Button>
-            {dayMembers.length === 0 && (
+            {/* Only once the roster has actually loaded — it flashed on every load before. */}
+            {crewDayLoaded && dayMembers.length === 0 && (
               <p className="mt-2 text-center text-xs text-amber-700 dark:text-amber-400">
                 No one is on your crew today. Tap Edit Crew to add the people working, or ask the office to add them under Team → Crews.
               </p>
@@ -226,7 +241,7 @@ export default function CrewSchedulePage() {
         ) : dayOpen ? (
           <div className="bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-green-800 dark:text-green-300">Day started {format(parseISO(dayStartedAt), "h:mm a")}</p>
+              <p className="text-sm font-medium text-green-800 dark:text-green-300">Day started {clock(dayStartedAt)}</p>
               <p className="text-xs text-green-700 dark:text-green-400">
                 {dayMembers.filter(m => m.startedAt && !m.endedAt).length} on the clock
               </p>
@@ -263,7 +278,7 @@ export default function CrewSchedulePage() {
                 Driving
               </p>
               <p className="text-xs text-blue-600 dark:text-blue-400">
-                Since {format(parseISO(drive.openSegment.startedAt), "h:mm a")}
+                Since {clock(drive.openSegment.startedAt)}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -273,7 +288,7 @@ export default function CrewSchedulePage() {
               <Button
                 size="sm"
                 className="bg-blue-600 hover:bg-blue-700 gap-1.5"
-                onClick={() => endDrive.mutate()}
+                onClick={() => endDrive.mutate(tap())}
                 disabled={endDrive.isPending}
               >
                 {endDrive.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}
@@ -287,14 +302,16 @@ export default function CrewSchedulePage() {
               variant="outline"
               size="sm"
               className="gap-1.5 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40"
-              onClick={() => startDrive.mutate()}
+              onClick={() => startDrive.mutate(tap())}
               disabled={startDrive.isPending || anyJobActive}
-              title={anyJobActive ? "Stop the active job before starting drive time" : undefined}
             >
               {startDrive.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Car className="h-4 w-4" />}
               Start Drive
             </Button>
-            {!!drive?.totalMinutes && (
+            {/* A title tooltip never shows on a phone — say it. */}
+            {anyJobActive ? (
+              <p className="text-xs text-slate-500 dark:text-neutral-400 text-right">Stop the active job to start drive time</p>
+            ) : !!drive?.totalMinutes && (
               <p className="text-xs text-slate-400 dark:text-neutral-500">Drive today: {drive.totalMinutes}m</p>
             )}
           </div>
@@ -311,7 +328,33 @@ export default function CrewSchedulePage() {
           </div>
         )}
 
-        {!isLoading && stops.length === 0 && (
+        {!isLoading && stopsError && (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <AlertCircle className="h-10 w-10 text-amber-500 mb-3" />
+            {/not authenticated|jwt|session|401/i.test(stopsErr instanceof Error ? stopsErr.message : String(stopsErr ?? "")) ? (
+              <>
+                <p className="font-medium text-slate-700 dark:text-neutral-300">You&apos;re signed out</p>
+                <p className="text-sm text-slate-500 dark:text-neutral-400 mt-1">Sign in again to see today&apos;s jobs.</p>
+                <Button className="mt-4 min-h-11" asChild><Link href="/login">Sign in</Link></Button>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-slate-700 dark:text-neutral-300">Couldn&apos;t load today&apos;s jobs</p>
+                <p className="text-sm text-slate-500 dark:text-neutral-400 mt-1">Check your signal, then try again. Your jobs are still scheduled.</p>
+                <Button variant="outline" className="mt-4 min-h-11" onClick={() => void refetchStops()}>Try again</Button>
+              </>
+            )}
+          </div>
+        )}
+
+        {allDone && (
+          <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 px-4 py-3 text-center">
+            <p className="font-medium text-green-800 dark:text-green-300">All stops done for today</p>
+            {dayOpen && <p className="text-sm text-green-700 dark:text-green-400 mt-0.5">Tap End Day when the crew is back at the shop.</p>}
+          </div>
+        )}
+
+        {!isLoading && !stopsError && stops.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <CheckCircle2 className="h-12 w-12 text-slate-300 dark:text-neutral-500 mb-3" />
             {crewInfo === null ? (

@@ -215,6 +215,11 @@ function QuickAddMenu() {
   )
     .filter((item) => item.quickAdd !== "client" || can("client_add"))
     .filter((item) => item.quickAdd !== "job" || can("job_add"))
+    // Same keys the pages use; these dialogs have no gate of their own.
+    .filter((item) => item.quickAdd !== "estimate" || can("estimate_add"))
+    .filter((item) => item.quickAdd !== "invoice" || can("acct_add_modify_invoices"))
+    .filter((item) => item.quickAdd !== "payment" || can("acct_add_modify_payments") || can("acct_add_modify_credits"))
+    .filter((item) => item.quickAdd !== "ticket" || can("tickets_view_modify") || can("tickets_add_notes") || can("tickets_add_calls"))
     // Limited Equipt app roles (viewer / requestor / purchaser) only see the
     // Equipt records they can actually create; Landscapt items follow the
     // Landscapt role.

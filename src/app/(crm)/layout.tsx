@@ -113,7 +113,8 @@ export default function CRMLayout({ children }: { children: React.ReactNode }) {
           <TopBar sidebarToggle={!isCrewApp} />
           <QuickAddOverlay />
         </div>
-        <main className="flex-1 overflow-auto p-4 md:p-6 print:overflow-visible print:p-0">{children}</main>
+        {/* The crew app pads its own pages; the office padding on top of it left ~311px for content on a 375px phone. */}
+        <main className={isCrewApp ? "flex-1 overflow-auto print:overflow-visible" : "flex-1 overflow-auto p-4 md:p-6 print:overflow-visible print:p-0"}>{children}</main>
       </div>
     </div>
   );

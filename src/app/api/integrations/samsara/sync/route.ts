@@ -93,7 +93,13 @@ async function handleSync(request: Request) {
   for (const integration of integrations) {
     // Canceled orgs get no background sync (cron or manual), same as the other cron routes.
     if (await orgCanceled(integration.org_id as string)) continue;
-    const orgResult = await syncOrg(adminClient, integration.org_id as string, integration.api_key as string);
+    // One org's unexpected throw must not stop every other org's sync.
+    let orgResult: Awaited<ReturnType<typeof syncOrg>>;
+    try {
+      orgResult = await syncOrg(adminClient, integration.org_id as string, integration.api_key as string);
+    } catch (err) {
+      orgResult = { fetched: 0, matched: 0, readings: 0, errors: 1, detail: [`sync failed: ${err instanceof Error ? err.message : String(err)}`] };
+    }
     results.push({ orgId: integration.org_id, ...orgResult });
 
     // Record sync timestamp and status on the integration row.

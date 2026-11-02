@@ -44,8 +44,10 @@ export default async function EstimatesPage() {
 
   // PortalShell only hides the nav link when disabled — that's not
   // enforcement, so a direct/bookmarked visit must also be blocked here.
+  // Service client: portal users have no RLS path to client_portal_settings, so the
+  // session read always came back null and the block never applied.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: settings } = await (supabase as any)
+  const { data: settings } = await (createServiceClient() as any)
     .from("client_portal_settings")
     .select("allow_estimates")
     .eq("org_id", ctx.orgId)

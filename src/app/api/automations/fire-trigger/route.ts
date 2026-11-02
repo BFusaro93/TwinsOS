@@ -3,6 +3,8 @@ import { createClient as createServerClient, createServiceClient } from "@/lib/s
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
 import { logger } from "@/lib/logger";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import type { TriggerType } from "@/types/crm-automations";
 
 /**
@@ -123,6 +125,9 @@ export async function POST(req: NextRequest) {
   if (profile.role && BLOCKED_ROLES.has(profile.role)) {
     return NextResponse.json({ error: "Your role cannot fire automation triggers" }, { status: 403 });
   }
+  // Staff impersonating an org act in that org; comparing against their own profile org made
+  // every client look foreign, so triggers silently never fired while impersonating.
+  const orgId: string = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as unknown as any;
@@ -131,7 +136,7 @@ export async function POST(req: NextRequest) {
   // this route runs with the caller's own RLS-scoped session, but org_id is
   // still worth double-checking explicitly rather than trusting the body.
   const { data: client } = await db.from("clients").select("org_id").eq("id", body.clientId).maybeSingle();
-  if (!client || client.org_id !== profile.org_id) {
+  if (!client || client.org_id !== orgId) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
   }
 
@@ -139,20 +144,20 @@ export async function POST(req: NextRequest) {
   if (body.estimateId) {
     const { data: estimate } = await db.from("estimates").select("org_id, client_id").eq("id", body.estimateId).maybeSingle();
     // A record that belongs to a different client must not be used as this client's context.
-    if (!estimate || estimate.org_id !== profile.org_id || (estimate.client_id && estimate.client_id !== body.clientId)) {
+    if (!estimate || estimate.org_id !== orgId || (estimate.client_id && estimate.client_id !== body.clientId)) {
       return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
     }
   }
   if (body.ticketId) {
     const { data: ticket } = await db.from("crm_tickets").select("org_id, client_id").eq("id", body.ticketId).maybeSingle();
     // A record that belongs to a different client must not be used as this client's context.
-    if (!ticket || ticket.org_id !== profile.org_id || (ticket.client_id && ticket.client_id !== body.clientId)) {
+    if (!ticket || ticket.org_id !== orgId || (ticket.client_id && ticket.client_id !== body.clientId)) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
     }
   }
   if (body.invoiceId) {
     const { data: invoice } = await db.from("crm_invoices").select("org_id, client_id").eq("id", body.invoiceId).maybeSingle();
-    if (!invoice || invoice.org_id !== profile.org_id || (invoice.client_id && invoice.client_id !== body.clientId)) {
+    if (!invoice || invoice.org_id !== orgId || (invoice.client_id && invoice.client_id !== body.clientId)) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
   }
@@ -179,10 +184,33 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
+  } else {
+    // Triggers the record can't prove still need their subject to exist in this org, and a
+    // replay limit: each call can send the first step (an email/text) immediately.
+    const matchValues = Array.isArray(body.matchValues) ? body.matchValues.filter((v) => typeof v === "string") : [];
+    if (body.triggerType === "invoice_created" && !body.invoiceId) {
+      return NextResponse.json({ error: "invoiceId is required for invoice_created" }, { status: 400 });
+    }
+    if (body.triggerType === "package_created" && matchValues[0]) {
+      const { data: pkg } = await db.from("crm_packages").select("org_id").eq("id", matchValues[0]).maybeSingle();
+      if (!pkg || pkg.org_id !== orgId) return NextResponse.json({ error: "Package not found" }, { status: 404 });
+    }
+    if (body.triggerType === "contract_created" || body.triggerType === "contract_signed") {
+      let q = db.from("crm_contracts").select("id").eq("client_id", body.clientId).is("deleted_at", null).limit(1);
+      if (body.triggerType === "contract_signed") q = q.in("status", ["signed", "active"]);
+      const { data: contracts } = await q;
+      if (!contracts || contracts.length === 0) {
+        return NextResponse.json({ error: `Cannot fire ${body.triggerType}: the client has no such contract` }, { status: 409 });
+      }
+    }
+    const recordKey = body.invoiceId ?? body.estimateId ?? body.ticketId ?? matchValues[0] ?? body.clientId;
+    if (!(await checkAuthRateLimit(`fire:${user.id}:${body.triggerType}:${recordKey}`, 3, 600))) {
+      return NextResponse.json({ error: "This automation was just triggered for this record. Try again in a few minutes." }, { status: 429 });
+    }
   }
 
   const enrollmentIds = await fireSimpleTrigger(db, {
-    orgId: profile.org_id,
+    orgId: orgId,
     clientId: body.clientId,
     estimateId: body.estimateId ?? null,
     ticketId: body.ticketId ?? null,

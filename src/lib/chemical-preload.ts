@@ -150,7 +150,8 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
       supabase,
       settings.area_custom_field_id ?? null,
       serviceIds,
-      propertyId ? [propertyId] : []
+      propertyId ? [propertyId] : [],
+      propertyId ? null : (job.client_id ?? null)
     );
     for (const c of attached ?? []) {
       if (areaByProduct.has(c.product_id)) continue;

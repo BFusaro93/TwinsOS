@@ -11,16 +11,6 @@ import {
 import { useClientCount } from "@/lib/hooks/use-clients";
 import type { FilterRow } from "@/lib/client-filters";
 
-/** The status filter row behind each built-in campaign segment ("all" and
- *  "custom" have none). */
-function segmentFilters(segment: string): FilterRow[] {
-  const status =
-    segment === "active_clients" ? "active"
-    : segment === "leads" ? "lead"
-    : segment === "past_clients" ? "inactive,cancelled"
-    : null;
-  return status ? [{ id: "segment", field: "status", operator: "eq", value: status }] : [];
-}
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { renderBlocksToHtml, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-template-renderer";
 import { CampaignAudiencePicker } from "./CampaignAudiencePicker";
@@ -84,6 +74,20 @@ import { toast } from "sonner";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { formatInZone, instantToZoneWallClock } from "@/lib/time/zone";
 import { SearchInput } from "@/components/shared/SearchInput";
+
+/** The status filter row behind each built-in campaign segment (none for
+ *  "custom", which is a hand-picked list). All Clients = active + inactive,
+ *  matching send-campaign.ts. */
+function segmentFilters(segment: string): FilterRow[] {
+  if (segment === "custom") return [];
+  const status =
+    segment === "active_clients" ? "active"
+    : segment === "leads" ? "lead"
+    : segment === "past_clients" ? "inactive,cancelled"
+    : "active,inactive";
+  return [{ id: "segment", field: "status", operator: "eq", value: status }];
+}
+
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -304,7 +308,7 @@ function CampaignDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all_clients">All Clients</SelectItem>
+                  <SelectItem value="all_clients">All Clients (active + inactive)</SelectItem>
                   <SelectItem value="active_clients">Active Clients</SelectItem>
                   <SelectItem value="leads">Leads</SelectItem>
                   <SelectItem value="past_clients">Past Clients</SelectItem>
@@ -412,6 +416,9 @@ function CampaignDialog({
                 setForm((p) => ({ ...p, scheduledAt: e.target.value || null }))
               }
             />
+            <p className="text-xs text-muted-foreground">
+              Saving keeps the campaign as a draft. Use <span className="font-medium">Mark Scheduled</span> on the campaign row to arm it; scheduled sends go out at the top of the hour.
+            </p>
           </div>
         </div>
 

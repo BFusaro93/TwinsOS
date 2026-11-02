@@ -104,7 +104,13 @@ export async function POST(
   // damages sending-domain reputation, so it is blocked for transactional mail
   // too (see the Resend webhook that sets email_bounced_at). An explicit `to`
   // override is how staff send to a corrected address, so it is not blocked.
-  if (!(body.to && body.to.length > 0) && client.email_bounced_at) {
+  // The dialog always posts `to` pre-filled with the stored address, so only a genuinely
+  // different address counts as the override.
+  const storedEmails = new Set(
+    [client.primary_email as string | null, client.billing_email as string | null].filter((e): e is string => !!e).map((e) => e.trim().toLowerCase())
+  );
+  const toIsStored = !(body.to && body.to.length > 0) || body.to.some((e) => storedEmails.has(e.trim().toLowerCase()));
+  if (toIsStored && client.email_bounced_at) {
     return NextResponse.json({ error: "Client's email address has hard-bounced. Update it, or send to a different address." }, { status: 422 });
   }
 

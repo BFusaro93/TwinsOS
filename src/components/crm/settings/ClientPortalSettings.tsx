@@ -40,6 +40,8 @@ const DEFAULTS: PortalSettings = {
 export function ClientPortalTab() {
   const [form, setForm] = useState<PortalSettings>(DEFAULTS);
   const [loading, setLoading] = useState(true);
+  // A failed load left the form on DEFAULTS, and Save then overwrote the real settings.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Ticket categories defined in CRM
@@ -48,11 +50,12 @@ export function ClientPortalTab() {
 
   useEffect(() => {
     fetch("/api/portal/settings")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.settings) setForm({ ...DEFAULTS, ...d.settings });
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error((d as { error?: string }).error ?? `HTTP ${r.status}`);
+        if ((d as { settings?: Partial<PortalSettings> }).settings) setForm({ ...DEFAULTS, ...(d as { settings: Partial<PortalSettings> }).settings });
       })
-      .catch(() => {})
+      .catch((err) => setLoadError(err instanceof Error ? err.message : "Couldn't load portal settings"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -80,10 +83,14 @@ export function ClientPortalTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const err = (body as { error?: unknown }).error;
+        throw new Error(typeof err === "string" ? err : "Failed to save settings");
+      }
       toast.success("Portal settings saved");
-    } catch {
-      toast.error("Failed to save settings");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to save settings");
     } finally {
       setSaving(false);
     }
@@ -94,6 +101,15 @@ export function ClientPortalTab() {
       <div className="flex items-center gap-2 py-8 text-slate-400 dark:text-neutral-500">
         <Loader2 className="h-4 w-4 animate-spin" />
         <span className="text-sm">Loading portal settings…</span>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="max-w-2xl rounded-md border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+        Couldn&apos;t load the portal settings ({loadError}). Reload the page before making changes — saving now would
+        overwrite them with defaults.
       </div>
     );
   }

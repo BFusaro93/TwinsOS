@@ -8,7 +8,7 @@ import { EMAIL_FROM } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { logger } from "@/lib/logger";
 import { resolveReminderRecipients } from "@/lib/notifications/reminder-recipients";
-import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 
 const log = logger.child("contract-expiry-notify cron");
 
@@ -59,7 +59,10 @@ export async function GET(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: expiring } = await (supabase as any)
     .from("crm_contracts")
-    .select("id, org_id, title, end_date, sales_rep_id, client_id, clients(display_name)")
+    .select("id, org_id, title, end_date, sales_rep_id, client_id, clients!inner(display_name, deleted_at, status)")
+    // A deleted or off-service client's contract needs no renewal reminder.
+    .is("clients.deleted_at", null)
+    .not("clients.status", "in", "(cancelled,inactive,lost)")
     .gte("end_date", todayStr)
     .lte("end_date", windowEndStr)
     .eq("is_active", true)
@@ -76,7 +79,7 @@ export async function GET(request: Request) {
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   let notified = 0;
-  const orgCanceled = createOrgCanceledResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase);
 
   for (const contract of expiring as Record<string, unknown>[]) {
     // Re-filter on the org's calendar — the SQL bounds above are deliberately
@@ -207,20 +210,20 @@ export async function GET(request: Request) {
           <a href="${contractUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View Contracts</a>
         </div>`,
         });
-        if (sendErr) {
-          await releaseClaim("email send failed", sendErr.message);
-          emailFailed = true;
-          break;
-        }
+        if (sendErr) throw new Error(sendErr.message);
         emailedAny = true;
       } catch (err) {
-        // continue to next contract if one email fails
-        await releaseClaim("email send threw", err);
+        // Release the claim only when nobody has been emailed yet: releasing after some
+        // recipients got it made tomorrow's run email all of them again.
         emailFailed = true;
-        break;
+        if (!emailedAny) {
+          await releaseClaim("email send failed", err);
+          break;
+        }
       }
     }
-    if (!emailFailed && emailedAny) notified++;
+    if (emailedAny) notified++;
+    void emailFailed;
   }
 
   return NextResponse.json({ notified });

@@ -21,6 +21,7 @@ import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-d
 import { renderBlocksToPlainText } from "@/lib/utils/document-template-renderer";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { SMS_EVENT_MERGE_TAGS } from "@/types/crm-proposals";
+import { useSmsReadiness, SMS_NOT_READY_MESSAGE } from "@/lib/hooks/use-sms-readiness";
 import { toast } from "sonner";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
@@ -48,6 +49,7 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
 
   const { data: allDocTemplates = [] } = useDocumentTemplates();
   const smsTemplates = allDocTemplates.filter((t) => t.docType === "text_message" && t.status === "active");
+  const { data: smsReady } = useSmsReadiness(open);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const { data: selectedDocTemplate } = useDocumentTemplate(selectedTemplateId);
 
@@ -85,6 +87,11 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
           <DialogTitle>Text Message Event</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-2">
+          {smsReady === false && (
+            <p className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+              {SMS_NOT_READY_MESSAGE} This step will be skipped until then.
+            </p>
+          )}
           {smsTemplates.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <Label>Use a template</Label>

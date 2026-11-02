@@ -508,8 +508,9 @@ export function ImportExportMenu({
                 {importSummary.succeeded} imported
                 {importSummary.failed.length > 0 && `, ${importSummary.failed.length} failed`}
                 {!!importSummary.skipped?.length && `, ${importSummary.skipped.length} skipped (duplicates)`}
+                {!!importSummary.warnings?.length && `, ${importSummary.warnings.length} with warnings`}
               </p>
-              {(importSummary.failed.length > 0 || !!importSummary.skipped?.length) && (
+              {(importSummary.failed.length > 0 || !!importSummary.skipped?.length || !!importSummary.warnings?.length) && (
                 <>
                   <button
                     type="button"
@@ -528,6 +529,11 @@ export function ImportExportMenu({
                       {(importSummary.skipped ?? []).map((f, i) => (
                         <li key={`s${i}`} className="border-b border-amber-100 dark:border-amber-900 px-2 py-1 last:border-0">
                           <span className="font-medium">Row {f.row} (skipped):</span> {f.error}
+                        </li>
+                      ))}
+                      {(importSummary.warnings ?? []).map((f, i) => (
+                        <li key={`w${i}`} className="border-b border-amber-100 dark:border-amber-900 px-2 py-1 last:border-0">
+                          <span className="font-medium">Row {f.row} (imported, check):</span> {f.error}
                         </li>
                       ))}
                     </ul>

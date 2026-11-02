@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useRouter } from "next/navigation";
 import {
   Wrench,
@@ -121,6 +122,13 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
   const { data: vendors = [] } = useVendors();
   const { data: projects = [] } = useProjects();
   const { data: photoJobs = [] } = usePhotoJobs();
+  // Each Landscapt group follows the same view key as its page; RLS only checks CRM access,
+  // so without this a rep with no invoice permission could read every invoice from here.
+  const { can: canCrm, isLoading: permsLoading } = usePermissions();
+  const showClients = !permsLoading && canCrm("client_list");
+  const showLeads = !permsLoading && canCrm("lead_list");
+  const showInvoices = !permsLoading && canCrm("acct_view_invoice_list");
+  const showEstimates = !permsLoading && canCrm("estimate_list");
   // Clients are searched server-side (an org can have thousands) — leads are
   // left out because they have their own group below.
   const [query, setQuery] = useState("");
@@ -128,7 +136,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
   const { data: clients = [] } = useClientSearch(
     clientTerm,
     { excludeStatuses: ["lead"], limit: 20 },
-    showFullSearch && clientTerm.length > 0,
+    showFullSearch && showClients && clientTerm.length > 0,
   );
   const { data: leads = [] } = useLeads();
   const { data: invoices = [] } = useInvoices();
@@ -151,7 +159,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
       <CommandList className="max-h-[480px]">
         <CommandEmpty>No results found.</CommandEmpty>
 
-        {showFullSearch && clients.length > 0 && (
+        {showFullSearch && showClients && clients.length > 0 && (
           <CommandGroup heading="Clients">
             {clients.map((client) => {
               const phones = [client.primaryPhone, ...client.phones.map((p) => p.phone)].filter(
@@ -180,7 +188,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
 
         {showFullSearch && clients.length > 0 && leads.length > 0 && <CommandSeparator />}
 
-        {showFullSearch && leads.length > 0 && (
+        {showFullSearch && showLeads && leads.length > 0 && (
           <CommandGroup heading="Leads">
             {leads.map((lead) => {
               const phones = [lead.primaryPhone, ...lead.phones.map((p) => p.phone)].filter(
@@ -208,7 +216,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
 
         {showFullSearch && (clients.length > 0 || leads.length > 0) && invoices.length > 0 && <CommandSeparator />}
 
-        {showFullSearch && invoices.length > 0 && (
+        {showFullSearch && showInvoices && invoices.length > 0 && (
           <CommandGroup heading="Invoices">
             {invoices.map((inv) => (
               <CommandItem
@@ -232,7 +240,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
 
         {showFullSearch && invoices.length > 0 && estimates.length > 0 && <CommandSeparator />}
 
-        {showFullSearch && estimates.length > 0 && (
+        {showFullSearch && showEstimates && estimates.length > 0 && (
           <CommandGroup heading="Estimates">
             {estimates.map((est) => (
               <CommandItem

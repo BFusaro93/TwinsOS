@@ -13,7 +13,7 @@ import { ClientDetailPanel } from "@/components/crm/ClientDetailPanel";
 import { NewClientDialog } from "@/components/crm/NewClientDialog";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
-import { fetchFilteredClients, useBulkImportClients } from "@/lib/hooks/use-clients";
+import { fetchClientAccountNumbers, fetchFilteredClients, useBulkImportClients } from "@/lib/hooks/use-clients";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
@@ -21,11 +21,14 @@ import type { FilterRow } from "@/lib/client-filters";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 
+// status, clientSince, names, billing email, notes, tags (separate with |) and the parent's
+// account number make a Service Autopilot export — and our own export — round-trip intact.
 const CLIENT_TEMPLATE_COLUMNS = [
-  "displayName", "accountType", "primaryPhone", "primaryEmail",
+  "displayName", "firstName", "lastName", "accountType", "status", "clientSince",
+  "primaryPhone", "primaryEmail", "billingEmail",
   "billingAddress", "billingCity", "billingState", "billingZip",
   "serviceAddress", "serviceCity", "serviceState", "serviceZip",
-  "source", "accountNumber",
+  "source", "accountNumber", "parentAccountNumber", "tags", "notesToCrew",
 ];
 
 // useSearchParams (for ?status= dashboard deep-links) needs a Suspense boundary.
@@ -110,12 +113,25 @@ function ClientsPageInner() {
                 setExporting(true);
                 try {
                   const clients = await fetchFilteredClients({ search, filters: filterRows });
+                  const accountById = new Map(clients.map((c) => [c.id, c.accountNumber ?? ""]));
+                  // A parent the filters left out still needs its account # for round-tripping.
+                  const missingParents = Array.from(new Set(
+                    clients.map((c) => c.parentClientId).filter((id): id is string => !!id && !accountById.has(id))
+                  ));
+                  if (missingParents.length > 0) {
+                    for (const [id, acct] of await fetchClientAccountNumbers(missingParents)) accountById.set(id, acct);
+                  }
                   exportCSV(
                     clients.map((c) => ({
                       displayName: c.displayName,
+                      firstName: c.firstName ?? "",
+                      lastName: c.lastName ?? "",
                       accountType: c.accountType,
+                      status: c.status,
+                      clientSince: c.clientSince ?? "",
                       primaryPhone: c.primaryPhone ?? "",
                       primaryEmail: c.primaryEmail ?? "",
+                      billingEmail: c.billingEmail ?? "",
                       billingAddress: c.billingAddress ?? "",
                       billingCity: c.billingCity ?? "",
                       billingState: c.billingState ?? "",
@@ -126,6 +142,9 @@ function ClientsPageInner() {
                       serviceZip: c.serviceZip ?? "",
                       source: c.source ?? "",
                       accountNumber: c.accountNumber ?? "",
+                      parentAccountNumber: c.parentClientId ? accountById.get(c.parentClientId) ?? "" : "",
+                      tags: (c.tags ?? []).join("|"),
+                      notesToCrew: c.notesToCrew ?? "",
                     })),
                     "clients-export.csv"
                   );
