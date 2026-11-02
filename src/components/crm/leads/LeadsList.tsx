@@ -2,10 +2,12 @@
 
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { isValidEmail } from "@/lib/utils/email";
-import { useState } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import {
-  useLeads,
+  useClientsPage,
+  fetchFilteredClientIds,
+  leadQueryParams,
   useCreateLead,
   useConvertLeadToClient,
   useCloseLeadAsLost,
@@ -39,7 +41,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ClientFilterPopover } from "@/components/crm/shared/ClientFilterPopover";
-import { matchesAllFilterRows, parseMultiValue, type FilterRow } from "@/lib/client-filters";
+import { parseMultiValue, type FilterRow } from "@/lib/client-filters";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { useLoadMoreSentinel } from "@/lib/hooks/use-load-more-sentinel";
 import { useLeadFilterFields } from "@/lib/hooks/use-lead-filter-fields";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -386,11 +390,19 @@ interface LeadsListProps {
   newDialogOpen?: boolean;
   onNewDialogOpenChange?: (o: boolean) => void;
   onSelect?: (lead: Client) => void;
+  /** Search + filter state is owned by the page so it survives switching to
+   *  the list view and drives CSV export. */
+  search: string;
+  onSearchChange: (search: string) => void;
+  filterRows: FilterRow[];
+  onFilterRowsChange: Dispatch<SetStateAction<FilterRow[]>>;
 }
 
-export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: LeadsListProps = {}) {
+export function LeadsList({
+  newDialogOpen, onNewDialogOpenChange, onSelect,
+  search, onSearchChange: setSearch, filterRows, onFilterRowsChange: setFilterRows,
+}: LeadsListProps) {
   const router = useRouter();
-  const { data: leads, isLoading } = useLeads();
   const { mutateAsync: bulkClose } = useBulkCloseLeadsAsLost();
   const { can } = usePermissions();
   // lead_allow_delete doubles as the gate for this app's closest equivalent
@@ -400,12 +412,11 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
   const canCloseLead = can("lead_allow_delete");
   const canConvertLead = can("lead_convert_close");
   const { fields: FILTER_FIELDS } = useLeadFilterFields();
-  const [search, setSearch] = useState("");
   const [internalDialogOpen, setInternalDialogOpen] = useState(false);
   const [convertLead, setConvertLead] = useState<Client | undefined>();
   const [closeLead, setCloseLead] = useState<Client | undefined>();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
+  const [selectingAll, setSelectingAll] = useState(false);
   const [bulkCloseOpen, setBulkCloseOpen] = useState(false);
 
   const { visible: cols, toggle: toggleCol } = useColumnPrefs("crm-leads-table-columns", LEAD_DEFAULT_VISIBLE);
@@ -419,21 +430,17 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
     else setInternalDialogOpen(o);
   }
 
-  const filtered = (leads ?? []).filter((l) => {
-    const q = search.toLowerCase();
-    // Digits-only comparison so "9785550100" finds a phone stored as "(978) 555-0100".
-    const qDigits = q.replace(/\D/g, "");
-    if (q && !(
-      l.displayName.toLowerCase().includes(q) ||
-      (l.primaryPhone ?? "").includes(q) ||
-      (qDigits.length >= 3 && (l.primaryPhone ?? "").replace(/\D/g, "").includes(qDigits)) ||
-      (l.primaryEmail ?? "").toLowerCase().includes(q) ||
-      // The row shows the service city; older leads may only have a billing city.
-      (l.serviceCity ?? "").toLowerCase().includes(q) ||
-      (l.billingCity ?? "").toLowerCase().includes(q)
-    )) return false;
-    return matchesAllFilterRows(l, filterRows);
-  });
+  // Search, filters and paging all run server-side (crm_search_clients,
+  // scoped to status = lead), 100 at a time.
+  const debouncedSearch = useDebouncedValue(search);
+  const queryParams = useMemo(
+    () => leadQueryParams({ search: debouncedSearch, filters: filterRows }),
+    [debouncedSearch, filterRows],
+  );
+  const { data, isPending: isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useClientsPage(queryParams);
+  const filtered = useMemo(() => data?.pages.flatMap((p) => p.clients) ?? [], [data]);
+  const total = data?.pages[0]?.total ?? filtered.length;
+  const sentinelRef = useLoadMoreSentinel({ hasNextPage, isFetchingNextPage, fetchNextPage });
 
   const activeFilterCount = filterRows.filter((r) => r.value !== "").length;
 
@@ -454,6 +461,20 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
 
   const selectedCount = selectedIds.size;
   const selectedLeadIds = Array.from(selectedIds);
+
+  // The header checkbox covers the rows loaded so far; this extends the
+  // selection to every lead matching the current search + filters.
+  const canSelectAllMatching = allSelected && total > filtered.length && selectedCount < total;
+  async function selectAllMatching() {
+    setSelectingAll(true);
+    try {
+      setSelectedIds(new Set(await fetchFilteredClientIds(queryParams)));
+    } catch {
+      toast.error("Couldn't select all matching leads");
+    } finally {
+      setSelectingAll(false);
+    }
+  }
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -495,7 +516,7 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
           </DropdownMenu>
         ) : (
           <span className="ml-auto text-sm text-muted-foreground">
-            {isLoading ? "…" : `${filtered.length} lead${filtered.length !== 1 ? "s" : ""}`}
+            {isLoading ? "…" : `${total.toLocaleString()} lead${total !== 1 ? "s" : ""}`}
           </span>
         )}
 
@@ -533,6 +554,19 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
       )}
 
       {/* Table */}
+      {canSelectAllMatching && (
+        <div className="rounded-md border bg-muted/40 px-3 py-1.5 text-center text-xs text-slate-600 dark:text-neutral-400">
+          All {filtered.length.toLocaleString()} loaded leads are selected.{" "}
+          <button
+            className="font-medium text-brand-600 dark:text-brand-400 underline disabled:opacity-50"
+            disabled={selectingAll}
+            onClick={selectAllMatching}
+          >
+            {selectingAll ? "Selecting…" : `Select all ${total.toLocaleString()} matching leads`}
+          </button>
+        </div>
+      )}
+
       <div className="flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-muted/40">
@@ -657,6 +691,13 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
             )}
           </tbody>
         </table>
+        {hasNextPage && !isLoading && (
+          <div ref={sentinelRef} className="flex justify-center p-3">
+            <Button variant="ghost" size="sm" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>
+              {isFetchingNextPage ? "Loading…" : `Load more (${(total - filtered.length).toLocaleString()} left)`}
+            </Button>
+          </div>
+        )}
       </div>
 
       <NewLeadDialog open={dialogOpen} onOpenChange={setDialogOpen} />

@@ -11,7 +11,8 @@ import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { exportCSV } from "@/lib/csv";
-import { useLeads, useBulkImportLeads } from "@/lib/hooks/use-clients";
+import { fetchFilteredClients, leadQueryParams, useBulkImportLeads } from "@/lib/hooks/use-clients";
+import type { FilterRow } from "@/lib/client-filters";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
@@ -23,7 +24,11 @@ const LEAD_TEMPLATE_COLUMNS = [
 
 export default function LeadsPage() {
   const { can, isLoading: permissionsLoading } = usePermissions();
-  const { data: leads } = useLeads();
+  // Shared by the table and list views (and the CSV export), so switching
+  // views keeps the current search and filters.
+  const [search, setSearch] = useState("");
+  const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
+  const [exporting, setExporting] = useState(false);
   const { mutateAsync: bulkImportLeads } = useBulkImportLeads();
   const [viewMode, setViewMode] = useState<"table" | "list">("list");
   const [newOpen, setNewOpen] = useState(false);
@@ -75,22 +80,33 @@ export default function LeadsPage() {
               templateColumns={LEAD_TEMPLATE_COLUMNS}
               templateFilename="leads-template.csv"
               requiredColumns={["displayName"]}
-              onExport={() =>
-                exportCSV(
-                  (leads ?? []).map((c) => ({
-                    displayName: c.displayName,
-                    accountType: c.accountType,
-                    primaryPhone: c.primaryPhone ?? "",
-                    primaryEmail: c.primaryEmail ?? "",
-                    billingAddress: c.billingAddress ?? "",
-                    billingCity: c.billingCity ?? "",
-                    billingState: c.billingState ?? "",
-                    billingZip: c.billingZip ?? "",
-                    source: c.source ?? "",
-                  })),
-                  "leads-export.csv"
-                )
-              }
+              onExport={async () => {
+                // Exports what the current search + filters match — fetched
+                // in full on demand, since the list itself is paged.
+                if (exporting) return;
+                setExporting(true);
+                try {
+                  const leads = await fetchFilteredClients(leadQueryParams({ search, filters: filterRows }));
+                  exportCSV(
+                    leads.map((c) => ({
+                      displayName: c.displayName,
+                      accountType: c.accountType,
+                      primaryPhone: c.primaryPhone ?? "",
+                      primaryEmail: c.primaryEmail ?? "",
+                      billingAddress: c.billingAddress ?? "",
+                      billingCity: c.billingCity ?? "",
+                      billingState: c.billingState ?? "",
+                      billingZip: c.billingZip ?? "",
+                      source: c.source ?? "",
+                    })),
+                    "leads-export.csv"
+                  );
+                } catch {
+                  toast.error("Export failed");
+                } finally {
+                  setExporting(false);
+                }
+              }}
               onImport={async (rows) => {
                 const result = await bulkImportLeads(rows);
                 const parts = [`${result.created} new lead${result.created !== 1 ? "s" : ""} created`];
@@ -121,12 +137,20 @@ export default function LeadsPage() {
         {viewMode === "table" ? (
           <LeadsList
             onSelect={(lead) => { setSelected(lead); setViewMode("list"); }}
+            search={search}
+            onSearchChange={setSearch}
+            filterRows={filterRows}
+            onFilterRowsChange={setFilterRows}
           />
         ) : (
           <LeadsListView
             selectedId={selected?.id ?? null}
             onSelect={setSelected}
             onBack={() => setSelected(null)}
+            search={search}
+            onSearchChange={setSearch}
+            filterRows={filterRows}
+            onFilterRowsChange={setFilterRows}
           />
         )}
       </div>

@@ -307,6 +307,14 @@ function searchClientsRpc(
 
 export const CLIENT_PAGE_SIZE = 100;
 
+/** The filter row that scopes crm_search_clients() to leads — prepend it to
+ *  the Leads screens' own filter rows. */
+export const LEAD_STATUS_FILTER: FilterRow = { id: "leads-only", field: "status", operator: "eq", value: "lead" };
+
+export function leadQueryParams(params: ClientQueryParams): ClientQueryParams {
+  return { search: params.search, filters: [LEAD_STATUS_FILTER, ...(params.filters ?? [])] };
+}
+
 /** The Clients page list: filtered, searched and paged on the server. */
 export function useClientsPage(params: ClientQueryParams) {
   return useInfiniteQuery({
@@ -373,6 +381,8 @@ export async function fetchFilteredClientIds(params: ClientQueryParams): Promise
 }
 
 export interface ClientSearchOptions {
+  /** Only these statuses — e.g. ["lead"] for a leads-only search. */
+  statuses?: ClientStatus[];
   /** Leave these statuses out — e.g. ["lead"] for invoice pickers. */
   excludeStatuses?: ClientStatus[];
   /** Only clients with no parent of their own (Link Parent candidates). */
@@ -391,6 +401,7 @@ export function useClientSearch(term: string, opts: ClientSearchOptions = {}, en
     queryFn: async () => {
       const supabase = createClient();
       let q = searchClientsRpc(supabase, { search: term }).select(CLIENT_SELECT);
+      if (opts.statuses?.length) q = q.in("status", opts.statuses);
       if (opts.excludeStatuses?.length) q = q.not("status", "in", `(${opts.excludeStatuses.join(",")})`);
       if (opts.topLevelOnly) q = q.is("parent_client_id", null);
       const exclude = (opts.excludeIds ?? []).filter(Boolean);

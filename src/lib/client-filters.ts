@@ -2,7 +2,8 @@
 // list/table and the Sales Campaigns audience picker send these rows to
 // crm_search_clients(), whose inline filter CASE is the SQL twin of
 // matchesFilterRow() below — keep the two in step when adding a field.
-// matchesFilterRow() itself is still used in memory by the Leads list.
+// matchesFilterRow() is no longer used by a list screen; it stays as the
+// readable reference for those rules.
 import type { Client } from "@/types/crm";
 
 export type FilterOperator = "eq" | "neq" | "contains" | "starts_with" | "lt" | "gt" | "lte" | "gte";
@@ -133,6 +134,22 @@ export function matchesFilterRow(c: Client, row: FilterRow, ctx?: FilterContext)
       if (!c.clientSince) return false;
       const cDate = c.clientSince.slice(0, 10);
       const val   = row.value;
+      if (op === "eq"  && cDate !== val) return false;
+      if (op === "lt"  && cDate >= val)  return false;
+      if (op === "gt"  && cDate <= val)  return false;
+      if (op === "lte" && cDate > val)   return false;
+      if (op === "gte" && cDate < val)   return false;
+      return true;
+    }
+    case row.field === "date_added": {
+      // Leads' "Date Added": Client Since when set, else the local day created.
+      const created = c.createdAt ? new Date(c.createdAt) : null;
+      const cDate = c.clientSince?.slice(0, 10)
+        ?? (created && !isNaN(created.getTime())
+          ? `${created.getFullYear()}-${String(created.getMonth() + 1).padStart(2, "0")}-${String(created.getDate()).padStart(2, "0")}`
+          : null);
+      if (!cDate) return false;
+      const val = row.value;
       if (op === "eq"  && cDate !== val) return false;
       if (op === "lt"  && cDate >= val)  return false;
       if (op === "gt"  && cDate <= val)  return false;

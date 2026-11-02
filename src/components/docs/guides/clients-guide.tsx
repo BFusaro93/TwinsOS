@@ -119,7 +119,9 @@ export function ClientsGuide() {
         <p>
           <strong>CRM &gt; Clients</strong> has two views of the same list: <strong>List</strong>{" "}
           (with the client&apos;s record open beside it) and <strong>Table</strong> (more columns,
-          bulk actions). Your search and filters carry over when you switch between them.
+          bulk actions). Your search and filters carry over when you switch between them.{" "}
+          <strong>CRM &gt; Leads</strong> works the same way — loading, search, filters,{" "}
+          <strong>Select all N matching leads</strong> and Export — limited to leads.
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
@@ -257,7 +259,8 @@ export function ClientsGuide() {
         <Callout>
           The Clients list can filter and sort by <strong>Client Since Date</strong>; the Leads
           list shows a &quot;Date added&quot; column instead — the day the lead was created — since
-          a lead has nothing to put in Client Since yet.
+          a lead has nothing to put in Client Since yet. The Leads <strong>Date Added</strong>{" "}
+          filter uses that same date.
         </Callout>
       </Section>
 

@@ -39,7 +39,7 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { usePhotoJobs } from "@/modules/photo-docs/hooks/usePhotoJobs";
-import { useClientSearch, useLeads } from "@/lib/hooks/use-clients";
+import { useClientSearch } from "@/lib/hooks/use-clients";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { useEstimates } from "@/lib/hooks/use-estimates";
@@ -138,7 +138,12 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
     { excludeStatuses: ["lead"], limit: 20 },
     showFullSearch && showClients && clientTerm.length > 0,
   );
-  const { data: leads = [] } = useLeads();
+  // Leads are searched server-side too (one org has 1,500+).
+  const { data: leads = [] } = useClientSearch(
+    clientTerm,
+    { statuses: ["lead"], limit: 20 },
+    showFullSearch && showLeads && clientTerm.length > 0,
+  );
   const { data: invoices = [] } = useInvoices();
   const { data: estimates = [] } = useEstimates();
 
@@ -197,7 +202,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
               return (
               <CommandItem
                 key={lead.id}
-                value={`${lead.displayName} ${lead.primaryEmail ?? ""} ${typeof lead.billingAddress === "object" && lead.billingAddress ? Object.values(lead.billingAddress).filter(Boolean).join(" ") : ""} ${[lead.serviceAddress, lead.serviceCity, lead.serviceState, lead.serviceZip].filter(Boolean).join(" ")} ${phones.join(" ")} ${phones.map((p) => p.replace(/\D/g, "")).join(" ")} lead`}
+                value={`${lead.displayName} ${lead.accountNumber ?? ""} ${(lead.tags ?? []).join(" ")} ${lead.primaryEmail ?? ""} ${typeof lead.billingAddress === "object" && lead.billingAddress ? Object.values(lead.billingAddress).filter(Boolean).join(" ") : ""} ${[lead.serviceAddress, lead.serviceCity, lead.serviceState, lead.serviceZip].filter(Boolean).join(" ")} ${phones.join(" ")} ${phones.map((p) => p.replace(/\D/g, "")).join(" ")} lead`}
                 onSelect={() => go(`/crm/clients/${lead.id}`)}
                 className="flex items-center gap-3"
               >
