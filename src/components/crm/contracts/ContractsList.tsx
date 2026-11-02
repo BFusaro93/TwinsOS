@@ -1007,7 +1007,11 @@ function ContractNotesTab({ contractId }: { contractId?: string }) {
                     <td className="py-1.5 text-xs text-slate-400 dark:text-neutral-500">{fmtDate(n.updatedAt.slice(0, 10))}</td>
                     <td className="py-1.5">
                       <button
-                        onClick={() => delNote({ id: n.id, contractId: contractId! })}
+                        onClick={() =>
+                          delNote({ id: n.id, contractId: contractId! }).catch((err) =>
+                            toast.error(mutationErrorMessage(err, "Failed to delete note")),
+                          )
+                        }
                         className="opacity-0 group-hover:opacity-100 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
