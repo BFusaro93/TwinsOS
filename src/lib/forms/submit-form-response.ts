@@ -637,6 +637,12 @@ export async function submitFormResponse(
           primary_email: submittedEmail ?? null,
           billing_email: mappedData["client.email"] ?? submittedEmail ?? null,
           primary_phone: mappedData["client.phone"] ?? submittedPhone ?? null,
+          // A lead's address is where the work would happen: without a service address the
+          // converted lead had nothing to schedule or route to (the import mirrors it the same way).
+          service_address: mappedData["client.address_line1"] ?? null,
+          service_city: mappedData["client.city"] ?? null,
+          service_state: mappedData["client.state"] ?? null,
+          service_zip: mappedData["client.zip"] ?? null,
           billing_address: mappedData["client.address_line1"] ?? null,
           billing_city: mappedData["client.city"] ?? null,
           billing_state: mappedData["client.state"] ?? null,

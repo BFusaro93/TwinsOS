@@ -406,6 +406,9 @@ function CampaignDialog({
                 setForm((p) => ({ ...p, scheduledAt: e.target.value || null }))
               }
             />
+            <p className="text-xs text-muted-foreground">
+              Saving keeps the campaign as a draft. Use <span className="font-medium">Mark Scheduled</span> on the campaign row to arm it; scheduled sends go out at the top of the hour.
+            </p>
           </div>
         </div>
 

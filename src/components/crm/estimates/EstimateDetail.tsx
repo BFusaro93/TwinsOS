@@ -23,6 +23,7 @@ import { useCreateInvoiceFromEstimate } from "@/lib/hooks/use-invoices";
 import { SaleTypeSelect } from "@/components/crm/commissions/SaleTypeSelect";
 import { useCRMServices, useEstimateJobs, useEstimateConvertedLines } from "@/lib/hooks/use-crm-jobs";
 import { useApprovalFlow } from "@/lib/hooks/use-approval-flows";
+import { useApprovalRequests } from "@/lib/hooks/use-approval-requests";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { ApprovalChain } from "@/components/shared/ApprovalChain";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -514,6 +515,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { data: estimateApprovalFlow } = useApprovalFlow("crm_estimate");
   const { mutate: submitForApproval, isPending: submittingForApproval } = useSubmitForApproval();
   const hasApprovalGate = !!estimateApprovalFlow && estimateApprovalFlow.steps.length > 0;
+  // The amount the live approval covers; a larger total has to be re-approved (the send and
+  // share-link routes refuse it too).
+  const { data: approvalRequests = [] } = useApprovalRequests(estimate?.id ?? "");
+  const approvedTotalCents = approvalRequests
+    .filter((r) => r.status === "approved" && typeof r.entityTotalCents === "number")
+    .reduce<number | null>((max, r) => (max == null || (r.entityTotalCents as number) > max ? (r.entityTotalCents as number) : max), null);
+  const approvalOutgrown = estimate?.approvalStatus === "approved" && approvedTotalCents != null && estimate.totalCents > approvedTotalCents;
 
   function handleSendClick() {
     if (!estimate) return;
@@ -534,6 +542,15 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
     if (estimate.approvalStatus === "rejected") {
       submitForApproval({ entityId: estimate.id, entityType: "crm_estimate", grandTotalCents: estimate.totalCents });
+      return;
+    }
+
+    if (approvalOutgrown) {
+      toast.info(`The total grew past the approved $${((approvedTotalCents ?? 0) / 100).toFixed(2)} — resubmitting for approval.`);
+      submitForApproval(
+        { entityId: estimate.id, entityType: "crm_estimate", grandTotalCents: estimate.totalCents },
+        { onSuccess: (result) => { if (result?.autoApproved) setSendDialogOpen(true); } }
+      );
       return;
     }
 

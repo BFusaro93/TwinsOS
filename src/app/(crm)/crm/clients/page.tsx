@@ -21,11 +21,14 @@ import type { FilterRow } from "@/lib/client-filters";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 
+// status, clientSince, names, billing email, notes, tags (separate with |) and the parent's
+// account number make a Service Autopilot export — and our own export — round-trip intact.
 const CLIENT_TEMPLATE_COLUMNS = [
-  "displayName", "accountType", "primaryPhone", "primaryEmail",
+  "displayName", "firstName", "lastName", "accountType", "status", "clientSince",
+  "primaryPhone", "primaryEmail", "billingEmail",
   "billingAddress", "billingCity", "billingState", "billingZip",
   "serviceAddress", "serviceCity", "serviceState", "serviceZip",
-  "source", "accountNumber",
+  "source", "accountNumber", "parentAccountNumber", "tags", "notesToCrew",
 ];
 
 // useSearchParams (for ?status= dashboard deep-links) needs a Suspense boundary.
@@ -99,13 +102,19 @@ function ClientsPageInner() {
               templateColumns={CLIENT_TEMPLATE_COLUMNS}
               templateFilename="clients-template.csv"
               requiredColumns={["displayName"]}
-              onExport={() =>
+              onExport={() => {
+                const accountById = new Map((clients ?? []).map((c) => [c.id, c.accountNumber ?? ""]));
                 exportCSV(
                   (clients ?? []).map((c) => ({
                     displayName: c.displayName,
+                    firstName: c.firstName ?? "",
+                    lastName: c.lastName ?? "",
                     accountType: c.accountType,
+                    status: c.status,
+                    clientSince: c.clientSince ?? "",
                     primaryPhone: c.primaryPhone ?? "",
                     primaryEmail: c.primaryEmail ?? "",
+                    billingEmail: c.billingEmail ?? "",
                     billingAddress: c.billingAddress ?? "",
                     billingCity: c.billingCity ?? "",
                     billingState: c.billingState ?? "",
@@ -116,10 +125,13 @@ function ClientsPageInner() {
                     serviceZip: c.serviceZip ?? "",
                     source: c.source ?? "",
                     accountNumber: c.accountNumber ?? "",
+                    parentAccountNumber: c.parentClientId ? accountById.get(c.parentClientId) ?? "" : "",
+                    tags: (c.tags ?? []).join("|"),
+                    notesToCrew: c.notesToCrew ?? "",
                   })),
                   "clients-export.csv"
-                )
-              }
+                );
+              }}
               onImport={async (rows) => {
                 const result = await bulkImportClients(rows);
                 const { succeeded, failed } = result;

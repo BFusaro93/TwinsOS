@@ -312,7 +312,8 @@ async function excludeInactiveParents(supabase: AnyClient, jobs: GeneratorJob[])
   for (const ids of chunk([...new Set(jobs.map((j) => j.client_id))], 100)) {
     const { data } = await supabase.from("clients").select("id, status, deleted_at").in("id", ids);
     for (const c of (data ?? []) as { id: string; status: string | null; deleted_at: string | null }[]) {
-      if (c.deleted_at || c.status === "cancelled") inactiveClients.add(c.id);
+      // Inactive is "a former active client" and lost is a closed lead: neither is on service.
+      if (c.deleted_at || c.status === "cancelled" || c.status === "inactive" || c.status === "lost") inactiveClients.add(c.id);
     }
   }
   const contractByJob = new Map<string, string>();

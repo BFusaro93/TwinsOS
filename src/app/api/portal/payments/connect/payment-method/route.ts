@@ -24,8 +24,10 @@ export async function DELETE() {
   if (client.saved_payment_method_id && (isStripeConfigured() || isStripeTestConfigured())) {
     // stripe_connect_livemode isn't in the generated Supabase types yet (added
     // by a migration this session wrote but did not apply/regenerate types for).
+    // Portal users have no profiles row, so the organizations policy returns nothing for
+    // their session; without the service client the Stripe detach was silently skipped.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: org } = await (supabase.from("organizations") as any)
+    const { data: org } = await (createServiceClient().from("organizations") as any)
       .select("stripe_connect_account_id, stripe_connect_livemode")
       .eq("id", ctx.orgId)
       .single();
@@ -43,7 +45,7 @@ export async function DELETE() {
   const serviceClient = createServiceClient();
   const { error } = await serviceClient
     .from("clients")
-    .update({ saved_payment_method_id: null, saved_payment_method_type: null, saved_payment_method_summary: null })
+    .update({ saved_payment_method_id: null, saved_payment_method_type: null, saved_payment_method_summary: null, autopay_enabled: false })
     .eq("id", client.id)
     .eq("org_id", ctx.orgId);
   if (error) return NextResponse.json({ error: "Failed to remove payment method" }, { status: 500 });

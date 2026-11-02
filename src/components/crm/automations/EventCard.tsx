@@ -3,6 +3,7 @@
 import { X, Bell, Mail, GitBranch, StickyNote, MessageSquare, Tag, RefreshCw, Clock, Hash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useSmsReadiness } from "@/lib/hooks/use-sms-readiness";
 import type { CRMSequenceEvent, EventType } from "@/types/crm-automations";
 
 interface Props {
@@ -68,7 +69,10 @@ export function EventCard({ event, onClick, onDelete }: Props) {
   const { can } = usePermissions();
   const meta = EVENT_META[event.eventType];
   const Icon = meta.icon;
-  const summary = getConfigSummary(event, can("automation_view_tags"));
+  const { data: smsReady } = useSmsReadiness(event.eventType === "text_message");
+  const summary = event.eventType === "text_message" && smsReady === false
+    ? `⚠ SMS setup not complete — this step is skipped · ${getConfigSummary(event, can("automation_view_tags"))}`
+    : getConfigSummary(event, can("automation_view_tags"));
 
   return (
     <div

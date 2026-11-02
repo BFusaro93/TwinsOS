@@ -190,7 +190,8 @@ function OutcomeDialog({
   );
 }
 
-const STATUS_CYCLE: VisitStatus[] = ["scheduled", "dispatched", "in_progress", "completed", "skipped"];
+// Skipping needs a reason (the outcome dialog), so it is not part of the one-tap cycle.
+const STATUS_CYCLE: VisitStatus[] = ["scheduled", "dispatched", "in_progress", "completed"];
 
 function StatusIcon({ status }: { status: VisitStatus }) {
   switch (status) {
@@ -212,11 +213,16 @@ function StatusCycleButton({ visit }: { visit: CRMJobVisit }) {
     e.stopPropagation();
     if (!canManage) return;
     const i = STATUS_CYCLE.indexOf(visit.status);
+    if (i === -1) return;
     const next = STATUS_CYCLE[(i + 1) % STATUS_CYCLE.length];
+    // Completing invoices and fires automations; reopening a completed stop clears its clock
+    // stamps. Neither should happen from a stray tap on an iPad.
+    if (next === "completed" && !window.confirm("Mark this stop completed? It will be invoiced and automations will run.")) return;
+    if (visit.status === "completed" && !window.confirm("Reopen this completed stop so the crew can work it again?")) return;
     try {
       await updateStatus({ id: visit.id, status: next, jobId: visit.jobId, jobType: visit.job?.jobType });
-    } catch {
-      toast.error("Failed to update status");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to update status");
     }
   }
   return (

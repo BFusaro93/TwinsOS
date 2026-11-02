@@ -455,6 +455,18 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
   async function handleStatus(status: string) {
     if (!job) return;
+    // Completing the job here invoices every service as performed. With visits still open
+    // on the board that bills work nobody has done yet — and when the crew later works a
+    // stop, its completion invoices the same service a second time.
+    if (status === "completed") {
+      const open = visits.filter((v) => v.status === "scheduled" || v.status === "dispatched" || v.status === "in_progress");
+      if (open.length > 0) {
+        toast.error(
+          `This job still has ${open.length} open visit${open.length !== 1 ? "s" : ""}. Complete, skip or cancel them on the Visits tab first — each completed visit invoices itself.`
+        );
+        return;
+      }
+    }
     try {
       await updateStatus.mutateAsync({ id: job.id, status, scheduledDate: job.scheduledDate ?? "" });
       toast.success(`Marked ${STATUS_LABEL[status] ?? status}`);
@@ -1799,14 +1811,18 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                     autoFocus
                   />
                   <div className="flex gap-2">
-                    <Button size="sm" disabled={!bulkNote.trim()} onClick={async () => {
+                    <Button size="sm" disabled={!bulkNote.trim() || updateVisit.isPending} onClick={async () => {
                       const scheduled = visits.filter(v => v.status === "scheduled");
-                      await Promise.all(scheduled.map(v =>
-                        updateVisit.mutateAsync({ id: v.id, updates: { notes_to_crew: bulkNote.trim() } })
-                      ));
-                      setBulkNote("");
-                      setAddingBulkNote(false);
-                      toast.success(`Note added to ${scheduled.length} visits`);
+                      try {
+                        await Promise.all(scheduled.map(v =>
+                          updateVisit.mutateAsync({ id: v.id, updates: { notes_to_crew: bulkNote.trim() } })
+                        ));
+                        setBulkNote("");
+                        setAddingBulkNote(false);
+                        toast.success(`Note added to ${scheduled.length} visits`);
+                      } catch (err) {
+                        toast.error(err instanceof Error && err.message ? err.message : "Failed to add the note to every visit");
+                      }
                     }}>
                       Save to All
                     </Button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -18,6 +18,15 @@ export default function PortalLoginPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteInput, setInviteInput] = useState("");
   const [inviteError, setInviteError] = useState<string | null>(null);
+
+  // Sent here by the portal layout when the session has no live portal access.
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get("reason");
+    if (reason !== "revoked") return;
+    setError("Your portal access is no longer active. Contact your service provider if you think this is a mistake.");
+    void createClient().auth.signOut();
+    window.history.replaceState(null, "", "/portal/login");
+  }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();

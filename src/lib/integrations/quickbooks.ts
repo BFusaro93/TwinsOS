@@ -1053,6 +1053,30 @@ async function buildInvoicePushInput(
  * Never throws: callers (the automatic hooks and the manual retry route) must
  * not fail their own action because QuickBooks is down or unconfigured.
  */
+/**
+ * Forget every QuickBooks link for an org. QuickBooks ids are per company, so after a disconnect
+ * (or a reconnect to a different company) the stored ids point at unrelated records there —
+ * an invoice push would overwrite somebody else's invoice.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function clearQuickBooksLinks(db: any, orgId: string): Promise<void> {
+  const nowIso = new Date().toISOString();
+  await db.from("clients").update({ qbo_customer_id: null }).eq("org_id", orgId).not("qbo_customer_id", "is", null);
+  await db.from("crm_invoices").update({ qbo_invoice_id: null, qbo_sync_error: null, qbo_sync_attempted_at: null }).eq("org_id", orgId).not("qbo_invoice_id", "is", null);
+  await db.from("crm_services").update({ qbo_item_id: null }).eq("org_id", orgId).not("qbo_item_id", "is", null);
+  // Allocations carry no org_id: walk the org's payments in chunks.
+  const { data: payments } = await db.from("crm_payments").select("id").eq("org_id", orgId);
+  const ids = ((payments ?? []) as { id: string }[]).map((p) => p.id);
+  for (let i = 0; i < ids.length; i += 200) {
+    await db
+      .from("crm_payment_allocations")
+      .update({ qbo_payment_id: null, qbo_sync_error: null, qbo_sync_attempted_at: null })
+      .in("payment_id", ids.slice(i, i + 200))
+      .not("qbo_payment_id", "is", null);
+  }
+  await db.from("crm_qbo_pending_voids").update({ resolved_at: nowIso }).eq("org_id", orgId).is("resolved_at", null);
+}
+
 export async function pushInvoiceToQuickBooks(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
@@ -1144,10 +1168,21 @@ export async function pushInvoiceToQuickBooks(
     const created = await createInvoice(conn, createInput, `inv-${invoiceId}`);
     const qboInvoiceId = created.id;
     const drift = driftMessage(createInput, created);
-    await db
+    const { error: linkErr } = await db
       .from("crm_invoices")
       .update({ qbo_invoice_id: qboInvoiceId, qbo_sync_error: drift, qbo_sync_attempted_at: attemptedAt })
       .eq("id", invoiceId);
+    if (linkErr) {
+      // The invoice exists in QuickBooks but we failed to remember its id: record the attempt so
+      // the cron doesn't create it again every run, and surface the error on the invoice.
+      log.error("QuickBooks invoice created but the link could not be stored", { err: linkErr, invoiceId, orgId, qboInvoiceId });
+      await db
+        .from("crm_invoices")
+        .update({ qbo_sync_error: `Created in QuickBooks as #${qboInvoiceId} but the link could not be saved: ${linkErr.message}`, qbo_sync_attempted_at: attemptedAt })
+        .eq("id", invoiceId);
+      await recordSyncResult(db, orgId, "error");
+      return { status: "error", reason: linkErr.message };
+    }
     await recordSyncResult(db, orgId, drift ? "error" : "ok");
     return { status: "pushed", qboInvoiceId };
   } catch (err) {
@@ -1501,6 +1536,7 @@ export async function mirrorPaymentReversalToQuickBooks(
             await db
               .from("crm_qbo_pending_voids")
               .update({ resolved_at: new Date().toISOString() })
+              .eq("org_id", orgId)
               .eq("qbo_payment_id", link.qboPaymentId)
               .is("resolved_at", null);
           }
@@ -1513,6 +1549,7 @@ export async function mirrorPaymentReversalToQuickBooks(
           await db
             .from("crm_qbo_pending_voids")
             .update({ resolved_at: new Date().toISOString() })
+            .eq("org_id", orgId)
             .eq("qbo_payment_id", link.qboPaymentId)
             .is("resolved_at", null);
           outcome.ok++;
@@ -1559,7 +1596,8 @@ export async function mirrorPaymentReversalToQuickBooks(
             .from("crm_qbo_pending_voids")
             .upsert(
               { org_id: orgId, payment_id: paymentId, qbo_payment_id: link.qboPaymentId, last_error: errorMessage(err), attempted_at: attemptedAt, resolved_at: null },
-              { onConflict: "qbo_payment_id" }
+              // QuickBooks ids repeat across companies; the unique key is per org.
+              { onConflict: "org_id,qbo_payment_id" }
             );
         }
         await recordSyncResult(db, orgId, "error");

@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { isAreaZone, isLinearZone, sumLinearFt, sumZoneSqft } from "@/lib/property-zones";
@@ -743,6 +744,22 @@ async function loadClientDedupMaps(supabase: ReturnType<typeof createClient>) {
   return { byEmail, byPhone, statusById };
 }
 
+/** Display name + service street, normalised — the only identity a client with no account
+ *  number, email or phone has (an export re-imported unchanged used to duplicate them). */
+function nameAddressKey(name: string | null | undefined, address: string | null | undefined): string | null {
+  const n = (name ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  const a = (address ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return n && a ? `${n}|${a}` : null;
+}
+
+const IMPORT_STATUS_MAP: Record<string, "active" | "lead" | "inactive" | "cancelled" | "lost"> = {
+  active: "active", current: "active", client: "active", customer: "active",
+  lead: "lead", prospect: "lead",
+  inactive: "inactive", former: "inactive", past: "inactive", "past client": "inactive",
+  cancelled: "cancelled", canceled: "cancelled",
+  lost: "lost", "closed lost": "lost",
+};
+
 export function useBulkImportClients() {
   const importOrgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
@@ -758,14 +775,27 @@ export function useBulkImportClients() {
       // constraint conflict on account_number, a field rarely populated in
       // a user's CSV).
       const { byEmail, byPhone } = await loadClientDedupMaps(supabase);
+      const existingNameAddr = await fetchAllRows<{ id: string; display_name: string; service_address: string | null }>(() =>
+        supabase.from("clients").select("id, display_name, service_address").is("deleted_at", null).order("id"),
+      );
+      const byNameAddress = new Map<string, string>();
+      for (const c of existingNameAddr ?? []) {
+        const k = nameAddressKey(c.display_name, c.service_address);
+        if (k) byNameAddress.set(k, c.id);
+      }
 
       let succeeded = 0;
       const failed: BulkImportResult["failed"] = [];
       const skipped: BulkImportResult["failed"] = [];
+      const warnings: BulkImportResult["failed"] = [];
+      // Parent links resolve after every row is in, so a child can precede its parent in the file.
+      const parentLinks: { row: number; clientId: string; parentAccountNumber: string; displayName: string }[] = [];
+      const tagRows: { clientId: string; tags: string[] }[] = [];
 
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i];
-        const rowNum = i + 1;
+        // The CSV's own line number (line 1 is the header), so the report points at the file.
+        const rowNum = i + 2;
         try {
           const displayName = r.displayName?.trim();
           if (!displayName) {
@@ -821,7 +851,37 @@ export function useBulkImportClients() {
               skipped.push({ row: rowNum, error: `"${displayName}": matches an existing client by email or phone — skipped` });
               continue;
             }
+            // No email or phone to compare: the same name at the same service street is the same client.
+            if (!email && !phoneDigits && !accountNumber) {
+              const nk = nameAddressKey(displayName, r.serviceAddress);
+              if (nk && byNameAddress.has(nk)) {
+                skipped.push({ row: rowNum, error: `"${displayName}": matches an existing client by name and service address — skipped` });
+                continue;
+              }
+            }
           }
+
+          // Optional columns a Service Autopilot export carries.
+          const statusRaw = r.status?.trim().toLowerCase() ?? "";
+          let status: "active" | "lead" | "inactive" | "cancelled" | "lost" | undefined;
+          if (statusRaw) {
+            status = IMPORT_STATUS_MAP[statusRaw];
+            if (!status) {
+              status = "active";
+              warnings.push({ row: rowNum, error: `"${displayName}": unknown status "${r.status}" — imported as active` });
+            }
+          }
+          const clientSinceCsv = normalizeCsvDate(r.clientSince);
+          if (r.clientSince?.trim() && !clientSinceCsv) {
+            warnings.push({ row: rowNum, error: `"${displayName}": couldn't read client since "${r.clientSince}" — left as ${status === "lead" ? "blank" : "today"}` });
+          }
+          const billingEmailRaw = r.billingEmail?.trim() || null;
+          if (billingEmailRaw && !EMAIL_RE.test(billingEmailRaw)) {
+            warnings.push({ row: rowNum, error: `"${displayName}": invalid billing email "${billingEmailRaw}" — not imported` });
+          }
+          const billingEmail = billingEmailRaw && EMAIL_RE.test(billingEmailRaw) ? billingEmailRaw : null;
+          const csvTags = (r.tags ?? "").split(/[|;]/).map((t) => t.trim()).filter(Boolean);
+          const parentAccountNumber = r.parentAccountNumber?.trim() || null;
 
           const row = {
             display_name: displayName,
@@ -838,7 +898,13 @@ export function useBulkImportClients() {
             service_state: r.serviceState?.trim() || null,
             service_zip: r.serviceZip?.trim() || null,
             source: r.source?.trim() || null,
-            client_since: todayInZone(importOrgTimeZone),
+            first_name: r.firstName?.trim() || null,
+            last_name: r.lastName?.trim() || null,
+            billing_email: billingEmail,
+            notes_to_crew: r.notesToCrew?.trim() || null,
+            ...(status ? { status } : {}),
+            // The file's own date when it has one; a lead has no client-since until it converts.
+            client_since: clientSinceCsv ?? (status === "lead" || status === "lost" ? null : todayInZone(importOrgTimeZone)),
           };
 
           const { data: newClient, error } = existingByAccount
@@ -892,12 +958,18 @@ export function useBulkImportClients() {
               service_state: row.service_state,
               service_zip: row.service_zip,
               source: row.source,
+              first_name: row.first_name,
+              last_name: row.last_name,
+              billing_email: row.billing_email,
+              notes_to_crew: row.notes_to_crew,
             } as const;
             const patch: import("@/types/supabase").Database["public"]["Tables"]["clients"]["Update"] = {};
             for (const [key, value] of Object.entries(candidate) as [keyof typeof candidate, string | null][]) {
               if (value) patch[key] = value;
             }
             if (r.accountType?.trim()) patch.account_type = row.account_type;
+            if (status) patch.status = status;
+            if (clientSinceCsv) patch.client_since = clientSinceCsv;
 
             const ADDRESS_KEYS = [
               "billing_address", "billing_city", "billing_state", "billing_zip",
@@ -932,6 +1004,8 @@ export function useBulkImportClients() {
                 continue;
               }
             }
+            if (csvTags.length) tagRows.push({ clientId: existing.id, tags: csvTags });
+            if (parentAccountNumber) parentLinks.push({ row: rowNum, clientId: existing.id, parentAccountNumber, displayName });
           } else if (error) {
             failed.push({ row: rowNum, error: `"${displayName}": ${error.message}` });
             continue;
@@ -940,6 +1014,10 @@ export function useBulkImportClients() {
             // an email/phone match each other instead of both inserting.
             if (email) byEmail.set(email, newClient.id);
             if (phoneDigits) byPhone.set(phoneDigits, newClient.id);
+            const nk = nameAddressKey(displayName, r.serviceAddress);
+            if (nk) byNameAddress.set(nk, newClient.id);
+            if (csvTags.length) tagRows.push({ clientId: newClient.id, tags: csvTags });
+            if (parentAccountNumber) parentLinks.push({ row: rowNum, clientId: newClient.id, parentAccountNumber, displayName });
           }
 
           succeeded++;
@@ -948,10 +1026,58 @@ export function useBulkImportClients() {
         }
       }
 
-      return { succeeded, failed, skipped };
+      // Tags: client_tags rows (idempotent), and the org's tag list so they show in filters
+      // and Bulk Tag.
+      const allTags = new Set<string>();
+      for (const { clientId, tags } of tagRows) {
+        for (const tag of tags) {
+          allTags.add(tag);
+          const { error: tagErr } = await supabase
+            .from("client_tags")
+            .upsert({ client_id: clientId, tag }, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true });
+          if (tagErr) warnings.push({ row: 0, error: `Tag "${tag}" could not be added: ${tagErr.message}` });
+        }
+      }
+      if (allTags.size > 0) {
+        // Add tags the org's list doesn't have yet (needs CRM settings permission; best effort).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: listed } = await (supabase as any)
+          .from("crm_list_options").select("value").eq("list_name", "client_tags").is("deleted_at", null);
+        const known = new Set(((listed ?? []) as { value: string }[]).map((o) => o.value.toLowerCase()));
+        const missing = [...allTags].filter((t) => !known.has(t.toLowerCase()));
+        if (missing.length) {
+          const { data: orgId } = await supabase.rpc("my_org_id");
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: listErr } = await (supabase as any)
+            .from("crm_list_options")
+            .insert(missing.map((value) => ({ org_id: orgId, list_name: "client_tags", value })));
+          if (listErr) {
+            warnings.push({ row: 0, error: `New tags (${missing.join(", ")}) were added to clients but not to Settings → Tags: ${listErr.message}` });
+          }
+        }
+      }
+
+      // Parent / sub-account links by account number (one level, enforced by a DB trigger).
+      for (const link of parentLinks) {
+        const { data: parent } = await supabase
+          .from("clients")
+          .select("id")
+          .eq("account_number", link.parentAccountNumber)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (!parent || parent.id === link.clientId) {
+          warnings.push({ row: link.row, error: `"${link.displayName}": parent account ${link.parentAccountNumber} not found — not linked` });
+          continue;
+        }
+        const { error: linkErr } = await supabase.from("clients").update({ parent_client_id: parent.id }).eq("id", link.clientId);
+        if (linkErr) warnings.push({ row: link.row, error: `"${link.displayName}": could not link to parent ${link.parentAccountNumber}: ${linkErr.message}` });
+      }
+
+      return { succeeded, failed, skipped, warnings };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["crm_list_options", "client_tags"] });
     },
   });
 }
@@ -966,9 +1092,9 @@ export function useUpdateClient() {
 
       // Fetch the "before" values for fields whose automation trigger only
       // fires on an actual change, not on every generic profile-edit save.
-      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null; payment_method: string | null; sms_opt_in: boolean | null; status: string | null } | null = null;
-      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined || updates.paymentMethod !== undefined || updates.smsOptIn !== undefined || updates.status !== undefined) {
-        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id, payment_method, sms_opt_in, status").eq("id", id).single();
+      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null; payment_method: string | null; sms_opt_in: boolean | null; status: string | null; primary_phone: string | null } | null = null;
+      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined || updates.paymentMethod !== undefined || updates.smsOptIn !== undefined || updates.status !== undefined || updates.primaryPhone !== undefined) {
+        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id, payment_method, sms_opt_in, status, primary_phone").eq("id", id).single();
         before = data;
       }
 
@@ -999,7 +1125,11 @@ export function useUpdateClient() {
       // Status is editable from the Edit Client → Details tab; a lead moved to
       // active there is the same business event as the "Convert" button, so
       // stamp client_since (the conversion date) if the form left it blank.
-      const leadConverting = updates.status === "active" && before?.status === "lead";
+      // A lead closed as lost never became a client either, so reactivating it is a conversion.
+      const leadConverting = updates.status === "active" && (before?.status === "lead" || before?.status === "lost");
+      // Text consent was given for the old number, not the new one.
+      const phoneChanged = updates.primaryPhone !== undefined && before
+        && (updates.primaryPhone ?? "").replace(/\D/g, "").slice(-10) !== (before.primary_phone ?? "").replace(/\D/g, "").slice(-10);
 
       const { error } = await supabase
         .from("clients")
@@ -1044,7 +1174,9 @@ export function useUpdateClient() {
             lng: null,
           }),
           billing_same_as_service: updates.billingSameAsService,
-          source: updates.source,
+          // "" from an empty select means "none", not a blank source (it also fired
+          // client_source_updated on every save of a client with no source).
+          source: updates.source === "" ? null : updates.source,
           // undefined (caller didn't touch it) is omitted; null clears the rep.
           sales_rep_id: updates.salesRepId,
           ok_to_email: updates.okToEmail,
@@ -1075,11 +1207,15 @@ export function useUpdateClient() {
           linear_ft_perimeter: updates.linearFtPerimeter ?? null,
           linear_ft_edging: updates.linearFtEdging ?? null,
           yards_of_mulch: updates.yardsOfMulch ?? null,
-          sms_opt_in: updates.smsOptIn,
-          sms_opt_in_at: smsOptInJustEnabled ? new Date().toISOString() : undefined,
-          sms_opt_in_source: smsOptInJustEnabled ? "manual" : undefined,
+          // A new number never opted in (the import does the same); an explicit toggle wins.
+          sms_opt_in: updates.smsOptIn !== undefined ? updates.smsOptIn : phoneChanged && before?.sms_opt_in ? false : undefined,
+          sms_opt_in_at: smsOptInJustEnabled ? new Date().toISOString() : phoneChanged && updates.smsOptIn === undefined ? null : undefined,
+          sms_opt_in_source: smsOptInJustEnabled ? "manual" : phoneChanged && updates.smsOptIn === undefined ? null : undefined,
         })
         .eq("id", id);
+      if (phoneChanged && before?.sms_opt_in && updates.smsOptIn === undefined) {
+        await logClientActivity(supabase, id, "Text consent cleared: primary phone number changed");
+      }
       if (error) throw error;
 
       // Keep the client's own-address property (is_master) in step with the client-level
@@ -1105,7 +1241,8 @@ export function useUpdateClient() {
         if (mirrorError) throw mirrorError;
       }
 
-      const sourceChanged = updates.source !== undefined && before && updates.source !== before.source;
+      // "" and null are both "no source" (the form posts "" for an empty select).
+      const sourceChanged = updates.source !== undefined && before && (updates.source || null) !== (before.source || null);
       const emailsOptedIn = updates.okToEmail === true && before && before.ok_to_email !== true;
       const newReferrerId = updates.referredByClientId && before && updates.referredByClientId !== before.referred_by_client_id
         ? updates.referredByClientId
@@ -1115,7 +1252,7 @@ export function useUpdateClient() {
       // active there is the same business event as the "Convert" button, so
       // fire the same automation trigger and leave a timeline entry.
       const statusChanged = updates.status !== undefined && before && updates.status !== before.status;
-      const leadConverted = !!statusChanged && before?.status === "lead" && updates.status === "active";
+      const leadConverted = !!statusChanged && (before?.status === "lead" || before?.status === "lost") && updates.status === "active";
       if (statusChanged) {
         await logClientActivity(supabase, id, `Status changed: ${before?.status ?? "—"} → ${updates.status}`);
       }
@@ -1405,7 +1542,7 @@ export function useAddClientContact() {
       contact: Omit<ClientContact, "id" | "orgId" | "clientId" | "createdAt" | "deletedAt">;
     }) => {
       const supabase = createClient();
-      const primaryPhone = contact.phones?.[0] ?? null;
+      const primaryPhone = contact.phones?.find((p) => p.isPrimary) ?? contact.phones?.[0] ?? null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: inserted, error } = await (supabase as any).from("client_contacts").insert({
         client_id:    clientId,
@@ -1460,7 +1597,7 @@ export function useUpdateClientContact() {
       contact: Omit<ClientContact, "id" | "orgId" | "clientId" | "createdAt" | "deletedAt">;
     }) => {
       const supabase = createClient();
-      const primaryPhone = contact.phones?.[0] ?? null;
+      const primaryPhone = contact.phones?.find((p) => p.isPrimary) ?? contact.phones?.[0] ?? null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("client_contacts").update({
         first_name:   contact.firstName,
@@ -1910,7 +2047,10 @@ export function useCancelClient() {
         .not("status", "in", "(cancelled,lost)")
         .select("id");
       if (error) throw error;
-      return { changed: (updated?.length ?? 0) > 0, wasLead: before?.status === "lead" };
+      const changed = (updated?.length ?? 0) > 0;
+      // The reason is cleared from the row on reactivation, so the timeline is its record.
+      if (changed) await logClientActivity(supabase, clientId, `Client cancelled${reason ? `: ${reason}` : ""}`);
+      return { changed, wasLead: before?.status === "lead" };
     },
     onSuccess: (result, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
@@ -1932,7 +2072,8 @@ export function useActivateClient() {
       const supabase = createClient();
       const { data: before } = await supabase.from("clients").select("status").eq("id", clientId).maybeSingle();
       if (!before || before.status === "active") return { changed: false, wasLead: false };
-      const wasLead = before.status === "lead";
+      // A lost lead never became a client, so bringing it back is a conversion too.
+      const wasLead = before.status === "lead" || before.status === "lost";
       const { error } = await supabase
         .from("clients")
         .update({
@@ -1944,7 +2085,7 @@ export function useActivateClient() {
         .eq("id", clientId)
         .eq("status", before.status);
       if (error) throw error;
-      if (wasLead) await logClientActivity(supabase, clientId, "Converted from lead to client");
+      await logClientActivity(supabase, clientId, wasLead ? "Converted from lead to client" : `Client reactivated (was ${before.status})`);
       return { changed: true, wasLead };
     },
     onSuccess: (result, clientId) => {
@@ -1977,6 +2118,7 @@ export function useCloseLeadAsLost() {
         .select("id");
       if (error) throw error;
       if (!data?.length) throw new Error("This record is no longer a lead, so it can't be closed as lost.");
+      await logClientActivity(supabase, clientId, `Lead closed as lost${reason ? `: ${reason}` : ""}`);
     },
     onSuccess: (_d, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
@@ -2107,23 +2249,27 @@ export function useBulkActivateClients() {
         .in("id", clientIds)
         .neq("status", "active");
       if (readErr) throw readErr;
-      const leadIds = (rows ?? []).filter((r) => r.status === "lead").map((r) => r.id);
-      const otherIds = (rows ?? []).filter((r) => r.status !== "lead").map((r) => r.id);
+      // Leads and lost leads never became clients: activating them is a conversion.
+      const isLead = (st: string | null) => st === "lead" || st === "lost";
+      const leadIds = (rows ?? []).filter((r) => isLead(r.status)).map((r) => r.id);
+      const otherIds = (rows ?? []).filter((r) => !isLead(r.status)).map((r) => r.id);
       if (leadIds.length > 0) {
         const { error } = await supabase
           .from("clients")
           .update({ status: "active", cancellation_reason: null, closed_at: null, client_since: todayInZone(orgTimeZone) })
           .in("id", leadIds)
-          .eq("status", "lead");
+          .in("status", ["lead", "lost"]);
         if (error) throw error;
+        for (const id of leadIds) await logClientActivity(supabase, id, "Converted from lead to client");
       }
       if (otherIds.length > 0) {
         const { error } = await supabase
           .from("clients")
           .update({ status: "active", cancellation_reason: null, closed_at: null })
           .in("id", otherIds)
-          .neq("status", "lead");
+          .not("status", "in", "(lead,lost)");
         if (error) throw error;
+        for (const id of otherIds) await logClientActivity(supabase, id, "Client reactivated");
       }
       return { leadIds, otherIds };
     },

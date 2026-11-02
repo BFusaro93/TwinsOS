@@ -54,6 +54,8 @@ export interface ApprovalRequest {
   status: ApprovalRequestStatus;
   decidedAt: string | null;
   comment: string | null;
+  /** The entity total this request was computed against (null on older rows). */
+  entityTotalCents: number | null;
   createdAt: string;
   updatedAt: string;
 }

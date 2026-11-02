@@ -1650,8 +1650,8 @@ function ContactDialog({
       contactType: contactType || null,
       email: email.trim() || null,
       phones: validPhones,
-      phone: validPhones[0]?.phone ?? null,
-      phoneType: validPhones[0]?.type ?? null,
+      phone: (validPhones.find((p) => p.isPrimary) ?? validPhones[0])?.phone ?? null,
+      phoneType: (validPhones.find((p) => p.isPrimary) ?? validPhones[0])?.type ?? null,
       isPrimary,
       okToEmail,
       notes: notes.trim() || null,
@@ -2288,6 +2288,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
               className="text-[11px] text-white/70 hover:text-white"
             >All History</button>
           </div>
+          <PermissionGate permission="job_add">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10">
@@ -2311,6 +2312,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          </PermissionGate>
         </div>
 
         {/* Active / Completed tabs */}
@@ -3503,7 +3505,8 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   async function handleConvert() {
     setConvertConfirmOpen(false);
     try {
-      await convertLead(clientId);
+      const result = await convertLead(clientId);
+      if (result && result.converted === false) { toast.error("This record is no longer a lead."); return; }
       toast.success(`${client!.displayName} converted to client`);
       router.push(`/crm/clients/${clientId}`);
     } catch { toast.error("Failed to convert lead"); }

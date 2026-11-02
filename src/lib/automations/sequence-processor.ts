@@ -1,6 +1,7 @@
 import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "./sequence-email";
 import { isOrgInactive } from "@/lib/orgs/org-canceled";
 import { resolveSmsStepContent, sendResolvedSequenceSms, nextSmsSendTime } from "./sequence-sms";
+import { SMS_NOT_REGISTERED_REASON } from "@/lib/sms/send";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
 import { shouldStopSequence, logSequenceExecution, evaluateConditionSet, computeWaitFireAt } from "./sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -154,6 +155,35 @@ interface SendFailureContext {
  *    enrollment is stopped (stopped_at — the existing "ended without
  *    finishing" state) so it stops occupying the client's active slot.
  */
+/** One in-app alert per org per 30 days: an automation tried to text but the org has no sender. */
+async function notifyAdminsSmsNotConfigured(adminClient: AnyClient, orgId: string, sequenceId: string): Promise<void> {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { count } = await adminClient
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("type", "automation_alert")
+    .eq("title", "Text message not sent")
+    .gte("created_at", since);
+  if ((count ?? 0) > 0) return;
+  const { data: admins } = await adminClient
+    .from("profiles")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("role", "admin")
+    .neq("status", "inactive");
+  const rows = ((admins ?? []) as { id: string }[]).map((a) => ({
+    org_id: orgId,
+    user_id: a.id,
+    type: "automation_alert",
+    title: "Text message not sent",
+    message: "An automation tried to send a text, but text messaging isn't set up for your company yet. Text steps are skipped until SMS registration is finished in Settings → Integrations.",
+    entity_id: sequenceId,
+    entity_type: "automation",
+  }));
+  if (rows.length) await adminClient.from("notifications").insert(rows);
+}
+
 async function handleSendFailure(
   adminClient: AnyClient,
   ctx: SendFailureContext,
@@ -167,6 +197,9 @@ async function handleSendFailure(
   };
 
   if (permanent) {
+    if (ctx.eventType === "text_message" && reason === SMS_NOT_REGISTERED_REASON) {
+      await notifyAdminsSmsNotConfigured(adminClient, ctx.orgId, ctx.sequenceId).catch(() => undefined);
+    }
     const action = await advanceEnrollmentPastStep(adminClient, {
       enrollmentId: ctx.enrollId,
       events: ctx.events,

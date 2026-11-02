@@ -1,3 +1,4 @@
+import { rejectWithoutSchedulingPermission } from "@/lib/auth/scheduling-permission";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
@@ -49,6 +50,8 @@ export async function PATCH(
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = await rejectWithoutSchedulingPermission(supabase);
+  if (denied) return denied;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile } = await (supabase as any).from("profiles").select("org_id").eq("id", user.id).single();
@@ -99,6 +102,8 @@ export async function DELETE(
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = await rejectWithoutSchedulingPermission(supabase);
+  if (denied) return denied;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: profile } = await (supabase as any).from("profiles").select("org_id").eq("id", user.id).single();

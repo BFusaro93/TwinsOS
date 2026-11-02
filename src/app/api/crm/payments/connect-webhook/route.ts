@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { grossToNetRefundCents } from "@/lib/stripe/refund-math";
 import { snapshotQuickBooksPaymentLinks, mirrorPaymentReversalToQuickBooks } from "@/lib/integrations/quickbooks";
 import type Stripe from "stripe";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -296,7 +297,7 @@ export async function POST(request: Request) {
           .limit(1)
           .maybeSingle();
         if (alreadyRecorded) break;
-        await markInvoicesPendingCharge({ db, paymentIntent: pendingIntent, amountsByInvoiceId: amounts });
+        await markInvoicesPendingCharge({ db, orgId: pendingOrgId, paymentIntent: pendingIntent, amountsByInvoiceId: amounts });
       }
       break;
     }
@@ -406,10 +407,12 @@ export async function POST(request: Request) {
       const qboLinks = await snapshotQuickBooksPaymentLinks(db, payment.id);
       let deltaCents = 0;
       try {
+        // A partial refund of a surcharged charge reports gross; scale it to the net the
+        // ledger tracks (a full refund already clamped, a partial one over-reversed by the fee share).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: applied, error: reconcileErr } = await (db.rpc as any)("reconcile_stripe_payment_reversal", {
           p_payment_id: payment.id,
-          p_target_reversed_cents: charge.amount_refunded,
+          p_target_reversed_cents: grossToNetRefundCents(charge.amount_refunded, payment.amount_cents ?? 0, payment.processing_fee_cents ?? 0),
         });
         if (reconcileErr) throw reconcileErr;
         deltaCents = typeof applied === "number" ? applied : 0;

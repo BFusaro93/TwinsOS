@@ -1577,8 +1577,8 @@ function AccountingTab() {
     try {
       await updateOrg({ achPaymentsEnabled: next });
       toast.success(next ? "ACH payments enabled" : "ACH payments disabled");
-    } catch {
-      toast.error("Failed to update ACH setting");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to update ACH setting");
     } finally {
       setAchSaving(false);
     }
@@ -1604,7 +1604,7 @@ function AccountingTab() {
     try {
       await updateOrg({ taxRatePercent: val });
       toast.success("Default tax rate saved");
-    } catch { toast.error("Failed to save tax rate"); }
+    } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to save tax rate"); }
     finally { setTaxSaving(false); }
   }
 
@@ -1628,7 +1628,7 @@ function AccountingTab() {
         ccProcessingFeeMode: feeModeDraft,
       });
       toast.success("Processing fee settings saved");
-    } catch { toast.error("Failed to save processing fee settings"); }
+    } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to save processing fee settings"); }
     finally { setFeeSaving(false); }
   }
 
@@ -1719,7 +1719,7 @@ function AccountingTab() {
             </UISelect>
             <p className="text-xs text-slate-400 dark:text-neutral-500">
               {feeModeDraft === "cover_fee"
-                ? "The charge is grossed up so that, after Stripe's card fee (2.9% + $0.30, taken from the whole charge including this fee), you receive the full invoice amount. The percent below is ignored."
+                ? "The charge is grossed up so that, after Stripe's card fee (2.9% + $0.30, taken from the whole charge including this fee), you receive the full invoice amount. The fee is capped at 4% of the balance (card-network ceiling), so very small balances net slightly less. The percent below is ignored."
                 : "A flat percent of the invoice balance. Stripe's card fee is taken from the whole charge, including this fee, so the fee itself costs you a little."}
             </p>
           </div>

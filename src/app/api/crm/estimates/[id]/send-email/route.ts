@@ -146,6 +146,31 @@ export async function POST(
     );
   }
 
+  // An approval covers the amount that was approved. If the estimate has grown since (lines
+  // added after approval), it has to go through approval again before it reaches the client.
+  if (est.approval_status === "approved") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: approvedRows } = await (supabase as any)
+      .from("approval_requests")
+      .select("entity_total_cents")
+      .eq("entity_id", estimateId)
+      .eq("status", "approved")
+      .eq("archived", false);
+    const approvedTotals = ((approvedRows ?? []) as { entity_total_cents: number | null }[])
+      .map((r) => r.entity_total_cents)
+      .filter((n): n is number => typeof n === "number");
+    const approvedTotal = approvedTotals.length ? Math.max(...approvedTotals) : null;
+    if (approvedTotal != null && (est.total_cents ?? 0) > approvedTotal) {
+      return NextResponse.json(
+        {
+          error: `This estimate was approved at $${(approvedTotal / 100).toFixed(2)} and now totals $${((est.total_cents ?? 0) / 100).toFixed(2)}. Resubmit it for approval before sending.`,
+          code: "reapproval_required",
+        },
+        { status: 409 }
+      );
+    }
+  }
+
   // Only a draft/quote/sent estimate is (re)opened for acceptance by a send.
   // Resending an accepted/lost/invoiced estimate emails the client a copy but
   // must not move it back to 'sent' — that re-armed the proposal's Accept

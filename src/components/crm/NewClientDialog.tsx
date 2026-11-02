@@ -25,6 +25,7 @@ import { EditClientDialogExport } from "./ClientDetailPanel";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
+import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
 import { useVerifyAddress } from "@/lib/hooks/use-verify-address";
 import { AddressSuggestion } from "@/components/shared/AddressSuggestion";
 
@@ -48,6 +49,10 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
   const [status, setStatus] = useState<InitialStatus>(initialStatus);
   const [primaryPhone, setPrimaryPhone] = useState("");
   const [primaryEmail, setPrimaryEmail] = useState("");
+  // Required Fields can demand a source; the quick-create used to skip it (and the follow-up
+  // edit dialog can simply be closed), so the rule was bypassable from the main entry point.
+  const [source, setSource] = useState("");
+  const { options: sourceOptions } = useClientSourceOptions();
   // The address a crew is dispatched to. Captured here rather than only in the
   // full edit dialog so Settings → Required Fields can actually enforce it —
   // a requirement on a field the create form doesn't show is unenforceable.
@@ -70,6 +75,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
     if (rf.isRequired("primary_email") && !primaryEmail.trim()) { toast.error("Email is required"); return; }
     if (primaryEmail.trim() && !isValidEmail(primaryEmail)) { toast.error("Enter a valid email address"); return; }
     if (rf.isRequired("service_address") && !serviceAddress.trim()) { toast.error("Service address is required"); return; }
+    if (rf.isRequired("source") && !source.trim()) { toast.error("Source is required"); return; }
     try {
       const client = await createClient({
         displayName: displayName.trim(),
@@ -86,7 +92,7 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
         billingCity: "",
         billingState: "",
         billingZip: "",
-        source: "",
+        source: source.trim(),
         salesRepId: "",
         status,
       });
@@ -161,6 +167,16 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
                 </Select>
               </div>
             </div>
+
+            {rf.isVisible("source") && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Source{rf.req("source")}</Label>
+                <Select value={source} onValueChange={setSource}>
+                  <SelectTrigger><SelectValue placeholder="How did they find you?" /></SelectTrigger>
+                  <SelectContent>{sourceOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               {rf.isVisible("primary_phone") && (
@@ -244,7 +260,8 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
                 !displayName.trim() ||
                 (rf.isRequired("primary_phone") && !primaryPhone.trim()) ||
                 (rf.isRequired("primary_email") && !primaryEmail.trim()) ||
-                (rf.isRequired("service_address") && !serviceAddress.trim())
+                (rf.isRequired("service_address") && !serviceAddress.trim()) ||
+                (rf.isRequired("source") && !source.trim())
               }
             >
               {isPending ? "Creating…" : "Create & Continue →"}

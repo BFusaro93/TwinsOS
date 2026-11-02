@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getPortalContext, getPortalOrgChoices } from "@/lib/portal/get-portal-context";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import PortalShell from "@/components/portal/PortalShell";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
 
@@ -12,7 +12,11 @@ export default async function PortalShellLayout({ children }: { children: React.
     // so someone who's a client of two Landscapt orgs gets sent to pick
     // one instead of bouncing to a login screen they're already past.
     const choices = await getPortalOrgChoices();
-    redirect(choices.length > 1 ? "/portal/select-org" : "/portal/login");
+    if (choices.length > 1) redirect("/portal/select-org");
+    // A signed-in user with no live portal link (access reset, client deleted, add-on gone)
+    // used to bounce between the login form and here with no explanation.
+    const { data: { user } } = await (await createClient()).auth.getUser();
+    redirect(user ? "/portal/login?reason=revoked" : "/portal/login");
   }
 
   const supabase = createServiceClient();

@@ -217,7 +217,8 @@ function ConvertDialog({ lead, open, onOpenChange }: { lead: Client; open: boole
 
   async function confirm() {
     try {
-      await convert(lead.id);
+      const result = await convert(lead.id);
+      if (result && result.converted === false) { toast.error("This record is no longer a lead."); onOpenChange(false); return; }
       toast.success(`${lead.displayName} converted to client`);
       onOpenChange(false);
       router.push(`/crm/clients/${lead.id}`);
