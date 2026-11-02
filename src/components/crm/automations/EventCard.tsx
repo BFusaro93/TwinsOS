@@ -31,13 +31,16 @@ function getConfigSummary(event: CRMSequenceEvent, canViewTags: boolean): string
   const c = event.config;
   switch (event.eventType) {
     case "wait":
-      return [
-        c.days ? `${c.days}d` : null,
-        c.hours ? `${c.hours}h` : null,
-        c.minutes ? `${c.minutes}m` : null,
-      ]
-        .filter(Boolean)
-        .join(" ") || "No delay set";
+      {
+        const delay = [
+          c.days ? `${c.days}d` : null,
+          c.hours ? `${c.hours}h` : null,
+          c.minutes ? `${c.minutes}m` : null,
+        ].filter(Boolean).join(" ");
+        const extra = [c.until_time ? `until ${c.until_time}` : null, c.weekdays_only ? "weekdays only" : null]
+          .filter(Boolean).join(", ");
+        return [delay, extra].filter(Boolean).join(" · ") || "No delay set";
+      }
     case "email":
       return c.subject ? `Subject: ${c.subject}` : "No subject set";
     case "alert":

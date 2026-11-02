@@ -1,7 +1,17 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { cn } from "@/lib/utils";
+import { Fragment, useState, useCallback, useEffect } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { cn, formatCurrency } from "@/lib/utils";
 import { bpsToPercent, centsToDisplay, clampComplexityBps, computeLineItem, getBreakevenRateCents, resolveLineDiscountCents } from "@/lib/estimate-calc";
 import { useUpsertLineItem, useDeleteLineItem } from "@/lib/hooks/use-estimates";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
@@ -24,7 +34,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { Trash2, Copy, Package as PackageIcon, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical, AlertTriangle, Printer } from "lucide-react";
+import { Trash2, Copy, Package as PackageIcon, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical, AlertTriangle, Printer, ArrowDownToLine } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -212,19 +222,43 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
 
 // ── Section header row ────────────────────────────────────────────────────────
 
+export type FillDownField = "qty" | "rate" | "hours" | "cost" | "adj" | "all";
+
+const FILL_DOWN_BUTTONS: { field: FillDownField; label: string }[] = [
+  { field: "qty", label: "Qty" },
+  { field: "rate", label: "Rate" },
+  { field: "hours", label: "B.Hr" },
+  { field: "cost", label: "Cost" },
+  { field: "adj", label: "Adj Rate" },
+  { field: "all", label: "All" },
+];
+
 function SectionRow({
   item,
   estimateId,
   onDelete,
+  onFillDown,
   tiersEnabled,
 }: {
   item: EstimateLineItem;
   estimateId: string;
   onDelete: (id: string, estimateId: string) => void;
+  onFillDown: (packageId: string, field: FillDownField) => void;
   tiersEnabled?: boolean;
 }) {
   const upsert = useUpsertLineItem();
   const [editing, setEditing] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [desc, setDesc] = useState(item.estimateDesc ?? "");
+  useEffect(() => setDesc(item.estimateDesc ?? ""), [item.estimateDesc]);
+
+  // A package section's estimate_desc is the wording the client sees as the
+  // package's main description (proposal, portal, PDF, email grid).
+  function saveDesc() {
+    setEditingDesc(false);
+    if (desc === (item.estimateDesc ?? "")) return;
+    upsert.mutate({ estimateId, item: { id: item.id, estimate_desc: desc.trim() || null } });
+  }
   const [name, setName] = useState(item.sectionName ?? "New Section");
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -275,6 +309,52 @@ function SectionRow({
             <Trash2 className="h-3 w-3" />
           </button>
         </div>
+        {item.packageId && (
+          <div className="mt-1 pl-12 text-xs">
+            {editingDesc ? (
+              <textarea
+                autoFocus
+                rows={3}
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                onBlur={saveDesc}
+                onKeyDown={(e) => { if (e.key === "Escape") { setDesc(item.estimateDesc ?? ""); setEditingDesc(false); } }}
+                placeholder="Package description shown to the client"
+                className="w-full max-w-2xl rounded border border-slate-300 dark:border-neutral-600 bg-background px-2 py-1 text-xs outline-none"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingDesc(true)}
+                className="flex w-full max-w-2xl items-start gap-1.5 rounded border border-dashed border-slate-300 dark:border-neutral-600 bg-background/60 px-2 py-1 text-left text-muted-foreground hover:border-brand-400 hover:text-foreground"
+                title="Click to edit the description the client sees"
+              >
+                <Pencil className="mt-0.5 h-3 w-3 shrink-0" />
+                <span>
+                  <span className="font-medium text-foreground">Description on estimate: </span>
+                  {item.estimateDesc ? item.estimateDesc : "none yet — click to add the wording the client sees"}
+                </span>
+              </button>
+            )}
+          </div>
+        )}
+        {item.packageId && (
+          <div className="mt-1 flex flex-wrap items-center gap-1 pl-12 text-[10px] text-muted-foreground">
+            <ArrowDownToLine className="h-3 w-3" />
+            <span>Copy the first visit&rsquo;s value to every visit:</span>
+            {FILL_DOWN_BUTTONS.map((b) => (
+              <button
+                key={b.field}
+                type="button"
+                onClick={() => onFillDown(item.packageId as string, b.field)}
+                className="rounded border border-slate-300 dark:border-neutral-600 px-1.5 py-0.5 hover:border-brand-400 hover:text-foreground"
+                title={b.field === "all" ? "Copy qty, rate, calc, budgeted hours, cost and adjusted rate" : `Copy ${b.label} from the first visit to the rest`}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -619,7 +699,13 @@ function LineItemRow({
         )}
 
         {/* Service name + expand chevron */}
-        <td className="min-w-[160px] px-2 py-1.5 font-semibold text-slate-900 dark:text-neutral-100">
+        <td
+          className={cn(
+            "min-w-[160px] px-2 py-1.5 font-semibold text-slate-900 dark:text-neutral-100",
+            // A package's visits sit under its header, indented like sub-items on other lines.
+            item.packageId && "border-l-2 border-brand-300 dark:border-brand-700 pl-6"
+          )}
+        >
           <div className="flex items-center gap-1">
             <button
               onClick={() => onToggleExpand(item.id)}
@@ -1008,16 +1094,89 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
 
+  // Deleting a package's header takes all of its visits with it, after a confirm.
+  const [packageDelete, setPackageDelete] = useState<{ id: string; name: string; lineIds: string[] } | null>(null);
+
   const handleDelete = useCallback(
     async (id: string) => {
+      const target = items.find((i) => i.id === id);
+      const group = target?.rowType === "section" && target.packageId
+        ? items.filter((i) => i.packageId === target.packageId && i.id !== id)
+        : [];
+      if (group.length > 0) {
+        setPackageDelete({ id, name: target?.sectionName ?? "this package", lineIds: group.map((i) => i.id) });
+        return;
+      }
       try {
         await deleteItem({ id, estimateId });
       } catch {
         toast.error("Failed to delete line item");
       }
     },
-    [deleteItem, estimateId]
+    [deleteItem, estimateId, items]
   );
+
+  async function confirmPackageDelete() {
+    const pending = packageDelete;
+    setPackageDelete(null);
+    if (!pending) return;
+    try {
+      for (const lineId of pending.lineIds) await deleteItem({ id: lineId, estimateId });
+      await deleteItem({ id: pending.id, estimateId });
+    } catch {
+      toast.error("Failed to delete the package");
+    }
+  }
+
+  /** SA-style fill down: copy the package's first visit's value(s) onto every other visit,
+   *  recomputing each line's totals the same way editing the cell would. */
+  async function fillPackageDown(packageId: string, field: FillDownField) {
+    const lines = items.filter((i) => i.packageId === packageId && i.rowType !== "section");
+    const [first, ...rest] = lines;
+    if (!first || rest.length === 0) return;
+    const pick = (src: EstimateLineItem): Partial<EstimateLineItem> => {
+      switch (field) {
+        case "qty": return { qty: src.qty };
+        case "rate": return { rateCents: src.rateCents };
+        case "hours": return { budgetedHours: src.budgetedHours };
+        case "cost": return { costCents: src.costCents };
+        case "adj": return { adjRateCents: src.adjRateCents };
+        default: return {
+          qty: src.qty, rateCents: src.rateCents, calcType: src.calcType,
+          budgetedHours: src.budgetedHours, costCents: src.costCents, adjRateCents: src.adjRateCents,
+        };
+      }
+    };
+    try {
+      for (const line of rest) {
+        const next = { ...line, ...pick(first) };
+        const computed = computeLineItem(next, breakevenRateCents);
+        const merged = { ...next, ...computed };
+        const withDiscount = { ...merged, discountCents: resolveLineDiscountCents(merged) };
+        await upsert({
+          estimateId,
+          item: {
+            id: line.id,
+            calc_type: withDiscount.calcType,
+            qty: withDiscount.qty,
+            rate_cents: withDiscount.rateCents,
+            total_cents: withDiscount.totalCents,
+            discount_cents: withDiscount.discountCents,
+            budgeted_hours: withDiscount.budgetedHours,
+            total_budgeted_hours: withDiscount.totalBudgetedHours,
+            cost_cents: withDiscount.costCents,
+            total_cost_cents: withDiscount.totalCostCents,
+            margin_bps: withDiscount.marginBps,
+            markup_bps: withDiscount.markupBps,
+            adj_rate_cents: withDiscount.adjRateCents,
+          },
+        });
+      }
+      toast.success(`Copied from "${first.serviceName}" to ${rest.length} other visit${rest.length !== 1 ? "s" : ""}`);
+    } catch {
+      toast.error("Failed to copy the values down");
+    }
+  }
 
   const handleDuplicate = useCallback(
     async (item: EstimateLineItem) => {
@@ -1100,7 +1259,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       : null;
     // A package step's rate is a per-visit price (lockRate), not a per-sq-ft rate:
     // never multiply it by the client's takeoff.
-    const qty = svc.lockRate ? 1 : (takeoffQty ?? 1);
+    let qty = svc.lockRate ? 1 : (takeoffQty ?? 1);
 
     // Rate Matrix override: if this service has banded rows keyed off a
     // property custom field, and the estimate has a property with a value
@@ -1115,9 +1274,11 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     let matrixBudgetedHours: number | null = svc.budgetedHours ?? null;
     let matrixCostCents: number | null = null;
     let matrixProductionRate: number | null = null;
-    // A package service carries its own per-visit price (lockRate), which the
-    // Rate Matrix must not silently replace.
-    if (svc.id && propertyId && !svc.lockRate) {
+    // A package step's own price (lockRate) is only the fallback: when the service
+    // has Rate Matrix rows keyed off a property field (e.g. Turf Sq. Ft.) that the
+    // estimate's property has a value for, the matched band prices the visit, so a
+    // package honors custom fields the same as the service added on its own.
+    if (svc.id && propertyId) {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: matrixRows } = await (supabase as any)
@@ -1186,6 +1347,11 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           // shouldn't scale with qty, and a per-unit row on a non-area unit
           // can't be stated as a sq ft/hr production rate at all — both keep
           // the manual snapshot.
+          // A per-unit band on an area line prices per sq ft, so a package visit
+          // (qty forced to 1 above) needs the client's takeoff as its quantity.
+          if (svc.lockRate && match.calcType === 1 && isAreaUnit(unit)) {
+            qty = resolveTakeoffSqft(svc.name, takeoff) ?? qty;
+          }
           if (match.calcType === 1 && match.budgetedHours > 0 && isAreaUnit(unit)) {
             matrixProductionRate = 1 / match.budgetedHours;
             budgetMethod = "production_rate";
@@ -1373,7 +1539,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
 
   function toggleSelectAll() {
     if (!onSelectionChange) return;
-    onSelectionChange(selectedIds.length === items.length ? [] : items.map((i) => i.id));
+    const selectable = items.filter((i) => i.rowType !== "section").map((i) => i.id);
+    onSelectionChange(selectedIds.length === selectable.length ? [] : selectable);
   }
 
   const activeServices = (services ?? []).filter((s) => s.isActive);
@@ -1510,7 +1677,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
               <th className="w-12 px-1 py-2 text-center">
                 <input
                   type="checkbox"
-                  checked={items.length > 0 && selectedIds.length === items.length}
+                  checked={items.some((i) => i.rowType !== "section") && selectedIds.length === items.filter((i) => i.rowType !== "section").length}
                   onChange={toggleSelectAll}
                   className="h-3.5 w-3.5 rounded border-slate-300 dark:border-neutral-700"
                 />
@@ -1543,18 +1710,25 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
               </tr>
             )}
               <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                {items.map((item) =>
-                  item.rowType === "section" ? (
+                {items.map((item, idx) => {
+                  const next = items[idx + 1];
+                  const endsPackage = !!item.packageId && item.rowType !== "section" && next?.packageId !== item.packageId;
+                  const packageTotal = endsPackage
+                    ? items.filter((i) => i.packageId === item.packageId && i.rowType !== "section" && (i.status === "quote" || i.status === "won")).reduce((sum, i) => sum + (i.totalCents ?? 0), 0)
+                    : 0;
+                  return (
+                  <Fragment key={item.id}>
+                  {item.rowType === "section" ? (
                     <SectionRow
                       key={item.id}
                       item={item}
                       estimateId={estimateId}
                       onDelete={handleDelete}
+                      onFillDown={fillPackageDown}
                       tiersEnabled={tiersEnabled}
                     />
                   ) : (
                     <LineItemRow
-                      key={item.id}
                       item={item}
                       estimateId={estimateId}
                       onDelete={handleDelete}
@@ -1568,13 +1742,38 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                       onStatusChange={onItemStatusChange}
                       takeoff={takeoff}
                     />
-                  )
-                )}
+                  )}
+                  {endsPackage && (
+                    <tr className="border-b border-border bg-muted/40">
+                      <td colSpan={tiersEnabled ? 18 : 17} className="px-3 py-1.5 text-right text-xs font-semibold">
+                        Package subtotal: {formatCurrency(packageTotal)}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
+                  );
+                })}
               </SortableContext>
           </tbody>
         </table>
         </DndContext>
       </div>
+
+      <AlertDialog open={packageDelete !== null} onOpenChange={(o) => { if (!o) setPackageDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete package?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &ldquo;{packageDelete?.name}&rdquo; and its {packageDelete?.lineIds.length} visit
+              {packageDelete?.lineIds.length !== 1 ? "s" : ""} will be removed from this estimate.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmPackageDelete}>Delete package</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

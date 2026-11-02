@@ -2019,7 +2019,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I show or hide a package's visits on the proposal?",
-        a: "Use the Package visits toggle in the estimate's 'What the client sees' settings (it is on by default, and can also be set on an Estimate document or the org default). On lists each visit as a plain row under the package's main line. Off shows only the package name, wording and total. It applies to the proposal page, the client portal, the PDF and the [estimategrid] table in emails.",
+        a: "Use the Package visits toggle in the estimate's 'What the client sees' settings (it is off by default, and can also be set on an Estimate document or the org default). Off shows only the package name, wording and total. On lists each visit as a plain row under the package's main line. It applies to the proposal page, the client portal, the PDF and the [estimategrid] table in emails.",
       },
       {
         q: "What happens when I convert an estimate that has a package on it?",

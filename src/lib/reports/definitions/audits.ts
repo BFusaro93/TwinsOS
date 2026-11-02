@@ -337,6 +337,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
         "occurred_at",
         "category",
         "record_label",
+        "record_ref",
         "action",
         "changed_by",
         "description",

@@ -3,7 +3,14 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useFormResponses, useMarkFormResponseRead } from "@/lib/hooks/use-crm-forms";
+import {
+  useDeleteFormResponse,
+  useFormResponses,
+  useMarkFormResponseRead,
+  useUpdateFormResponseStatus,
+} from "@/lib/hooks/use-crm-forms";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useConfirm } from "@/components/shared/useConfirm";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
@@ -13,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ExternalLink, Paperclip, RotateCcw, Ticket, User } from "lucide-react";
+import { Ban, CheckCircle2, ChevronDown, ExternalLink, EyeOff, Paperclip, PauseCircle, RotateCcw, ShieldAlert, Ticket, Trash2, User } from "lucide-react";
 import type { CRMFormResponse, FormResponseStatus } from "@/types/crm-forms";
 import { SearchInput } from "@/components/shared/SearchInput";
 
@@ -64,6 +71,50 @@ const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
 
 function ResponseDetailPanel({ response, onClose }: { response: CRMFormResponse; onClose: () => void }) {
   const router = useRouter();
+  const { can } = usePermissions();
+  // Status changes and delete need forms_edit (enforced again server-side);
+  // mark-unread only needs the view permission the panel already requires.
+  const canEdit = can("forms_edit");
+  const [confirm, confirmDialog] = useConfirm();
+  const markRead = useMarkFormResponseRead();
+  const updateStatus = useUpdateFormResponseStatus();
+  const deleteResponse = useDeleteFormResponse();
+
+  function setStatus(status: FormResponseStatus, message: string) {
+    updateStatus.mutate(
+      { id: response.id, status },
+      {
+        onSuccess: () => toast.success(message),
+        onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to update response"),
+      }
+    );
+  }
+
+  function markUnread() {
+    markRead.mutate(
+      { id: response.id, isRead: false },
+      {
+        onSuccess: () => { toast.success("Marked as unread"); onClose(); },
+        onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to update response"),
+      }
+    );
+  }
+
+  async function handleDelete() {
+    if (!(await confirm({
+      title: "Delete this response?",
+      description: "It will be removed from the list. The client or ticket it created, if any, is not affected.",
+      confirmLabel: "Delete Response",
+      destructive: true,
+    }))) return;
+    deleteResponse.mutate(
+      { id: response.id },
+      {
+        onSuccess: () => { toast.success("Response deleted"); onClose(); },
+        onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to delete response"),
+      }
+    );
+  }
   return (
     <div className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-[420px] md:w-[420px] border-l bg-card shadow-xl flex flex-col">
       <div className="flex items-center justify-between border-b px-5 py-4">
@@ -103,6 +154,41 @@ function ResponseDetailPanel({ response, onClose }: { response: CRMFormResponse;
           )}
         </div>
       )}
+      <div className="flex flex-wrap items-center gap-2 border-b px-5 py-2.5">
+        {canEdit && response.status !== "completed" && (
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setStatus("completed", "Marked as completed")}>
+            <CheckCircle2 className="h-3.5 w-3.5" /> Mark resolved
+          </Button>
+        )}
+        {canEdit && response.status !== "on_hold" && (
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setStatus("on_hold", "Moved back to on hold")}>
+            <PauseCircle className="h-3.5 w-3.5" /> Move back to on hold
+          </Button>
+        )}
+        {canEdit && response.status !== "ignored" && (
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setStatus("ignored", "Response ignored")}>
+            <Ban className="h-3.5 w-3.5" /> Ignore
+          </Button>
+        )}
+        {canEdit && response.status !== "spam" && (
+          <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setStatus("spam", "Marked as spam")}>
+            <ShieldAlert className="h-3.5 w-3.5" /> Mark as spam
+          </Button>
+        )}
+        <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={markUnread}>
+          <EyeOff className="h-3.5 w-3.5" /> Mark unread
+        </Button>
+        {canEdit && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 text-xs text-red-600 dark:text-red-400"
+            onClick={handleDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </Button>
+        )}
+      </div>
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
         <div className="grid grid-cols-2 gap-3 text-xs">
           <div>
@@ -115,7 +201,7 @@ function ResponseDetailPanel({ response, onClose }: { response: CRMFormResponse;
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-neutral-500 mb-0.5">Status</p>
-            <p className="capitalize text-slate-700 dark:text-neutral-300">{response.status}</p>
+            <p className="capitalize text-slate-700 dark:text-neutral-300">{response.status.replace("_", " ")}</p>
           </div>
           <div>
             <p className="text-[10px] uppercase tracking-widest text-slate-400 dark:text-neutral-500 mb-0.5">Source</p>
@@ -150,6 +236,7 @@ function ResponseDetailPanel({ response, onClose }: { response: CRMFormResponse;
           </div>
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }
@@ -165,7 +252,11 @@ export function FormResponses({ formId }: Props) {
   const markRead = useMarkFormResponseRead();
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
-  const [selected, setSelected] = useState<CRMFormResponse | null>(null);
+  // Track the id and derive the row so optimistic status/read changes show up
+  // in the open panel immediately.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = responses.find((r) => r.id === selectedId) ?? null;
+  const setSelected = (r: CRMFormResponse | null) => setSelectedId(r?.id ?? null);
 
   function openResponse(r: CRMFormResponse) {
     setSelected(r);
@@ -321,9 +412,11 @@ export function FormResponses({ formId }: Props) {
                         ? "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
                         : r.status === "spam"
                         ? "bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800"
+                        : r.status === "ignored"
+                        ? "bg-muted text-muted-foreground border-slate-300 dark:border-neutral-700"
                         : "bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-800"
                     )}>
-                      {r.status}
+                      {r.status.replace("_", " ")}
                     </span>
                   </td>
                   <td className="px-4 py-3 font-medium text-slate-800 dark:text-neutral-100">{r.submittedByName ?? "—"}</td>

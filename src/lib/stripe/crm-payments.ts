@@ -67,15 +67,30 @@ const CARD_BRAND_TO_METHOD: Record<string, string> = {
   visa: "Credit Card- Visa",
 };
 
-export function methodForCardBrand(brand: string | null | undefined): string {
+const DEBIT_BRAND_TO_METHOD: Record<string, string> = {
+  discover: "Debit Card- Discover",
+  mastercard: "Debit Card- MasterCard",
+  visa: "Debit Card- Visa",
+};
+
+/** Debit and prepaid cards are labelled "Debit Card" (the same funding types the surcharge
+ * skips); AmEx has no debit product, so it always stays a credit card. */
+export function methodForCardBrand(brand: string | null | undefined, funding?: string | null): string {
+  if (brand && (funding === "debit" || funding === "prepaid") && DEBIT_BRAND_TO_METHOD[brand]) {
+    return DEBIT_BRAND_TO_METHOD[brand];
+  }
   return (brand && CARD_BRAND_TO_METHOD[brand]) ?? "Other";
 }
 
 /** crm_payments.method for a succeeded PaymentIntent — ACH never has a "card brand"
  * to look up, so it's tagged directly from the payment method type used. */
-export function methodForPaymentIntent(paymentMethodTypes: string[], cardBrand: string | null | undefined): string {
+export function methodForPaymentIntent(
+  paymentMethodTypes: string[],
+  cardBrand: string | null | undefined,
+  cardFunding?: string | null
+): string {
   if (paymentMethodTypes.includes("us_bank_account")) return "ACH/E-Check";
-  return methodForCardBrand(cardBrand);
+  return methodForCardBrand(cardBrand, cardFunding);
 }
 
 export interface InvoiceAllocation {

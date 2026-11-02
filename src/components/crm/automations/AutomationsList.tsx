@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Pencil, Trash2, Plus, Zap, Sparkles } from "lucide-react";
+import { Pencil, Trash2, Plus, Zap, Sparkles, Copy } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ import {
   useCreateAutomation,
   useUpdateAutomation,
   useDeleteAutomation,
+  useCopyAutomation,
   useCreateSequence,
   useCreateTrigger,
   useCreateEvent,
@@ -40,6 +41,8 @@ import type { EventType, TriggerType } from "@/types/crm-automations";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { createClient } from "@/lib/supabase/client";
+import { automationActivationWarnings } from "@/lib/automations/activation-warnings";
 
 interface AutomationTemplate {
   name: string;
@@ -147,6 +150,28 @@ interface Props {
 
 export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props) {
   const [confirm, confirmDialog] = useConfirm();
+
+  async function setActive(id: string, checked: boolean) {
+    if (checked) {
+      const warnings = await automationActivationWarnings(createClient(), id).catch(() => []);
+      if (warnings.length > 0) {
+        const ok = await confirm({
+          title: "Turn on with warnings?",
+          description: (
+            <ul className="list-disc space-y-1 pl-5 text-left">
+              {warnings.map((w) => <li key={w}>{w}</li>)}
+            </ul>
+          ),
+          confirmLabel: "Turn on anyway",
+        });
+        if (!ok) return;
+      }
+    }
+    updateAutomation.mutate(
+      { id, updates: { isActive: checked } },
+      { onError: () => toast.error("Failed to update automation") }
+    );
+  }
   const router = useRouter();
   const { can } = usePermissions();
   const canModify = can("automation_create_modify");
@@ -155,6 +180,8 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
   const createAutomation = useCreateAutomation();
   const updateAutomation = useUpdateAutomation();
   const deleteAutomation = useDeleteAutomation();
+  const copyAutomation = useCopyAutomation();
+  const [copyingId, setCopyingId] = useState<string | null>(null);
   const createSequence = useCreateSequence();
   const createTrigger = useCreateTrigger();
   const createEvent = useCreateEvent();
@@ -210,6 +237,19 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
       toast.error("Failed to add automation from template");
     } finally {
       setAddingTemplate(null);
+    }
+  }
+
+  async function handleCopy(id: string) {
+    setCopyingId(id);
+    try {
+      const copy = await copyAutomation.mutateAsync(id);
+      toast.success(`Copied as "${copy.name}" — it's disabled until you turn it on`);
+      router.push(`/crm/communication/automations/${copy.id}`);
+    } catch {
+      toast.error("Failed to copy automation");
+    } finally {
+      setCopyingId(null);
     }
   }
 
@@ -329,12 +369,7 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
                       <Switch
                         checked={a.isActive}
                         disabled={!canStop}
-                        onCheckedChange={(checked) =>
-                          updateAutomation.mutate(
-                            { id: a.id, updates: { isActive: checked } },
-                            { onError: () => toast.error("Failed to update automation") }
-                          )
-                        }
+                        onCheckedChange={(checked) => { void setActive(a.id, checked); }}
                       />
                       {a.isActive ? (
                         <Badge variant="outline" className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400">
@@ -357,6 +392,17 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
                           onClick={() => router.push(`/crm/communication/automations/${a.id}`)}
                         >
                           <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Copy automation"
+                          aria-label="Copy automation"
+                          disabled={copyingId === a.id}
+                          onClick={() => void handleCopy(a.id)}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="ghost"

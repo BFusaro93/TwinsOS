@@ -5,6 +5,8 @@ import { escapeHtml } from "@/lib/utils/escape-html";
 import { buildCanSpamFooter, orgEmailFrom } from "@/lib/email/send";
 import { getOrgReplyTo, isUsableReplyTo } from "@/lib/email/reply-to";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
+import { buildInvoiceExtras, buildServiceExtras } from "./record-merge-vars";
 import { computeWaitFireAt } from "./sequence-enrollment";
 import { buildAutomationMergeVars, loadAutomationClient } from "./client-merge-vars";
 import type { CardExpiryContext } from "./card-expiry-context";
@@ -31,6 +33,20 @@ interface ResolvedEmailContent {
 }
 
 
+/**
+ * Email Category (EmailEventDialog) decides which suppression rules apply.
+ * `transactional` and `reminder` are service messages: they still go to a
+ * client who set do_not_market (that flag is a MARKETING preference). Every
+ * other category (general, marketing, follow_up, unset/unknown) is treated as
+ * marketing and respects do_not_market — the conservative default, since
+ * existing steps were all created as "general" and always honored it.
+ * email_bounced_at (dead address) and ok_to_email=false block every category.
+ */
+const SERVICE_EMAIL_CATEGORIES: ReadonlySet<string> = new Set(["transactional", "reminder"]);
+export function isMarketingEmailCategory(category: string | null | undefined): boolean {
+  return !SERVICE_EMAIL_CATEGORIES.has((category ?? "").toLowerCase());
+}
+
 /** Resolves an email step's `to`/`from` selections and [mergetag] placeholders against the client/org/estimate context. */
 export async function resolveEmailStepContent(
   supabase: AnyClient,
@@ -38,6 +54,7 @@ export async function resolveEmailStepContent(
     orgId: string;
     clientId: string;
     estimateId: string | null;
+    invoiceId?: string | null;
     meetingId?: string | null;
     subjectTemplate: string;
     bodyTemplate: string;
@@ -45,19 +62,23 @@ export async function resolveEmailStepContent(
     fromSelection?: string;
     /** Only populated for `credit_card_about_to_expire` enrollments — see fetchCardExpiryContext. */
     cardExpiryContext?: CardExpiryContext | null;
+    /** The step's Email Category; see isMarketingEmailCategory. */
+    category?: string | null;
   }
 ): Promise<ResolvedEmailContent | { error: string }> {
   const loaded = await loadAutomationClient(supabase, { orgId: params.orgId, clientId: params.clientId });
   if (!loaded) return { error: "client not found" };
   const { client, orgName: loadedOrgName } = loaded;
   // Same opt-out flag Sales Campaigns checks before sending — a client who
-  // used the unsubscribe link should stop getting automation emails too,
-  // not just campaign blasts.
-  if (client.do_not_market) return { error: "client has opted out of marketing emails (do_not_market)" };
+  // used the unsubscribe link should stop getting MARKETING automation emails
+  // too, not just campaign blasts. Service-category steps (transactional,
+  // reminder) are exempt: do_not_market is a marketing preference only.
+  if (isMarketingEmailCategory(params.category) && client.do_not_market) {
+    return { error: "client has opted out of marketing emails (do_not_market)" };
+  }
   // clients.ok_to_email is the per-client "OK to Email" preference (ClientsTable
-  // / API v1). Automations here have no service-vs-marketing purpose flag and
-  // already honor do_not_market for every step, so they honor ok_to_email the
-  // same way; transactional notices (invoice/estimate/receipt emails) go
+  // / API v1). It is a general "don't email me" switch, so it blocks every
+  // category; transactional notices (invoice/estimate/receipt emails) go
   // through their own routes and are unaffected.
   if (client.ok_to_email === false) return { error: "client is marked not OK to email (ok_to_email)" };
   // Separate from the opt-out: the address itself hard-bounced. The Resend
@@ -202,6 +223,12 @@ export async function resolveEmailStepContent(
     extras["[creditcardending]"] = params.cardExpiryContext.last4;
     extras["[creditcardexpiration]"] = `${params.cardExpiryContext.expMonth}/${String(params.cardExpiryContext.expYear).slice(-2)}`;
   }
+  // Invoice tags (invoice-triggered enrollments) and last/next service tags.
+  Object.assign(
+    extras,
+    await buildInvoiceExtras(supabase, { orgId: params.orgId, invoiceId: params.invoiceId, html: true }),
+    await buildServiceExtras(supabase, { orgId: params.orgId, clientId: params.clientId, today: todayInZone(await getOrgTimeZone(supabase, params.orgId)) }),
+  );
   const vars = await buildAutomationMergeVars(supabase, { orgId: params.orgId, client, extras, escapeHtml });
   const resolve = (template: string, escapeValues: boolean) => {
     const map = escapeValues ? vars.html : vars.text;
@@ -241,6 +268,8 @@ export async function sendResolvedSequenceEmail(
     replyTo?: string | null;
     subject: string;
     bodyHtml: string;
+    /** Marketing-category emails get the CAN-SPAM footer + one-click unsubscribe; service emails don't (default true). */
+    marketing?: boolean;
   }
 ): Promise<{ ok: true; resendId: string | null } | { ok: false; reason: string; permanent?: boolean }> {
   const resendKey = process.env.RESEND_API_KEY;
@@ -265,7 +294,7 @@ export async function sendResolvedSequenceEmail(
   // recipient's only way out is replying (and `email.complained` is the result).
   let html = params.bodyHtml;
   let unsubscribeUrl: string | null = null;
-  if (params.clientId) {
+  if (params.clientId && params.marketing !== false) {
     const [{ data: tokenRow }, { data: orgRow }] = await Promise.all([
       supabase.from("clients").select("unsubscribe_token").eq("id", params.clientId).maybeSingle(),
       supabase.from("organizations").select("name, address").eq("id", params.orgId).maybeSingle(),
@@ -385,11 +414,17 @@ export async function advanceEnrollmentPastStep(
   }
 
   if (nextEvent.event_type === "wait") {
-    const waitConfig = (nextEvent.config as Record<string, number>) ?? {};
-    const days = waitConfig.days ?? 0;
-    const hours = waitConfig.hours ?? 0;
-    const minutes = waitConfig.minutes ?? 0;
-    const d = computeWaitFireAt(waitConfig);
+    const waitConfig = (nextEvent.config as Record<string, number | string | boolean>) ?? {};
+    const days = Number(waitConfig.days ?? 0);
+    const hours = Number(waitConfig.hours ?? 0);
+    const minutes = Number(waitConfig.minutes ?? 0);
+    const { data: enr } = await supabase
+      .from("crm_sequence_enrollments")
+      .select("org_id")
+      .eq("id", params.enrollmentId)
+      .maybeSingle();
+    const waitTz = enr?.org_id ? await getOrgTimeZone(supabase, enr.org_id as string) : undefined;
+    const d = computeWaitFireAt(waitConfig, new Date(), waitTz);
     const { error } = await supabase
       .from("crm_sequence_enrollments")
       .update({ next_event_position: nextEvent.position + 1, next_fire_at: d.toISOString(), updated_at: params.nowIso })

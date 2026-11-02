@@ -124,18 +124,96 @@ export function useUpsertRateMatrixRow() {
       row: Record<string, any>;
     }) => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_service_rate_matrix")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .upsert({ service_id: serviceId, ...row } as any)
-        .select()
-        .single();
+      const { id, ...patch } = row;
+      // Editing an existing row must be a real UPDATE. Sending a partial row
+      // through upsert() builds an INSERT tuple first, and Postgres checks
+      // NOT NULL (custom_field_id) on that tuple before it looks for the
+      // conflicting id, so every single-cell edit failed to save.
+      const query = supabase as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      const { data, error } = id
+        ? await query.from("crm_service_rate_matrix").update(patch).eq("id", id).select().single()
+        : await query.from("crm_service_rate_matrix").insert({ service_id: serviceId, ...patch }).select().single();
       if (error) throw error;
       return mapRow(data);
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["rate-matrix", vars.serviceId] });
+    },
+  });
+}
+
+/**
+ * Copy one service's rate matrix to other services. Each target's existing
+ * rows are soft-deleted first so the result is an exact copy, and the
+ * service-level lookup field / calc mode are carried across with it.
+ */
+export function useCopyRateMatrix() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      sourceServiceId,
+      targetServiceIds,
+    }: {
+      sourceServiceId: string;
+      targetServiceIds: string[];
+    }) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = supabase as any;
+      const { data: src, error: srcErr } = await db
+        .from("crm_service_rate_matrix")
+        .select("*")
+        .eq("service_id", sourceServiceId)
+        .is("deleted_at", null)
+        .order("sort_order", { ascending: true });
+      if (srcErr) throw srcErr;
+      const { data: srcSvc, error: svcErr } = await db
+        .from("crm_services")
+        .select("rate_matrix_field, rate_matrix_calc")
+        .eq("id", sourceServiceId)
+        .single();
+      if (svcErr) throw svcErr;
+
+      for (const targetId of targetServiceIds) {
+        const { error: delErr } = await db
+          .from("crm_service_rate_matrix")
+          .update({ deleted_at: new Date().toISOString() })
+          .eq("service_id", targetId)
+          .is("deleted_at", null);
+        if (delErr) throw delErr;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const copies = (src ?? []).map((r: any) => ({
+          service_id: targetId,
+          custom_field_id: r.custom_field_id,
+          calc_type: r.calc_type,
+          from_val: r.from_val,
+          to_val: r.to_val,
+          rate_cents: r.rate_cents,
+          budgeted_hours: r.budgeted_hours,
+          budgeted_cost_cents: r.budgeted_cost_cents,
+          sort_order: r.sort_order,
+          is_tail_row: r.is_tail_row,
+          tail_every_qty: r.tail_every_qty,
+          tail_over_qty: r.tail_over_qty,
+        }));
+        if (copies.length > 0) {
+          const { error: insErr } = await db.from("crm_service_rate_matrix").insert(copies);
+          if (insErr) throw insErr;
+        }
+        const { error: updErr } = await db
+          .from("crm_services")
+          .update({
+            rate_matrix_field: srcSvc?.rate_matrix_field ?? null,
+            rate_matrix_calc: srcSvc?.rate_matrix_calc ?? "qty_x_rate_x_visits",
+          })
+          .eq("id", targetId);
+        if (updErr) throw updErr;
+      }
+      return { count: targetServiceIds.length };
+    },
+    onSuccess: (_d, vars) => {
+      for (const id of vars.targetServiceIds) qc.invalidateQueries({ queryKey: ["rate-matrix", id] });
+      qc.invalidateQueries({ queryKey: ["crm-services"] });
     },
   });
 }

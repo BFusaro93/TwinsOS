@@ -18,6 +18,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { useConfirm } from "@/components/shared/useConfirm";
+import { createClient } from "@/lib/supabase/client";
+import { automationActivationWarnings } from "@/lib/automations/activation-warnings";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -79,6 +82,29 @@ export function AutomationBuilder({ automationId }: Props) {
   const updateAutomation = useUpdateAutomation();
   const createSequence = useCreateSequence();
   const createEvent = useCreateEvent();
+  const [confirm, confirmDialog] = useConfirm();
+
+  async function setActive(checked: boolean) {
+    if (checked) {
+      const warnings = await automationActivationWarnings(createClient(), automationId).catch(() => []);
+      if (warnings.length > 0) {
+        const ok = await confirm({
+          title: "Turn on with warnings?",
+          description: (
+            <ul className="list-disc space-y-1 pl-5 text-left">
+              {warnings.map((w) => <li key={w}>{w}</li>)}
+            </ul>
+          ),
+          confirmLabel: "Turn on anyway",
+        });
+        if (!ok) return;
+      }
+    }
+    updateAutomation.mutate(
+      { id: automationId, updates: { isActive: checked } },
+      { onError: () => toast.error("Failed to update automation") }
+    );
+  }
 
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState("");
@@ -157,6 +183,7 @@ export function AutomationBuilder({ automationId }: Props) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      {confirmDialog}
       {/* Top bar */}
       <div className="flex h-12 shrink-0 items-center gap-3 border-b bg-card px-4">
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => router.back()}>
@@ -192,12 +219,7 @@ export function AutomationBuilder({ automationId }: Props) {
               id="auto-active"
               checked={automation.isActive}
               disabled={!canStop}
-              onCheckedChange={(checked) =>
-                updateAutomation.mutate(
-                  { id: automationId, updates: { isActive: checked } },
-                  { onError: () => toast.error("Failed to update automation") }
-                )
-              }
+              onCheckedChange={(checked) => { void setActive(checked); }}
             />
             <Label htmlFor="auto-active" className="text-sm cursor-pointer">
               Active

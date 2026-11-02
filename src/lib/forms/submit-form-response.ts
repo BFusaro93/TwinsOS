@@ -4,6 +4,7 @@ import { resolveMergeTags, EMAIL_FROM } from "@/lib/email/send";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { escapeHtml } from "@/lib/utils/escape-html";
+import { EMAIL_REGEX, computeVisitedPages, ruleConditionMatches, type PageWalkRule } from "@/lib/forms/form-logic";
 
 /** File-upload answers are stored as `{path, name, size}` objects (see
  *  FormResponses.tsx) — plain string interpolation of one produces
@@ -32,32 +33,18 @@ interface FormEmailNotification {
   sendCopy?: boolean; // append the full raw submission (all fields) below the body
 }
 
-// Mirrors src/app/forms/[slug]/page.tsx's DISPLAY_TYPES/MULTI_VALUE_TYPES and
-// ruleConditionMatches() — kept in sync deliberately since this is the
+// Mirrors src/app/forms/[slug]/page.tsx's DISPLAY_TYPES/MULTI_VALUE_TYPES (rule
+// condition + page-walk logic is shared via lib/forms/form-logic) — kept in sync deliberately since this is the
 // server-side re-check of exactly what that client-side validation does.
 const DISPLAY_TYPES = new Set(["header", "paragraph", "divider", "hidden"]);
 const MULTI_VALUE_TYPES = new Set(["checklist"]);
-
-function ruleConditionMatches(value: string, operator: string, operand: string | null): boolean {
-  const v = value ?? "";
-  const op = operand ?? "";
-  switch (operator) {
-    case "equals": return v === op;
-    case "not_equals": return v !== op;
-    case "greater_than": return parseFloat(v) > parseFloat(op);
-    case "less_than": return parseFloat(v) < parseFloat(op);
-    case "contains": return v.toLowerCase().includes(op.toLowerCase());
-    case "is_empty": return v.trim() === "";
-    case "is_not_empty": return v.trim() !== "";
-    default: return false;
-  }
-}
 
 interface FormFieldRow {
   id: string;
   label: string;
   field_type: string;
   required: boolean | null;
+  page_number?: number | null;
 }
 
 /** An attachment answer's {path,name,size} was never checked against the
@@ -119,6 +106,18 @@ interface EvaluatedFormRules {
   /** Tags from add_tag/remove_tag rules whose conditions matched. */
   tagsToAdd: string[];
   tagsToRemove: string[];
+  /** Pages the visitor never saw because a jump_to_page rule skipped them. */
+  skippedPages: Set<number>;
+}
+
+/** The answer for a field as the string rule operators compare against —
+ *  same shape the public page builds (multi-value joined with ","). */
+function ruleValueFor(field: FormFieldRow | undefined, formData: Record<string, unknown>): string {
+  if (!field) return "";
+  const v = formData[field.label];
+  if (Array.isArray(v)) return v.join(",");
+  if (v == null || typeof v === "object") return "";
+  return String(v);
 }
 
 /** Server-side twin of evaluateRules() in src/app/forms/[slug]/page.tsx:
@@ -138,6 +137,9 @@ async function evaluateFormRules(
     .from("crm_form_rules")
     .select("source_field_id, operator, operand, action, action_value")
     .eq("form_id", formId)
+    // Same order the public page receives rules in — "last matching jump wins"
+    // depends on it.
+    .order("sort_order", { ascending: true })
     // crm_form_rules is soft-deleted; without this a rule the user deleted
     // keeps hiding/altering fields on every new submission.
     .is("deleted_at", null);
@@ -164,7 +166,24 @@ async function evaluateFormRules(
     if (rule.action === "add_tag" && rule.action_value) tagsToAdd.add(rule.action_value);
     if (rule.action === "remove_tag" && rule.action_value) tagsToRemove.add(rule.action_value);
   }
-  return { hidden, tagsToAdd: [...tagsToAdd], tagsToRemove: [...tagsToRemove] };
+
+  // Replay the visitor's page walk (shared with the public page) so required
+  // fields on pages a jump_to_page rule skipped are not demanded.
+  const totalPages = Math.max(1, ...formFields.map((f) => f.page_number ?? 1));
+  const walkRules: PageWalkRule[] = (formRules ?? []).map(
+    (r: { source_field_id: string | null; operator: string; operand: string | null; action: string; action_value: string | null }) => ({
+      sourceFieldId: r.source_field_id,
+      operator: r.operator,
+      operand: r.operand,
+      action: r.action,
+      actionValue: r.action_value,
+    })
+  );
+  const visited = computeVisitedPages(totalPages, walkRules, (id) => ruleValueFor(fieldById.get(id), formData));
+  const skippedPages = new Set<number>();
+  for (let p = 1; p <= totalPages; p++) if (!visited.has(p)) skippedPages.add(p);
+
+  return { hidden, tagsToAdd: [...tagsToAdd], tagsToRemove: [...tagsToRemove], skippedPages };
 }
 
 /** Returns the labels of every required, rule-visible field with no value
@@ -172,14 +191,15 @@ async function evaluateFormRules(
 function findMissingRequiredFields(
   formFields: FormFieldRow[],
   formData: Record<string, unknown>,
-  hidden: Set<string>
+  hidden: Set<string>,
+  skippedPages: Set<number>
 ): string[] {
-
   const missing: string[] = [];
   for (const field of formFields) {
     if (DISPLAY_TYPES.has(field.field_type)) continue;
     if (!field.required) continue;
     if (hidden.has(field.id)) continue;
+    if (skippedPages.has(field.page_number ?? 1)) continue;
 
     const value = formData[field.label];
     const isEmpty = field.field_type === "attachment"
@@ -229,7 +249,7 @@ export async function submitFormResponse(
 ): Promise<{ ok: true; result: string } | { ok: false; error: string; status?: number }> {
   const { data: formFields } = await db
     .from("crm_form_fields")
-    .select("id, label, mapped_field, field_type, required")
+    .select("id, label, mapped_field, field_type, required, page_number")
     .eq("form_id", form.id)
     .is("deleted_at", null);
 
@@ -248,11 +268,30 @@ export async function submitFormResponse(
   if (formFields?.length) {
     const rules = await evaluateFormRules(db, form.id, formFields, formData);
     ruleTags = { add: rules.tagsToAdd, remove: rules.tagsToRemove };
-    const missing = findMissingRequiredFields(formFields, formData, rules.hidden);
+    const missing = findMissingRequiredFields(formFields, formData, rules.hidden, rules.skippedPages);
     if (missing.length > 0) {
       return {
         ok: false,
         error: `Missing required field${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}`,
+        status: 422,
+      };
+    }
+
+    // Email-type fields: the public page checks format client-side only, so a
+    // direct POST could store junk. Same regex as the client (EMAIL_REGEX).
+    // Skipped when the field is hidden/skipped (its value isn't submitted).
+    const badEmails = formFields
+      .filter((f: FormFieldRow) => f.field_type === "email" && !rules.hidden.has(f.id) && !rules.skippedPages.has(f.page_number ?? 1))
+      .filter((f: FormFieldRow) => {
+        const v = formData[f.label];
+        if (v === undefined || v === null || v === "") return false;
+        return typeof v !== "string" || v.length > 254 || !EMAIL_REGEX.test(v.trim());
+      })
+      .map((f: FormFieldRow) => f.label || "This field");
+    if (badEmails.length > 0) {
+      return {
+        ok: false,
+        error: `Invalid email address${badEmails.length > 1 ? "es" : ""} in: ${badEmails.join(", ")}`,
         status: 422,
       };
     }
@@ -316,7 +355,7 @@ export async function submitFormResponse(
     asString(formData["Email Address"]) ??
     null;
   const submittedEmail: string | null =
-    rawSubmittedEmail && rawSubmittedEmail.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawSubmittedEmail.trim())
+    rawSubmittedEmail && rawSubmittedEmail.length <= 254 && EMAIL_REGEX.test(rawSubmittedEmail.trim())
       ? rawSubmittedEmail.trim()
       : null;
 
@@ -759,7 +798,14 @@ export async function submitFormResponse(
 
   // ── Create ticket ─────────────────────────────────────────────────────────────
   let relatedTicketId: string | null = null;
-  {
+  // Per-form ticket settings (Configure → Ticket). Default: always create, as
+  // forms did before the setting existed. Priority is whitelisted — settings
+  // are staff-written but travel as free JSON.
+  const ticketSettings = (form.settings?.ticket ?? {}) as { create?: unknown; priority?: unknown; category?: unknown };
+  const createTicket = ticketSettings.create !== false;
+  const ticketPriority = ["low", "normal", "high", "urgent"].includes(String(ticketSettings.priority)) ? String(ticketSettings.priority) : "normal";
+  const ticketCategory = typeof ticketSettings.category === "string" && ticketSettings.category.trim() ? ticketSettings.category.trim().slice(0, 100) : form.name;
+  if (createTicket) {
     const ticketSubject = `${form.name}${submittedName ? ` — ${submittedName}` : ""}`;
     const ticketBody = [
       submittedName ? `Name: ${submittedName}` : null,
@@ -783,8 +829,8 @@ export async function submitFormResponse(
         subject: ticketSubject,
         body: ticketBody,
         status: "open",
-        priority: "normal",
-        category: form.name,
+        priority: ticketPriority,
+        category: ticketCategory,
         type: "note",
         sms_consent_pending_phone: smsConsentPendingPhone,
       })

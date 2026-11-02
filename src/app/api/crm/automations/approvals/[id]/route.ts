@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { sendResolvedSequenceEmail, advanceEnrollmentPastStep } from "@/lib/automations/sequence-email";
+import { sendResolvedSequenceEmail, advanceEnrollmentPastStep, isMarketingEmailCategory } from "@/lib/automations/sequence-email";
+import { emailSendDeferral } from "@/lib/automations/sequence-processor";
 import { sendResolvedSequenceSms, nextSmsSendTime } from "@/lib/automations/sequence-sms";
 import { instantToZoneWallClock } from "@/lib/time/zone";
 import { logSequenceExecution } from "@/lib/automations/sequence-enrollment";
@@ -92,6 +93,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   }
 
+  // The step's own settings (Email Category, Send window, Mon-Fri flag) live on
+  // its event; the queued row only holds the resolved content.
+  let eventConfig: Record<string, unknown> = {};
+  if (approval.channel !== "sms") {
+    const { data: ev } = await db
+      .from("crm_sequence_events")
+      .select("config")
+      .eq("id", approval.event_id)
+      .maybeSingle();
+    eventConfig = ((ev as { config: Record<string, unknown> | null } | null)?.config ?? {}) as Record<string, unknown>;
+  }
+  const marketingEmail = isMarketingEmailCategory(eventConfig.category as string | undefined);
+
   // Suppression can change while a step sits in the queue (unsubscribe link,
   // hard bounce). The queued content was vetted at queue time only, so
   // re-check before the send — SMS consent is re-checked inside sendClientSms.
@@ -110,7 +124,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         { status: 409 }
       );
     }
-    if (approval.channel !== "sms" && (recipient.do_not_market || recipient.ok_to_email === false || recipient.email_bounced_at)) {
+    // do_not_market only blocks marketing-category steps; a bounced address or
+    // ok_to_email=false blocks every category (same rule as the processor).
+    if (approval.channel !== "sms" && ((marketingEmail && recipient.do_not_market) || recipient.ok_to_email === false || recipient.email_bounced_at)) {
       return NextResponse.json(
         { error: "Client has opted out of email or their address has bounced — reject this step instead" },
         { status: 409 }
@@ -162,6 +178,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
   }
 
+  // Emails approved outside the step's "Send Between" window or on a weekend
+  // (with "Send Mon-Fri only") must not go out now: same rules as the
+  // processor, via the shared emailSendDeferral. Keep the approval as approved,
+  // release the enrollment and schedule it; the processor then sends the
+  // approved email as-is when it comes due (and re-checks suppression).
+  if (approval.channel !== "sms") {
+    const deferral = await emailSendDeferral(db, approval.org_id, eventConfig);
+    if (deferral) {
+      const sendAtIso = deferral.fireAt.toISOString();
+      await db
+        .from("crm_sequence_enrollments")
+        .update({ awaiting_approval: false, next_fire_at: sendAtIso, updated_at: nowIso })
+        .eq("id", approval.enrollment_id);
+      await logSequenceExecution(db, {
+        orgId: approval.org_id, enrollmentId: approval.enrollment_id, sequenceId: approval.sequence_id,
+        clientId: approval.client_id, eventId: approval.event_id, eventType: approval.channel,
+        action: "approval_approved",
+        detail: `${approval.subject} → ${approval.to_email} — approved by ${user.id}, held until ${sendAtIso} (send window)`,
+      });
+      return NextResponse.json({
+        ok: true,
+        action: "approved",
+        deferred: true,
+        sendAt: sendAtIso,
+        message: "Approved — will send when the email's send window opens",
+      });
+    }
+  }
+
   // Approve: send the already-resolved content, then advance the enrollment
   // exactly like a normal (non-approval) step of that channel would.
   const sendResult =
@@ -184,6 +229,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           // null on rows queued before reply_to existed — undefined lets
           // sendResolvedSequenceEmail fall back to the org reply address.
           replyTo: approval.reply_to ?? undefined,
+          marketing: marketingEmail,
         });
   if (!sendResult.ok) {
     // Nothing went out — hand the approval back so it can be retried.

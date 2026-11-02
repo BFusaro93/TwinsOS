@@ -26,6 +26,8 @@ export function WaitEventDialog({ open, onOpenChange, event }: Props) {
   const [days, setDays] = useState<number>(event.config.days ?? 0);
   const [hours, setHours] = useState<number>(event.config.hours ?? 0);
   const [minutes, setMinutes] = useState<number>(event.config.minutes ?? 0);
+  const [untilTime, setUntilTime] = useState<string>(event.config.until_time ?? "");
+  const [weekdaysOnly, setWeekdaysOnly] = useState<boolean>(event.config.weekdays_only === true);
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
@@ -34,7 +36,11 @@ export function WaitEventDialog({ open, onOpenChange, event }: Props) {
       await updateEvent.mutateAsync({
         id: event.id,
         sequenceId: event.sequenceId,
-        config: { days, hours, minutes },
+        config: {
+          days, hours, minutes,
+          ...(untilTime ? { until_time: untilTime } : {}),
+          ...(weekdaysOnly ? { weekdays_only: true } : {}),
+        },
       });
       onOpenChange(false);
     } catch {
@@ -85,6 +91,26 @@ export function WaitEventDialog({ open, onOpenChange, event }: Props) {
               />
             </div>
           </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="wait-until-time">Then wait until (optional)</Label>
+            <Input
+              id="wait-until-time"
+              type="time"
+              value={untilTime}
+              onChange={(e) => setUntilTime(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              After the delay, hold until the next time your company clock reads this — e.g. wait 1 day, then continue at 9:00 AM.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={weekdaysOnly}
+              onChange={(e) => setWeekdaysOnly(e.target.checked)}
+            />
+            Weekdays only (a Saturday or Sunday result moves to Monday)
+          </label>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

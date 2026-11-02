@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForms, useCreateForm, useDeleteForm, useUpdateForm } from "@/lib/hooks/use-crm-forms";
+import { useForms, useCreateForm, useDeleteForm, useUpdateForm, useCopyForm, fetchFormWithFields } from "@/lib/hooks/use-crm-forms";
+import { duplicateLabelMessage, findDuplicateFieldLabels } from "@/lib/forms/duplicate-labels";
+import { formPublishWarnings } from "@/lib/forms/publish-warnings";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +25,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ExternalLink, FormInput, MoreHorizontal, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { ChevronDown, Copy, ExternalLink, FormInput, MoreHorizontal, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -125,7 +127,46 @@ function FormRowMenu({ form }: { form: CRMForm }) {
   const canEdit = can("forms_edit");
   const deleteForm = useDeleteForm();
   const updateForm = useUpdateForm(form.id);
+  const copyForm = useCopyForm();
   const toggleStatus = form.status === "published" ? "draft" : "published";
+
+  async function changeStatus() {
+    if (toggleStatus === "published") {
+      // Same gate as the builder's Publish button: duplicate labels block,
+      // everything else is a warning the admin can accept.
+      let full;
+      try {
+        full = await fetchFormWithFields(form.id);
+      } catch {
+        toast.error("Couldn't check the form before publishing");
+        return;
+      }
+      const duplicates = findDuplicateFieldLabels(
+        full.fields.map((f) => ({ id: f.id, label: f.label, fieldType: f.fieldType }))
+      );
+      if (duplicates.length > 0) {
+        toast.error(duplicateLabelMessage(duplicates), { duration: 8000 });
+        return;
+      }
+      const warnings = formPublishWarnings(full);
+      if (warnings.length > 0) {
+        const ok = await confirm({
+          title: "Publish with warnings?",
+          description: (
+            <ul className="list-disc space-y-1 pl-5 text-left">
+              {warnings.map((w) => <li key={w}>{w}</li>)}
+            </ul>
+          ),
+          confirmLabel: "Publish anyway",
+        });
+        if (!ok) return;
+      }
+    }
+    updateForm.mutate(
+      { status: toggleStatus as FormStatus },
+      { onError: () => toast.error("Failed to update form status") }
+    );
+  }
 
   return (
     <>
@@ -145,14 +186,24 @@ function FormRowMenu({ form }: { form: CRMForm }) {
         {canEdit && (
           <>
             <DropdownMenuItem
-              onSelect={() =>
-                updateForm.mutate(
-                  { status: toggleStatus as FormStatus },
-                  { onError: () => toast.error("Failed to update form status") }
-                )
-              }
+              onSelect={() => { void changeStatus(); }}
             >
               {toggleStatus === "published" ? "Publish" : "Unpublish"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={copyForm.isPending}
+              onSelect={() =>
+                copyForm.mutate(form.id, {
+                  onSuccess: (copy) => {
+                    toast.success(`Created "${copy.name}" as a draft`);
+                    router.push(`/crm/communication/forms/${copy.id}`);
+                  },
+                  onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to copy form"),
+                })
+              }
+            >
+              <Copy className="mr-2 h-3.5 w-3.5" />
+              Copy form
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-red-600 dark:text-red-400"

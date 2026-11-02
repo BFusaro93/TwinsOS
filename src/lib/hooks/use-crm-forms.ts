@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
-import type { CRMForm, CRMFormField, CRMFormResponse, CRMFormRule, NewFormValues } from "@/types/crm-forms";
+import type { CRMForm, CRMFormField, CRMFormResponse, CRMFormRule, FormResponseStatus, NewFormValues } from "@/types/crm-forms";
 
 // ── Forms list ────────────────────────────────────────────────────────────────
 
@@ -18,6 +18,13 @@ export function useForms() {
 }
 
 // ── Single form ───────────────────────────────────────────────────────────────
+
+/** One-shot read of a form with its fields — for pre-publish checks run from an event handler. */
+export async function fetchFormWithFields(id: string): Promise<CRMForm & { fields: CRMFormField[] }> {
+  const res = await fetch(`/api/crm/forms/${id}`);
+  if (!res.ok) throw new Error("Failed to fetch form");
+  return res.json();
+}
 
 export function useForm(id: string) {
   return useQuery<CRMForm & { fields: CRMFormField[] }>({
@@ -47,22 +54,75 @@ export function useFormResponses(formId?: string) {
   });
 }
 
-export function useMarkFormResponseRead() {
+type ResponsePatch =
+  | { id: string; isRead: boolean }
+  | { id: string; status: FormResponseStatus }
+  | { id: string; delete: true };
+
+/** Shared PATCH + optimistic update for every response mutation. Optimistic
+ *  edits are applied to every cached ["crm-form-responses", …] list and rolled
+ *  back on error. */
+function useResponseMutation() {
   const qc = useQueryClient();
+  const KEY = ["crm-form-responses"];
   return useMutation({
-    mutationFn: async ({ id, isRead }: { id: string; isRead: boolean }) => {
+    mutationFn: async (patch: ResponsePatch) => {
       const res = await fetch("/api/crm/forms/responses", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, isRead }),
+        body: JSON.stringify(patch),
       });
-      if (!res.ok) throw new Error("Failed to update response");
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? "Failed to update response");
+      }
       return res.json();
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["crm-form-responses"] });
+    onMutate: async (patch) => {
+      await qc.cancelQueries({ queryKey: KEY });
+      const previous = qc.getQueriesData<CRMFormResponse[]>({ queryKey: KEY });
+      qc.setQueriesData<CRMFormResponse[]>({ queryKey: KEY }, (old) => {
+        if (!old) return old;
+        if ("delete" in patch) return old.filter((r) => r.id !== patch.id);
+        return old.map((r) =>
+          r.id !== patch.id ? r : "isRead" in patch ? { ...r, isRead: patch.isRead } : { ...r, status: patch.status }
+        );
+      });
+      return { previous };
+    },
+    onError: (_err, _patch, ctx) => {
+      ctx?.previous.forEach(([key, data]) => qc.setQueryData(key, data));
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: KEY });
+      // Responses count on the forms list/detail header
+      void qc.invalidateQueries({ queryKey: ["crm-forms"] });
     },
   });
+}
+
+export function useMarkFormResponseRead() {
+  const m = useResponseMutation();
+  return {
+    ...m,
+    mutate: (vars: { id: string; isRead: boolean }, opts?: Parameters<typeof m.mutate>[1]) => m.mutate(vars, opts),
+  };
+}
+
+export function useUpdateFormResponseStatus() {
+  const m = useResponseMutation();
+  return {
+    ...m,
+    mutate: (vars: { id: string; status: FormResponseStatus }, opts?: Parameters<typeof m.mutate>[1]) => m.mutate(vars, opts),
+  };
+}
+
+export function useDeleteFormResponse() {
+  const m = useResponseMutation();
+  return {
+    ...m,
+    mutate: (vars: { id: string }, opts?: Parameters<typeof m.mutate>[1]) => m.mutate({ id: vars.id, delete: true }, opts),
+  };
 }
 
 // ── Create form ───────────────────────────────────────────────────────────────
@@ -115,7 +175,11 @@ export function useSaveFormFields(formId: string) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fields }),
       });
-      if (!res.ok) throw new Error("Failed to save fields");
+      if (!res.ok) {
+        // Surface the server's validation message (e.g. duplicate labels).
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? "Failed to save fields");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -170,6 +234,23 @@ export function useDeleteForm() {
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/crm/forms/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete form");
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-forms"] }),
+  });
+}
+
+// ── Copy form ─────────────────────────────────────────────────────────────────
+
+export function useCopyForm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/crm/forms/${id}/copy`, { method: "POST" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? "Failed to copy form");
+      }
+      return res.json() as Promise<{ id: string; name: string }>;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crm-forms"] }),
   });

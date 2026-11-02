@@ -91,6 +91,7 @@ export async function resolveMethod(
 ): Promise<{ method: string; isAch: boolean }> {
   const isAch = paymentIntent.payment_method_types.includes("us_bank_account");
   let cardBrand: string | null = null;
+  let cardFunding: string | null = null;
   if (!isAch) {
     try {
       // Resolve the client matching this org's livemode rather than whichever
@@ -102,11 +103,12 @@ export async function resolveMethod(
         { stripeAccount: connectedAccountId }
       );
       cardBrand = charges.data[0]?.payment_method_details?.card?.brand ?? null;
+      cardFunding = charges.data[0]?.payment_method_details?.card?.funding ?? null;
     } catch {
       cardBrand = null;
     }
   }
-  return { method: methodForPaymentIntent(paymentIntent.payment_method_types, cardBrand), isAch };
+  return { method: methodForPaymentIntent(paymentIntent.payment_method_types, cardBrand, cardFunding), isAch };
 }
 
 /**

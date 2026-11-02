@@ -36,6 +36,7 @@ import { useOrgTags } from "@/lib/hooks/use-clients";
 import { usePackages } from "@/lib/hooks/use-packages";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { PAYMENT_METHOD_OPTIONS } from "@/components/crm/ClientDetailPanel";
+import { availableRecordKinds } from "@/lib/automations/condition-applicability";
 import type { TriggerType, TriggerConfig } from "@/types/crm-automations";
 
 // Trigger types that fire off a day-count gap rather than an event — the
@@ -121,6 +122,7 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
       { value: "credit_card_about_to_expire", label: "Credit card is about to expire" },
       { value: "credit_card_updated", label: "Credit card was updated" },
       { value: "has_opted_in_emails", label: "Has opted in for emails" },
+      { value: "has_opted_in_sms", label: "Has opted in for texts" },
       { value: "payment_method_updated", label: "Payment method updated" },
     ],
   },
@@ -397,57 +399,85 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
         },
       });
 
-      // Replace triggers: delete existing (cascades their conditions too),
-      // re-insert, then re-insert each new trigger's conditions against its
-      // freshly-generated id. Each call's {error} is checked explicitly —
-      // Supabase doesn't throw on a failed query, so an insert failing after
-      // the delete already succeeded would otherwise close this dialog having
-      // silently wiped the sequence's triggers.
-      const { error: delTriggersErr } = await supabase.from("crm_sequence_triggers").delete().eq("sequence_id", sequenceId);
-      if (delTriggersErr) throw delTriggersErr;
-      if (triggers.length > 0) {
-        const { data: insertedTriggers, error: insTriggersErr } = await supabase
-          .from("crm_sequence_triggers")
-          .insert(
-            triggers.map((t, i) => ({
-              sequence_id: sequenceId,
-              trigger_type: t.triggerType,
-              position: i,
-              config: t.config,
-            }))
-          )
-          .select("id, position");
-        if (insTriggersErr) throw insTriggersErr;
+      // Replace triggers and stop conditions INSERT-FIRST: remember the existing
+      // rows' ids, insert the new rows, and only once those all succeeded delete
+      // the old ones by id. The old order (delete everything, then insert) left a
+      // sequence with no triggers/stop conditions whenever an insert failed.
+      // These tables have no deleted_at (hard delete, as before); trigger
+      // conditions cascade from their trigger. If anything fails after new rows
+      // exist, the new rows are removed again so the sequence is left exactly as
+      // it was (never duplicated, never empty). Supabase doesn't throw on a
+      // failed query, so every {error} is checked explicitly.
+      const [{ data: oldTriggerRows, error: oldTrigErr }, { data: oldStopRows, error: oldStopErr }] = await Promise.all([
+        supabase.from("crm_sequence_triggers").select("id").eq("sequence_id", sequenceId),
+        supabase.from("crm_sequence_stop_conditions").select("id").eq("sequence_id", sequenceId),
+      ]);
+      if (oldTrigErr) throw oldTrigErr;
+      if (oldStopErr) throw oldStopErr;
+      const oldTriggerIds = ((oldTriggerRows ?? []) as { id: string }[]).map((r) => r.id);
+      const oldStopIds = ((oldStopRows ?? []) as { id: string }[]).map((r) => r.id);
 
-        const conditionRows = ((insertedTriggers ?? []) as { id: string; position: number }[]).flatMap((row) => {
-          const t = triggers[row.position];
-          return (t?.conditions ?? []).map((c) => ({
-            trigger_id: row.id,
-            condition_group: 0,
-            field: c.field,
-            operator: c.operator,
-            value: c.value || null,
-          }));
-        });
-        if (conditionRows.length > 0) {
-          const { error: insCondErr } = await supabase.from("crm_sequence_trigger_conditions").insert(conditionRows);
-          if (insCondErr) throw insCondErr;
+      let newTriggerIds: string[] = [];
+      let newStopIds: string[] = [];
+      try {
+        if (triggers.length > 0) {
+          const { data: insertedTriggers, error: insTriggersErr } = await supabase
+            .from("crm_sequence_triggers")
+            .insert(
+              triggers.map((t, i) => ({
+                sequence_id: sequenceId,
+                trigger_type: t.triggerType,
+                position: i,
+                config: t.config,
+              }))
+            )
+            .select("id, position");
+          if (insTriggersErr) throw insTriggersErr;
+          newTriggerIds = ((insertedTriggers ?? []) as { id: string }[]).map((r) => r.id);
+
+          const conditionRows = ((insertedTriggers ?? []) as { id: string; position: number }[]).flatMap((row) => {
+            const t = triggers[row.position];
+            return (t?.conditions ?? []).map((c) => ({
+              trigger_id: row.id,
+              condition_group: 0,
+              field: c.field,
+              operator: c.operator,
+              value: c.value || null,
+            }));
+          });
+          if (conditionRows.length > 0) {
+            const { error: insCondErr } = await supabase.from("crm_sequence_trigger_conditions").insert(conditionRows);
+            if (insCondErr) throw insCondErr;
+          }
         }
+
+        if (stopConditions.length > 0) {
+          const { data: insertedStops, error: insStopErr } = await supabase.from("crm_sequence_stop_conditions").insert(
+            stopConditions.map((sc) => ({
+              sequence_id: sequenceId,
+              field: sc.field,
+              operator: sc.operator,
+              value: sc.value || null,
+            }))
+          ).select("id");
+          if (insStopErr) throw insStopErr;
+          newStopIds = ((insertedStops ?? []) as { id: string }[]).map((r) => r.id);
+        }
+      } catch (insertErr) {
+        // Undo the partial insert; the old rows were never touched.
+        if (newTriggerIds.length > 0) await supabase.from("crm_sequence_triggers").delete().in("id", newTriggerIds);
+        if (newStopIds.length > 0) await supabase.from("crm_sequence_stop_conditions").delete().in("id", newStopIds);
+        throw insertErr;
       }
 
-      // Replace stop conditions: delete existing, re-insert
-      const { error: delStopErr } = await supabase.from("crm_sequence_stop_conditions").delete().eq("sequence_id", sequenceId);
-      if (delStopErr) throw delStopErr;
-      if (stopConditions.length > 0) {
-        const { error: insStopErr } = await supabase.from("crm_sequence_stop_conditions").insert(
-          stopConditions.map((sc) => ({
-            sequence_id: sequenceId,
-            field: sc.field,
-            operator: sc.operator,
-            value: sc.value || null,
-          }))
-        );
-        if (insStopErr) throw insStopErr;
+      // New rows are in place — now retire the old ones.
+      if (oldTriggerIds.length > 0) {
+        const { error: delTriggersErr } = await supabase.from("crm_sequence_triggers").delete().in("id", oldTriggerIds);
+        if (delTriggersErr) throw delTriggersErr;
+      }
+      if (oldStopIds.length > 0) {
+        const { error: delStopErr } = await supabase.from("crm_sequence_stop_conditions").delete().in("id", oldStopIds);
+        if (delStopErr) throw delStopErr;
       }
 
       onOpenChange(false);
@@ -638,6 +668,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
                   joinLabel="AND"
                   emptyLabel="No extra conditions — fires whenever this trigger occurs."
                   addLabel="Add Condition"
+                  availableRecordKinds={availableRecordKinds([t.triggerType])}
                 />
               </div>
             </div>
@@ -663,6 +694,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
             joinLabel="OR"
             emptyLabel="No stop conditions — sequence runs to completion."
             addLabel="Add Condition"
+            availableRecordKinds={availableRecordKinds(triggers.map((t) => t.triggerType))}
           />
         </div>
 

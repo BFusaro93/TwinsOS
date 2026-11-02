@@ -25,7 +25,7 @@ export const DEFAULT_DISPLAY_SETTINGS: DisplaySettings = {
   showSectionSubtotals: true,
   hideZeroTotals: false,
   hideZeroPrices: false,
-  showPackageVisits: true,
+  showPackageVisits: false,
 };
 
 export function toDisplaySettings(raw: unknown): DisplaySettings {

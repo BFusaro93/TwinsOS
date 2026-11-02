@@ -402,7 +402,15 @@ export function EstimatingGuide() {
           visit count and per-visit price (the package&rsquo;s own rate, or the service&rsquo;s default
           if the package sets none). Quantity, tier, discounts and the estimate totals work exactly as
           they do on any other line. The package&rsquo;s <strong>Description on Estimate</strong>,
-          set in Settings &rarr; Packages, becomes the package&rsquo;s wording on the proposal.
+          set in Settings &rarr; Packages, becomes the package&rsquo;s wording on the proposal, and you
+          can edit it on the estimate by clicking the description box under the package header.
+        </p>
+        <p>
+          If a package service has a <strong>Rate Matrix</strong> keyed off a property field (such as
+          Turf Sq. Ft.) and the estimate&rsquo;s property has a value for it, the matching band prices
+          that visit instead of the package&rsquo;s flat price. To copy the first visit&rsquo;s Qty,
+          Rate, B.Hr, Cost or Adj Rate down to every other visit, use the <strong>copy</strong> buttons
+          on the package header. Deleting the package header deletes all of its visits.
         </p>
         <h3 className="text-base font-semibold">What the client sees</h3>
         <ul className="list-disc space-y-2 pl-5">
@@ -413,8 +421,8 @@ export function EstimatingGuide() {
           </li>
           <li>
             The <strong>Package visits</strong> toggle in the estimate&rsquo;s &ldquo;What the client
-            sees&rdquo; settings (on by default) lists each visit under the main line as plain rows.
-            Turn it off to show only the name, wording and total. It applies to the proposal page,
+            sees&rdquo; settings (off by default) lists each visit under the main line as plain rows.
+            Leave it off to show only the name, wording and total. It applies to the proposal page,
             the client portal, the PDF and the <code>[estimategrid]</code> table in emails.
           </li>
           <li>

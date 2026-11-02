@@ -1,5 +1,6 @@
 import { buildClientMergeVars } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -140,4 +141,28 @@ export async function buildAutomationMergeVars(
     html[k] = params.escapeHtml(v);
   }
   return { html, text };
+}
+
+/**
+ * Resolves [mergetag] placeholders in a plain-text template (alert message,
+ * ticket title/description) against the enrolled client — the same vocabulary
+ * email/SMS steps use. With no client, or if the client can't be loaded, the
+ * template comes back unchanged. A recognized tag we can't fill degrades to
+ * blank; an unrecognized one stays literal, exactly like email/SMS.
+ */
+export async function resolveClientPlainText(
+  supabase: AnyClient,
+  params: { orgId: string; clientId: string | null; template: string }
+): Promise<string> {
+  if (!params.clientId || !params.template.includes("[")) return params.template;
+  const loaded = await loadAutomationClient(supabase, { orgId: params.orgId, clientId: params.clientId });
+  if (!loaded) return params.template;
+  const vars = await buildAutomationMergeVars(supabase, {
+    orgId: params.orgId, client: loaded.client, extras: {}, escapeHtml: (t) => t,
+  });
+  return params.template.replace(/\[(\w+)\]/gi, (match) => {
+    const key = match.toLowerCase();
+    if (key in vars.text) return vars.text[key] ?? "";
+    return KNOWN_MERGE_TAG_KEYS.has(key) ? "" : match;
+  });
 }
