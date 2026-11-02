@@ -6,6 +6,7 @@ import {
   type BillingContractRow,
   type MonthKey,
 } from "@/lib/contract-billing";
+import { invoicesPerYear } from "@/lib/reports/contract-schedule";
 import type { BillingFrequency } from "@/types/crm-invoices";
 
 /**
@@ -49,6 +50,60 @@ export function billingFrequencySuffix(raw: string | null | undefined): string {
 /** "$3,000.00 / quarter", "$250.00 / month", "$1,200.00 one time". */
 export function formatContractAmount(cents: number, raw: string | null | undefined): string {
   return `${formatCurrency(cents)} ${billingFrequencySuffix(raw)}`;
+}
+
+export interface ContractAmountSummary {
+  /** "$250.00 / month", "$500.00 / month · 8 months", "$4,100.00 / yr · 8 months (varies)", "$3,000.00 / quarter". */
+  label: string;
+  /** The amount on every invoice, or null when a monthly grid bills different amounts in different months. */
+  perInvoiceCents: number | null;
+  /** What the contract bills in a year; null for one-time contracts, which don't recur. */
+  yearlyCents: number | null;
+  /** Nothing would ever be invoiced (every month $0, or a $0 amount). */
+  isZero: boolean;
+}
+
+/**
+ * One line describing what a contract bills. A monthly contract bills
+ * `monthly_amounts[month] ?? monthly_amount_cents` each month and skips a $0
+ * month, so its stored monthly_amount_cents is only the AVERAGE of the billed
+ * months when they differ — showing that as "/ month" would name an amount no
+ * invoice carries. Uneven grids read as a yearly total instead.
+ */
+export function summarizeContractAmount(contract: {
+  monthlyAmountCents: number;
+  billingFrequency: string | null | undefined;
+  monthlyAmounts?: Partial<Record<MonthKey, number | null>> | null;
+}): ContractAmountSummary {
+  const frequency = normalizeBillingFrequency(contract.billingFrequency);
+  const flat = contract.monthlyAmountCents ?? 0;
+
+  if (frequency !== "monthly") {
+    const perYear = invoicesPerYear(frequency);
+    return {
+      label: formatContractAmount(flat, frequency),
+      perInvoiceCents: flat,
+      yearlyCents: frequency === "one_time" ? null : flat * perYear,
+      isZero: flat <= 0,
+    };
+  }
+
+  const amounts = contract.monthlyAmounts ?? {};
+  const billed = MONTH_KEYS.map((k) => amounts[k] ?? flat).filter((v) => v > 0);
+  const yearly = billed.reduce((sum, v) => sum + v, 0);
+  const months = `${billed.length} month${billed.length === 1 ? "" : "s"}`;
+  if (billed.length === 0) {
+    return { label: formatContractAmount(0, frequency), perInvoiceCents: 0, yearlyCents: 0, isZero: true };
+  }
+  if (new Set(billed).size > 1) {
+    return { label: `${formatCurrency(yearly)} / yr · ${months} (varies)`, perInvoiceCents: null, yearlyCents: yearly, isZero: false };
+  }
+  return {
+    label: billed.length === 12 ? formatContractAmount(billed[0], frequency) : `${formatContractAmount(billed[0], frequency)} · ${months}`,
+    perInvoiceCents: billed[0],
+    yearlyCents: yearly,
+    isZero: false,
+  };
 }
 
 const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

@@ -75,7 +75,7 @@ import {
   billingFrequencySuffix,
   contractBillingMonths,
   formatBillingMonths,
-  formatContractAmount,
+  summarizeContractAmount,
 } from "@/lib/utils/contract-frequency";
 import { useConfirm } from "@/components/shared/useConfirm";
 import {
@@ -131,6 +131,11 @@ function ordinal(n: number) {
 function billingDayLabel(c: CRMContract): string {
   const frequency = normalizeBillingFrequency(c.billingFrequency);
   return frequency === "weekly" || frequency === "biweekly" || frequency === "one_time" ? "—" : ordinal(c.billingDayOfMonth);
+}
+
+function amountLabel(c: CRMContract): string {
+  const amount = summarizeContractAmount(c);
+  return amount.isZero ? "—" : amount.label;
 }
 
 function fmtDate(d: string | null) {
@@ -336,6 +341,10 @@ function ContractDetailsTab({
   const anchorLabel = fmtAnchor(billingAnchor(scheduleRow, new Date()));
   const anchorSource = state.startDate ? "the start date" : signedAt ? "the signed date" : createdAt ? "the date it was created" : "today (no start date set)";
 
+  // Every grid month is explicitly set, so the flat amount never applies here.
+  const gridSummary = summarizeContractAmount({ monthlyAmountCents: 0, billingFrequency: "monthly", monthlyAmounts: state.monthlyAmounts });
+  const gridMonths = MONTHS.filter(({ key }) => (state.monthlyAmounts[key] ?? 0) > 0).length;
+
   function changeFrequency(next: BillingFrequency) {
     if (next === state.billingFrequency) return;
     // Carry the amount across so switching cadence never silently zeroes it.
@@ -444,6 +453,11 @@ function ContractDetailsTab({
           <>
           <p className="col-span-2 text-xs text-muted-foreground">
             Amount per invoice for each month. A month left at $0.00 is not billed.
+            {gridSummary.yearlyCents ? (
+              <span className="ml-1 font-medium text-slate-700 dark:text-neutral-300">
+                Bills {formatCurrency(gridSummary.yearlyCents)} a year across {gridMonths} month{gridMonths === 1 ? "" : "s"}.
+              </span>
+            ) : null}
           </p>
           {/* Left months */}
           <div className="flex flex-col gap-2">
@@ -1633,18 +1647,20 @@ export function ContractsList({ clientId }: Props) {
       toast.info("No contracts to export");
       return;
     }
-    const header = ["Client", "Contract", "Status", "Billing Frequency", "Billing Day", "Amount per invoice", "Start Date", "End Date", "Last Bill Date"];
+    const header = ["Client", "Contract", "Status", "Billing Frequency", "Billing Day", "Amount per invoice", "Yearly Total", "Start Date", "End Date", "Last Bill Date"];
     // Shared exporter escape: quotes + formula-injection neutralization.
     const csvEscape = (v: string) => escapeCsvCell(v);
     const lines = [header.map(csvEscape).join(",")];
     for (const c of rows) {
+      const amount = summarizeContractAmount(c);
       lines.push([
         c.clientName ?? "",
         c.title,
         c.status,
         billingFrequencyLabel(c.billingFrequency),
         billingDayLabel(c) === "—" ? "" : billingDayLabel(c),
-        c.monthlyAmountCents > 0 ? formatCurrency(c.monthlyAmountCents) : "",
+        amount.isZero ? "" : amount.perInvoiceCents === null ? "varies by month" : formatCurrency(amount.perInvoiceCents),
+        amount.isZero || amount.yearlyCents === null ? "" : formatCurrency(amount.yearlyCents),
         fmtDate(c.startDate),
         fmtDate(c.endDate),
         fmtDate(c.lastBilledDate),
@@ -1897,7 +1913,7 @@ export function ContractsList({ clientId }: Props) {
                   )}
                   {visibleKeys.includes("amount") && (
                     <td className="px-3 py-2.5 text-right font-medium text-slate-700 dark:text-neutral-300">
-                      {c.monthlyAmountCents > 0 ? formatContractAmount(c.monthlyAmountCents, c.billingFrequency) : "—"}
+                      {amountLabel(c)}
                     </td>
                   )}
                   {visibleKeys.includes("start_date") && (
