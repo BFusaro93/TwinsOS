@@ -191,11 +191,11 @@ export function InjuryCasesPage() {
                     {[c.injuryType, c.bodyPart].filter(Boolean).join(" · ") || c.description}
                   </TableCell>
                   <TableCell>
-                    <Badge className={`${INJURY_INCIDENT_TYPE_COLORS[c.incidentType]} text-xs`}>{INJURY_INCIDENT_TYPE_LABELS[c.incidentType]}</Badge>
+                    <Badge variant="outline" className={`border-transparent ${INJURY_INCIDENT_TYPE_COLORS[c.incidentType]} text-xs`}>{INJURY_INCIDENT_TYPE_LABELS[c.incidentType]}</Badge>
                   </TableCell>
                   <TableCell>
                     {c.severity ? (
-                      <Badge className={`${INJURY_SEVERITY_COLORS[c.severity]} text-xs`}>{INJURY_SEVERITY_LABELS[c.severity]}</Badge>
+                      <Badge variant="outline" className={`border-transparent ${INJURY_SEVERITY_COLORS[c.severity]} text-xs`}>{INJURY_SEVERITY_LABELS[c.severity]}</Badge>
                     ) : (
                       <span className="text-sm text-muted-foreground">—</span>
                     )}

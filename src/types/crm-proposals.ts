@@ -56,6 +56,7 @@ export const CHEMICAL_EMAIL_MERGE_TAGS = [
   { tag: "[products]",           label: "Products Applied (name, EPA #, amount)" },
   { tag: "[conditions]",         label: "Weather Conditions" },
   { tag: "[careinstructions]",   label: "Post-Application Care Instructions" },
+  { tag: "[chemicalnotice]",     label: "Full Notice of Treatment (leave-behind)" },
   { tag: "[companyphonenumber]", label: "Company Phone" },
 ] as const;
 

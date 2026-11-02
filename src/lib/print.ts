@@ -10,7 +10,7 @@ import { escapeHtml } from "@/lib/utils/escape-html";
 import { computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { formatDateShort } from "@/lib/utils";
 
-function openPrintWindow(html: string) {
+export function openPrintWindow(html: string) {
   const win = window.open("", "_blank", "width=900,height=700");
   if (!win) {
     // window.open returns null when the browser's popup blocker steps in. This

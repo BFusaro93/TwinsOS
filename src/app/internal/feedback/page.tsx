@@ -49,7 +49,7 @@ function FeedbackCard({ item }: { item: StaffFeedbackItem }) {
   return (
     <div className="rounded-lg border bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge className={cn("gap-1", meta.className)}>
+        <Badge variant="outline" className={cn("border-transparent", "gap-1", meta.className)}>
           <Icon className="h-3 w-3" />
           {meta.label}
         </Badge>

@@ -169,6 +169,54 @@ export function ProductCatalogGuide() {
           have decimals.
         </p>
         <p>
+          <strong>Notice of Treatment (the leave-behind).</strong> Everything recorded on a visit
+          &mdash; date, time, weather, applicator and license number, and each product with its EPA
+          Registration #, amount, method and target &mdash; can be turned into a customer-facing
+          notice that replaces the paper carbon copy. Re-entry intervals and each product&apos;s
+          Client Route Sheet Instructions appear under &ldquo;Recommended procedures&rdquo;. Three
+          ways to use it: <strong>Print Notice</strong> on the visit&apos;s Chemicals tab;{" "}
+          <strong>Send Email</strong> (the notice goes in the message in a compact form, and a full
+          PDF copy is attached unless you untick <strong>Attach the Notice of Treatment as a
+          PDF</strong>; the email template tag <strong>[chemicalnotice]</strong> drops the compact
+          notice anywhere in the message); or an automation on a completed visit with
+          <strong> [chemicalnotice]</strong> in its email, which is how clients billed under a
+          contract &mdash; and so never get an invoice &mdash; still receive the record. Use that tag
+          in an email with little or no wait after the visit, because it reads the client&apos;s most
+          recent completed visit.
+        </p>
+        <p>
+          <strong>Three kinds of chemical email.</strong> <strong>Send Email</strong> on the
+          visit&apos;s Chemicals tab lets you choose an <strong>Email type</strong>:{" "}
+          <strong>Client Instruction</strong> (the notice of what was applied, with care
+          instructions), <strong>Recommendation</strong> (something the technician noticed, such as
+          a future treatment, watering, or damage) and <strong>Upsale</strong> (other services the
+          client could add). Build the templates under Documents, choosing{" "}
+          <strong>Chemical &ndash; Client Instruction</strong>, <strong>Chemical &ndash;
+          Recommendation</strong> or <strong>Chemical &ndash; Upsale</strong> as the type; each email
+          type offers only its own templates. A Recommendation or Upsale can be sent on any visit,
+          even one with no chemicals recorded.
+        </p>
+        <p>
+          <strong>Sending many notices at once.</strong> In the Chemical Tracking wizard click{" "}
+          <strong>Send notices</strong>, or select visits on the Dispatch Board and choose{" "}
+          <strong>Actions &gt; Send Chemical Notices</strong>. The dialog sorts the visits into{" "}
+          <em>ready to send</em>, <em>already sent</em>, <em>no email on file</em>,{" "}
+          <em>email bounced</em> and <em>no confirmed application</em>. Choose a template (or edit the
+          subject and message), decide whether to attach the PDF, and click Send. Each client gets
+          their own email with their own visit&apos;s products, amounts and conditions. Only the
+          ready visits are sent, so running it twice never double-sends unless you tick{" "}
+          <strong>Also re-send</strong>. A progress bar shows the send, and any failures are listed
+          afterwards with the reason.
+        </p>
+        <p>
+          <strong>Printed chemical route sheets.</strong> On the Dispatch Board choose{" "}
+          <strong>Print &gt; Chemical sheets</strong> (or <strong>Print route sheets</strong> in the
+          Chemical Tracking wizard). Each chemical stop prints two landscape pages: the
+          crew&apos;s copy (planned amounts, label instructions, blanks for time, weather and what
+          was actually used), then a full-width notice for the customer with the amounts and weather
+          left blank to write in, so the page can be handed over or torn off cleanly.
+        </p>
+        <p>
           <strong>Compliance report.</strong> The Chemical Tracking report lists applications on
           visits that are in progress or completed, in a compact set of columns that prints
           landscape and exports to a readable PDF.

@@ -121,7 +121,7 @@ export function DamageCasesPage() {
                     >
                       <TableCell className="font-mono text-xs text-muted-foreground">{c.caseNumber}</TableCell>
                       <TableCell>
-                        <Badge className={`${TYPE_COLORS[c.caseType]} text-xs`}>
+                        <Badge variant="outline" className={`border-transparent ${TYPE_COLORS[c.caseType]} text-xs`}>
                           {DAMAGE_CASE_TYPE_LABELS[c.caseType]}
                         </Badge>
                       </TableCell>

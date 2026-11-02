@@ -72,8 +72,8 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
           <h2 className="text-base font-semibold text-slate-900 dark:text-neutral-100">{data.employeeName}</h2>
         </div>
         <div className="flex items-center gap-2">
-          <Badge className={INJURY_INCIDENT_TYPE_COLORS[data.incidentType]}>{INJURY_INCIDENT_TYPE_LABELS[data.incidentType]}</Badge>
-          {data.severity && <Badge className={INJURY_SEVERITY_COLORS[data.severity]}>{INJURY_SEVERITY_LABELS[data.severity]}</Badge>}
+          <Badge variant="outline" className={`border-transparent ${INJURY_INCIDENT_TYPE_COLORS[data.incidentType]}`}>{INJURY_INCIDENT_TYPE_LABELS[data.incidentType]}</Badge>
+          {data.severity && <Badge variant="outline" className={`border-transparent ${INJURY_SEVERITY_COLORS[data.severity]}`}>{INJURY_SEVERITY_LABELS[data.severity]}</Badge>}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button type="button" className="inline-flex items-center gap-1 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
@@ -154,7 +154,7 @@ export function InjuryCaseDetailPanel({ caseId, onClose }: { caseId: string; onC
         <Row label="Suggested prevention">{data.preventionSuggestion}</Row>
         <Row label="Cause">{data.cause}</Row>
         <Row label="Corrective action">{data.correctiveAction}</Row>
-        {data.recordable && <Badge className="bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300">OSHA recordable</Badge>}
+        {data.recordable && <Badge variant="outline" className="border-transparent bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300">OSHA recordable</Badge>}
         {(data.resolutionNotes || isClosed) && (
           <div className="flex items-start gap-2 text-sm">
             <div className="min-w-0 flex-1">

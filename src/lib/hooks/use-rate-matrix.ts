@@ -38,6 +38,10 @@ export interface CRMCustomFieldDef {
   fieldType: "text" | "number" | "select" | "date";
   entityType: "client" | "property";
   isSystem: boolean;
+  /** Handle for the built-in takeoff fields (turf_sqft, …) whose value lives in a property/client column. */
+  fieldKey?: string | null;
+  /** For a number client custom field's property copy: the client field whose value is the default. */
+  clientFieldDefId?: string | null;
 }
 
 // ── Mappers ───────────────────────────────────────────────────────────────────
@@ -82,6 +86,8 @@ function mapFieldDef(row: any): CRMCustomFieldDef {
     fieldType: row.field_type,
     entityType: row.entity_type,
     isSystem: row.is_system ?? false,
+    fieldKey: row.field_key ?? null,
+    clientFieldDefId: row.client_field_def_id ?? null,
   };
 }
 

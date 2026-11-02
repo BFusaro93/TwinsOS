@@ -8,6 +8,8 @@ import { resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { renderChemicalNoticePdf } from "@/lib/chemical/notice-pdf";
+import { loadChemicalNoticeData, loadInvoiceTemplateBranding, noticeOrgFromRow, renderChemicalNoticeHtml } from "@/lib/chemical/application-notice";
 
 export async function POST(
   req: NextRequest,
@@ -40,7 +42,16 @@ export async function POST(
     subject: string;
     bodyHtml: string;
     ccEmails?: string[];
+    /** Which of the three chemical emails this is; defaults to the post-application Client Instruction. */
+    kind?: "chemical" | "chemical_recommendation" | "chemical_upsell";
+    /** Attach the Notice of Treatment PDF (Client Instruction only); defaults to true. */
+    attachPdf?: boolean;
   };
+  const kind = body.kind ?? "chemical";
+  if (kind !== "chemical" && kind !== "chemical_recommendation" && kind !== "chemical_upsell") {
+    return NextResponse.json({ error: "Unknown email type" }, { status: 400 });
+  }
+  const kindLabel = kind === "chemical_recommendation" ? "Recommendation" : kind === "chemical_upsell" ? "Upsale" : "Chemical Application Notice";
 
   if (!body.subject?.trim() || !body.bodyHtml?.trim()) {
     return NextResponse.json({ error: "subject and bodyHtml are required" }, { status: 400 });
@@ -76,7 +87,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: org } = effOrgId
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? await (supabase as any).from("organizations").select("name, address").eq("id", effOrgId).single()
+    ? await (supabase as any).from("organizations").select("name, address, customizations, brand_color").eq("id", effOrgId).single()
     : { data: null };
 
   const orgName = org?.name ?? "Your Service Provider";
@@ -100,14 +111,16 @@ export async function POST(
   // could otherwise go out before the visit, listing planned chemicals as applied.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const applied = ((applications ?? []) as any[]).filter((a) => a.used && (!a.preloaded || a.confirmed_at));
-  if (applied.length === 0) {
+  // Only the post-application notice needs a confirmed application; a recommendation or
+  // upsale can go out whenever the office wants.
+  if (kind === "chemical" && applied.length === 0) {
     return NextResponse.json({ error: "No confirmed chemical applications for this visit yet" }, { status: 422 });
   }
 
   const clientDisplayName = (visit.clients?.display_name as string) ?? "";
   const firstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
   // The day it was actually applied (in the company's timezone), not the day it was scheduled.
-  const first = applied.find((a) => a.application_start_time) ?? applied[0];
+  const first = applied.find((a) => a.application_start_time) ?? applied[0] ?? {};
   const orgTz = effOrgId ? await getOrgTimeZone(supabase, effOrgId) : undefined;
   const applicationDate = first.application_start_time
     ? new Date(first.application_start_time).toLocaleDateString("en-US", {
@@ -154,7 +167,33 @@ export async function POST(
     ),
   ].map((s) => escapeHtml(s).replace(/\n/g, "<br>")).join("<br><br>") || "Keep children and pets off the treated area until dry.";
 
+  // The full leave-behind: compact HTML for the email body, plus a roomy PDF copy
+  // attached for the client to keep or print.
+  let chemicalNotice = "";
+  let pdfAttachment: { filename: string; content: string } | null = null;
+  if (effOrgId) {
+    const notice = (await loadChemicalNoticeData(supabase, [visitId], "applied", effOrgId)).get(visitId);
+    if (notice) {
+      const noticeOrg = { ...noticeOrgFromRow(org), ...(await loadInvoiceTemplateBranding(supabase, effOrgId)) };
+      const timeZone = await getOrgTimeZone(supabase, effOrgId);
+      chemicalNotice = renderChemicalNoticeHtml(notice, noticeOrg, { timeZone, compact: true });
+      if (kind === "chemical" && body.attachPdf !== false) {
+        try {
+          const buffer = await renderChemicalNoticePdf(notice, noticeOrg, timeZone);
+          pdfAttachment = {
+            filename: `notice-of-treatment-${notice.serviceDate ?? "visit"}.pdf`,
+            content: buffer.toString("base64"),
+          };
+        } catch (err) {
+          // Non-fatal: send the email without the attachment rather than block the send.
+          console.error("[send-chemical-notice] PDF render error:", err);
+        }
+      }
+    }
+  }
+
   const mergeVars: Record<string, string> = {
+    "[chemicalnotice]":     chemicalNotice,
     "[clientfirstname]":    firstName,
     "[clientfullname]":     clientDisplayName,
     "[companyname]":        orgName,
@@ -180,6 +219,7 @@ export async function POST(
     html: resolvedBody,
     ...(replyTo ? { replyTo } : {}),
     ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails } : {}),
+    ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
   });
 
   if (sendErr) {
@@ -198,7 +238,7 @@ export async function POST(
     subject: resolvedSubject,
     body_html: resolvedBody,
     resend_id: sent?.id ?? null,
-    email_type: "chemical_application",
+    email_type: kind === "chemical" ? "chemical_application" : kind,
   });
 
   // Log activity
@@ -208,7 +248,7 @@ export async function POST(
       org_id: effOrgId,
       client_id: visit.client_id,
       activity_type: "email",
-      subject: "Chemical Application Notice sent via email",
+      subject: `${kindLabel} sent via email`,
       body: `Sent to ${clientEmail}. Subject: ${resolvedSubject}`,
       ref_id: visitId,
       ref_table: "crm_job_visits",

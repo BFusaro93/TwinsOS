@@ -65,6 +65,7 @@ export function DispatchBoardGuide() {
           <TOCLink href="#route-order">Stop order and Optimize Route</TOCLink>
           <TOCLink href="#calendar-view">Calendar view</TOCLink>
           <TOCLink href="#crew-board">The Crew Board (shop TV)</TOCLink>
+          <TOCLink href="#views-ranges">Saved views, quick ranges and shortcuts</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
           <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
@@ -929,6 +930,33 @@ export function DispatchBoardGuide() {
           a readable size (roughly five or six on a laptop). On a wall display, filter or stage the
           board so every crew that matters is visible — nobody is there to scroll it.
         </Callout>
+      </Section>
+
+      <Section id="views-ranges" title="Saved views, quick ranges and shortcuts">
+        <p>
+          <strong>Saved views.</strong> Open <strong>Saved views</strong> next to Refresh to keep a
+          set of filters you use often. <strong>Save current as view&hellip;</strong> stores the
+          service, crew, tag, priority and status-tab filters, the column filter, search text and
+          visible columns; click a view to apply it, or <strong>Update</strong> it to overwrite with
+          what is on screen. Views are private to you. A date range is saved only if you set it with
+          a Quick range, so a &ldquo;This week&rdquo; view keeps meaning this week.
+        </p>
+        <p>
+          <strong>Quick range.</strong> Beside the From and To dates: Today, Past 1/3/5 days, Next
+          3/5/7 days, This week, or Next week (weeks run Sunday to Saturday). Past and Next ranges
+          include today.
+        </p>
+        <p>
+          <strong>Status icon menu.</strong> Click a visit&apos;s status icon to change its status
+          and, in the same Save, its date, appointment start and end, and crew. Only what you
+          changed is applied.
+        </p>
+        <p>
+          <strong>Also new.</strong> <strong>Add / Remove Tags&hellip;</strong> in the Actions menu
+          tags the clients of the selected visits; <strong>Legend</strong> explains every icon on
+          the board; <strong>Alt+C</strong> marks the selected visits completed. The job sheet&apos;s billing
+          box shows the service&apos;s real billing mode (Flat Rate, Hourly or Per Unit).
+        </p>
       </Section>
 
       <Section id="see-also" title="See also">
