@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Ticket, Plus, Loader2, CheckCircle2, Clock, AlertCircle, XCircle, ChevronDown } from "lucide-react";
+import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -23,23 +24,37 @@ interface Ticket {
   priority: string;
   created_at: string;
   body: string | null;
+  /** Set when the ticket is on one of the login's sub-accounts. */
+  accountName?: string | null;
+}
+
+/** An account a ticket can be filed under: the login's own client first,
+ * then its sub-accounts. */
+interface TicketAccount {
+  id: string;
+  displayName: string;
+  isSelf: boolean;
 }
 
 interface Props {
   tickets: Ticket[];
   categories: string[];
+  accounts: TicketAccount[];
 }
 
 const DEFAULT_CATEGORIES = ["General", "Billing", "Service Issue", "Other"];
 
 function NewTicketDialog({
   categories,
+  accounts,
   onCreated,
 }: {
   categories: string[];
+  accounts: TicketAccount[];
   onCreated: (ticket: Ticket) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [subject, setSubject] = useState("");
   const [category, setCategory] = useState(categories[0] ?? "");
   const [body, setBody] = useState("");
@@ -55,7 +70,7 @@ function NewTicketDialog({
     const res = await fetch("/api/portal/tickets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subject, category, body }),
+      body: JSON.stringify({ subject, category, body, clientId: accountId || undefined }),
     });
     const data = await res.json();
     setSubmitting(false);
@@ -74,6 +89,7 @@ function NewTicketDialog({
       priority: "normal",
       created_at: new Date().toISOString(),
       body,
+      accountName: accounts.find((a) => a.id === accountId && !a.isSelf)?.displayName ?? null,
     });
 
     setSubject("");
@@ -105,6 +121,27 @@ function NewTicketDialog({
         </div>
 
         <form onSubmit={submit} className="p-5 flex flex-col gap-4">
+          {accounts.length > 1 && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-slate-700">Account</label>
+              <div className="relative">
+                <select
+                  value={accountId}
+                  onChange={(e) => setAccountId(e.target.value)}
+                  required
+                  className="w-full h-9 appearance-none rounded-md border border-slate-200 bg-white px-3 pr-8 text-sm outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.isSelf ? `${a.displayName || "My account"} (main account)` : a.displayName}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2.5 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-slate-700">Category</label>
             <div className="relative">
@@ -172,7 +209,7 @@ function NewTicketDialog({
   );
 }
 
-export default function PortalTicketsPage({ tickets: initialTickets, categories: categoriesProp }: Props) {
+export default function PortalTicketsPage({ tickets: initialTickets, categories: categoriesProp, accounts }: Props) {
   const [tickets, setTickets] = useState(initialTickets);
   const categories = categoriesProp.length > 0 ? categoriesProp : DEFAULT_CATEGORIES;
 
@@ -194,6 +231,7 @@ export default function PortalTicketsPage({ tickets: initialTickets, categories:
                   <p className="text-sm font-medium text-slate-800">{t.subject ?? `Ticket #${t.ticket_number}`}</p>
                   <span className="text-xs text-slate-400">#{t.ticket_number}</span>
                 </div>
+                <SubAccountLabel name={t.accountName} />
                 {t.category && (
                   <p className="text-xs text-slate-500 mt-0.5">{t.category}</p>
                 )}
@@ -219,6 +257,7 @@ export default function PortalTicketsPage({ tickets: initialTickets, categories:
         <h1 className="text-xl font-bold text-slate-900">Tickets</h1>
         <NewTicketDialog
           categories={categories}
+          accounts={accounts}
           onCreated={(t) => setTickets((prev) => [t, ...prev])}
         />
       </div>
@@ -231,6 +270,7 @@ export default function PortalTicketsPage({ tickets: initialTickets, categories:
           <div className="flex justify-center">
             <NewTicketDialog
               categories={categories}
+              accounts={accounts}
               onCreated={(t) => setTickets((prev) => [t, ...prev])}
             />
           </div>

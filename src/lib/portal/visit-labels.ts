@@ -93,6 +93,7 @@ export async function labelPortalVisits(
 }
 
 export interface PortalUpcomingVisit extends PortalVisitRow {
+  client_id: string;
   scheduled_date: string;
   status: string;
 }
@@ -108,15 +109,16 @@ export async function loadUpcomingPortalVisits(
   // The portal user's own session client — RLS scopes the visit rows.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
-  params: { clientId: string; orgId: string; today: string; limit: number }
+  // clientIds: the login's client plus its sub-accounts (getPortalAccounts).
+  params: { clientIds: string[]; orgId: string; today: string; limit: number }
 ): Promise<{ visits: PortalUpcomingVisit[]; labels: Map<string, PortalVisitLabel> }> {
-  const { clientId, orgId, today, limit } = params;
-  const cols = "id, scheduled_date, status, job_id, job_service_id, invoice_description";
+  const { clientIds, orgId, today, limit } = params;
+  const cols = "id, client_id, scheduled_date, status, job_id, job_service_id, invoice_description";
   const base = () =>
     supabase
       .from("crm_job_visits")
       .select(cols)
-      .eq("client_id", clientId)
+      .in("client_id", clientIds)
       .eq("org_id", orgId)
       .is("deleted_at", null)
       // A multi-crew stop is one visit to the customer — show the lead's only.

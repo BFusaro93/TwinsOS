@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getEffectiveTicketCategories } from "@/lib/portal/ticket-categories";
 import { notifyStaffOfNewTicket, ticketLink } from "@/lib/ticket-notify";
@@ -30,10 +30,11 @@ export async function GET() {
     .eq("org_id", ctx.orgId)
     .single() as { data: Pick<PortalSettingsRow, "allow_tickets" | "portal_ticket_categories"> | null };
 
+  const clientIds = (await getPortalAccounts(ctx)).map((a) => a.id);
   const { data: tickets } = await supabase
     .from("crm_tickets")
-    .select("id, ticket_number, subject, category, status, priority, created_at, body")
-    .eq("client_id", ctx.clientId)
+    .select("id, client_id, ticket_number, subject, category, status, priority, created_at, body")
+    .in("client_id", clientIds)
     .eq("org_id", ctx.orgId)
     .eq("visible_to_client", true)
     .is("deleted_at", null)
@@ -60,6 +61,18 @@ export async function POST(req: Request) {
 
   const supabase = createServiceClient();
 
+  const payload = await req.json().catch(() => null) as { subject?: unknown; body?: unknown; category?: unknown; clientId?: unknown } | null;
+
+  // A parent client's login may file a ticket under one of its sub-accounts;
+  // anything else falls back to the login's own client. Never trusted beyond
+  // that list.
+  const accounts = await getPortalAccounts(ctx);
+  const requestedClientId = typeof payload?.clientId === "string" ? payload.clientId : null;
+  if (requestedClientId && !accounts.some((a) => a.id === requestedClientId)) {
+    return NextResponse.json({ error: "Invalid account" }, { status: 400 });
+  }
+  const ticketClientId = requestedClientId ?? ctx.clientId;
+
   // Fetch settings + client info in parallel
   const [settingsRes, clientRes] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,7 +85,7 @@ export async function POST(req: Request) {
     supabase
       .from("clients")
       .select("display_name, first_name, sales_rep_id")
-      .eq("id", ctx.clientId)
+      .eq("id", ticketClientId)
       .eq("org_id", ctx.orgId)
       .single(),
   ]);
@@ -84,7 +97,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Tickets are not enabled for this portal" }, { status: 403 });
   }
 
-  const payload = await req.json().catch(() => null) as { subject?: unknown; body?: unknown; category?: unknown } | null;
   const subject = typeof payload?.subject === "string" ? payload.subject : "";
   const body = typeof payload?.body === "string" ? payload.body : null;
   const category = typeof payload?.category === "string" ? payload.category : "";
@@ -114,7 +126,7 @@ export async function POST(req: Request) {
     .from("crm_tickets")
     .insert({
       org_id: ctx.orgId,
-      client_id: ctx.clientId,
+      client_id: ticketClientId,
       subject: subject.trim(),
       body: body?.trim() ?? null,
       category,
@@ -133,7 +145,7 @@ export async function POST(req: Request) {
 
   const { error: activityError } = await supabase.from("client_activity").insert({
     org_id: ctx.orgId,
-    client_id: ctx.clientId,
+    client_id: ticketClientId,
     activity_type: "ticket",
     subject: subject.trim(),
     body: body?.trim() ?? null,
