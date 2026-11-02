@@ -109,7 +109,8 @@ export function CommissionsGuide() {
         </p>
         <p>
           For rules earned <em>when paid</em>, each payment applied to the invoice earns its share on the
-          payment date; refunds reduce what was applied. Rules earned <em>when invoiced</em> pay on the
+          payment date; refunds reduce what was applied. Only money actually received counts: account
+          credits and AR write-offs applied to an invoice earn no commission. Rules earned <em>when invoiced</em> pay on the
           invoice date for any invoice that has left draft and isn&apos;t void.
         </p>
         <Callout>

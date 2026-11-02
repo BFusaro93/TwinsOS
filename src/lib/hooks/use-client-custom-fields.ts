@@ -3,7 +3,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
-import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 
 export interface CustomFieldDef {
   id: string;
@@ -72,17 +71,15 @@ export function useCreateCustomFieldDef() {
   return useMutation({
     mutationFn: async (input: { name: string; fieldType: "text" | "number"; unit?: string }) => {
       const supabase = createClient();
-      const { data: profile } = await supabase.auth.getUser();
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("org_id")
-        .eq("id", profile.user!.id)
-        .single();
+      // my_org_id() honors staff impersonation; profiles.org_id is the staff member's own org,
+      // which RLS rejects (or files the row under the wrong org).
+      const { data: orgId, error: orgErr } = await supabase.rpc("my_org_id");
+      if (orgErr || !orgId) throw orgErr ?? new Error("No organization for the current session");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_custom_field_defs")
         .insert({
-          org_id: prof!.org_id,
+          org_id: orgId,
           name: input.name,
           field_type: input.fieldType,
           unit: input.unit ?? null,
@@ -186,15 +183,16 @@ export function usePropertyCustomFieldDefs() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_rate_matrix_field_defs")
-        .select("id, field_key, field_label, field_type, sort_order")
+        .select("id, field_key, field_label, field_type, sort_order, client_field_def_id")
         .eq("entity_type", "property")
         .is("deleted_at", null)
         .order("sort_order")
         .order("field_label");
       if (error) throw error;
       return (data ?? [])
+        // Mirrors of client fields already have their own client column.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .filter((row: any) => !BUILT_IN_TAKEOFF_FIELD_KEYS.has(row.field_key))
+        .filter((row: any) => !BUILT_IN_TAKEOFF_FIELD_KEYS.has(row.field_key) && !row.client_field_def_id)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((row: any): PropertyCustomFieldDef => ({
           id: row.id,
@@ -226,25 +224,6 @@ export function useClientCustomFieldValues(clientId: string) {
   });
 }
 
-/** Every client's custom field values in one query, for bulk filtering (e.g.
- *  the Sales Campaigns audience filter) rather than one row at a time. */
-export function useAllClientCustomFieldValues() {
-  return useQuery({
-    queryKey: ["crm_client_custom_field_values", "all"],
-    queryFn: async () => {
-      const supabase = createClient();
-      // One row per client x field, so this passes PostgREST's 1000-row cap
-      // quickly — page through, or the audience filter silently ignores
-      // everyone past the first 1000 values.
-      const rows = await fetchAllRows<unknown>(() =>
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any).from("crm_client_custom_field_values").select("*").order("id"),
-      );
-      return rows.map(mapValue) as ClientCustomFieldValue[];
-    },
-  });
-}
-
 export function useUpsertClientCustomFieldValue() {
   const qc = useQueryClient();
   return useMutation({
@@ -255,17 +234,15 @@ export function useUpsertClientCustomFieldValue() {
       valueNumber?: number | null;
     }) => {
       const supabase = createClient();
-      const { data: profile } = await supabase.auth.getUser();
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("org_id")
-        .eq("id", profile.user!.id)
-        .single();
+      // my_org_id() honors staff impersonation; profiles.org_id is the staff member's own org,
+      // which RLS rejects (or files the row under the wrong org).
+      const { data: orgId, error: orgErr } = await supabase.rpc("my_org_id");
+      if (orgErr || !orgId) throw orgErr ?? new Error("No organization for the current session");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from("crm_client_custom_field_values")
         .upsert({
-          org_id: prof!.org_id,
+          org_id: orgId,
           client_id: input.clientId,
           field_def_id: input.fieldDefId,
           value_text: input.valueText ?? null,

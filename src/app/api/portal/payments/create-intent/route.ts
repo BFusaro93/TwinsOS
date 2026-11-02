@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { applyCreditBeforeCharge } from "@/lib/stripe/apply-credit-first";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
@@ -49,7 +49,9 @@ export async function POST(request: Request) {
     .from("crm_invoices")
     .select("id, org_id, client_id, invoice_number, balance_cents, status, open_dispute_payment_id")
     .eq("id", invoiceId)
-    .eq("client_id", ctx.clientId)
+    // A parent client's login may pay its sub-accounts' invoices; the charge
+    // still records against the invoice's own client (metadata below).
+    .in("client_id", (await getPortalAccounts(ctx)).map((a) => a.id))
     .eq("org_id", ctx.orgId)
     // A draft isn't visible in the portal, so it can't be paid from it either.
     .neq("status", "draft")
@@ -67,8 +69,10 @@ export async function POST(request: Request) {
   }
   // stripe_connect_livemode isn't in the generated Supabase types yet (added
   // by a migration this session wrote but did not apply/regenerate types for).
+  // Portal users have no profiles row, so the organizations policy (id = my_org_id()) returns
+  // nothing for their session: read the org with the service client (ctx.orgId is server-derived).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: org } = await (supabase.from("organizations") as any)
+  const { data: org } = await (createServiceClient().from("organizations") as any)
     .select(
       "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode"
     )

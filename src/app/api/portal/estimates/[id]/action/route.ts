@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import { MAX_CHANGE_REQUEST_MESSAGE_CHARS, submitEstimateChangeRequest } from "@/lib/estimate-change-requests";
 import { notifyStaffOfEstimateDecision } from "@/lib/estimate-client-notify";
@@ -72,13 +72,15 @@ export async function POST(
     return NextResponse.json({ error: "Estimates are not enabled for this portal" }, { status: 403 });
   }
 
-  // Verify the estimate belongs to this client and is in an actionable state
+  // Verify the estimate belongs to this client (or one of its sub-accounts)
+  // and is in an actionable state
+  const clientIds = (await getPortalAccounts(ctx)).map((a) => a.id);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: estimate } = await (supabase as any)
     .from("estimates")
     .select("id, stage, org_id, client_id, estimate_number, sales_rep_id, valid_until_date, tiers_enabled")
     .eq("id", id)
-    .eq("client_id", ctx.clientId)
+    .in("client_id", clientIds)
     .eq("org_id", ctx.orgId)
     .is("deleted_at", null)
     .single() as { data: { id: string; stage: string; org_id: string; client_id: string; estimate_number: number; sales_rep_id: string | null; valid_until_date: string | null; tiers_enabled: boolean | null } | null };

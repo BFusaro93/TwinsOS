@@ -71,6 +71,7 @@ export function ClientsGuide() {
         </h2>
         <div className="flex flex-col gap-1">
           <TOCLink href="#creating-a-client">Creating a client</TOCLink>
+          <TOCLink href="#finding-clients">Finding clients: search, filters &amp; export</TOCLink>
           <TOCLink href="#status">Client status &amp; the Lead-to-Client transition</TOCLink>
           <TOCLink href="#client-since">Client Since, and how leads are counted</TOCLink>
           <TOCLink href="#hierarchy">Commercial parent/child hierarchy</TOCLink>
@@ -80,6 +81,7 @@ export function ClientsGuide() {
           <TOCLink href="#contacts">Contacts</TOCLink>
           <TOCLink href="#timeline">Activity timeline</TOCLink>
           <TOCLink href="#account-statement">Account Statement</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -111,6 +113,57 @@ export function ClientsGuide() {
           Sales Rep filter on the Clients list and the rep reports. <strong>Client is taxable</strong> on
           the same screen marks a tax-exempt client: unchecked means no sales tax on their invoices.
         </p>
+      </Section>
+
+      <Section id="finding-clients" title="Finding clients: search, filters & export">
+        <p>
+          <strong>CRM &gt; Clients</strong> has two views of the same list: <strong>List</strong>{" "}
+          (with the client&apos;s record open beside it) and <strong>Table</strong> (more columns,
+          bulk actions). Your search and filters carry over when you switch between them.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Loading as you scroll.</strong> The count at the top is the full number of
+            matching clients, but the list shows them 100 at a time. More load automatically as you
+            scroll down, or click <strong>Load more</strong> at the bottom. Searching and filtering
+            always cover every client, not just the ones on screen.
+          </li>
+          <li>
+            <strong>Search</strong> matches name, account number, email, phone, billing and service
+            address, city, ZIP, and tags. Phone numbers match on digits alone once you type three or
+            more, so <em>9785550100</em> finds <em>(978) 555-0100</em>.
+          </li>
+          <li>
+            <strong>Filters</strong> are the same in both views: Status, Account Type, Balance,
+            Billing City, Service City, ZIP, Client Source, Sales Rep, Priority, Client Since, Tags,
+            your custom fields, Referred By, Do Not Market, Taxable, OK to Email, and{" "}
+            <strong>Has Scheduled Job For</strong> / <strong>Has Completed Job For</strong> a
+            service. Pick several values in one filter to match any of them.
+          </li>
+          <li>
+            <strong>Billing City vs. Service City.</strong> The table&apos;s{" "}
+            <strong>Service Address</strong> column shows where the work happens. To filter on that
+            town, use <strong>Service City</strong>; <strong>Billing City</strong> filters on the
+            billing address.
+          </li>
+          <li>
+            <strong>Selecting clients in the Table.</strong> The header checkbox selects the rows
+            loaded so far. When there are more matches, a <strong>Select all N matching
+            clients</strong> link appears above the table to select every client the current search
+            and filters match, ready for a bulk action.
+          </li>
+          <li>
+            <strong>Export.</strong> <strong>Import / Export &gt; Export</strong> downloads a CSV of
+            exactly the clients your current search and filters match, all of them, not just the
+            ones loaded on screen. Clear the search and filters first to export everyone.
+          </li>
+        </ul>
+        <Callout>
+          <strong>Picking a client elsewhere.</strong> Client pickers on invoices, estimates, jobs,
+          contracts, payments, tickets, projects and the global search (⌘K) search as you type and
+          show up to 50 matches. If the client you want isn&apos;t listed, keep typing: a few
+          letters of the name, an account number or part of the address narrows it down.
+        </Callout>
       </Section>
 
       <Section id="status" title="Client status & the Lead-to-Client transition">
@@ -218,6 +271,12 @@ export function ClientsGuide() {
           parent first before it could become a parent itself.
         </p>
         <p>
+          The Link Parent Account picker shows the first 50 eligible clients. Type a name, account
+          number or address to search all of them. If the client you&apos;re linking already has
+          sub-accounts of its own, the picker explains that it can&apos;t be given a parent instead
+          of listing choices, since that would make the hierarchy two levels deep.
+        </p>
+        <p>
           The parent&apos;s detail page shows a <strong>Sub-Accounts</strong> banner listing every
           child and a combined balance figure. That balance is the parent&apos;s own outstanding
           balance <em>plus</em> the sum of every child&apos;s outstanding balance — not just the
@@ -322,19 +381,13 @@ export function ClientsGuide() {
           the <strong>Details</strong> tab, with its unit after the value. Fields with no value are hidden.
         </p>
         <p>
-          <strong>Custom fields on a property.</strong> A client&apos;s custom field value is the default
-          for everything about that client. If a client has more than one property, open{" "}
-          <strong>Edit Property</strong> and use its <strong>Custom Fields</strong> section to give
-          that property its own value (for example two different mulch colors); leave a field blank
-          and the property uses the client&apos;s value. The same applies to the measurements above:
-          a property&apos;s own figure wins, otherwise the client&apos;s is used, so you never have to
-          create a property just to repeat what is already on the client.
-        </p>
-        <p>
-          <strong>Custom fields in pricing.</strong> A <em>number</em> custom field can be chosen as
-          the <strong>Lookup field</strong> of a service&apos;s Rate Matrix (Services &amp; Pricing),
-          and as the Area Custom Field under Settings &rarr; Chemical Tracking. The estimate uses the
-          property&apos;s own value when it has one and the client&apos;s value otherwise.
+          <strong>Number custom fields on a property.</strong> A number custom field&apos;s value on the
+          client is the default for all of that client&apos;s properties. If a client has more than one
+          property, open <strong>Edit Property</strong> and use its <strong>Custom Fields</strong>{" "}
+          section to give that property its own figure; leave a field blank and the property uses the
+          client&apos;s value. The same applies to the measurements above: a property&apos;s own figure
+          wins, otherwise the client&apos;s is used, so you never have to create a property just to
+          repeat what is already on the client.
         </p>
         <p>
           Typed takeoffs are one combined number per client. Aerial Measurement is the only place
@@ -484,6 +537,40 @@ export function ClientsGuide() {
           for just the share applied to the child&apos;s invoices (net of any refund). The
           child&apos;s balance on the statement therefore matches what the child actually owes.
         </p>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Inactive and lost clients.</strong> Marking a client Inactive, Lost or Cancelled stops new recurring and package visits and stops their contract invoices. Reactivating resumes both.
+          </li>
+          <li>
+            <strong>Bringing back a lost lead.</strong> Reactivating a lead that was closed as lost counts as a conversion: Client Since is set, “Converted from lead to client” is logged and the Lead converted to client automation fires.
+          </li>
+          <li>
+            <strong>Changing the phone number clears text consent.</strong> Consent was given for the old number, so saving a different primary phone turns off “Opted in to text messages” and logs it, unless you tick the box yourself in the same save.
+          </li>
+          <li>
+            <strong>The timeline records more.</strong> Cancelling, closing as lost and reactivating (with the reason), adding or changing contacts and properties, removing tags, and uploading or deleting files all leave an entry on the client&apos;s activity timeline.
+          </li>
+          <li>
+            <strong>Statements to a bounced address.</strong> An account statement won&apos;t be emailed to an address that has hard-bounced. Enter a different address in the dialog to send it.
+          </li>
+          <li>
+            <strong>New Client.</strong> If Settings → Required Fields requires a source, New Client asks for it. A service address checked with the address suggestion is saved with its verified location.
+          </li>
+          <li>
+            <strong>Tags you type.</strong> A new tag typed on a client is also added to Settings → Tags (when your role can edit CRM settings), so you can filter and bulk-tag by it.
+          </li>
+          <li>
+            <strong>Custom fields that didn&apos;t load.</strong> If a client&apos;s custom fields fail to load, the Custom Fields tab says so and saving the client leaves them unchanged.
+          </li>
+          <li>
+            <strong>Link Parent.</strong> The Link Parent picker shows up to 50 clients until you search, and explains when a client can&apos;t be a sub-account because it already has sub-accounts of its own.
+          </li>
+          <li>
+            <strong>Chemical area without a property.</strong> For a client with no property records, chemical amounts use the measurement on the client&apos;s Details tab (for example Turf Sq. Ft.).
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );

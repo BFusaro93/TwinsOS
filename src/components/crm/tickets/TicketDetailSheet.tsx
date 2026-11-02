@@ -23,7 +23,7 @@ import { useProjects } from "@/lib/hooks/use-projects";
 import { useCreateEstimateFromUpsell } from "@/lib/hooks/use-upsell-convert";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
-import { useClients } from "@/lib/hooks/use-clients";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { NewClientDialog } from "@/components/crm/NewClientDialog";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import {
@@ -159,7 +159,6 @@ interface EditFormProps {
 
 function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
   const updateTicket = useUpdateTicket();
-  const { data: clients } = useClients();
   const [newClientOpen, setNewClientOpen] = useState(false);
   const { data: employees } = useSelectableEmployees();
   const users = (employees ?? []).map((e) => ({ id: e.id, name: `${e.firstName} ${e.lastName}`.trim() }));
@@ -276,15 +275,14 @@ function EditForm({ ticket, onCancel, onSaved }: EditFormProps) {
         <div className="space-y-1.5">
           <Label className="text-xs">Client</Label>
           <div className="flex gap-1.5">
-            <Select value={form.clientId ?? "none"} onValueChange={(v) => set("clientId", v === "none" ? null : v)}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select client…" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No client</SelectItem>
-                {(clients ?? []).map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="min-w-0 flex-1">
+              <ClientCombobox
+                value={form.clientId ?? ""}
+                onValueChange={(v) => set("clientId", v || null)}
+                noneLabel="Select client…"
+                clearLabel="No client"
+              />
+            </div>
             <PermissionGate permission="client_add">
               <Button
                 type="button"

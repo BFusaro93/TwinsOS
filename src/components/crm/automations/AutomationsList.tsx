@@ -43,6 +43,7 @@ import { toast } from "sonner";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { createClient } from "@/lib/supabase/client";
 import { automationActivationWarnings } from "@/lib/automations/activation-warnings";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface AutomationTemplate {
   name: string;
@@ -169,7 +170,7 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
     }
     updateAutomation.mutate(
       { id, updates: { isActive: checked } },
-      { onError: () => toast.error("Failed to update automation") }
+      { onError: (err) => toast.error(mutationErrorMessage(err, "Failed to update automation")) }
     );
   }
   const router = useRouter();
@@ -203,8 +204,8 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
       setNewName("");
       setNewDescription("");
       router.push(`/crm/communication/automations/${automation.id}`);
-    } catch {
-      toast.error("Failed to create automation");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create automation"));
     } finally {
       setCreating(false);
     }
@@ -233,8 +234,8 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
         });
       }
       router.push(`/crm/communication/automations/${automation.id}`);
-    } catch {
-      toast.error("Failed to add automation from template");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add automation from template"));
     } finally {
       setAddingTemplate(null);
     }
@@ -246,8 +247,8 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
       const copy = await copyAutomation.mutateAsync(id);
       toast.success(`Copied as "${copy.name}" — it's disabled until you turn it on`);
       router.push(`/crm/communication/automations/${copy.id}`);
-    } catch {
-      toast.error("Failed to copy automation");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to copy automation"));
     } finally {
       setCopyingId(null);
     }
@@ -262,8 +263,8 @@ export function AutomationsList({ newDialogOpen, onNewDialogOpenChange }: Props)
     }))) return;
     try {
       await deleteAutomation.mutateAsync(id);
-    } catch {
-      toast.error("Failed to delete automation");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to delete automation"));
     }
   }
 

@@ -186,7 +186,12 @@ export async function computePayroll(
     // nobody clocked at all).
     const start = adj?.start_override ?? shift?.started_at ?? null;
     const end = adj?.end_override ?? shift?.ended_at ?? null;
-    const breakMinutes = (adj?.break_override != null ? Number(adj.break_override) : Number(shift?.break_minutes ?? 0)) + job.offClockMinutes;
+    // The office's corrected break is the day's total time off the clock (the input shows the
+    // combined figure as its placeholder) and REPLACES it. Adding the job-punch breaks on top
+    // counted a recorded lunch twice: typing 45 over "30 min off" saved 75 and under-paid.
+    const breakMinutes = adj?.break_override != null
+      ? Number(adj.break_override)
+      : Number(shift?.break_minutes ?? 0) + job.offClockMinutes;
     const hasDay = !!start;
     const openShift = hasDay && !end;
     const shiftHours = start && end

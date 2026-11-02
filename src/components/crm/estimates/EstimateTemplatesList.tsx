@@ -31,6 +31,7 @@ import type { CRMDiscount } from "@/types/crm-discounts";
 import type { EstimateTemplate, EstimateTemplateItem, EstimateTemplateItemSubitem } from "@/types/crm-estimates";
 import type { BudgetMethod } from "@/types/crm-jobs";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 /** Which creation flow a bundle is offered in. Read by the estimate pickers
  *  (NewEstimateDialog, EstimateDetail) and the job one (NewJobDialog). */
@@ -92,8 +93,8 @@ function TemplateItemRow({
         },
       });
       setDirty(false);
-    } catch {
-      toast.error("Failed to save");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save"));
     }
   }
 
@@ -116,8 +117,8 @@ function TemplateItemRow({
           applied_discount_id: patch.appliedDiscountId,
         },
       });
-    } catch {
-      toast.error("Failed to save discount");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save discount"));
     }
   }
 
@@ -231,8 +232,8 @@ function TemplateSubitemRow({ sub }: { sub: EstimateTemplateItemSubitem }) {
         templateItemId: sub.templateItemId,
         item: { ...sub, qty: nextQty, rateCents: nextRate },
       });
-    } catch {
-      toast.error("Failed to save sub-item");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save sub-item"));
     }
   }
 
@@ -312,8 +313,8 @@ function AddTemplateSubitemRow({
       });
       setOpen(false);
       setSearch("");
-    } catch {
-      toast.error("Failed to add sub-item");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add sub-item"));
     }
   }
 
@@ -433,8 +434,8 @@ function EditTemplateDialog({
       });
       setAddOpen(false);
       setSearch("");
-    } catch {
-      toast.error("Failed to add item");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add item"));
     }
   }
 
@@ -673,8 +674,8 @@ export function EstimateTemplatesList() {
       setNewName("");
       setShowNew(false);
       toast.success("Bundle created");
-    } catch {
-      toast.error("Failed to create bundle");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create bundle"));
     }
   }
 
@@ -776,8 +777,8 @@ export function EstimateTemplatesList() {
                           try {
                             await deleteTemplate(t.id);
                             toast.success("Bundle deleted");
-                          } catch {
-                            toast.error("Failed to delete");
+                          } catch (err) {
+                            toast.error(mutationErrorMessage(err, "Failed to delete"));
                           }
                         }
                       }}

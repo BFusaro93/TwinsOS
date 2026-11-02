@@ -24,10 +24,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
+import { blocksUseEstimateTags } from "@/lib/estimates/estimate-tags";
 import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   open: boolean;
@@ -97,6 +99,10 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
   // so the automation's own send-time resolver fills them in per-recipient.
   useEffect(() => {
     if (!selectedDocTemplate) return;
+    // Estimate-only tags resolve only when sent from an estimate; an automation step has none.
+    if (blocksUseEstimateTags(selectedDocTemplate.blocks)) {
+      toast.warning("This document is an estimate email — its estimate details will be blank in an automation email.");
+    }
     if (selectedDocTemplate.subject) setSubject(selectedDocTemplate.subject);
     setBody(renderBlocksToHtml(selectedDocTemplate.blocks, {}, { preserveUnresolvedKnownTags: true }));
     setDocTemplateId("");
@@ -132,8 +138,8 @@ export function EmailEventDialog({ open, onOpenChange, event }: Props) {
         },
       });
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save email event");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save email event"));
     } finally {
       setSaving(false);
     }

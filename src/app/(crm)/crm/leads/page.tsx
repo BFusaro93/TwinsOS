@@ -92,12 +92,13 @@ export default function LeadsPage() {
                 )
               }
               onImport={async (rows) => {
-                const { created, matched, skipped, failed } = await bulkImportLeads(rows);
-                const parts = [`${created} new lead${created !== 1 ? "s" : ""} created`];
-                if (matched > 0) parts.push(`${matched} matched to existing client${matched !== 1 ? "s" : ""}`);
-                if (skipped > 0) parts.push(`${skipped} row${skipped !== 1 ? "s" : ""} skipped (missing name or invalid email)`);
-                if (failed > 0) parts.push(`${failed} row${failed !== 1 ? "s" : ""} failed to save`);
-                toast[skipped > 0 || failed > 0 ? "warning" : "success"](parts.join(", ") + ".");
+                const result = await bulkImportLeads(rows);
+                const parts = [`${result.created} new lead${result.created !== 1 ? "s" : ""} created`];
+                if (result.matched > 0) parts.push(`${result.matched} matched to existing client${result.matched !== 1 ? "s" : ""}`);
+                if (result.failed.length > 0) parts.push(`${result.failed.length} row${result.failed.length !== 1 ? "s" : ""} not imported`);
+                toast[result.failed.length > 0 ? "warning" : "success"](parts.join(", ") + ".");
+                // Returned so the import dialog lists each failed / matched row with its reason.
+                return result;
               }}
               hideImport={!can("lead_bulk_create")}
             />

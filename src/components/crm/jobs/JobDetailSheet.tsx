@@ -25,7 +25,12 @@ export function JobDetailSheet({ jobId, onOpenChange, initialEditing, initialTab
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onOpenChange(false);
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      // Escape meant for something layered over the sheet (a confirm, Send Email, a menu or
+      // a select) closes that layer only — it used to dismiss the whole job slide-over too.
+      // The layer is still in the DOM while this bubble-phase listener runs.
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return;
+      onOpenChange(false);
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

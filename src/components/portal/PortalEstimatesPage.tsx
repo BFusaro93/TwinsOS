@@ -5,6 +5,7 @@ import { FileText, Clock, CheckCircle2, XCircle, Loader2, Download, MessageSquar
 import { groupIntoSections, DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
 import { looksLikeHtml } from "@/lib/utils/sanitize-html";
 import { stripHtml } from "@/lib/utils/strip-html";
+import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -22,6 +23,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   viewed:   { label: "Viewed",          color: "bg-yellow-50 text-yellow-700 border-yellow-200", icon: <Clock className="h-3.5 w-3.5" /> },
   accepted: { label: "Accepted",        color: "bg-green-50 text-green-700 border-green-200", icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
   invoiced: { label: "Accepted",        color: "bg-green-50 text-green-700 border-green-200", icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
+  // The office moves an accepted estimate to 'won' when converting it to a job.
+  won:      { label: "Accepted",        color: "bg-green-50 text-green-700 border-green-200", icon: <CheckCircle2 className="h-3.5 w-3.5" /> },
   // A declined proposal is stored as stage 'lost' (the office's term); the
   // client-facing wording stays "Declined". 'declined' is kept for any legacy rows.
   lost:     { label: "Declined",        color: "bg-slate-100 text-slate-500 border-slate-200", icon: <XCircle className="h-3.5 w-3.5" /> },
@@ -37,6 +40,8 @@ interface Estimate {
   status: string;
   expires_at: string | null;
   created_at: string;
+  /** Set when the estimate is for one of the login's sub-accounts. */
+  accountName?: string | null;
   display_settings?: DisplaySettings;
   /** Good/Better/Best estimate: the client accepts exactly one tier. */
   tiers_enabled?: boolean;
@@ -155,6 +160,9 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
           <p className="text-sm text-slate-500 mt-1">
             {estimate.title ?? `Estimate #${estimate.estimate_number}`} · {fmt(estimate.total_price_cents)}
           </p>
+          {estimate.accountName && (
+            <p className="text-xs text-slate-500 mt-1">For {estimate.accountName}</p>
+          )}
         </div>
 
         {tiersEnabled && (
@@ -471,7 +479,7 @@ export default function PortalEstimatesPage({ estimates: initial, today }: { est
           const cfg = STATUS_CONFIG[est.status] ?? STATUS_CONFIG.sent;
           // Only an estimate still awaiting a decision can expire — a decided
           // one (accepted/invoiced/declined) keeps its outcome badge.
-          const decided = ["accepted", "invoiced", "lost", "declined"].includes(est.status);
+          const decided = ["accepted", "invoiced", "won", "lost", "declined"].includes(est.status);
           const expired = est.expires_at && est.expires_at.slice(0, 10) < today && !decided;
           const displayStatus = expired ? STATUS_CONFIG.expired : cfg;
           const canAct = actionable && !expired;
@@ -485,9 +493,10 @@ export default function PortalEstimatesPage({ estimates: initial, today }: { est
                 <p className="text-sm font-medium text-slate-800">
                   {est.title ?? `Estimate #${est.estimate_number}`}
                 </p>
+                <SubAccountLabel name={est.accountName} />
                 <p className="text-xs text-slate-500">
                   Sent {fmtDate(est.created_at)}
-                  {est.expires_at && !["accepted", "lost", "invoiced"].includes(est.status) && (
+                  {est.expires_at && !["accepted", "lost", "invoiced", "won"].includes(est.status) && (
                     <> · Expires {fmtDate(est.expires_at)}</>
                   )}
                 </p>

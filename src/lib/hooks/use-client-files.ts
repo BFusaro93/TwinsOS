@@ -3,6 +3,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { getStorageOrgPrefix } from "@/lib/supabase/storage-org-prefix";
+import { logClientActivity } from "@/lib/hooks/use-clients";
 
 export interface ClientFile {
   id: string;
@@ -67,7 +69,9 @@ export function useUploadClientFile() {
       // (brackets, #, non-ASCII…) — keep the original name in the DB row and
       // use a safe one in the key.
       const safeName = input.file.name.replace(/[^A-Za-z0-9._-]+/g, "_");
-      const storagePath = `${prof!.org_id}/${input.clientId}/${Date.now()}-${safeName}`;
+      // Impersonating staff upload into the impersonated org, not their own.
+      const orgPrefix = await getStorageOrgPrefix(supabase);
+      const storagePath = `${orgPrefix}/${input.clientId}/${Date.now()}-${safeName}`;
 
       const { error: uploadError } = await supabase.storage
         .from(BUCKET)
@@ -76,7 +80,7 @@ export function useUploadClientFile() {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: dbError } = await (supabase as any).from("client_files").insert({
-        org_id: prof!.org_id,
+        org_id: orgPrefix,
         client_id: input.clientId,
         name: input.file.name,
         storage_path: storagePath,
@@ -89,8 +93,12 @@ export function useUploadClientFile() {
         await supabase.storage.from(BUCKET).remove([storagePath]);
         throw dbError;
       }
+      await logClientActivity(supabase, input.clientId, `File uploaded: ${input.file.name}`);
     },
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["client_files", v.clientId] }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["client_files", v.clientId] });
+      qc.invalidateQueries({ queryKey: ["clients", v.clientId, "activity"] });
+    },
   });
 }
 
@@ -101,15 +109,21 @@ export function useDeleteClientFile() {
       const supabase = createClient();
       // Soft-delete the DB record
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
+      const { data: removed, error } = await (supabase as any)
         .from("client_files")
         .update({ deleted_at: new Date().toISOString() })
-        .eq("id", input.id);
+        .eq("id", input.id)
+        .select("name")
+        .maybeSingle();
       if (error) throw error;
       // Remove from storage
       await supabase.storage.from(BUCKET).remove([input.storagePath]);
+      await logClientActivity(supabase, input.clientId, `File deleted${removed?.name ? `: ${removed.name}` : ""}`);
     },
-    onSuccess: (_d, v) => qc.invalidateQueries({ queryKey: ["client_files", v.clientId] }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["client_files", v.clientId] });
+      qc.invalidateQueries({ queryKey: ["clients", v.clientId, "activity"] });
+    },
   });
 }
 

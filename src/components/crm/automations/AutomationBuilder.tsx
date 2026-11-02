@@ -48,6 +48,7 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   automationId: string;
@@ -102,7 +103,7 @@ export function AutomationBuilder({ automationId }: Props) {
     }
     updateAutomation.mutate(
       { id: automationId, updates: { isActive: checked } },
-      { onError: () => toast.error("Failed to update automation") }
+      { onError: (err) => toast.error(mutationErrorMessage(err, "Failed to update automation")) }
     );
   }
 
@@ -128,7 +129,7 @@ export function AutomationBuilder({ automationId }: Props) {
     }
     updateAutomation.mutate(
       { id: automationId, updates: { name: nameValue.trim() } },
-      { onError: () => toast.error("Failed to rename automation") }
+      { onError: (err) => toast.error(mutationErrorMessage(err, "Failed to rename automation")) }
     );
     setEditingName(false);
   }
@@ -142,8 +143,8 @@ export function AutomationBuilder({ automationId }: Props) {
         position: sequences?.length ?? 0,
       });
       setFocusedSequenceId(seq.id);
-    } catch {
-      toast.error("Failed to add sequence");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add sequence"));
     }
   }
 
@@ -152,8 +153,8 @@ export function AutomationBuilder({ automationId }: Props) {
     if (!sequenceId || createEvent.isPending) return;
     try {
       await createEvent.mutateAsync({ sequenceId, eventType: type, config: {}, parentEventId });
-    } catch {
-      toast.error("Failed to add event");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add event"));
     }
   }
 

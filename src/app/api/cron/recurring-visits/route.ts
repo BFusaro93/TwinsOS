@@ -15,6 +15,9 @@ import {
 
 const log = logger.child("cron/recurring-visits");
 
+// Loops every org; give it room before the default function limit.
+export const maxDuration = 300;
+
 /**
  * GET /api/cron/recurring-visits — called daily by Vercel Cron at 06:00 UTC.
  *

@@ -51,6 +51,16 @@ function str(v: unknown): string {
   return typeof v === "string" ? v : String(v ?? "");
 }
 
+/** Every value interpolated into the email HTML goes through this. */
+function esc(v: unknown): string {
+  return str(v)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function formatCurrency(cents: unknown): string {
   const n = typeof cents === "number" ? cents : Number(cents ?? 0);
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n / 100);
@@ -66,7 +76,7 @@ function emailShell(subject: string, bodyHtml: string): string {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${subject}</title>
+  <title>${esc(subject)}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
@@ -109,11 +119,11 @@ function emailShell(subject: string, bodyHtml: string): string {
 }
 
 function ctaButton(href: string, label: string): string {
-  return `<a href="${href}"
+  return `<a href="${esc(href)}"
      style="display:inline-block;margin-top:24px;padding:12px 24px;
             background-color:#60ab45;color:#ffffff;text-decoration:none;
             border-radius:6px;font-size:14px;font-weight:600;"
-   >${label}</a>`;
+   >${esc(label)}</a>`;
 }
 
 function metaTable(rows: [string, string][]): string {
@@ -121,8 +131,8 @@ function metaTable(rows: [string, string][]): string {
     .map(
       ([label, value]) =>
         `<tr>
-          <td style="padding:6px 0;font-size:13px;color:#64748b;width:140px;vertical-align:top;">${label}</td>
-          <td style="padding:6px 0;font-size:13px;color:#1e293b;font-weight:500;">${value}</td>
+          <td style="padding:6px 0;font-size:13px;color:#64748b;width:140px;vertical-align:top;">${esc(label)}</td>
+          <td style="padding:6px 0;font-size:13px;color:#1e293b;font-weight:500;">${esc(value)}</td>
         </tr>`
     )
     .join("");
@@ -142,10 +152,10 @@ function buildApprovalRequestedEmail(opts: {
   link: string;
 }): string {
   const body = `
-    <p style="margin:0 0 4px;font-size:16px;color:#1e293b;">Hi ${opts.approverName},</p>
+    <p style="margin:0 0 4px;font-size:16px;color:#1e293b;">Hi ${esc(opts.approverName)},</p>
     <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.6;">
-      <strong>${opts.requesterName}</strong> has submitted a
-      <strong>${opts.entityLabel}</strong> that requires your approval.
+      <strong>${esc(opts.requesterName)}</strong> has submitted a
+      <strong>${esc(opts.entityLabel)}</strong> that requires your approval.
     </p>
 
     <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:20px;margin-bottom:24px;">
@@ -177,9 +187,9 @@ function buildApprovedEmail(opts: {
   link: string;
 }): string {
   const body = `
-    <p style="margin:0 0 4px;font-size:16px;color:#1e293b;">Hi ${opts.requesterName},</p>
+    <p style="margin:0 0 4px;font-size:16px;color:#1e293b;">Hi ${esc(opts.requesterName)},</p>
     <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.6;">
-      Great news &mdash; your <strong>${opts.entityLabel}</strong> has been
+      Great news &mdash; your <strong>${esc(opts.entityLabel)}</strong> has been
       <span style="color:#16a34a;font-weight:600;">approved</span> and is ready to proceed.
     </p>
 
@@ -210,14 +220,14 @@ function buildRejectedEmail(opts: {
 }): string {
   const commentSection = opts.rejectionComment
     ? `<div style="background-color:#fff7ed;border-left:3px solid #f97316;padding:12px 16px;margin:16px 0;border-radius:0 4px 4px 0;">
-         <p style="margin:0;font-size:13px;color:#9a3412;font-style:italic;">"${opts.rejectionComment}"</p>
+         <p style="margin:0;font-size:13px;color:#9a3412;font-style:italic;">"${esc(opts.rejectionComment)}"</p>
        </div>`
     : "";
 
   const body = `
-    <p style="margin:0 0 4px;font-size:16px;color:#1e293b;">Hi ${opts.requesterName},</p>
+    <p style="margin:0 0 4px;font-size:16px;color:#1e293b;">Hi ${esc(opts.requesterName)},</p>
     <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.6;">
-      Your <strong>${opts.entityLabel}</strong> was
+      Your <strong>${esc(opts.entityLabel)}</strong> was
       <span style="color:#dc2626;font-weight:600;">not approved</span>.
       Please review the details below, make any necessary changes, and resubmit.
     </p>
@@ -266,14 +276,17 @@ async function sendEmail(message: EmailMessage): Promise<void> {
 
 async function getProfile(
   supabase: ReturnType<typeof createClient>,
-  userId: string | null | undefined
+  userId: string | null | undefined,
+  orgId: string
 ): Promise<Profile | null> {
   if (!userId) return null;
+  // Scoped to the record's org: a recipient is always a member of the org the record belongs to.
   const { data } = await supabase
     .from("profiles")
     .select("id, name, email")
     .eq("id", userId)
-    .single();
+    .eq("org_id", orgId)
+    .maybeSingle();
   return data as Profile | null;
 }
 
@@ -304,7 +317,7 @@ async function findNextApprover(
     .limit(1);
 
   if (arRows && arRows.length > 0) {
-    return getProfile(supabase, arRows[0].approver_id as string);
+    return getProfile(supabase, arRows[0].approver_id as string, orgId);
   }
 
   // Strategy 2: look up the flow for this org and entity type
@@ -331,7 +344,7 @@ async function findNextApprover(
 
   // Strategy 2a: specific user assigned to this step
   if (step.assigned_user_id) {
-    return getProfile(supabase, step.assigned_user_id);
+    return getProfile(supabase, step.assigned_user_id, orgId);
   }
 
   // Strategy 2b: any user in the org with the required role
@@ -352,6 +365,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
+  // Only the database trigger (fn_notify_approval_email) may call this: it sends
+  // `Authorization: Bearer <app_config.service_role_key>`. Without this check the public anon
+  // key was enough to make the platform email any profile a forged, HTML-bearing message.
+  // APPROVAL_EMAIL_TRIGGER_KEY lets the trigger's key differ from this project's
+  // SUPABASE_SERVICE_ROLE_KEY (e.g. after a key-format migration) without reopening the hole.
+  const bearer = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  const allowedKeys = [SUPABASE_SERVICE_ROLE_KEY, Deno.env.get("APPROVAL_EMAIL_TRIGGER_KEY") ?? ""].filter(Boolean);
+  if (!bearer || !allowedKeys.includes(bearer)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
   if (!RESEND_API_KEY) {
     // Resend not configured — log and return 200 so pg_net doesn't retry
     console.warn("RESEND_API_KEY not set; skipping email notification");
@@ -365,20 +389,35 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return new Response("Invalid JSON body", { status: 400 });
   }
 
-  const { table, record, old_record } = payload;
+  const { table, old_record } = payload;
+  if (table !== "requisitions" && table !== "purchase_orders") {
+    return new Response(JSON.stringify({ skipped: "unsupported_table" }), { status: 200 });
+  }
   const oldStatus = str(old_record?.status);
-  const newStatus = str(record?.status);
+  const payloadStatus = str(payload.record?.status);
 
-  if (oldStatus === newStatus) {
+  if (oldStatus === payloadStatus) {
     return new Response(JSON.stringify({ skipped: "no_status_change" }), { status: 200 });
   }
 
   const relevantStatuses = ["pending_approval", "pending", "approved", "rejected"];
-  if (!relevantStatuses.includes(newStatus)) {
+  if (!relevantStatuses.includes(payloadStatus)) {
     return new Response(JSON.stringify({ skipped: "irrelevant_status" }), { status: 200 });
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  // Read the record itself rather than trusting the payload's copy; if its status has moved
+  // on since the trigger fired, this notification is stale and is dropped.
+  const recordId = str(payload.record?.id);
+  if (!recordId) return new Response(JSON.stringify({ skipped: "no_record_id" }), { status: 200 });
+  const { data: recordRow } = await supabase.from(table).select("*").eq("id", recordId).maybeSingle();
+  if (!recordRow) return new Response(JSON.stringify({ skipped: "record_not_found" }), { status: 200 });
+  const record = recordRow as Record<string, unknown>;
+  const newStatus = str(record.status);
+  if (newStatus !== payloadStatus) {
+    return new Response(JSON.stringify({ skipped: "status_changed_since_trigger" }), { status: 200 });
+  }
 
   const entityType:   "requisition" | "purchase_order" = table === "requisitions" ? "requisition" : "purchase_order";
   const entityLabel   = entityType === "requisition"    ? "Requisition"            : "Purchase Order";
@@ -400,7 +439,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (newStatus === "pending_approval" || newStatus === "pending") {
     const approver = await findNextApprover(supabase, entityType, entityId, orgId);
     if (approver) {
-      const requesterProfile = await getProfile(supabase, requesterId);
+      const requesterProfile = await getProfile(supabase, requesterId, orgId);
       messages.push({
         to:      approver.email,
         subject: `[Action Required] ${entityLabel} ${entityNumber} needs your approval`,
@@ -420,7 +459,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   // ── approved — notify the requester ────────────────────────────────────────
   else if (newStatus === "approved") {
-    const requester = await getProfile(supabase, requesterId);
+    const requester = await getProfile(supabase, requesterId, orgId);
     if (requester) {
       messages.push({
         to:      requester.email,
@@ -440,7 +479,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   // ── rejected — notify the requester with the latest rejection comment ───────
   else if (newStatus === "rejected") {
-    const requester = await getProfile(supabase, requesterId);
+    const requester = await getProfile(supabase, requesterId, orgId);
     if (requester) {
       // Pull the most recent rejection comment from approval_requests
       const { data: rejRows } = await supabase

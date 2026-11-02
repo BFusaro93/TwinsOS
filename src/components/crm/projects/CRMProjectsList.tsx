@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useProjects, useCreateProject, useUpdateProject } from "@/lib/hooks/use-projects";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClient } from "@/lib/hooks/use-clients";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { usePayments } from "@/lib/hooks/use-invoices";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ import { toast } from "sonner";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import type { Project, ProjectStatus } from "@/types/project";
+import type { Client } from "@/types/crm";
 import { SearchInput } from "@/components/shared/SearchInput";
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -81,9 +83,6 @@ function ProgressBar({ pct }: { pct: number }) {
 // ── milestone tab ─────────────────────────────────────────────────────────────
 
 function MilestoneTab({ project }: { project: Project }) {
-  const { can } = usePermissions();
-  const canInvoice = can("acct_add_modify_invoices");
-
   if (!project.clientId) {
     return (
       <div className="rounded-lg border bg-slate-50 dark:bg-muted/40 p-4 text-sm text-muted-foreground">
@@ -113,7 +112,6 @@ function MilestoneTab({ project }: { project: Project }) {
         salesRepId={null}
         totalCents={project.contractPrice}
         showTargetDate
-        readOnly={!canInvoice}
         basisLabel="contract price"
       />
     </div>
@@ -302,17 +300,17 @@ function AnalysisTab({ project }: { project: Project }) {
   const { data: invoices } = useInvoices(project.clientId ?? undefined, scope);
   const { data: payments } = usePayments(project.clientId ?? undefined, scope);
 
-  // A voided invoice was never receivable — counting it as billed overstates
-  // revenue and understates what's left to bill. Mirrors rpt_projects_wip.
+  // A voided invoice was never receivable, and a draft hasn't been issued yet — counting either
+  // as billed overstates revenue and understates what's left to bill. Mirrors rpt_projects_wip.
   const totalInvoiced = (invoices ?? [])
-    .filter((inv) => inv.status !== "void")
+    .filter((inv) => inv.status !== "void" && inv.status !== "draft")
     .reduce((s, inv) => s + inv.totalCents, 0);
   const totalPayments = (payments ?? []).reduce((s, p) => s + p.amountCents, 0);
   const amountDue = totalInvoiced - totalPayments;
   // The contract price is pre-tax, so what's left to bill is measured against
   // billed amounts excluding tax (same as rpt_projects_wip's billed_cents).
   const billedExTax = (invoices ?? [])
-    .filter((inv) => inv.status !== "void")
+    .filter((inv) => inv.status !== "void" && inv.status !== "draft")
     .reduce((s, inv) => s + inv.totalCents - (inv.taxCents ?? 0), 0);
   const remainingToBill = project.contractPrice - billedExTax;
 
@@ -521,7 +519,6 @@ function NewProjectDialog({
   /** When set, edits this project instead of creating a new one. */
   project?: Project;
 }) {
-  const { data: clients } = useClients();
   const { mutateAsync: create, isPending: creating } = useCreateProject();
   const { mutateAsync: update, isPending: updating } = useUpdateProject();
   const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
@@ -532,6 +529,7 @@ function NewProjectDialog({
   // (toISOString) is already tomorrow after ~8 PM Eastern.
   const [name, setName] = useState(project?.name ?? "");
   const [clientId, setClientId] = useState(project?.clientId ?? "");
+  const { data: selectedClient } = useClient(clientId);
   const [address, setAddress] = useState(project?.address ?? "");
   const [city, setCity] = useState(project?.city ?? "");
   const [state, setState] = useState(project?.state ?? "");
@@ -573,9 +571,8 @@ function NewProjectDialog({
 
   // Picking a client with no address typed yet pre-fills the site address
   // from the client's billing address (still editable).
-  function handleClientChange(nextClientId: string) {
+  function handleClientChange(nextClientId: string, c: Client | null) {
     setClientId(nextClientId);
-    const c = (clients ?? []).find((x) => x.id === nextClientId);
     if (c && !address && !city && !state && !zip) {
       setAddress(c.billingAddress ?? "");
       setCity(c.billingCity ?? "");
@@ -591,7 +588,6 @@ function NewProjectDialog({
     if (endBeforeStart) { toast.error("End date must be on or after the start date"); return; }
     const parsedBudgetHours = parseFloat(budgetHours);
     const budgetHoursValue = Number.isFinite(parsedBudgetHours) && parsedBudgetHours > 0 ? parsedBudgetHours : null;
-    const selectedClient = (clients ?? []).find((c) => c.id === clientId);
     try {
       if (isEditing && project) {
         await update({
@@ -652,14 +648,7 @@ function NewProjectDialog({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Client</Label>
-            <Select value={clientId} onValueChange={handleClientChange}>
-              <SelectTrigger><SelectValue placeholder="Select client…" /></SelectTrigger>
-              <SelectContent>
-                {(clients ?? []).map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ClientCombobox value={clientId} onValueChange={handleClientChange} noneLabel="Select client…" />
           </div>
 
           {/* Site address — split street / city / state / zip (mirrors the PO NewProjectDialog) */}
@@ -761,7 +750,12 @@ export function CRMProjectsList() {
   const canModify = can("sched_add_modify_projects");
   const { data: projects, isLoading } = useProjects(true);
   const [search, setSearch] = useState("");
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  // Keep only the id: the dialog reads the project from the live list, so a change order's new
+  // contract price shows at once (a snapshot kept the old figure and disabled Invoice buttons
+  // as "over-allocated" until the dialog was reopened).
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const selectedProject = (projects ?? []).find((p) => p.id === selectedProjectId) ?? null;
+  const setSelectedProject = (p: Project | null) => setSelectedProjectId(p?.id ?? null);
   const [newOpen, setNewOpen] = useState(false);
 
   const filtered = (projects ?? []).filter((p) =>
@@ -842,7 +836,7 @@ export function CRMProjectsList() {
                     {p.clientName ?? p.customerName ?? "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant="outline" className={`border-transparent capitalize border text-xs ${STATUS_COLOR[p.status]}`}>
+                    <Badge variant="outline" className={`capitalize border text-xs ${STATUS_COLOR[p.status]}`}>
                       {statusLabel(p.status)}
                     </Badge>
                   </td>

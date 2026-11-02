@@ -228,6 +228,7 @@ function mapService(row: any): CRMService {
     matrixTailRateCents: row.matrix_tail_rate_cents ?? null,
     matrixTailHours: row.matrix_tail_hours ? Number(row.matrix_tail_hours) : null,
     matrixTailCostCents: row.matrix_tail_cost_cents ?? null,
+    chemicalAreaFieldId: row.chemical_area_field_id ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -648,6 +649,7 @@ function mapJobServiceFull(s: any): CRMJobService {
     sortOrder: s.sort_order ?? 0,
     serviceInvoiceDescription: s.crm_services?.invoice_description ?? null,
     minDays: s.min_days ?? null,
+    treatedArea: s.treated_area != null ? Number(s.treated_area) : null,
     subitems: mapServiceSubitems(s.crm_job_service_subitems),
   };
 }
@@ -2304,6 +2306,8 @@ export function useCreateJobsFromEstimate() {
         /** Estimate line this service converts. Unique on crm_job_services:
          *  the DB refuses a second conversion of the same line. */
         estimateLineItemId?: string | null;
+        /** Area this service treats (sq ft); overrides the property measurement for chemical quantities. */
+        treatedArea?: number | null;
         /** Recurring only: the estimate line's visit count — the service's
          *  rate is priced per visit over exactly this many (max_visits). */
         maxVisits?: number | null;
@@ -2515,6 +2519,7 @@ export function useCreateJobsFromEstimate() {
               days_count: 1,
               is_taxable: s.isTaxable ?? estimateIsTaxed,
               estimate_line_item_id: s.estimateLineItemId ?? null,
+              treated_area: s.treatedArea ?? null,
               max_visits: (jobType === "recurring" || jobType === "package") && s.maxVisits && s.maxVisits > 0 ? Math.round(s.maxVisits) : null,
               start_date: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.startDate ?? null,
               complete_by_date: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.completeByDate ?? null,
@@ -3279,7 +3284,7 @@ export function useUpdateJobService() {
   return useMutation({
     mutationFn: async ({ id, patch }: {
       id: string;
-      patch: { qty?: number; rate_cents?: number | null; budgeted_hours?: number };
+      patch: { qty?: number; rate_cents?: number | null; budgeted_hours?: number; treated_area?: number | null };
     }) => {
       const supabase = createClient();
       if (typeof patch.budgeted_hours === 'number') patch = { ...patch, budgeted_hours: roundHours(patch.budgeted_hours) };
@@ -3656,60 +3661,6 @@ export function useSetJobProductStatus() {
       if (data?.invoiceId) qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", data.invoiceId] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["products"] });
-    },
-  });
-}
-
-// ── client service history (for audience/segment filtering) ───────────────────
-// "Has client X ever had a scheduled/completed visit for service Y" — used by
-// the Sales Campaigns filter and reusable anywhere else that needs it. Two
-// flat queries + a client-side join, rather than one query with two
-// ambiguous relationships to crm_job_services (visit.job_service_id vs the
-// job's own services), which PostgREST can't disambiguate cleanly.
-const TERMINAL_VISIT_STATUSES_HISTORY = new Set(["completed", "cancelled", "skipped"]);
-
-export function useClientServiceHistory() {
-  return useQuery({
-    queryKey: ["crm-jobs", "client-service-history"],
-    queryFn: async () => {
-      const supabase = createClient();
-      const [visitsRes, servicesRes] = await Promise.all([
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any).from("crm_job_visits").select("job_id, client_id, status, job_service_id").is("deleted_at", null),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any).from("crm_job_services").select("id, job_id, service_name"),
-      ]);
-      if (visitsRes.error) throw visitsRes.error;
-      if (servicesRes.error) throw servicesRes.error;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const services = servicesRes.data as { id: string; job_id: string; service_name: string }[];
-      const nameById = new Map(services.map((s) => [s.id, s.service_name]));
-      const namesByJobId = new Map<string, string[]>();
-      services.forEach((s) => {
-        namesByJobId.set(s.job_id, [...(namesByJobId.get(s.job_id) ?? []), s.service_name]);
-      });
-
-      const scheduled = new Map<string, Set<string>>();
-      const completed = new Map<string, Set<string>>();
-      const add = (map: Map<string, Set<string>>, name: string, clientId: string) => {
-        if (!map.has(name)) map.set(name, new Set());
-        map.get(name)!.add(clientId);
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (visitsRes.data as { job_id: string; client_id: string; status: string; job_service_id: string | null }[]).forEach((v) => {
-        const names = v.job_service_id && nameById.has(v.job_service_id)
-          ? [nameById.get(v.job_service_id)!]
-          : namesByJobId.get(v.job_id) ?? [];
-        const target = v.status === "completed" ? completed
-          : TERMINAL_VISIT_STATUSES_HISTORY.has(v.status) ? null
-          : scheduled;
-        if (!target) return;
-        names.forEach((n) => add(target, n, v.client_id));
-      });
-
-      return { scheduled, completed };
     },
   });
 }

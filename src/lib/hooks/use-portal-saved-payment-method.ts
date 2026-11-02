@@ -9,6 +9,7 @@ export interface CreateSetupIntentResult {
 export interface SavedPaymentMethodResult {
   type: "card" | "us_bank_account";
   summary: string;
+  autopayEnabled?: boolean;
 }
 
 export function useCreatePortalSetupIntent() {
@@ -28,11 +29,11 @@ export function useCreatePortalSetupIntent() {
 
 export function useSavePortalSetupIntent() {
   return useMutation({
-    mutationFn: async ({ setupIntentId }: { setupIntentId: string }) => {
+    mutationFn: async ({ setupIntentId, enableAutopay = false }: { setupIntentId: string; enableAutopay?: boolean }) => {
       const res = await fetch("/api/portal/payments/connect/setup-intent", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ setupIntentId }),
+        body: JSON.stringify({ setupIntentId, enableAutopay }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to save payment method");
@@ -48,6 +49,21 @@ export function useRemovePortalPaymentMethod() {
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Failed to remove payment method");
       return body as { removed: true };
+    },
+  });
+}
+
+export function useSetPortalAutopay() {
+  return useMutation({
+    mutationFn: async (autopayEnabled: boolean) => {
+      const res = await fetch("/api/portal/payments/connect/payment-method", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ autopayEnabled }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to update autopay");
+      return body as { autopayEnabled: boolean };
     },
   });
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { grossToNetRefundCents } from "@/lib/stripe/refund-math";
 import { snapshotQuickBooksPaymentLinks, mirrorPaymentReversalToQuickBooks } from "@/lib/integrations/quickbooks";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { z } from "zod";
@@ -82,7 +83,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: payment, error: paymentErr } = await (db as any)
     .from("crm_payments")
-    .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, stripe_payment_intent_id, method")
+    .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, stripe_payment_intent_id, method, processing_fee_cents")
     .eq("id", paymentId)
     .eq("org_id", effOrgId)
     // A soft-deleted payment is gone from the books — refunding it would
@@ -120,18 +121,25 @@ export async function POST(
     let stripeRefundId: string;
     try {
       const stripe = getStripeForOrg(org.stripe_connect_livemode);
+      // Card-network surcharge rules: the surcharge is refunded with the sale. The client
+      // paid net + fee, so a refund of X net returns X plus the fee's share of X. The ledger
+      // below stays in net dollars (the fee was never credited to the client's account).
+      const feeCents: number = payment.processing_fee_cents ?? 0;
+      const grossRefundCents = feeCents > 0 && payment.amount_cents > 0
+        ? refundAmountCents + Math.round((feeCents * refundAmountCents) / payment.amount_cents)
+        : refundAmountCents;
       const refund = await stripe.refunds.create(
         {
           payment_intent: payment.stripe_payment_intent_id,
-          amount: refundAmountCents,
+          amount: grossRefundCents,
         },
         {
           stripeAccount: org.stripe_connect_account_id,
           // A token-less caller (older client, direct API use) keeps the legacy
           // 10-second bucket; the UI always sends a token.
           idempotencyKey: idempotencyToken
-            ? refundIdempotencyKey(paymentId, refundAmountCents, idempotencyToken)
-            : chargeIdempotencyKey(["refund", paymentId, refundAmountCents]),
+            ? refundIdempotencyKey(paymentId, grossRefundCents, idempotencyToken)
+            : chargeIdempotencyKey(["refund", paymentId, grossRefundCents]),
         }
       );
       stripeRefundId = refund.id;
@@ -144,7 +152,8 @@ export async function POST(
       const chargeId = typeof refund.charge === "string" ? refund.charge : refund.charge?.id;
       if (!chargeId) throw new Error("Stripe refund has no charge");
       const charge = await stripe.charges.retrieve(chargeId, undefined, { stripeAccount: org.stripe_connect_account_id });
-      stripeRefundedCents = charge.amount_refunded;
+      // Stripe's running total is gross; convert back to the net the ledger tracks.
+      stripeRefundedCents = grossToNetRefundCents(charge.amount_refunded, payment.amount_cents, feeCents);
     } catch (err) {
       log.error("stripe refund failed", { error: err, paymentId });
       const message = err instanceof Error ? err.message : "Stripe refund failed";

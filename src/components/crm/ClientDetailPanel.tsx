@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   useClient,
-  useClients,
+  useClientSearch,
+  CLIENT_SEARCH_LIMIT,
   useClientContacts,
   useClientProperties,
   useChildClients,
@@ -24,6 +25,7 @@ import {
   useCancelClient,
   useActivateClient,
 } from "@/lib/hooks/use-clients";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { TagEditor } from "@/components/crm/TagEditor";
 import { DispatchJobsDialog } from "@/components/crm/WaitingList";
 import { useTicket, useTickets } from "@/lib/hooks/use-tickets";
@@ -151,6 +153,7 @@ import type { CRMJob, CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { previewClientVisits, cancelClientVisitsRemote, clientVisitsConfirmOptions } from "@/lib/client-visits-api";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { summarizeContractAmount } from "@/lib/utils/contract-frequency";
 
 // Contact types — configurable via Settings in a future sprint
 const CONTACT_TYPES = [
@@ -672,6 +675,9 @@ export const PAYMENT_METHOD_OPTIONS = [
   { value: "Credit Card- Discover", label: "Credit Card (Discover)" },
   { value: "Credit Card- MasterCard", label: "Credit Card (MC)" },
   { value: "Credit Card- Visa",     label: "Credit Card (Visa)" },
+  { value: "Debit Card- Discover",  label: "Debit Card (Discover)" },
+  { value: "Debit Card- MasterCard", label: "Debit Card (MC)" },
+  { value: "Debit Card- Visa",      label: "Debit Card (Visa)" },
   { value: "Other",                 label: "Other" },
 ];
 
@@ -683,7 +689,7 @@ function ClientCombobox({
   value,
   onChange,
   onSelectId,
-  clients,
+  excludeId,
   placeholder = "Search clients or type name…",
 }: {
   value: string;
@@ -691,18 +697,17 @@ function ClientCombobox({
   /** Called with a client's id when picked from the list, or null once the
    * text no longer matches that pick (free text — no real client link). */
   onSelectId?: (id: string | null) => void;
-  clients: Client[];
+  /** The client being edited — never offered as its own referrer. */
+  excludeId: string;
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
+  const term = useDebouncedValue(query);
 
-  // Show all clients on focus; filter when user types
-  const filtered = open
-    ? query.trim().length > 0
-      ? clients.filter((c) => c.displayName.toLowerCase().includes(query.toLowerCase())).slice(0, 10)
-      : clients.slice(0, 10)
-    : [];
+  // Server-side search; the first 10 on focus, matches as the user types.
+  const { data: suggestions = [] } = useClientSearch(term, { excludeIds: [excludeId], limit: 10 }, open);
+  const filtered = open ? suggestions : [];
 
   return (
     <div className="relative" data-client-combobox="">
@@ -750,9 +755,8 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   const rf = useRequiredFields("client");
   const svcAddr = useVerifyAddress();
   const { data: fieldDefs = [] } = useCustomFieldDefs();
-  const { data: fieldValues = [], isLoading: fieldValuesLoading } = useClientCustomFieldValues(client.id);
+  const { data: fieldValues = [], isLoading: fieldValuesLoading, isError: fieldValuesError } = useClientCustomFieldValues(client.id);
   const { mutateAsync: upsertFieldValue } = useUpsertClientCustomFieldValue();
-  const { data: allClients = [] } = useClients();
   // Shared org-level source list (same one the New Lead dialog uses) — the
   // client's current value is appended if it isn't in the list so it still shows.
   const { options: sourcesOptions } = useClientSourceOptions(client.source);
@@ -1024,9 +1028,12 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     // The main client fields already committed above — a failure here is a
     // separate, secondary problem, not a full save failure. Report it as
     // such instead of a generic "failed to update" that implies nothing saved.
+    // Only write custom fields the form actually loaded: if their query failed (or hasn't
+    // seeded yet) the form holds blanks, and saving them would wipe every stored value.
+    const customFieldsLoaded = !fieldValuesError && customValuesSyncedForRef.current === client.id;
     try {
       await Promise.all(
-        fieldDefs.map((def) => {
+        (customFieldsLoaded ? fieldDefs : []).map((def) => {
           const raw = customValues[def.id] ?? "";
           return upsertFieldValue({
             clientId: client.id,
@@ -1328,7 +1335,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                   value={form.referredBy}
                   onChange={(v) => patch("referredBy", v)}
                   onSelectId={(id) => patch("referredByClientId", id)}
-                  clients={allClients.filter((c) => c.id !== client.id)}
+                  excludeId={client.id}
                   placeholder="Search clients, or type a name…"
                 />
                 {form.referredByClientId ? (
@@ -1455,6 +1462,11 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
 
             {/* ── Custom Fields ── */}
             <TabsContent value="custom" className="mt-0 space-y-1">
+              {fieldValuesError && (
+                <p className="mb-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                  Custom field values couldn&apos;t be loaded, so they won&apos;t be changed by this save. Close and reopen to try again.
+                </p>
+              )}
               <p className="text-xs text-slate-400 dark:text-neutral-500 mb-3">
                 Built-in takeoff measurements + org-defined custom fields.
                 Add or remove fields in{" "}
@@ -1651,8 +1663,8 @@ function ContactDialog({
       contactType: contactType || null,
       email: email.trim() || null,
       phones: validPhones,
-      phone: validPhones[0]?.phone ?? null,
-      phoneType: validPhones[0]?.type ?? null,
+      phone: (validPhones.find((p) => p.isPrimary) ?? validPhones[0])?.phone ?? null,
+      phoneType: (validPhones.find((p) => p.isPrimary) ?? validPhones[0])?.type ?? null,
       isPrimary,
       okToEmail,
       notes: notes.trim() || null,
@@ -1978,14 +1990,13 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
   );
 }
 
-// The client's custom fields, as this property's own values. The client's value is the
-// default (set on Edit Client > Custom Fields); a value entered here overrides it for this
-// property only — two properties can carry two mulch colors, or two different areas.
-// Auto-saves per field on blur — independent of the dialog's own Save button, same pattern
+// The client's number custom fields, as this property's own values. The client's value is
+// the default (set on Edit Client > Custom Fields); a value entered here overrides it for
+// this property only — two properties can carry two different areas. Auto-saves per field on blur — independent of the dialog's own Save button, same pattern
 // as other property sub-panels. The built-in takeoffs are the Measurements inputs above.
 function PropertyCustomFieldsSection({ propertyId, clientId }: { propertyId: string; clientId: string }) {
   const { data: fieldDefs = [] } = useRateMatrixFieldDefs("property");
-  const customDefs = fieldDefs.filter((d) => !isBuiltInAreaKey(d.fieldKey));
+  const customDefs = fieldDefs.filter((d) => d.fieldType === "number" && !isBuiltInAreaKey(d.fieldKey));
   const { data: values = [] } = usePropertyCustomFieldValues(propertyId);
   const { data: clientValues = [] } = useClientCustomFieldValues(clientId);
   const upsertValue = useUpsertPropertyCustomFieldValue();
@@ -1997,8 +2008,8 @@ function PropertyCustomFieldsSection({ propertyId, clientId }: { propertyId: str
     const raw = type === "number" ? v?.valueNumber : v?.valueText;
     return raw == null ? "" : String(raw);
   }
-  function clientDefault(fieldDefId: string, type: string): string {
-    const v = clientValues.find((x) => x.fieldDefId === fieldDefId);
+  function clientDefault(clientFieldDefId: string | null | undefined, type: string): string {
+    const v = clientFieldDefId ? clientValues.find((x) => x.fieldDefId === clientFieldDefId) : undefined;
     const raw = type === "number" ? v?.valueNumber : v?.valueText;
     return raw == null ? "" : String(raw);
   }
@@ -2021,7 +2032,7 @@ function PropertyCustomFieldsSection({ propertyId, clientId }: { propertyId: str
       </p>
       <div className="grid grid-cols-2 gap-3">
         {customDefs.map((d) => {
-          const inherited = clientDefault(d.id, d.fieldType);
+          const inherited = clientDefault(d.clientFieldDefId, d.fieldType);
           return (
             <div key={d.id} className="flex flex-col gap-1.5">
               <Label className="text-xs font-normal text-muted-foreground">{d.label}</Label>
@@ -2053,9 +2064,9 @@ function LinkParentDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const { mutateAsync: setParent, isPending } = useSetParentClient();
-  const { data: allClients } = useClients();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(currentParentId ?? "");
+  const term = useDebouncedValue(search);
 
   // Re-sync the selection to the client's actual current parent every time
   // the dialog opens. Without this, a selection made (or a search typed) but
@@ -2069,17 +2080,24 @@ function LinkParentDialog({
     }
   }, [open, currentParentId]);
 
-  const options = (allClients ?? []).filter(
-    (c) => c.id !== clientId && c.parentClientId == null // can't link to a child
-      && (search === "" || c.displayName.toLowerCase().includes(search.toLowerCase()))
+  // Only offer what prevent_client_hierarchy_cycle() accepts: one level deep,
+  // so a parent can't itself have a parent, and a client that already has
+  // sub-accounts can't be given one. Server-side search, capped at 50.
+  const { data: subAccounts, isPending: subAccountsLoading } = useChildClients(open ? clientId : "");
+  const hasSubAccounts = (subAccounts?.length ?? 0) > 0;
+  const { data: options = [], isFetching } = useClientSearch(
+    term,
+    { topLevelOnly: true, excludeIds: [clientId] },
+    open && !subAccountsLoading && !hasSubAccounts,
   );
+  const { data: currentParent } = useClient(open ? currentParentId ?? "" : "");
 
   async function handleSave() {
     try {
       await setParent({ id: clientId, parentClientId: selectedId || null });
       toast.success(selectedId ? "Parent account linked" : "Parent link removed");
       onOpenChange(false);
-    } catch { toast.error("Failed to update parent link"); }
+    } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to update parent link"); }
   }
 
   return (
@@ -2093,12 +2111,17 @@ function LinkParentDialog({
           <div className="flex flex-col gap-1.5">
             <Label>Search clients</Label>
             <Input
-              placeholder="Type to filter…"
+              placeholder="Search by name, account #, address…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
             />
           </div>
+          {hasSubAccounts && (
+            <p className="rounded-md border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+              This client has sub-accounts of its own, so it can&apos;t be linked under a parent — only one level of hierarchy is supported.
+            </p>
+          )}
           <div className="max-h-56 overflow-y-auto rounded-md border divide-y">
             <button
               type="button"
@@ -2120,8 +2143,24 @@ function LinkParentDialog({
                 )}
               </button>
             ))}
-            {options.length === 0 && (
-              <p className="px-3 py-4 text-center text-sm text-slate-400 dark:text-neutral-500">No matching clients</p>
+            {/* The current parent stays visible even when it isn't in the first 50. */}
+            {currentParent && !options.some((c) => c.id === currentParent.id) && (
+              <button
+                type="button"
+                onClick={() => setSelectedId(currentParent.id)}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-muted/40 ${selectedId === currentParent.id ? "bg-brand-50 dark:bg-brand-900/30 font-medium text-brand-700 dark:text-brand-400" : "text-slate-700 dark:text-neutral-300"}`}
+              >
+                <span className="block">{currentParent.displayName}</span>
+                <span className="text-xs text-slate-400 dark:text-neutral-500">Current parent</span>
+              </button>
+            )}
+            {!hasSubAccounts && options.length === 0 && (
+              <p className="px-3 py-4 text-center text-sm text-slate-400 dark:text-neutral-500">{isFetching ? "Searching…" : "No matching clients"}</p>
+            )}
+            {options.length >= CLIENT_SEARCH_LIMIT && (
+              <p className="px-3 py-2 text-center text-xs text-slate-400 dark:text-neutral-500">
+                Showing the first {CLIENT_SEARCH_LIMIT} — type to search for others.
+              </p>
             )}
           </div>
         </div>
@@ -2290,7 +2329,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
     {/* minmax(0,1fr), not 1fr: a bare fr track won't shrink below its content's
         min-content, so Jobs and Open Estimates were stealing width and left
         Accounting a third narrower than its share. */}
-    <div className="grid min-h-[600px] grid-cols-1 bg-card px-3 md:grid-cols-[minmax(0,1fr)_10px_minmax(0,1fr)_10px_minmax(0,1fr)]">
+    <div className="grid min-h-[600px] grid-cols-1 bg-card px-3 xl:grid-cols-[minmax(0,1fr)_10px_minmax(0,1fr)_10px_minmax(0,1fr)]">
       {/* Left — Jobs */}
       <div className="flex flex-col bg-card">
         <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
@@ -2308,6 +2347,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
               className="text-[11px] text-white/70 hover:text-white"
             >All History</button>
           </div>
+          {(can("job_add") || can("sched_add_modify_projects")) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs text-white/80 hover:text-white hover:bg-white/10">
@@ -2324,13 +2364,18 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                 ["package",      "Add a package job"],
                 ["project",      "Add a project"],
                 ["snow",         "Add a snow job"],
-              ] as const).map(([type, label]) => (
+              ] as const)
+                // Job creation is checked in the database (job_add; a project
+                // also passes with sched_add_modify_projects).
+                .filter(([type]) => can("job_add") || type === "project")
+                .map(([type, label]) => (
                 <DropdownMenuItem key={type} onSelect={() => { setNewJobType(type); setNewJobOpen(true); }}>
                   {label}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
         </div>
 
         {/* Active / Completed tabs */}
@@ -2469,7 +2514,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       </div>
 
       {/* Divider column */}
-      <div className="hidden justify-center bg-card md:flex"><div className="w-px h-full bg-slate-200 dark:bg-neutral-700" /></div>
+      <div className="hidden justify-center bg-card xl:flex"><div className="w-px h-full bg-slate-200 dark:bg-neutral-700" /></div>
 
       {/* Middle — Accounting */}
       <PermissionGate permission="client_view_billing">
@@ -2512,7 +2557,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                         <p className="whitespace-nowrap text-xs font-semibold text-slate-800 dark:text-neutral-100">
                           {row.invoiceNumber != null ? `Invoice #${row.invoiceNumber}` : "Invoice"}
                         </p>
-                        <div className="mt-0.5 flex gap-3 text-xs text-muted-foreground">
+                        <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                           <span>Amt: {formatCurrency(row.totalCents)}</span>
                           <span className={row.balanceCents > 0 ? "font-medium text-red-500 dark:text-red-400" : "text-slate-400 dark:text-neutral-500"}>
                             Bal: {formatCurrency(row.balanceCents)}
@@ -2554,7 +2599,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       </PermissionGate>
 
       {/* Divider column */}
-      <div className="hidden justify-center bg-card md:flex"><div className="w-px h-full bg-slate-200 dark:bg-neutral-700" /></div>
+      <div className="hidden justify-center bg-card xl:flex"><div className="w-px h-full bg-slate-200 dark:bg-neutral-700" /></div>
 
       {/* Right — Estimates + Contracts */}
       <div className="flex flex-col bg-card divide-y">
@@ -2640,7 +2685,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                     <div className="flex items-start justify-between gap-2">
                       <p className="truncate text-xs font-semibold text-slate-700 dark:text-neutral-300">{contract.title}</p>
                       <Badge variant="secondary" className="shrink-0 text-[10px]">
-                        {formatCurrency(contract.monthlyAmountCents)}/mo
+                        {summarizeContractAmount(contract).label}
                       </Badge>
                     </div>
                     {(contract.startDate || contract.endDate) && (
@@ -2695,7 +2740,6 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       onOpenChange={(o) => { if (!o) { setAddingContract(false); setEditingContract(null); } }}
       contract={editingContract ?? undefined}
       defaultClientId={clientId}
-      clients={[]}
     />
     <AddPaymentDialog
       open={addPaymentOpen}
@@ -3523,7 +3567,8 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   async function handleConvert() {
     setConvertConfirmOpen(false);
     try {
-      await convertLead(clientId);
+      const result = await convertLead(clientId);
+      if (result && result.converted === false) { toast.error("This record is no longer a lead."); return; }
       toast.success(`${client!.displayName} converted to client`);
       router.push(`/crm/clients/${clientId}`);
     } catch { toast.error("Failed to convert lead"); }

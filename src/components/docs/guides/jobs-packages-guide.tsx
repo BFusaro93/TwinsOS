@@ -44,6 +44,7 @@ export function JobsPackagesGuide() {
           <TOCLink href="#recurring-setup">Setting up a recurring job</TOCLink>
           <TOCLink href="#schedule-templates">Schedule templates</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -204,7 +205,10 @@ export function JobsPackagesGuide() {
           The <strong>Job Costing</strong> tab compares what a job was expected to take with what it
           actually took. Its figures come from the same visit data the Job Costing and COGS reports
           use, so the tab and the reports agree. Only visits that were worked (completed or in
-          progress) count as actuals.
+          progress) count as actuals. Revenue is the pre-tax amount, so sales tax never inflates profit.
+          Materials include products the crew recorded as used on the job (at their unit cost) as well as
+          materials added on the Costs tab, and the estimated cost includes the estimate&apos;s equipment
+          and sub-item costs.
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
@@ -496,6 +500,25 @@ export function JobsPackagesGuide() {
           <li>Dispatch Board — the daily scheduling view (list and calendar) where visits get assigned to crews, plus the Crew Board for crew, equipment, and job assignments</li>
           <li>Waiting List — the opportunistic-dispatch queue for <code>waiting_list</code> jobs (and unscheduled <code>package</code> jobs)</li>
           <li>Snow Jobs — storm-based scheduling for the <code>snow</code> job type</li>
+        </ul>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Complete waits for open visits.</strong> The job&apos;s <strong>Complete</strong> button refuses while the job still has scheduled, dispatched or in-progress visits, and says how many. Complete, skip or cancel them on the Visits tab first; each completed visit invoices itself, so the job isn&apos;t billed for work not done or billed twice.
+          </li>
+          <li>
+            <strong>Inactive and lost clients get no new visits.</strong> Recurring and package visits stop being generated for a client marked Inactive, Lost or Cancelled (and for deleted clients). Reactivating the client resumes generation on the next run.
+          </li>
+          <li>
+            <strong>Visits the crew is working are locked.</strong> While a crew is clocked in to a visit you can&apos;t move, re-crew, cancel, skip or delete it. A visit the crew skipped after starting can be rescheduled or reopened.
+          </li>
+          <li>
+            <strong>Note All Visits.</strong> Save to All adds the note to every scheduled visit and tells you if any couldn&apos;t be updated.
+          </li>
+          <li>
+            <strong>Escape closes the job panel safely.</strong> Pressing Escape inside a dialog on the job (a confirmation, Send Email) closes only that dialog, not the whole job panel.
+          </li>
         </ul>
       </Section>
     </DocsFontScope>

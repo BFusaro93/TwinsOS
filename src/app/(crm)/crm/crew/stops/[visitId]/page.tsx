@@ -3,7 +3,7 @@
 import { RichNotes } from "@/components/shared/RichNotes";
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format, parseISO, differenceInMinutes } from "date-fns";
+import { parseISO, differenceInMinutes } from "date-fns";
 import {
   ArrowLeft, MapPin, Phone, Clock, Camera, MessageSquare,
   CheckSquare, Square, AlertTriangle, Play, Square as StopIcon, SkipForward,
@@ -13,7 +13,8 @@ import {
 import {
   useStopDetail,
   useStopPartnerCrews,
-  useVisitPhotos,
+  useStopPhotos,
+  useCrewTap,
   useVisitChemicals,
   useChemicalConfirmationStatus,
   useConfirmChemicals,
@@ -53,6 +54,8 @@ import { visitServices, isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-s
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { openInMaps } from "@/lib/utils/maps";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
+import { useCurrentUserStore } from "@/stores";
 import { toast } from "sonner";
 
 const REQUISITION_STATUS_STYLE: Record<VisitRequisitionStatus, { label: string; className: string }> = {
@@ -134,14 +137,14 @@ function PlannedMaterialRow({
           Mark Used
         </Button>
         <button
-          className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 disabled:opacity-50"
+          className="min-h-11 px-2 text-xs text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-neutral-300 disabled:opacity-50"
           disabled={!isValid || isSaving}
           onClick={() => onMarkUsedNoInvoice(material, parsedQty)}
         >
           Used — don&apos;t bill
         </button>
         <button
-          className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 disabled:opacity-50"
+          className="min-h-11 px-2 text-xs text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-neutral-300 disabled:opacity-50"
           disabled={isSaving}
           onClick={() => onMarkNotUsed(material)}
         >
@@ -168,11 +171,16 @@ function ElapsedTimer({ start }: { start: string }) {
 export default function CrewStopDetailPage({ params }: { params: Promise<{ visitId: string }> }) {
   const { visitId: anchorVisitId } = use(params);
   const router = useRouter();
-  const { data: stop, isLoading } = useStopDetail(anchorVisitId);
+  const { data: stop, isLoading, isError: stopLoadError, error: stopErr, refetch: refetchStop } = useStopDetail(anchorVisitId);
+  const tap = useCrewTap();
+  const { format: orgFormat } = useOrgDates();
+  // Times read on the org's wall clock, not the phone's.
+  const clock = (iso: string) => orgFormat(iso, { hour: "numeric", minute: "2-digit" });
+  const { currentUser } = useCurrentUserStore();
   const { data: partnerCrews } = useStopPartnerCrews(stop?.visits ?? []);
   const partners = [...new Set((stop?.visits ?? []).flatMap((v) => partnerCrews?.get(v.id) ?? []))];
-  const { data: photos = [] } = useVisitPhotos(anchorVisitId);
   const stopVisitIds = stop?.visits.map((v) => v.id) ?? [];
+  const { data: photos = [] } = useStopPhotos(stopVisitIds);
   const { data: chemicals = [] } = useVisitChemicals(stopVisitIds);
   // A service the crew skipped (or the office cancelled) is not being applied, so
   // its chemicals are neither "what to mix" nor something to confirm — and the
@@ -265,19 +273,21 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     stop?.notesToCrewUpdatedAt
   );
   const isActive = stop?.derivedStatus === "in_progress";
-  const isComplete = stop?.derivedStatus === "completed" || stop?.derivedStatus === "skipped";
+  // Cancelled is terminal too: it used to offer a big Start Job that only got a server error.
+  const isComplete = stop?.derivedStatus === "completed" || stop?.derivedStatus === "skipped" || stop?.derivedStatus === "cancelled";
   const isPaused = isActive && !!stop?.pausedAt;
 
   function openMaps() {
     if (!stop?.address) return;
-    openInMaps(stop.address);
+    // City alone ("120 Main St, Springfield") can route to the wrong town.
+    openInMaps(stop.fullAddress || stop.address);
   }
 
   // Each hook's onError already toasts the failure; swallow the rejection here
   // so it isn't also reported as an unhandled promise rejection.
   async function handleClockIn() {
     try {
-      await stopClockIn.mutateAsync(anchorVisitId);
+      await stopClockIn.mutateAsync({ anchorVisitId, tap: tap() });
     } catch {
       /* surfaced by the mutation's onError */
     }
@@ -285,7 +295,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
 
   async function handlePause() {
     try {
-      await stopPause.mutateAsync(anchorVisitId);
+      await stopPause.mutateAsync({ anchorVisitId, tap: tap() });
     } catch {
       /* surfaced by the mutation's onError */
     }
@@ -293,7 +303,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
 
   async function handleResume() {
     try {
-      await stopResume.mutateAsync(anchorVisitId);
+      await stopResume.mutateAsync({ anchorVisitId, tap: tap() });
     } catch {
       /* surfaced by the mutation's onError */
     }
@@ -301,7 +311,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
 
   async function handleClockOut() {
     try {
-      await stopClockOut.mutateAsync({ anchorVisitId, notes: clockOutNotes || undefined });
+      await stopClockOut.mutateAsync({ anchorVisitId, notes: clockOutNotes || undefined, tap: tap() });
     } catch {
       return; // surfaced by the mutation's onError; stay on the stop
     }
@@ -451,16 +461,6 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     }
   }
 
-  async function loadSignedUrl(storagePath: string, photoId: string) {
-    const res = await fetch(`/api/crm/crew/visits/${anchorVisitId}/photos`);
-    if (!res.ok) return;
-    const all = await res.json();
-    const match = all.find((p: { id: string; signedUrl: string }) => p.id === photoId);
-    if (match?.signedUrl) {
-      setPhotoUrls(prev => ({ ...prev, [photoId]: match.signedUrl }));
-    }
-  }
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-dvh">
@@ -469,11 +469,28 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     );
   }
 
+  if (stopLoadError) {
+    // A failed load (signed out, no signal) used to read "Job not found".
+    const signedOut = /not authenticated|jwt|session|401/i.test(stopErr instanceof Error ? stopErr.message : String(stopErr ?? ""));
+    return (
+      <div className="flex flex-col items-center justify-center h-dvh gap-3 px-6 text-center">
+        <AlertTriangle className="h-8 w-8 text-amber-500" />
+        <p className="font-medium text-slate-700 dark:text-neutral-300">{signedOut ? "You're signed out" : "Couldn't load this job"}</p>
+        <p className="text-sm text-muted-foreground">{signedOut ? "Sign in again to keep working." : "Check your signal, then try again."}</p>
+        {signedOut ? (
+          <Button className="min-h-11" onClick={() => router.push("/login")}>Sign in</Button>
+        ) : (
+          <Button variant="outline" className="min-h-11" onClick={() => void refetchStop()}>Try again</Button>
+        )}
+      </div>
+    );
+  }
+
   if (!stop || !anchor) {
     return (
       <div className="flex flex-col items-center justify-center h-dvh gap-3">
-        <p className="text-muted-foreground">Job not found</p>
-        <Button variant="outline" onClick={() => router.push("/crm/crew")}>Back</Button>
+        <p className="text-muted-foreground">This job isn&apos;t on your crew&apos;s schedule</p>
+        <Button variant="outline" className="min-h-11" onClick={() => router.push("/crm/crew")}>Back</Button>
       </div>
     );
   }
@@ -481,9 +498,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   return (
     <div className="flex flex-col min-h-dvh bg-slate-50 dark:bg-muted/40">
       {/* Header */}
-      <div className="bg-card border-b border-border px-4 pt-safe-top pb-3 sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.push("/crm/crew")} className="p-1 -ml-1 text-muted-foreground">
+      <div className="bg-card border-b border-border px-4 pt-[env(safe-area-inset-top)] pb-3 sticky top-0 z-10">
+        <div className="flex items-start gap-2">
+          <button
+            onClick={() => router.push("/crm/crew")}
+            aria-label="Back to today's jobs"
+            className="flex h-11 w-11 shrink-0 items-center justify-center -ml-2 text-muted-foreground"
+          >
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div className="flex-1 min-w-0">
@@ -494,14 +515,27 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               </p>
             )}
             {stop.address && (
-              <button onClick={openMaps} className="text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1 mt-0.5">
-                <MapPin className="h-3 w-3" />
-                <span className="truncate">{stop.address}</span>
+              // Wraps instead of truncating: the crew needs to read the whole address here.
+              <button
+                onClick={openMaps}
+                className="text-sm text-blue-600 dark:text-blue-400 flex max-w-full min-w-0 items-start gap-1 mt-0.5 py-1 text-left"
+              >
+                <MapPin className="h-3 w-3 mt-1 shrink-0" />
+                <span className="break-words">{stop.fullAddress || stop.address}</span>
               </button>
+            )}
+            {stop.gateCode && (
+              <p className="mt-1 inline-flex items-center gap-2 rounded-md bg-slate-900 dark:bg-neutral-100 px-2.5 py-1 text-base font-bold text-white dark:text-neutral-900">
+                Gate code <span className="font-mono tracking-wider">{stop.gateCode}</span>
+              </p>
             )}
           </div>
           {stop.clientPhone && (
-            <a href={`tel:${stop.clientPhone}`} className="p-2 text-muted-foreground">
+            <a
+              href={`tel:${stop.clientPhone}`}
+              aria-label="Call the client"
+              className="flex h-11 w-11 shrink-0 items-center justify-center text-muted-foreground"
+            >
               <Phone className="h-5 w-5" />
             </a>
           )}
@@ -519,7 +553,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   On Break
                 </p>
                 <p className="text-xs text-blue-600 dark:text-blue-400">
-                  Since {format(parseISO(stop.pausedAt), "h:mm a")}
+                  Since {clock(stop.pausedAt)}
                 </p>
               </div>
               <div className="text-blue-700 dark:text-blue-400 font-mono font-bold text-lg">
@@ -531,7 +565,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               <div>
                 <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Job Running</p>
                 <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Started {format(parseISO(stop.clockedInAt), "h:mm a")}
+                  Started {clock(stop.clockedInAt)}
                 </p>
               </div>
               <div className="text-amber-700 dark:text-amber-400 font-mono font-bold text-lg">
@@ -584,7 +618,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                                   onClick={() => toggleSubitem.mutate({ visitId: v.id, subitemId: si.id, checked: !done })}
                                   aria-pressed={done}
                                   aria-label={`${done ? "Untick" : "Tick off"} ${si.name}`}
-                                  className="shrink-0 disabled:opacity-60"
+                                  className="-my-3 -ml-3 flex h-11 w-11 shrink-0 items-center justify-center disabled:opacity-60"
                                 >
                                   {done
                                     ? <CheckSquare className="h-4 w-4 text-green-600 dark:text-green-400" />
@@ -613,7 +647,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                       <CheckCircle2 className="h-4 w-4 text-green-500 dark:text-green-400" />
                     ) : !rowTerminal ? (
                       <button
-                        className="text-xs text-slate-400 dark:text-neutral-500 hover:text-slate-600 dark:hover:text-neutral-400 flex items-center gap-1"
+                        className="min-h-11 px-2 text-sm text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-neutral-300 flex items-center gap-1"
                         onClick={() => setSkipTargetId(v.id)}
                       >
                         <SkipForward className="h-3 w-3" />
@@ -678,10 +712,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               <Button
                 className="w-full h-12 text-base font-bold bg-emerald-600 hover:bg-emerald-700"
                 onClick={handleConfirmChemicals}
-                disabled={confirmChemicals.isPending}
+                disabled={confirmChemicals.isPending || !isActive}
               >
                 {confirmChemicals.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : "Confirm chemicals"}
               </Button>
+              {/* The application record needs a start time: confirming at the yard before
+                  Start Job wrote an end time with no start. */}
+              {!isActive && (
+                <p className="text-center text-xs text-amber-800 dark:text-amber-300">Start the job first — then confirm what was applied.</p>
+              )}
             </div>
           </div>
         )}
@@ -776,25 +815,31 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               <div className="px-4 pb-3">
                 <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
                   <CheckSquare className="h-3 w-3" />
-                  Acknowledged {format(parseISO(anchor.acknowledgedNotesAt), "h:mm a")}
+                  Acknowledged {clock(anchor.acknowledgedNotesAt)}
                 </p>
               </div>
             )}
           </div>
         )}
 
-        {/* Primary action buttons */}
+        {/* Primary action buttons — sticky at the bottom (above the home indicator) so they
+            stay reachable one-handed below a long services / chemicals list. */}
         {!isComplete && (
-          <div className="space-y-2">
+          <div className="sticky bottom-0 z-10 -mx-4 space-y-2 border-t border-border bg-slate-50/95 dark:bg-background/95 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] backdrop-blur">
             {!isActive ? (
-              <Button
-                className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 gap-2"
-                onClick={handleClockIn}
-                disabled={stopClockIn.isPending || (hasNotes && !acknowledged)}
-              >
-                {stopClockIn.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
-                Start Job
-              </Button>
+              <>
+                <Button
+                  className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 gap-2"
+                  onClick={handleClockIn}
+                  disabled={stopClockIn.isPending || (hasNotes && !acknowledged)}
+                >
+                  {stopClockIn.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
+                  Start Job
+                </Button>
+                {hasNotes && !acknowledged && (
+                  <p className="text-center text-xs text-amber-700 dark:text-amber-400">Read the job notes and tap &ldquo;I&apos;ve read the notes&rdquo; to start.</p>
+                )}
+              </>
             ) : (
               <>
                 {isPaused ? (
@@ -838,11 +883,11 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         {isComplete && (
           <div className="bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 text-center">
             <p className="font-medium text-green-800 dark:text-green-300">
-              {stop.derivedStatus === "skipped" ? "Job Skipped" : "Job Complete"}
+              {stop.derivedStatus === "skipped" ? "Job Skipped" : stop.derivedStatus === "cancelled" ? "Job Cancelled by the office" : "Job Complete"}
             </p>
             {stop.clockedInAt && stop.clockedOutAt && (
               <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                {format(parseISO(stop.clockedInAt), "h:mm a")} – {format(parseISO(stop.clockedOutAt), "h:mm a")}
+                {clock(stop.clockedInAt)} – {clock(stop.clockedOutAt)}
               </p>
             )}
           </div>
@@ -879,20 +924,17 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             <div className="grid grid-cols-3 gap-1 p-2">
               {photos.map(photo => (
                 <div key={photo.id} className="aspect-square bg-muted rounded-md overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {photoUrls[photo.id] ? (
+                  {(photoUrls[photo.id] ?? photo.signedUrl) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={photoUrls[photo.id]}
+                      src={photoUrls[photo.id] ?? photo.signedUrl ?? ""}
                       alt={photo.caption ?? "Visit photo"}
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <button
-                      className="w-full h-full flex items-center justify-center text-slate-400 dark:text-neutral-500"
-                      onClick={() => loadSignedUrl(photo.storagePath, photo.id)}
-                    >
+                    <div className="w-full h-full flex items-center justify-center text-slate-400 dark:text-neutral-500">
                       <ImageIcon className="h-6 w-6" />
-                    </button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -983,11 +1025,25 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </div>
           {anchor.jobComments && anchor.jobComments.length > 0 && (
             <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40">
-              <p className="text-sm text-slate-600 dark:text-neutral-400 whitespace-pre-wrap">
-                {typeof anchor.jobComments === "string"
-                  ? anchor.jobComments
-                  : anchor.jobComments.map((c: { text?: string; content?: string }) => c.text ?? c.content ?? "").join("\n")}
-              </p>
+              {typeof anchor.jobComments === "string" ? (
+                <p className="text-sm text-slate-600 dark:text-neutral-400 whitespace-pre-wrap">{anchor.jobComments}</p>
+              ) : (
+                // Dispatcher remarks and crew notes share this list; say who wrote each one.
+                <ul className="space-y-2">
+                  {anchor.jobComments.map((c, i) => {
+                    const mine = c.authorId === currentUser.id || c.authorName === "Crew";
+                    return (
+                      <li key={c.id ?? i} className="text-sm">
+                        <p className="text-xs font-medium text-slate-500 dark:text-neutral-400">
+                          {mine ? "You" : `Office${c.authorName ? ` · ${c.authorName}` : ""}`}
+                          {c.createdAt ? ` · ${clock(c.createdAt)}` : ""}
+                        </p>
+                        <p className="text-slate-700 dark:text-neutral-300 whitespace-pre-wrap">{c.text}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
           )}
           <div className="p-3 flex gap-2">

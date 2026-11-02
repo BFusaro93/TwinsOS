@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useFilteredClients } from "@/lib/hooks/use-clients";
+import type { FilterRow } from "@/lib/client-filters";
+
+const STATEMENT_FILTERS: FilterRow[] = [
+  { id: "not-lead", field: "status", operator: "neq", value: "lead" },
+  { id: "balance", field: "balance", operator: "gt", value: "0" },
+];
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,7 +35,10 @@ type SendStatus = "sent" | "skipped" | "failed";
 export function StatementsList() {
   const orgTimeZone = useOrgTimeZone();
   const { can } = usePermissions();
-  const { data: clients = [], isLoading } = useClients();
+  // Any real account with money owed — inactive and cancelled clients with a
+  // balance are exactly who a collections statement is for. Leads have never
+  // been billed. Filtered server-side.
+  const { data: clients = [], isLoading } = useFilteredClients({ filters: STATEMENT_FILTERS });
 
   const [statementDate, setStatementDate] = useState(() => todayInZone(orgTimeZone));
   const [periodFrom, setPeriodFrom] = useState(() => startOfYearISO(todayInZone(orgTimeZone)));
@@ -43,11 +52,7 @@ export function StatementsList() {
 
   const clientsWithBalance = useMemo(
     () =>
-      clients
-        // Any real account with money owed — inactive and cancelled clients
-        // with a balance are exactly who a collections statement is for.
-        // Leads have never been billed.
-        .filter((c) => c.status !== "lead" && c.balanceOutstandingCents > 0)
+      [...clients]
         .sort((a, b) => b.balanceOutstandingCents - a.balanceOutstandingCents),
     [clients]
   );

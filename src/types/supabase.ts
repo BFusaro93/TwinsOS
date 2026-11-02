@@ -6362,6 +6362,7 @@ export type Database = {
       }
       crm_job_services: {
         Row: {
+          treated_area: number | null
           assigned_to: string | null
           budget_method: string
           budgeted_hours: number
@@ -6388,6 +6389,7 @@ export type Database = {
           time_start: string | null
         }
         Insert: {
+          treated_area?: number | null
           assigned_to?: string | null
           budget_method?: string
           budgeted_hours?: number
@@ -6414,6 +6416,7 @@ export type Database = {
           time_start?: string | null
         }
         Update: {
+          treated_area?: number | null
           assigned_to?: string | null
           budget_method?: string
           budgeted_hours?: number
@@ -8001,6 +8004,7 @@ export type Database = {
       }
       crm_rate_matrix_field_defs: {
         Row: {
+          client_field_def_id: string | null
           created_at: string
           deleted_at: string | null
           entity_type: string
@@ -8013,6 +8017,7 @@ export type Database = {
           sort_order: number
         }
         Insert: {
+          client_field_def_id?: string | null
           created_at?: string
           deleted_at?: string | null
           entity_type?: string
@@ -8025,6 +8030,7 @@ export type Database = {
           sort_order?: number
         }
         Update: {
+          client_field_def_id?: string | null
           created_at?: string
           deleted_at?: string | null
           entity_type?: string
@@ -9151,6 +9157,7 @@ export type Database = {
       }
       crm_services: {
         Row: {
+          chemical_area_field_id: string | null
           budget_method: string
           call_script_notes: string | null
           category: string
@@ -9193,6 +9200,7 @@ export type Database = {
           upsell_pitch: string | null
         }
         Insert: {
+          chemical_area_field_id?: string | null
           budget_method?: string
           call_script_notes?: string | null
           category?: string
@@ -9235,6 +9243,7 @@ export type Database = {
           upsell_pitch?: string | null
         }
         Update: {
+          chemical_area_field_id?: string | null
           budget_method?: string
           call_script_notes?: string | null
           category?: string
@@ -10742,6 +10751,7 @@ export type Database = {
       }
       estimate_line_items: {
         Row: {
+          treated_area: number | null
           adj_rate_cents: number | null
           applied_discount_id: string | null
           budget_method: string
@@ -10782,6 +10792,7 @@ export type Database = {
           visits: number
         }
         Insert: {
+          treated_area?: number | null
           adj_rate_cents?: number | null
           applied_discount_id?: string | null
           budget_method?: string
@@ -10822,6 +10833,7 @@ export type Database = {
           visits?: number
         }
         Update: {
+          treated_area?: number | null
           adj_rate_cents?: number | null
           applied_discount_id?: string | null
           budget_method?: string
@@ -10909,6 +10921,7 @@ export type Database = {
       estimate_milestones: {
         Row: {
           amount_cents: number
+          amount_is_pretax: boolean
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -10927,6 +10940,7 @@ export type Database = {
         }
         Insert: {
           amount_cents?: number
+          amount_is_pretax?: boolean
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -10945,6 +10959,7 @@ export type Database = {
         }
         Update: {
           amount_cents?: number
+          amount_is_pretax?: boolean
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -17743,7 +17758,17 @@ export type Database = {
         Args: { p_entity_id: string; p_entity_type: string; p_status: string }
         Returns: undefined
       }
+      _crm_changed_outside: {
+        Args: { p_allowed: string[]; p_new: Json; p_old: Json }
+        Returns: boolean
+      }
+      _crm_direct_user_write: { Args: never; Returns: boolean }
+      _crm_has_any_permission: { Args: { p_keys: string[] }; Returns: boolean }
       _equipt_org_mismatch: { Args: { p_org: string }; Returns: boolean }
+      _estimate_is_own_unsent_draft: {
+        Args: { p_estimate_id: string }
+        Returns: boolean
+      }
       _next_work_order_number_for_org: {
         Args: { p_org_id: string }
         Returns: string
@@ -17979,6 +18004,7 @@ export type Database = {
         }
         Returns: string
       }
+      crm_client_filter_options: { Args: never; Returns: Json }
       crm_commission_create_statement: {
         Args: { p_employee_id: string; p_from: string; p_to: string }
         Returns: string
@@ -18310,6 +18336,16 @@ export type Database = {
         Returns: Json
       }
       crm_save_route_order: { Args: { p_visit_ids: string[] }; Returns: number }
+      crm_search_clients: {
+        Args: { p_filters?: Json; p_search?: string }
+        Returns: Database["public"]["Tables"]["clients"]["Row"][]
+        SetofOptions: {
+          from: "*"
+          to: "clients"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       crm_unsubscribe_client: {
         Args: { p_campaign_id?: string; p_token: string }
         Returns: string

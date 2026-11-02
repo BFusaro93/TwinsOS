@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import { renderEstimatePDF } from "@/lib/estimate-pdf";
 
@@ -17,14 +17,15 @@ export async function GET(
   const supabase = createServiceClient();
 
   // Service client bypasses RLS, so ownership is checked here: the estimate
-  // must belong to this portal client in the active org, and already sent
-  // (not a draft or an unsent quote).
+  // must belong to this portal client (or one of its sub-accounts) in the
+  // active org, and already sent (not a draft or an unsent quote).
+  const clientIds = (await getPortalAccounts(ctx)).map((a) => a.id);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: owned } = await (supabase as any)
     .from("estimates")
     .select("id, estimate_number")
     .eq("id", id)
-    .eq("client_id", ctx.clientId)
+    .in("client_id", clientIds)
     .eq("org_id", ctx.orgId)
     .not("stage", "in", "(draft,quote)")
     .is("deleted_at", null)

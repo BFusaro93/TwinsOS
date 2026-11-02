@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CreditCard, Download, CheckCircle2, Clock, AlertCircle, FileText } from "lucide-react";
 import { PayInvoiceDialog } from "@/components/portal/PayInvoiceDialog";
+import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -33,6 +34,8 @@ interface Invoice {
   due_date: string | null;
   status: string;
   created_at: string;
+  /** Set when the invoice is on one of the login's sub-accounts. */
+  accountName?: string | null;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -181,6 +184,7 @@ function InvoiceRow({ invoice: inv, today, onPay }: { invoice: Invoice; today: s
     <li className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3">
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-slate-800">Invoice #{inv.invoice_number}</p>
+        <SubAccountLabel name={inv.accountName} />
         <p className={`text-xs mt-0.5 ${pastDue ? "text-red-500" : "text-slate-500"}`}>
           {subtitle}
         </p>

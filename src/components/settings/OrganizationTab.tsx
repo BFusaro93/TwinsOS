@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +34,16 @@ export function OrganizationTab() {
 
   const { data: remoteSettings } = useOrgSettings();
   const { mutate: updateOrgSettings, isPending: savingSettings } = useUpdateOrgSettings();
+  const [confirm, confirmDialog] = useConfirm();
+  // Every save says whether it worked: these used to fail silently (e.g. a role the org-update
+  // policy refuses) and the old value came back on reload.
+  const saveFeedback = (label: string, onSuccess?: () => void) => ({
+    onSuccess: () => {
+      toast.success(`${label} saved`);
+      onSuccess?.();
+    },
+    onError: (err: unknown) => toast.error(err instanceof Error && err.message ? err.message : `Failed to save ${label.toLowerCase()}`),
+  });
   const [addressSaved, setAddressSaved] = useState(false);
   // After a labor rate is saved: offer to also update open projects.
   const [ratesPrompt, setRatesPrompt] = useState<{ full: number; burdened: number } | null>(null);
@@ -80,6 +92,7 @@ export function OrganizationTab() {
 
   return (
     <div className="flex flex-col gap-6">
+      {confirmDialog}
       {/* Organization */}
       <div className="rounded-lg border bg-card shadow-sm">
         <div className="px-6 py-4">
@@ -105,8 +118,8 @@ export function OrganizationTab() {
                 className="h-8 shrink-0"
                 disabled={orgNameDraft.trim() === orgName || !orgNameDraft.trim()}
                 onClick={() => {
-                  setOrgName(orgNameDraft.trim());
-                  updateOrgSettings({ name: orgNameDraft.trim() });
+                  const name = orgNameDraft.trim();
+                  updateOrgSettings({ name }, saveFeedback("Organization name", () => setOrgName(name)));
                 }}
               >
                 Save
@@ -142,7 +155,7 @@ export function OrganizationTab() {
                     replyToDraft.trim() === (remoteSettings?.replyToEmail ?? "") ||
                     (!!replyToDraft.trim() && !replyToValid)
                   }
-                  onClick={() => updateOrgSettings({ replyToEmail: replyToDraft.trim() || null })}
+                  onClick={() => updateOrgSettings({ replyToEmail: replyToDraft.trim() || null }, saveFeedback("Reply-to email"))}
                 >
                   Save
                 </Button>
@@ -207,6 +220,7 @@ export function OrganizationTab() {
                         setAddressSaved(true);
                         setTimeout(() => setAddressSaved(false), 2000);
                       },
+                      onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to save address"),
                     }
                   );
                 }}
@@ -223,7 +237,7 @@ export function OrganizationTab() {
         <div className="px-6 py-4">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-neutral-100">Finance</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Tax and currency defaults applied to new requisitions and purchase orders
+            Time zone, tax and labor-rate defaults for the whole company
           </p>
         </div>
         <Separator />
@@ -259,7 +273,16 @@ export function OrganizationTab() {
                 size="sm"
                 className="h-8"
                 disabled={savingSettings || tzDraft === (remoteSettings?.timezone ?? "")}
-                onClick={() => updateOrgSettings({ timezone: tzDraft })}
+                onClick={async () => {
+                  // The org's clock decides which day every visit, invoice and report belongs to.
+                  const ok = await confirm({
+                    title: "Change the operating time zone?",
+                    description: `"Today" for the dispatch board, crew app, billing runs and reports will follow ${tzDraft} from now on. Visits already scheduled keep their dates.`,
+                    confirmLabel: "Change time zone",
+                  });
+                  if (!ok) return;
+                  updateOrgSettings({ timezone: tzDraft }, saveFeedback("Time zone"));
+                }}
               >
                 Save
               </Button>
@@ -267,7 +290,7 @@ export function OrganizationTab() {
           </SettingRow>
           <SettingRow
             label="Default Sales Tax Rate"
-            description="Applied to new POs and requisitions. Can be overridden per record."
+            description="One rate for the whole company: the default on new invoices and estimates (Landscapt) and on new POs and requisitions (Equipt). Can be overridden per record."
           >
             <div className="flex items-center gap-2">
               <input
@@ -285,8 +308,7 @@ export function OrganizationTab() {
                 className="h-8"
                 disabled={taxDraft === taxRatePercent}
                 onClick={() => {
-                  setTaxRatePercent(taxDraft);
-                  updateOrgSettings({ taxRatePercent: taxDraft });
+                  updateOrgSettings({ taxRatePercent: taxDraft }, saveFeedback("Default tax rate", () => setTaxRatePercent(taxDraft)));
                 }}
               >
                 Save
@@ -317,7 +339,7 @@ export function OrganizationTab() {
                   setBreakevenLaborRateCents(cents);
                   updateOrgSettings(
                     { customizations: { breakevenLaborRateCents: cents } },
-                    { onSuccess: () => setRatesPrompt({ full: cents, burdened: burdenedLaborRateCents }) },
+                    saveFeedback("Break-even labor rate", () => setRatesPrompt({ full: cents, burdened: burdenedLaborRateCents })),
                   );
                 }}
               >
@@ -349,7 +371,7 @@ export function OrganizationTab() {
                   setBurdenedLaborRateCents(cents);
                   updateOrgSettings(
                     { customizations: { burdenedLaborRateCents: cents } },
-                    { onSuccess: () => setRatesPrompt({ full: breakevenLaborRateCents, burdened: cents }) },
+                    saveFeedback("Loaded labor rate", () => setRatesPrompt({ full: breakevenLaborRateCents, burdened: cents })),
                   );
                 }}
               >
@@ -364,7 +386,7 @@ export function OrganizationTab() {
             <Switch
               checked={remoteCustomizations.crewBreaksUnpaid !== false}
               disabled={savingSettings}
-              onCheckedChange={(checked) => updateOrgSettings({ customizations: { crewBreaksUnpaid: checked } })}
+              onCheckedChange={(checked) => updateOrgSettings({ customizations: { crewBreaksUnpaid: checked } }, saveFeedback("Crew pause setting"))}
               aria-label="Crew pauses are unpaid"
             />
           </SettingRow>

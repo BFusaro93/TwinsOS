@@ -390,7 +390,8 @@ export function ReportCenterGuide() {
           </li>
           <li>
             <strong>Correct any day.</strong> In the detail, change the <strong>clock-in and
-            clock-out times</strong>, the <strong>unpaid break minutes</strong>, or type the hours
+            clock-out times</strong>, the <strong>unpaid break minutes</strong> (the number you enter is the
+            day&apos;s whole unpaid break, replacing the recorded breaks rather than adding to them), or type the hours
             directly to override them; add <strong>Extra</strong> hours (shop time, PTO, anything not
             on the clock); write a <strong>note</strong> saying why; and click <strong>Save</strong>. An
             end time earlier than the start is read as the next morning, for storm work past
@@ -679,7 +680,9 @@ export function ReportCenterGuide() {
           roll their entries up to the parent automation. For the record you don&apos;t already
           have open, the <strong>Audits</strong> section of the Report Center has three reports
           reading a new org-wide <code>rpt_audit_log</code> view: <strong>Audit Log</strong> (the
-          full trail, filterable by category, record type, user, and action),{" "}
+          full trail, filterable by category, record type, user, and action, with a <strong>Record</strong>{" "}
+          column naming the estimate, invoice, PO, client, contract, project, job, service, package or
+          crew that was changed),{" "}
           <strong>Security &amp; Access Audit</strong> (permission, user, credential, and
           approval-chain changes only, defaulting to a 90-day window), and{" "}
           <strong>Change Activity by User</strong> (a count of changes per person, grouped by

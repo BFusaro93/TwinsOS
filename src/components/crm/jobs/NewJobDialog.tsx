@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateClientJob, useCRMServices, useCRMSchedules, useCRMCrews } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
-import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
+import { useClient, useClientProperties } from "@/lib/hooks/use-clients";
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
 import { useContracts } from "@/lib/hooks/use-contracts";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -46,6 +46,7 @@ import { ServiceDialog } from "@/components/crm/services/ServiceDialog";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { JobType, BudgetMethod, CRMService } from "@/types/crm-jobs";
 import { resolveStopAddress } from "@/lib/utils/stop-address";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -152,7 +153,6 @@ interface Props {
 export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, initialJobType, allowTypeChange, onCreated }: Props) {
   const showTypeSelector = allowTypeChange ?? initialJobType == null;
   const createJob = useCreateClientJob();
-  const { data: clients } = useClients();
   const { data: crmServices } = useCRMServices();
   const { data: crmSchedules } = useCRMSchedules();
   const { data: orgSettings } = useOrgSettings();
@@ -522,7 +522,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const productTotalCents = productRows.reduce((s, p) => s + p.qty * p.unitPriceCents, 0);
 
   const effectiveClientId = defaultClientId ?? selectedClientId;
-  const effectiveClient = (clients ?? []).find((c) => c.id === effectiveClientId);
+  const { data: effectiveClient } = useClient(effectiveClientId ?? "");
   const effectiveClientName = effectiveClient?.displayName ?? "";
   /**
    * A job for a client with no address anywhere produces a stop the crew
@@ -703,15 +703,15 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       if (parsedTiers.length > 0) {
         try {
           await saveSnowTiers.mutateAsync({ jobId: (result as { id: string }).id, tiers: parsedTiers });
-        } catch {
-          toast.error("Job created, but the rate ranges didn't save — add them from the job's Details.");
+        } catch (err) {
+          toast.error(mutationErrorMessage(err, "Job created, but the rate ranges didn't save — add them from the job's Details."));
         }
       }
       toast.success("Job created");
       onOpenChange(false);
       if (onCreated) onCreated((result as { id: string }).id);
-    } catch {
-      toast.error("Failed to create job");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create job"));
     } finally {
       setIsPending(false);
     }
@@ -753,11 +753,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   {/* Leads and lost leads can't have jobs — convert the lead first.
                       (crm_jobs also enforces this with a DB trigger.) */}
                   <ClientCombobox
-                    clients={(clients ?? [])
-                      .filter((c) => c.status !== "inactive" && c.status !== "cancelled" && c.status !== "lead" && c.status !== "lost")
-                      .sort((a, b) => a.displayName.localeCompare(b.displayName))}
+                    excludeStatuses={["inactive", "cancelled", "lead", "lost"]}
                     value={selectedClientId}
-                    onValueChange={setSelectedClientId}
+                    onValueChange={(id) => setSelectedClientId(id)}
                     noneLabel="Select client…"
                   />
                 </div>

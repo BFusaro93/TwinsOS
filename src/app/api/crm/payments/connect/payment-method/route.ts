@@ -66,7 +66,9 @@ export async function DELETE(request: Request) {
   const serviceClient = createServiceClient();
   const { error } = await serviceClient
     .from("clients")
-    .update({ saved_payment_method_id: null, saved_payment_method_type: null, saved_payment_method_summary: null })
+    // No card means nothing to autopay with; leaving the flag on re-enabled autopay silently
+    // the moment a new card was saved.
+    .update({ saved_payment_method_id: null, saved_payment_method_type: null, saved_payment_method_summary: null, autopay_enabled: false })
     .eq("id", clientId);
   if (error) return NextResponse.json({ error: "Failed to remove payment method" }, { status: 500 });
 

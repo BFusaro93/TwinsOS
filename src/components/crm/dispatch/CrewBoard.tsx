@@ -52,6 +52,10 @@ type DragItem =
 
 const TV_REFRESH_MS = 30_000;
 
+function dragKey(item: DragItem): string {
+  return item.kind === "member" ? `m:${item.id}` : item.kind === "equipment" ? `e:${item.key}` : `j:${item.jobId}`;
+}
+
 // Same rule the Dispatch Board uses: the visit's own crew, else its job's,
 // and crewUnassigned pins it to no crew.
 function visitCrewId(v: CRMJobVisit): string | null {
@@ -76,7 +80,8 @@ function shiftDate(iso: string, days: number): string {
 /**
  * Trello-style crew board: a column per crew showing who is on it today, which
  * equipment is loaded on it, and which jobs it is running. Everything is
- * draggable and writes through to the same tables the Dispatch Board uses, so
+ * draggable (or, on touch, tapped up and tapped onto a crew — iOS Safari never
+ * fires HTML5 drag events) and writes through to the same tables the Dispatch Board uses, so
  * the two stay in sync. Equipment can be pinned as a crew's default so it shows
  * up on that crew every day without being re-assigned. `?tv=1` renders
  * chrome-free and auto-refreshes, for the shop wall.
@@ -116,6 +121,9 @@ export function CrewBoard() {
 
   const [drag, setDrag] = useState<DragItem | null>(null);
   const [overKey, setOverKey] = useState<string | null>(null);
+  // Tap-to-place fallback for touch (same pattern as TeamAssignDialog): tap a
+  // card to pick it up, tap a crew (or the yard) to put it down.
+  const [held, setHeld] = useState<{ item: DragItem; label: string } | null>(null);
   const [yardSearch, setYardSearch] = useState("");
 
   // The wall display has no one to refresh it — poll instead.
@@ -130,6 +138,15 @@ export function CrewBoard() {
     }, TV_REFRESH_MS);
     return () => clearInterval(t);
   }, [tv, qc]);
+
+  useEffect(() => {
+    if (!held) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setHeld(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [held]);
+  // Nothing moves on the wall display.
+  useEffect(() => { if (tv) setHeld(null); }, [tv]);
 
   const liveVisits = useMemo(() => visits.filter((v) => v.status !== "cancelled"), [visits]);
   const jobIds = useMemo(() => [...new Set(liveVisits.map((v) => v.jobId))], [liveVisits]);
@@ -251,9 +268,12 @@ export function CrewBoard() {
     );
   }
 
+  /** Drop the dragged — or tapped-up — item on a crew. Dropping it on the crew
+   *  it's already on is a no-op, which is how tapping the held card cancels. */
   function handleDropOnCrew(crewId: string) {
-    const item = drag;
+    const item = drag ?? held?.item;
     setDrag(null);
+    setHeld(null);
     setOverKey(null);
     if (!item) return;
     if (item.kind === "member") {
@@ -286,8 +306,9 @@ export function CrewBoard() {
   }
 
   function handleDropOnYard() {
-    const item = drag;
+    const item = drag ?? held?.item;
     setDrag(null);
+    setHeld(null);
     setOverKey(null);
     if (item?.kind === "equipment" && item.fromCrewId) unloadAsset(item.key);
   }
@@ -301,6 +322,15 @@ export function CrewBoard() {
   const isToday = date === orgToday();
   const big = tv; // scale type up for across-the-room reading
   const endDrag = () => { setDrag(null); setOverKey(null); };
+  const startDrag = (item: DragItem) => { setHeld(null); setDrag(item); };
+  const heldKey = held ? dragKey(held.item) : null;
+  /** Card click: pick it up (or put it back). With something already held, let
+   *  the click through to the column underneath so the held item lands there. */
+  const pickUp = (item: DragItem, label: string) => (e: React.MouseEvent) => {
+    if (tv || held) return;
+    e.stopPropagation();
+    setHeld({ item, label });
+  };
 
   const dateNav = (
     <div className="flex flex-wrap items-center gap-2">
@@ -343,9 +373,32 @@ export function CrewBoard() {
       ) : (
         <PageHeader
           title="Crew Board"
-          description="Who's on each crew, what they're taking, and where they're going — drag to change"
+          description={
+            <>
+              Who&apos;s on each crew, what they&apos;re taking, and where they&apos;re going —{" "}
+              <span className="touch:hidden">drag to change</span>
+              <span className="hidden touch:inline">tap a card, then a crew, to change</span>
+            </>
+          }
           action={dateNav}
         />
+      )}
+
+      {held && !tv && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 dark:border-brand-800 dark:bg-brand-900/30">
+          <p className="text-xs text-brand-800 dark:text-brand-300">
+            Moving <span className="font-semibold">{held.label}</span> — pick the crew
+            {held.item.kind === "member" ? " they should work with today" : " it should go to"}
+            {held.item.kind === "equipment" && held.item.fromCrewId ? ", or the equipment yard to unload it" : ""}.
+          </p>
+          <button
+            type="button"
+            onClick={() => setHeld(null)}
+            className="shrink-0 rounded border border-brand-300 bg-card px-2 py-1 text-[11px] font-medium text-brand-700 hover:bg-brand-100 dark:border-brand-700 dark:text-brand-400 dark:hover:bg-brand-900/40 touch:-my-1 touch:h-11 touch:px-3"
+          >
+            Cancel
+          </button>
+        </div>
       )}
 
       <div className="flex min-h-0 flex-1 gap-4">
@@ -357,7 +410,8 @@ export function CrewBoard() {
             onDrop={(e) => { e.preventDefault(); handleDropOnYard(); }}
             className={cn(
               "flex w-64 shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm transition",
-              overKey === "yard" && "ring-2 ring-brand-400"
+              overKey === "yard" && "ring-2 ring-brand-400",
+              held?.item.kind === "equipment" && held.item.fromCrewId && "ring-2 ring-brand-300"
             )}
           >
             <div className="border-b bg-slate-100 px-3 py-2.5 dark:bg-neutral-800">
@@ -367,13 +421,27 @@ export function CrewBoard() {
               </div>
               <Input value={yardSearch} onChange={(e) => setYardSearch(e.target.value)} placeholder="Search equipment…" className="mt-2 h-8 bg-background text-xs" />
             </div>
-            <div className="flex-1 space-y-1.5 overflow-y-auto p-2">
+            {/* The list (not the search box) is the tap target for unloading. */}
+            <div
+              className={cn("flex-1 space-y-1.5 overflow-y-auto p-2", held?.item.kind === "equipment" && "cursor-pointer")}
+              onClick={() => { if (held?.item.kind === "equipment") handleDropOnYard(); }}
+            >
               {yard.length === 0 && <p className="p-2 text-xs text-muted-foreground">Everything is out on a crew.</p>}
               {yard.map((e) => (
-                <EquipmentCard key={e.key} item={e} onDragStart={() => setDrag({ kind: "equipment", key: e.key, fromCrewId: null })} onDragEnd={endDrag} />
+                <EquipmentCard
+                  key={e.key}
+                  item={e}
+                  held={heldKey === `e:${e.key}`}
+                  onClick={pickUp({ kind: "equipment", key: e.key, fromCrewId: null }, e.name)}
+                  onDragStart={() => startDrag({ kind: "equipment", key: e.key, fromCrewId: null })}
+                  onDragEnd={endDrag}
+                />
               ))}
             </div>
-            <p className="border-t px-3 py-2 text-[10px] text-muted-foreground">Drag onto a crew. Drop a loaded item here to unload it.</p>
+            <p className="border-t px-3 py-2 text-[10px] text-muted-foreground">
+              <span className="touch:hidden">Drag onto a crew. Drop a loaded item here to unload it.</span>
+              <span className="hidden touch:inline">Tap an item, then a crew. Tap a loaded item, then here, to unload it.</span>
+            </p>
           </aside>
         )}
 
@@ -411,10 +479,12 @@ export function CrewBoard() {
                 onDragOver={(e) => { if (drag) { e.preventDefault(); if (overKey !== key) setOverKey(key); } }}
                 onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverKey(null); }}
                 onDrop={(e) => { e.preventDefault(); handleDropOnCrew(crew.id); }}
+                onClick={() => { if (held) handleDropOnCrew(crew.id); }}
                 className={cn(
                   "flex flex-1 flex-col overflow-hidden rounded-xl border-2 bg-card shadow-sm transition",
                   big ? "min-w-[24rem] basis-[24rem]" : "min-w-[18rem] max-w-[34rem] basis-[18rem]",
-                  overKey === key && "scale-[1.01] shadow-lg"
+                  overKey === key && "scale-[1.01] shadow-lg",
+                  held && "cursor-pointer ring-2 ring-brand-300"
                 )}
                 style={{ borderColor: overKey === key ? color : tint(color, 45), backgroundColor: tint(color, overKey === key ? 14 : 6) }}
               >
@@ -444,12 +514,14 @@ export function CrewBoard() {
                       <div
                         key={m.id}
                         draggable={!tv}
-                        onDragStart={() => setDrag({ kind: "member", id: m.id, fromCrewId: crew.id })}
+                        onDragStart={() => startDrag({ kind: "member", id: m.id, fromCrewId: crew.id })}
                         onDragEnd={endDrag}
+                        onClick={pickUp({ kind: "member", id: m.id, fromCrewId: crew.id }, m.name)}
                         className={cn(
-                          "flex items-center gap-2 rounded-lg border bg-background px-2 py-1.5 shadow-sm",
+                          "flex items-center gap-2 rounded-lg border bg-background px-2 py-1.5 shadow-sm touch:min-h-11",
                           big ? "text-lg" : "text-xs",
-                          !tv && "cursor-grab active:cursor-grabbing"
+                          !tv && "cursor-grab active:cursor-grabbing",
+                          heldKey === `m:${m.id}` && "ring-2 ring-brand-500"
                         )}
                       >
                         <span
@@ -476,7 +548,9 @@ export function CrewBoard() {
                         needed={need.has(e.key)}
                         isDefault={defaultCrewByKey.get(e.key) === crew.id}
                         onToggleDefault={tv ? undefined : () => toggleDefault(e.key, crew.id)}
-                        onDragStart={() => setDrag({ kind: "equipment", key: e.key, fromCrewId: crew.id })}
+                        held={heldKey === `e:${e.key}`}
+                        onClick={pickUp({ kind: "equipment", key: e.key, fromCrewId: crew.id }, e.name)}
+                        onDragStart={() => startDrag({ kind: "equipment", key: e.key, fromCrewId: crew.id })}
                         onDragEnd={endDrag}
                       />
                     ))}
@@ -488,7 +562,8 @@ export function CrewBoard() {
                           key={mKey}
                           type="button"
                           disabled={tv}
-                          onClick={() => loadAssetOnCrew(mKey, crew.id)}
+                          // With something held, the tap places it on this crew instead.
+                          onClick={() => { if (!held) loadAssetOnCrew(mKey, crew.id); }}
                           title={`Needed for ${[...new Set(need.get(mKey))].join(", ")} — click to load on ${crew.name}`}
                           className={cn(
                             "flex w-full items-center gap-1.5 rounded-lg border border-dashed border-amber-500 bg-amber-50 px-2 py-1.5 text-left text-amber-800 dark:bg-amber-900/20 dark:text-amber-300",
@@ -514,7 +589,9 @@ export function CrewBoard() {
                         color={color}
                         big={big}
                         draggable={!tv}
-                        onDragStart={() => setDrag({ kind: "job", jobId: j.jobId, visitIds: j.visits.map((v) => v.id), fromCrewId: crew.id })}
+                        held={heldKey === `j:${j.jobId}`}
+                        onClick={pickUp({ kind: "job", jobId: j.jobId, visitIds: j.visits.map((v) => v.id), fromCrewId: crew.id }, j.visits[0]?.clientName ?? "Job")}
+                        onDragStart={() => startDrag({ kind: "job", jobId: j.jobId, visitIds: j.visits.map((v) => v.id), fromCrewId: crew.id })}
                         onDragEnd={endDrag}
                       />
                     ))}
@@ -530,7 +607,10 @@ export function CrewBoard() {
             <section className={cn("flex flex-1 flex-col overflow-hidden rounded-xl border-2 border-dashed bg-muted/30", big ? "min-w-[24rem] basis-[24rem]" : "min-w-[18rem] max-w-[34rem] basis-[18rem]")}>
               <header className="border-b bg-slate-200 px-4 py-3 dark:bg-neutral-800">
                 <span className={cn("font-bold", big ? "text-3xl" : "text-lg")}>Unassigned jobs</span>
-                <p className="text-xs text-muted-foreground">Drag onto a crew to assign</p>
+                <p className="text-xs text-muted-foreground">
+                  <span className="touch:hidden">Drag onto a crew to assign</span>
+                  <span className="hidden touch:inline">Tap a job, then a crew, to assign</span>
+                </p>
               </header>
               <div className="space-y-2 overflow-y-auto p-3">
                 {jobsByCrew.get("unassigned")!.map((j) => (
@@ -540,7 +620,9 @@ export function CrewBoard() {
                     color="#64748b"
                     big={big}
                     draggable={!tv}
-                    onDragStart={() => setDrag({ kind: "job", jobId: j.jobId, visitIds: j.visits.map((v) => v.id), fromCrewId: null })}
+                    held={heldKey === `j:${j.jobId}`}
+                    onClick={pickUp({ kind: "job", jobId: j.jobId, visitIds: j.visits.map((v) => v.id), fromCrewId: null }, j.visits[0]?.clientName ?? "Job")}
+                    onDragStart={() => startDrag({ kind: "job", jobId: j.jobId, visitIds: j.visits.map((v) => v.id), fromCrewId: null })}
                     onDragEnd={endDrag}
                   />
                 ))}
@@ -596,6 +678,8 @@ function EquipmentCard({
   needed,
   isDefault,
   onToggleDefault,
+  held,
+  onClick,
   onDragStart,
   onDragEnd,
 }: {
@@ -607,6 +691,9 @@ function EquipmentCard({
   isDefault?: boolean;
   /** Present only for a loaded card — pins/unpins it as the crew's default. */
   onToggleDefault?: () => void;
+  /** Picked up for tap-to-place. */
+  held?: boolean;
+  onClick?: React.MouseEventHandler;
   onDragStart: () => void;
   onDragEnd: () => void;
 }) {
@@ -615,11 +702,13 @@ function EquipmentCard({
       draggable={draggable}
       onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", item.key); onDragStart(); }}
       onDragEnd={onDragEnd}
+      onClick={onClick}
       className={cn(
-        "flex items-center gap-2 rounded-lg border bg-background px-2 py-1.5 shadow-sm",
+        "flex items-center gap-2 rounded-lg border bg-background px-2 py-1.5 shadow-sm touch:min-h-11",
         big ? "text-lg" : "text-xs",
         draggable && "cursor-grab active:cursor-grabbing",
-        item.isVehicle && "border-slate-400 bg-slate-100 dark:border-neutral-500 dark:bg-neutral-800"
+        item.isVehicle && "border-slate-400 bg-slate-100 dark:border-neutral-500 dark:bg-neutral-800",
+        held && "ring-2 ring-brand-500"
       )}
     >
       <EquipmentAvatar item={item} className={big ? "h-10 w-10" : "h-7 w-7"} />
@@ -637,9 +726,10 @@ function EquipmentCard({
         {onToggleDefault && (
           <button
             type="button"
-            onClick={onToggleDefault}
+            onClick={(e) => { e.stopPropagation(); onToggleDefault(); }}
             title={isDefault ? "Default for this crew — click to remove" : "Make this crew's default"}
-            className={cn("rounded p-0.5 transition", isDefault ? "text-brand-600" : "text-muted-foreground/50 hover:text-brand-600")}
+            // Negative margin absorbs the touch padding so the card doesn't grow.
+            className={cn("rounded p-0.5 transition touch:-m-2.5 touch:p-3", isDefault ? "text-brand-600" : "text-muted-foreground/50 hover:text-brand-600")}
           >
             {isDefault ? <Pin className="h-3.5 w-3.5 fill-current" /> : <PinOff className="h-3.5 w-3.5" />}
           </button>
@@ -654,6 +744,8 @@ function JobCard({
   color,
   big,
   draggable,
+  held,
+  onClick,
   onDragStart,
   onDragEnd,
 }: {
@@ -661,6 +753,9 @@ function JobCard({
   color: string;
   big: boolean;
   draggable: boolean;
+  /** Picked up for tap-to-place. */
+  held?: boolean;
+  onClick?: React.MouseEventHandler;
   onDragStart: () => void;
   onDragEnd: () => void;
 }) {
@@ -677,11 +772,13 @@ function JobCard({
       draggable={draggable}
       onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", first.jobId); onDragStart(); }}
       onDragEnd={onDragEnd}
+      onClick={onClick}
       className={cn(
-        "overflow-hidden rounded-lg border border-l-4 bg-background px-2.5 py-1.5 shadow-sm",
+        "overflow-hidden rounded-lg border border-l-4 bg-background px-2.5 py-1.5 shadow-sm touch:min-h-11",
         big ? "text-lg" : "text-xs",
         draggable && "cursor-grab active:cursor-grabbing",
-        done && "opacity-60"
+        done && "opacity-60",
+        held && "ring-2 ring-brand-500"
       )}
       style={{ borderLeftColor: color }}
     >

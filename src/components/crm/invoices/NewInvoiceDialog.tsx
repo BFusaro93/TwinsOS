@@ -13,12 +13,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { useCreateInvoice } from "@/lib/hooks/use-invoices";
-import { useClients } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { toast } from "sonner";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const schema = z.object({
   clientId:    z.string().min(1, "Client required"),
@@ -40,8 +40,6 @@ interface Props {
 export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreated }: Props) {
   // Defaults are the ORG's calendar day, not the browser's.
   const orgToday = todayInZone(useOrgTimeZone());
-  const { data: clients } = useClients();
-  const invoiceableClients = (clients ?? []).filter((c) => c.status !== "lead");
   const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { mutateAsync: create, isPending } = useCreateInvoice();
@@ -71,8 +69,8 @@ export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreate
         toast.success("Invoice created");
         onOpenChange(false);
       }
-    } catch {
-      toast.error("Failed to create invoice");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create invoice"));
     }
   }
 
@@ -87,7 +85,7 @@ export function NewInvoiceDialog({ open, onOpenChange, defaultClientId, onCreate
               <ClientCombobox
                 value={watch("clientId")}
                 onValueChange={(v) => setValue("clientId", v)}
-                clients={invoiceableClients}
+                excludeStatuses={["lead"]}
                 noneLabel="Select client..."
               />
               {errors.clientId && <p className="text-xs text-red-500 dark:text-red-400">{errors.clientId.message}</p>}

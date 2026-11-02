@@ -1,10 +1,11 @@
 "use client";
 
 import { phoneDedupeKey, toE164Us } from "@/lib/utils/phone";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { isAreaZone, isLinearZone, sumLinearFt, sumZoneSqft } from "@/lib/property-zones";
@@ -12,11 +13,13 @@ import type { AddressVerdict } from "@/types/address-verification";
 import { logger } from "@/lib/logger";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { BulkImportResult } from "@/lib/csv";
+import type { FilterRow } from "@/lib/client-filters";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { cancelClientVisitsRemote } from "@/lib/client-visits-api";
 import type {
   Client,
+  ClientStatus,
   ClientContact,
   ClientProperty,
   ClientActivity,
@@ -37,7 +40,7 @@ import type {
  * Never throws: the primary mutation has already committed by the time this
  * runs, so a failed timeline write must not surface as a failed save.
  */
-async function logClientActivity(
+export async function logClientActivity(
   supabase: ReturnType<typeof createClient>,
   clientId: string,
   subject: string,
@@ -226,25 +229,257 @@ function mapActivity(row: any): ClientActivity {
   };
 }
 
-// ── list ──────────────────────────────────────────────────────────────────────
+// ── query keys ────────────────────────────────────────────────────────────────
 
-export function useClients() {
+// Every client query lives under "clients". The list-shaped ones sit under a
+// named scope as the second key part, so refreshing lists never prefix-matches
+// the per-client ["clients", id, …] detail queries (record, contacts,
+// properties, activity, children) — and invalidating one client's detail with
+// `exact: true` never re-downloads a list.
+export const clientKeys = {
+  /** useClients — every client in the org. Avoid for new screens. */
+  everyClient: ["clients", "all"] as const,
+  /** useClientsPage — the Clients page list, paged server-side. */
+  page: (params: ClientQueryParams) => ["clients", "list", normalizeParams(params)] as const,
+  /** useClientSearch — pickers (search-as-you-type, capped). */
+  search: (term: string, opts: ClientSearchOptions) => ["clients", "search", term.trim().toLowerCase(), opts] as const,
+  count: (params: ClientQueryParams, opts: ClientCountOptions) => ["clients", "count", normalizeParams(params), opts] as const,
+  filterOptions: ["clients", "filter-options"] as const,
+  leads: ["clients", "leads"] as const,
+  detail: (id: string) => ["clients", id] as const,
+};
+
+const LIST_SCOPES = new Set(["all", "list", "search", "count", "filter-options", "leads"]);
+
+/** Refreshes every client list/picker/count without touching per-client
+ *  detail queries. Lists that aren't on screen are only marked stale. */
+export function invalidateClientLists(qc: QueryClient) {
+  return qc.invalidateQueries({
+    predicate: (q) => q.queryKey[0] === "clients" && LIST_SCOPES.has(q.queryKey[1] as string),
+  });
+}
+
+/** Many clients changed at once (bulk actions): refresh the lists and every
+ *  cached client record, still leaving contacts/properties/activity alone. */
+function invalidateAllClientRecords(qc: QueryClient) {
+  invalidateClientLists(qc);
+  qc.invalidateQueries({
+    predicate: (q) => q.queryKey[0] === "clients" && q.queryKey.length === 2 && !LIST_SCOPES.has(q.queryKey[1] as string),
+  });
+}
+
+/** One client's record changed: refresh its detail record and the lists, but
+ *  not its contacts/properties/activity/children (pass those explicitly). */
+function invalidateClientRecord(qc: QueryClient, id: string) {
+  invalidateClientLists(qc);
+  qc.invalidateQueries({ queryKey: clientKeys.detail(id), exact: true });
+}
+
+const CLIENT_SELECT = "*, client_tags(tag), sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)";
+
+// ── server-side search / filter ───────────────────────────────────────────────
+
+/** Search box + filter rows, evaluated in SQL by crm_search_clients() — the
+ *  same rules src/lib/client-filters.ts applies in the browser. */
+export interface ClientQueryParams {
+  search?: string;
+  filters?: FilterRow[];
+}
+
+function normalizeParams(params: ClientQueryParams) {
+  return {
+    search: (params.search ?? "").trim(),
+    // Row ids and half-built rows (no value yet) don't change the result.
+    filters: (params.filters ?? [])
+      .filter((r) => r.value !== "")
+      .map((r) => ({ field: r.field, operator: r.operator, value: r.value })),
+  };
+}
+
+function searchClientsRpc(
+  supabase: ReturnType<typeof createClient>,
+  params: ClientQueryParams,
+  options?: { count?: "exact"; head?: boolean },
+) {
+  const { search, filters } = normalizeParams(params);
+  return supabase.rpc("crm_search_clients", { p_search: search || undefined, p_filters: filters }, options);
+}
+
+export const CLIENT_PAGE_SIZE = 100;
+
+/** The Clients page list: filtered, searched and paged on the server. */
+export function useClientsPage(params: ClientQueryParams) {
+  return useInfiniteQuery({
+    queryKey: clientKeys.page(params),
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const supabase = createClient();
+      const from = pageParam * CLIENT_PAGE_SIZE;
+      // Only the first page pays for the count — later pages reuse it.
+      const { data, error, count } = await searchClientsRpc(supabase, params, pageParam === 0 ? { count: "exact" } : undefined)
+        .select(CLIENT_SELECT)
+        .order("display_name")
+        .order("id")
+        .range(from, from + CLIENT_PAGE_SIZE - 1);
+      if (error) throw error;
+      return { clients: (data ?? []).map(mapClient), total: count };
+    },
+    getNextPageParam: (last, pages) => {
+      const total = pages[0]?.total ?? 0;
+      const loaded = pages.length * CLIENT_PAGE_SIZE;
+      return last.clients.length === CLIENT_PAGE_SIZE && loaded < total ? pages.length : undefined;
+    },
+    // Keep showing the previous result while a new search/filter loads.
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Every client matching the search/filters — for CSV export and "select all
+ *  N matching". Fetched on demand, not cached. */
+export async function fetchFilteredClients(params: ClientQueryParams): Promise<Client[]> {
+  const supabase = createClient();
+  const rows = await fetchAllRows<unknown>(() =>
+    searchClientsRpc(supabase, params).select(CLIENT_SELECT).order("display_name"),
+  );
+  return rows.map(mapClient);
+}
+
+/** Every client matching the search/filters, cached — for screens that work
+ *  on a filtered subset (e.g. Statements: clients with a balance). */
+export function useFilteredClients(params: ClientQueryParams) {
   return useQuery({
-    queryKey: ["clients"],
+    queryKey: [...clientKeys.page(params), "all"] as const,
+    queryFn: () => fetchFilteredClients(params),
+  });
+}
+
+/** Account numbers by client id — e.g. parents of exported clients that the
+ *  current filters left out of the export itself. Chunked to keep URLs short. */
+export async function fetchClientAccountNumbers(ids: string[]): Promise<Map<string, string>> {
+  const supabase = createClient();
+  const out = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await supabase.from("clients").select("id, account_number").in("id", ids.slice(i, i + 200));
+    if (error) throw error;
+    for (const r of data ?? []) out.set(r.id, r.account_number ?? "");
+  }
+  return out;
+}
+
+export async function fetchFilteredClientIds(params: ClientQueryParams): Promise<string[]> {
+  const supabase = createClient();
+  const rows = await fetchAllRows<{ id: string }>(() => searchClientsRpc(supabase, params).select("id"));
+  return rows.map((r) => r.id);
+}
+
+export interface ClientSearchOptions {
+  /** Leave these statuses out — e.g. ["lead"] for invoice pickers. */
+  excludeStatuses?: ClientStatus[];
+  /** Only clients with no parent of their own (Link Parent candidates). */
+  topLevelOnly?: boolean;
+  excludeIds?: string[];
+  limit?: number;
+}
+
+export const CLIENT_SEARCH_LIMIT = 50;
+
+/** Search-as-you-type for client pickers: at most `limit` (50) matches,
+ *  alphabetical. An empty term returns the first 50. */
+export function useClientSearch(term: string, opts: ClientSearchOptions = {}, enabled = true) {
+  return useQuery({
+    queryKey: clientKeys.search(term, opts),
     queryFn: async () => {
       const supabase = createClient();
-      // PostgREST caps a response at 1000 rows, so page through the whole
-      // table — `id` breaks display_name ties so pages never skip/repeat rows.
+      let q = searchClientsRpc(supabase, { search: term }).select(CLIENT_SELECT);
+      if (opts.excludeStatuses?.length) q = q.not("status", "in", `(${opts.excludeStatuses.join(",")})`);
+      if (opts.topLevelOnly) q = q.is("parent_client_id", null);
+      const exclude = (opts.excludeIds ?? []).filter(Boolean);
+      if (exclude.length > 0) q = q.not("id", "in", `(${exclude.join(",")})`);
+      const { data, error } = await q.order("display_name").order("id").limit(opts.limit ?? CLIENT_SEARCH_LIMIT);
+      if (error) throw error;
+      return (data ?? []).map(mapClient);
+    },
+    enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
+export interface ClientCountOptions {
+  /** Only clients with a primary email (campaign recipients). */
+  withEmail?: boolean;
+  /** Restrict to these client ids (a hand-picked audience). */
+  ids?: string[];
+  /** Only clients created at/after this timestamp. */
+  createdSince?: string;
+}
+
+/** How many clients match — a HEAD count, no rows downloaded. */
+export function useClientCount(params: ClientQueryParams, opts: ClientCountOptions = {}, enabled = true) {
+  return useQuery({
+    queryKey: clientKeys.count(params, opts),
+    queryFn: async () => {
+      const supabase = createClient();
+      const countOne = async (ids?: string[]) => {
+        let q = searchClientsRpc(supabase, params, { count: "exact", head: true }).select("id");
+        if (opts.withEmail) q = q.not("primary_email", "is", null).neq("primary_email", "");
+        if (opts.createdSince) q = q.gte("created_at", opts.createdSince);
+        if (ids) q = q.in("id", ids);
+        const { count, error } = await q;
+        if (error) throw error;
+        return count ?? 0;
+      };
+      if (!opts.ids) return countOne();
+      // Chunked so a large hand-picked audience doesn't overflow the URL.
+      let total = 0;
+      for (let i = 0; i < opts.ids.length; i += 200) total += await countOne(opts.ids.slice(i, i + 200));
+      return total;
+    },
+    enabled,
+  });
+}
+
+/** Distinct Client Source / Sales Rep values in use, for the filter dropdowns. */
+export function useClientFilterOptions() {
+  return useQuery({
+    queryKey: clientKeys.filterOptions,
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("crm_client_filter_options");
+      if (error) throw error;
+      const opts = (data ?? {}) as { sources?: string[]; sales_reps?: { id: string; name: string }[] };
+      return { sources: opts.sources ?? [], salesReps: opts.sales_reps ?? [] };
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+// ── every client ──────────────────────────────────────────────────────────────
+
+/**
+ * Every client in the org (paged past PostgREST's 1000-row cap). Heavy for
+ * large orgs — pickers should use useClientSearch, lists useClientsPage, and
+ * single lookups useClient.
+ */
+export function useClients() {
+  return useQuery({
+    queryKey: clientKeys.everyClient,
+    queryFn: async () => {
+      const supabase = createClient();
+      // `id` breaks display_name ties so pages never skip/repeat rows.
       const rows = await fetchAllRows<unknown>(() =>
         supabase
           .from("clients")
-          .select("*, client_tags(tag), sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
+          .select(CLIENT_SELECT)
           .is("deleted_at", null)
           .order("display_name")
           .order("id"),
       );
       return rows.map(mapClient) as Client[];
     },
+    // Mutations keep this fresh via invalidateClientLists; don't re-pull the
+    // whole org every time another screen using it mounts.
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -283,13 +518,12 @@ export function useSetParentClient() {
         await logClientActivity(supabase, id, "Parent account link removed");
       }
     },
-    onSuccess: (_data, { id, parentClientId }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", id] });
+    onSuccess: (_data, { id }) => {
+      invalidateClientRecord(qc, id);
       qc.invalidateQueries({ queryKey: ["clients", id, "activity"] });
-      if (parentClientId) {
-        qc.invalidateQueries({ queryKey: ["clients", parentClientId, "children"] });
-      }
+      // Both the new parent's and (on unlink/re-link) the old parent's
+      // sub-account lists — the old parent's id isn't known here.
+      qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === "clients" && q.queryKey[2] === "children" });
     },
   });
 }
@@ -551,10 +785,12 @@ export function useUpdateClientProperty() {
           if (clientError) throw clientError;
         }
       }
+      await logClientActivity(supabase, clientId, `Property updated${property.name ? `: ${property.name}` : property.address ? `: ${property.address}` : ""}`);
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      qc.invalidateQueries({ queryKey: clientKeys.detail(clientId), exact: true });
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
     },
   });
 }
@@ -642,7 +878,7 @@ export function useUpdateClientPropertyZones() {
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      qc.invalidateQueries({ queryKey: clientKeys.detail(clientId), exact: true });
     },
   });
 }
@@ -668,6 +904,16 @@ export function useCreateClient() {
           service_city: values.serviceCity || null,
           service_state: values.serviceState || null,
           service_zip: values.serviceZip || null,
+          // The dialog's address check, when it ran against this exact address: without it a
+          // verified new client had no coordinates or verdict until someone re-typed the address.
+          ...(values.addressVerdict
+            ? {
+                address_verdict: values.addressVerdict,
+                address_verified_at: new Date().toISOString(),
+                lat: values.lat ?? null,
+                lng: values.lng ?? null,
+              }
+            : {}),
           // clients.billing_same_as_service defaults to true and is in fact
           // true for every client on both projects, so a create that captured
           // a service address and no separate billing address mirrors it
@@ -694,7 +940,7 @@ export function useCreateClient() {
       return client;
     },
     onSuccess: (client) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientLists(qc);
       fireAutomationTrigger({
         triggerType: client.status === "lead" ? "lead_created" : "client_created",
         clientId: client.id,
@@ -743,6 +989,22 @@ async function loadClientDedupMaps(supabase: ReturnType<typeof createClient>) {
   return { byEmail, byPhone, statusById };
 }
 
+/** Display name + service street, normalised — the only identity a client with no account
+ *  number, email or phone has (an export re-imported unchanged used to duplicate them). */
+function nameAddressKey(name: string | null | undefined, address: string | null | undefined): string | null {
+  const n = (name ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  const a = (address ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return n && a ? `${n}|${a}` : null;
+}
+
+const IMPORT_STATUS_MAP: Record<string, "active" | "lead" | "inactive" | "cancelled" | "lost"> = {
+  active: "active", current: "active", client: "active", customer: "active",
+  lead: "lead", prospect: "lead",
+  inactive: "inactive", former: "inactive", past: "inactive", "past client": "inactive",
+  cancelled: "cancelled", canceled: "cancelled",
+  lost: "lost", "closed lost": "lost",
+};
+
 export function useBulkImportClients() {
   const importOrgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
@@ -758,14 +1020,27 @@ export function useBulkImportClients() {
       // constraint conflict on account_number, a field rarely populated in
       // a user's CSV).
       const { byEmail, byPhone } = await loadClientDedupMaps(supabase);
+      const existingNameAddr = await fetchAllRows<{ id: string; display_name: string; service_address: string | null }>(() =>
+        supabase.from("clients").select("id, display_name, service_address").is("deleted_at", null).order("id"),
+      );
+      const byNameAddress = new Map<string, string>();
+      for (const c of existingNameAddr ?? []) {
+        const k = nameAddressKey(c.display_name, c.service_address);
+        if (k) byNameAddress.set(k, c.id);
+      }
 
       let succeeded = 0;
       const failed: BulkImportResult["failed"] = [];
       const skipped: BulkImportResult["failed"] = [];
+      const warnings: BulkImportResult["failed"] = [];
+      // Parent links resolve after every row is in, so a child can precede its parent in the file.
+      const parentLinks: { row: number; clientId: string; parentAccountNumber: string; displayName: string }[] = [];
+      const tagRows: { clientId: string; tags: string[] }[] = [];
 
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i];
-        const rowNum = i + 1;
+        // The CSV's own line number (line 1 is the header), so the report points at the file.
+        const rowNum = i + 2;
         try {
           const displayName = r.displayName?.trim();
           if (!displayName) {
@@ -821,7 +1096,37 @@ export function useBulkImportClients() {
               skipped.push({ row: rowNum, error: `"${displayName}": matches an existing client by email or phone — skipped` });
               continue;
             }
+            // No email or phone to compare: the same name at the same service street is the same client.
+            if (!email && !phoneDigits && !accountNumber) {
+              const nk = nameAddressKey(displayName, r.serviceAddress);
+              if (nk && byNameAddress.has(nk)) {
+                skipped.push({ row: rowNum, error: `"${displayName}": matches an existing client by name and service address — skipped` });
+                continue;
+              }
+            }
           }
+
+          // Optional columns a Service Autopilot export carries.
+          const statusRaw = r.status?.trim().toLowerCase() ?? "";
+          let status: "active" | "lead" | "inactive" | "cancelled" | "lost" | undefined;
+          if (statusRaw) {
+            status = IMPORT_STATUS_MAP[statusRaw];
+            if (!status) {
+              status = "active";
+              warnings.push({ row: rowNum, error: `"${displayName}": unknown status "${r.status}" — imported as active` });
+            }
+          }
+          const clientSinceCsv = normalizeCsvDate(r.clientSince);
+          if (r.clientSince?.trim() && !clientSinceCsv) {
+            warnings.push({ row: rowNum, error: `"${displayName}": couldn't read client since "${r.clientSince}" — left as ${status === "lead" ? "blank" : "today"}` });
+          }
+          const billingEmailRaw = r.billingEmail?.trim() || null;
+          if (billingEmailRaw && !EMAIL_RE.test(billingEmailRaw)) {
+            warnings.push({ row: rowNum, error: `"${displayName}": invalid billing email "${billingEmailRaw}" — not imported` });
+          }
+          const billingEmail = billingEmailRaw && EMAIL_RE.test(billingEmailRaw) ? billingEmailRaw : null;
+          const csvTags = (r.tags ?? "").split(/[|;]/).map((t) => t.trim()).filter(Boolean);
+          const parentAccountNumber = r.parentAccountNumber?.trim() || null;
 
           const row = {
             display_name: displayName,
@@ -838,7 +1143,13 @@ export function useBulkImportClients() {
             service_state: r.serviceState?.trim() || null,
             service_zip: r.serviceZip?.trim() || null,
             source: r.source?.trim() || null,
-            client_since: todayInZone(importOrgTimeZone),
+            first_name: r.firstName?.trim() || null,
+            last_name: r.lastName?.trim() || null,
+            billing_email: billingEmail,
+            notes_to_crew: r.notesToCrew?.trim() || null,
+            ...(status ? { status } : {}),
+            // The file's own date when it has one; a lead has no client-since until it converts.
+            client_since: clientSinceCsv ?? (status === "lead" || status === "lost" ? null : todayInZone(importOrgTimeZone)),
           };
 
           const { data: newClient, error } = existingByAccount
@@ -892,12 +1203,18 @@ export function useBulkImportClients() {
               service_state: row.service_state,
               service_zip: row.service_zip,
               source: row.source,
+              first_name: row.first_name,
+              last_name: row.last_name,
+              billing_email: row.billing_email,
+              notes_to_crew: row.notes_to_crew,
             } as const;
             const patch: import("@/types/supabase").Database["public"]["Tables"]["clients"]["Update"] = {};
             for (const [key, value] of Object.entries(candidate) as [keyof typeof candidate, string | null][]) {
               if (value) patch[key] = value;
             }
             if (r.accountType?.trim()) patch.account_type = row.account_type;
+            if (status) patch.status = status;
+            if (clientSinceCsv) patch.client_since = clientSinceCsv;
 
             const ADDRESS_KEYS = [
               "billing_address", "billing_city", "billing_state", "billing_zip",
@@ -932,6 +1249,8 @@ export function useBulkImportClients() {
                 continue;
               }
             }
+            if (csvTags.length) tagRows.push({ clientId: existing.id, tags: csvTags });
+            if (parentAccountNumber) parentLinks.push({ row: rowNum, clientId: existing.id, parentAccountNumber, displayName });
           } else if (error) {
             failed.push({ row: rowNum, error: `"${displayName}": ${error.message}` });
             continue;
@@ -940,6 +1259,10 @@ export function useBulkImportClients() {
             // an email/phone match each other instead of both inserting.
             if (email) byEmail.set(email, newClient.id);
             if (phoneDigits) byPhone.set(phoneDigits, newClient.id);
+            const nk = nameAddressKey(displayName, r.serviceAddress);
+            if (nk) byNameAddress.set(nk, newClient.id);
+            if (csvTags.length) tagRows.push({ clientId: newClient.id, tags: csvTags });
+            if (parentAccountNumber) parentLinks.push({ row: rowNum, clientId: newClient.id, parentAccountNumber, displayName });
           }
 
           succeeded++;
@@ -948,10 +1271,58 @@ export function useBulkImportClients() {
         }
       }
 
-      return { succeeded, failed, skipped };
+      // Tags: client_tags rows (idempotent), and the org's tag list so they show in filters
+      // and Bulk Tag.
+      const allTags = new Set<string>();
+      for (const { clientId, tags } of tagRows) {
+        for (const tag of tags) {
+          allTags.add(tag);
+          const { error: tagErr } = await supabase
+            .from("client_tags")
+            .upsert({ client_id: clientId, tag }, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true });
+          if (tagErr) warnings.push({ row: 0, error: `Tag "${tag}" could not be added: ${tagErr.message}` });
+        }
+      }
+      if (allTags.size > 0) {
+        // Add tags the org's list doesn't have yet (needs CRM settings permission; best effort).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: listed } = await (supabase as any)
+          .from("crm_list_options").select("value").eq("list_name", "client_tags").is("deleted_at", null);
+        const known = new Set(((listed ?? []) as { value: string }[]).map((o) => o.value.toLowerCase()));
+        const missing = [...allTags].filter((t) => !known.has(t.toLowerCase()));
+        if (missing.length) {
+          const { data: orgId } = await supabase.rpc("my_org_id");
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: listErr } = await (supabase as any)
+            .from("crm_list_options")
+            .insert(missing.map((value) => ({ org_id: orgId, list_name: "client_tags", value })));
+          if (listErr) {
+            warnings.push({ row: 0, error: `New tags (${missing.join(", ")}) were added to clients but not to Settings → Tags: ${listErr.message}` });
+          }
+        }
+      }
+
+      // Parent / sub-account links by account number (one level, enforced by a DB trigger).
+      for (const link of parentLinks) {
+        const { data: parent } = await supabase
+          .from("clients")
+          .select("id")
+          .eq("account_number", link.parentAccountNumber)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (!parent || parent.id === link.clientId) {
+          warnings.push({ row: link.row, error: `"${link.displayName}": parent account ${link.parentAccountNumber} not found — not linked` });
+          continue;
+        }
+        const { error: linkErr } = await supabase.from("clients").update({ parent_client_id: parent.id }).eq("id", link.clientId);
+        if (linkErr) warnings.push({ row: link.row, error: `"${link.displayName}": could not link to parent ${link.parentAccountNumber}: ${linkErr.message}` });
+      }
+
+      return { succeeded, failed, skipped, warnings };
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientLists(qc);
+      qc.invalidateQueries({ queryKey: ["crm_list_options", "client_tags"] });
     },
   });
 }
@@ -966,9 +1337,9 @@ export function useUpdateClient() {
 
       // Fetch the "before" values for fields whose automation trigger only
       // fires on an actual change, not on every generic profile-edit save.
-      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null; payment_method: string | null; sms_opt_in: boolean | null; status: string | null } | null = null;
-      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined || updates.paymentMethod !== undefined || updates.smsOptIn !== undefined || updates.status !== undefined) {
-        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id, payment_method, sms_opt_in, status").eq("id", id).single();
+      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null; payment_method: string | null; sms_opt_in: boolean | null; status: string | null; primary_phone: string | null } | null = null;
+      if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined || updates.paymentMethod !== undefined || updates.smsOptIn !== undefined || updates.status !== undefined || updates.primaryPhone !== undefined) {
+        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id, payment_method, sms_opt_in, status, primary_phone").eq("id", id).single();
         before = data;
       }
 
@@ -999,7 +1370,11 @@ export function useUpdateClient() {
       // Status is editable from the Edit Client → Details tab; a lead moved to
       // active there is the same business event as the "Convert" button, so
       // stamp client_since (the conversion date) if the form left it blank.
-      const leadConverting = updates.status === "active" && before?.status === "lead";
+      // A lead closed as lost never became a client either, so reactivating it is a conversion.
+      const leadConverting = updates.status === "active" && (before?.status === "lead" || before?.status === "lost");
+      // Text consent was given for the old number, not the new one.
+      const phoneChanged = updates.primaryPhone !== undefined && before
+        && (updates.primaryPhone ?? "").replace(/\D/g, "").slice(-10) !== (before.primary_phone ?? "").replace(/\D/g, "").slice(-10);
 
       const { error } = await supabase
         .from("clients")
@@ -1044,7 +1419,9 @@ export function useUpdateClient() {
             lng: null,
           }),
           billing_same_as_service: updates.billingSameAsService,
-          source: updates.source,
+          // "" from an empty select means "none", not a blank source (it also fired
+          // client_source_updated on every save of a client with no source).
+          source: updates.source === "" ? null : updates.source,
           // undefined (caller didn't touch it) is omitted; null clears the rep.
           sales_rep_id: updates.salesRepId,
           ok_to_email: updates.okToEmail,
@@ -1075,11 +1452,15 @@ export function useUpdateClient() {
           linear_ft_perimeter: updates.linearFtPerimeter ?? null,
           linear_ft_edging: updates.linearFtEdging ?? null,
           yards_of_mulch: updates.yardsOfMulch ?? null,
-          sms_opt_in: updates.smsOptIn,
-          sms_opt_in_at: smsOptInJustEnabled ? new Date().toISOString() : undefined,
-          sms_opt_in_source: smsOptInJustEnabled ? "manual" : undefined,
+          // A new number never opted in (the import does the same); an explicit toggle wins.
+          sms_opt_in: updates.smsOptIn !== undefined ? updates.smsOptIn : phoneChanged && before?.sms_opt_in ? false : undefined,
+          sms_opt_in_at: smsOptInJustEnabled ? new Date().toISOString() : phoneChanged && updates.smsOptIn === undefined ? null : undefined,
+          sms_opt_in_source: smsOptInJustEnabled ? "manual" : phoneChanged && updates.smsOptIn === undefined ? null : undefined,
         })
         .eq("id", id);
+      if (phoneChanged && before?.sms_opt_in && updates.smsOptIn === undefined) {
+        await logClientActivity(supabase, id, "Text consent cleared: primary phone number changed");
+      }
       if (error) throw error;
 
       // Keep the client's own-address property (is_master) in step with the client-level
@@ -1105,7 +1486,8 @@ export function useUpdateClient() {
         if (mirrorError) throw mirrorError;
       }
 
-      const sourceChanged = updates.source !== undefined && before && updates.source !== before.source;
+      // "" and null are both "no source" (the form posts "" for an empty select).
+      const sourceChanged = updates.source !== undefined && before && (updates.source || null) !== (before.source || null);
       const emailsOptedIn = updates.okToEmail === true && before && before.ok_to_email !== true;
       const newReferrerId = updates.referredByClientId && before && updates.referredByClientId !== before.referred_by_client_id
         ? updates.referredByClientId
@@ -1115,7 +1497,7 @@ export function useUpdateClient() {
       // active there is the same business event as the "Convert" button, so
       // fire the same automation trigger and leave a timeline entry.
       const statusChanged = updates.status !== undefined && before && updates.status !== before.status;
-      const leadConverted = !!statusChanged && before?.status === "lead" && updates.status === "active";
+      const leadConverted = !!statusChanged && (before?.status === "lead" || before?.status === "lost") && updates.status === "active";
       if (statusChanged) {
         await logClientActivity(supabase, id, `Status changed: ${before?.status ?? "—"} → ${updates.status}`);
       }
@@ -1132,8 +1514,7 @@ export function useUpdateClient() {
       };
     },
     onSuccess: (result, { id }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", id] });
+      invalidateClientRecord(qc, id);
       qc.invalidateQueries({ queryKey: ["clients", id, "properties"] });
       if (result?.statusChanged) {
         qc.invalidateQueries({ queryKey: ["clients", id, "activity"] });
@@ -1369,7 +1750,7 @@ export function useDeleteClient() {
       if (cancelVisits) await cancelClientVisitsRemote([id]);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
   });
@@ -1405,7 +1786,7 @@ export function useAddClientContact() {
       contact: Omit<ClientContact, "id" | "orgId" | "clientId" | "createdAt" | "deletedAt">;
     }) => {
       const supabase = createClient();
-      const primaryPhone = contact.phones?.[0] ?? null;
+      const primaryPhone = contact.phones?.find((p) => p.isPrimary) ?? contact.phones?.[0] ?? null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: inserted, error } = await (supabase as any).from("client_contacts").insert({
         client_id:    clientId,
@@ -1460,7 +1841,7 @@ export function useUpdateClientContact() {
       contact: Omit<ClientContact, "id" | "orgId" | "clientId" | "createdAt" | "deletedAt">;
     }) => {
       const supabase = createClient();
-      const primaryPhone = contact.phones?.[0] ?? null;
+      const primaryPhone = contact.phones?.find((p) => p.isPrimary) ?? contact.phones?.[0] ?? null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any).from("client_contacts").update({
         first_name:   contact.firstName,
@@ -1487,9 +1868,12 @@ export function useUpdateClientContact() {
           .eq("is_primary", true)
           .is("deleted_at", null);
       }
+      const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim();
+      await logClientActivity(supabase, clientId, `Contact updated${name ? `: ${name}` : ""}`);
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "contacts"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
     },
   });
 }
@@ -1497,16 +1881,21 @@ export function useUpdateClientContact() {
 export function useDeleteClientContact() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id }: { id: string; clientId: string }) => {
+    mutationFn: async ({ id, clientId }: { id: string; clientId: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      const { data: removed, error } = await supabase
         .from("client_contacts")
         .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
+        .eq("id", id)
+        .select("first_name, last_name")
+        .maybeSingle();
       if (error) throw error;
+      const name = [removed?.first_name, removed?.last_name].filter(Boolean).join(" ").trim();
+      await logClientActivity(supabase, clientId, `Contact removed${name ? `: ${name}` : ""}`);
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "contacts"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
     },
   });
 }
@@ -1578,7 +1967,7 @@ export function useRecipientSearch(query: string) {
 
 export function useLeads() {
   return useQuery({
-    queryKey: ["clients", { status: "lead" }],
+    queryKey: clientKeys.leads,
     queryFn: async () => {
       const supabase = createClient();
       const rows = await fetchAllRows<unknown>(() =>
@@ -1650,7 +2039,7 @@ export function useCreateLead() {
       return lead;
     },
     onSuccess: (lead) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientLists(qc);
       fireAutomationTrigger({ triggerType: "lead_created", clientId: lead.id });
     },
   });
@@ -1659,7 +2048,9 @@ export function useCreateLead() {
 export function useBulkImportLeads() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    // A BulkImportResult so the import dialog lists every failed or skipped row with its
+    // reason (the counts-only toast hid which rows to fix).
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult & { created: number; matched: number }> => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -1669,18 +2060,20 @@ export function useBulkImportLeads() {
 
       let created = 0;
       let matched = 0;
-      let skipped = 0;
-      let failed = 0;
+      const failed: BulkImportResult["failed"] = [];
+      const skipped: BulkImportResult["failed"] = [];
 
-      for (const r of rows) {
+      for (const [i, r] of rows.entries()) {
+        // The CSV's own line number (line 1 is the header).
+        const rowNum = i + 2;
         // One bad row (constraint error, transient failure) must not abort the
         // rest of the import after earlier rows were already written.
         try {
         const displayName = r.displayName?.trim();
-        if (!displayName) { skipped++; continue; }
+        if (!displayName) { failed.push({ row: rowNum, error: "Missing required field: Display Name" }); continue; }
 
         const emailRaw = r.primaryEmail?.trim() || null;
-        if (emailRaw && !EMAIL_RE.test(emailRaw)) { skipped++; continue; }
+        if (emailRaw && !EMAIL_RE.test(emailRaw)) { failed.push({ row: rowNum, error: `"${displayName}": invalid email format ("${emailRaw}")` }); continue; }
 
         const email = r.primaryEmail?.trim().toLowerCase() || null;
         const phone = toE164Us(r.primaryPhone);
@@ -1698,6 +2091,7 @@ export function useBulkImportLeads() {
             );
           }
           matched++;
+          skipped.push({ row: rowNum, error: `"${displayName}": matches an existing client by email or phone — not created` });
           continue;
         }
 
@@ -1731,15 +2125,15 @@ export function useBulkImportLeads() {
           if (phoneDigits) byPhone.set(phoneDigits, newClient.id);
         }
         created++;
-        } catch {
-          failed++;
+        } catch (err) {
+          failed.push({ row: rowNum, error: err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Failed to save" });
         }
       }
 
-      return { created, matched, skipped, failed };
+      return { succeeded: created, failed, skipped, created, matched };
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientLists(qc);
     },
   });
 }
@@ -1773,7 +2167,7 @@ export function useConvertLeadToClient() {
       return { converted };
     },
     onSuccess: (result, id) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientRecord(qc, id);
       qc.invalidateQueries({ queryKey: ["clients", id, "activity"] });
       if (result.converted) {
         fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
@@ -1788,6 +2182,23 @@ export function useConvertLeadToClient() {
 export function useOrgTags(): string[] {
   const { data } = useOrgList("client_tags");
   return (data ?? []).map((o) => o.value);
+}
+
+/** Adds `tag` to the org's tag list (Settings → Tags) if it isn't there. Best effort. */
+async function addTagToOrgList(supabase: ReturnType<typeof createClient>, tag: string): Promise<boolean> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: listed } = await (supabase as any)
+      .from("crm_list_options").select("value").eq("list_name", "client_tags").is("deleted_at", null);
+    if (((listed ?? []) as { value: string }[]).some((o) => o.value.toLowerCase() === tag.toLowerCase())) return false;
+    const { data: orgId } = await supabase.rpc("my_org_id");
+    if (!orgId) return false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from("crm_list_options").insert({ org_id: orgId, list_name: "client_tags", value: tag });
+    return !error;
+  } catch {
+    return false;
+  }
 }
 
 export function useAddClientTag() {
@@ -1805,12 +2216,15 @@ export function useAddClientTag() {
       if (error) throw error;
       const added = (data ?? []).length > 0;
       if (added) await logClientActivity(supabase, clientId, `Tag added: ${tag}`);
+      // A tag typed in (not picked from the org list) is added to the list too, or it can't be
+      // filtered on or bulk-applied. Needs CRM settings permission (RLS); skipped quietly without it.
+      if (added) await addTagToOrgList(supabase, tag);
       return { added };
     },
     onSuccess: (result, { clientId, tag }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      invalidateClientRecord(qc, clientId);
       qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
+      qc.invalidateQueries({ queryKey: ["crm_list_options", "client_tags"] });
       if (result?.added) fireAutomationTrigger({ triggerType: "tag_added", clientId, matchValues: [tag] });
     },
     onError: () => {
@@ -1830,10 +2244,11 @@ export function useRemoveClientTag() {
         .eq("client_id", clientId)
         .eq("tag", tag);
       if (error) throw error;
+      await logClientActivity(supabase, clientId, `Tag removed: ${tag}`);
     },
     onSuccess: (_d, { clientId, tag }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      invalidateClientRecord(qc, clientId);
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
       fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
     },
     onError: () => {
@@ -1859,7 +2274,7 @@ export function useBulkAddTag() {
       return { addedClientIds: (data ?? []).map((r) => r.client_id as string) };
     },
     onSuccess: (result, { tag }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
       // The single-client add fires tag_added; a bulk add silently skipped every
       // "when tag X is added" automation for the whole selection.
       for (const clientId of result?.addedClientIds ?? []) {
@@ -1885,7 +2300,7 @@ export function useBulkRemoveTag() {
       return { removedClientIds: (data ?? []).map((r) => r.client_id as string) };
     },
     onSuccess: (result, { tag }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
       // Mirrors the single-client remove, which fires tag_removed.
       for (const clientId of result?.removedClientIds ?? []) {
         fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
@@ -1910,11 +2325,13 @@ export function useCancelClient() {
         .not("status", "in", "(cancelled,lost)")
         .select("id");
       if (error) throw error;
-      return { changed: (updated?.length ?? 0) > 0, wasLead: before?.status === "lead" };
+      const changed = (updated?.length ?? 0) > 0;
+      // The reason is cleared from the row on reactivation, so the timeline is its record.
+      if (changed) await logClientActivity(supabase, clientId, `Client cancelled${reason ? `: ${reason}` : ""}`);
+      return { changed, wasLead: before?.status === "lead" };
     },
     onSuccess: (result, { clientId }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      invalidateClientRecord(qc, clientId);
       if (result?.changed) {
         fireAutomationTrigger({ triggerType: result.wasLead ? "lead_cancelled" : "client_cancelled", clientId });
       }
@@ -1932,7 +2349,8 @@ export function useActivateClient() {
       const supabase = createClient();
       const { data: before } = await supabase.from("clients").select("status").eq("id", clientId).maybeSingle();
       if (!before || before.status === "active") return { changed: false, wasLead: false };
-      const wasLead = before.status === "lead";
+      // A lost lead never became a client, so bringing it back is a conversion too.
+      const wasLead = before.status === "lead" || before.status === "lost";
       const { error } = await supabase
         .from("clients")
         .update({
@@ -1944,12 +2362,11 @@ export function useActivateClient() {
         .eq("id", clientId)
         .eq("status", before.status);
       if (error) throw error;
-      if (wasLead) await logClientActivity(supabase, clientId, "Converted from lead to client");
+      await logClientActivity(supabase, clientId, wasLead ? "Converted from lead to client" : `Client reactivated (was ${before.status})`);
       return { changed: true, wasLead };
     },
     onSuccess: (result, clientId) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      invalidateClientRecord(qc, clientId);
       if (result?.changed) {
         fireAutomationTrigger({
           triggerType: result.wasLead ? "lead_converted_to_client" : "client_reactivated",
@@ -1977,10 +2394,10 @@ export function useCloseLeadAsLost() {
         .select("id");
       if (error) throw error;
       if (!data?.length) throw new Error("This record is no longer a lead, so it can't be closed as lost.");
+      await logClientActivity(supabase, clientId, `Lead closed as lost${reason ? `: ${reason}` : ""}`);
     },
     onSuccess: (_d, { clientId }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      invalidateClientRecord(qc, clientId);
     },
   });
 }
@@ -2001,7 +2418,7 @@ export function useBulkCloseLeadsAsLost() {
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
     },
   });
 }
@@ -2043,7 +2460,7 @@ export function useBulkUpdateClients() {
       };
     },
     onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
       for (const id of result.sourceChangedIds) {
         fireAutomationTrigger({
           triggerType: "client_source_updated",
@@ -2086,7 +2503,7 @@ export function useBulkCancelClients() {
       };
     },
     onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
       for (const c of result.changed) {
         fireAutomationTrigger({ triggerType: c.wasLead ? "lead_cancelled" : "client_cancelled", clientId: c.id });
       }
@@ -2107,28 +2524,32 @@ export function useBulkActivateClients() {
         .in("id", clientIds)
         .neq("status", "active");
       if (readErr) throw readErr;
-      const leadIds = (rows ?? []).filter((r) => r.status === "lead").map((r) => r.id);
-      const otherIds = (rows ?? []).filter((r) => r.status !== "lead").map((r) => r.id);
+      // Leads and lost leads never became clients: activating them is a conversion.
+      const isLead = (st: string | null) => st === "lead" || st === "lost";
+      const leadIds = (rows ?? []).filter((r) => isLead(r.status)).map((r) => r.id);
+      const otherIds = (rows ?? []).filter((r) => !isLead(r.status)).map((r) => r.id);
       if (leadIds.length > 0) {
         const { error } = await supabase
           .from("clients")
           .update({ status: "active", cancellation_reason: null, closed_at: null, client_since: todayInZone(orgTimeZone) })
           .in("id", leadIds)
-          .eq("status", "lead");
+          .in("status", ["lead", "lost"]);
         if (error) throw error;
+        for (const id of leadIds) await logClientActivity(supabase, id, "Converted from lead to client");
       }
       if (otherIds.length > 0) {
         const { error } = await supabase
           .from("clients")
           .update({ status: "active", cancellation_reason: null, closed_at: null })
           .in("id", otherIds)
-          .neq("status", "lead");
+          .not("status", "in", "(lead,lost)");
         if (error) throw error;
+        for (const id of otherIds) await logClientActivity(supabase, id, "Client reactivated");
       }
       return { leadIds, otherIds };
     },
     onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateAllClientRecords(qc);
       for (const id of result.leadIds) fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
       for (const id of result.otherIds) fireAutomationTrigger({ triggerType: "client_reactivated", clientId: id });
     },

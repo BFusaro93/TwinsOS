@@ -48,10 +48,18 @@ export function displaySettingsEqual(a: DisplaySettings, b: DisplaySettings): bo
 /**
  * True when an estimate's toggles were changed by hand: they differ from what was
  * last copied onto it (the baseline). Estimates that predate the baseline are
- * compared with the built-in defaults.
+ * compared with what they were created from — the org's default toggles (pass
+ * them), else the built-in defaults — so an org whose default hides line prices
+ * isn't asked "Replace the toggles?" on every old estimate.
  */
-export function hasHandSetDisplaySettings(current: DisplaySettings, baseline: DisplaySettings | null | undefined): boolean {
-  return !displaySettingsEqual(current, baseline ?? DEFAULT_DISPLAY_SETTINGS);
+export function hasHandSetDisplaySettings(
+  current: DisplaySettings,
+  baseline: DisplaySettings | null | undefined,
+  orgDefault?: DisplaySettings | null,
+): boolean {
+  if (baseline) return !displaySettingsEqual(current, baseline);
+  if (displaySettingsEqual(current, DEFAULT_DISPLAY_SETTINGS)) return false;
+  return orgDefault ? !displaySettingsEqual(current, orgDefault) : true;
 }
 
 /**
@@ -126,5 +134,7 @@ export function groupIntoSections<T extends GroupableItem>(
   }
   sections.push(current);
 
-  return started ? sections.filter((s) => s.items.length > 0 || s.sectionName !== null) : sections;
+  // A plain section header may stand alone (a heading), but a package with no visits left
+  // has nothing to sell and must not print its name, wording and a $0.00 subtotal.
+  return started ? sections.filter((s) => s.items.length > 0 || (s.sectionName !== null && !s.packageId)) : sections;
 }

@@ -21,11 +21,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 //     rule here: exactly one live property -> use it; two or more stays
 //     unresolved, because guessing which lawn gets sprayed is worse than
 //     showing nothing.
-//
-//  3. Clients with no property rows. A job with no property_id is for the
-//     client's own address, whose measurements live on the client record, so
-//     when no property supplies a value the client's own value is used
-//     (fetchClientAreaValues).
 
 /** field_key -> client_properties column, for takeoff fields stored as columns. */
 const BUILT_IN_AREA_COLUMNS: Record<string, string> = {
@@ -125,51 +120,120 @@ export async function fetchPropertyAreaValues(
 }
 
 /**
- * client_id -> the client's OWN area value for the configured Area Custom Field.
- *
- * A job with no property_id is for the client's own address (that's what the New
- * Job dialog's default "client" choice stores), and the measurements entered on the
- * client record ("Property Details" on its Details tab) describe that address. When
- * the job has no property row with a value — including a client who has two
- * properties and a job tied to neither — these are the numbers to use, so the
- * office isn't made to re-enter the client's measurements as a property.
- * Built-in takeoffs come from the client's measurement columns; a custom field the org
- * created comes from the client's custom value (crm_client_custom_field_values), which
- * a property's own value (fetchPropertyAreaValues) overrides.
+ * client_id -> value for an area/lookup field, at the CLIENT level: the linked
+ * client custom field when the property def mirrors one (client_field_def_id),
+ * else the built-in takeoff column on `clients`. Property-only custom fields
+ * have no client counterpart and return nothing.
  */
 export async function fetchClientAreaValues(
   supabase: SupabaseClient,
-  areaFieldId: string | null,
+  fieldId: string | null,
   clientIds: string[]
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   const ids = [...new Set(clientIds.filter(Boolean))];
-  if (!areaFieldId || ids.length === 0) return out;
+  if (!fieldId || ids.length === 0) return out;
 
   const { data: def } = await supabase
     .from("crm_rate_matrix_field_defs")
-    .select("field_key")
-    .eq("id", areaFieldId)
+    .select("field_key, client_field_def_id")
+    .eq("id", fieldId)
     .maybeSingle();
-  const column = def ? BUILT_IN_AREA_COLUMNS[(def as { field_key: string }).field_key] : undefined;
-  if (!column) {
-    // A custom field the org made (mirrored into the rate-matrix defs under the same id):
-    // the client's value is the default every property starts from.
-    const { data: custom } = await supabase
+  if (!def) return out;
+  const { field_key: fieldKey, client_field_def_id: clientFieldDefId } = def as {
+    field_key: string;
+    client_field_def_id: string | null;
+  };
+
+  if (clientFieldDefId) {
+    const { data: values } = await supabase
       .from("crm_client_custom_field_values")
       .select("client_id, value_number")
-      .eq("field_def_id", areaFieldId)
+      .eq("field_def_id", clientFieldDefId)
       .in("client_id", ids);
-    for (const row of (custom ?? []) as { client_id: string; value_number: number | null }[]) {
+    for (const row of (values ?? []) as { client_id: string; value_number: number | null }[]) {
       if (row.value_number != null) out.set(row.client_id, Number(row.value_number));
     }
     return out;
   }
 
+  const column = BUILT_IN_AREA_COLUMNS[fieldKey];
+  if (!column) return out;
   const { data: rows } = await supabase.from("clients").select(`id, ${column}`).in("id", ids);
   for (const row of (rows ?? []) as unknown as Record<string, unknown>[]) {
     const v = row[column];
     if (v != null) out.set(row.id as string, Number(v));
   }
   return out;
+}
+
+/** The value of a lookup field for a property, falling back to its client. */
+export async function fetchFieldValueWithClientFallback(
+  supabase: SupabaseClient,
+  fieldId: string | null,
+  propertyId: string | null,
+  clientId: string | null
+): Promise<number | null> {
+  if (!fieldId) return null;
+  if (propertyId) {
+    const byProperty = await fetchPropertyAreaValues(supabase, fieldId, [propertyId]);
+    const v = byProperty.get(propertyId);
+    if (v != null) return v;
+  }
+  if (clientId) {
+    const byClient = await fetchClientAreaValues(supabase, fieldId, [clientId]);
+    return byClient.get(clientId) ?? null;
+  }
+  return null;
+}
+
+export interface ChemicalAreaArgs {
+  propertyId: string | null;
+  /** Used when the property has no value (or there is no property): the client's value for the same field. */
+  clientId?: string | null;
+  serviceId: string | null;
+  /** crm_job_services.treated_area — what this job actually treats. */
+  treatedArea?: number | null;
+}
+
+export type ChemicalAreaResolver = (args: ChemicalAreaArgs) => number | undefined;
+
+/**
+ * "How much area does this service treat on this job" for the chemical
+ * estimate. Order: the job service's own treated area (spot treatment, front
+ * lawn only), else the property measurement named by the service's
+ * chemical_area_field_id (parking-lot weed control sizes from Parking Lot
+ * Sq. Ft.), else the org's Area Custom Field.
+ */
+export async function buildChemicalAreaResolver(
+  supabase: SupabaseClient,
+  orgAreaFieldId: string | null,
+  serviceIds: string[],
+  propertyIds: string[],
+  clientIds: string[] = []
+): Promise<ChemicalAreaResolver> {
+  const ids = [...new Set(serviceIds.filter(Boolean))];
+  const serviceFieldById = new Map<string, string>();
+  if (ids.length > 0) {
+    const { data } = await supabase.from("crm_services").select("id, chemical_area_field_id").in("id", ids);
+    for (const row of (data ?? []) as { id: string; chemical_area_field_id: string | null }[]) {
+      if (row.chemical_area_field_id) serviceFieldById.set(row.id, row.chemical_area_field_id);
+    }
+  }
+  const fieldIds = [...new Set([...(orgAreaFieldId ? [orgAreaFieldId] : []), ...serviceFieldById.values()])];
+  const valuesByField = new Map<string, Map<string, number>>();
+  const clientValuesByField = new Map<string, Map<string, number>>();
+  for (const fieldId of fieldIds) {
+    valuesByField.set(fieldId, await fetchPropertyAreaValues(supabase, fieldId, propertyIds));
+    clientValuesByField.set(fieldId, await fetchClientAreaValues(supabase, fieldId, clientIds));
+  }
+  return ({ propertyId, clientId, serviceId, treatedArea }) => {
+    if (treatedArea != null && treatedArea > 0) return Number(treatedArea);
+    const fieldId = (serviceId ? serviceFieldById.get(serviceId) : undefined) ?? orgAreaFieldId;
+    if (!fieldId) return undefined;
+    // Property value first, then the client's own value for the same field.
+    const onProperty = propertyId ? valuesByField.get(fieldId)?.get(propertyId) : undefined;
+    if (onProperty != null) return onProperty;
+    return clientId ? clientValuesByField.get(fieldId)?.get(clientId) : undefined;
+  };
 }

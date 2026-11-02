@@ -201,6 +201,8 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
                 updates: {
                   scheduled_date: date,
                   crew_id: crewId || null,
+                  // "Unassigned" on a crewed job must not inherit the job's crew.
+                  ...(!crewId && job.crewId ? { crew_unassigned: true } : {}),
                   status: "dispatched",
                   dispatched_at: new Date().toISOString(),
                 },
@@ -213,6 +215,7 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
               clientId: job.clientId,
               scheduledDate: date,
               crewId: crewId || null,
+              ...(!crewId && job.crewId ? { crewUnassigned: true } : {}),
               jobServiceId: service.id,
               jobType: job.jobType,
               status: "dispatched",
@@ -223,6 +226,7 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
             clientId: job.clientId,
             scheduledDate: date,
             crewId: crewId || null,
+            ...(!crewId && job.crewId ? { crewUnassigned: true } : {}),
             jobServiceId: service?.id ?? null,
             jobType: job.jobType,
           });
@@ -676,10 +680,12 @@ export function WaitingList() {
         title="Waiting List"
         description="Jobs queued for opportunistic scheduling"
         action={
-          <Button size="sm" onClick={() => setAddOpen(true)}>
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            Add to Waiting List
-          </Button>
+          can("job_add") ? (
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Add to Waiting List
+            </Button>
+          ) : undefined
         }
       />
 

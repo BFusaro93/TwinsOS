@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2 } from "lucide-react";
+import { Copy, Plus, Trash2 } from "lucide-react";
 import { RichTextEditor } from "./RichTextEditor";
 import {
   useCreateCRMService,
@@ -32,6 +32,7 @@ import {
   useRateMatrix,
   useUpsertRateMatrixRow,
   useDeleteRateMatrixRow,
+  useCopyRateMatrix,
   useCustomFieldDefs,
 } from "@/lib/hooks/use-rate-matrix";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
@@ -40,6 +41,7 @@ import { useServiceChemicals, useSaveServiceChemicals } from "@/lib/hooks/use-ch
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import type { CRMService, BudgetMethod } from "@/types/crm-jobs";
 import { toast } from "sonner";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 const UNITS = ["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 // Fallback shown only until the org has configured its own list under
@@ -86,6 +88,7 @@ interface FormState {
   matrixTailRateCents: string;
   matrixTailHours: string;
   matrixTailCostCents: string;
+  chemicalAreaFieldId: string;
 }
 
 function emptyForm(): FormState {
@@ -104,6 +107,7 @@ function emptyForm(): FormState {
     rateMatrixField: "", rateMatrixCalc: "qty_x_rate_x_visits",
     matrixTailEveryQty: "", matrixTailOverQty: "",
     matrixTailRateCents: "", matrixTailHours: "", matrixTailCostCents: "",
+    chemicalAreaFieldId: "",
   };
 }
 
@@ -138,6 +142,7 @@ function serviceToForm(s: CRMService): FormState {
     matrixTailRateCents: s.matrixTailRateCents != null ? (s.matrixTailRateCents / 100).toFixed(2) : "",
     matrixTailHours: s.matrixTailHours != null ? String(s.matrixTailHours) : "",
     matrixTailCostCents: s.matrixTailCostCents != null ? (s.matrixTailCostCents / 100).toFixed(2) : "",
+    chemicalAreaFieldId: s.chemicalAreaFieldId ?? "",
   };
 }
 
@@ -162,12 +167,41 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 interface RateMatrixTabProps {
   serviceId: string;
+  form: FormState;
+  setForm: (f: FormState) => void;
 }
 
-function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
+function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
   const { data: rows = [] } = useRateMatrix(serviceId);
   const upsert = useUpsertRateMatrixRow();
   const deleteRow = useDeleteRateMatrixRow();
+  const copyMatrix = useCopyRateMatrix();
+  // Copying replaces OTHER services' matrices, so it needs the edit key, not just add.
+  const { can } = usePermissions();
+  const canCopyMatrix = can("service_edit");
+  const { data: allServices = [] } = useCRMServices();
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyTargets, setCopyTargets] = useState<string[]>([]);
+  const copyCandidates = allServices.filter((s) => !s.deletedAt && s.id !== serviceId);
+
+  function runCopy() {
+    if (copyTargets.length === 0) return;
+    copyMatrix.mutate({ sourceServiceId: serviceId, targetServiceIds: copyTargets }, {
+      onSuccess: ({ count, failed }) => {
+        if (failed.length > 0) {
+          const name = (id: string) => allServices.find((s) => s.id === id)?.name ?? "a service";
+          toast.error(
+            `Copied to ${count} of ${copyTargets.length}. Not copied: ${failed.map((f) => `${name(f.serviceId)} (${f.error})`).join("; ")}`
+          );
+        } else {
+          toast.success(`Copied rate matrix to ${count} service${count === 1 ? "" : "s"}`);
+        }
+        setCopyOpen(false);
+        setCopyTargets([]);
+      },
+      onError: (err) => toast.error(err instanceof Error && err.message ? `Failed to copy rate matrix: ${err.message}` : "Failed to copy rate matrix"),
+    });
+  }
 
   const { data: fieldDefs = [] } = useCustomFieldDefs("property");
   const numericFieldDefs = fieldDefs.filter((d) => d.fieldType === "number");
@@ -220,7 +254,9 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
       if (field.endsWith("_cents")) {
         value = parseCents(rawValue);
       } else if (["from_val", "to_val", "budgeted_hours", "tail_every_qty", "tail_over_qty"].includes(field)) {
-        value = rawValue === "" ? null : parseNum(rawValue);
+        // from_val and budgeted_hours are NOT NULL (default 0): a cleared cell means 0.
+        const notNull = field === "from_val" || field === "budgeted_hours";
+        value = rawValue === "" ? (notNull ? 0 : null) : parseNum(rawValue);
       } else if (field === "calc_type") {
         value = parseInt(rawValue, 10) as 0 | 1;
       }
@@ -251,6 +287,9 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
 
   const inputCls =
     "w-full rounded border border-border px-1.5 py-0.5 text-right text-xs focus:outline-none focus:border-brand-400";
+
+  // inputCls is w-full; the overflow sentence needs compact inline boxes.
+  const tailInputCls = inputCls.replace("w-full", "w-20");
 
   return (
     <div className="flex flex-col gap-4">
@@ -346,6 +385,67 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
           {!selectedFieldId && (
             <span className="text-xs text-slate-400 dark:text-neutral-500">Pick a lookup field above so rows know what to measure against</span>
           )}
+          {canCopyMatrix && (
+            <Button variant="ghost" size="sm" className="ml-auto text-xs" disabled={rows.length === 0}
+              onClick={() => setCopyOpen((o) => !o)}>
+              <Copy className="mr-1 h-3.5 w-3.5" /> Copy to other services…
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {copyOpen && (
+        <div className="rounded-lg border p-3 flex flex-col gap-2">
+          {/* Buttons sit above the list: with many matrix rows this panel is
+              pushed below the dialog's visible area, and the body can't scroll. */}
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-slate-600 dark:text-neutral-400">
+              Copies these {rows.length} rows to each ticked service, replacing any matrix it already has.
+            </p>
+            <div className="flex shrink-0 gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setCopyOpen(false)}>Cancel</Button>
+              <Button size="sm" disabled={copyTargets.length === 0 || copyMatrix.isPending} onClick={runCopy}>
+                Copy to {copyTargets.length || ""} service{copyTargets.length === 1 ? "" : "s"}
+              </Button>
+            </div>
+          </div>
+          <div className="max-h-40 overflow-y-auto flex flex-col gap-1">
+            {copyCandidates.map((s) => (
+              <label key={s.id} className="flex items-center gap-2 text-xs">
+                <Checkbox
+                  checked={copyTargets.includes(s.id)}
+                  onCheckedChange={(v) =>
+                    setCopyTargets((prev) => (v ? [...prev, s.id] : prev.filter((id) => id !== s.id)))
+                  }
+                />
+                {s.name}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg border p-3 flex flex-col gap-2">
+        <p className="text-xs font-semibold text-slate-600 dark:text-neutral-400">Overflow rule</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500">
+          For values past the last row, step up from it instead of adding a row for every size. Saved with Save Changes.
+        </p>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          Every
+          <input type="number" value={form.matrixTailEveryQty} className={tailInputCls}
+            onChange={(e) => setForm({ ...form, matrixTailEveryQty: e.target.value })} />
+          over
+          <input type="number" value={form.matrixTailOverQty} className={tailInputCls}
+            onChange={(e) => setForm({ ...form, matrixTailOverQty: e.target.value })} />
+          is $
+          <input type="number" step="0.01" value={form.matrixTailRateCents} className={tailInputCls}
+            onChange={(e) => setForm({ ...form, matrixTailRateCents: e.target.value })} />
+          more and
+          <input type="number" step="0.01" value={form.matrixTailHours} className={tailInputCls}
+            onChange={(e) => setForm({ ...form, matrixTailHours: e.target.value })} />
+          more time with an additional cost of $
+          <input type="number" step="0.01" value={form.matrixTailCostCents} className={tailInputCls}
+            onChange={(e) => setForm({ ...form, matrixTailCostCents: e.target.value })} />
         </div>
       </div>
 
@@ -677,6 +777,8 @@ function ChemicalsTab({ serviceId }: ChemicalsTabProps) {
 export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
   const [tab, setTab] = useState<Tab>("details");
   const [form, setForm] = useState<FormState>(emptyForm());
+  const { data: propertyFieldDefs = [] } = useCustomFieldDefs("property");
+  const areaFieldDefs = propertyFieldDefs.filter((d) => d.fieldType === "number");
   // Tracks the saved service — set from prop on open, or updated after create so tabs unlock immediately
   const [activeService, setActiveService] = useState<CRMService | null>(service);
 
@@ -727,6 +829,7 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
       matrix_tail_rate_cents: form.matrixTailRateCents ? parseCents(form.matrixTailRateCents) : null,
       matrix_tail_hours: form.matrixTailHours ? parseNum(form.matrixTailHours) : null,
       matrix_tail_cost_cents: form.matrixTailCostCents ? parseCents(form.matrixTailCostCents) : null,
+      chemical_area_field_id: form.chemicalAreaFieldId || null,
     };
   }
 
@@ -1058,7 +1161,7 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
         {/* Rate Matrix Tab */}
         {tab === "rate_matrix" && activeService && (
           <div className="py-2">
-            <RateMatrixTab serviceId={activeService.id} />
+            <RateMatrixTab serviceId={activeService.id} form={form} setForm={setForm} />
           </div>
         )}
 
@@ -1078,7 +1181,28 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
 
         {/* Chemicals Tab */}
         {tab === "chemicals" && activeService && (
-          <div className="py-2">
+          <div className="flex flex-col gap-4 py-2">
+            <Field label="Area measurement for chemical quantities">
+              <Select
+                value={form.chemicalAreaFieldId || "default"}
+                onValueChange={(v) => setForm({ ...form, chemicalAreaFieldId: v === "default" ? "" : v })}
+              >
+                <SelectTrigger className="text-sm">
+                  <SelectValue placeholder="Org default" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Org default (Settings → Chemical Tracking)</SelectItem>
+                  {areaFieldDefs.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">
+                Which property measurement this service&apos;s chemical amounts are sized from, such as Parking Lot / Hardscape
+                Sq. Ft. for a parking-lot weed control service. A treated area typed on an estimate line overrides it.
+                Saved with Save Changes.
+              </p>
+            </Field>
             <ChemicalsTab serviceId={activeService.id} />
           </div>
         )}

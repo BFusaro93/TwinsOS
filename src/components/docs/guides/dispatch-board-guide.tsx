@@ -67,6 +67,7 @@ export function DispatchBoardGuide() {
           <TOCLink href="#crew-board">The Crew Board (shop TV)</TOCLink>
           <TOCLink href="#views-ranges">Saved views, quick ranges and shortcuts</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -595,6 +596,13 @@ export function DispatchBoardGuide() {
             flagged as needing a courtesy call to the client before arrival.
           </li>
           <li>
+            <strong>Load List</strong> — next to Stats, opens the <strong>Daily Load List</strong> for the
+            board&apos;s selected day in a dialog: what each crew needs on the truck, with chemicals
+            (concentrate amount and finished mix volume) and other materials grouped by crew. Use{" "}
+            <strong>Print</strong> or open the full report from the dialog. It needs the View Report Center
+            permission.
+          </li>
+          <li>
             <strong>Print Route Sheets</strong> — generates a printable, per-crew stop sheet (client,
             address, service, time, budgeted hours, and notes to the crew) for the selected day,
             including a separate sheet for anything still unassigned.
@@ -684,7 +692,8 @@ export function DispatchBoardGuide() {
           row on the board. Reordering one crew never renumbers another.
         </p>
         <p>
-          Drag rows in <strong>Manual Route</strong> mode, or use <strong>Reverse</strong> to flip the
+          Drag rows in <strong>Manual Route</strong> mode (within one crew &mdash; to move a stop to another
+          crew, use Team Assign), or use <strong>Reverse</strong> to flip the
           current order, or <strong>Group Stops</strong> to cluster each crew&apos;s stops by zip area.
           Either way the board shows an &quot;Order changed — not yet saved&quot; banner until you
           click <strong>Save Order</strong>.
@@ -811,8 +820,9 @@ export function DispatchBoardGuide() {
           <li>
             <strong>Drag to reschedule or reassign.</strong> Drag a card onto another day, another
             crew, or both. The move saves immediately (and snaps back if it can&apos;t be saved).
-            Completed, skipped, and cancelled visits can&apos;t be dragged. Drag and drop works with a
-            mouse; on a touch tablet use the List view or the visit&apos;s own sheet to move a visit.
+            Completed, skipped, and cancelled visits can&apos;t be dragged. On a touch tablet, tap a card to
+            pick it up (a bar shows what you&apos;re moving), then tap the day or crew to place it; Cancel or
+            tapping the card again drops it. The bar has an <strong>Open job</strong> link.
           </li>
           <li>
             <strong>Open a job.</strong> Click a card&apos;s name to open the job. The job page&apos;s
@@ -884,7 +894,8 @@ export function DispatchBoardGuide() {
             <strong>Change crews by dragging.</strong> Drag a person to another crew (that move is for
             this day only and is tagged &quot;today only&quot; — dropping them back on their own crew
             clears it), or drag a job card to another crew to reassign it. Jobs with no crew sit in an{" "}
-            <strong>Unassigned jobs</strong> column.
+            <strong>Unassigned jobs</strong> column. On a touch screen, tap to pick up and tap to place
+            instead of dragging.
           </li>
           <li>
             <strong>Equipment.</strong> The <strong>Equipment yard</strong> on the left lists everything
@@ -963,6 +974,31 @@ export function DispatchBoardGuide() {
           live on the Dispatch Board at all until they&apos;re given a day and crew. See the{" "}
           <strong>Waiting List</strong> guide for how those get queued and dispatched.
         </p>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Visits the crew is working are protected.</strong> While a crew is clocked in to a stop you can&apos;t move it to another day, change its crew, change its status or delete it, from the board, the visit sheet, bulk actions or the snow board. Have the crew clock out first. A stop the crew skipped after starting can be rescheduled or reopened normally.
+          </li>
+          <li>
+            <strong>Reopening a finished visit.</strong> Setting a completed, skipped or cancelled visit back to Scheduled or Dispatched clears its clock times so the crew can work it again.
+          </li>
+          <li>
+            <strong>Dispatch Assigned.</strong> Dispatch Assigned in Team Assign dispatches the assigned visits for the day shown in its title, even when the board has a From/To range loaded.
+          </li>
+          <li>
+            <strong>Edit Job Times.</strong> Opening Edit Job Times waits for the crew&apos;s punches to load before filling in anyone, so it never overwrites times the crew recorded.
+          </li>
+          <li>
+            <strong>Snow board status icon.</strong> Tapping the status icon steps a stop forward and asks before completing it (completing invoices it) or reopening it. Skipping goes through the outcome dialog with a reason.
+          </li>
+          <li>
+            <strong>Nearby Jobs.</strong> A job scheduled from Nearby Jobs drops out of that list, so it can&apos;t be added twice.
+          </li>
+          <li>
+            <strong>Visit sheet invoice description.</strong> The visit sheet shows the job&apos;s invoice description when the visit has none. It only saves an invoice description on the visit when you change it, so later edits to the job&apos;s description still reach that visit&apos;s invoice.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );

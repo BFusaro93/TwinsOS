@@ -77,6 +77,7 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Textarea } from "@/components/ui/textarea";
 import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { getDisplayInvoiceStatus } from "@/lib/invoice-status";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -110,6 +111,9 @@ const METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "Credit Card- MasterCard",  label: "Credit Card (MC)" },
   { value: "Credit Card- AmEx",        label: "Credit Card (AmEx)" },
   { value: "Credit Card- Discover",    label: "Credit Card (Discover)" },
+  { value: "Debit Card- Visa",         label: "Debit Card (Visa)" },
+  { value: "Debit Card- MasterCard",   label: "Debit Card (MC)" },
+  { value: "Debit Card- Discover",     label: "Debit Card (Discover)" },
   { value: "ACH/E-Check",              label: "ACH / E-Check" },
   { value: "AutoPay",                  label: "AutoPay" },
   { value: "Other",                    label: "Other" },
@@ -284,9 +288,9 @@ function LineItemRow({
     setRow(next);
     try {
       await upsert({ invoiceId, item: buildUpsertPayload(next) });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to update discount");
+      toast.error(mutationErrorMessage(err, "Failed to update discount"));
     }
   }
 
@@ -296,7 +300,7 @@ function LineItemRow({
     try {
       await upsert({ invoiceId, item: buildUpsertPayload(row) });
       settleIfUnchanged(seq);
-    } catch { toast.error("Save failed"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Save failed")); }
   }
 
   async function saveRow(r: InvoiceLineItem) {
@@ -304,7 +308,7 @@ function LineItemRow({
     try {
       await upsert({ invoiceId, item: buildUpsertPayload(r) });
       settleIfUnchanged(seq);
-    } catch { toast.error("Save failed"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Save failed")); }
   }
 
   async function toggleTaxable() {
@@ -313,16 +317,16 @@ function LineItemRow({
     try {
       // recalc: persist the header's tax/total from the lines right away.
       await upsert({ invoiceId, item: buildUpsertPayload(next), recalc: true });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to update taxable setting");
+      toast.error(mutationErrorMessage(err, "Failed to update taxable setting"));
     }
   }
 
   async function handleDelete() {
     try {
       await remove({ id: row.id, invoiceId });
-    } catch { toast.error("Failed to delete item"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to delete item")); }
   }
 
   return (
@@ -561,7 +565,8 @@ function RecordPaymentDialog({
   const appliedCents = Math.min(amountCents, Math.max(0, balanceCents));
   const overageCents = Math.max(0, amountCents - appliedCents);
   const isWriteOff = method === "AR Write-off";
-  const isElectronicMethod = method.startsWith("Credit Card") || method === "ACH/E-Check";
+  // Debit cards are recorded as "Debit Card- …" (#395); they are just as electronic as credit.
+  const isElectronicMethod = method.startsWith("Credit Card") || method.startsWith("Debit Card") || method === "ACH/E-Check";
 
   async function submit() {
     if (!amountCents || amountCents <= 0) { toast.error("Enter a valid amount"); return; }
@@ -583,7 +588,7 @@ function RecordPaymentDialog({
         : "Payment recorded");
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error && err.message ? err.message : "Failed to record payment");
+      toast.error(mutationErrorMessage(err, err instanceof Error && err.message ? err.message : "Failed to record payment"));
     }
   }
 
@@ -643,7 +648,7 @@ function RecordPaymentDialog({
           </div>
           {isElectronicMethod && (
             <p className="text-xs text-amber-600 dark:text-amber-400">
-              Only pick {method.startsWith("Credit Card") ? "a card" : "ACH"} here if it was already collected elsewhere
+              Only pick {method.startsWith("Credit Card") || method.startsWith("Debit Card") ? "a card" : "ACH"} here if it was already collected elsewhere
               (e.g. a separate terminal) — nothing is charged by saving this.
             </p>
           )}
@@ -877,7 +882,7 @@ export function InvoiceDetail({
           sort_order: lineItems.length,
         },
       });
-    } catch { toast.error("Failed to add item"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to add item")); }
     finally { addingLineItemRef.current = false; }
   }
 
@@ -905,7 +910,7 @@ export function InvoiceDetail({
           sort_order: lineItems.length,
         },
       });
-    } catch { toast.error("Failed to add charge"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to add charge")); }
     finally { addingLineItemRef.current = false; }
   }
 
@@ -954,7 +959,7 @@ export function InvoiceDetail({
       const next = !invoice!.locked;
       await setLock({ id: invoice!.id, locked: next });
       toast.success(next ? "Invoice locked" : "Invoice unlocked");
-    } catch { toast.error("Failed to update lock"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to update lock")); }
   }
 
   async function handleSave() {
@@ -1017,8 +1022,8 @@ export function InvoiceDetail({
     if (!invoice) { onDiscard?.(); return; }
     try {
       await deleteInvoice({ id: invoice.id, clientId: invoice.clientId });
-    } catch {
-      toast.error("Failed to discard draft — it was not deleted");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to discard draft — it was not deleted"));
       return;
     }
     onDiscard?.();
@@ -1032,7 +1037,7 @@ export function InvoiceDetail({
       toast.success("Invoice deleted");
       setConfirmDeleteOpen(false);
       onDiscard?.();
-    } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to delete invoice"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, err instanceof Error && err.message ? err.message : "Failed to delete invoice")); }
     finally { setDeleting(false); }
   }
 
@@ -1044,7 +1049,7 @@ export function InvoiceDetail({
       toast.success("Invoice voided");
       setConfirmVoidOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to void invoice");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to void invoice"));
     }
     finally { setVoiding(false); }
   }
@@ -1073,19 +1078,6 @@ export function InvoiceDetail({
             </h1>
             <p className="text-xs text-slate-400 dark:text-neutral-500">{invoice.clientName}</p>
           </div>
-          <Badge variant="outline" className={cn("text-[10px] capitalize border-transparent", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
-            {getDisplayInvoiceStatus(invoice)}
-          </Badge>
-          {invoice.invoiceNumber == null && (
-            <span className="rounded-full bg-yellow-100 dark:bg-yellow-900/40 px-2 py-0.5 text-[10px] font-semibold text-yellow-700 dark:text-yellow-400">
-              Unsaved — click Save to assign invoice #
-            </span>
-          )}
-          {invoice.locked && (
-            <span className="flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
-              <Lock className="h-3 w-3" /> Locked
-            </span>
-          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {onDiscard && invoice.invoiceNumber == null && (
@@ -1094,14 +1086,18 @@ export function InvoiceDetail({
               Discard
             </Button>
           )}
-          <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={handleToggleLock}
-            title={invoice.locked ? "Unlock invoice to make changes" : "Lock invoice"}>
-            {invoice.locked
-              ? <><Unlock className="mr-1 h-3.5 w-3.5 text-amber-500 dark:text-amber-400" /> Unlock</>
-              : <><Lock className="mr-1 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" /> Lock</>
-            }
-          </Button>
+          {/* Unlocking re-opens the amounts, so the database requires
+              acct_add_modify_invoices for it; anyone may lock. */}
+          {(!invoice.locked || can("acct_add_modify_invoices")) && (
+            <Button variant="outline" size="sm" className="h-8 text-xs"
+              onClick={handleToggleLock}
+              title={invoice.locked ? "Unlock invoice to make changes" : "Lock invoice"}>
+              {invoice.locked
+                ? <><Unlock className="mr-1 h-3.5 w-3.5 text-amber-500 dark:text-amber-400" /> Unlock</>
+                : <><Lock className="mr-1 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" /> Lock</>
+              }
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={() => setPaymentOpen(true)}
             disabled={invoice.status === "void" || invoice.balanceCents <= 0}>
@@ -1209,7 +1205,9 @@ export function InvoiceDetail({
       </Dialog>
 
       {/* Tabs */}
-      <div className="flex overflow-x-auto border-b bg-card px-4 md:px-8">
+      {/* Wraps instead of scrolling sideways: on a phone the status / Locked pills used to sit
+          off-screen to the right of a scrolling tab row. */}
+      <div className="flex flex-wrap items-center border-b bg-card px-4 md:px-8">
         {(["invoice", "photos", "audit"] as const).map((tab) => (
           <button
             key={tab}
@@ -1224,6 +1222,22 @@ export function InvoiceDetail({
             {tab === "audit" ? "Audit Trail" : tab === "photos" ? "Photos" : "Invoice"}
           </button>
         ))}
+        {/* Status pills sit beside the tabs so the action buttons above never shift with them */}
+        <div className="ml-3 flex min-w-0 flex-wrap items-center gap-2 py-1">
+          <Badge variant="outline" className={cn("border-transparent text-[10px] capitalize", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
+            {getDisplayInvoiceStatus(invoice)}
+          </Badge>
+          {invoice.invoiceNumber == null && (
+            <span className="rounded-full bg-yellow-100 dark:bg-yellow-900/40 px-2 py-0.5 text-[10px] font-semibold text-yellow-700 dark:text-yellow-400">
+              Unsaved — click Save to assign invoice #
+            </span>
+          )}
+          {invoice.locked && (
+            <span className="flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+              <Lock className="h-3 w-3" /> Locked
+            </span>
+          )}
+        </div>
       </div>
 
       {activeTab === "photos" ? (
@@ -1502,7 +1516,7 @@ export function InvoiceDetail({
           </div>
 
           {/* Notes — shown on the invoice PDF/email below the line items */}
-          <div className="mx-8 mb-5 rounded-lg border bg-card p-4 shadow-sm">
+          <div className="mx-4 md:mx-8 mb-5 rounded-lg border bg-card p-4 shadow-sm">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-2">Notes</p>
             <Textarea
               value={notesDraft}
@@ -1518,7 +1532,7 @@ export function InvoiceDetail({
           </div>
 
           {/* Line items */}
-          <div className="mx-8 mb-5 rounded-lg border bg-card shadow-sm overflow-x-auto">
+          <div className="mx-4 md:mx-8 mb-5 rounded-lg border bg-card shadow-sm overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-brand-500 text-white">
                 <tr>
@@ -1690,7 +1704,7 @@ export function InvoiceDetail({
               invoiced its full amount and the client is asked for money they
               have already paid. */}
           {unappliedCents > 0 && invoice.balanceCents > 0 && invoice.status !== "draft" && invoice.status !== "void" && (
-            <div className="mx-8 mb-5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 px-4 py-3">
+            <div className="mx-4 md:mx-8 mb-5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-blue-900 dark:text-blue-200">
                   <strong>{formatCurrency(unappliedCents)}</strong> of unapplied{" "}
@@ -1718,7 +1732,7 @@ export function InvoiceDetail({
                         total += res.appliedCents;
                         remaining -= res.appliedCents;
                       } catch (err) {
-                        toast.error(err instanceof Error ? err.message : "Couldn't apply the credit");
+                        toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Couldn't apply the credit"));
                         break;
                       }
                     }
@@ -1733,7 +1747,7 @@ export function InvoiceDetail({
 
           {/* Payment history */}
           {payments.length > 0 && (
-            <div className="mx-8 mb-5 rounded-lg border bg-card shadow-sm overflow-x-auto">
+            <div className="mx-4 md:mx-8 mb-5 rounded-lg border bg-card shadow-sm overflow-x-auto">
               <div className="border-b bg-slate-50 dark:bg-muted/40 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Payment History
               </div>

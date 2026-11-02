@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import { renderInvoicePDF } from "@/lib/invoices/pdf-data";
 import { logger } from "@/lib/logger";
@@ -20,12 +20,14 @@ export async function GET(
   const supabase = createServiceClient();
 
   // Service client bypasses RLS, so ownership is checked here: the invoice
-  // must belong to this portal client in the active org, and not be a draft.
+  // must belong to this portal client (or one of its sub-accounts) in the
+  // active org, and not be a draft.
+  const clientIds = (await getPortalAccounts(ctx)).map((a) => a.id);
   const { data: owned } = await supabase
     .from("crm_invoices")
     .select("id")
     .eq("id", id)
-    .eq("client_id", ctx.clientId)
+    .in("client_id", clientIds)
     .eq("org_id", ctx.orgId)
     .neq("status", "draft")
     .is("deleted_at", null)

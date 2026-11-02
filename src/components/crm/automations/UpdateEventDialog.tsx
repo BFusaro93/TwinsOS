@@ -20,10 +20,11 @@ import {
 } from "@/components/ui/select";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import { useUsers } from "@/lib/hooks/use-users";
-import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
 import { useCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // CSR was removed — it isn't a real field anywhere in the app (no
 // clients.csr column, no CSR concept outside this picker and a document
@@ -59,7 +60,7 @@ interface Props {
 export function UpdateEventDialog({ open, onOpenChange, event }: Props) {
   const updateEvent = useUpdateEvent();
   const { data: users } = useUsers();
-  const { data: clientSources } = useOrgList("client_sources");
+  const { options: clientSources } = useClientSourceOptions();
   const { data: customFieldDefs } = useCustomFieldDefs();
   const [field, setField] = useState("sales_person");
   const [value, setValue] = useState("");
@@ -95,8 +96,8 @@ export function UpdateEventDialog({ open, onOpenChange, event }: Props) {
         config: field === "custom_field" ? { field, value, customFieldId } : { field, value },
       });
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save update event");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save update event"));
     } finally {
       setSaving(false);
     }
@@ -165,9 +166,9 @@ export function UpdateEventDialog({ open, onOpenChange, event }: Props) {
                   <SelectValue placeholder="Select a client source" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(clientSources ?? []).map((o) => (
-                    <SelectItem key={o.id} value={o.value}>
-                      {o.value}
+                  {clientSources.map((v) => (
+                    <SelectItem key={v} value={v}>
+                      {v}
                     </SelectItem>
                   ))}
                 </SelectContent>

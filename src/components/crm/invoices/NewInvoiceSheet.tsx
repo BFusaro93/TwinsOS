@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import { X, GripVertical } from "lucide-react";
-import { useClients } from "@/lib/hooks/use-clients";
 import { useCreateInvoice, useDeleteInvoice } from "@/lib/hooks/use-invoices";
 import { InvoiceDetail } from "./InvoiceDetail";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
@@ -13,6 +12,7 @@ import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { useConfirm } from "@/components/shared/useConfirm";
 import type { CRMInvoice } from "@/types/crm-invoices";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   open: boolean;
@@ -53,8 +53,6 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
   openRef.current = open;
 
   const orgTimeZone = useOrgTimeZone();
-  const { data: clients } = useClients();
-  const invoiceableClients = (clients ?? []).filter((c) => c.status !== "lead");
   const { mutateAsync: createInvoice } = useCreateInvoice();
   const { mutateAsync: deleteInvoice } = useDeleteInvoice();
   const qc = useQueryClient();
@@ -171,8 +169,8 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
       const inv = await createInvoice({ clientId, description: "", invoiceDate: today });
       setInvoiceId(inv.id);
       setDraftClientId(clientId);
-    } catch {
-      toast.error("Failed to create invoice");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create invoice"));
     } finally {
       setCreating(false);
       creatingRef.current = false;
@@ -231,7 +229,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
                   <ClientCombobox
                     value=""
                     onValueChange={handleSelectClient}
-                    clients={invoiceableClients}
+                    excludeStatuses={["lead"]}
                     noneLabel="Search clients..."
                     disabled={creating}
                   />

@@ -38,6 +38,7 @@ export function OnlinePaymentsGuide() {
           <TOCLink href="#security">How this is kept secure</TOCLink>
           <TOCLink href="#double-pay">What happens if a client pays twice</TOCLink>
           <TOCLink href="#gotchas">Gotchas</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -136,7 +137,8 @@ export function OnlinePaymentsGuide() {
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>Off by default for new companies. When you turn it on you set the rate (3% is the starting value) and the threshold above which it applies — for example 3% on card payments over $500.</li>
-          <li>Choose <strong>Flat percent</strong> or <strong>Cover the card fee exactly</strong>. Stripe&apos;s fee is taken from the whole charge, including the surcharge, so a flat percent can leave you slightly short; the cover-the-fee mode grosses the charge up so you receive the full invoice amount.</li>
+          <li>Choose <strong>Flat percent</strong> or <strong>Cover the card fee exactly</strong>. Stripe&apos;s fee is taken from the whole charge, including the surcharge, so a flat percent can leave you slightly short; the cover-the-fee mode grosses the charge up so you receive the full invoice amount. The cover-the-fee surcharge is capped at 4% of the balance, so on a very small balance you net slightly less than the invoice.</li>
+          <li><strong>Refunds return the surcharge too.</strong> A full refund returns the processing fee the client paid; a partial refund returns the fee&apos;s matching share. Your books still show the refund against the invoice amount.</li>
           <li>Card networks cap surcharges (at 3%) and some states ban them. Landscapt doesn&apos;t limit the rate — it&apos;s on you to set one that&apos;s lawful where you operate.</li>
           <li>Applies to card payments on invoices <em>and</em> to a deposit paid by card when a client accepts a proposal, on the same threshold.</li>
           <li>Never applied to Bank Transfer/ACH payments — ACH is fee-free by design.</li>
@@ -238,6 +240,25 @@ export function OnlinePaymentsGuide() {
             <strong>Fee waivers and overrides are staff-only.</strong> A client paying through their
             portal or a public link always sees the standard configured fee — they can&apos;t adjust
             or skip it themselves.
+          </li>
+        </ul>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Charge asks first.</strong> Clicking <strong>Charge</strong> on an invoice in the Invoices list shows the client, amount, invoice number and saved card before anything is charged.
+          </li>
+          <li>
+            <strong>Debit cards are card payments.</strong> Payments recorded as “Debit Card - Visa” and similar count with credit card payments in the payment-method and Credit Card Charges reports.
+          </li>
+          <li>
+            <strong>Refunds don&apos;t trigger “payment failed” automations.</strong> Only a real failure or bank return of an ACH payment fires the failed-charge automation. A refund you issue, here or in Stripe, does not.
+          </li>
+          <li>
+            <strong>Payments in flight.</strong> While a card authorization or bank debit is pending, the invoice is marked as having a payment in progress and is left out of Charge All, so it isn&apos;t charged twice.
+          </li>
+          <li>
+            <strong>Changing Stripe accounts.</strong> If a payment that was already under way lands on your previous Stripe account after you connect a new one, Landscapt tells your admins once so it can be recorded by hand.
           </li>
         </ul>
       </Section>

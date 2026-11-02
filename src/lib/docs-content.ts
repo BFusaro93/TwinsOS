@@ -648,6 +648,11 @@ export const DOC_SECTIONS: DocSection[] = [
               "Go to CRM > Clients and click '+ New Client'. The quick-create step captures Display Name, Account Type (Residential or Commercial), phone, and email — click 'Create & Continue' and the full client record opens immediately for billing info, custom fields, and office notes.",
           },
           {
+            step: "Finding clients: search, filters & export",
+            detail:
+              "The Clients list (List or Table view, which share the same search and filters) shows the total number of matches and loads clients 100 at a time as you scroll, or click 'Load more'. Search covers name, account #, email, phone (digits only once you type 3+), billing and service address, city, ZIP and tags, across every client. Filters include Status, Balance, Billing City, Service City, Tags, custom fields and Has Scheduled / Completed Job For a service. In the Table, the header checkbox selects the loaded rows and 'Select all N matching clients' selects every match. Import / Export > Export downloads every client that matches the current search and filters.",
+          },
+          {
             step: "Client status",
             detail:
               "Status is one of Active, Inactive, Lead, or Cancelled. Cancelling a client requires picking a reason — Price, Moved, Unhappy with Service, No Longer Needs Service, or Other — which is kept on the record for churn reporting.",
@@ -655,7 +660,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Commercial parent/child hierarchy",
             detail:
-              "Use 'Link Parent Account' on a commercial client to nest it under a property-manager parent. Only a client that isn't already a child itself can be picked as the parent — the hierarchy is one level deep. The parent's record shows a Sub-Accounts banner with the combined balance across all its children.",
+              "Use 'Link Parent Account' on a commercial client to nest it under a property-manager parent. Only a client that isn't already a child itself can be picked as the parent — the hierarchy is one level deep. The picker shows the first 50 eligible clients; type to search the rest. A client that already has sub-accounts can't be given a parent, and the picker says so. The parent's record shows a Sub-Accounts banner with the combined balance across all its children.",
           },
           {
             step: "Adding a property",
@@ -999,7 +1004,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Contracts",
             detail:
-              "CRM > Accounting > Contracts covers ongoing agreements: a monthly amount, billing frequency (weekly through annual, or one-time — honored by the invoicing cron, set through the API since the dialog doesn't expose it), auto-renew, billing day of month, and whether the contract bills a month in advance. The amount is charged per invoice at every frequency, not annualized. The end date can't be before the start date. Month-by-month amount overrides are supported for seasonal pricing. If a contract starts mid-cycle you can choose 'Prorate first period' (a daily-prorated first invoice for the partial stretch, then normal billing) or leave the default of starting on the first full cycle. Editing the financial terms of a signed contract keeps it billing at the new terms and flags it 'Changed since signed — needs client approval' until you clear the flag. Visits on a cancelled, expired or inactive contract bill like normal per-visit work.",
+              "CRM > Accounting > Contracts covers ongoing agreements: an amount per invoice, a Billing Frequency (Monthly, Quarterly, Annual, Weekly, Every 2 weeks or One time — set in the contract's Invoice Details), auto-renew, billing day of month, and whether the contract bills a month in advance. The amount is charged per invoice at every frequency, not annualized: a $3,000-a-quarter contract stores $3,000. Monthly contracts have a 12-month grid so each month can bill a different amount (a month at $0 is skipped); every other frequency has one Amount per invoice field and shows the months or dates it will bill in. The contracts list shows the cadence ('$3,000.00 / quarter'), and a monthly contract whose months differ shows its yearly total ('$4,100.00 / yr · 8 months (varies)'). The end date can't be before the start date. If a contract starts mid-cycle you can choose 'Prorate first period' (a daily-prorated first invoice for the partial stretch, then normal billing) or leave the default of starting on the first full cycle. Editing the financial terms of a signed contract keeps it billing at the new terms and flags it 'Changed since signed — needs client approval' until you clear the flag. Visits on a cancelled, expired or inactive contract bill like normal per-visit work.",
           },
           {
             step: "Sub-properties on one contract",
@@ -1950,6 +1955,70 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "Why does my estimate say it needs approval again?",
+        a: "An approval covers the total that was approved. If lines added afterwards push the estimate above that amount, Send and Copy link resubmit it for approval, and it can't go out until it is approved again. Lowering the total doesn't need a new approval.",
+      },
+      {
+        q: "Why won't the job's Complete button finish the job?",
+        a: "Complete refuses while the job still has scheduled, dispatched or in-progress visits, because completing the job would bill every service as done and each visit also bills itself when it's completed. Complete, skip or cancel the open visits on the job's Visits tab, then the job completes itself (or click Complete again).",
+      },
+      {
+        q: "Why can't I move or change the status of a visit?",
+        a: "The crew is clocked in to it. While a stop is running you can't move it to another day, change its crew, change its status or delete it, from anywhere in the office. Have the crew tap Stop Job (or Skip) first. A stop the crew skipped after starting can be rescheduled or reopened normally.",
+      },
+      {
+        q: "Why did a client's visits and contract invoices stop?",
+        a: "The client is marked Inactive, Lost or Cancelled. Those statuses stop new recurring and package visits and stop contract invoices. Set the client back to Active to resume both on the next run.",
+      },
+      {
+        q: "Why didn't a text message send from an automation?",
+        a: "Your company hasn't finished SMS registration (Settings → Integrations → Your own texting number). Until it is approved, text steps are skipped and the rest of the sequence still runs; the builder shows “SMS setup not complete” on those steps and your admins get one notification.",
+      },
+      {
+        q: "Why can't I delete an invoice?",
+        a: "Invoices with payments applied, locked invoices and invoices already sent to QuickBooks can't be deleted. Refund or unapply the payments, unlock the invoice, or (for a QuickBooks-synced invoice) void it so QuickBooks is updated too.",
+      },
+      {
+        q: "Does a refund return the card processing fee?",
+        a: "Yes. A full refund returns the processing fee the client paid; a partial refund returns the fee's matching share. Your books still show the refund against the invoice amount.",
+      },
+      {
+        q: "Why does a client's portal say their access is no longer active?",
+        a: "Their portal link was removed: someone used Reset portal access, the client was deleted, or the client portal was turned off for your company. Send them a new portal invite from the client's Details tab.",
+      },
+      {
+        q: "Can a property manager see their sub-accounts in the portal?",
+        a: "Yes. A client with sub-accounts sees the sub-accounts' invoices, estimates, visits and tickets when they sign in, each labelled with the sub-account's name. They can pay a sub-account's invoice and pick which account a new ticket is for.",
+      },
+      {
+        q: "Can clients turn autopay on or off themselves?",
+        a: "Yes. A client with a saved card has an Autopay switch on the portal Account page. Saving a card asks whether to use it for autopay (off by default), and removing the saved card turns autopay off.",
+      },
+      {
+        q: "Why does a contract show Inactive client when I click Create Invoices?",
+        a: "Contracts don't bill clients marked Inactive, Lost or Cancelled. Reactivate the client to bill the contract. Create Invoices always says why it skipped a contract (already billed, draft, not started, $0 month, not a billing month, or inactive client).",
+      },
+      {
+        q: "Do account credits earn commission?",
+        a: "No. Commission earned when paid counts only money actually received, so account credits and AR write-offs applied to an invoice earn none.",
+      },
+      {
+        q: "Which clients does the campaign All Clients audience include?",
+        a: "Active and inactive clients with an email address that can be emailed. Lost leads and cancelled clients are left out; reach them with the Leads or Past Clients audience. Do-not-market, opt-outs and bounced addresses are always skipped.",
+      },
+      {
+        q: "Why can't my crew confirm chemicals yet?",
+        a: "Chemicals can only be confirmed once the stop is running, so the application record has real start and end times. Tap Start Job first. Confirming records the crew foreman as the applicator, with their license number.",
+      },
+      {
+        q: "Why is the QuickBooks invoice stuck on “name exists as a vendor or employee”?",
+        a: "QuickBooks won't create a customer whose name already belongs to a vendor or employee. Rename the Landscapt client (or link it to the existing QuickBooks customer), then edit and save the invoice to retry.",
+      },
+      {
+        q: "How do I see what my crews need to load on the truck?",
+        a: "On the Dispatch Board, click Load List next to Stats. It shows the Daily Load List for the board's day, chemicals with concentrate and mix volume and other materials, grouped by crew, with Print and a link to the full report. It needs the View Report Center permission.",
+      },
+      {
         q: "How do I schedule a job or visit?",
         a: "Use the Scheduling section of the Landscapt left menu, not Settings. Scheduling > Dispatch Board is where you put a visit on a day and assign it to a crew; Scheduling > Waiting List is for jobs that only have a date range and no firm date yet, where each row has a Schedule button. Scheduling > Jobs lists every job. The Schedules page under Administration only holds the reusable recurrence patterns (weekly, bi-weekly, seasonal) that a recurring job's Schedule dropdown uses.",
       },
@@ -2022,6 +2091,46 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Use the Package visits toggle in the estimate's 'What the client sees' settings (it is off by default, and can also be set on an Estimate document or the org default). Off shows only the package name, wording and total. On lists each visit as a plain row under the package's main line. It applies to the proposal page, the client portal, the PDF and the [estimategrid] table in emails.",
       },
       {
+        q: "Can the Rate Matrix or chemical area use a custom number field I created?",
+        a: "Yes. Create a Number field under Settings > Custom Client Fields and it appears automatically in the Rate Matrix lookup list and in a service's Area measurement for chemical quantities. The value is read from the property first and then from the client, so enter it once on the client and override it on a property when it differs. Text, select and date fields can't be used.",
+      },
+      {
+        q: "How do I quote a spot treatment or part of a property so chemical quantities use that area?",
+        a: "On the estimate line open the notes menu and use the Treated Area tab to enter the sq ft you will actually treat. It carries to the job service when you convert, and you can also edit it on the job's Services tab. Materials Needed, the Daily Load List, the crew's preloaded amounts and the application panel use it instead of the property measurement. Leave it blank to use the property's measurement.",
+      },
+      {
+        q: "How do I make a service like parking-lot weed control use the Parking Lot square footage?",
+        a: "Open the service, go to its Chemicals tab and set Area measurement for chemical quantities to Parking Lot / Hardscape Sq. Ft. Without it the service uses the org's Area Custom Field from Settings > Chemical Tracking (for example Turf Sq. Ft.). A treated area on the job service overrides both.",
+      },
+      {
+        q: "How do I skip one step of a package on an estimate?",
+        a: "Set that visit's status to Draft. Draft and Lost visits are excluded from the package subtotal, the estimate total and the proposal, and the client still sees one package line. Set it back to Quote to include it again.",
+      },
+      {
+        q: "How do I delete a whole package from an estimate?",
+        a: "Click the trash icon on the package's header row and confirm. The header and all of its visits are deleted together.",
+      },
+      {
+        q: "How do I copy the first package visit's values to the other visits?",
+        a: "On the package header row use the copy buttons (Qty, Rate, B.Hr, Cost, Adj Rate or All). Each copies that value from the first visit to every other visit in the package and recalculates the totals.",
+      },
+      {
+        q: "How do I change the status of or delete several estimate line items at once?",
+        a: "Tick the lines in the grid (the header checkbox selects all lines). A bar appears above the grid with Change Status, Rate Increase and Delete. Delete asks you to confirm.",
+      },
+      {
+        q: "How do I copy a service's rate matrix to other services?",
+        a: "Open the service, go to its Rate Matrix tab and click Copy to other services. Tick the services and click Copy. The rows, lookup field and overflow rule are copied, replacing any matrix the targets already have. Rate matrix edits save when you click out of a field.",
+      },
+      {
+        q: "How do I price a property larger than my last rate matrix row without adding hundreds of rows?",
+        a: "Use the Overflow rule on the service's Rate Matrix tab: Every Y over X is $R more, plus hours and cost. At or above X, the estimate starts from the last row and adds one increment for each full Y, counting the first interval. It takes priority over a Tail row.",
+      },
+      {
+        q: "How do I see which estimate or invoice an audit log entry belongs to?",
+        a: "In the Audit Log report (Report Center, Audits) use the Record column. It shows the estimate or invoice number, PO number, client name, contract title, project name, job number, service, package or crew that changed.",
+      },
+      {
         q: "What happens when I convert an estimate that has a package on it?",
         a: "Convert to Job creates a Package job instead of a plain job, with the package, its total steps, each step's date window (with Min Days spacing), the package's invoice description and one visit per dated step. Convert one package at a time, and not in the same pass as ordinary lines; the convert window has a button per package and locks Job Type to Package. Scheduled Date acts as a Program Start Date that moves every step window by the same number of days.",
       },
@@ -2050,6 +2159,26 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "My Day opens scoped to you. Mine shows tickets assigned to you or where you're a contributor, estimates where you're the sales rep, and meetings assigned to you; Everyone shows the whole company's. A My Upcoming Meetings card lists your next seven days of meetings. Breadcrumbs across the top of list pages are clickable to jump back to the section.",
       },
       {
+        q: "Why does the Clients list only show 100 clients when the count says more?",
+        a: "The list loads clients 100 at a time to stay fast for large client lists. Scroll down and the next 100 load automatically, or click 'Load more' at the bottom. The count at the top is the true number of matches, and search, filters and Export always cover every client, not just the ones on screen.",
+      },
+      {
+        q: "My City filter doesn't match the address shown in the Clients table. Why?",
+        a: "There are two city filters. 'Billing City' filters on the billing address. The table's 'Service Address' column shows where the work is done, and 'Service City' is the filter that matches it. Use Service City to find everyone serviced in a town.",
+      },
+      {
+        q: "Where did the 'Active Service' filter go?",
+        a: "It was replaced by 'Has Scheduled Job For' (clients with an upcoming visit for that service) and 'Has Completed Job For' (clients with a completed visit for it). The old Active Service filter in the Table view didn't actually filter anything; the new ones work in both List and Table, and you can pick several services at once.",
+      },
+      {
+        q: "I can't find a client in a client picker or in Link Parent Account. Where is it?",
+        a: "Client pickers search as you type and show up to 50 matches. If the client isn't in the first 50, type part of the name, the account number, a phone number or part of the address. In Link Parent Account, clients that already have a parent are never offered, and a client that has sub-accounts of its own can't be linked under a parent at all, since the hierarchy is one level deep.",
+      },
+      {
+        q: "Does exporting clients export everyone or just what I'm looking at?",
+        a: "Clients > Import / Export > Export downloads every client that matches your current search and filters, including the ones not yet loaded on screen. Clear the search box and filters first if you want the whole client list.",
+      },
+      {
         q: "A refund or chargeback didn't update in QuickBooks. What now?",
         a: "Open Settings > Accounting > Sync Status. The payment is listed with the reason; click Retry (it needs the QuickBooks Resync permission) and Landscapt re-runs the void or reduction on the QuickBooks payment and clears the error once it goes through.",
       },
@@ -2064,6 +2193,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "When does an invoice count as overdue, and who gets contract and estimate expiry reminders?",
         a: "An unpaid invoice is overdue once its due day has passed; one on Due on Receipt terms with no due date goes overdue the day after its invoice date, and an invoice with no balance left is never overdue. About three days before an open estimate expires, its creator is reminded (its sales rep when there is no creator). Contract expiry warnings go only for signed or active contracts, never for cancelled, expired or draft ones. A snow job whose contract has ended no longer shows on the Snow Jobs board, and its completed visits bill per visit.",
+      },
+      {
+        q: "How do I set up a contract that bills only some months, at different amounts?",
+        a: "Leave the contract's Billing Frequency on Monthly and fill in the 12-month grid in Invoice Details: enter each billed month's own amount and leave the other months at $0.00 — a $0 month is skipped, so an April–November contract sends 8 invoices a year, each for that month's amount. The line under the grid shows the yearly total as you type. On the contracts list (and the client's contract badge) it reads like '$4,100.00 / yr · 8 months (varies)', and the CSV export says 'varies by month' in Amount per invoice with the total in Yearly Total. If every billed month is the same, it reads '$500.00 / month · 8 months'.",
+      },
+      {
+        q: "How do I bill a contract quarterly, yearly, weekly or once?",
+        a: "Open the contract, go to Contract Details > Invoice Details and pick a Billing Frequency. Enter the Amount per invoice — the amount charged every time it bills, not a monthly figure: a $3,000-a-quarter contract is $3,000, a $12,000-a-year contract is $12,000. The dialog shows when it will bill (for example 'Invoices in Jan, Apr, Jul, Oct'), counted from the start date. Quarterly and annual contracts bill on the Billing Day of Month in those months; weekly and every-2-weeks contracts bill every 7 or 14 days from the start date; a one-time contract bills once, on or after the start date. Changing the frequency of a signed or active contract flags it 'Changed since signed — needs client approval'.",
       },
       {
         q: "Why can't a crew member edit punches on a visit?",
@@ -2182,6 +2319,26 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Users & Settings",
     items: [
+      {
+        q: "Why does Settings → Clients say my next account number is too low?",
+        a: "The next account number can't be set at or below the highest account number already in use, so new clients never collide with existing ones. Leave it as shown, or pick a higher number.",
+      },
+      {
+        q: "Why does changing the timezone ask me to confirm?",
+        a: "The company timezone decides what “today” means everywhere: the dispatch board, crew days, billing dates and reports. Landscapt asks before changing it.",
+      },
+      {
+        q: "Why can't I change someone's Landscapt role on their employee record?",
+        a: "Only an admin can change an employee's Landscapt Role or link or unlink their login. Other roles see those controls disabled.",
+      },
+      {
+        q: "Why can't I deactivate a role?",
+        a: "Employees still hold it, and an inactive role grants nothing, so they would lose Landscapt access. Move them to another role first.",
+      },
+      {
+        q: "Where is the owner's employee record?",
+        a: "Signing up creates an employee record for the owner with the Owner role, so the owner can be picked as a sales rep or assignee and sees their own items in My Day. My Day shows Everyone for a login with no employee record.",
+      },
       {
         q: "Which Landscapt role permissions are actually enforced, and which only hide things?",
         a: "Most are enforced on the server, so a role without them is refused even through another route. Newly enforced: changing a client's Office Notes needs View Notes; changing the stored card or turning autopay on needs View Credit Card #'s plus Add/Modify Payments; changing a client balance directly needs View Balance plus Add/Modify Credits. Still hide-only: View Notes, View Credit Card #'s, View Balance, View Billing and Export Lists decide what the screen shows, but a login that queries the data directly could still read it, and exports are built in the browser from rows already loaded. Admins always pass.",

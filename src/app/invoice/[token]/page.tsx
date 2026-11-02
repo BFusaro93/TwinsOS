@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Loader2, CheckCircle2 } from "lucide-react";
@@ -99,8 +99,8 @@ export default function PublicInvoicePage() {
   // loadError, which replaces the whole page — the invoice itself loaded fine.
   const [payError, setPayError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch(`/api/public/invoices/${token}`)
+  const loadInvoice = useCallback(() => {
+    return fetch(`/api/public/invoices/${token}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load invoice");
@@ -108,6 +108,18 @@ export default function PublicInvoicePage() {
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load invoice"));
   }, [token]);
+
+  useEffect(() => {
+    void loadInvoice();
+  }, [loadInvoice]);
+
+  // The success note promises the balance will update once the payment is confirmed —
+  // the webhook records it a few seconds later, so poll a handful of times.
+  useEffect(() => {
+    if (!paySucceeded) return;
+    const timers = [3000, 8000, 15000].map((ms) => setTimeout(() => void loadInvoice(), ms));
+    return () => timers.forEach(clearTimeout);
+  }, [paySucceeded, loadInvoice]);
 
   async function handleStartPay() {
     setCreatingIntent(true);

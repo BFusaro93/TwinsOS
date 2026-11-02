@@ -20,6 +20,7 @@ import type { CRMSequence, CRMSequenceEvent, EventType } from "@/types/crm-autom
 import { EventCard } from "./EventCard";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   sequence: CRMSequence;
@@ -56,7 +57,7 @@ export function SequenceColumn({
   function handleDelete(ev: CRMSequenceEvent) {
     deleteEvent.mutate(
       { id: ev.id, sequenceId: ev.sequenceId },
-      { onError: () => toast.error("Failed to delete event") }
+      { onError: (err) => toast.error(mutationErrorMessage(err, "Failed to delete event")) }
     );
   }
 
@@ -129,7 +130,7 @@ export function SequenceColumn({
                 automationId: sequence.automationId,
                 updates: { isActive: checked },
               },
-              { onError: () => toast.error("Failed to update sequence") }
+              { onError: (err) => toast.error(mutationErrorMessage(err, "Failed to update sequence")) }
             )
           }
         />

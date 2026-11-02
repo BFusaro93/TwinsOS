@@ -1,17 +1,28 @@
 "use client";
 
 import { Fragment, useState, useCallback, useEffect } from "react";
-import { fetchClientAreaValues, fetchPropertyAreaValues } from "@/lib/chemical-area";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import { bpsToPercent, centsToDisplay, clampComplexityBps, computeLineItem, getBreakevenRateCents, resolveLineDiscountCents } from "@/lib/estimate-calc";
-import { useUpsertLineItem, useDeleteLineItem } from "@/lib/hooks/use-estimates";
+import { useUpsertLineItem, useDeleteLineItem, useEstimateSubitemTotals } from "@/lib/hooks/use-estimates";
+import { packageGroupLineIds } from "@/lib/estimates/package-group";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { useClient, useClientProperties } from "@/lib/hooks/use-clients";
 import { useCustomFieldDefs, useClientCustomFieldValues } from "@/lib/hooks/use-client-custom-fields";
-import { usePropertyCustomFieldValues, lookupRateMatrixMatch, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
+import { fetchFieldValueWithClientFallback } from "@/lib/chemical-area";
+import { usePropertyCustomFieldValues, lookupRateMatrixMatch, applyMatrixTail, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
 import { createClient } from "@/lib/supabase/client";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { usePackages } from "@/lib/hooks/use-packages";
@@ -25,7 +36,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { Trash2, Copy, Package as PackageIcon, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical, AlertTriangle, Printer } from "lucide-react";
+import { Trash2, Copy, Package as PackageIcon, Plus, ChevronDown, ChevronRight, Pencil, Heading2, GripVertical, AlertTriangle, Printer, ArrowDownToLine } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -58,6 +69,7 @@ import {
 import type { EstimateLineItem, LineItemStatus } from "@/types/crm-estimates";
 import type { CRMDiscount } from "@/types/crm-discounts";
 import type { BudgetMethod } from "@/types/crm-jobs";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const UNIT_TYPES = ["sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 
@@ -125,7 +137,7 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
 
   async function handleDelete(s: LineItemSubitem) {
     try { await deleteSubitem({ id: s.id, lineItemId }); }
-    catch { toast.error("Failed to delete sub-item"); }
+    catch (err) { toast.error(mutationErrorMessage(err, "Failed to delete sub-item")); }
   }
 
   return (
@@ -213,15 +225,28 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
 
 // ── Section header row ────────────────────────────────────────────────────────
 
+export type FillDownField = "qty" | "rate" | "hours" | "cost" | "adj" | "all";
+
+const FILL_DOWN_BUTTONS: { field: FillDownField; label: string }[] = [
+  { field: "qty", label: "Qty" },
+  { field: "rate", label: "Rate" },
+  { field: "hours", label: "B.Hr" },
+  { field: "cost", label: "Cost" },
+  { field: "adj", label: "Adj Rate" },
+  { field: "all", label: "All" },
+];
+
 function SectionRow({
   item,
   estimateId,
   onDelete,
+  onFillDown,
   tiersEnabled,
 }: {
   item: EstimateLineItem;
   estimateId: string;
   onDelete: (id: string, estimateId: string) => void;
+  onFillDown: (packageId: string, field: FillDownField, headerId?: string) => void;
   tiersEnabled?: boolean;
 }) {
   const upsert = useUpsertLineItem();
@@ -304,12 +329,33 @@ function SectionRow({
               <button
                 type="button"
                 onClick={() => setEditingDesc(true)}
-                className="text-left text-muted-foreground hover:text-foreground"
+                className="flex w-full max-w-2xl items-start gap-1.5 rounded border border-dashed border-slate-300 dark:border-neutral-600 bg-background/60 px-2 py-1 text-left text-muted-foreground hover:border-brand-400 hover:text-foreground"
                 title="Click to edit the description the client sees"
               >
-                {item.estimateDesc ? item.estimateDesc : "Add package description for the client…"}
+                <Pencil className="mt-0.5 h-3 w-3 shrink-0" />
+                <span>
+                  <span className="font-medium text-foreground">Description on estimate: </span>
+                  {item.estimateDesc ? item.estimateDesc : "none yet — click to add the wording the client sees"}
+                </span>
               </button>
             )}
+          </div>
+        )}
+        {item.packageId && (
+          <div className="mt-1 flex flex-wrap items-center gap-1 pl-12 text-[10px] text-muted-foreground">
+            <ArrowDownToLine className="h-3 w-3" />
+            <span>Copy the first visit&rsquo;s value to every visit:</span>
+            {FILL_DOWN_BUTTONS.map((b) => (
+              <button
+                key={b.field}
+                type="button"
+                onClick={() => onFillDown(item.packageId as string, b.field, item.id)}
+                className="rounded border border-slate-300 dark:border-neutral-600 px-1.5 py-0.5 hover:border-brand-400 hover:text-foreground"
+                title={b.field === "all" ? "Copy qty, rate, calc, budgeted hours, cost and adjusted rate" : `Copy ${b.label} from the first visit to the rest`}
+              >
+                {b.label}
+              </button>
+            ))}
           </div>
         )}
       </td>
@@ -431,8 +477,8 @@ function LineItemRow({
         },
       });
       setDirty(false);
-    } catch {
-      toast.error("Failed to save line item");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save line item"));
     }
   }
 
@@ -450,9 +496,9 @@ function LineItemRow({
           applied_discount_id: patch.appliedDiscountId,
         },
       });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to update discount");
+      toast.error(mutationErrorMessage(err, "Failed to update discount"));
     }
   }
 
@@ -484,9 +530,9 @@ function LineItemRow({
           discount_cents: merged.discountCents,
         },
       });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to update budgeted hours");
+      toast.error(mutationErrorMessage(err, "Failed to update budgeted hours"));
     }
   }
 
@@ -500,11 +546,12 @@ function LineItemRow({
           job_note: notes.jobNote,
           invoice_desc: notes.invoiceDesc,
           internal_note: notes.internalNote,
+          treated_area: notes.treatedArea,
         },
       });
       setRow((r) => ({ ...r, ...notes }));
-    } catch {
-      toast.error("Failed to save notes");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save notes"));
     }
   }
 
@@ -534,9 +581,9 @@ function LineItemRow({
           discount_cents: next.discountCents,
         },
       });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to save complexity adjustment");
+      toast.error(mutationErrorMessage(err, "Failed to save complexity adjustment"));
     }
   }
 
@@ -641,8 +688,8 @@ function LineItemRow({
                 setRow((r) => ({ ...r, tier: val }));
                 try {
                   await upsert({ estimateId, item: { id: row.id, tier: val } });
-                } catch {
-                  toast.error("Failed to save tier");
+                } catch (err) {
+                  toast.error(mutationErrorMessage(err, "Failed to save tier"));
                 }
               }}
               className="w-full rounded border border-border bg-card px-1 py-0.5 text-[10px] focus:outline-none"
@@ -656,7 +703,13 @@ function LineItemRow({
         )}
 
         {/* Service name + expand chevron */}
-        <td className="min-w-[160px] px-2 py-1.5 font-semibold text-slate-900 dark:text-neutral-100">
+        <td
+          className={cn(
+            "min-w-[160px] px-2 py-1.5 font-semibold text-slate-900 dark:text-neutral-100",
+            // A package's visits sit under its header, indented like sub-items on other lines.
+            item.packageId && "border-l-2 border-brand-300 dark:border-brand-700 pl-6"
+          )}
+        >
           <div className="flex items-center gap-1">
             <button
               onClick={() => onToggleExpand(item.id)}
@@ -870,7 +923,7 @@ function LineItemRow({
             />
             <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
             <LineItemNotesPopover
-              notes={{ estimateDesc: row.estimateDesc ?? null, jobNote: row.jobNote ?? null, invoiceDesc: row.invoiceDesc ?? null, internalNote: row.internalNote ?? null }}
+              notes={{ estimateDesc: row.estimateDesc ?? null, jobNote: row.jobNote ?? null, invoiceDesc: row.invoiceDesc ?? null, internalNote: row.internalNote ?? null, treatedArea: row.treatedArea ?? null }}
               onSave={saveNotes}
             />
             <button
@@ -989,13 +1042,18 @@ interface Props {
   /** The estimate's property, if set — drives Rate Matrix lookups when a service being added has matrix rows keyed off one of this property's custom field values. */
   propertyId?: string | null;
   items: EstimateLineItem[];
+  /** Every live line on the estimate, not just the ones the status tab shows — package
+   *  delete and fill-down act on the whole package, including hidden visits. */
+  allItems?: EstimateLineItem[];
   selectedIds?: string[];
   onSelectionChange?: (ids: string[]) => void;
   tiersEnabled?: boolean;
   onItemStatusChange?: (status: LineItemStatus) => void;
 }
 
-export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items, selectedIds = [], onSelectionChange, tiersEnabled = false, onItemStatusChange }: Props) {
+export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items, allItems, selectedIds = [], onSelectionChange, tiersEnabled = false, onItemStatusChange }: Props) {
+  const everyItem = allItems ?? items;
+  const { data: subitemTotals = {} } = useEstimateSubitemTotals(estimateId);
   const { data: services } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
@@ -1045,16 +1103,93 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
 
+  // Deleting a package's header takes all of its visits with it, after a confirm.
+  const [packageDelete, setPackageDelete] = useState<{ id: string; name: string; lineIds: string[] } | null>(null);
+
   const handleDelete = useCallback(
     async (id: string) => {
+      const target = everyItem.find((i) => i.id === id);
+      // The package's own visits, by position from the full list: lines hidden by the status
+      // tab are still part of it, and a second copy of the same package is a separate group.
+      const groupIds = target?.rowType === "section" && target.packageId ? packageGroupLineIds(id, everyItem) : [];
+      if (groupIds.length > 0) {
+        setPackageDelete({ id, name: target?.sectionName ?? "this package", lineIds: groupIds });
+        return;
+      }
       try {
         await deleteItem({ id, estimateId });
-      } catch {
-        toast.error("Failed to delete line item");
+      } catch (err) {
+        toast.error(mutationErrorMessage(err, "Failed to delete line item"));
       }
     },
-    [deleteItem, estimateId]
+    [deleteItem, estimateId, everyItem]
   );
+
+  async function confirmPackageDelete() {
+    const pending = packageDelete;
+    setPackageDelete(null);
+    if (!pending) return;
+    try {
+      for (const lineId of pending.lineIds) await deleteItem({ id: lineId, estimateId });
+      await deleteItem({ id: pending.id, estimateId });
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to delete the package"));
+    }
+  }
+
+  /** SA-style fill down: copy the package's first visit's value(s) onto every other visit,
+   *  recomputing each line's totals the same way editing the cell would. */
+  async function fillPackageDown(packageId: string, field: FillDownField, headerId?: string) {
+    // This header's own visits only (a package added twice is two groups).
+    const groupIds = headerId ? new Set(packageGroupLineIds(headerId, everyItem)) : null;
+    const lines = everyItem.filter((i) =>
+      !i.deletedAt && i.rowType !== "section" && (groupIds ? groupIds.has(i.id) : i.packageId === packageId)
+    );
+    const [first, ...rest] = lines;
+    if (!first || rest.length === 0) return;
+    const pick = (src: EstimateLineItem): Partial<EstimateLineItem> => {
+      switch (field) {
+        case "qty": return { qty: src.qty };
+        case "rate": return { rateCents: src.rateCents };
+        case "hours": return { budgetedHours: src.budgetedHours };
+        case "cost": return { costCents: src.costCents };
+        case "adj": return { adjRateCents: src.adjRateCents };
+        default: return {
+          qty: src.qty, rateCents: src.rateCents, calcType: src.calcType,
+          budgetedHours: src.budgetedHours, costCents: src.costCents, adjRateCents: src.adjRateCents,
+        };
+      }
+    };
+    try {
+      for (const line of rest) {
+        const next = { ...line, ...pick(first) };
+        const computed = computeLineItem(next, breakevenRateCents);
+        const merged = { ...next, ...computed };
+        const withDiscount = { ...merged, discountCents: resolveLineDiscountCents(merged) };
+        await upsert({
+          estimateId,
+          item: {
+            id: line.id,
+            calc_type: withDiscount.calcType,
+            qty: withDiscount.qty,
+            rate_cents: withDiscount.rateCents,
+            total_cents: withDiscount.totalCents,
+            discount_cents: withDiscount.discountCents,
+            budgeted_hours: withDiscount.budgetedHours,
+            total_budgeted_hours: withDiscount.totalBudgetedHours,
+            cost_cents: withDiscount.costCents,
+            total_cost_cents: withDiscount.totalCostCents,
+            margin_bps: withDiscount.marginBps,
+            markup_bps: withDiscount.markupBps,
+            adj_rate_cents: withDiscount.adjRateCents,
+          },
+        });
+      }
+      toast.success(`Copied from "${first.serviceName}" to ${rest.length} other visit${rest.length !== 1 ? "s" : ""}`);
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to copy the values down"));
+    }
+  }
 
   const handleDuplicate = useCallback(
     async (item: EstimateLineItem) => {
@@ -1093,11 +1228,12 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
             job_note: item.jobNote,
             invoice_desc: item.invoiceDesc,
             internal_note: item.internalNote,
+            treated_area: item.treatedArea,
             sort_order: items.length,
           },
         });
-      } catch {
-        toast.error("Failed to duplicate line item");
+      } catch (err) {
+        toast.error(mutationErrorMessage(err, "Failed to duplicate line item"));
       }
     },
     [upsert, estimateId, items.length]
@@ -1137,7 +1273,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       : null;
     // A package step's rate is a per-visit price (lockRate), not a per-sq-ft rate:
     // never multiply it by the client's takeoff.
-    const qty = svc.lockRate ? 1 : (takeoffQty ?? 1);
+    let qty = svc.lockRate ? 1 : (takeoffQty ?? 1);
 
     // Rate Matrix override: if this service has banded rows keyed off a
     // property custom field, and the estimate has a property with a value
@@ -1152,9 +1288,11 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     let matrixBudgetedHours: number | null = svc.budgetedHours ?? null;
     let matrixCostCents: number | null = null;
     let matrixProductionRate: number | null = null;
-    // A package service carries its own per-visit price (lockRate), which the
-    // Rate Matrix must not silently replace.
-    if (svc.id && (propertyId || clientId) && !svc.lockRate) {
+    // A package step's own price (lockRate) is only the fallback: when the service
+    // has Rate Matrix rows keyed off a property field (e.g. Turf Sq. Ft.) that the
+    // estimate's property has a value for, the matched band prices the visit, so a
+    // package honors custom fields the same as the service added on its own.
+    if (svc.id && (propertyId || clientId)) {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: matrixRows } = await (supabase as any)
@@ -1174,18 +1312,13 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       // line. The matrix rows are already being fetched here on the same
       // round trip; one more point lookup removes the race entirely instead of
       // just narrowing it.
-      let propertyValue: number | null = null;
-      if (customFieldId) {
-        // The property's own value first (a custom value, or the built-in Turf Sq. Ft.
-        // column behind it), then the client's own figure — the estimate may be for the
-        // client's address with no property chosen, and that's where its measurements live.
-        if (propertyId) {
-          propertyValue = (await fetchPropertyAreaValues(supabase, customFieldId, [propertyId])).get(propertyId) ?? null;
-        }
-        if (propertyValue == null && clientId) {
-          propertyValue = (await fetchClientAreaValues(supabase, customFieldId, [clientId])).get(clientId) ?? null;
-        }
-      }
+      // Property value first (custom value, then the property's own takeoff
+      // column), then the client's value for the same field — so a number
+      // entered once on the client prices every estimate without a property,
+      // and a property can override it.
+      const propertyValue: number | null = customFieldId
+        ? await fetchFieldValueWithClientFallback(supabase, customFieldId, propertyId ?? null, clientId ?? null)
+        : null;
       if (rows.length > 0 && propertyValue != null) {
         const mapped: RateMatrixRow[] = rows.map((r) => ({
           id: r.id as string,
@@ -1203,7 +1336,34 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           tailEveryQty: r.tail_every_qty != null ? Number(r.tail_every_qty) : null,
           tailOverQty: r.tail_over_qty != null ? Number(r.tail_over_qty) : null,
         }));
-        const match = lookupRateMatrixMatch(mapped, propertyValue);
+        let match = lookupRateMatrixMatch(mapped, propertyValue);
+        // Past the end of the bands: the service's overflow rule ("every Y over
+        // X adds $R") takes over from a tail row or the flat rate.
+        if (!match || match.isTailRow) {
+          const { data: tailSvc } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+            .from("crm_services")
+            .select("matrix_tail_every_qty, matrix_tail_over_qty, matrix_tail_rate_cents, matrix_tail_hours, matrix_tail_cost_cents")
+            .eq("id", svc.id)
+            .maybeSingle();
+          if (tailSvc) {
+            match = applyMatrixTail(mapped, propertyValue, {
+              everyQty: Number(tailSvc.matrix_tail_every_qty ?? 0),
+              overQty: Number(tailSvc.matrix_tail_over_qty ?? 0),
+              rateCents: tailSvc.matrix_tail_rate_cents ?? 0,
+              hours: Number(tailSvc.matrix_tail_hours ?? 0),
+              costCents: tailSvc.matrix_tail_cost_cents ?? 0,
+            }) ?? match;
+          }
+        }
+        // A package step with its own price under a per-unit band: the visit's quantity is the
+        // client's takeoff, else the very value the band was matched on. With no quantity at
+        // all, keep the step's locked price rather than one unit of a per-sq-ft rate.
+        let packageBandQty: number | null = null;
+        if (match && svc.lockRate && match.calcType === 1) {
+          packageBandQty = (isAreaUnit(unit) ? resolveTakeoffSqft(svc.name, takeoff) : null)
+            ?? (propertyValue > 0 ? propertyValue : null);
+          if (packageBandQty == null) match = null;
+        }
         if (match) {
           calcType = match.calcType;
           effectiveRateCents = match.rateCents;
@@ -1223,6 +1383,9 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           // shouldn't scale with qty, and a per-unit row on a non-area unit
           // can't be stated as a sq ft/hr production rate at all — both keep
           // the manual snapshot.
+          // A per-unit band on an area line prices per sq ft, so a package visit
+          // (qty forced to 1 above) needs the client's takeoff as its quantity.
+          if (packageBandQty != null) qty = packageBandQty;
           if (match.calcType === 1 && match.budgetedHours > 0 && isAreaUnit(unit)) {
             matrixProductionRate = 1 / match.budgetedHours;
             budgetMethod = "production_rate";
@@ -1289,8 +1452,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         });
       }
       return true;
-    } catch {
-      toast.error("Failed to add item");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add item"));
       return false;
     }
   }
@@ -1306,6 +1469,12 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
    * Lines carry tier = null (all tiers), exactly like any other added line.
    */
   async function addPackage(pkg: CRMPackage) {
+    // Two copies of one package share a package_id, which converts into a single package job
+    // and confuses delete/fill-down; edit the visits of the existing one instead.
+    if (everyItem.some((i) => !i.deletedAt && i.rowType === "section" && i.packageId === pkg.id)) {
+      toast.error(`"${pkg.name}" is already on this estimate — change its visits instead of adding it again`);
+      return;
+    }
     const steps = [...(pkg.services ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
     if (steps.length === 0) {
       toast.error(`"${pkg.name}" has no services — add them in CRM Settings → Packages`);
@@ -1360,8 +1529,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           return;
         }
       }
-    } catch {
-      toast.error("Failed to add package");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add package"));
     }
   }
 
@@ -1383,8 +1552,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           calc_type: 1,
         },
       });
-    } catch {
-      toast.error("Failed to add section");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add section"));
     }
   }
 
@@ -1410,7 +1579,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
 
   function toggleSelectAll() {
     if (!onSelectionChange) return;
-    onSelectionChange(selectedIds.length === items.length ? [] : items.map((i) => i.id));
+    const selectable = items.filter((i) => i.rowType !== "section").map((i) => i.id);
+    onSelectionChange(selectedIds.length === selectable.length ? [] : selectable);
   }
 
   const activeServices = (services ?? []).filter((s) => s.isActive);
@@ -1488,6 +1658,12 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           {filteredServices.length === 0 && filteredProducts.length === 0 && lc && (
             <div className="px-3 py-3 text-xs text-slate-400 dark:text-neutral-500">No results for &ldquo;{search}&rdquo;</div>
           )}
+          {activeServices.length === 0 && !lc && (
+            // A new org has no catalog yet: point at where services are set up.
+            <a href="/crm/settings?tab=services" className="block px-3 py-2 text-xs text-brand-600 dark:text-brand-400 hover:underline">
+              No services yet — add your services in Settings → Services
+            </a>
+          )}
           <div className="mt-1 border-t">
             <button
               className="flex w-full items-center px-3 py-1.5 text-xs text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
@@ -1547,7 +1723,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
               <th className="w-12 px-1 py-2 text-center">
                 <input
                   type="checkbox"
-                  checked={items.length > 0 && selectedIds.length === items.length}
+                  checked={items.some((i) => i.rowType !== "section") && selectedIds.length === items.filter((i) => i.rowType !== "section").length}
                   onChange={toggleSelectAll}
                   className="h-3.5 w-3.5 rounded border-slate-300 dark:border-neutral-700"
                 />
@@ -1583,9 +1759,17 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                 {items.map((item, idx) => {
                   const next = items[idx + 1];
                   const endsPackage = !!item.packageId && item.rowType !== "section" && next?.packageId !== item.packageId;
-                  const packageTotal = endsPackage
-                    ? items.filter((i) => i.packageId === item.packageId && i.rowType !== "section").reduce((sum, i) => sum + (i.totalCents ?? 0), 0)
-                    : 0;
+                  // The contiguous run of this package's lines ending here, priced like the
+                  // estimate total: net of line discounts, plus priced sub-items.
+                  let packageTotal = 0;
+                  if (endsPackage) {
+                    for (let j = idx; j >= 0; j--) {
+                      const row = items[j];
+                      if (row.rowType === "section" || row.packageId !== item.packageId) break;
+                      if (row.status !== "quote" && row.status !== "won") continue;
+                      packageTotal += Math.max(0, (row.totalCents ?? 0) - (row.discountCents ?? 0)) + (subitemTotals[row.id] ?? 0);
+                    }
+                  }
                   return (
                   <Fragment key={item.id}>
                   {item.rowType === "section" ? (
@@ -1594,6 +1778,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                       item={item}
                       estimateId={estimateId}
                       onDelete={handleDelete}
+                      onFillDown={fillPackageDown}
                       tiersEnabled={tiersEnabled}
                     />
                   ) : (
@@ -1627,6 +1812,22 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         </table>
         </DndContext>
       </div>
+
+      <AlertDialog open={packageDelete !== null} onOpenChange={(o) => { if (!o) setPackageDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete package?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &ldquo;{packageDelete?.name}&rdquo; and its {packageDelete?.lineIds.length} visit
+              {packageDelete?.lineIds.length !== 1 ? "s" : ""} will be removed from this estimate.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmPackageDelete}>Delete package</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

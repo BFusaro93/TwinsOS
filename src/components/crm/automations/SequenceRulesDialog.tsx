@@ -32,12 +32,14 @@ import { ConditionListEditor, type ConditionRow } from "./ConditionListEditor";
 import { validateConditionRows } from "@/lib/automations/custom-field-condition";
 import { MultiSelectDropdown } from "@/components/shared/MultiSelectDropdown";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
 import { useOrgTags } from "@/lib/hooks/use-clients";
 import { usePackages } from "@/lib/hooks/use-packages";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { PAYMENT_METHOD_OPTIONS } from "@/components/crm/ClientDetailPanel";
 import { availableRecordKinds } from "@/lib/automations/condition-applicability";
 import type { TriggerType, TriggerConfig } from "@/types/crm-automations";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // Trigger types that fire off a day-count gap rather than an event — the
 // builder shows a "days" input for these instead of just the type selector.
@@ -240,7 +242,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   const sequence = sequences?.find((s) => s.id === sequenceId);
   const updateSequence = useUpdateSequence();
   const { data: services } = useCRMServices();
-  const { data: clientSources } = useOrgList("client_sources");
+  const { options: clientSources } = useClientSourceOptions();
   const { data: ticketCategories } = useOrgList("ticket_categories");
   const orgTags = useOrgTags();
   const { data: packages } = usePackages();
@@ -249,7 +251,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
 
   const FILTER_OPTIONS: Record<FilterKind, { value: string; label: string }[]> = {
     service: (services ?? []).map((s) => ({ value: s.id, label: s.name })),
-    source: (clientSources ?? []).map((o) => ({ value: o.value, label: o.value })),
+    source: clientSources.map((v) => ({ value: v, label: v })),
     category: (ticketCategories ?? []).map((o) => ({ value: o.value, label: o.value })),
     job_type: JOB_TYPE_OPTIONS,
     package: (packages ?? []).map((p) => ({ value: p.id, label: p.name })),
@@ -482,7 +484,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
 
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save sequence rules");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to save sequence rules"));
     } finally {
       setSaving(false);
     }

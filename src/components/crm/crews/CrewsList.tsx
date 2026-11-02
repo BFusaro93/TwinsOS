@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   useCrews,
   useCrewLogins,
@@ -34,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Users, X } from "lucide-react";
+import { ChevronDown, Plus, Users, X } from "lucide-react";
 import { PermissionGate, useGate } from "@/components/shared/PermissionGate";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { toast } from "sonner";
@@ -44,6 +45,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -77,38 +79,40 @@ function DayOfWeekSelect({
     : `${value.length} selected`;
 
   return (
-    <div className="relative">
-      <Select>
-        <SelectTrigger className="h-8 text-sm w-36">
+    // A Popover of real checkboxes: the old Select had no items, so keyboard users got an
+    // open listbox that arrows and typeahead couldn't move through.
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" className="h-8 w-36 justify-between px-3 text-sm font-normal">
           <span>{label}</span>
-        </SelectTrigger>
-        <SelectContent>
-          {DAYS_SHORT.map((day, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
-              onClick={() => {
+          <ChevronDown className="h-3.5 w-3.5 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-44 p-1">
+        {DAYS_SHORT.map((day, i) => (
+          <label
+            key={i}
+            className="flex min-h-9 items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
+          >
+            <Checkbox
+              checked={value.includes(i)}
+              onCheckedChange={() => {
                 const next = value.includes(i)
                   ? value.filter((d) => d !== i)
                   : [...value, i].sort();
                 onChange(next);
               }}
-            >
-              <Checkbox checked={value.includes(i)} className="pointer-events-none" />
-              <span className="text-sm">{day}</span>
-            </div>
-          ))}
-          <div className="border-t mx-2 my-1" />
-          <div
-            className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40"
-            onClick={() => onChange(allSelected ? [] : [...ALL_DAYS])}
-          >
-            <Checkbox checked={allSelected} className="pointer-events-none" />
-            <span className="text-sm font-medium">Select All</span>
-          </div>
-        </SelectContent>
-      </Select>
-    </div>
+            />
+            <span className="text-sm">{day}</span>
+          </label>
+        ))}
+        <div className="border-t mx-2 my-1" />
+        <label className="flex min-h-9 items-center gap-2 rounded px-2 py-1.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-muted/40">
+          <Checkbox checked={allSelected} onCheckedChange={() => onChange(allSelected ? [] : [...ALL_DAYS])} />
+          <span className="text-sm font-medium">Select All</span>
+        </label>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -163,8 +167,8 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
   async function handleChangeDays(member: CRMCrewMember, days: number[]) {
     try {
       await updateMember({ id: member.id, updates: { days_of_week: days } });
-    } catch {
-      toast.error("Failed to update days");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to update days"));
     }
   }
 
@@ -172,16 +176,16 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
     const cents = Math.round((parseFloat(dollarStr) || 0) * 100);
     try {
       await updateMember({ id: member.id, updates: { labor_burden_cents_per_hour: cents } });
-    } catch {
-      toast.error("Failed to update labor burden rate");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to update labor burden rate"));
     }
   }
 
   async function handleRemove(member: CRMCrewMember) {
     try {
       await removeMember({ crewId: crew.id, employeeId: member.employeeId });
-    } catch {
-      toast.error("Failed to remove assignment");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to remove assignment"));
     }
   }
 
@@ -611,8 +615,8 @@ function CrewDialog({
         toast.success("Team saved");
         onOpenChange(false);
       }
-    } catch {
-      toast.error("Failed to save team");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save team"));
     }
   }
 
@@ -724,7 +728,7 @@ export function CrewsList() {
     const jobCount = jobsRes.count ?? 0;
     const visitCount = (visitsRes.count ?? 0) + (inheritedVisitsRes.count ?? 0);
     const leftBehind = jobCount > 0 || visitCount > 0
-      ? ` It still has ${jobCount} active job${jobCount === 1 ? "" : "s"} and ${visitCount} upcoming visit${visitCount === 1 ? "" : "s"} assigned to it. They will stay on this crew, hidden from the crew dropdowns, and its crew login will see nothing — reassign them first.`
+      ? ` It still has ${jobCount} active job${jobCount === 1 ? "" : "s"} and ${visitCount} upcoming visit${visitCount === 1 ? "" : "s"} assigned to it. They will stay on this crew and drop out of the crew dropdowns, so nobody can re-dispatch them; its crew login keeps working and still lists them — reassign them first.`
       : "";
     if (!(await confirm({
       title: `Deactivate crew "${name}"?`,
@@ -735,8 +739,8 @@ export function CrewsList() {
     try {
       await update({ id, updates: { is_active: false } });
       toast.success(`${name} deactivated`);
-    } catch {
-      toast.error("Failed to deactivate");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to deactivate"));
     }
   }
 
@@ -744,8 +748,8 @@ export function CrewsList() {
     try {
       await update({ id, updates: { is_active: true } });
       toast.success("Crew activated");
-    } catch {
-      toast.error("Failed to activate");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to activate"));
     }
   }
 

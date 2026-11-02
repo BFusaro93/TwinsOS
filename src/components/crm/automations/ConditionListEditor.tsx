@@ -19,6 +19,8 @@ import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
+import { useCancellationReasonOptions } from "@/lib/hooks/use-cancellation-reasons";
 import { useForms } from "@/lib/hooks/use-crm-forms";
 import { usePackages } from "@/lib/hooks/use-packages";
 import { useEstimateStages } from "@/lib/hooks/use-estimate-stages";
@@ -94,8 +96,10 @@ export function ConditionListEditor({
   const { data: ticketCategories } = useOrgList("ticket_categories");
   const { data: forms } = useForms();
   const { data: packages } = usePackages();
-  const { data: clientSources } = useOrgList("client_sources");
-  const { data: cancellationReasons } = useOrgList("cancellation_reasons");
+  // Same option lists the client forms and cancel dialogs use (built-in defaults included),
+  // so a new org's conditions aren't offered an empty picker.
+  const { options: clientSources } = useClientSourceOptions();
+  const cancellationReasons = useCancellationReasonOptions();
   const { data: estimateStages } = useEstimateStages();
   const { data: customFieldDefs } = useCustomFieldDefs();
 
@@ -109,8 +113,8 @@ export function ConditionListEditor({
     if (TICKET_CATEGORY_CONDITION_FIELDS.has(field)) return { options: (ticketCategories ?? []).map((o) => ({ value: o.value, label: o.value })), placeholder: "Select categor(ies)" };
     if (FORM_CONDITION_FIELDS.has(field)) return { options: (forms ?? []).map((f) => ({ value: f.id, label: f.name })), placeholder: "Select form(s)" };
     if (PACKAGE_CONDITION_FIELDS.has(field)) return { options: (packages ?? []).map((p) => ({ value: p.id, label: p.name })), placeholder: "Select package(s)" };
-    if (CLIENT_SOURCE_CONDITION_FIELDS.has(field)) return { options: (clientSources ?? []).map((o) => ({ value: o.value, label: o.value })), placeholder: "Select source(s)" };
-    if (CANCELLATION_REASON_CONDITION_FIELDS.has(field)) return { options: (cancellationReasons ?? []).map((o) => ({ value: o.value, label: o.value })), placeholder: "Select reason(s)" };
+    if (CLIENT_SOURCE_CONDITION_FIELDS.has(field)) return { options: clientSources.map((v) => ({ value: v, label: v })), placeholder: "Select source(s)" };
+    if (CANCELLATION_REASON_CONDITION_FIELDS.has(field)) return { options: cancellationReasons.map((v) => ({ value: v, label: v })), placeholder: "Select reason(s)" };
     if (ESTIMATE_STAGE_CONDITION_FIELDS.has(field)) return { options: (estimateStages ?? []).map((s) => ({ value: s.stageKey, label: s.name })), placeholder: "Select stage(s)" };
     return null;
   }

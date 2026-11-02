@@ -12,10 +12,11 @@ import { todayInZone } from "@/lib/time/zone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import {
-  computeAutoInvoiceTotals,
-  resolveAutoInvoiceTaxRateBps,
-  resolveJobServiceTaxable,
-} from "@/lib/invoices/auto-invoice-tax";
+  createInvoiceFromJob,
+  findLiveInvoiceCoveringJob,
+  findLiveInvoiceForVisit,
+  type InvoiceFromJobInput,
+} from "@/lib/invoices/create-from-job";
 
 // ── locked-invoice error handling ───────────────────────────────────────────────
 
@@ -1684,7 +1685,7 @@ function mapPaymentFull(row: any): CRMPayment {
 const PAYMENT_METHODS = [
   "ACH/E-Check", "AR Write-off", "AutoPay", "Cash", "Check",
   "Credit Card- AmEx", "Credit Card- Discover", "Credit Card- MasterCard",
-  "Credit Card- Visa", "Other",
+  "Credit Card- Visa", "Debit Card- Discover", "Debit Card- MasterCard", "Debit Card- Visa", "Other",
 ];
 
 export function useBulkImportPayments() {
@@ -2122,69 +2123,6 @@ export function useInvoiceForVisit(visitId: string | null | undefined) {
   });
 }
 
-// A "live" invoice is one that still bills the client: not soft-deleted and
-// not void. A voided invoice no longer covers the work — re-invoicing after a
-// void (e.g. cancel → reopen → complete) is legitimate. Same definition as
-// trg_crm_job_visits_guard_invoiced.
-type InvoiceRef = { id: string; invoiceNumber: number | null };
-type EmbeddedInvoice = { id: string; invoice_number: number | null; status: string; deleted_at: string | null } | null;
-const isLiveEmbeddedInvoice = (inv: EmbeddedInvoice): inv is NonNullable<EmbeddedInvoice> =>
-  !!inv && inv.deleted_at == null && inv.status !== "void";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function findLiveInvoiceForVisit(supabase: any, visitId: string): Promise<{ invoice: InvoiceRef | null; visitLineExists: boolean }> {
-  const { data, error } = await supabase
-    .from("crm_invoice_line_items")
-    .select("invoice_id, crm_invoices(id, invoice_number, status, deleted_at)")
-    .eq("visit_id", visitId)
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return { invoice: null, visitLineExists: false };
-  const inv = (data as { crm_invoices: EmbeddedInvoice }).crm_invoices;
-  return {
-    invoice: isLiveEmbeddedInvoice(inv) ? { id: inv.id, invoiceNumber: inv.invoice_number } : null,
-    // crm_invoice_line_items_visit_id_unique: once any line (even on a void
-    // invoice) carries the visit id, no other line may.
-    visitLineExists: true,
-  };
-}
-
-// Whether any live invoice already covers a job: one billed directly to it
-// (crm_job_id), or a line tagged with one of its visits — per-service split
-// visits and weekly/monthly period invoices bill a job's visits onto
-// invoices that may carry a different (or no) crm_job_id.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function findLiveInvoiceCoveringJob(supabase: any, jobId: string): Promise<InvoiceRef | null> {
-  const { data: direct, error } = await supabase
-    .from("crm_invoices")
-    .select("id, invoice_number")
-    .eq("crm_job_id", jobId)
-    .is("deleted_at", null)
-    .neq("status", "void")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  if (direct) return { id: (direct as { id: string }).id, invoiceNumber: (direct as { invoice_number: number | null }).invoice_number };
-
-  const { data: visits, error: vErr } = await supabase
-    .from("crm_job_visits")
-    .select("id")
-    .eq("job_id", jobId);
-  if (vErr) throw vErr;
-  const visitIds = ((visits ?? []) as { id: string }[]).map((v) => v.id);
-  if (visitIds.length === 0) return null;
-  const { data: lines, error: lErr } = await supabase
-    .from("crm_invoice_line_items")
-    .select("invoice_id, crm_invoices(id, invoice_number, status, deleted_at)")
-    .in("visit_id", visitIds);
-  if (lErr) throw lErr;
-  const live = ((lines ?? []) as { crm_invoices: EmbeddedInvoice }[])
-    .map((l) => l.crm_invoices)
-    .find(isLiveEmbeddedInvoice);
-  return live ? { id: live.id, invoiceNumber: live.invoice_number } : null;
-}
 
 // Whether a job is already covered by a live invoice — mirrors
 // applyVisitCompletionSideEffects()'s "job_already_invoiced" guard.
@@ -2212,255 +2150,11 @@ export type CreateInvoiceFromJobResult = CRMInvoice & {
 export function useCreateInvoiceFromJob() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      jobId,
-      visitId,
-      clientId,
-      description,
-      invoiceDate,
-      dueDate,
-      poNumber,
-      lineItems,
-    }: {
-      jobId: string;
-      /** Invoicing one visit (Dispatch Board): tags its first line with
-       *  visit_id — the idempotency key every invoicing path checks — and
-       *  dedupes on the visit instead of the whole job. */
-      visitId?: string | null;
-      clientId: string;
-      description: string;
-      invoiceDate: string;
-      dueDate?: string;
-      poNumber?: string | null;
-      /** Totals and tax are derived here from these lines, exactly like the
-       *  server-side visit-completion auto-invoice (auto-invoice-tax.ts):
-       *  rate = accepted estimate's rate, else the client's default; only
-       *  lines with a taxable jobServiceId are taxed. */
-      lineItems: {
-        name?: string;
-        description: string;
-        qty: number;
-        rateCents: number;
-        totalCents: number;
-        serviceDate?: string | null;
-        /** crm_job_services.id this line bills — drives is_taxable. */
-        jobServiceId?: string | null;
-        // Present only for line items sourced from a job Product — links the
-        // invoice line back to the catalog product and flips the source
-        // crm_job_products row to 'invoiced' (decrementing inventory if the
-        // product tracks it) once the invoice is created.
-        productId?: string | null;
-        jobProductId?: string | null;
-      }[];
-    }): Promise<CreateInvoiceFromJobResult> => {
+    mutationFn: async (input: InvoiceFromJobInput): Promise<CreateInvoiceFromJobResult> => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: job, error: jobErr } = await (supabase as any)
-        .from("crm_jobs")
-        .select("sales_rep_id, job_type, estimate_id, clients(default_tax_rate_bps, default_terms, is_taxable), crm_job_services(id, is_taxable, crm_services(is_taxable))")
-        .eq("id", jobId)
-        .single();
-      if (jobErr) throw jobErr;
-      const jobRow = job as {
-        sales_rep_id: string | null;
-        job_type: string;
-        estimate_id: string | null;
-        clients: { default_tax_rate_bps: number | null; default_terms: string | null; is_taxable: boolean | null } | null;
-        crm_job_services: { id: string; is_taxable: boolean | null; crm_services: { is_taxable: boolean | null } | null }[] | null;
-      };
-
-      // ── Idempotency: never bill work a live invoice already covers ──────
-      let existing: InvoiceRef | null = null;
-      let tagVisit = false;
-      if (visitId) {
-        // A secondary crew's visit on a multi-crew stop never bills on its own:
-        // the stop is billed once, from the lead visit.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: grp } = await (supabase as any)
-          .from("crm_job_visits").select("crew_group_id, crew_group_secondary").eq("id", visitId).maybeSingle();
-        const g = grp as { crew_group_id: string | null; crew_group_secondary: boolean | null } | null;
-        if (g?.crew_group_secondary && g.crew_group_id) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: lead } = await (supabase as any)
-            .from("crm_job_visits").select("id").eq("crew_group_id", g.crew_group_id)
-            .eq("crew_group_secondary", false).is("deleted_at", null).maybeSingle();
-          const leadFound = lead ? await findLiveInvoiceForVisit(supabase, (lead as { id: string }).id) : null;
-          if (!leadFound?.invoice) {
-            throw new Error("This crew shares the stop with another crew — it bills once, from the lead crew's visit. Invoice that visit instead.");
-          }
-          existing = leadFound.invoice;
-        }
-        const found = existing ? { invoice: existing, visitLineExists: true } : await findLiveInvoiceForVisit(supabase, visitId);
-        existing = found.invoice;
-        tagVisit = !found.visitLineExists;
-        // Legacy single-visit one_time/waiting_list jobs: one invoice per job
-        // (same guard as the server path).
-        if (!existing && (jobRow.job_type === "one_time" || jobRow.job_type === "waiting_list")) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: v } = await (supabase as any)
-            .from("crm_job_visits").select("job_service_id").eq("id", visitId).maybeSingle();
-          if (!(v as { job_service_id: string | null } | null)?.job_service_id) {
-            existing = await findLiveInvoiceCoveringJob(supabase, jobId);
-          }
-        }
-      } else {
-        existing = await findLiveInvoiceCoveringJob(supabase, jobId);
-      }
-      if (existing) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: row, error: rowErr } = await (supabase as any)
-          .from("crm_invoices").select("*").eq("id", existing.id).single();
-        if (rowErr) throw rowErr;
-        return { ...mapInvoice(row), alreadyInvoiced: true };
-      }
-
-      // ── Totals + tax (shared with complete-visit-side-effects.ts) ───────
-      let estimateTaxRateBps: number | null = null;
-      if (jobRow.estimate_id) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: est } = await (supabase as any)
-          .from("estimates").select("tax_rate_bps").eq("id", jobRow.estimate_id).maybeSingle();
-        estimateTaxRateBps = (est as { tax_rate_bps: number | null } | null)?.tax_rate_bps ?? null;
-      }
-      const taxRateBps = resolveAutoInvoiceTaxRateBps(estimateTaxRateBps, jobRow.clients?.default_tax_rate_bps, jobRow.clients?.is_taxable);
-      const svcById = new Map((jobRow.crm_job_services ?? []).map((s) => [s.id, s]));
-      // Product lines take the catalog product's selling-tax flag
-      // (product_items.is_taxable); a zero tax rate still yields zero tax.
-      const productIds = [...new Set(lineItems.map((li) => li.productId).filter((id): id is string => !!id))];
-      const productTaxable = new Map<string, boolean>();
-      if (productIds.length > 0) {
-        const { data: taxRows, error: taxErr } = await supabase
-          .from("product_items")
-          .select("id, is_taxable")
-          .in("id", productIds);
-        if (taxErr) throw taxErr;
-        for (const t of taxRows ?? []) productTaxable.set(t.id, t.is_taxable ?? false);
-      }
-      const lines = lineItems.map((li) => {
-        const svc = li.jobServiceId ? svcById.get(li.jobServiceId) : undefined;
-        const isTaxable = svc
-          ? resolveJobServiceTaxable(svc.is_taxable, svc.crm_services?.is_taxable)
-          : li.productId
-            ? (productTaxable.get(li.productId) ?? false)
-            : false;
-        return {
-          ...li,
-          totalCents: Math.round(li.totalCents),
-          isTaxable,
-        };
-      });
-      const { subtotalCents, taxCents, totalCents } = computeAutoInvoiceTotals(lines, taxRateBps);
-      const newTerms = await resolveNewInvoiceTerms(supabase, jobRow.clients?.default_terms, invoiceDate, dueDate);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_invoices")
-        .insert({
-          created_by: user?.id ?? null,
-          client_id: clientId,
-          crm_job_id: jobId,
-          sales_rep_id: jobRow.sales_rep_id ?? null,
-          description,
-          invoice_date: invoiceDate,
-          terms: newTerms.terms,
-          due_date: newTerms.due_date,
-          po_number: poNumber ?? null,
-          status: "draft",
-          subtotal_cents: subtotalCents,
-          tax_rate_bps: taxRateBps,
-          tax_cents: taxCents,
-          total_cents: totalCents,
-          balance_cents: totalCents,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-
-      const invoiceId = (data as { id: string }).id;
-
-      if (lines.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: insertedLineItems, error: liError } = await (supabase as any)
-          .from("crm_invoice_line_items")
-          .insert(
-            lines.map((li, i) => ({
-              invoice_id: invoiceId,
-              name: li.name ?? null,
-              description: li.description,
-              qty: li.qty,
-              rate_cents: li.rateCents,
-              total_cents: li.totalCents,
-              service_date: li.serviceDate ?? null,
-              product_id: li.productId ?? null,
-              is_taxable: li.isTaxable,
-              sort_order: i,
-              // First line only — crm_invoice_line_items_visit_id_unique.
-              visit_id: tagVisit && i === 0 ? visitId : null,
-            }))
-          )
-          .select("id");
-        if (liError) {
-          // Header and lines are two statements — don't leave a line-less
-          // draft carrying full totals behind (it would also satisfy every
-          // duplicate check above and block the real invoice). Soft delete:
-          // no number is assigned yet and nothing refers to it.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any)
-            .from("crm_invoices")
-            .update({ deleted_at: new Date().toISOString() })
-            .eq("id", invoiceId);
-          throw liError;
-        }
-
-        // Line items sourced from a job Product: link the invoice line back
-        // to the job product row and flip it to 'invoiced' via
-        // set_job_product_status(), which decrements product_items.quantity_on_hand
-        // server-side when that product tracks inventory.
-        const productLinks = lines
-          .map((li, i) => ({ li, insertedId: (insertedLineItems as { id: string }[] | null)?.[i]?.id }))
-          .filter((x) => x.li.jobProductId && x.insertedId);
-        await Promise.all(
-          productLinks.map(async ({ li, insertedId }) => {
-            // Errors are thrown, not swallowed: an unlinked material stays
-            // pending and would be billed again on the next invoice.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { error: linkErr } = await (supabase as any)
-              .from("crm_job_products")
-              .update({ invoice_line_item_id: insertedId })
-              .eq("id", li.jobProductId);
-            if (linkErr) throw linkErr;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { error: statusErr } = await (supabase.rpc as any)("set_job_product_status", {
-              p_job_product_id: li.jobProductId,
-              p_new_status: "invoiced",
-            });
-            if (statusErr) throw statusErr;
-          })
-        );
-      }
-
-      // tag the job as invoiced
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
-        .from("crm_jobs")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .update({ sub_status: "invoiced" } as any)
-        .eq("id", jobId);
-
-      // log to client activity timeline
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from("client_activity").insert({
-        client_id: clientId,
-        activity_type: "invoice",
-        subject: data.invoice_number != null ? `Invoice #${data.invoice_number}` : "Draft Invoice",
-        amount_cents: data.total_cents ?? 0,
-        ref_id: invoiceId,
-        ref_table: "crm_invoices",
-      });
-
-      return { ...mapInvoice(data), alreadyInvoiced: false };
+      const { row, alreadyInvoiced } = await createInvoiceFromJob(supabase, user?.id ?? null, input);
+      return { ...mapInvoice(row), alreadyInvoiced };
     },
     onSuccess: (invoice, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
@@ -2471,6 +2165,42 @@ export function useCreateInvoiceFromJob() {
       qc.invalidateQueries({ queryKey: ["crm-job-detail"] });
       qc.invalidateQueries({ queryKey: ["products"] });
       fireAutomationTrigger({ triggerType: "invoice_created", clientId: vars.clientId, invoiceId: invoice.id });
+    },
+  });
+}
+
+// ── automatic invoice when a one-time job is completed ───────────────────────
+
+export interface AutoInvoiceCompletedJobResult {
+  invoiceId: string;
+  alreadyInvoiced: boolean;
+}
+
+/**
+ * The draft invoice a one-time job gets when it is marked Completed from Job
+ * Detail. Built and written on the server (/api/crm/jobs/[jobId]/auto-invoice)
+ * from the job's own services and products, as the service role — so a role
+ * that may complete jobs but lacks acct_add_modify_invoices (Scheduler,
+ * Customer Support Rep) still gets it, without being able to write invoices.
+ */
+export function useAutoInvoiceCompletedJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ jobId }: { jobId: string; clientId: string }): Promise<AutoInvoiceCompletedJobResult> => {
+      const res = await fetch(`/api/crm/jobs/${jobId}/auto-invoice`, { method: "POST" });
+      const body = (await res.json().catch(() => ({}))) as { error?: string; invoiceId?: string; alreadyInvoiced?: boolean };
+      if (!res.ok || !body.invoiceId) throw new Error(body.error ?? "Automatic invoice failed");
+      return { invoiceId: body.invoiceId, alreadyInvoiced: !!body.alreadyInvoiced };
+    },
+    onSuccess: (result, vars) => {
+      qc.invalidateQueries({ queryKey: ["crm-invoices"] });
+      if (result.alreadyInvoiced) return;
+      qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-products", vars.jobId] });
+      qc.invalidateQueries({ queryKey: ["crm-job-detail"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      fireAutomationTrigger({ triggerType: "invoice_created", clientId: vars.clientId, invoiceId: result.invoiceId });
     },
   });
 }

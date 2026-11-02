@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
-import { exchangeCodeForTokens, resolveQuickBooksEnvironment } from "@/lib/integrations/quickbooks";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { exchangeCodeForTokens, resolveQuickBooksEnvironment, clearQuickBooksLinks } from "@/lib/integrations/quickbooks";
 import { logger } from "@/lib/logger";
 
 const log = logger.child("quickbooks-callback");
@@ -36,6 +36,18 @@ export async function GET(request: Request) {
     const environment = resolveQuickBooksEnvironment(profile.org_id);
     const tokens = await exchangeCodeForTokens(code, `${url.origin}/api/integrations/quickbooks/callback`, environment);
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+
+    // Connecting a different QuickBooks company than before: the old ids mean nothing there.
+    const { data: existing } = await supabase
+      .from("integrations")
+      .select("config")
+      .eq("org_id", profile.org_id)
+      .eq("provider", "quickbooks")
+      .maybeSingle();
+    const previousRealm = (existing?.config as { realm_id?: string } | null)?.realm_id ?? null;
+    if (previousRealm && previousRealm !== realmId) {
+      await clearQuickBooksLinks(createServiceClient(), profile.org_id);
+    }
 
     const { error } = await supabase.from("integrations").upsert(
       {

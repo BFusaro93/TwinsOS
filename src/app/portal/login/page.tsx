@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -19,6 +19,15 @@ export default function PortalLoginPage() {
   const [inviteInput, setInviteInput] = useState("");
   const [inviteError, setInviteError] = useState<string | null>(null);
 
+  // Sent here by the portal layout when the session has no live portal access.
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get("reason");
+    if (reason !== "revoked") return;
+    setError("Your portal access is no longer active. Contact your service provider if you think this is a mistake.");
+    void createClient().auth.signOut();
+    window.history.replaceState(null, "", "/portal/login");
+  }, []);
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -34,12 +43,22 @@ export default function PortalLoginPage() {
       return;
     }
 
-    // Verify this is a portal user, not a staff user
-    const portalMeta = data.user?.user_metadata?.portal;
-    if (!portalMeta) {
+    // A portal user is anyone with a live portal link — including a staff or owner account that
+    // was invited as a customer (user_metadata.portal is only set on logins the portal created).
+    const { data: links } = await supabase
+      .from("client_portal_users")
+      .select("org_id")
+      .eq("user_id", data.user.id)
+      .is("deleted_at", null)
+      .limit(1);
+    if (!links || links.length === 0) {
       await supabase.auth.signOut();
-      setError("This is a staff or crew login, not a client portal account.");
-      setStaffLogin(true);
+      if (data.user?.user_metadata?.portal) {
+        setError("Your portal access is no longer active. Contact your service provider if you think this is a mistake.");
+      } else {
+        setError("This is a staff or crew login, not a client portal account.");
+        setStaffLogin(true);
+      }
       setLoading(false);
       return;
     }

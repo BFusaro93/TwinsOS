@@ -98,7 +98,7 @@ export async function POST(
   const { data: applications, error: appsErr } = await (supabase as any)
     .from("crm_chemical_applications")
     .select(
-      "chemical_amount, solution_amount, epa_number_snapshot, re_entry_interval_snapshot, applicator_license_number, temperature, wind_speed, wind_direction, application_start_time, application_end_time, used, product:product_id(name, epa_registration_number, re_entry_interval, route_sheet_instructions), unit:unit_of_measure_id(name), applicator:applicator_employee_id(first_name, last_name)"
+      "chemical_amount, solution_amount, epa_number_snapshot, re_entry_interval_snapshot, applicator_license_number, temperature, wind_speed, wind_direction, application_start_time, application_end_time, used, preloaded, confirmed_at, product:product_id(name, epa_registration_number, re_entry_interval, route_sheet_instructions), unit:unit_of_measure_id(name), applicator:applicator_employee_id(first_name, last_name)"
     )
     .eq("visit_id", visitId)
     .is("deleted_at", null);
@@ -106,21 +106,32 @@ export async function POST(
   if (appsErr) {
     return NextResponse.json({ error: "Failed to load chemical applications" }, { status: 500 });
   }
-  // Only the post-application notice needs a recorded application; a
-  // recommendation or upsale can go out whenever the office wants.
-  if (kind === "chemical" && (!applications || applications.length === 0)) {
-    return NextResponse.json({ error: "No chemical applications logged for this visit" }, { status: 422 });
+  // Only what was actually applied: a preloaded row is the PLANNED amount until the crew
+  // confirms it — the same rule as the compliance report and the invoice lines. The notice
+  // could otherwise go out before the visit, listing planned chemicals as applied.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const applied = ((applications ?? []) as any[]).filter((a) => a.used && (!a.preloaded || a.confirmed_at));
+  // Only the post-application notice needs a confirmed application; a recommendation or
+  // upsale can go out whenever the office wants.
+  if (kind === "chemical" && applied.length === 0) {
+    return NextResponse.json({ error: "No confirmed chemical applications for this visit yet" }, { status: 422 });
   }
 
   const clientDisplayName = (visit.clients?.display_name as string) ?? "";
   const firstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
-  const applicationDate = visit.scheduled_date
-    ? new Date(`${visit.scheduled_date}T00:00:00`).toLocaleDateString("en-US", {
-        month: "long", day: "numeric", year: "numeric",
+  // The day it was actually applied (in the company's timezone), not the day it was scheduled.
+  const first = applied.find((a) => a.application_start_time) ?? applied[0] ?? {};
+  const orgTz = effOrgId ? await getOrgTimeZone(supabase, effOrgId) : undefined;
+  const applicationDate = first.application_start_time
+    ? new Date(first.application_start_time).toLocaleDateString("en-US", {
+        month: "long", day: "numeric", year: "numeric", ...(orgTz ? { timeZone: orgTz } : {}),
       })
-    : "";
+    : visit.scheduled_date
+      ? new Date(`${visit.scheduled_date}T00:00:00`).toLocaleDateString("en-US", {
+          month: "long", day: "numeric", year: "numeric",
+        })
+      : "";
 
-  const first = applications?.[0] ?? {};
   const applicatorName = first.applicator
     ? `${first.applicator.first_name ?? ""} ${first.applicator.last_name ?? ""}`.trim()
     : "";
@@ -131,8 +142,7 @@ export async function POST(
   const conditions = conditionsParts.join(", ") || "Not recorded";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const productsHtml = ((applications ?? []) as any[])
-    .filter((a) => a.used)
+  const productsHtml = applied
     .map((a) => {
       // Prefer the snapshot frozen at time-of-application over the live
       // catalog join — a correction to the product's EPA # in the catalog
@@ -151,7 +161,7 @@ export async function POST(
   const careInstructions = [
     ...new Set(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ((applications ?? []) as any[])
+      applied
         .map((a) => a.product?.route_sheet_instructions)
         .filter((s): s is string => !!s?.trim())
     ),

@@ -279,6 +279,7 @@ export async function POST(request: Request) {
       if (isPendingChargeStatus(paymentIntent.status)) {
         await markInvoicesPendingCharge({
           db: createServiceClient(),
+          orgId: effOrgId,
           paymentIntent,
           amountsByInvoiceId: new Map(allocations.map((a) => [a.invoiceId, a.amountCents])),
         });

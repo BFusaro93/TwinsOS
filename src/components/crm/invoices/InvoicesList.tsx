@@ -24,6 +24,7 @@ import { exportCSV } from "@/lib/csv";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Plus, FileText, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown, Loader2, Clock } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/useConfirm";
 import type { InvoiceStatus, CRMInvoice } from "@/types/crm-invoices";
 import { isInvoiceOverdue } from "@/lib/invoice-status";
 import { useChargeAutopayInvoice, DuplicateChargeError } from "@/lib/hooks/use-autopay-invoices";
@@ -50,6 +51,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 /**
  * Why an invoice may not be voided, or null when it may.
@@ -476,7 +478,7 @@ export function InvoicesList({ clientId }: Props) {
       setVoidTarget(null);
       refetchInvoices();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to void invoice");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to void invoice"));
     } finally {
       setVoiding(false);
     }
@@ -556,6 +558,7 @@ export function InvoicesList({ clientId }: Props) {
   }
 
   const chargeInvoice = useChargeAutopayInvoice();
+  const [confirmCharge, confirmChargeDialog] = useConfirm();
   const [chargingId, setChargingId] = useState<string | null>(null);
   const [chargingAll, setChargingAll] = useState(false);
   const onChargeTab = quickFilter === "to_charge_card" || quickFilter === "to_charge_ach";
@@ -569,6 +572,16 @@ export function InvoicesList({ clientId }: Props) {
   const totalToCharge = chargeableNow.reduce((sum, i) => sum + i.balanceCents, 0);
 
   async function handleCharge(inv: CRMInvoice) {
+    // One click (or a stray tap on an iPad, where these actions are always visible) used to
+    // charge the saved card immediately.
+    const method = inv.clientSavedPaymentMethodSummary
+      ?? (inv.clientSavedPaymentMethodType === "us_bank_account" ? "the saved bank account" : "the saved card");
+    const ok = await confirmCharge({
+      title: `Charge ${inv.clientName} ${formatCurrency(inv.balanceCents)}?`,
+      description: `Invoice #${inv.invoiceNumber ?? "—"} will be charged to ${method}. Any card processing fee is added on top. Account credit is applied first.`,
+      confirmLabel: "Charge",
+    });
+    if (!ok) return;
     setChargingId(inv.id);
     try {
       const result = await chargeInvoice.mutateAsync({ invoiceId: inv.id });
@@ -703,6 +716,7 @@ export function InvoicesList({ clientId }: Props) {
 
   return (
     <div className="flex h-full flex-col gap-4">
+      {confirmChargeDialog}
 
       {/* ── Page header ── */}
       {!clientId && (
@@ -996,7 +1010,7 @@ export function InvoicesList({ clientId }: Props) {
                   </th>
                 );
               })}
-              <th className="w-0 p-0" />
+              <th className="w-0 p-0 [@media(hover:none)]:w-auto [@media(hover:none)]:px-2" />
             </tr>
           </thead>
           <tbody>
@@ -1143,8 +1157,10 @@ export function InvoicesList({ clientId }: Props) {
                   })}
                   {/* Zero-width cell: the hover actions float over the row's right edge so
                       they don't reserve a blank column beside the data. */}
-                  <td className="relative w-0 p-0">
-                    <div className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-md bg-card/95 px-1 opacity-0 shadow-sm group-hover:opacity-100">
+                  {/* On touch screens there is no hover, so the actions sit in their own column
+                      instead of permanently covering the right-most cells. */}
+                  <td className="relative w-0 p-0 [@media(hover:none)]:static [@media(hover:none)]:w-auto [@media(hover:none)]:px-1">
+                    <div className="absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-md bg-card/95 px-1 opacity-0 shadow-sm group-hover:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100 [@media(hover:none)]:shadow-none [@media(hover:none)]:bg-transparent">
                       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOpenInvoiceId(inv.id)}>
                         <FileText className="mr-1 h-3 w-3" /> Open
                       </Button>

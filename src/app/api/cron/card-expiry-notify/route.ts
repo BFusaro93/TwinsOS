@@ -4,9 +4,13 @@ import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/l
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
-import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 
 const log = logger.child("card-expiry-notify cron");
+
+export const maxDuration = 300;
+/** Stop cleanly before the function limit; tomorrow's run starts from a different org. */
+const TIME_BUDGET_MS = 270_000;
 
 /**
  * GET /api/cron/card-expiry-notify — called daily by Vercel Cron.
@@ -76,41 +80,72 @@ export async function GET(request: Request) {
 
   let checked = 0;
   let fired = 0;
-  const orgCanceled = createOrgCanceledResolver(supabase);
+  let stoppedEarly = false;
+  const startedAt = Date.now();
+  const orgCanceled = createOrgOutboundMutedResolver(supabase);
 
+  // Group by org and skip orgs with no live credit_card_about_to_expire trigger before any
+  // Stripe call: one retrieve per card-on-file client across every org, one at a time, ran
+  // past the function limit and the same id-ordered tail was never checked.
+  const byOrg = new Map<string, CardClientRow[]>();
   for (const client of clients) {
-    if (await orgCanceled(client.org_id)) continue; // canceled orgs get no automated reminders
-    const connectAccountId = client.organizations?.stripe_connect_account_id;
-    if (!connectAccountId) continue;
-    checked++;
+    const list = byOrg.get(client.org_id);
+    if (list) list.push(client);
+    else byOrg.set(client.org_id, [client]);
+  }
+  // Start at a different org each day so a slow org can't starve the same orgs every run.
+  const orgIds = [...byOrg.keys()].sort();
+  const offset = orgIds.length ? Math.floor(Date.now() / 86_400_000) % orgIds.length : 0;
+  const orderedOrgIds = [...orgIds.slice(offset), ...orgIds.slice(0, offset)];
 
-    try {
-      const stripe = getStripeForOrg(client.organizations?.stripe_connect_livemode);
-      const pm = await stripe.paymentMethods.retrieve(
-        client.saved_payment_method_id,
-        {},
-        { stripeAccount: connectAccountId }
-      );
-      const card = pm.card;
-      if (!card) continue;
+  outer: for (const orgId of orderedOrgIds) {
+    if (await orgCanceled(orgId)) continue; // inactive or demo orgs get no automated reminders
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { count: triggerCount } = await (supabase as any)
+      .from("crm_sequence_triggers")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("trigger_type", "credit_card_about_to_expire");
+    if (!triggerCount) continue;
 
-      const expiresThisOrNextMonth =
-        (card.exp_month === thisMonth.month && card.exp_year === thisMonth.year) ||
-        (card.exp_month === nextMonth.month && card.exp_year === nextMonth.year);
-      if (!expiresThisOrNextMonth) continue;
+    for (const client of byOrg.get(orgId) ?? []) {
+      if (Date.now() - startedAt > TIME_BUDGET_MS) {
+        stoppedEarly = true;
+        break outer;
+      }
+      const connectAccountId = client.organizations?.stripe_connect_account_id;
+      if (!connectAccountId) continue;
+      checked++;
 
-      await fireSimpleTrigger(supabase, {
-        orgId: client.org_id,
-        clientId: client.id,
-        triggerType: "credit_card_about_to_expire",
-      });
-      fired++;
-    } catch (err) {
-      // A single client's card lookup failing (e.g. detached on Stripe's side
-      // since we last synced) shouldn't stop the rest of the sweep.
-      log.error("failed to check card expiry", { error: err, clientId: client.id });
+      try {
+        const stripe = getStripeForOrg(client.organizations?.stripe_connect_livemode);
+        const pm = await stripe.paymentMethods.retrieve(
+          client.saved_payment_method_id,
+          {},
+          { stripeAccount: connectAccountId }
+        );
+        const card = pm.card;
+        if (!card) continue;
+
+        const expiresThisOrNextMonth =
+          (card.exp_month === thisMonth.month && card.exp_year === thisMonth.year) ||
+          (card.exp_month === nextMonth.month && card.exp_year === nextMonth.year);
+        if (!expiresThisOrNextMonth) continue;
+
+        await fireSimpleTrigger(supabase, {
+          orgId: client.org_id,
+          clientId: client.id,
+          triggerType: "credit_card_about_to_expire",
+        });
+        fired++;
+      } catch (err) {
+        // A single client's card lookup failing (e.g. detached on Stripe's side
+        // since we last synced) shouldn't stop the rest of the sweep.
+        log.error("failed to check card expiry", { error: err, clientId: client.id });
+      }
     }
   }
+  if (stoppedEarly) log.warn("card-expiry sweep stopped at its time budget; the rest is checked tomorrow", { checked, fired });
 
-  return NextResponse.json({ checked, fired });
+  return NextResponse.json({ checked, fired, stoppedEarly });
 }

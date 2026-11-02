@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { cn } from "@/lib/utils";
+
+/** The list (and its stat cards) cover only the newest rows; say so once the cap is reached. */
+const ACTIVITY_LIMIT = 500;
 import {
   Table,
   TableBody,
@@ -55,7 +58,7 @@ function useSmsActivity() {
         `)
         .eq("activity_type", "sms")
         .order("occurred_at", { ascending: false })
-        .limit(500);
+        .limit(ACTIVITY_LIMIT);
       if (error) throw error;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data ?? []).map((row: any): SmsActivity => ({
@@ -162,6 +165,9 @@ export function SmsActivityList() {
           </div>
         ))}
       </div>
+      {total >= ACTIVITY_LIMIT && (
+        <p className="-mt-2 text-xs text-muted-foreground">Figures cover the most recent {ACTIVITY_LIMIT.toLocaleString()} texts.</p>
+      )}
 
       {/* Dark actions bar */}
       <div className="flex flex-wrap items-center justify-between gap-y-2 bg-[#4a4a4a] px-4 py-2">

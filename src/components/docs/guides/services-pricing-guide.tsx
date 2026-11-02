@@ -52,11 +52,13 @@ export function ServicesPricingGuide() {
         <div className="flex flex-col gap-1">
           <TOCLink href="#where">Where it is</TOCLink>
           <TOCLink href="#layers">Where a price actually lives</TOCLink>
+          <TOCLink href="#rate-matrix">Rate Matrix</TOCLink>
           <TOCLink href="#equipment-costs">Equipment costs</TOCLink>
           <TOCLink href="#bulk-prices">Bulk Prices — changing the catalog</TOCLink>
           <TOCLink href="#adjustments">Price Adjustments — re-pricing live work</TOCLink>
           <TOCLink href="#undo">Undoing a run</TOCLink>
           <TOCLink href="#permissions">Permissions</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -100,6 +102,39 @@ export function ServicesPricingGuide() {
           what gets filled in on the <em>next</em> estimate, invoice or package line. To move money on
           work that already exists, use a Price Adjustment run.
         </Callout>
+      </Section>
+
+      <Section id="rate-matrix" title="Rate Matrix — pricing by a measured value">
+        <p>
+          Open a service and use its <strong>Rate Matrix</strong> tab to price by a number on the
+          property, such as Turf Sq. Ft. Pick the <strong>lookup field</strong>, then add rows. Each row
+          has a From and To range, a calc type (Per Unit or Fixed), a rate, budgeted hours and cost.
+          Edits to a row save when you click out of the field.
+        </p>
+        <p>
+          <strong>Which fields can be the lookup.</strong> The built-in measurements (Turf, Mulch Bed,
+          Gross, Linear Ft. Perimeter, Linear Ft. Edging, Yards of Mulch, Parking Lot / Hardscape) and
+          any <strong>Number</strong> field you create under Settings &rarr; Custom Client Fields.
+          Number fields appear in the list automatically, with the same name. The value comes from the
+          property when the property has one, otherwise from the client, so you can enter it once on the
+          client and override it on a particular property. With no property on the estimate, the client&rsquo;s
+          value is used. Text fields can&rsquo;t be used.
+        </p>
+        <p>
+          <strong>Copy to other services.</strong> Click <strong>Copy to other services&hellip;</strong>{" "}
+          under the table, tick the services, and click <strong>Copy to N services</strong>. The rows,
+          the lookup field and the overflow rule are copied to each ticked service, and any matrix a
+          target already has is replaced. Use it to set up one step of a package and copy it to the rest.
+        </p>
+        <p>
+          <strong>Overflow rule.</strong> Instead of adding a row for every size, set{" "}
+          <em>Every [Y] over [X] is $[R] more and [H] more time with an additional cost of $[C]</em>.
+          When a property&rsquo;s value is at or above X, the estimate starts from the last row and adds
+          one increment of rate, hours and cost for each full Y, counting the first interval. For example,
+          with over = 26,000 and every = 1,000, a 26,000 to 26,999 property is the last row plus one
+          increment and a 27,000 to 27,999 property is plus two. The overflow rule takes priority over a
+          Tail row. It is saved with Save Changes.
+        </p>
       </Section>
 
       <Section id="equipment-costs" title="Equipment costs">
@@ -278,6 +313,22 @@ export function ServicesPricingGuide() {
             History tabs. Enforced in the database itself, not just hidden in the UI: applying or
             reverting a run re-checks this permission at the point the prices are written, so a user
             without it cannot re-price anything by any route.
+          </li>
+        </ul>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Deleting a service.</strong> Deleting a service in Settings asks first and says how many open jobs use it.
+          </li>
+          <li>
+            <strong>Production rate sets the budget method.</strong> Adding a production rate to a service in Settings switches it to budgeting by production rate, the same as adding a new service with one.
+          </li>
+          <li>
+            <strong>Copying a rate matrix.</strong> Copy to other services needs the Edit Service permission. It adds the copied rows before removing the target&apos;s old ones, so a failure never leaves a service with no matrix, and it reports which services couldn&apos;t be copied.
+          </li>
+          <li>
+            <strong>Blank matrix cells.</strong> Clearing a From or Hours cell in the rate matrix saves 0.
           </li>
         </ul>
       </Section>

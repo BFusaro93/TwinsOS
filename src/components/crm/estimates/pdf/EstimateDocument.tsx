@@ -10,6 +10,7 @@ import {
 import { DocumentPdfBlocks, type DocumentPdfBlock } from "@/components/crm/documents/pdf/DocumentTemplatePdf";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
 import { complexityFactor, computeInstallmentSchedule } from "@/lib/estimate-calc";
+import { packageLineNetCents } from "@/lib/estimates/package-line-net";
 import { groupIntoSections, type DisplaySettings, type DisplaySection } from "@/lib/estimate-display-settings";
 
 // ── types ────────────────────────────────────────────────────────────────────
@@ -36,6 +37,10 @@ export interface EstimatePDFLineItem {
   tier: "basic" | "standard" | "premium" | null;
   /** Sub-items flagged "print on estimate", listed under this line. */
   subitems?: { name: string; qty: number; rateCents: number; totalCents: number }[];
+  /** The line's discount, when the caller has it — a collapsed package row prints net. */
+  discountCents?: number | null;
+  /** Every priced sub-item on the line (printed or not), when the caller has it. */
+  subitemTotalCents?: number | null;
 }
 
 /**
@@ -405,9 +410,16 @@ function LineItemSections({
   const shown = sections.map((section): DisplaySection<EstimatePDFLineItem> => {
     if (!section.packageId || section.items.length === 0 || settings.showPackageVisits) return section;
     const first = section.items[0];
+    // The visits' totals plus their sub-items, net of line discounts — what the estimate
+    // total counts for this package (the bare line sum left the row short of the subtotal).
+    const packageCents = section.items.reduce((s, li) => s + packageLineNetCents(li), 0);
     return {
       ...section,
       sectionName: null,
+      subtotalCents: packageCents,
+      // The wording is already inside the collapsed row; clearing it stops the
+      // section-level description block printing it a second time.
+      description: null,
       items: [{
         ...first,
         serviceName: section.sectionName,
@@ -416,9 +428,11 @@ function LineItemSections({
         unitType: null,
         // One printed row at the package total: Visits x Qty x Rate must still equal Total.
         visits: 1,
-        rateCents: section.subtotalCents,
+        rateCents: packageCents,
         complexityBps: null,
-        totalCents: section.subtotalCents,
+        totalCents: packageCents,
+        discountCents: 0,
+        subitemTotalCents: 0,
         subitems: [],
       }],
     };

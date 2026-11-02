@@ -36,6 +36,7 @@ export function QuickBooksGuide() {
           <TOCLink href="#sync-status">Sync Status and retrying</TOCLink>
           <TOCLink href="#limits">What does not sync</TOCLink>
           <TOCLink href="#disconnecting">Disconnecting or reconnecting</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -317,15 +318,35 @@ export function QuickBooksGuide() {
       <Section id="disconnecting" title="Disconnecting or reconnecting">
         <p>
           Click <strong>Disconnect</strong> on the QuickBooks card to stop syncing; Landscapt also revokes its access
-          at Intuit. Nothing is deleted in either system, and each client and invoice keeps its record of which
-          QuickBooks customer or invoice it was sent to.
+          at Intuit. Nothing is deleted in either system. Landscapt forgets which QuickBooks customer, invoice, item
+          and payment each record was linked to, because those links only mean something in the company you
+          disconnected from.
         </p>
         <p>
           Reconnecting restarts the &quot;after you connect&quot; cut-off: invoices and payments created while you were
-          disconnected are not sent automatically. Reconnect to the <strong>same</strong> QuickBooks company and
-          everything already sent stays linked. Reconnecting to a <strong>different</strong> company is not
-          supported yet — the saved links point at the old company, so contact support before switching.
+          disconnected are not sent automatically. Records sent before you disconnected are matched again by
+          name and number the next time they sync. Connecting a <strong>different</strong> QuickBooks company
+          starts fresh: nothing in the new company is overwritten with data meant for the old one.
         </p>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Account credits.</strong> A credit you record for a client and apply to an invoice is sent to QuickBooks as a credit memo applied to that invoice, the same way an AR write-off is, so the invoice closes in both places.
+          </li>
+          <li>
+            <strong>Synced invoices are voided, not deleted.</strong> An invoice that has been sent to QuickBooks can&apos;t be deleted in Landscapt. Void it instead, and the void is sent to QuickBooks.
+          </li>
+          <li>
+            <strong>“Name exists as a vendor or employee”.</strong> QuickBooks won&apos;t create a customer whose name already belongs to a vendor or employee. When that happens the invoice shows this message and stops retrying. Rename the customer or link it to the existing QuickBooks customer, then edit and save the invoice to retry.
+          </li>
+          <li>
+            <strong>Editing a payment.</strong> Changing a payment&apos;s date, memo or split keeps its link to the QuickBooks payment, so it is updated rather than sent a second time.
+          </li>
+          <li>
+            <strong>Several companies, one Landscapt.</strong> Each Landscapt company keeps its own QuickBooks links. Two companies connected to two different QuickBooks files never collide.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );
