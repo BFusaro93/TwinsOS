@@ -299,6 +299,11 @@ export function EstimatingGuide() {
           everything else here, the match is looked up once at add-time, not re-resolved later if
           the property&rsquo;s field value or the matrix rows change.
         </p>
+        <p>
+          Past the last band, the service&rsquo;s <strong>overflow rule</strong> (&ldquo;every Y over X
+          adds $R&rdquo;, set on the Rate Matrix tab) steps the price up from the last band instead of
+          falling back to the flat rate. See <em>Rate Matrix</em> in the Services &amp; Pricing guide.
+        </p>
         <Callout>
           Complexity and Rate Matrix are independent of each other and of budget method &mdash; a
           Rate Matrix line still gets its own Complexity multiplier on top of whatever the matched
@@ -410,7 +415,19 @@ export function EstimatingGuide() {
           Turf Sq. Ft.) and the estimate&rsquo;s property has a value for it, the matching band prices
           that visit instead of the package&rsquo;s flat price. To copy the first visit&rsquo;s Qty,
           Rate, B.Hr, Cost or Adj Rate down to every other visit, use the <strong>copy</strong> buttons
-          on the package header. Deleting the package header deletes all of its visits.
+          on the package header. Deleting the package header asks for confirmation, then deletes all of
+          its visits.
+        </p>
+        <p>
+          Each package ends with a <strong>Package subtotal</strong> row for its visits. To skip a
+          step, set that visit&rsquo;s status to <strong>Draft</strong>; Draft and Lost visits are left
+          out of the subtotal, the estimate total and the proposal. Package visits are indented under
+          the header.
+        </p>
+        <p>
+          <strong>Bulk actions.</strong> Tick lines in the grid (the header checkbox selects every
+          line, not section headers) and a bar appears above it with <strong>Change Status</strong>,{" "}
+          <strong>Rate Increase</strong> and <strong>Delete</strong>. Delete asks for confirmation first.
         </p>
         <h3 className="text-base font-semibold">What the client sees</h3>
         <ul className="list-disc space-y-2 pl-5">

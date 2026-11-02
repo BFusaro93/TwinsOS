@@ -679,7 +679,9 @@ export function ReportCenterGuide() {
           roll their entries up to the parent automation. For the record you don&apos;t already
           have open, the <strong>Audits</strong> section of the Report Center has three reports
           reading a new org-wide <code>rpt_audit_log</code> view: <strong>Audit Log</strong> (the
-          full trail, filterable by category, record type, user, and action),{" "}
+          full trail, filterable by category, record type, user, and action, with a <strong>Record</strong>{" "}
+          column naming the estimate, invoice, PO, client, contract, project, job, service, package or
+          crew that was changed),{" "}
           <strong>Security &amp; Access Audit</strong> (permission, user, credential, and
           approval-chain changes only, defaulting to a 90-day window), and{" "}
           <strong>Change Activity by User</strong> (a count of changes per person, grouped by
