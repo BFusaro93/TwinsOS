@@ -15,6 +15,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 import {
   useEstimateMilestones,
   useProjectMilestones,
@@ -39,6 +41,7 @@ function MilestoneRow({
   salesRepId,
   showTargetDate,
   readOnly,
+  canInvoice,
 }: {
   milestone: EstimateMilestone;
   totalCents: number;
@@ -50,6 +53,7 @@ function MilestoneRow({
   salesRepId: string | null;
   showTargetDate: boolean;
   readOnly: boolean;
+  canInvoice: boolean;
 }) {
   const router = useRouter();
   const update = useUpdateEstimateMilestone();
@@ -79,7 +83,7 @@ function MilestoneRow({
       id: milestone.id,
       ...ids,
       patch: { milestoneType: nextType, milestoneValue, amountCents },
-    }, { onError: () => toast.error("Failed to save milestone") });
+    }, { onError: (err) => toast.error(mutationErrorMessage(err, "Failed to save milestone")) });
   }
 
   // An invoiced milestone shows what it was actually BILLED, never a fresh
@@ -98,7 +102,7 @@ function MilestoneRow({
       <Input
         value={name}
         onChange={(e) => setName(e.target.value)}
-        onBlur={() => { if (name !== milestone.name) update.mutate({ id: milestone.id, ...ids, patch: { name } }, { onError: () => toast.error("Failed to save milestone") }); }}
+        onBlur={() => { if (name !== milestone.name) update.mutate({ id: milestone.id, ...ids, patch: { name } }, { onError: (err) => toast.error(mutationErrorMessage(err, "Failed to save milestone")) }); }}
         disabled={locked}
         className="h-8 min-w-[8rem] flex-1 text-sm"
         placeholder="e.g. Deposit"
@@ -111,7 +115,7 @@ function MilestoneRow({
           onBlur={() => {
             const next = targetDate || null;
             if (next !== (milestone.targetDate ?? null)) {
-              update.mutate({ id: milestone.id, ...ids, patch: { targetDate: next } }, { onError: () => toast.error("Failed to save milestone") });
+              update.mutate({ id: milestone.id, ...ids, patch: { targetDate: next } }, { onError: (err) => toast.error(mutationErrorMessage(err, "Failed to save milestone")) });
             }
           }}
           disabled={locked}
@@ -162,42 +166,44 @@ function MilestoneRow({
         </>
       ) : readOnly ? null : (
         <>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 shrink-0 gap-1 text-xs"
-            disabled={creatingInvoice || amountCents <= 0 || overAllocated || !clientId}
-            title={
-              !clientId
-                ? "Link a client before invoicing"
-                : overAllocated
-                  ? "Milestones total more than the contract — fix amounts before invoicing"
-                  : undefined
-            }
-            onClick={async () => {
-              try {
-                const invoice = await createInvoice({
-                  milestone: { ...milestone, name, amountCents },
-                  ...ids,
-                  clientId,
-                  salesRepId,
-                });
-                toast.success("Invoice created");
-                router.push(`/crm/accounting/invoices/${invoice.id}`);
-              } catch (e) {
-                toast.error(e instanceof Error ? e.message : "Failed to create invoice");
+          {canInvoice && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 shrink-0 gap-1 text-xs"
+              disabled={creatingInvoice || amountCents <= 0 || overAllocated || !clientId}
+              title={
+                !clientId
+                  ? "Link a client before invoicing"
+                  : overAllocated
+                    ? "Milestones total more than the contract — fix amounts before invoicing"
+                    : undefined
               }
-            }}
-          >
-            <Receipt className="h-3.5 w-3.5 text-teal-500 dark:text-teal-400" />
-            {creatingInvoice ? "Creating…" : "Invoice"}
-          </Button>
+              onClick={async () => {
+                try {
+                  const invoice = await createInvoice({
+                    milestone: { ...milestone, name, amountCents },
+                    ...ids,
+                    clientId,
+                    salesRepId,
+                  });
+                  toast.success("Invoice created");
+                  router.push(`/crm/accounting/invoices/${invoice.id}`);
+                } catch (e) {
+                  toast.error(mutationErrorMessage(e, e instanceof Error ? e.message : "Failed to create invoice"));
+                }
+              }}
+            >
+              <Receipt className="h-3.5 w-3.5 text-teal-500 dark:text-teal-400" />
+              {creatingInvoice ? "Creating…" : "Invoice"}
+            </Button>
+          )}
           <Button
             size="icon"
             variant="ghost"
             className="h-8 w-8 shrink-0 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
             title="Delete milestone"
-            onClick={() => del.mutate({ id: milestone.id, ...ids }, { onError: () => toast.error("Failed to delete milestone") })}
+            onClick={() => del.mutate({ id: milestone.id, ...ids }, { onError: (err) => toast.error(mutationErrorMessage(err, "Failed to delete milestone")) })}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
@@ -242,6 +248,21 @@ export function MilestoneScheduleEditor({
   const projectQuery = useProjectMilestones(projectId);
   const { data: milestones = [], isLoading } = projectId ? projectQuery : estimateQuery;
   const create = useCreateEstimateMilestone();
+
+  // Mirrors the database guard (20261209000100): a row on a project is edited
+  // with the project or invoice key, an estimate-only row with estimate_edit.
+  // On an estimate that became a project, the carried rows lock for a user
+  // who can edit the estimate but not the project.
+  const { can } = usePermissions();
+  const canInvoice = can("acct_add_modify_invoices");
+  const canEditProjectRows = can("sched_add_modify_projects") || canInvoice;
+  const canEditEstimateRows = can("estimate_edit");
+  const rowReadOnly = (m: EstimateMilestone) =>
+    readOnly || (m.projectId ? !canEditProjectRows : !canEditEstimateRows);
+  // A milestone added to a converted estimate lands on its project (the
+  // link-project trigger), so it needs the project rights too.
+  const addsToProject = !!projectId || milestones.some((m) => m.projectId);
+  const canAdd = !readOnly && (addsToProject ? canEditProjectRows : canEditEstimateRows);
 
   // A pending percent milestone is worth a percentage of the CURRENT basis,
   // not whatever amount_cents was snapshotted when it was last edited — after
@@ -299,7 +320,7 @@ export function MilestoneScheduleEditor({
       milestoneValue: 0,
       amountCents: 0,
       sortOrder: milestones.length,
-    }, { onError: () => toast.error("Failed to add milestone") });
+    }, { onError: (err) => toast.error(mutationErrorMessage(err, "Failed to add milestone")) });
   }
 
   if (isLoading) return <p className="text-xs text-slate-400 dark:text-neutral-500">Loading milestones…</p>;
@@ -315,7 +336,8 @@ export function MilestoneScheduleEditor({
           clientId={clientId}
           salesRepId={salesRepId}
           showTargetDate={showTargetDate}
-          readOnly={readOnly}
+          readOnly={rowReadOnly(m)}
+          canInvoice={canInvoice}
         />
       ))}
       {milestones.length === 0 && (
@@ -323,7 +345,7 @@ export function MilestoneScheduleEditor({
           No milestones yet — add one below (e.g. Deposit, Rough-in, Completion).
         </p>
       )}
-      {!readOnly && (
+      {canAdd && (
         <Button
           size="sm"
           variant="outline"

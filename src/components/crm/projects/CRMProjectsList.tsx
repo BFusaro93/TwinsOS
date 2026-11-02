@@ -81,9 +81,6 @@ function ProgressBar({ pct }: { pct: number }) {
 // ── milestone tab ─────────────────────────────────────────────────────────────
 
 function MilestoneTab({ project }: { project: Project }) {
-  const { can } = usePermissions();
-  const canInvoice = can("acct_add_modify_invoices");
-
   if (!project.clientId) {
     return (
       <div className="rounded-lg border bg-slate-50 dark:bg-muted/40 p-4 text-sm text-muted-foreground">
@@ -113,7 +110,6 @@ function MilestoneTab({ project }: { project: Project }) {
         salesRepId={null}
         totalCents={project.contractPrice}
         showTargetDate
-        readOnly={!canInvoice}
         basisLabel="contract price"
       />
     </div>
@@ -847,7 +843,7 @@ export function CRMProjectsList() {
                     {p.clientName ?? p.customerName ?? "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge className={`capitalize border text-xs ${STATUS_COLOR[p.status]}`}>
+                    <Badge variant="outline" className={`capitalize border text-xs ${STATUS_COLOR[p.status]}`}>
                       {statusLabel(p.status)}
                     </Badge>
                   </td>

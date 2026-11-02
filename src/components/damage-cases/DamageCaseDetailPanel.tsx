@@ -102,7 +102,7 @@ export function DamageCaseDetailPanel({ caseId, onClose }: Props) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button type="button" className="inline-flex items-center gap-1 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
-                <Badge className={`${STATUS_COLORS[data.status]} text-xs`}>{DAMAGE_CASE_STATUS_LABELS[data.status]}</Badge>
+                <Badge variant="outline" className={`border-transparent ${STATUS_COLORS[data.status]} text-xs`}>{DAMAGE_CASE_STATUS_LABELS[data.status]}</Badge>
                 <ChevronDown className="h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
               </button>
             </DropdownMenuTrigger>
