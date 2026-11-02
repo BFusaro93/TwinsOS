@@ -45,7 +45,7 @@ export function RateIncreaseDialog({ selectedCount, open, onApply, onCancel }: P
   }
 
   const preview = parsed
-    ? `${parsed.amount > 0 ? "+" : ""}${parsed.amount}${parsed.isPercent ? "%" : " ($/visit)"} to ${selectedCount} line item${selectedCount !== 1 ? "s" : ""}`
+    ? `${parsed.isPercent ? `${parsed.amount > 0 ? "+" : ""}${parsed.amount}%` : `${parsed.amount < 0 ? "-" : "+"}$${Math.abs(parsed.amount).toFixed(2)} per visit`} on ${selectedCount} line item${selectedCount !== 1 ? "s" : ""}`
     : null;
 
   return (
@@ -67,7 +67,7 @@ export function RateIncreaseDialog({ selectedCount, open, onApply, onCancel }: P
               onKeyDown={(e) => { if (e.key === "Enter") handleApply(); }}
             />
             <p className="text-xs text-muted-foreground">
-              End with <code className="font-mono">%</code> for percentage, or enter a dollar amount (positive or negative).
+              End with <code className="font-mono">%</code> for percentage, or enter a dollar amount (positive or negative) — each line&apos;s total changes by that much per visit.
             </p>
           </div>
           {preview && (

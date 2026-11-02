@@ -10909,6 +10909,7 @@ export type Database = {
       estimate_milestones: {
         Row: {
           amount_cents: number
+          amount_is_pretax: boolean
           created_at: string
           created_by: string | null
           deleted_at: string | null
@@ -10927,6 +10928,7 @@ export type Database = {
         }
         Insert: {
           amount_cents?: number
+          amount_is_pretax?: boolean
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
@@ -10945,6 +10947,7 @@ export type Database = {
         }
         Update: {
           amount_cents?: number
+          amount_is_pretax?: boolean
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null

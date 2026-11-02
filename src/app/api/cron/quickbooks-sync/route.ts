@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { pushInvoiceToQuickBooks, pushPaymentToQuickBooks, retryPendingQuickBooksVoids } from "@/lib/integrations/quickbooks";
 import { logger } from "@/lib/logger";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 const log = logger.child("quickbooks sync cron");
 
@@ -37,6 +38,8 @@ const CHANGED_SLACK_MS = 60 * 1000;
 const MAX_CREATES = 50;
 const MAX_UPDATES = 100;
 const MAX_PAYMENTS = 50;
+/** Stop cleanly before maxDuration; the next 15-minute run starts from a different org. */
+const TIME_BUDGET_MS = 240_000;
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -65,9 +68,21 @@ export async function GET(request: Request) {
   const settledBefore = new Date(now - SETTLE_MS).toISOString();
   const retryBefore = new Date(now - RETRY_FAILED_MS).toISOString();
   const summary: Record<string, { created: number; updated: number; payments: number }> = {};
+  const orgInactive = createOrgCanceledResolver(supabase);
+  const overBudget = () => Date.now() - now > TIME_BUDGET_MS;
+  let stoppedEarly = false;
 
-  for (const integration of (integrations ?? []) as { org_id: string; created_at: string }[]) {
+  // Rotate the starting org every run: with a fixed order, one org's backlog could use up the
+  // whole run every time and the orgs after it were never synced.
+  const list = ((integrations ?? []) as { org_id: string; created_at: string }[]).sort((a, b) => a.org_id.localeCompare(b.org_id));
+  const offset = list.length ? Math.floor(now / (15 * 60 * 1000)) % list.length : 0;
+  const ordered = [...list.slice(offset), ...list.slice(0, offset)];
+
+  for (const integration of ordered) {
+    if (overBudget()) { stoppedEarly = true; break; }
     const orgId = integration.org_id;
+    // A canceled or expired-trial org is read-only; its books are not pushed meanwhile.
+    if (await orgInactive(orgId)) continue;
     const connectedAt = integration.created_at;
     const counts = { created: 0, updated: 0, payments: 0 };
     summary[orgId] = counts;
@@ -87,6 +102,7 @@ export async function GET(request: Request) {
         .order("created_at", { ascending: true })
         .limit(MAX_CREATES);
       for (const row of (toCreate ?? []) as { id: string }[]) {
+        if (overBudget()) { stoppedEarly = true; break; }
         const result = await pushInvoiceToQuickBooks(db, orgId, row.id);
         if (result.status === "pushed") counts.created++;
         if (result.reason === "not_connected") break;
@@ -128,6 +144,7 @@ export async function GET(request: Request) {
         })
         .slice(0, MAX_UPDATES);
       for (const row of changed) {
+        if (overBudget()) { stoppedEarly = true; break; }
         const result = await pushInvoiceToQuickBooks(db, orgId, row.id);
         if (result.status === "updated" || result.status === "voided") counts.updated++;
         if (result.reason === "not_connected") break;
@@ -156,6 +173,7 @@ export async function GET(request: Request) {
         if (paymentIds.size >= MAX_PAYMENTS) break;
       }
       for (const paymentId of paymentIds) {
+        if (overBudget()) { stoppedEarly = true; break; }
         const result = await pushPaymentToQuickBooks(db, orgId, paymentId);
         if (result.status === "pushed") counts.payments++;
         if (result.reason === "not_connected") break;
@@ -163,11 +181,12 @@ export async function GET(request: Request) {
 
       // 4. Voids that failed when a payment was refunded in full (its allocation, and the
       //    QuickBooks id with it, is gone).
-      await retryPendingQuickBooksVoids(db, orgId);
+      if (!overBudget()) await retryPendingQuickBooksVoids(db, orgId);
     } catch (err) {
       log.error("QuickBooks sync sweep failed for org", { err, orgId });
     }
   }
 
-  return NextResponse.json({ ok: true, orgs: summary });
+  if (stoppedEarly) log.warn("QuickBooks sweep stopped at its time budget; the next run continues", { orgs: Object.keys(summary).length });
+  return NextResponse.json({ ok: true, stoppedEarly, orgs: summary });
 }

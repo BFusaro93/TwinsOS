@@ -302,17 +302,17 @@ function AnalysisTab({ project }: { project: Project }) {
   const { data: invoices } = useInvoices(project.clientId ?? undefined, scope);
   const { data: payments } = usePayments(project.clientId ?? undefined, scope);
 
-  // A voided invoice was never receivable — counting it as billed overstates
-  // revenue and understates what's left to bill. Mirrors rpt_projects_wip.
+  // A voided invoice was never receivable, and a draft hasn't been issued yet — counting either
+  // as billed overstates revenue and understates what's left to bill. Mirrors rpt_projects_wip.
   const totalInvoiced = (invoices ?? [])
-    .filter((inv) => inv.status !== "void")
+    .filter((inv) => inv.status !== "void" && inv.status !== "draft")
     .reduce((s, inv) => s + inv.totalCents, 0);
   const totalPayments = (payments ?? []).reduce((s, p) => s + p.amountCents, 0);
   const amountDue = totalInvoiced - totalPayments;
   // The contract price is pre-tax, so what's left to bill is measured against
   // billed amounts excluding tax (same as rpt_projects_wip's billed_cents).
   const billedExTax = (invoices ?? [])
-    .filter((inv) => inv.status !== "void")
+    .filter((inv) => inv.status !== "void" && inv.status !== "draft")
     .reduce((s, inv) => s + inv.totalCents - (inv.taxCents ?? 0), 0);
   const remainingToBill = project.contractPrice - billedExTax;
 
@@ -761,7 +761,12 @@ export function CRMProjectsList() {
   const canModify = can("sched_add_modify_projects");
   const { data: projects, isLoading } = useProjects(true);
   const [search, setSearch] = useState("");
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  // Keep only the id: the dialog reads the project from the live list, so a change order's new
+  // contract price shows at once (a snapshot kept the old figure and disabled Invoice buttons
+  // as "over-allocated" until the dialog was reopened).
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const selectedProject = (projects ?? []).find((p) => p.id === selectedProjectId) ?? null;
+  const setSelectedProject = (p: Project | null) => setSelectedProjectId(p?.id ?? null);
   const [newOpen, setNewOpen] = useState(false);
 
   const filtered = (projects ?? []).filter((p) =>

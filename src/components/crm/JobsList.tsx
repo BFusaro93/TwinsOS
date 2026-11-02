@@ -341,8 +341,10 @@ export function JobsList() {
       )}
 
       {dateKeys.length > 0 && (
-        <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
-          <table className="w-full text-sm table-fixed">
+        // Below lg the fixed percentage columns squeezed Revenue into Crew and the status badge
+        // over the chevron; scroll sideways at a readable minimum width instead.
+        <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm table-fixed">
             <colgroup>
               <col className="w-[26%]" />
               <col className="w-[26%]" />

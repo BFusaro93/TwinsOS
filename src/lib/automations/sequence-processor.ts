@@ -1,6 +1,6 @@
 import { resolveEmailStepContent, sendResolvedSequenceEmail, advanceEnrollmentPastStep, isMarketingEmailCategory } from "./sequence-email";
 import { logger } from "@/lib/logger";
-import { isOrgInactive } from "@/lib/orgs/org-canceled";
+import { isOrgInactive, isOrgDemo } from "@/lib/orgs/org-canceled";
 import { resolveSmsStepContent, sendResolvedSequenceSms, nextSmsSendTime } from "./sequence-sms";
 import { SMS_NOT_REGISTERED_REASON } from "@/lib/sms/send";
 import { notifyStaffOfNewTicket, notifyTicketAssigned } from "@/lib/ticket-notify";
@@ -349,6 +349,14 @@ export async function processDueEnrollment(
     .eq("id", enrollment.org_id)
     .maybeSingle();
   if (isOrgInactive(org)) {
+    // Move the row off the head of the queue (oldest-due first) so a large inactive org can't
+    // starve every other org; it is re-checked tomorrow and resumes if the org resubscribes.
+    await adminClient
+      .from("crm_sequence_enrollments")
+      .update({ next_fire_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() })
+      .eq("id", enrollment.id)
+      .is("completed_at", null)
+      .is("stopped_at", null);
     return { skipped: { enrollmentId: enrollment.id, reason: org?.plan === "trial" ? "org trial has ended" : "org subscription is canceled" } };
   }
   if (!(await claimEnrollmentStep(adminClient, enrollment))) {
@@ -464,6 +472,16 @@ async function runClaimedStep(
     if (trigger) {
       cardExpiryContext = await fetchCardExpiryContext(adminClient, client_id);
     }
+  }
+
+  // Demo/sandbox orgs never send email or texts from automations (a real person added to a
+  // sandbox must not be contacted about demo data); the step is skipped like any permanent
+  // send failure, so the rest of the sequence (tasks, tags, alerts) still runs.
+  if ((currentEvent.event_type === "email" || currentEvent.event_type === "text_message") && (await isOrgDemo(adminClient, orgId))) {
+    return handleSendFailure(adminClient, {
+      orgId, enrollId, sequenceId: sequence_id, clientId: client_id, eventId: currentEvent.id,
+      eventType: currentEvent.event_type, events: events ?? [], position: next_event_position, nowIso,
+    }, "outbound messages are muted for demo organizations", true);
   }
 
   if (currentEvent.event_type === "wait") {

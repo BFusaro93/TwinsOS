@@ -1,7 +1,7 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { EstimateDocument, EstimateDocumentMulti } from "@/components/crm/estimates/pdf/EstimateDocument";
-import { PRINTED_SUBITEM_SELECT, pickPrintedSubitems } from "@/lib/estimates/printed-subitems";
+import { PRINTED_SUBITEM_SELECT, pickPrintedSubitems, sumSubitemTotals } from "@/lib/estimates/printed-subitems";
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { getPublishedProposal, toProposalDocument, type ProposalContent, type ProposalDocument } from "@/lib/estimates/proposal-content";
@@ -91,6 +91,9 @@ export async function buildEstimatePDFData(
       // the emailed copy already passes it.
       complexityBps: (li.complexity_bps as number | null) ?? null,
       subitems: pickPrintedSubitems(li.estimate_line_item_subitems),
+      // Package rows sum each visit net of its discount plus all its sub-items.
+      discountCents: (li.discount_cents as number | null) ?? 0,
+      subitemTotalCents: sumSubitemTotals(li.estimate_line_item_subitems),
     }));
 
   const addr = (org?.address as Record<string, string>) ?? {};

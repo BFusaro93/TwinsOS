@@ -601,6 +601,10 @@ async function handleRun(request: Request) {
         // A canceled org is read-only: its automations pause (and resume if it
         // resubscribes). Filtered here so its due rows can't crowd the batch.
         .neq("organizations.plan", "canceled")
+        // An expired trial is just as inactive (isOrgInactive). Skipping its rows one at a time
+        // left them at the head of the queue forever: past ~1,000 of them, every run saw only
+        // already-skipped rows and no other org's sequence step fired again.
+        .or(`plan.neq.trial,trial_ends_at.is.null,trial_ends_at.gt.${nowIso},is_platform_staff_org.eq.true`, { referencedTable: "organizations" })
         .lte("next_fire_at", nowIso)
         .is("completed_at", null)
         .is("stopped_at", null)
@@ -611,7 +615,8 @@ async function handleRun(request: Request) {
         .order("next_fire_at", { ascending: true })
         // Over-fetch by the already-seen count so skipped-but-still-due rows
         // at the head of the queue can't hide fresh ones behind them.
-        .limit(BATCH_SIZE + seenEnrollmentIds.size);
+        // PostgREST caps a response at max_rows (1000) anyway.
+        .limit(Math.min(1000, BATCH_SIZE + seenEnrollmentIds.size));
 
       if (callerOrgId) {
         enrollQuery = enrollQuery.eq("org_id", callerOrgId);

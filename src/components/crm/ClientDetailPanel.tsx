@@ -2273,7 +2273,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
     {/* minmax(0,1fr), not 1fr: a bare fr track won't shrink below its content's
         min-content, so Jobs and Open Estimates were stealing width and left
         Accounting a third narrower than its share. */}
-    <div className="grid min-h-[600px] grid-cols-1 bg-card px-3 md:grid-cols-[minmax(0,1fr)_10px_minmax(0,1fr)_10px_minmax(0,1fr)]">
+    <div className="grid min-h-[600px] grid-cols-1 bg-card px-3 xl:grid-cols-[minmax(0,1fr)_10px_minmax(0,1fr)_10px_minmax(0,1fr)]">
       {/* Left — Jobs */}
       <div className="flex flex-col bg-card">
         <div className="flex flex-wrap items-center justify-between gap-y-1 bg-[#4a4a4a] px-4 py-2">
@@ -2454,7 +2454,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       </div>
 
       {/* Divider column */}
-      <div className="hidden justify-center bg-card md:flex"><div className="w-px h-full bg-slate-200 dark:bg-neutral-700" /></div>
+      <div className="hidden justify-center bg-card xl:flex"><div className="w-px h-full bg-slate-200 dark:bg-neutral-700" /></div>
 
       {/* Middle — Accounting */}
       <PermissionGate permission="client_view_billing">
@@ -2497,7 +2497,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                         <p className="whitespace-nowrap text-xs font-semibold text-slate-800 dark:text-neutral-100">
                           {row.invoiceNumber != null ? `Invoice #${row.invoiceNumber}` : "Invoice"}
                         </p>
-                        <div className="mt-0.5 flex gap-3 text-xs text-muted-foreground">
+                        <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                           <span>Amt: {formatCurrency(row.totalCents)}</span>
                           <span className={row.balanceCents > 0 ? "font-medium text-red-500 dark:text-red-400" : "text-slate-400 dark:text-neutral-500"}>
                             Bal: {formatCurrency(row.balanceCents)}
@@ -2539,7 +2539,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
       </PermissionGate>
 
       {/* Divider column */}
-      <div className="hidden justify-center bg-card md:flex"><div className="w-px h-full bg-slate-200 dark:bg-neutral-700" /></div>
+      <div className="hidden justify-center bg-card xl:flex"><div className="w-px h-full bg-slate-200 dark:bg-neutral-700" /></div>
 
       {/* Right — Estimates + Contracts */}
       <div className="flex flex-col bg-card divide-y">

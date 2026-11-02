@@ -126,5 +126,7 @@ export function groupIntoSections<T extends GroupableItem>(
   }
   sections.push(current);
 
-  return started ? sections.filter((s) => s.items.length > 0 || s.sectionName !== null) : sections;
+  // A plain section header may stand alone (a heading), but a package with no visits left
+  // has nothing to sell and must not print its name, wording and a $0.00 subtotal.
+  return started ? sections.filter((s) => s.items.length > 0 || (s.sectionName !== null && !s.packageId)) : sections;
 }

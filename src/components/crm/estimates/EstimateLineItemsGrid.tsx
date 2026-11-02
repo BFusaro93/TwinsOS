@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import { bpsToPercent, centsToDisplay, clampComplexityBps, computeLineItem, getBreakevenRateCents, resolveLineDiscountCents } from "@/lib/estimate-calc";
-import { useUpsertLineItem, useDeleteLineItem } from "@/lib/hooks/use-estimates";
+import { useUpsertLineItem, useDeleteLineItem, useEstimateSubitemTotals } from "@/lib/hooks/use-estimates";
+import { packageGroupLineIds } from "@/lib/estimates/package-group";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
@@ -243,7 +244,7 @@ function SectionRow({
   item: EstimateLineItem;
   estimateId: string;
   onDelete: (id: string, estimateId: string) => void;
-  onFillDown: (packageId: string, field: FillDownField) => void;
+  onFillDown: (packageId: string, field: FillDownField, headerId?: string) => void;
   tiersEnabled?: boolean;
 }) {
   const upsert = useUpsertLineItem();
@@ -346,7 +347,7 @@ function SectionRow({
               <button
                 key={b.field}
                 type="button"
-                onClick={() => onFillDown(item.packageId as string, b.field)}
+                onClick={() => onFillDown(item.packageId as string, b.field, item.id)}
                 className="rounded border border-slate-300 dark:border-neutral-600 px-1.5 py-0.5 hover:border-brand-400 hover:text-foreground"
                 title={b.field === "all" ? "Copy qty, rate, calc, budgeted hours, cost and adjusted rate" : `Copy ${b.label} from the first visit to the rest`}
               >
@@ -1038,13 +1039,18 @@ interface Props {
   /** The estimate's property, if set — drives Rate Matrix lookups when a service being added has matrix rows keyed off one of this property's custom field values. */
   propertyId?: string | null;
   items: EstimateLineItem[];
+  /** Every live line on the estimate, not just the ones the status tab shows — package
+   *  delete and fill-down act on the whole package, including hidden visits. */
+  allItems?: EstimateLineItem[];
   selectedIds?: string[];
   onSelectionChange?: (ids: string[]) => void;
   tiersEnabled?: boolean;
   onItemStatusChange?: (status: LineItemStatus) => void;
 }
 
-export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items, selectedIds = [], onSelectionChange, tiersEnabled = false, onItemStatusChange }: Props) {
+export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items, allItems, selectedIds = [], onSelectionChange, tiersEnabled = false, onItemStatusChange }: Props) {
+  const everyItem = allItems ?? items;
+  const { data: subitemTotals = {} } = useEstimateSubitemTotals(estimateId);
   const { data: services } = useCRMServices();
   const { data: orgSettings } = useOrgSettings();
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
@@ -1099,12 +1105,12 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
 
   const handleDelete = useCallback(
     async (id: string) => {
-      const target = items.find((i) => i.id === id);
-      const group = target?.rowType === "section" && target.packageId
-        ? items.filter((i) => i.packageId === target.packageId && i.id !== id)
-        : [];
-      if (group.length > 0) {
-        setPackageDelete({ id, name: target?.sectionName ?? "this package", lineIds: group.map((i) => i.id) });
+      const target = everyItem.find((i) => i.id === id);
+      // The package's own visits, by position from the full list: lines hidden by the status
+      // tab are still part of it, and a second copy of the same package is a separate group.
+      const groupIds = target?.rowType === "section" && target.packageId ? packageGroupLineIds(id, everyItem) : [];
+      if (groupIds.length > 0) {
+        setPackageDelete({ id, name: target?.sectionName ?? "this package", lineIds: groupIds });
         return;
       }
       try {
@@ -1113,7 +1119,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         toast.error("Failed to delete line item");
       }
     },
-    [deleteItem, estimateId, items]
+    [deleteItem, estimateId, everyItem]
   );
 
   async function confirmPackageDelete() {
@@ -1130,8 +1136,12 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
 
   /** SA-style fill down: copy the package's first visit's value(s) onto every other visit,
    *  recomputing each line's totals the same way editing the cell would. */
-  async function fillPackageDown(packageId: string, field: FillDownField) {
-    const lines = items.filter((i) => i.packageId === packageId && i.rowType !== "section");
+  async function fillPackageDown(packageId: string, field: FillDownField, headerId?: string) {
+    // This header's own visits only (a package added twice is two groups).
+    const groupIds = headerId ? new Set(packageGroupLineIds(headerId, everyItem)) : null;
+    const lines = everyItem.filter((i) =>
+      !i.deletedAt && i.rowType !== "section" && (groupIds ? groupIds.has(i.id) : i.packageId === packageId)
+    );
     const [first, ...rest] = lines;
     if (!first || rest.length === 0) return;
     const pick = (src: EstimateLineItem): Partial<EstimateLineItem> => {
@@ -1327,7 +1337,16 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           tailEveryQty: r.tail_every_qty != null ? Number(r.tail_every_qty) : null,
           tailOverQty: r.tail_over_qty != null ? Number(r.tail_over_qty) : null,
         }));
-        const match = lookupRateMatrixMatch(mapped, propertyValue);
+        let match = lookupRateMatrixMatch(mapped, propertyValue);
+        // A package step with its own price under a per-unit band: the visit's quantity is the
+        // client's takeoff, else the very value the band was matched on. With no quantity at
+        // all, keep the step's locked price rather than one unit of a per-sq-ft rate.
+        let packageBandQty: number | null = null;
+        if (match && svc.lockRate && match.calcType === 1) {
+          packageBandQty = (isAreaUnit(unit) ? resolveTakeoffSqft(svc.name, takeoff) : null)
+            ?? (propertyValue > 0 ? propertyValue : null);
+          if (packageBandQty == null) match = null;
+        }
         if (match) {
           calcType = match.calcType;
           effectiveRateCents = match.rateCents;
@@ -1349,9 +1368,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           // the manual snapshot.
           // A per-unit band on an area line prices per sq ft, so a package visit
           // (qty forced to 1 above) needs the client's takeoff as its quantity.
-          if (svc.lockRate && match.calcType === 1 && isAreaUnit(unit)) {
-            qty = resolveTakeoffSqft(svc.name, takeoff) ?? qty;
-          }
+          if (packageBandQty != null) qty = packageBandQty;
           if (match.calcType === 1 && match.budgetedHours > 0 && isAreaUnit(unit)) {
             matrixProductionRate = 1 / match.budgetedHours;
             budgetMethod = "production_rate";
@@ -1435,6 +1452,12 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
    * Lines carry tier = null (all tiers), exactly like any other added line.
    */
   async function addPackage(pkg: CRMPackage) {
+    // Two copies of one package share a package_id, which converts into a single package job
+    // and confuses delete/fill-down; edit the visits of the existing one instead.
+    if (everyItem.some((i) => !i.deletedAt && i.rowType === "section" && i.packageId === pkg.id)) {
+      toast.error(`"${pkg.name}" is already on this estimate — change its visits instead of adding it again`);
+      return;
+    }
     const steps = [...(pkg.services ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
     if (steps.length === 0) {
       toast.error(`"${pkg.name}" has no services — add them in CRM Settings → Packages`);
@@ -1618,6 +1641,12 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           {filteredServices.length === 0 && filteredProducts.length === 0 && lc && (
             <div className="px-3 py-3 text-xs text-slate-400 dark:text-neutral-500">No results for &ldquo;{search}&rdquo;</div>
           )}
+          {activeServices.length === 0 && !lc && (
+            // A new org has no catalog yet: point at where services are set up.
+            <a href="/crm/settings?tab=services" className="block px-3 py-2 text-xs text-brand-600 dark:text-brand-400 hover:underline">
+              No services yet — add your services in Settings → Services
+            </a>
+          )}
           <div className="mt-1 border-t">
             <button
               className="flex w-full items-center px-3 py-1.5 text-xs text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
@@ -1713,9 +1742,17 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
                 {items.map((item, idx) => {
                   const next = items[idx + 1];
                   const endsPackage = !!item.packageId && item.rowType !== "section" && next?.packageId !== item.packageId;
-                  const packageTotal = endsPackage
-                    ? items.filter((i) => i.packageId === item.packageId && i.rowType !== "section" && (i.status === "quote" || i.status === "won")).reduce((sum, i) => sum + (i.totalCents ?? 0), 0)
-                    : 0;
+                  // The contiguous run of this package's lines ending here, priced like the
+                  // estimate total: net of line discounts, plus priced sub-items.
+                  let packageTotal = 0;
+                  if (endsPackage) {
+                    for (let j = idx; j >= 0; j--) {
+                      const row = items[j];
+                      if (row.rowType === "section" || row.packageId !== item.packageId) break;
+                      if (row.status !== "quote" && row.status !== "won") continue;
+                      packageTotal += Math.max(0, (row.totalCents ?? 0) - (row.discountCents ?? 0)) + (subitemTotals[row.id] ?? 0);
+                    }
+                  }
                   return (
                   <Fragment key={item.id}>
                   {item.rowType === "section" ? (

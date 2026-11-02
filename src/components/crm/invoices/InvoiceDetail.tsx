@@ -564,7 +564,8 @@ function RecordPaymentDialog({
   const appliedCents = Math.min(amountCents, Math.max(0, balanceCents));
   const overageCents = Math.max(0, amountCents - appliedCents);
   const isWriteOff = method === "AR Write-off";
-  const isElectronicMethod = method.startsWith("Credit Card") || method === "ACH/E-Check";
+  // Debit cards are recorded as "Debit Card- …" (#395); they are just as electronic as credit.
+  const isElectronicMethod = method.startsWith("Credit Card") || method.startsWith("Debit Card") || method === "ACH/E-Check";
 
   async function submit() {
     if (!amountCents || amountCents <= 0) { toast.error("Enter a valid amount"); return; }
@@ -646,7 +647,7 @@ function RecordPaymentDialog({
           </div>
           {isElectronicMethod && (
             <p className="text-xs text-amber-600 dark:text-amber-400">
-              Only pick {method.startsWith("Credit Card") ? "a card" : "ACH"} here if it was already collected elsewhere
+              Only pick {method.startsWith("Credit Card") || method.startsWith("Debit Card") ? "a card" : "ACH"} here if it was already collected elsewhere
               (e.g. a separate terminal) — nothing is charged by saving this.
             </p>
           )}
@@ -1199,7 +1200,9 @@ export function InvoiceDetail({
       </Dialog>
 
       {/* Tabs */}
-      <div className="flex overflow-x-auto border-b bg-card px-4 md:px-8">
+      {/* Wraps instead of scrolling sideways: on a phone the status / Locked pills used to sit
+          off-screen to the right of a scrolling tab row. */}
+      <div className="flex flex-wrap items-center border-b bg-card px-4 md:px-8">
         {(["invoice", "photos", "audit"] as const).map((tab) => (
           <button
             key={tab}
@@ -1215,7 +1218,7 @@ export function InvoiceDetail({
           </button>
         ))}
         {/* Status pills sit beside the tabs so the action buttons above never shift with them */}
-        <div className="ml-3 flex shrink-0 items-center gap-2">
+        <div className="ml-3 flex min-w-0 flex-wrap items-center gap-2 py-1">
           <Badge className={cn("text-[10px] capitalize", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
             {getDisplayInvoiceStatus(invoice)}
           </Badge>
@@ -1508,7 +1511,7 @@ export function InvoiceDetail({
           </div>
 
           {/* Notes — shown on the invoice PDF/email below the line items */}
-          <div className="mx-8 mb-5 rounded-lg border bg-card p-4 shadow-sm">
+          <div className="mx-4 md:mx-8 mb-5 rounded-lg border bg-card p-4 shadow-sm">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-2">Notes</p>
             <Textarea
               value={notesDraft}
@@ -1524,7 +1527,7 @@ export function InvoiceDetail({
           </div>
 
           {/* Line items */}
-          <div className="mx-8 mb-5 rounded-lg border bg-card shadow-sm overflow-x-auto">
+          <div className="mx-4 md:mx-8 mb-5 rounded-lg border bg-card shadow-sm overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-brand-500 text-white">
                 <tr>
@@ -1696,7 +1699,7 @@ export function InvoiceDetail({
               invoiced its full amount and the client is asked for money they
               have already paid. */}
           {unappliedCents > 0 && invoice.balanceCents > 0 && invoice.status !== "draft" && invoice.status !== "void" && (
-            <div className="mx-8 mb-5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 px-4 py-3">
+            <div className="mx-4 md:mx-8 mb-5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-blue-900 dark:text-blue-200">
                   <strong>{formatCurrency(unappliedCents)}</strong> of unapplied{" "}
@@ -1739,7 +1742,7 @@ export function InvoiceDetail({
 
           {/* Payment history */}
           {payments.length > 0 && (
-            <div className="mx-8 mb-5 rounded-lg border bg-card shadow-sm overflow-x-auto">
+            <div className="mx-4 md:mx-8 mb-5 rounded-lg border bg-card shadow-sm overflow-x-auto">
               <div className="border-b bg-slate-50 dark:bg-muted/40 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
                 Payment History
               </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -73,7 +74,19 @@ export function ClientCombobox({
         <Command filter={(itemValue, search) => (itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0)}>
           <CommandInput placeholder="Search clients..." />
           <CommandList className="!max-h-[220px]">
-            <CommandEmpty>No clients found.</CommandEmpty>
+            <CommandEmpty>
+              {clients.length === 0 ? (
+                // A new org's first estimate/invoice: point at where clients are created.
+                <span>
+                  No clients yet.{" "}
+                  <Link href="/crm/clients" className="font-medium text-brand-600 dark:text-brand-400 underline underline-offset-2">
+                    Add a client
+                  </Link>
+                </span>
+              ) : (
+                "No clients found."
+              )}
+            </CommandEmpty>
             <CommandGroup>
               {clients.map((c) => (
                 <CommandItem

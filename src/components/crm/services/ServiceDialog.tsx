@@ -41,6 +41,7 @@ import { useServiceChemicals, useSaveServiceChemicals } from "@/lib/hooks/use-ch
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import type { CRMService, BudgetMethod } from "@/types/crm-jobs";
 import { toast } from "sonner";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 
 const UNITS = ["visit", "sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 // Fallback shown only until the org has configured its own list under
@@ -170,6 +171,9 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
   const upsert = useUpsertRateMatrixRow();
   const deleteRow = useDeleteRateMatrixRow();
   const copyMatrix = useCopyRateMatrix();
+  // Copying replaces OTHER services' matrices, so it needs the edit key, not just add.
+  const { can } = usePermissions();
+  const canCopyMatrix = can("service_edit");
   const { data: allServices = [] } = useCRMServices();
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyTargets, setCopyTargets] = useState<string[]>([]);
@@ -178,12 +182,19 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
   function runCopy() {
     if (copyTargets.length === 0) return;
     copyMatrix.mutate({ sourceServiceId: serviceId, targetServiceIds: copyTargets }, {
-      onSuccess: ({ count }) => {
-        toast.success(`Copied rate matrix to ${count} service${count === 1 ? "" : "s"}`);
+      onSuccess: ({ count, failed }) => {
+        if (failed.length > 0) {
+          const name = (id: string) => allServices.find((s) => s.id === id)?.name ?? "a service";
+          toast.error(
+            `Copied to ${count} of ${copyTargets.length}. Not copied: ${failed.map((f) => `${name(f.serviceId)} (${f.error})`).join("; ")}`
+          );
+        } else {
+          toast.success(`Copied rate matrix to ${count} service${count === 1 ? "" : "s"}`);
+        }
         setCopyOpen(false);
         setCopyTargets([]);
       },
-      onError: () => toast.error("Failed to copy rate matrix"),
+      onError: (err) => toast.error(err instanceof Error && err.message ? `Failed to copy rate matrix: ${err.message}` : "Failed to copy rate matrix"),
     });
   }
 
@@ -238,7 +249,9 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
       if (field.endsWith("_cents")) {
         value = parseCents(rawValue);
       } else if (["from_val", "to_val", "budgeted_hours", "tail_every_qty", "tail_over_qty"].includes(field)) {
-        value = rawValue === "" ? null : parseNum(rawValue);
+        // from_val and budgeted_hours are NOT NULL (default 0): a cleared cell means 0.
+        const notNull = field === "from_val" || field === "budgeted_hours";
+        value = rawValue === "" ? (notNull ? 0 : null) : parseNum(rawValue);
       } else if (field === "calc_type") {
         value = parseInt(rawValue, 10) as 0 | 1;
       }
@@ -364,10 +377,12 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
           {!selectedFieldId && (
             <span className="text-xs text-slate-400 dark:text-neutral-500">Pick a lookup field above so rows know what to measure against</span>
           )}
-          <Button variant="ghost" size="sm" className="ml-auto text-xs" disabled={rows.length === 0}
-            onClick={() => setCopyOpen((o) => !o)}>
-            <Copy className="mr-1 h-3.5 w-3.5" /> Copy to other services…
-          </Button>
+          {canCopyMatrix && (
+            <Button variant="ghost" size="sm" className="ml-auto text-xs" disabled={rows.length === 0}
+              onClick={() => setCopyOpen((o) => !o)}>
+              <Copy className="mr-1 h-3.5 w-3.5" /> Copy to other services…
+            </Button>
+          )}
         </div>
       </div>
 

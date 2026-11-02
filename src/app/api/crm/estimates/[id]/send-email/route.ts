@@ -5,7 +5,7 @@ import { Resend } from "resend";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { EstimateDocument } from "@/components/crm/estimates/pdf/EstimateDocument";
-import { PRINTED_SUBITEM_SELECT, pickPrintedSubitems } from "@/lib/estimates/printed-subitems";
+import { PRINTED_SUBITEM_SELECT, pickPrintedSubitems, sumSubitemTotals } from "@/lib/estimates/printed-subitems";
 import type { EstimatePDFData, EstimatePDFLineItem, EstimatePDFMilestone, EstimatePDFPhoto, OrgPDFData } from "@/components/crm/estimates/pdf/EstimateDocument";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { complexityFactor } from "@/lib/estimate-calc";
@@ -338,6 +338,8 @@ export async function POST(
       totalCents: li.total_cents ?? 0,
       tier: li.tier ?? null,
       subitems: pickPrintedSubitems(li.estimate_line_item_subitems),
+      discountCents: li.discount_cents ?? 0,
+      subitemTotalCents: sumSubitemTotals(li.estimate_line_item_subitems),
     }));
 
   const installmentSummary = computeInstallmentSummary(

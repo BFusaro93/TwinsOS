@@ -80,12 +80,15 @@ export function MyDay() {
   const firstName = currentUser.name.split(" ")[0];
 
   const { data: allOpenTickets, isLoading: ticketsLoading } = useTickets({ status: "open" });
-  const { data: employees } = useEmployees(true);
+  const { data: employees, isLoading: employeesLoading } = useEmployees(true);
   // My Day is per-user, so default tickets and meetings to the ones assigned to
   // you; "Everyone" is one click away for managers who triage the whole queue.
-  const [scope, setScope] = useState<"mine" | "all">("mine");
+  const [scopeChoice, setScope] = useState<"mine" | "all" | null>(null);
   const myEmployee = (employees ?? []).find((e) => e.userId === currentUser.id);
   const myEmployeeId = myEmployee?.id ?? null;
+  // A login with no employee record (e.g. an owner before they add themselves) has nothing
+  // assigned to "Mine", so it starts on Everyone instead of an always-empty page.
+  const scope: "mine" | "all" = scopeChoice ?? (!employeesLoading && !myEmployeeId ? "all" : "mine");
   const { data: contributedTicketIds } = useContributedTicketIds(myEmployeeId);
   const myName = currentUser.name.trim().toLowerCase();
   const openTickets = scope === "all"

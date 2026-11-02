@@ -1056,7 +1056,7 @@ function JobDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-[800px] md:w-[800px] p-0 flex flex-col gap-0"
+        className="w-full max-w-[100vw] sm:max-w-[min(800px,100vw)] md:w-[800px] p-0 flex flex-col gap-0"
       >
         {/* Header — light gray, CMMS-style */}
         <SheetHeader className="shrink-0 border-b bg-slate-50 dark:bg-muted/40 px-5 py-4 pr-14">
@@ -2369,7 +2369,7 @@ function TeamAssignDialog({
               ))}
               {byCrew.length === 0 && (
                 <div className="flex-1 flex items-center justify-center">
-                  <p className="text-sm text-slate-400 dark:text-neutral-500">No crews configured</p>
+                  <p className="text-sm text-slate-400 dark:text-neutral-500">No crews yet. <Link href="/crm/team/crews" className="text-brand-600 dark:text-brand-400 hover:underline">Set up crews</Link></p>
                 </div>
               )}
             </div>
