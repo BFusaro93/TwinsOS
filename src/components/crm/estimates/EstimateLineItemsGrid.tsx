@@ -20,7 +20,7 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { useClient, useClientProperties } from "@/lib/hooks/use-clients";
 import { useCustomFieldDefs, useClientCustomFieldValues } from "@/lib/hooks/use-client-custom-fields";
-import { usePropertyCustomFieldValues, lookupRateMatrixMatch, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
+import { usePropertyCustomFieldValues, lookupRateMatrixMatch, applyMatrixTail, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
 import { createClient } from "@/lib/supabase/client";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { usePackages } from "@/lib/hooks/use-packages";
@@ -1327,7 +1327,25 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           tailEveryQty: r.tail_every_qty != null ? Number(r.tail_every_qty) : null,
           tailOverQty: r.tail_over_qty != null ? Number(r.tail_over_qty) : null,
         }));
-        const match = lookupRateMatrixMatch(mapped, propertyValue);
+        let match = lookupRateMatrixMatch(mapped, propertyValue);
+        // Past the end of the bands: the service's overflow rule ("every Y over
+        // X adds $R") takes over from a tail row or the flat rate.
+        if (!match || match.isTailRow) {
+          const { data: tailSvc } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+            .from("crm_services")
+            .select("matrix_tail_every_qty, matrix_tail_over_qty, matrix_tail_rate_cents, matrix_tail_hours, matrix_tail_cost_cents")
+            .eq("id", svc.id)
+            .maybeSingle();
+          if (tailSvc) {
+            match = applyMatrixTail(mapped, propertyValue, {
+              everyQty: Number(tailSvc.matrix_tail_every_qty ?? 0),
+              overQty: Number(tailSvc.matrix_tail_over_qty ?? 0),
+              rateCents: tailSvc.matrix_tail_rate_cents ?? 0,
+              hours: Number(tailSvc.matrix_tail_hours ?? 0),
+              costCents: tailSvc.matrix_tail_cost_cents ?? 0,
+            }) ?? match;
+          }
+        }
         if (match) {
           calcType = match.calcType;
           effectiveRateCents = match.rateCents;
