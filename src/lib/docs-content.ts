@@ -2091,6 +2091,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Use the Package visits toggle in the estimate's 'What the client sees' settings (it is off by default, and can also be set on an Estimate document or the org default). Off shows only the package name, wording and total. On lists each visit as a plain row under the package's main line. It applies to the proposal page, the client portal, the PDF and the [estimategrid] table in emails.",
       },
       {
+        q: "Can the Rate Matrix or chemical area use a custom number field I created?",
+        a: "Yes. Create a Number field under Settings > Custom Client Fields and it appears automatically in the Rate Matrix lookup list and in a service's Area measurement for chemical quantities. The value is read from the property first and then from the client, so enter it once on the client and override it on a property when it differs. Text, select and date fields can't be used.",
+      },
+      {
         q: "How do I quote a spot treatment or part of a property so chemical quantities use that area?",
         a: "On the estimate line open the notes menu and use the Treated Area tab to enter the sq ft you will actually treat. It carries to the job service when you convert, and you can also edit it on the job's Services tab. Materials Needed, the Daily Load List, the crew's preloaded amounts and the application panel use it instead of the property measurement. Leave it blank to use the property's measurement.",
       },

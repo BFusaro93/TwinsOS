@@ -151,12 +151,12 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
       settings.area_custom_field_id ?? null,
       serviceIds,
       propertyId ? [propertyId] : [],
-      propertyId ? null : (job.client_id ?? null)
+      job.client_id ? [job.client_id] : []
     );
     for (const c of attached ?? []) {
       if (areaByProduct.has(c.product_id)) continue;
       const js = scoped.find((x) => x.service_id === c.service_id);
-      const area = resolveArea({ propertyId, serviceId: c.service_id, treatedArea: js?.treated_area ?? null });
+      const area = resolveArea({ propertyId, clientId: job.client_id, serviceId: c.service_id, treatedArea: js?.treated_area ?? null });
       if (area != null) areaByProduct.set(c.product_id, area);
     }
   }

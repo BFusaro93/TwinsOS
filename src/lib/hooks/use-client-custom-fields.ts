@@ -183,15 +183,16 @@ export function usePropertyCustomFieldDefs() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_rate_matrix_field_defs")
-        .select("id, field_key, field_label, field_type, sort_order")
+        .select("id, field_key, field_label, field_type, sort_order, client_field_def_id")
         .eq("entity_type", "property")
         .is("deleted_at", null)
         .order("sort_order")
         .order("field_label");
       if (error) throw error;
       return (data ?? [])
+        // Mirrors of client fields already have their own client column.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .filter((row: any) => !BUILT_IN_TAKEOFF_FIELD_KEYS.has(row.field_key))
+        .filter((row: any) => !BUILT_IN_TAKEOFF_FIELD_KEYS.has(row.field_key) && !row.client_field_def_id)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((row: any): PropertyCustomFieldDef => ({
           id: row.id,

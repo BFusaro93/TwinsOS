@@ -115,37 +115,77 @@ export async function fetchPropertyAreaValues(
 }
 
 /**
- * Area from the client record itself, for a client with NO property rows — the common case
- * (takeoffs typed on Edit Client → Details land on clients.turf_sqft and friends, and most
- * clients never get a separate property). Only built-in takeoff fields have a client column.
- * A client with two or more properties stays unresolved, same as effectivePropertyId.
+ * client_id -> value for an area/lookup field, at the CLIENT level: the linked
+ * client custom field when the property def mirrors one (client_field_def_id),
+ * else the built-in takeoff column on `clients`. Property-only custom fields
+ * have no client counterpart and return nothing.
  */
-export async function fetchClientAreaFallback(
+export async function fetchClientAreaValues(
   supabase: SupabaseClient,
-  areaFieldId: string | null,
-  clientId: string | null
-): Promise<number | null> {
-  if (!areaFieldId || !clientId) return null;
-  const { count } = await supabase
-    .from("client_properties")
-    .select("id", { count: "exact", head: true })
-    .eq("client_id", clientId)
-    .is("deleted_at", null);
-  if ((count ?? 0) > 0) return null;
+  fieldId: string | null,
+  clientIds: string[]
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const ids = [...new Set(clientIds.filter(Boolean))];
+  if (!fieldId || ids.length === 0) return out;
+
   const { data: def } = await supabase
     .from("crm_rate_matrix_field_defs")
-    .select("field_key")
-    .eq("id", areaFieldId)
+    .select("field_key, client_field_def_id")
+    .eq("id", fieldId)
     .maybeSingle();
-  const column = def ? BUILT_IN_AREA_COLUMNS[(def as { field_key: string }).field_key] : undefined;
-  if (!column) return null;
-  const { data: client } = await supabase.from("clients").select(column).eq("id", clientId).maybeSingle();
-  const v = client ? (client as unknown as Record<string, unknown>)[column] : null;
-  return v != null && Number(v) > 0 ? Number(v) : null;
+  if (!def) return out;
+  const { field_key: fieldKey, client_field_def_id: clientFieldDefId } = def as {
+    field_key: string;
+    client_field_def_id: string | null;
+  };
+
+  if (clientFieldDefId) {
+    const { data: values } = await supabase
+      .from("crm_client_custom_field_values")
+      .select("client_id, value_number")
+      .eq("field_def_id", clientFieldDefId)
+      .in("client_id", ids);
+    for (const row of (values ?? []) as { client_id: string; value_number: number | null }[]) {
+      if (row.value_number != null) out.set(row.client_id, Number(row.value_number));
+    }
+    return out;
+  }
+
+  const column = BUILT_IN_AREA_COLUMNS[fieldKey];
+  if (!column) return out;
+  const { data: rows } = await supabase.from("clients").select(`id, ${column}`).in("id", ids);
+  for (const row of (rows ?? []) as unknown as Record<string, unknown>[]) {
+    const v = row[column];
+    if (v != null) out.set(row.id as string, Number(v));
+  }
+  return out;
+}
+
+/** The value of a lookup field for a property, falling back to its client. */
+export async function fetchFieldValueWithClientFallback(
+  supabase: SupabaseClient,
+  fieldId: string | null,
+  propertyId: string | null,
+  clientId: string | null
+): Promise<number | null> {
+  if (!fieldId) return null;
+  if (propertyId) {
+    const byProperty = await fetchPropertyAreaValues(supabase, fieldId, [propertyId]);
+    const v = byProperty.get(propertyId);
+    if (v != null) return v;
+  }
+  if (clientId) {
+    const byClient = await fetchClientAreaValues(supabase, fieldId, [clientId]);
+    return byClient.get(clientId) ?? null;
+  }
+  return null;
 }
 
 export interface ChemicalAreaArgs {
   propertyId: string | null;
+  /** Used when the property has no value (or there is no property): the client's value for the same field. */
+  clientId?: string | null;
   serviceId: string | null;
   /** crm_job_services.treated_area — what this job actually treats. */
   treatedArea?: number | null;
@@ -165,8 +205,7 @@ export async function buildChemicalAreaResolver(
   orgAreaFieldId: string | null,
   serviceIds: string[],
   propertyIds: string[],
-  /** With no property at all, the client's own takeoff (Edit Client → Details) is the area. */
-  clientIdForFallback: string | null = null
+  clientIds: string[] = []
 ): Promise<ChemicalAreaResolver> {
   const ids = [...new Set(serviceIds.filter(Boolean))];
   const serviceFieldById = new Map<string, string>();
@@ -178,19 +217,18 @@ export async function buildChemicalAreaResolver(
   }
   const fieldIds = [...new Set([...(orgAreaFieldId ? [orgAreaFieldId] : []), ...serviceFieldById.values()])];
   const valuesByField = new Map<string, Map<string, number>>();
-  const clientAreaByField = new Map<string, number>();
+  const clientValuesByField = new Map<string, Map<string, number>>();
   for (const fieldId of fieldIds) {
     valuesByField.set(fieldId, await fetchPropertyAreaValues(supabase, fieldId, propertyIds));
-    if (clientIdForFallback && propertyIds.length === 0) {
-      const v = await fetchClientAreaFallback(supabase, fieldId, clientIdForFallback);
-      if (v != null) clientAreaByField.set(fieldId, v);
-    }
+    clientValuesByField.set(fieldId, await fetchClientAreaValues(supabase, fieldId, clientIds));
   }
-  return ({ propertyId, serviceId, treatedArea }) => {
+  return ({ propertyId, clientId, serviceId, treatedArea }) => {
     if (treatedArea != null && treatedArea > 0) return Number(treatedArea);
     const fieldId = (serviceId ? serviceFieldById.get(serviceId) : undefined) ?? orgAreaFieldId;
     if (!fieldId) return undefined;
-    if (!propertyId) return clientAreaByField.get(fieldId);
-    return valuesByField.get(fieldId)?.get(propertyId);
+    // Property value first, then the client's own value for the same field.
+    const onProperty = propertyId ? valuesByField.get(fieldId)?.get(propertyId) : undefined;
+    if (onProperty != null) return onProperty;
+    return clientId ? clientValuesByField.get(fieldId)?.get(clientId) : undefined;
   };
 }

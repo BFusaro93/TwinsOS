@@ -8004,6 +8004,7 @@ export type Database = {
       }
       crm_rate_matrix_field_defs: {
         Row: {
+          client_field_def_id: string | null
           created_at: string
           deleted_at: string | null
           entity_type: string
@@ -8016,6 +8017,7 @@ export type Database = {
           sort_order: number
         }
         Insert: {
+          client_field_def_id?: string | null
           created_at?: string
           deleted_at?: string | null
           entity_type?: string
@@ -8028,6 +8030,7 @@ export type Database = {
           sort_order?: number
         }
         Update: {
+          client_field_def_id?: string | null
           created_at?: string
           deleted_at?: string | null
           entity_type?: string
