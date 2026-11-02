@@ -41,6 +41,8 @@ export interface CRMService {
   matrixTailRateCents: number | null;
   matrixTailHours: number | null;
   matrixTailCostCents: number | null;
+  /** Property measurement this service's chemical quantities size from; null = the org's Area Custom Field. */
+  chemicalAreaFieldId: string | null;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -93,6 +95,8 @@ export interface CRMJobService {
   serviceInvoiceDescription: string | null; // from crm_services.invoice_description, for the job-level invoice-desc fallback preview
   /** Days that must elapse after this service's visit completes before the next package-sequenced service is due, if this row came from a Package. */
   minDays: number | null;
+  /** Area this service treats (sq ft); overrides the property measurement for chemical quantities. */
+  treatedArea?: number | null;
   /** Products to bring / sub-services to do under this service (copied from the estimate; no prices). */
   subitems?: CRMJobServiceSubitem[];
 }

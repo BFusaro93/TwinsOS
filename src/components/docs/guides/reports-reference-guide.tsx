@@ -114,7 +114,7 @@ const SECTIONS: ReportSection[] = [
         name: "Materials Needed for Upcoming Jobs",
         description: "For every product (chemical or general material): quantity needed for outstanding scheduled and waiting-list jobs, amount on hand, amount on order, and the resulting shortfall — with the ability to create a Requisition or PO directly from a shortfall.",
         notes: [
-          "Chemical quantities require an Area Custom Field under Settings > Chemical Tracking and a default Application Rate on the product. General materials come from each job's Products section.",
+          "Chemical quantities require an Area Custom Field under Settings > Chemical Tracking and a default Application Rate on the product. A job service's treated area, or a service's own area measurement (e.g. Parking Lot / Hardscape Sq. Ft.), takes priority over the org-wide field. A chemical with no application rate shows as \"not estimated\". General materials come from each job's Products section.",
           "Chemical demand is the concentrate amount to stock or order, not the raw \"applied X per area\" rate — when a rate is configured with a diluted/mixed unit (e.g. 1 gallon of finished spray-mix per 1,000 sq ft), the report resolves the rate's dilution settings and the org's unit conversions to back out the concentrate, the same calculation the Daily Load List report uses.",
           "Amount on Order sums line-item quantities on open Requisitions (pending approval/approved) and Purchase Orders (requested through partially fulfilled) for that product, less any quantity already received against those PO lines.",
           "Demand counts visits in Scheduled, Dispatched, or In Progress status, plus waiting-list jobs that have not been dispatched yet. Only job products still marked Pending count — products already marked Invoiced or Used are excluded, since their quantity has already come out of on-hand.",
@@ -125,7 +125,7 @@ const SECTIONS: ReportSection[] = [
         name: "Daily Load List",
         description: "What each crew needs to load on the truck for a given day — chemicals (concentrate amount and finished spray-mix volume) and general materials, grouped by crew.",
         notes: [
-          "Defaults to the org's current operating day. Chemical amounts use an already-entered application record for that visit when one exists, otherwise fall back to the default Application Rate × an Area Custom Field on the property — the same estimate Materials Needed uses.",
+          "Defaults to the org's current operating day. Chemical amounts use an already-entered application record for that visit when one exists, otherwise fall back to the default Application Rate × the area (the job service's treated area, else the service's own area measurement, else the org's Area Custom Field on the property) — the same estimate Materials Needed uses.",
           "Mix volume is the total finished spray solution (e.g. gallons of mix), computed from the product's default rate's dilution settings — it only appears when that rate has a Mixed with Water/Product ratio configured with convertible units.",
           "Crew is the visit's crew override if set, otherwise the job's default crew; visits/jobs with no crew assigned appear under Unassigned. A row that can't be reduced to one unit (e.g. stops recorded in different units) says why instead of printing a number.",
         ],

@@ -5,6 +5,7 @@ import { FileText } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
 
@@ -13,10 +14,12 @@ export interface LineItemNotes {
   jobNote: string | null;
   invoiceDesc: string | null;
   internalNote: string | null;
+  /** Sq ft this line treats, when it differs from the property measurement. */
+  treatedArea: number | null;
 }
 
 function hasNotes(notes: LineItemNotes): boolean {
-  return !!(notes.estimateDesc || notes.jobNote || notes.invoiceDesc || notes.internalNote);
+  return !!(notes.estimateDesc || notes.jobNote || notes.invoiceDesc || notes.internalNote || notes.treatedArea);
 }
 
 interface Props {
@@ -68,6 +71,9 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
               <TabsTrigger value="line_item" className="h-7 rounded-none border-b-2 border-transparent px-2 text-xs data-[state=active]:border-brand-500 data-[state=active]:bg-transparent">
                 Line Item
               </TabsTrigger>
+              <TabsTrigger value="treated_area" className="h-7 rounded-none border-b-2 border-transparent px-2 text-xs data-[state=active]:border-brand-500 data-[state=active]:bg-transparent">
+                Treated Area
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -109,6 +115,26 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
                 value={draft.internalNote ?? ""}
                 onChange={(e) => setDraft((d) => ({ ...d, internalNote: e.target.value || null }))}
                 placeholder="Private internal note…"
+              />
+            </TabsContent>
+
+            <TabsContent value="treated_area" className="mt-0">
+              <p className="mb-1.5 text-xs text-muted-foreground">
+                Sq ft this line actually treats (a spot treatment, the front lawn only). Chemical quantities on the
+                Materials Needed, Load List and crew app use this instead of the property measurement. Leave blank to
+                use the property measurement.
+              </p>
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                className="w-40"
+                value={draft.treatedArea ?? ""}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setDraft((d) => ({ ...d, treatedArea: Number.isFinite(v) && v > 0 ? v : null }));
+                }}
+                placeholder="Sq ft"
               />
             </TabsContent>
           </div>

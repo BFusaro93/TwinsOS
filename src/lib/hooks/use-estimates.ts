@@ -58,6 +58,7 @@ function mapLineItem(row: any): EstimateLineItem {
     sectionName: row.section_name ?? null,
     tier: (row.tier as 'basic' | 'standard' | 'premium' | null) ?? null,
     packageId: row.package_id ?? null,
+    treatedArea: row.treated_area != null ? Number(row.treated_area) : null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

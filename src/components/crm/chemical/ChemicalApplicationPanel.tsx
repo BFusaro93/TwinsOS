@@ -388,7 +388,7 @@ export function ChemicalApplicationPanel({ jobId, visitId }: Props) {
 
   const [addingProductId, setAddingProductId] = useState("");
   const { data: addingProductRates = [] } = useChemicalApplicationRates(addingProductId || undefined);
-  const { data: areaValue = null } = useChemicalJobAreaValue(jobId, settings?.areaCustomFieldId);
+  const { data: areaValue = null } = useChemicalJobAreaValue(jobId, settings?.areaCustomFieldId, addingProductId || null);
   const unitsById = new Map([...units, ...areaUnits].map((u) => [u.id, u]));
 
   const employees = employeesRaw.map((e) => ({

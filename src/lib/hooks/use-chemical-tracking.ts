@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
-import { effectivePropertyId, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
+import { buildChemicalAreaResolver, effectivePropertyId, fetchSinglePropertyByClient } from "@/lib/chemical-area";
 import type {
   ChemicalApplication,
   ChemicalApplicationRate,
@@ -603,22 +603,47 @@ export function useDeleteChemicalApplication() {
  * client's only property when the job has none), so the panel and the reports
  * can't disagree about whether an estimate exists.
  */
-export function useChemicalJobAreaValue(jobId: string, areaFieldId: string | null | undefined) {
+export function useChemicalJobAreaValue(
+  jobId: string,
+  areaFieldId: string | null | undefined,
+  /** The product being applied: its service may size from its own field or carry a treated-area override. */
+  productId?: string | null
+) {
   return useQuery({
-    queryKey: ["chemical-job-area-value", jobId, areaFieldId],
+    queryKey: ["chemical-job-area-value", jobId, areaFieldId, productId ?? null],
     queryFn: async (): Promise<number | null> => {
       const supabase = createClient();
       const { data: job } = await supabase
         .from("crm_jobs")
-        .select("client_id, property_id")
+        .select("client_id, property_id, crm_job_services(service_id, included, treated_area)")
         .eq("id", jobId)
         .maybeSingle();
       if (!job) return null;
       const single = job.property_id ? new Map<string, string>() : await fetchSinglePropertyByClient(supabase, [job.client_id ?? ""]);
       const propertyId = effectivePropertyId(job, single);
-      if (!propertyId) return null;
-      const values = await fetchPropertyAreaValues(supabase, areaFieldId ?? null, [propertyId]);
-      return values.get(propertyId) ?? null;
+      const jobServices = ((job as unknown as {
+        crm_job_services: { service_id: string | null; included: boolean | null; treated_area: number | null }[] | null;
+      }).crm_job_services ?? []).filter((js) => js.included !== false && js.service_id);
+      // The job service that attaches this product (first match), if any.
+      let serviceId: string | null = null;
+      let treatedArea: number | null = null;
+      if (productId && jobServices.length > 0) {
+        const { data: attached } = await supabase
+          .from("crm_service_chemicals")
+          .select("service_id")
+          .eq("product_id", productId)
+          .in("service_id", jobServices.map((js) => js.service_id as string));
+        const match = jobServices.find((js) => (attached ?? []).some((a) => a.service_id === js.service_id));
+        serviceId = match?.service_id ?? null;
+        treatedArea = match?.treated_area != null ? Number(match.treated_area) : null;
+      }
+      const resolveArea = await buildChemicalAreaResolver(
+        supabase,
+        areaFieldId ?? null,
+        serviceId ? [serviceId] : [],
+        propertyId ? [propertyId] : []
+      );
+      return resolveArea({ propertyId, serviceId, treatedArea }) ?? null;
     },
     enabled: !!jobId && !!areaFieldId,
   });

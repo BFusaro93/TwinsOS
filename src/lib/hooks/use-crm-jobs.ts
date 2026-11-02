@@ -219,6 +219,7 @@ function mapService(row: any): CRMService {
     matrixTailRateCents: row.matrix_tail_rate_cents ?? null,
     matrixTailHours: row.matrix_tail_hours ? Number(row.matrix_tail_hours) : null,
     matrixTailCostCents: row.matrix_tail_cost_cents ?? null,
+    chemicalAreaFieldId: row.chemical_area_field_id ?? null,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -639,6 +640,7 @@ function mapJobServiceFull(s: any): CRMJobService {
     sortOrder: s.sort_order ?? 0,
     serviceInvoiceDescription: s.crm_services?.invoice_description ?? null,
     minDays: s.min_days ?? null,
+    treatedArea: s.treated_area != null ? Number(s.treated_area) : null,
     subitems: mapServiceSubitems(s.crm_job_service_subitems),
   };
 }
@@ -2295,6 +2297,8 @@ export function useCreateJobsFromEstimate() {
         /** Estimate line this service converts. Unique on crm_job_services:
          *  the DB refuses a second conversion of the same line. */
         estimateLineItemId?: string | null;
+        /** Area this service treats (sq ft); overrides the property measurement for chemical quantities. */
+        treatedArea?: number | null;
         /** Recurring only: the estimate line's visit count — the service's
          *  rate is priced per visit over exactly this many (max_visits). */
         maxVisits?: number | null;
@@ -2506,6 +2510,7 @@ export function useCreateJobsFromEstimate() {
               days_count: 1,
               is_taxable: s.isTaxable ?? estimateIsTaxed,
               estimate_line_item_id: s.estimateLineItemId ?? null,
+              treated_area: s.treatedArea ?? null,
               max_visits: (jobType === "recurring" || jobType === "package") && s.maxVisits && s.maxVisits > 0 ? Math.round(s.maxVisits) : null,
               start_date: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.startDate ?? null,
               complete_by_date: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.completeByDate ?? null,
@@ -3270,7 +3275,7 @@ export function useUpdateJobService() {
   return useMutation({
     mutationFn: async ({ id, patch }: {
       id: string;
-      patch: { qty?: number; rate_cents?: number | null; budgeted_hours?: number };
+      patch: { qty?: number; rate_cents?: number | null; budgeted_hours?: number; treated_area?: number | null };
     }) => {
       const supabase = createClient();
       if (typeof patch.budgeted_hours === 'number') patch = { ...patch, budgeted_hours: roundHours(patch.budgeted_hours) };

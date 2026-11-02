@@ -544,6 +544,7 @@ function LineItemRow({
           job_note: notes.jobNote,
           invoice_desc: notes.invoiceDesc,
           internal_note: notes.internalNote,
+          treated_area: notes.treatedArea,
         },
       });
       setRow((r) => ({ ...r, ...notes }));
@@ -920,7 +921,7 @@ function LineItemRow({
             />
             <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
             <LineItemNotesPopover
-              notes={{ estimateDesc: row.estimateDesc ?? null, jobNote: row.jobNote ?? null, invoiceDesc: row.invoiceDesc ?? null, internalNote: row.internalNote ?? null }}
+              notes={{ estimateDesc: row.estimateDesc ?? null, jobNote: row.jobNote ?? null, invoiceDesc: row.invoiceDesc ?? null, internalNote: row.internalNote ?? null, treatedArea: row.treatedArea ?? null }}
               onSave={saveNotes}
             />
             <button
@@ -1216,6 +1217,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
             job_note: item.jobNote,
             invoice_desc: item.invoiceDesc,
             internal_note: item.internalNote,
+            treated_area: item.treatedArea,
             sort_order: items.length,
           },
         });

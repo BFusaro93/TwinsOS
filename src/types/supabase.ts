@@ -6362,6 +6362,7 @@ export type Database = {
       }
       crm_job_services: {
         Row: {
+          treated_area: number | null
           assigned_to: string | null
           budget_method: string
           budgeted_hours: number
@@ -6388,6 +6389,7 @@ export type Database = {
           time_start: string | null
         }
         Insert: {
+          treated_area?: number | null
           assigned_to?: string | null
           budget_method?: string
           budgeted_hours?: number
@@ -6414,6 +6416,7 @@ export type Database = {
           time_start?: string | null
         }
         Update: {
+          treated_area?: number | null
           assigned_to?: string | null
           budget_method?: string
           budgeted_hours?: number
@@ -9151,6 +9154,7 @@ export type Database = {
       }
       crm_services: {
         Row: {
+          chemical_area_field_id: string | null
           budget_method: string
           call_script_notes: string | null
           category: string
@@ -9193,6 +9197,7 @@ export type Database = {
           upsell_pitch: string | null
         }
         Insert: {
+          chemical_area_field_id?: string | null
           budget_method?: string
           call_script_notes?: string | null
           category?: string
@@ -9235,6 +9240,7 @@ export type Database = {
           upsell_pitch?: string | null
         }
         Update: {
+          chemical_area_field_id?: string | null
           budget_method?: string
           call_script_notes?: string | null
           category?: string
@@ -10742,6 +10748,7 @@ export type Database = {
       }
       estimate_line_items: {
         Row: {
+          treated_area: number | null
           adj_rate_cents: number | null
           applied_discount_id: string | null
           budget_method: string
@@ -10782,6 +10789,7 @@ export type Database = {
           visits: number
         }
         Insert: {
+          treated_area?: number | null
           adj_rate_cents?: number | null
           applied_discount_id?: string | null
           budget_method?: string
@@ -10822,6 +10830,7 @@ export type Database = {
           visits?: number
         }
         Update: {
+          treated_area?: number | null
           adj_rate_cents?: number | null
           applied_discount_id?: string | null
           budget_method?: string
