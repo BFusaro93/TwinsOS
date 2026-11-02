@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Trash2 } from "lucide-react";
+import { Copy, Plus, Trash2 } from "lucide-react";
 import { RichTextEditor } from "./RichTextEditor";
 import {
   useCreateCRMService,
@@ -32,6 +32,7 @@ import {
   useRateMatrix,
   useUpsertRateMatrixRow,
   useDeleteRateMatrixRow,
+  useCopyRateMatrix,
   useCustomFieldDefs,
 } from "@/lib/hooks/use-rate-matrix";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
@@ -168,6 +169,23 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
   const { data: rows = [] } = useRateMatrix(serviceId);
   const upsert = useUpsertRateMatrixRow();
   const deleteRow = useDeleteRateMatrixRow();
+  const copyMatrix = useCopyRateMatrix();
+  const { data: allServices = [] } = useCRMServices();
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyTargets, setCopyTargets] = useState<string[]>([]);
+  const copyCandidates = allServices.filter((s) => !s.deletedAt && s.id !== serviceId);
+
+  function runCopy() {
+    if (copyTargets.length === 0) return;
+    copyMatrix.mutate({ sourceServiceId: serviceId, targetServiceIds: copyTargets }, {
+      onSuccess: ({ count }) => {
+        toast.success(`Copied rate matrix to ${count} service${count === 1 ? "" : "s"}`);
+        setCopyOpen(false);
+        setCopyTargets([]);
+      },
+      onError: () => toast.error("Failed to copy rate matrix"),
+    });
+  }
 
   const { data: fieldDefs = [] } = useCustomFieldDefs("property");
   const numericFieldDefs = fieldDefs.filter((d) => d.fieldType === "number");
@@ -346,8 +364,39 @@ function RateMatrixTab({ serviceId }: RateMatrixTabProps) {
           {!selectedFieldId && (
             <span className="text-xs text-slate-400 dark:text-neutral-500">Pick a lookup field above so rows know what to measure against</span>
           )}
+          <Button variant="ghost" size="sm" className="ml-auto text-xs" disabled={rows.length === 0}
+            onClick={() => setCopyOpen((o) => !o)}>
+            <Copy className="mr-1 h-3.5 w-3.5" /> Copy to other services…
+          </Button>
         </div>
       </div>
+
+      {copyOpen && (
+        <div className="rounded-lg border p-3 flex flex-col gap-2">
+          <p className="text-xs text-slate-600 dark:text-neutral-400">
+            Copies these {rows.length} rows to each service you tick. Any rate matrix the target already has is replaced.
+          </p>
+          <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
+            {copyCandidates.map((s) => (
+              <label key={s.id} className="flex items-center gap-2 text-xs">
+                <Checkbox
+                  checked={copyTargets.includes(s.id)}
+                  onCheckedChange={(v) =>
+                    setCopyTargets((prev) => (v ? [...prev, s.id] : prev.filter((id) => id !== s.id)))
+                  }
+                />
+                {s.name}
+              </label>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setCopyOpen(false)}>Cancel</Button>
+            <Button size="sm" disabled={copyTargets.length === 0 || copyMatrix.isPending} onClick={runCopy}>
+              Copy to {copyTargets.length || ""} service{copyTargets.length === 1 ? "" : "s"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <p className="text-xs text-slate-400 dark:text-neutral-500">
         Tail rows apply when a property value exceeds all standard range rows. Mark a row as Tail to use it as the overflow rule.
