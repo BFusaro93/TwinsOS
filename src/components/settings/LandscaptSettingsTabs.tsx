@@ -703,7 +703,7 @@ function CRMTab() {
       <AccordionSection title="Tags" count={clientTags.length}>
         <OrgListEditor listName="client_tags" addPlaceholder="e.g. VIP" />
       </AccordionSection>
-      <AccordionSection title="Custom Client Fields" count={customFieldDefs.length} defaultOpen={false} description="Define takeoff fields and custom data points collected on every client (used in estimate rate matrices)">
+      <AccordionSection title="Custom Client Fields" count={customFieldDefs.length} defaultOpen={false} description="Define takeoff fields and custom data points collected on every client. Number fields can also drive Rate Matrix pricing and chemical quantities; a property can override the client value">
         <CustomFieldDefsEditor />
       </AccordionSection>
       <AccordionSection title="Email Templates" defaultOpen={false} description="Templates used when emailing clients now live in Documents, alongside every other template type.">

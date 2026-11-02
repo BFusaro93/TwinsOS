@@ -301,7 +301,8 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     supabase,
     areaFieldId,
     liveVisits.flatMap((v) => chemicalServiceIdsForVisit(v).map((c) => c.serviceId)),
-    [...new Set(liveVisits.map((v) => (v.crm_jobs ? jobPropertyId(v.crm_jobs) : null)).filter(Boolean) as string[])]
+    [...new Set(liveVisits.map((v) => (v.crm_jobs ? jobPropertyId(v.crm_jobs) : null)).filter(Boolean) as string[])],
+    [...new Set(liveVisits.map((v) => v.crm_jobs?.client_id).filter(Boolean) as string[])]
   );
 
   // ── already-entered application records for these visits (preferred over estimate) ──
@@ -412,7 +413,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
 
         const rate = defaultRateByProduct.get(pid);
         const propertyId = jobPropertyId(job);
-        const areaValue = resolveArea({ propertyId, serviceId: sid, treatedArea });
+        const areaValue = resolveArea({ propertyId, clientId: job.client_id, serviceId: sid, treatedArea });
         if (!rate || areaValue == null) continue;
         // Resolved per-visit, not summed-then-converted — which of
         // chemical/solution is the rate's "primary" number depends on the

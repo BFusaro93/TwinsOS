@@ -111,6 +111,15 @@ export function ServicesPricingGuide() {
           Edits to a row save when you click out of the field.
         </p>
         <p>
+          <strong>Which fields can be the lookup.</strong> The built-in measurements (Turf, Mulch Bed,
+          Gross, Linear Ft. Perimeter, Linear Ft. Edging, Yards of Mulch, Parking Lot / Hardscape) and
+          any <strong>Number</strong> field you create under Settings &rarr; Custom Client Fields.
+          Number fields appear in the list automatically, with the same name. The value comes from the
+          property when the property has one, otherwise from the client, so you can enter it once on the
+          client and override it on a particular property. With no property on the estimate, the client&rsquo;s
+          value is used. Text fields can&rsquo;t be used.
+        </p>
+        <p>
           <strong>Copy to other services.</strong> Click <strong>Copy to other services&hellip;</strong>{" "}
           under the table, tick the services, and click <strong>Copy to N services</strong>. The rows,
           the lookup field and the overflow rule are copied to each ticked service, and any matrix a

@@ -20,6 +20,7 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { useClient, useClientProperties } from "@/lib/hooks/use-clients";
 import { useCustomFieldDefs, useClientCustomFieldValues } from "@/lib/hooks/use-client-custom-fields";
+import { fetchFieldValueWithClientFallback } from "@/lib/chemical-area";
 import { usePropertyCustomFieldValues, lookupRateMatrixMatch, applyMatrixTail, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
 import { createClient } from "@/lib/supabase/client";
 import { stripHtml } from "@/lib/utils/strip-html";
@@ -1281,7 +1282,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     // has Rate Matrix rows keyed off a property field (e.g. Turf Sq. Ft.) that the
     // estimate's property has a value for, the matched band prices the visit, so a
     // package honors custom fields the same as the service added on its own.
-    if (svc.id && propertyId) {
+    if (svc.id && (propertyId || clientId)) {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: matrixRows } = await (supabase as any)
@@ -1301,18 +1302,13 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       // line. The matrix rows are already being fetched here on the same
       // round trip; one more point lookup removes the race entirely instead of
       // just narrowing it.
-      let propertyValue: number | null = null;
-      if (customFieldId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: fieldValueRow } = await (supabase as any)
-          .from("crm_property_custom_field_values")
-          .select("value_number")
-          .eq("property_id", propertyId)
-          .eq("field_def_id", customFieldId)
-          .maybeSingle();
-        const raw = (fieldValueRow as { value_number: number | null } | null)?.value_number;
-        propertyValue = raw != null ? Number(raw) : null;
-      }
+      // Property value first (custom value, then the property's own takeoff
+      // column), then the client's value for the same field — so a number
+      // entered once on the client prices every estimate without a property,
+      // and a property can override it.
+      const propertyValue: number | null = customFieldId
+        ? await fetchFieldValueWithClientFallback(supabase, customFieldId, propertyId ?? null, clientId ?? null)
+        : null;
       if (rows.length > 0 && propertyValue != null) {
         const mapped: RateMatrixRow[] = rows.map((r) => ({
           id: r.id as string,
