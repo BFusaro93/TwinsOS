@@ -129,7 +129,7 @@ export function DamageCasesPage() {
                       <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{c.description}</TableCell>
                       <TableCell className="text-sm">{formatDate(c.dateOfIncident)}</TableCell>
                       <TableCell>
-                        <Badge className={`${STATUS_COLORS[c.status]} text-xs`}>
+                        <Badge variant="outline" className={`border-transparent ${STATUS_COLORS[c.status]} text-xs`}>
                           {DAMAGE_CASE_STATUS_LABELS[c.status]}
                         </Badge>
                       </TableCell>
