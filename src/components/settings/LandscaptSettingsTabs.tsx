@@ -2774,8 +2774,12 @@ function InvoiceNumberingSection() {
   async function save() {
     if (!valid) return;
     try {
-      await setNext.mutateAsync(parsed);
-      toast.success(`The next invoice will be #${parsed}`);
+      const effective = await setNext.mutateAsync(parsed);
+      toast.success(
+        effective === parsed
+          ? `The next invoice will be #${effective}`
+          : `You already have invoices up to #${effective - 1}, so the next invoice will be #${effective}`
+      );
       setDraft("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to set the invoice number");
@@ -2786,7 +2790,9 @@ function InvoiceNumberingSection() {
     <div className="space-y-3 p-4">
       <p className="text-sm text-slate-600 dark:text-neutral-400">
         Next invoice number:{" "}
-        <span className="font-semibold text-slate-900 dark:text-neutral-100">{numbering ? `#${numbering.nextNumber}` : "…"}</span>
+        <span className="font-semibold text-slate-900 dark:text-neutral-100">
+          {!numbering ? "…" : numbering.nextNumber != null ? `#${numbering.nextNumber}` : "assigned automatically"}
+        </span>
         {numbering?.maxExisting != null && (
           <span className="text-slate-400 dark:text-neutral-500"> · highest existing invoice is #{numbering.maxExisting}</span>
         )}
@@ -2809,7 +2815,7 @@ function InvoiceNumberingSection() {
       </div>
       {overlaps && (
         <p className="text-xs text-amber-700 dark:text-amber-400">
-          You already have invoices up to #{numbering?.maxExisting}. Numbers an existing invoice already uses are skipped, so you won&apos;t get duplicates.
+          You already have invoices up to #{numbering?.maxExisting}, so numbering will continue at #{(numbering?.maxExisting ?? 0) + 1} to avoid duplicates.
         </p>
       )}
       <p className="text-xs text-slate-400 dark:text-neutral-500">

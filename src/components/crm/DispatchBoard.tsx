@@ -3884,6 +3884,8 @@ export function DispatchBoard() {
   // Move-to-day dialog state
   const [moveDayDate, setMoveDayDate] = useState("");
   const [moveDayOpen, setMoveDayOpen] = useState(false);
+  // A second click while the bulk move is in flight sent the request twice.
+  const [movingDay, setMovingDay] = useState(false);
 
   // Route optimization state
   const [optimizing,         setOptimizing]         = useState(false);
@@ -5577,7 +5579,8 @@ export function DispatchBoard() {
             ) : displayVisits.length === 0 ? (
               <tr>
                 <td colSpan={20} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
-                  {search || crewFilters.length > 0 || statusFilter !== "all"
+                  {search || crewFilters.length > 0 || statusFilter !== "all" || tagFilters.length > 0 ||
+                    priorityFilters.length > 0 || serviceFilters.length > 0 || (colFilterKey && colFilterValue)
                     ? "No visits match the current filters"
                     : "No visits scheduled for this date"}
                 </td>
@@ -5685,8 +5688,9 @@ export function DispatchBoard() {
               <Button
                 size="sm"
                 className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white"
-                disabled={!moveDayDate}
+                disabled={!moveDayDate || movingDay}
                 onClick={async () => {
+                  if (movingDay) return;
                   // Only visits that aren't already on the target day — moving
                   // a visit onto its own date used to report "Moved 1 visit"
                   // while changing nothing.
@@ -5700,6 +5704,7 @@ export function DispatchBoard() {
                     );
                     return;
                   }
+                  setMovingDay(true);
                   try {
                     // 409s (package min-days rule, invoiced-visit lock) come
                     // back as the server's own message — shown as-is.
@@ -5715,10 +5720,12 @@ export function DispatchBoard() {
                     toast.success(`Moved ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${moveDayDate}`);
                   } catch (err) {
                     toast.error(err instanceof Error ? err.message : "Failed to move visits");
+                  } finally {
+                    setMovingDay(false);
                   }
                 }}
               >
-                Move
+                {movingDay ? "Moving…" : "Move"}
               </Button>
             </div>
           </div>

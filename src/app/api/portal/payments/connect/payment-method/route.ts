@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
@@ -51,4 +52,41 @@ export async function DELETE() {
   if (error) return NextResponse.json({ error: "Failed to remove payment method" }, { status: 500 });
 
   return NextResponse.json({ removed: true });
+}
+
+const AutopaySchema = z.object({ autopayEnabled: z.boolean() });
+
+/** PATCH — the customer turns autopay on or off for the payment method they have saved. */
+export async function PATCH(request: Request) {
+  const ctx = await getPortalContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const parsed = AutopaySchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+
+  // Service client: portal users have no profiles row, and the client write guard reserves
+  // payment columns for service-role callers. Scoped to this portal user's own client.
+  const serviceClient = createServiceClient();
+  const { data: client } = await serviceClient
+    .from("clients")
+    .select("id, saved_payment_method_id")
+    .eq("id", ctx.clientId)
+    .eq("org_id", ctx.orgId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
+  if (parsed.data.autopayEnabled && !client.saved_payment_method_id) {
+    return NextResponse.json({ error: "Save a payment method before turning on autopay" }, { status: 400 });
+  }
+
+  const { error } = await serviceClient
+    .from("clients")
+    .update({ autopay_enabled: parsed.data.autopayEnabled })
+    .eq("id", client.id)
+    .eq("org_id", ctx.orgId);
+  if (error) {
+    log.error("failed to update autopay", { error, clientId: client.id });
+    return NextResponse.json({ error: "Failed to update autopay" }, { status: 500 });
+  }
+  return NextResponse.json({ autopayEnabled: parsed.data.autopayEnabled });
 }

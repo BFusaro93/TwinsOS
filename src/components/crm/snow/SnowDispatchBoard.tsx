@@ -1212,6 +1212,8 @@ export function SnowDispatchBoard() {
     }
   }
 
+  const [reordering, setReordering] = useState(false);
+
   /** Writes order_num for every visit whose position in `orderedIds` changed. */
   async function persistOrder(orderedIds: string[]) {
     const byId = new Map(visits.map((v) => [v.id, v]));
@@ -1232,6 +1234,9 @@ export function SnowDispatchBoard() {
   }
 
   async function moveStop(v: CRMJobVisit, dir: -1 | 1) {
+    // Each tap swaps against the order on the server; a second tap before the refetch
+    // swapped from a stale order and undid the first.
+    if (reordering) return;
     const crewKey = effectiveCrewIdOf(v) ?? "none";
     const group = filteredVisits.filter((x) => (effectiveCrewIdOf(x) ?? "none") === crewKey);
     const idx = group.findIndex((x) => x.id === v.id);
@@ -1242,7 +1247,8 @@ export function SnowDispatchBoard() {
     const b = ids.indexOf(neighbor.id);
     [ids[a], ids[b]] = [ids[b], ids[a]];
     setDriveMins(new Map());
-    try { await persistOrder(ids); } catch { toast.error("Failed to reorder"); }
+    setReordering(true);
+    try { await persistOrder(ids); } catch { toast.error("Failed to reorder"); } finally { setReordering(false); }
   }
 
   async function changeCrew(visitIds: string[], crewId: string | null) {
@@ -1692,8 +1698,8 @@ export function SnowDispatchBoard() {
                           <span className="w-4 text-center text-[11px] text-slate-500 dark:text-neutral-400">{stopNumberById.get(v.id)}</span>
                           {canManage && (
                             <span className="flex flex-col">
-                              <button type="button" title="Move up in route" className="text-slate-300 hover:text-slate-600 dark:text-neutral-600 dark:hover:text-neutral-300" onClick={() => void moveStop(v, -1)}><ArrowUp className="h-3 w-3" /></button>
-                              <button type="button" title="Move down in route" className="text-slate-300 hover:text-slate-600 dark:text-neutral-600 dark:hover:text-neutral-300" onClick={() => void moveStop(v, 1)}><ArrowDown className="h-3 w-3" /></button>
+                              <button type="button" title="Move up in route" className="text-slate-300 hover:text-slate-600 dark:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-40" disabled={reordering} onClick={() => void moveStop(v, -1)}><ArrowUp className="h-3 w-3" /></button>
+                              <button type="button" title="Move down in route" className="text-slate-300 hover:text-slate-600 dark:text-neutral-600 dark:hover:text-neutral-300 disabled:opacity-40" disabled={reordering} onClick={() => void moveStop(v, 1)}><ArrowDown className="h-3 w-3" /></button>
                             </span>
                           )}
                         </div>

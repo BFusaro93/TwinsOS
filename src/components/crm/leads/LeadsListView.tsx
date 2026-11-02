@@ -93,6 +93,7 @@ export function LeadsListView({ selectedId, onSelect, onBack }: LeadsListViewPro
       (l.primaryPhone ?? "").includes(q) ||
       (qDigits.length >= 3 && (l.primaryPhone ?? "").replace(/\D/g, "").includes(qDigits)) ||
       (l.primaryEmail ?? "").toLowerCase().includes(q) ||
+      (l.serviceCity ?? "").toLowerCase().includes(q) ||
       (l.billingCity ?? "").toLowerCase().includes(q)
     );
   });

@@ -400,6 +400,8 @@ export async function submitFormResponse(
   // (e.g. two clients named "John Smith") is treated as "no match" rather than
   // guessing and misattaching the submission.
   let relatedClientId: string | null = null;
+  // Set only when this submission created a brand-new lead (fires lead_created below).
+  let createdLeadId: string | null = null;
   let result = "On Hold";
 
   // Escapes ILIKE wildcard characters so a submitted name containing "%" or
@@ -700,6 +702,7 @@ export async function submitFormResponse(
         console.error("[submitFormResponse] failed to create client:", newClientErr.message);
       }
       relatedClientId = newClient?.id ?? null;
+      createdLeadId = newClient?.id ?? null;
 
       if (relatedClientId && (submittedFirstName || submittedEmail)) {
         await db.from("client_contacts").insert({
@@ -900,6 +903,15 @@ export async function submitFormResponse(
       await fireSimpleTrigger(db, { orgId: form.org_id, clientId: relatedClientId, triggerType: "form_submitted" });
     } catch (err) {
       console.error("[submitFormResponse] form_submitted trigger failed:", err instanceof Error ? err.message : err);
+    }
+  }
+  if (createdLeadId) {
+    // A web-form lead is a new lead like a manual, imported or Zapier one: "new lead → text
+    // the rep" automations key on lead_created, which form leads never fired.
+    try {
+      await fireSimpleTrigger(db, { orgId: form.org_id, clientId: createdLeadId, triggerType: "lead_created" });
+    } catch (err) {
+      console.error("[submitFormResponse] lead_created trigger failed:", err instanceof Error ? err.message : err);
     }
   }
 

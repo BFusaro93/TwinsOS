@@ -113,3 +113,33 @@ export async function fetchPropertyAreaValues(
   }
   return out;
 }
+
+/**
+ * Area from the client record itself, for a client with NO property rows — the common case
+ * (takeoffs typed on Edit Client → Details land on clients.turf_sqft and friends, and most
+ * clients never get a separate property). Only built-in takeoff fields have a client column.
+ * A client with two or more properties stays unresolved, same as effectivePropertyId.
+ */
+export async function fetchClientAreaFallback(
+  supabase: SupabaseClient,
+  areaFieldId: string | null,
+  clientId: string | null
+): Promise<number | null> {
+  if (!areaFieldId || !clientId) return null;
+  const { count } = await supabase
+    .from("client_properties")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", clientId)
+    .is("deleted_at", null);
+  if ((count ?? 0) > 0) return null;
+  const { data: def } = await supabase
+    .from("crm_rate_matrix_field_defs")
+    .select("field_key")
+    .eq("id", areaFieldId)
+    .maybeSingle();
+  const column = def ? BUILT_IN_AREA_COLUMNS[(def as { field_key: string }).field_key] : undefined;
+  if (!column) return null;
+  const { data: client } = await supabase.from("clients").select(column).eq("id", clientId).maybeSingle();
+  const v = client ? (client as unknown as Record<string, unknown>)[column] : null;
+  return v != null && Number(v) > 0 ? Number(v) : null;
+}

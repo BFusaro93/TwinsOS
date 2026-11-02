@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { pushInvoiceToQuickBooks, pushPaymentToQuickBooks, retryPendingQuickBooksVoids } from "@/lib/integrations/quickbooks";
+import { pushInvoiceToQuickBooks, pushPaymentToQuickBooks, retryPendingQuickBooksVoids, QBO_DUPLICATE_NAME_MESSAGE } from "@/lib/integrations/quickbooks";
 import { logger } from "@/lib/logger";
 import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
@@ -89,9 +89,9 @@ export async function GET(request: Request) {
 
     try {
       // 1. Issued invoices created since connecting that never reached QuickBooks.
-      const { data: toCreate } = await db
+      const { data: toCreateRaw } = await db
         .from("crm_invoices")
-        .select("id")
+        .select("id, updated_at, qbo_sync_error, qbo_sync_attempted_at, clients(updated_at)")
         .eq("org_id", orgId)
         .is("deleted_at", null)
         .is("qbo_invoice_id", null)
@@ -101,7 +101,16 @@ export async function GET(request: Request) {
         .or(`qbo_sync_attempted_at.is.null,qbo_sync_attempted_at.lt.${retryBefore}`)
         .order("created_at", { ascending: true })
         .limit(MAX_CREATES);
-      for (const row of (toCreate ?? []) as { id: string }[]) {
+      // A client whose name exists as a vendor/employee in QuickBooks can't be created there
+      // until someone renames or links it: don't retry that invoice every run, only once the
+      // invoice or its client has been edited since the failed attempt.
+      type CreateRow = { id: string; updated_at: string; qbo_sync_error: string | null; qbo_sync_attempted_at: string | null; clients: { updated_at: string } | null };
+      const toCreate = ((toCreateRaw ?? []) as CreateRow[]).filter((r) => {
+        if (r.qbo_sync_error !== QBO_DUPLICATE_NAME_MESSAGE || !r.qbo_sync_attempted_at) return true;
+        const lastEdit = [r.updated_at, r.clients?.updated_at ?? ""].sort().pop() ?? "";
+        return lastEdit > r.qbo_sync_attempted_at;
+      });
+      for (const row of toCreate) {
         if (overBudget()) { stoppedEarly = true; break; }
         const result = await pushInvoiceToQuickBooks(db, orgId, row.id);
         if (result.status === "pushed") counts.created++;
@@ -158,8 +167,6 @@ export async function GET(request: Request) {
         .is("qbo_payment_id", null)
         .not("crm_invoices.qbo_invoice_id", "is", null)
         .is("crm_payments.deleted_at", null)
-        // Credit applications aren't pushed (the original prepayment already is).
-        .or("is_credit.is.null,is_credit.eq.false", { referencedTable: "crm_payments" })
         .gte("crm_payments.created_at", connectedAt)
         .lt("crm_payments.created_at", settledBefore)
         // Never-attempted first, then the longest-waiting: an unordered limit kept returning the

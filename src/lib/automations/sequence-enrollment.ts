@@ -805,7 +805,7 @@ export async function triggerConditionsMet(
  * silently truncates at 1000 rows) and scoped to the org in SQL rather than
  * fetching every tenant's triggers and filtering in memory.
  */
-async function fetchOrgTriggers(
+export async function fetchOrgTriggers(
   supabase: AnyClient,
   orgId: string,
   triggerType: string
@@ -915,11 +915,15 @@ export async function fireSimpleTrigger(
      * whether this is passed.
      */
     matchValues?: string[];
-  }
+  },
+  /** The org's triggers of this type, already loaded by a caller that fires many events for
+   *  one org (the past-due crons) — saves a paged trigger query per row. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  preloadedTriggers?: any[]
 ): Promise<string[]> {
   const enrolledIds: string[] = [];
 
-  const triggers = await fetchOrgTriggers(supabase, params.orgId, params.triggerType);
+  const triggers = preloadedTriggers ?? await fetchOrgTriggers(supabase, params.orgId, params.triggerType);
 
   for (const trigger of (triggers ?? []) as {
     id: string;

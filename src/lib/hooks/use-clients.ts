@@ -38,7 +38,7 @@ import type {
  * Never throws: the primary mutation has already committed by the time this
  * runs, so a failed timeline write must not surface as a failed save.
  */
-async function logClientActivity(
+export async function logClientActivity(
   supabase: ReturnType<typeof createClient>,
   clientId: string,
   subject: string,
@@ -552,10 +552,12 @@ export function useUpdateClientProperty() {
           if (clientError) throw clientError;
         }
       }
+      await logClientActivity(supabase, clientId, `Property updated${property.name ? `: ${property.name}` : property.address ? `: ${property.address}` : ""}`);
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "properties"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
     },
   });
 }
@@ -669,6 +671,16 @@ export function useCreateClient() {
           service_city: values.serviceCity || null,
           service_state: values.serviceState || null,
           service_zip: values.serviceZip || null,
+          // The dialog's address check, when it ran against this exact address: without it a
+          // verified new client had no coordinates or verdict until someone re-typed the address.
+          ...(values.addressVerdict
+            ? {
+                address_verdict: values.addressVerdict,
+                address_verified_at: new Date().toISOString(),
+                lat: values.lat ?? null,
+                lng: values.lng ?? null,
+              }
+            : {}),
           // clients.billing_same_as_service defaults to true and is in fact
           // true for every client on both projects, so a create that captured
           // a service address and no separate billing address mirrors it
@@ -1624,9 +1636,12 @@ export function useUpdateClientContact() {
           .eq("is_primary", true)
           .is("deleted_at", null);
       }
+      const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ").trim();
+      await logClientActivity(supabase, clientId, `Contact updated${name ? `: ${name}` : ""}`);
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "contacts"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
     },
   });
 }
@@ -1634,16 +1649,21 @@ export function useUpdateClientContact() {
 export function useDeleteClientContact() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id }: { id: string; clientId: string }) => {
+    mutationFn: async ({ id, clientId }: { id: string; clientId: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      const { data: removed, error } = await supabase
         .from("client_contacts")
         .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
+        .eq("id", id)
+        .select("first_name, last_name")
+        .maybeSingle();
       if (error) throw error;
+      const name = [removed?.first_name, removed?.last_name].filter(Boolean).join(" ").trim();
+      await logClientActivity(supabase, clientId, `Contact removed${name ? `: ${name}` : ""}`);
     },
     onSuccess: (_data, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId, "contacts"] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
     },
   });
 }
@@ -1796,7 +1816,9 @@ export function useCreateLead() {
 export function useBulkImportLeads() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    // A BulkImportResult so the import dialog lists every failed or skipped row with its
+    // reason (the counts-only toast hid which rows to fix).
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult & { created: number; matched: number }> => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -1806,18 +1828,20 @@ export function useBulkImportLeads() {
 
       let created = 0;
       let matched = 0;
-      let skipped = 0;
-      let failed = 0;
+      const failed: BulkImportResult["failed"] = [];
+      const skipped: BulkImportResult["failed"] = [];
 
-      for (const r of rows) {
+      for (const [i, r] of rows.entries()) {
+        // The CSV's own line number (line 1 is the header).
+        const rowNum = i + 2;
         // One bad row (constraint error, transient failure) must not abort the
         // rest of the import after earlier rows were already written.
         try {
         const displayName = r.displayName?.trim();
-        if (!displayName) { skipped++; continue; }
+        if (!displayName) { failed.push({ row: rowNum, error: "Missing required field: Display Name" }); continue; }
 
         const emailRaw = r.primaryEmail?.trim() || null;
-        if (emailRaw && !EMAIL_RE.test(emailRaw)) { skipped++; continue; }
+        if (emailRaw && !EMAIL_RE.test(emailRaw)) { failed.push({ row: rowNum, error: `"${displayName}": invalid email format ("${emailRaw}")` }); continue; }
 
         const email = r.primaryEmail?.trim().toLowerCase() || null;
         const phone = toE164Us(r.primaryPhone);
@@ -1835,6 +1859,7 @@ export function useBulkImportLeads() {
             );
           }
           matched++;
+          skipped.push({ row: rowNum, error: `"${displayName}": matches an existing client by email or phone — not created` });
           continue;
         }
 
@@ -1868,12 +1893,12 @@ export function useBulkImportLeads() {
           if (phoneDigits) byPhone.set(phoneDigits, newClient.id);
         }
         created++;
-        } catch {
-          failed++;
+        } catch (err) {
+          failed.push({ row: rowNum, error: err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Failed to save" });
         }
       }
 
-      return { created, matched, skipped, failed };
+      return { succeeded: created, failed, skipped, created, matched };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
@@ -1927,6 +1952,23 @@ export function useOrgTags(): string[] {
   return (data ?? []).map((o) => o.value);
 }
 
+/** Adds `tag` to the org's tag list (Settings → Tags) if it isn't there. Best effort. */
+async function addTagToOrgList(supabase: ReturnType<typeof createClient>, tag: string): Promise<boolean> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: listed } = await (supabase as any)
+      .from("crm_list_options").select("value").eq("list_name", "client_tags").is("deleted_at", null);
+    if (((listed ?? []) as { value: string }[]).some((o) => o.value.toLowerCase() === tag.toLowerCase())) return false;
+    const { data: orgId } = await supabase.rpc("my_org_id");
+    if (!orgId) return false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from("crm_list_options").insert({ org_id: orgId, list_name: "client_tags", value: tag });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 export function useAddClientTag() {
   const qc = useQueryClient();
   return useMutation({
@@ -1942,12 +1984,16 @@ export function useAddClientTag() {
       if (error) throw error;
       const added = (data ?? []).length > 0;
       if (added) await logClientActivity(supabase, clientId, `Tag added: ${tag}`);
+      // A tag typed in (not picked from the org list) is added to the list too, or it can't be
+      // filtered on or bulk-applied. Needs CRM settings permission (RLS); skipped quietly without it.
+      if (added) await addTagToOrgList(supabase, tag);
       return { added };
     },
     onSuccess: (result, { clientId, tag }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
       qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
+      qc.invalidateQueries({ queryKey: ["crm_list_options", "client_tags"] });
       if (result?.added) fireAutomationTrigger({ triggerType: "tag_added", clientId, matchValues: [tag] });
     },
     onError: () => {
@@ -1967,10 +2013,12 @@ export function useRemoveClientTag() {
         .eq("client_id", clientId)
         .eq("tag", tag);
       if (error) throw error;
+      await logClientActivity(supabase, clientId, `Tag removed: ${tag}`);
     },
     onSuccess: (_d, { clientId, tag }) => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
+      qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
       fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
     },
     onError: () => {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { fetchOrgTriggers, fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
@@ -88,6 +88,8 @@ export async function GET(request: Request) {
       .eq("org_id", orgId)
       .eq("trigger_type", "invoice_past_due");
     if (!triggerCount) continue;
+    // Loaded once per org rather than once per overdue row.
+    const orgTriggers = await fetchOrgTriggers(supabase, orgId, "invoice_past_due");
 
     const orgToday = todayInZone(await getOrgTimeZone(supabase, orgId));
     for (const invoice of rows) {
@@ -101,7 +103,7 @@ export async function GET(request: Request) {
         clientId: invoice.client_id,
         invoiceId: invoice.id,
         triggerType: "invoice_past_due",
-      });
+      }, orgTriggers);
       fired++;
     }
   }

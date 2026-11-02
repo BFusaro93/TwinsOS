@@ -43,12 +43,22 @@ export default function PortalLoginPage() {
       return;
     }
 
-    // Verify this is a portal user, not a staff user
-    const portalMeta = data.user?.user_metadata?.portal;
-    if (!portalMeta) {
+    // A portal user is anyone with a live portal link — including a staff or owner account that
+    // was invited as a customer (user_metadata.portal is only set on logins the portal created).
+    const { data: links } = await supabase
+      .from("client_portal_users")
+      .select("org_id")
+      .eq("user_id", data.user.id)
+      .is("deleted_at", null)
+      .limit(1);
+    if (!links || links.length === 0) {
       await supabase.auth.signOut();
-      setError("This is a staff or crew login, not a client portal account.");
-      setStaffLogin(true);
+      if (data.user?.user_metadata?.portal) {
+        setError("Your portal access is no longer active. Contact your service provider if you think this is a mistake.");
+      } else {
+        setError("This is a staff or crew login, not a client portal account.");
+        setStaffLogin(true);
+      }
       setLoading(false);
       return;
     }

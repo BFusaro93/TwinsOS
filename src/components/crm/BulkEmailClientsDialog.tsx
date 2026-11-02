@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
+import { blocksUseEstimateTags } from "@/lib/estimates/estimate-tags";
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import { GENERAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import Link from "next/link";
@@ -59,6 +60,10 @@ export function BulkEmailClientsDialog({
     [allDocTemplates]
   );
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  // Auto-picked defaults that turned out to be estimate emails (estimate-only merge tags would
+  // send blank here); skipped by the auto-select below. A user's own pick is never skipped.
+  const [skippedDefaultIds, setSkippedDefaultIds] = useState<string[]>([]);
+  const autoPickedRef = useRef(false);
   const { data: selectedDocTemplate } = useDocumentTemplate(selectedTemplateId);
   const [subject, setSubject] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
@@ -71,6 +76,7 @@ export function BulkEmailClientsDialog({
   const richTextRef = useRef<RichTextEditorHandle>(null);
 
   function applyTemplate(templateId: string) {
+    autoPickedRef.current = false;
     setSelectedTemplateId(templateId);
   }
 
@@ -79,6 +85,11 @@ export function BulkEmailClientsDialog({
   // as InvoiceEmailDialog.
   useEffect(() => {
     if (!selectedDocTemplate) return;
+    if (autoPickedRef.current && blocksUseEstimateTags(selectedDocTemplate.blocks)) {
+      setSkippedDefaultIds((prev) => [...prev, selectedDocTemplate.id]);
+      setSelectedTemplateId("");
+      return;
+    }
     if (selectedDocTemplate.subject) setSubject(selectedDocTemplate.subject);
     setBodyHtml(renderBlocksToHtml(selectedDocTemplate.blocks, {}, { preserveUnresolvedKnownTags: true }));
   }, [selectedDocTemplate]);
@@ -86,10 +97,14 @@ export function BulkEmailClientsDialog({
   // Auto-select the org's default "client" document template on open.
   useEffect(() => {
     if (open && templates.length > 0 && !selectedTemplateId) {
-      const def = templates.find((t) => t.isDefault) ?? templates[0];
-      if (def) setSelectedTemplateId(def.id);
+      const candidates = templates.filter((t) => !skippedDefaultIds.includes(t.id));
+      const def = candidates.find((t) => t.isDefault) ?? candidates[0];
+      if (def) {
+        autoPickedRef.current = true;
+        setSelectedTemplateId(def.id);
+      }
     }
-  }, [open, templates, selectedTemplateId]);
+  }, [open, templates, selectedTemplateId, skippedDefaultIds]);
 
   // The caller builds `clientIds` inline, so it's a new array on every parent
   // render — keying the fetch off its identity re-ran the query continuously

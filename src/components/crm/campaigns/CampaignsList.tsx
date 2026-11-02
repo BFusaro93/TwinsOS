@@ -220,7 +220,8 @@ function CampaignDialog({
       if (form.targetSegment === "active_clients") return c.status === "active";
       if (form.targetSegment === "leads") return c.status === "lead";
       if (form.targetSegment === "past_clients") return c.status === "inactive" || c.status === "cancelled";
-      return true;
+      // All Clients = active + inactive (matches send-campaign.ts).
+      return c.status === "active" || c.status === "inactive";
     });
     return inSegment.filter((c) => c.doNotMarket).length;
   }, [allClients, form.targetSegment]);
@@ -298,7 +299,7 @@ function CampaignDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all_clients">All Clients</SelectItem>
+                  <SelectItem value="all_clients">All Clients (active + inactive)</SelectItem>
                   <SelectItem value="active_clients">Active Clients</SelectItem>
                   <SelectItem value="leads">Leads</SelectItem>
                   <SelectItem value="past_clients">Past Clients</SelectItem>
@@ -616,7 +617,8 @@ export function CampaignsList() {
     if (sending.targetSegment === "active_clients") return eligible.filter((c) => c.status === "active").length;
     if (sending.targetSegment === "leads") return eligible.filter((c) => c.status === "lead").length;
     if (sending.targetSegment === "past_clients") return eligible.filter((c) => c.status === "inactive" || c.status === "cancelled").length;
-    return eligible.length;
+    // All Clients = active + inactive, same as the send.
+    return eligible.filter((c) => c.status === "active" || c.status === "inactive").length;
   }, [sending, allClients]);
 
   const filtered = campaigns.filter((c: CRMCampaign) => {

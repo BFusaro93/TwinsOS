@@ -43,6 +43,10 @@ function credentialsFor(env: QuickBooksEnvironment): { clientId: string; clientS
   const sandboxId = process.env.QUICKBOOKS_CLIENT_ID_SANDBOX;
   const sandboxSecret = process.env.QUICKBOOKS_CLIENT_SECRET_SANDBOX;
   if (env === "sandbox" && sandboxId && sandboxSecret) return { clientId: sandboxId, clientSecret: sandboxSecret };
+  // A sandbox org on a production deployment (QUICKBOOKS_SANDBOX_ORG_IDS) needs the sandbox pair:
+  // Intuit's development and production keys differ, so falling back to the production pair
+  // against the sandbox API only produced an opaque token error. Report it as not configured.
+  if (env === "sandbox" && process.env.QUICKBOOKS_ENVIRONMENT === "production") return null;
   const clientId = process.env.QUICKBOOKS_CLIENT_ID;
   const clientSecret = process.env.QUICKBOOKS_CLIENT_SECRET;
   return clientId && clientSecret ? { clientId, clientSecret } : null;
@@ -282,6 +286,19 @@ export interface CreateCustomerInput {
   billingZip?: string | null;
 }
 
+/** Intuit 6240 "Duplicate Name Exists": QuickBooks names are unique across customers, vendors
+ *  and employees, so a vendor or employee already has this client's name. Retrying can't fix
+ *  it — the client must be renamed or linked to the existing record by hand. */
+export const QBO_DUPLICATE_NAME_MESSAGE =
+  "This client's name already exists as a vendor or employee in QuickBooks — rename the client or link it to a QuickBooks customer from the client's QuickBooks section.";
+
+export class QboDuplicateNameError extends Error {
+  constructor() {
+    super(QBO_DUPLICATE_NAME_MESSAGE);
+    this.name = "QboDuplicateNameError";
+  }
+}
+
 export async function createCustomer(conn: QuickBooksConnection, input: CreateCustomerInput): Promise<string> {
   const body: Record<string, unknown> = { DisplayName: input.displayName };
   if (input.email) body.PrimaryEmailAddr = { Address: input.email };
@@ -306,6 +323,7 @@ export async function createCustomer(conn: QuickBooksConnection, input: CreateCu
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    if (/"code"\s*:\s*"6240"|Duplicate Name Exists/i.test(text)) throw new QboDuplicateNameError();
     throw new Error(`QuickBooks customer creation failed (${res.status}): ${text}`);
   }
   const data = await res.json();
@@ -351,7 +369,12 @@ export async function findOrCreateCustomer(
     return { status: "matched", customerId: exact[0].Id };
   }
 
-  const fuzzy = await qboQuery(conn, `SELECT Id, DisplayName FROM Customer WHERE DisplayName LIKE '%${escaped}%'`, "Customer");
+  // `%` is the QuickBooks query wildcard: a name containing one ("100% Lawn") must not widen
+  // the search to unrelated customers. Strip it (and `_`, for safety) from the fuzzy term.
+  const fuzzyTerm = escaped.replace(/[%_]/g, " ").trim();
+  const fuzzy = fuzzyTerm
+    ? await qboQuery(conn, `SELECT Id, DisplayName FROM Customer WHERE DisplayName LIKE '%${fuzzyTerm}%'`, "Customer")
+    : [];
   if (fuzzy.length === 0) {
     const customerId = await createCustomer(conn, input);
     return { status: "created", customerId };
@@ -1064,16 +1087,11 @@ export async function clearQuickBooksLinks(db: any, orgId: string): Promise<void
   await db.from("clients").update({ qbo_customer_id: null }).eq("org_id", orgId).not("qbo_customer_id", "is", null);
   await db.from("crm_invoices").update({ qbo_invoice_id: null, qbo_sync_error: null, qbo_sync_attempted_at: null }).eq("org_id", orgId).not("qbo_invoice_id", "is", null);
   await db.from("crm_services").update({ qbo_item_id: null }).eq("org_id", orgId).not("qbo_item_id", "is", null);
-  // Allocations carry no org_id: walk the org's payments in chunks.
-  const { data: payments } = await db.from("crm_payments").select("id").eq("org_id", orgId);
-  const ids = ((payments ?? []) as { id: string }[]).map((p) => p.id);
-  for (let i = 0; i < ids.length; i += 200) {
-    await db
-      .from("crm_payment_allocations")
-      .update({ qbo_payment_id: null, qbo_sync_error: null, qbo_sync_attempted_at: null })
-      .in("payment_id", ids.slice(i, i + 200))
-      .not("qbo_payment_id", "is", null);
-  }
+  await db
+    .from("crm_payment_allocations")
+    .update({ qbo_payment_id: null, qbo_sync_error: null, qbo_sync_attempted_at: null })
+    .eq("org_id", orgId)
+    .not("qbo_payment_id", "is", null);
   await db.from("crm_qbo_pending_voids").update({ resolved_at: nowIso }).eq("org_id", orgId).is("resolved_at", null);
 }
 
@@ -1192,7 +1210,8 @@ export async function pushInvoiceToQuickBooks(
       .from("crm_invoices")
       .update({ qbo_sync_error: errorMessage(err), qbo_sync_attempted_at: attemptedAt })
       .eq("id", invoiceId);
-    return { status: "error", reason: "quickbooks_api_error" };
+    // The cron skips a duplicate-name failure until the invoice or its client is edited.
+    return { status: "error", reason: err instanceof QboDuplicateNameError ? "duplicate_name" : "quickbooks_api_error" };
   }
 }
 
@@ -1255,15 +1274,13 @@ export async function pushPaymentToQuickBooks(
     return { status: "error", reason: "ambiguous_client_match" };
   }
 
-  // An AR write-off is not money received: it goes to QuickBooks as a credit memo
-  // applied to the invoice, never as a cash Payment. A credit payment only applies
-  // a prepayment/credit that is already in QuickBooks as the original payment, so
-  // pushing it again would double count — leave it out entirely.
+  // Neither an AR write-off nor a staff-issued account credit is money received: both go to
+  // QuickBooks as a credit memo applied to the invoice, never as a cash Payment. (Applying an
+  // existing prepayment doesn't create an is_credit row — it allocates the ORIGINAL payment,
+  // which is pushed as a Payment like any other.) Credits used to be skipped entirely, so the
+  // QuickBooks invoice stayed open while Landscapt showed it paid.
   const isWriteOff = payment.method === AR_WRITE_OFF_METHOD;
-  if (payment.is_credit === true && !isWriteOff) {
-    return { status: "skipped", pushedAllocations: 0, skippedAllocations: 0 };
-  }
-  const asCreditMemo = isWriteOff;
+  const asCreditMemo = isWriteOff || payment.is_credit === true;
 
   let pushed = 0;
   let skipped = 0;
@@ -1295,7 +1312,7 @@ export async function pushPaymentToQuickBooks(
             qboInvoiceId,
             amountCents: alloc.amount_cents,
             txnDate: payment.payment_date,
-            note: "AR write-off",
+            note: isWriteOff ? "AR write-off" : "Account credit",
             requestId: alloc.id,
           })
         : await createPayment(conn, {

@@ -105,7 +105,9 @@ export async function POST(request: Request) {
   }
 }
 
-const SaveSchema = z.object({ setupIntentId: z.string(), enableAutopay: z.boolean().default(true) });
+// Off unless the customer ticks "use for autopay": a card saved only for manual payments
+// was being charged automatically.
+const SaveSchema = z.object({ setupIntentId: z.string(), enableAutopay: z.boolean().default(false) });
 
 export async function PUT(request: Request) {
   if (!isStripeConfigured() && !isStripeTestConfigured()) {

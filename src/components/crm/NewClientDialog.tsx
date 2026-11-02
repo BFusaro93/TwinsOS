@@ -86,6 +86,9 @@ export function NewClientDialog({ open, onOpenChange, onCreated, initialStatus =
         serviceCity: serviceCity.trim(),
         serviceState: serviceState.trim(),
         serviceZip: serviceZip.trim(),
+        ...(addr.result && addr.isCurrent({ address: serviceAddress, city: serviceCity, state: serviceState, zip: serviceZip })
+          ? { addressVerdict: addr.result.verdict, lat: addr.result.lat, lng: addr.result.lng }
+          : {}),
         // Left blank on purpose — useCreateClient mirrors the service address
         // into billing when no separate billing address is given.
         billingAddress: "",

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
+import { crewGroupVisitIds } from "@/lib/crew/crew-group-visits";
 
 /**
  * GET /api/crm/crew/visits/:visitId/job-products — the materials office
@@ -32,7 +33,7 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitError } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, job_id, org_id, crew_id, crew_unassigned, scheduled_date, crm_jobs(crew_id)")
+    .select("id, job_id, org_id, crew_id, crew_unassigned, crew_group_id, scheduled_date, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -57,6 +58,8 @@ export async function GET(
   // date boundary in this codebase (see lib/time/zone).
   const timeZone = await getOrgTimeZone(supabase, visit.org_id as string);
   const serviceDate = (visit.scheduled_date as string | null) ?? todayInZone(timeZone);
+  // A multi-crew stop's per-visit rows sit on the lead visit; every crew on the stop sees them.
+  const stopVisitIds = await crewGroupVisitIds(visit);
 
   return NextResponse.json(
     (data ?? [])
@@ -64,7 +67,7 @@ export async function GET(
       .filter((row: any) =>
         // Per-visit rows (recurring/package sub-item products) belong to ONE visit;
         // job-level rows (visit_id null) are shared by every visit of the job.
-        (row.visit_id == null || row.visit_id === visitId) &&
+        (row.visit_id == null || stopVisitIds.has(row.visit_id)) &&
         (row.status === "pending"
         || (row.updated_at && isoInZone(new Date(row.updated_at as string), timeZone) === serviceDate))
       )

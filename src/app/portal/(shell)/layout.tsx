@@ -15,8 +15,18 @@ export default async function PortalShellLayout({ children }: { children: React.
     if (choices.length > 1) redirect("/portal/select-org");
     // A signed-in user with no live portal link (access reset, client deleted, add-on gone)
     // used to bounce between the login form and here with no explanation.
+    // Only a real (former) portal login gets the revoked notice — which also signs it out. A
+    // staff session that opens /portal must not be signed out of the office app.
     const { data: { user } } = await (await createClient()).auth.getUser();
-    redirect(user ? "/portal/login?reason=revoked" : "/portal/login");
+    let wasPortalUser = !!user?.user_metadata?.portal;
+    if (user && !wasPortalUser) {
+      const { count } = await createServiceClient()
+        .from("client_portal_users")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id);
+      wasPortalUser = (count ?? 0) > 0;
+    }
+    redirect(wasPortalUser ? "/portal/login?reason=revoked" : "/portal/login");
   }
 
   const supabase = createServiceClient();

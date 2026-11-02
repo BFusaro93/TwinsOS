@@ -75,6 +75,7 @@ import {
   DEFAULT_DISPLAY_SETTINGS,
   displaySettingsEqual,
   hasHandSetDisplaySettings,
+  getOrgDefaultDisplaySettings,
   type DisplaySettings,
 } from "@/lib/estimate-display-settings";
 import {
@@ -569,7 +570,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     if (
       !estimate ||
       displaySettingsEqual(estimate.displaySettings, incoming) ||
-      !hasHandSetDisplaySettings(estimate.displaySettings, estimate.displaySettingsBaseline)
+      !hasHandSetDisplaySettings(
+        estimate.displaySettings,
+        estimate.displaySettingsBaseline,
+        getOrgDefaultDisplaySettings(orgSettings?.customizations as Record<string, unknown> | null | undefined),
+      )
     ) {
       return Promise.resolve(true);
     }
@@ -583,9 +588,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   // Accepts an explicit patch for callers that fire save in the same tick as
   // patchHeader (e.g. Select onValueChange) — headerEdits state hasn't
   // re-rendered yet at that point, so reading it here would miss the just-set value.
-  async function saveHeader(explicitPatch?: Record<string, string | boolean | number | null>) {
+  /** Saves header edits; resolves true on success so callers can roll back their own staged edits. */
+  async function saveHeader(explicitPatch?: Record<string, string | boolean | number | null>): Promise<boolean> {
     const patch = explicitPatch ?? headerEdits;
-    if (!estimate || Object.keys(patch).length === 0) return;
+    if (!estimate || Object.keys(patch).length === 0) return false;
     // A date input happily yields "232026-09-01" when a year is mistyped, and
     // Postgres stores it — the estimate then never expires (or always has).
     const nextEstimateDate = (patch.estimate_date as string | undefined) ?? estimate.estimateDate;
@@ -595,20 +601,22 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     for (const d of [patch.estimate_date, patch.valid_until_date]) {
       if (typeof d === "string" && d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
         toast.error("Enter a valid date (4-digit year)");
-        return;
+        return false;
       }
     }
     if (nextValidUntil && nextEstimateDate && nextValidUntil < nextEstimateDate) {
       toast.error("Valid Until can't be before the estimate date");
-      return;
+      return false;
     }
     setSaving(true);
     try {
       await updateEstimate({ id: estimate.id, patch });
       setHeaderEdits({});
       toast.success("Saved");
+      return true;
     } catch (err) {
       toast.error(mutationErrorMessage(err, "Save failed"));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -1569,17 +1577,28 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               // the estimate: estimate > document > bundle > org default.
                               const docSettings = val ? allDocTemplates.find((t) => t.id === val)?.displaySettings ?? null : null;
                               patchHeader("document_template_id", val);
+                              // A failed save must not leave the document (and its toggles) queued in
+                              // headerEdits, where the next unrelated header save would apply them.
+                              const unstage = () => setHeaderEdits((p) => {
+                                const rest = { ...p };
+                                delete rest.document_template_id;
+                                delete rest.display_settings;
+                                delete rest.display_settings_baseline;
+                                return rest;
+                              });
                               if (docSettings && (await confirmReplaceToggles(docSettings))) {
                                 patchHeader("display_settings", { ...docSettings } as unknown as boolean);
-                                saveHeader({
+                                const ok = await saveHeader({
                                   ...headerEdits,
                                   document_template_id: val,
                                   display_settings: docSettings as unknown as boolean,
                                   display_settings_baseline: docSettings as unknown as boolean,
                                 });
-                                toast.success("Applied this document's display settings");
+                                if (ok) toast.success("Applied this document's display settings");
+                                else unstage();
                               } else {
-                                saveHeader({ ...headerEdits, document_template_id: val });
+                                const ok = await saveHeader({ ...headerEdits, document_template_id: val });
+                                if (!ok) unstage();
                               }
                             }}
                           >

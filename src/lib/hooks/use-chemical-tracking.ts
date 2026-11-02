@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
-import { effectivePropertyId, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
+import { effectivePropertyId, fetchClientAreaFallback, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
 import type {
   ChemicalApplication,
   ChemicalApplicationRate,
@@ -616,7 +616,8 @@ export function useChemicalJobAreaValue(jobId: string, areaFieldId: string | nul
       if (!job) return null;
       const single = job.property_id ? new Map<string, string>() : await fetchSinglePropertyByClient(supabase, [job.client_id ?? ""]);
       const propertyId = effectivePropertyId(job, single);
-      if (!propertyId) return null;
+      // No property at all: the client's own takeoff (Edit Client → Details) is the area.
+      if (!propertyId) return fetchClientAreaFallback(supabase, areaFieldId ?? null, job.client_id ?? null);
       const values = await fetchPropertyAreaValues(supabase, areaFieldId ?? null, [propertyId]);
       return values.get(propertyId) ?? null;
     },

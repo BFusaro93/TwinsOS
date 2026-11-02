@@ -63,9 +63,10 @@ export function SavedPaymentMethodDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onSaved: (summary: string) => void;
+  onSaved: (summary: string, autopayEnabled: boolean) => void;
 }) {
   const [paymentMethod, setPaymentMethod] = useState<"card" | "us_bank_account">("card");
+  const [useForAutopay, setUseForAutopay] = useState(false);
   const [intent, setIntent] = useState<CreateSetupIntentResult | null>(null);
   const [succeeded, setSucceeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +77,7 @@ export function SavedPaymentMethodDialog({
 
   function handleClose() {
     setPaymentMethod("card");
+    setUseForAutopay(false);
     setIntent(null);
     setSucceeded(false);
     setError(null);
@@ -94,9 +96,9 @@ export function SavedPaymentMethodDialog({
 
   async function handleSetupSuccess(setupIntentId: string) {
     try {
-      const result = await saveSetupIntent.mutateAsync({ setupIntentId });
+      const result = await saveSetupIntent.mutateAsync({ setupIntentId, enableAutopay: useForAutopay });
       setSucceeded(true);
-      onSaved(result.summary);
+      onSaved(result.summary, result.autopayEnabled ?? useForAutopay);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save payment method");
     }
@@ -131,7 +133,7 @@ export function SavedPaymentMethodDialog({
           ) : (
             <div className="flex flex-col gap-4">
               <p className="text-sm text-slate-600">
-                Save a card or bank account on file so your invoices can be paid automatically.
+                Save a card or bank account on file to pay invoices faster.
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -157,6 +159,15 @@ export function SavedPaymentMethodDialog({
                   Bank Account (ACH)
                 </button>
               </div>
+              <label className="flex items-start gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4"
+                  checked={useForAutopay}
+                  onChange={(e) => setUseForAutopay(e.target.checked)}
+                />
+                <span>Use it for autopay — charge invoices automatically when they&apos;re due</span>
+              </label>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button
                 onClick={start}
