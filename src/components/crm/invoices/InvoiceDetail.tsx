@@ -1221,7 +1221,7 @@ export function InvoiceDetail({
         ))}
         {/* Status pills sit beside the tabs so the action buttons above never shift with them */}
         <div className="ml-3 flex shrink-0 items-center gap-2">
-          <Badge className={cn("text-[10px] capitalize", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
+          <Badge variant="outline" className={cn("border-transparent text-[10px] capitalize", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
             {getDisplayInvoiceStatus(invoice)}
           </Badge>
           {invoice.invoiceNumber == null && (

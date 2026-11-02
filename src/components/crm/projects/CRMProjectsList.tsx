@@ -842,7 +842,7 @@ export function CRMProjectsList() {
                     {p.clientName ?? p.customerName ?? "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge className={`capitalize border text-xs ${STATUS_COLOR[p.status]}`}>
+                    <Badge variant="outline" className={`capitalize border text-xs ${STATUS_COLOR[p.status]}`}>
                       {statusLabel(p.status)}
                     </Badge>
                   </td>
