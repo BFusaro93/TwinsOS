@@ -320,7 +320,7 @@ export function FormsGuide() {
       </Section>
 
       <Section id="submission-flow" title="What happens on submission">
-        <p>Every submission, without exception, does two things immediately:</p>
+        <p>Every submission does two things immediately (the ticket step only when Ticket Settings is on, which is the default):</p>
         <ol className="list-decimal space-y-2 pl-5">
           <li>Creates a CRM ticket with status <code>open</code>.</li>
           <li>

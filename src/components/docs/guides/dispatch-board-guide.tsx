@@ -605,7 +605,9 @@ export function DispatchBoardGuide() {
           <li>
             <strong>Print Route Sheets</strong> — generates a printable, per-crew stop sheet (client,
             address, service, time, budgeted hours, and notes to the crew) for the selected day,
-            including a separate sheet for anything still unassigned.
+            including a separate sheet for anything still unassigned. When the day has chemical
+            visits, a <strong>Chemical sheets (N)</strong> button in the dialog prints the matching
+            chemical route sheets.
           </li>
         </ul>
         <p>
@@ -633,6 +635,11 @@ export function DispatchBoardGuide() {
           template (type &quot;Client&quot;) — the same block-based template system used for
           invoice emails — and a row of merge tags can be inserted into the message at the cursor.
           Sending fires one email per recipient and logs to each client&apos;s Activity timeline.
+        </p>
+        <p>
+          <strong>Send Chemical Notices (n)</strong> appears in the Actions menu when at least one
+          selected visit is a chemical service and your role can send application notices. It opens a
+          dialog that emails each client their Notice of Treatment in one pass, with the PDF attached unless you untick it.
         </p>
         <p>
           <strong>Completing visits in bulk (or one at a time from the status menu)</strong> also
@@ -947,9 +954,15 @@ export function DispatchBoardGuide() {
           include today.
         </p>
         <p>
+          <strong>Saved views and your columns.</strong> Applying a saved view replaces your current
+          visible columns with the ones the view stored. <strong>Dragging a stop to another
+          crew</strong> on the board is refused with &ldquo;Use Team Assign to move a stop between
+          crews&rdquo;; open Team Assignment to move it.
+        </p>
+        <p>
           <strong>Status icon menu.</strong> Click a visit&apos;s status icon to change its status
-          and, in the same Save, its date, appointment start and end, and crew. Only what you
-          changed is applied.
+          The status applies as soon as you click it. The same menu can also change the date,
+          appointment start and end, and crew, which apply when you Save. Only what you changed is applied.
         </p>
         <p>
           <strong>Also new.</strong> <strong>Add / Remove Tags&hellip;</strong> in the Actions menu

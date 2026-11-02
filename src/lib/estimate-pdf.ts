@@ -174,6 +174,11 @@ export async function buildEstimatePDFData(
           totalCents: li.totalCents,
           tier: (li.tier as "basic" | "standard" | "premium" | null) ?? null,
           complexityBps: li.complexityBps,
+          // A collapsed package row sums each visit net of its discount plus its sub-items;
+          // without these the client's PDF package total differed from the staff copy.
+          discountCents: li.discountCents ?? 0,
+          subitemTotalCents: li.subitemTotalCents ?? null,
+          subitems: li.printedSubitems ?? [],
         })),
       });
     }

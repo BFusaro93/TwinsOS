@@ -328,8 +328,8 @@ export function JobsPackagesGuide() {
           description, client-facing wording for how it appears on an estimate, separate wording for
           how its visits appear on invoices, and a <code>visits_per_season</code> count. The invoice
           wording is copied onto each package job you create and is what the visit&apos;s invoice line says;
-          the estimate wording is not used yet because packages can&apos;t be added to estimates (a visit&apos;s
-          own invoice description still wins over it).
+          the estimate wording is the client-facing text for the package when you add it to an estimate (a
+          visit&apos;s own invoice description still wins over it on invoices).
         </p>
         <p>
           The package&apos;s <strong>Services tab</strong> is where each visit in the program is

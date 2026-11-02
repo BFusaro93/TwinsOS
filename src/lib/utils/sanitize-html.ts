@@ -83,7 +83,12 @@ const STRAY_LT_RE = new RegExp(`<(?!/?(?:${[...ALLOWED_TAGS].join("|")})(?:/?>|\
  */
 export function sanitizeHtml(html: string | null | undefined): string {
   if (!html) return "";
-  const withoutDangerous = html.replace(DROP_WITH_CONTENT, "");
+  // Pasted Word/Outlook/Gmail content carries comments (`<!--StartFragment-->`,
+  // `<!--[if mso]>`) and a doctype; drop them so the stray-`<` pass below doesn't print them.
+  const withoutDangerous = html
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<![a-z][^>]*>/gi, "")
+    .replace(DROP_WITH_CONTENT, "");
   return sanitizeTags(withoutDangerous).replace(STRAY_LT_RE, "&lt;");
 }
 

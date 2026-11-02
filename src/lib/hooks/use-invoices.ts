@@ -1037,6 +1037,10 @@ export function useUpdateInvoiceStatus() {
       // a draft sent without saving would go out at its stale (often $0) total.
       // Re-derive the totals from the saved lines before it leaves draft.
       if (current?.status === "draft" && (status === "sent" || status === "printed")) {
+        // Refreshed server-side first: a role that can print/send but not edit invoices may
+        // not write the totals from its own session (DB guard), which left a printed draft
+        // locked yet still a draft. Best effort; the recalc below then finds nothing to change.
+        await fetch(`/api/crm/invoices/${id}/refresh-draft-totals`, { method: "POST" }).catch(() => undefined);
         await recalcInvoiceTotalsFromLines(supabase, id);
         // Likewise only Save Invoice assigned the number, so a draft sent from
         // here went out numberless (and QuickBooks invented its own). The RPC

@@ -5,6 +5,8 @@ import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
+const PREBUILT_HTML_TAGS = new Set(["[paymentlink]", "[chemicalnotice]"]);
+
 export interface AutomationClientRow {
   id: string;
   display_name: string | null;
@@ -138,7 +140,9 @@ export async function buildAutomationMergeVars(
   }
   for (const [k, v] of Object.entries(params.extras)) {
     text[k] = v;
-    html[k] = params.escapeHtml(v);
+    // These two are built as ready-made, already-escaped HTML (Pay Now button, Notice of
+    // Treatment); escaping them again shows the markup to the client as literal text.
+    html[k] = PREBUILT_HTML_TAGS.has(k) && v.startsWith("<") ? v : params.escapeHtml(v);
   }
   return { html, text };
 }

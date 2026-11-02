@@ -156,8 +156,8 @@ export function ProductCatalogGuide() {
           weed control service; (3) the org&apos;s Area Custom Field above. Any measurement, including a Number
           custom field, is read from the property first and then from the client. The Materials Needed report,
           the Daily Load List, the crew&apos;s preloaded amounts and the application panel all use the same
-          order, so they agree. Rate Matrix pricing is separate and still looks up the property&apos;s
-          stored value.
+          order, so they agree. Rate Matrix pricing uses the same property-then-client lookup for its
+          keyed field.
         </p>
         <p>
           <strong>Stock.</strong> When a visit is completed, each confirmed, used chemical

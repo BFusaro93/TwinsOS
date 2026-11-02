@@ -251,6 +251,16 @@ export function DocumentsGuide() {
             &quot;JaneLandscapt Lawn &amp; Landscape&quot;), so type your own separator.
           </li>
           <li>
+            <strong>Notice of Treatment.</strong> <code>[chemicalnotice]</code> drops the compact
+            Notice of Treatment for the last completed visit that logged chemicals into an email or
+            automation, and is blank when that visit logged none. It is the way a contract client, who
+            gets no invoice, still receives the record. The invoice tags
+            (<code>[invoicenumber]</code>, <code>[invoicetotal]</code>, <code>[paymentlink]</code> and so
+            on) and the service tags (<code>[servicename]</code>, <code>[servicedate]</code>,
+            <code>[nextservicename]</code>, <code>[nextservicedate]</code>) fill in for automations; see the
+            Automations guide.
+          </li>
+          <li>
             <strong>Empty tags.</strong> A tag that has no value for this client or record is left blank in
             the sent email rather than showing the bracket text.
           </li>
@@ -321,7 +331,9 @@ export function DocumentsGuide() {
           </li>
         </ul>
         <Callout>
-          Formatting carries into the sent email, the public proposal page and the PDF. In the PDF,
+          Formatting carries into the sent email, the public proposal page and the PDF. Rich text in an
+          estimate line&apos;s description keeps its bold, italic, underline and lists in the PDF, and any
+          other formatting is dropped rather than shown as raw tags. In the PDF,
           subscript and superscript are shown smaller but not raised or lowered, and fonts map to the
           closest of the PDF&apos;s own sans-serif, serif and monospace faces.
         </Callout>
