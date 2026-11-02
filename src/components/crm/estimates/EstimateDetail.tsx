@@ -1732,9 +1732,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               </div>
 
               {/* Bulk actions for the ticked lines — shown right above the grid so the
-                  checkboxes visibly do something. */}
+                  checkboxes visibly do something, and pinned to the top of the scrolling
+                  area so they stay reachable when the ticked lines are far down. */}
               {selectedLineItemIds.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border border-brand-200 bg-brand-50 px-3 py-1.5 dark:border-neutral-700 dark:bg-neutral-800">
+                <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-md border shadow-sm border-brand-200 bg-brand-50 px-3 py-1.5 dark:border-neutral-700 dark:bg-neutral-800">
                   <span className="text-xs font-medium">{selectedLineItemIds.length} selected</span>
                   <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setBulkStatusOpen(true)}>
                     Change Status
