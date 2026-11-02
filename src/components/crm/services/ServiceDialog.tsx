@@ -378,10 +378,20 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
 
       {copyOpen && (
         <div className="rounded-lg border p-3 flex flex-col gap-2">
-          <p className="text-xs text-slate-600 dark:text-neutral-400">
-            Copies these {rows.length} rows to each service you tick. Any rate matrix the target already has is replaced.
-          </p>
-          <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
+          {/* Buttons sit above the list: with many matrix rows this panel is
+              pushed below the dialog's visible area, and the body can't scroll. */}
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-slate-600 dark:text-neutral-400">
+              Copies these {rows.length} rows to each ticked service, replacing any matrix it already has.
+            </p>
+            <div className="flex shrink-0 gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setCopyOpen(false)}>Cancel</Button>
+              <Button size="sm" disabled={copyTargets.length === 0 || copyMatrix.isPending} onClick={runCopy}>
+                Copy to {copyTargets.length || ""} service{copyTargets.length === 1 ? "" : "s"}
+              </Button>
+            </div>
+          </div>
+          <div className="max-h-40 overflow-y-auto flex flex-col gap-1">
             {copyCandidates.map((s) => (
               <label key={s.id} className="flex items-center gap-2 text-xs">
                 <Checkbox
@@ -393,12 +403,6 @@ function RateMatrixTab({ serviceId, form, setForm }: RateMatrixTabProps) {
                 {s.name}
               </label>
             ))}
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setCopyOpen(false)}>Cancel</Button>
-            <Button size="sm" disabled={copyTargets.length === 0 || copyMatrix.isPending} onClick={runCopy}>
-              Copy to {copyTargets.length || ""} service{copyTargets.length === 1 ? "" : "s"}
-            </Button>
           </div>
         </div>
       )}
