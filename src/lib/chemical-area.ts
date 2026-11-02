@@ -143,3 +143,54 @@ export async function fetchClientAreaFallback(
   const v = client ? (client as unknown as Record<string, unknown>)[column] : null;
   return v != null && Number(v) > 0 ? Number(v) : null;
 }
+
+export interface ChemicalAreaArgs {
+  propertyId: string | null;
+  serviceId: string | null;
+  /** crm_job_services.treated_area — what this job actually treats. */
+  treatedArea?: number | null;
+}
+
+export type ChemicalAreaResolver = (args: ChemicalAreaArgs) => number | undefined;
+
+/**
+ * "How much area does this service treat on this job" for the chemical
+ * estimate. Order: the job service's own treated area (spot treatment, front
+ * lawn only), else the property measurement named by the service's
+ * chemical_area_field_id (parking-lot weed control sizes from Parking Lot
+ * Sq. Ft.), else the org's Area Custom Field.
+ */
+export async function buildChemicalAreaResolver(
+  supabase: SupabaseClient,
+  orgAreaFieldId: string | null,
+  serviceIds: string[],
+  propertyIds: string[],
+  /** With no property at all, the client's own takeoff (Edit Client → Details) is the area. */
+  clientIdForFallback: string | null = null
+): Promise<ChemicalAreaResolver> {
+  const ids = [...new Set(serviceIds.filter(Boolean))];
+  const serviceFieldById = new Map<string, string>();
+  if (ids.length > 0) {
+    const { data } = await supabase.from("crm_services").select("id, chemical_area_field_id").in("id", ids);
+    for (const row of (data ?? []) as { id: string; chemical_area_field_id: string | null }[]) {
+      if (row.chemical_area_field_id) serviceFieldById.set(row.id, row.chemical_area_field_id);
+    }
+  }
+  const fieldIds = [...new Set([...(orgAreaFieldId ? [orgAreaFieldId] : []), ...serviceFieldById.values()])];
+  const valuesByField = new Map<string, Map<string, number>>();
+  const clientAreaByField = new Map<string, number>();
+  for (const fieldId of fieldIds) {
+    valuesByField.set(fieldId, await fetchPropertyAreaValues(supabase, fieldId, propertyIds));
+    if (clientIdForFallback && propertyIds.length === 0) {
+      const v = await fetchClientAreaFallback(supabase, fieldId, clientIdForFallback);
+      if (v != null) clientAreaByField.set(fieldId, v);
+    }
+  }
+  return ({ propertyId, serviceId, treatedArea }) => {
+    if (treatedArea != null && treatedArea > 0) return Number(treatedArea);
+    const fieldId = (serviceId ? serviceFieldById.get(serviceId) : undefined) ?? orgAreaFieldId;
+    if (!fieldId) return undefined;
+    if (!propertyId) return clientAreaByField.get(fieldId);
+    return valuesByField.get(fieldId)?.get(propertyId);
+  };
+}

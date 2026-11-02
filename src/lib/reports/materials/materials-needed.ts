@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { calcChemicalAndSolution, convertQuantity } from "@/lib/chemical-mix-calc";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
-import { fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
+import { buildChemicalAreaResolver, fetchSinglePropertyByClient } from "@/lib/chemical-area";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRateRow(row: any): ChemicalApplicationRate {
@@ -166,6 +166,10 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     /** Fallback when the job has no property: the client's single property. */
     clientId: string | null;
     neededBy: string | null;
+    /** The service that attaches this product — it can name its own area field. */
+    serviceId: string | null;
+    /** crm_job_services.treated_area for that service on this job. */
+    treatedArea: number | null;
   }
   const chemDemandByProduct = new Map<string, ChemDemandEntry[]>();
 
@@ -182,13 +186,10 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
    * fetchVisitServiceIds() in use-crm-jobs.ts and the visit-complete route.
    * Services excluded from the job (included = false) aren't performed at all.
    */
-  function servicesFor(
-    jobServices: { id: string; service_id: string | null; included: boolean | null }[] | null,
-    jobServiceId: string | null
-  ): string[] {
+  type JobServiceRef = { id: string; service_id: string | null; included: boolean | null; treated_area: number | null };
+  function servicesFor(jobServices: JobServiceRef[] | null, jobServiceId: string | null): JobServiceRef[] {
     const performed = (jobServices ?? []).filter((js) => js.included !== false && js.service_id);
-    const scoped = jobServiceId ? performed.filter((js) => js.id === jobServiceId) : performed;
-    return scoped.map((js) => js.service_id as string);
+    return jobServiceId ? performed.filter((js) => js.id === jobServiceId) : performed;
   }
 
   if (chemicalProductIds.size > 0) {
@@ -203,14 +204,14 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
         status: string | null;
         scheduled_date: string | null;
         clients: { display_name: string | null } | null;
-        crm_job_services: { id: string; service_id: string | null; included: boolean | null }[] | null;
+        crm_job_services: JobServiceRef[] | null;
       } | null;
     }
     const visitsRaw = await fetchAllRows<VisitRow>(() =>
       supabase
         .from("crm_job_visits")
         .select(
-          "scheduled_date, job_service_id, crm_jobs!inner(id, client_id, property_id, status, scheduled_date, clients:client_id(display_name), crm_job_services(id, service_id, included))"
+          "scheduled_date, job_service_id, crm_jobs!inner(id, client_id, property_id, status, scheduled_date, clients:client_id(display_name), crm_job_services(id, service_id, included, treated_area))"
         )
         .in("status", OUTSTANDING_VISIT_STATUSES)
         .is("deleted_at", null)
@@ -223,18 +224,23 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     for (const v of visitsRaw) {
       const job = v.crm_jobs;
       if (!job || TERMINAL_JOB_STATUSES.has(job.status ?? "")) continue;
-      const serviceIds = servicesFor(job.crm_job_services, v.job_service_id);
-      const productIdsForVisit = new Set<string>();
-      for (const sid of serviceIds) {
-        for (const pid of productIdsFor(sid, v.scheduled_date ?? null)) productIdsForVisit.add(pid);
+      // One entry per product (first service that attaches it wins), so a
+      // product shared by two services on a visit is still counted once.
+      const demandForVisit = new Map<string, JobServiceRef>();
+      for (const js of servicesFor(job.crm_job_services, v.job_service_id)) {
+        for (const pid of productIdsFor(js.service_id as string, v.scheduled_date ?? null)) {
+          if (!demandForVisit.has(pid)) demandForVisit.set(pid, js);
+        }
       }
-      for (const pid of productIdsForVisit) {
+      for (const [pid, js] of demandForVisit) {
         addChemDemand(pid, {
           jobId: job.id,
           jobName: job.clients?.display_name ?? "Job",
           propertyId: job.property_id,
           clientId: job.client_id,
           neededBy: v.scheduled_date ?? job.scheduled_date,
+          serviceId: js.service_id,
+          treatedArea: js.treated_area != null ? Number(js.treated_area) : null,
         });
       }
     }
@@ -248,14 +254,14 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       property_id: string | null;
       waiting_list_start: string | null;
       clients: { display_name: string | null } | null;
-      crm_job_services: { id: string; service_id: string | null; included: boolean | null }[] | null;
+      crm_job_services: JobServiceRef[] | null;
       crm_job_visits: { id: string }[] | null;
     }
     const waitingRaw = await fetchAllRows<WaitingJobRow>(() =>
       supabase
         .from("crm_jobs")
         .select(
-          "id, client_id, property_id, waiting_list_start, clients:client_id(display_name), crm_job_services(id, service_id, included), crm_job_visits(id)"
+          "id, client_id, property_id, waiting_list_start, clients:client_id(display_name), crm_job_services(id, service_id, included, treated_area), crm_job_visits(id)"
         )
         .eq("job_type", "waiting_list")
         .not("status", "in", '("cancelled","completed","hold")')
@@ -269,18 +275,21 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     for (const job of waitingRaw) {
       if ((job.crm_job_visits ?? []).length > 0) continue;
       // A waiting-list job has no visit, so nothing narrows it to one service.
-      const serviceIds = servicesFor(job.crm_job_services, null);
-      const productIdsForJob = new Set<string>();
-      for (const sid of serviceIds) {
-        for (const pid of productIdsFor(sid, null)) productIdsForJob.add(pid);
+      const demandForJob = new Map<string, JobServiceRef>();
+      for (const js of servicesFor(job.crm_job_services, null)) {
+        for (const pid of productIdsFor(js.service_id as string, null)) {
+          if (!demandForJob.has(pid)) demandForJob.set(pid, js);
+        }
       }
-      for (const pid of productIdsForJob) {
+      for (const [pid, js] of demandForJob) {
         addChemDemand(pid, {
           jobId: job.id,
           jobName: job.clients?.display_name ?? "Job",
           propertyId: job.property_id,
           clientId: job.client_id,
           neededBy: job.waiting_list_start,
+          serviceId: js.service_id,
+          treatedArea: js.treated_area != null ? Number(js.treated_area) : null,
         });
       }
     }
@@ -296,9 +305,12 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
   for (const d of allDemand) {
     if (!d.propertyId && d.clientId) d.propertyId = singlePropertyByClient.get(d.clientId) ?? null;
   }
-  const areaValueByProperty = await fetchPropertyAreaValues(supabase, areaFieldId, [
-    ...new Set(allDemand.map((d) => d.propertyId).filter(Boolean) as string[]),
-  ]);
+  const resolveArea = await buildChemicalAreaResolver(
+    supabase,
+    areaFieldId,
+    allDemand.map((d) => d.serviceId ?? ""),
+    [...new Set(allDemand.map((d) => d.propertyId).filter(Boolean) as string[])]
+  );
 
   const defaultRateByProduct = new Map<string, ChemicalApplicationRate>();
   if (chemicalProductIds.size > 0) {
@@ -498,7 +510,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     let unitMismatchJobs = 0;
     let unestimatedJobs = 0;
     for (const d of demand) {
-      const areaValue = d.propertyId ? areaValueByProperty.get(d.propertyId) : undefined;
+      const areaValue = resolveArea({ propertyId: d.propertyId, serviceId: d.serviceId, treatedArea: d.treatedArea });
       perJobMeta.set(d.jobId, { jobName: d.jobName, neededBy: d.neededBy });
       nextNeededBy = earliest(nextNeededBy, d.neededBy);
 

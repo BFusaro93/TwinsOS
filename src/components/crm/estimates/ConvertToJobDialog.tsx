@@ -458,6 +458,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
             budgetedHours: roundHours(budgetedHoursFromLineItem(li)),
             budgetMethod:  li.budgetMethod,
             estimateLineItemId: li.id,
+            treatedArea:   li.treatedArea ?? null,
             maxVisits:     perVisit(li) ? Math.max(1, li.visits || 1) : null,
           };
         }),

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calcChemicalAndSolution } from "@/lib/chemical-mix-calc";
-import { effectivePropertyId, fetchClientAreaFallback, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
+import { buildChemicalAreaResolver, effectivePropertyId, fetchSinglePropertyByClient } from "@/lib/chemical-area";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,7 +68,7 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
   const { data: visit } = await supabase
     .from("crm_job_visits")
     .select(
-      "id, org_id, job_id, scheduled_date, status, job_service_id, crew_group_secondary, crm_jobs(client_id, property_id, crm_job_services(id, service_id, included))"
+      "id, org_id, job_id, scheduled_date, status, job_service_id, crew_group_secondary, crm_jobs(client_id, property_id, crm_job_services(id, service_id, included, treated_area))"
     )
     .eq("id", visitId)
     .is("deleted_at", null)
@@ -82,7 +82,7 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
   const job = visit.crm_jobs as unknown as {
     client_id: string | null;
     property_id: string | null;
-    crm_job_services: { id: string; service_id: string | null; included: boolean | null }[] | null;
+    crm_job_services: { id: string; service_id: string | null; included: boolean | null; treated_area: number | null }[] | null;
   } | null;
   if (!job) return 0;
 
@@ -93,7 +93,7 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
 
   const { data: attached } = await supabase
     .from("crm_service_chemicals")
-    .select("product_id, start_date, end_date")
+    .select("service_id, product_id, start_date, end_date")
     .in("service_id", serviceIds);
   const day = visit.scheduled_date;
   const productIds = [
@@ -138,24 +138,33 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
     if (!current || (rate.isDefault && !current.isDefault)) rateByProduct.set(rate.productId, rate);
   }
 
-  let areaValue: number | null = null;
-  if (settings?.auto_calc_quantity && settings.area_custom_field_id) {
+  // Area is per product: the service that attaches it can size from its own
+  // property measurement or carry a treated-area override (see chemical-area.ts).
+  const areaByProduct = new Map<string, number>();
+  if (settings?.auto_calc_quantity) {
     const single = job.property_id
       ? new Map<string, string>()
       : await fetchSinglePropertyByClient(supabase, [job.client_id ?? ""]);
     const propertyId = effectivePropertyId({ client_id: job.client_id, property_id: job.property_id }, single);
-    if (propertyId) {
-      const values = await fetchPropertyAreaValues(supabase, settings.area_custom_field_id, [propertyId]);
-      areaValue = values.get(propertyId) ?? null;
-    } else {
-      // No property at all: the client's own takeoff is the area.
-      areaValue = await fetchClientAreaFallback(supabase, settings.area_custom_field_id, job.client_id ?? null);
+    const resolveArea = await buildChemicalAreaResolver(
+      supabase,
+      settings.area_custom_field_id ?? null,
+      serviceIds,
+      propertyId ? [propertyId] : [],
+      propertyId ? null : (job.client_id ?? null)
+    );
+    for (const c of attached ?? []) {
+      if (areaByProduct.has(c.product_id)) continue;
+      const js = scoped.find((x) => x.service_id === c.service_id);
+      const area = resolveArea({ propertyId, serviceId: c.service_id, treatedArea: js?.treated_area ?? null });
+      if (area != null) areaByProduct.set(c.product_id, area);
     }
   }
 
   const { data: { user } } = await supabase.auth.getUser();
   const rows = (products ?? []).map((p) => {
     const rate = rateByProduct.get(p.id);
+    const areaValue = areaByProduct.get(p.id) ?? null;
     const computed = rate && areaValue != null ? calcChemicalAndSolution(rate, areaValue, unitsById) : null;
     return {
       job_id: visit.job_id,

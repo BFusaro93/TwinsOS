@@ -3,7 +3,7 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { calcChemicalAndSolution, createQuantityAccumulator } from "@/lib/chemical-mix-calc";
 import type { QuantityAccumulator } from "@/lib/chemical-mix-calc";
 import { embeddedOne, formatStopAddress, resolveStopAddress } from "@/lib/utils/stop-address";
-import { effectivePropertyId, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
+import { buildChemicalAreaResolver, effectivePropertyId, fetchSinglePropertyByClient } from "@/lib/chemical-area";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
 
 // ============================================================
@@ -207,6 +207,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
             id: string;
             service_id: string | null;
             included: boolean | null;
+            treated_area: number | null;
             crm_services: { track_chemicals: boolean | null } | null;
           }[]
         | null;
@@ -216,7 +217,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     supabase
       .from("crm_job_visits")
       .select(
-        "id, job_id, crew_id, crew_unassigned, crew_group_secondary, job_service_id, crm_jobs!inner(id, client_id, crew_id, property_id, status, service_address, service_city, service_state, service_zip, client_properties(address, city, state, zip), clients:client_id(display_name, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip), crm_job_services(id, service_id, included, crm_services:service_id(track_chemicals)))"
+        "id, job_id, crew_id, crew_unassigned, crew_group_secondary, job_service_id, crm_jobs!inner(id, client_id, crew_id, property_id, status, service_address, service_city, service_state, service_zip, client_properties(address, city, state, zip), clients:client_id(display_name, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip), crm_job_services(id, service_id, included, treated_area, crm_services:service_id(track_chemicals)))"
       )
       .eq("scheduled_date", date)
       .in("status", OUTSTANDING_VISIT_STATUSES)
@@ -240,12 +241,15 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
    * and /api/crm/visits/[visitId]/complete. Services excluded from the job
    * (included = false) aren't being performed and need nothing loaded.
    */
-  function chemicalServiceIdsForVisit(v: VisitRow): string[] {
+  function chemicalServiceIdsForVisit(v: VisitRow): { serviceId: string; treatedArea: number | null }[] {
     const jobServices = (v.crm_jobs?.crm_job_services ?? []).filter(
       (js) => js.included !== false && js.crm_services?.track_chemicals && js.service_id
     );
     const scoped = v.job_service_id ? jobServices.filter((js) => js.id === v.job_service_id) : jobServices;
-    return scoped.map((js) => js.service_id as string);
+    return scoped.map((js) => ({
+      serviceId: js.service_id as string,
+      treatedArea: js.treated_area != null ? Number(js.treated_area) : null,
+    }));
   }
 
   // ── chemical product <-> service links + default rates ──────────────────────
@@ -293,9 +297,12 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
   );
   const jobPropertyId = (job: NonNullable<VisitRow["crm_jobs"]>): string | null =>
     effectivePropertyId(job, singlePropertyByClient);
-  const areaValueByProperty = await fetchPropertyAreaValues(supabase, areaFieldId, [
-    ...new Set(liveVisits.map((v) => (v.crm_jobs ? jobPropertyId(v.crm_jobs) : null)).filter(Boolean) as string[]),
-  ]);
+  const resolveArea = await buildChemicalAreaResolver(
+    supabase,
+    areaFieldId,
+    liveVisits.flatMap((v) => chemicalServiceIdsForVisit(v).map((c) => c.serviceId)),
+    [...new Set(liveVisits.map((v) => (v.crm_jobs ? jobPropertyId(v.crm_jobs) : null)).filter(Boolean) as string[])]
+  );
 
   // ── already-entered application records for these visits (preferred over estimate) ──
   //
@@ -379,7 +386,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     jobCrewIds.set(job.id, crewSet);
     if (!jobMetaMap.has(job.id)) jobMetaMap.set(job.id, { clientName, address });
 
-    for (const sid of chemicalServiceIdsForVisit(v)) {
+    for (const { serviceId: sid, treatedArea } of chemicalServiceIdsForVisit(v)) {
       for (const pid of productIdsByService.get(sid) ?? []) {
         const key = `${crewId ?? "__unassigned__"}:${job.id}:${sid}:${pid}`;
         const entered = enteredByVisitProduct.get(`${v.id}:${pid}`);
@@ -405,7 +412,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
 
         const rate = defaultRateByProduct.get(pid);
         const propertyId = jobPropertyId(job);
-        const areaValue = propertyId ? areaValueByProperty.get(propertyId) : undefined;
+        const areaValue = resolveArea({ propertyId, serviceId: sid, treatedArea });
         if (!rate || areaValue == null) continue;
         // Resolved per-visit, not summed-then-converted — which of
         // chemical/solution is the rate's "primary" number depends on the
