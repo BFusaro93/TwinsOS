@@ -999,7 +999,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Contracts",
             detail:
-              "CRM > Accounting > Contracts covers ongoing agreements: a monthly amount, billing frequency (weekly through annual, or one-time — honored by the invoicing cron, set through the API since the dialog doesn't expose it), auto-renew, billing day of month, and whether the contract bills a month in advance. The amount is charged per invoice at every frequency, not annualized. The end date can't be before the start date. Month-by-month amount overrides are supported for seasonal pricing. If a contract starts mid-cycle you can choose 'Prorate first period' (a daily-prorated first invoice for the partial stretch, then normal billing) or leave the default of starting on the first full cycle. Editing the financial terms of a signed contract keeps it billing at the new terms and flags it 'Changed since signed — needs client approval' until you clear the flag. Visits on a cancelled, expired or inactive contract bill like normal per-visit work.",
+              "CRM > Accounting > Contracts covers ongoing agreements: an amount per invoice, a Billing Frequency (Monthly, Quarterly, Annual, Weekly, Every 2 weeks or One time — set in the contract's Invoice Details), auto-renew, billing day of month, and whether the contract bills a month in advance. The amount is charged per invoice at every frequency, not annualized: a $3,000-a-quarter contract stores $3,000. Monthly contracts have a 12-month grid so each month can bill a different amount (a month at $0 is skipped); every other frequency has one Amount per invoice field and shows the months or dates it will bill in. The contracts list shows the cadence ('$3,000.00 / quarter'), and a monthly contract whose months differ shows its yearly total ('$4,100.00 / yr · 8 months (varies)'). The end date can't be before the start date. If a contract starts mid-cycle you can choose 'Prorate first period' (a daily-prorated first invoice for the partial stretch, then normal billing) or leave the default of starting on the first full cycle. Editing the financial terms of a signed contract keeps it billing at the new terms and flags it 'Changed since signed — needs client approval' until you clear the flag. Visits on a cancelled, expired or inactive contract bill like normal per-visit work.",
           },
           {
             step: "Sub-properties on one contract",
@@ -2022,6 +2022,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Use the Package visits toggle in the estimate's 'What the client sees' settings (it is off by default, and can also be set on an Estimate document or the org default). Off shows only the package name, wording and total. On lists each visit as a plain row under the package's main line. It applies to the proposal page, the client portal, the PDF and the [estimategrid] table in emails.",
       },
       {
+        q: "How do I quote a spot treatment or part of a property so chemical quantities use that area?",
+        a: "On the estimate line open the notes menu and use the Treated Area tab to enter the sq ft you will actually treat. It carries to the job service when you convert, and you can also edit it on the job's Services tab. Materials Needed, the Daily Load List, the crew's preloaded amounts and the application panel use it instead of the property measurement. Leave it blank to use the property's measurement.",
+      },
+      {
+        q: "How do I make a service like parking-lot weed control use the Parking Lot square footage?",
+        a: "Open the service, go to its Chemicals tab and set Area measurement for chemical quantities to Parking Lot / Hardscape Sq. Ft. Without it the service uses the org's Area Custom Field from Settings > Chemical Tracking (for example Turf Sq. Ft.). A treated area on the job service overrides both.",
+      },
+      {
         q: "How do I skip one step of a package on an estimate?",
         a: "Set that visit's status to Draft. Draft and Lost visits are excluded from the package subtotal, the estimate total and the proposal, and the client still sees one package line. Set it back to Quote to include it again.",
       },
@@ -2092,6 +2100,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "When does an invoice count as overdue, and who gets contract and estimate expiry reminders?",
         a: "An unpaid invoice is overdue once its due day has passed; one on Due on Receipt terms with no due date goes overdue the day after its invoice date, and an invoice with no balance left is never overdue. About three days before an open estimate expires, its creator is reminded (its sales rep when there is no creator). Contract expiry warnings go only for signed or active contracts, never for cancelled, expired or draft ones. A snow job whose contract has ended no longer shows on the Snow Jobs board, and its completed visits bill per visit.",
+      },
+      {
+        q: "How do I set up a contract that bills only some months, at different amounts?",
+        a: "Leave the contract's Billing Frequency on Monthly and fill in the 12-month grid in Invoice Details: enter each billed month's own amount and leave the other months at $0.00 — a $0 month is skipped, so an April–November contract sends 8 invoices a year, each for that month's amount. The line under the grid shows the yearly total as you type. On the contracts list (and the client's contract badge) it reads like '$4,100.00 / yr · 8 months (varies)', and the CSV export says 'varies by month' in Amount per invoice with the total in Yearly Total. If every billed month is the same, it reads '$500.00 / month · 8 months'.",
+      },
+      {
+        q: "How do I bill a contract quarterly, yearly, weekly or once?",
+        a: "Open the contract, go to Contract Details > Invoice Details and pick a Billing Frequency. Enter the Amount per invoice — the amount charged every time it bills, not a monthly figure: a $3,000-a-quarter contract is $3,000, a $12,000-a-year contract is $12,000. The dialog shows when it will bill (for example 'Invoices in Jan, Apr, Jul, Oct'), counted from the start date. Quarterly and annual contracts bill on the Billing Day of Month in those months; weekly and every-2-weeks contracts bill every 7 or 14 days from the start date; a one-time contract bills once, on or after the start date. Changing the frequency of a signed or active contract flags it 'Changed since signed — needs client approval'.",
       },
       {
         q: "Why can't a crew member edit punches on a visit?",

@@ -147,6 +147,18 @@ export function ProductCatalogGuide() {
           rather than a guess. Start and end time inputs on the application record are optional.
         </p>
         <p>
+          <strong>Which area is used.</strong> Three things can change the area, in this order:
+          (1) a <strong>treated area</strong> on the job service &mdash; typed on the estimate
+          line&apos;s notes menu (Treated Area tab) and carried to the job, or edited on the job&apos;s
+          Services tab &mdash; for a spot treatment or just the front lawn; (2) the service&apos;s own{" "}
+          <strong>Area measurement for chemical quantities</strong> (Services &amp; Pricing &rarr; the
+          service &rarr; Chemicals tab), for example Parking Lot / Hardscape Sq. Ft. on a parking-lot
+          weed control service; (3) the org&apos;s Area Custom Field above. The Materials Needed report,
+          the Daily Load List, the crew&apos;s preloaded amounts and the application panel all use the same
+          order, so they agree. Rate Matrix pricing is separate and still looks up the property&apos;s
+          stored value.
+        </p>
+        <p>
           <strong>Stock.</strong> When a visit is completed, each confirmed, used chemical
           application takes its concentrate amount out of the product&apos;s on-hand quantity,
           converted into the unit of the product&apos;s default Application Rate (the product needs

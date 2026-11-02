@@ -87,6 +87,7 @@ interface FormState {
   matrixTailRateCents: string;
   matrixTailHours: string;
   matrixTailCostCents: string;
+  chemicalAreaFieldId: string;
 }
 
 function emptyForm(): FormState {
@@ -105,6 +106,7 @@ function emptyForm(): FormState {
     rateMatrixField: "", rateMatrixCalc: "qty_x_rate_x_visits",
     matrixTailEveryQty: "", matrixTailOverQty: "",
     matrixTailRateCents: "", matrixTailHours: "", matrixTailCostCents: "",
+    chemicalAreaFieldId: "",
   };
 }
 
@@ -139,6 +141,7 @@ function serviceToForm(s: CRMService): FormState {
     matrixTailRateCents: s.matrixTailRateCents != null ? (s.matrixTailRateCents / 100).toFixed(2) : "",
     matrixTailHours: s.matrixTailHours != null ? String(s.matrixTailHours) : "",
     matrixTailCostCents: s.matrixTailCostCents != null ? (s.matrixTailCostCents / 100).toFixed(2) : "",
+    chemicalAreaFieldId: s.chemicalAreaFieldId ?? "",
   };
 }
 
@@ -759,6 +762,8 @@ function ChemicalsTab({ serviceId }: ChemicalsTabProps) {
 export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
   const [tab, setTab] = useState<Tab>("details");
   const [form, setForm] = useState<FormState>(emptyForm());
+  const { data: propertyFieldDefs = [] } = useCustomFieldDefs("property");
+  const areaFieldDefs = propertyFieldDefs.filter((d) => d.fieldType === "number");
   // Tracks the saved service — set from prop on open, or updated after create so tabs unlock immediately
   const [activeService, setActiveService] = useState<CRMService | null>(service);
 
@@ -809,6 +814,7 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
       matrix_tail_rate_cents: form.matrixTailRateCents ? parseCents(form.matrixTailRateCents) : null,
       matrix_tail_hours: form.matrixTailHours ? parseNum(form.matrixTailHours) : null,
       matrix_tail_cost_cents: form.matrixTailCostCents ? parseCents(form.matrixTailCostCents) : null,
+      chemical_area_field_id: form.chemicalAreaFieldId || null,
     };
   }
 
@@ -1160,7 +1166,28 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
 
         {/* Chemicals Tab */}
         {tab === "chemicals" && activeService && (
-          <div className="py-2">
+          <div className="flex flex-col gap-4 py-2">
+            <Field label="Area measurement for chemical quantities">
+              <Select
+                value={form.chemicalAreaFieldId || "default"}
+                onValueChange={(v) => setForm({ ...form, chemicalAreaFieldId: v === "default" ? "" : v })}
+              >
+                <SelectTrigger className="text-sm">
+                  <SelectValue placeholder="Org default" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Org default (Settings → Chemical Tracking)</SelectItem>
+                  {areaFieldDefs.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">
+                Which property measurement this service&apos;s chemical amounts are sized from, such as Parking Lot / Hardscape
+                Sq. Ft. for a parking-lot weed control service. A treated area typed on an estimate line overrides it.
+                Saved with Save Changes.
+              </p>
+            </Field>
             <ChemicalsTab serviceId={activeService.id} />
           </div>
         )}

@@ -152,6 +152,7 @@ import type { CRMJob, CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { previewClientVisits, cancelClientVisitsRemote, clientVisitsConfirmOptions } from "@/lib/client-visits-api";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { summarizeContractAmount } from "@/lib/utils/contract-frequency";
 
 // Contact types — configurable via Settings in a future sprint
 const CONTACT_TYPES = [
@@ -2657,7 +2658,7 @@ function HomeTab({ clientId, isLead = false, onSwitchTab }: { clientId: string; 
                     <div className="flex items-start justify-between gap-2">
                       <p className="truncate text-xs font-semibold text-slate-700 dark:text-neutral-300">{contract.title}</p>
                       <Badge variant="secondary" className="shrink-0 text-[10px]">
-                        {formatCurrency(contract.monthlyAmountCents)}/mo
+                        {summarizeContractAmount(contract).label}
                       </Badge>
                     </div>
                     {(contract.startDate || contract.endDate) && (

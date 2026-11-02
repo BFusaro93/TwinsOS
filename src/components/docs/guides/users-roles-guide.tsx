@@ -220,15 +220,23 @@ export function UsersRolesGuide() {
             invoice for anyone allowed to complete it.
           </li>
           <li>
-            <strong>Estimates</strong> (and their line items, sub-items, equipment and direct
-            costs) need Add Estimate to create and Edit Estimate to change or delete. Add Estimate
-            alone also covers finishing a new estimate you created that hasn&apos;t been sent.
-            Send Estimate alone can mark an estimate sent, and Add Job alone can mark it accepted
-            when converting it.
+            <strong>Estimates</strong> (and their line items, sub-items, equipment, direct
+            costs, photos and payment-plan milestones) need Add Estimate to create and Edit
+            Estimate to change or delete. Add Estimate alone also covers finishing a new estimate
+            you created that hasn&apos;t been sent. Send Estimate alone can mark an estimate sent,
+            and Add Job alone can mark it accepted when converting it.
           </li>
           <li>
-            <strong>Contracts</strong> need Add, Edit or Delete Contract for each action; Create
-            Invoices from Contracts may only record the billing dates it stamps.
+            <strong>Project billing milestones</strong> need Add/Modify Projects or Add/Modify
+            Invoices. Once an estimate is converted to a project, its milestones belong to the
+            project: they show as read-only on the estimate for a role that can edit estimates but
+            not projects. Converting the estimate (Add Job) carries them onto the project.
+            Invoicing a milestone needs Add/Modify Invoices on either screen.
+          </li>
+          <li>
+            <strong>Contracts</strong> (and their notes) need Add, Edit or Delete Contract for
+            each action; Create Invoices from Contracts may only record the billing dates it
+            stamps.
           </li>
           <li>
             <strong>New jobs</strong> need Add Job (a project also allows Add/Modify Projects).
@@ -243,7 +251,8 @@ export function UsersRolesGuide() {
         </ul>
         <p>
           Editing an existing job, its visits and crew time stays open to every CRM role, since
-          the crew app writes those.
+          the crew app writes those. Giving an invoice its number (which happens when it is
+          printed, emailed or saved) is open to anyone who can see the invoice.
         </p>
         <p>
           <strong>Client notes, stored card and balance are protected on write.</strong> Changing

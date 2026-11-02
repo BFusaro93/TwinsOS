@@ -1,4 +1,5 @@
--- Regression probe for 20261207000100..000600 (crm_roles write guards).
+-- Regression probe for 20261207000100..000600 and 20261209000100..000300
+-- (crm_roles write guards).
 -- TEST project only: the four ids at the top are TEST rows (the Twins Lawn
 -- Service org, a crew login that is temporarily turned into a 'technician'
 -- with a probe crm_role, an admin, and a client). Everything runs in one DO
@@ -19,6 +20,13 @@ declare
   D0 uuid := gen_random_uuid(); DO_ uuid := gen_random_uuid();
   P0 uuid := gen_random_uuid();
   W0 uuid := gen_random_uuid(); WM uuid := gen_random_uuid(); L0 uuid := gen_random_uuid();
+  -- 20261209*: milestones (estimate-only M0/MI, project MP, convert candidate MC),
+  -- converted estimates E1/E2 with projects PJ/PJ2, contract notes, photos.
+  E1 uuid := gen_random_uuid(); E2 uuid := gen_random_uuid();
+  PJ uuid := gen_random_uuid(); PJ2 uuid := gen_random_uuid();
+  M0 uuid := gen_random_uuid(); MI uuid := gen_random_uuid();
+  MP uuid := gen_random_uuid(); MC uuid := gen_random_uuid();
+  KD uuid := gen_random_uuid(); N0 uuid := gen_random_uuid(); PH uuid := gen_random_uuid();
   tc record;
   v_res text;
   v_out text := '';
@@ -40,6 +48,25 @@ begin
   insert into crm_crews (id, org_id, name, created_by) values (W0, X, 'Probe crew', ADM);
   insert into crm_crew_members (id, org_id, crew_id, name) values (WM, X, W0, 'Probe member');
   insert into crm_invoice_line_items (id, org_id, invoice_id, description) values (L0, X, I2, 'Probe line');
+  insert into estimates (id, org_id, client_id, estimate_date, created_by) values
+    (E1, X, C, current_date, ADM), (E2, X, C, current_date, ADM);
+  insert into projects (id, org_id, name, client_id) values (PJ, X, 'Probe project', C), (PJ2, X, 'Probe project 2', C);
+  insert into estimate_milestones (id, org_id, estimate_id, name, milestone_type, milestone_value, amount_cents) values
+    (M0, X, E0, 'Probe estimate milestone', 'flat', 1000, 1000);
+  insert into estimate_milestones (id, org_id, estimate_id, name, milestone_type, milestone_value, amount_cents, status, invoice_id) values
+    (MI, X, E0, 'Probe invoiced milestone', 'flat', 1000, 1000, 'invoiced', I0);
+  insert into crm_jobs (org_id, client_id, job_type, estimate_id, project_id) values (X, C, 'project', E1, PJ);
+  insert into estimate_milestones (id, org_id, estimate_id, project_id, name, milestone_type, milestone_value, amount_cents) values
+    (MP, X, E1, PJ, 'Probe project milestone', 'flat', 1000, 1000);
+  -- E2 is mid-conversion: its job is on PJ2 but MC has not been stamped yet
+  -- (triggers off so fn_crm_jobs_adopt_milestones does not stamp it).
+  set local session_replication_role = replica;
+  insert into crm_jobs (org_id, client_id, job_type, estimate_id, project_id) values (X, C, 'project', E2, PJ2);
+  insert into estimate_milestones (id, org_id, estimate_id, name) values (MC, X, E2, 'Probe convert milestone');
+  set local session_replication_role = origin;
+  insert into crm_contracts (id, org_id, client_id, title, status, created_by) values (KD, X, C, 'Probe draft', 'draft', U);
+  insert into crm_contract_notes (id, org_id, contract_id, body) values (N0, X, K0, 'Probe note');
+  insert into estimate_photos (id, org_id, estimate_id, storage_path) values (PH, X, E0, X::text || '/probe.jpg');
   -- A cascade: a trigger on another table that writes crm_invoices.
   create table public.probe_cascade (id int);
   grant insert on public.probe_cascade to authenticated;
@@ -121,10 +148,53 @@ begin
   ('increment_invoice_totals RPC, service role', 'service', '{}', format('select public.increment_invoice_totals(%L, 500)', I2), 'allow'),
   ('service role, invoice insert', 'service', '{}', format('insert into crm_invoices (org_id, client_id, invoice_date) values (%L,%L,current_date)', X, C), 'allow'),
   ('admin, invoice insert', 'admin', '{}', format('insert into crm_invoices (org_id, client_id, invoice_date) values (%L,%L,current_date)', X, C), 'allow'),
-  ('admin, contract soft delete', 'admin', '{}', format('update crm_contracts set deleted_at=null, title=''T4'' where id=%L', K0), 'allow');
+  ('admin, contract soft delete', 'admin', '{}', format('update crm_contracts set deleted_at=null, title=''T4'' where id=%L', K0), 'allow'),
+  -- 20261209000100 estimate_milestones
+  ('milestone (estimate) rename, no key', 'u', '{}', format('update estimate_milestones set name=''x'' where id=%L', M0), 'deny'),
+  ('milestone (estimate) rename, estimate_edit', 'u', '{"estimate_edit":true}', format('update estimate_milestones set name=''x'' where id=%L', M0), 'allow'),
+  ('milestone (estimate) add on own unsent, estimate_add', 'u', '{"estimate_add":true}', format('insert into estimate_milestones (org_id, estimate_id, name) values (%L,%L,''m'')', X, EO), 'allow'),
+  ('milestone (estimate) add, estimate_add (not own)', 'u', '{"estimate_add":true}', format('insert into estimate_milestones (org_id, estimate_id, name) values (%L,%L,''m'')', X, E0), 'deny'),
+  ('milestone (estimate) rename, acct_add_modify_invoices', 'u', '{"acct_add_modify_invoices":true}', format('update estimate_milestones set name=''y'' where id=%L', M0), 'deny'),
+  ('milestone invoice repoint, acct_add_modify_invoices', 'u', '{"acct_add_modify_invoices":true}', format('update estimate_milestones set invoice_id=%L where id=%L', I2, MI), 'allow'),
+  ('milestone (project) rename, estimate_edit', 'u', '{"estimate_edit":true}', format('update estimate_milestones set name=''x'' where id=%L', MP), 'deny'),
+  ('milestone (project) rename, sched_add_modify_projects', 'u', '{"sched_add_modify_projects":true}', format('update estimate_milestones set name=''x'' where id=%L', MP), 'allow'),
+  ('milestone (project) rename, acct_add_modify_invoices', 'u', '{"acct_add_modify_invoices":true}', format('update estimate_milestones set name=''y'' where id=%L', MP), 'allow'),
+  ('milestone (project) soft delete, job_add', 'u', '{"job_add":true}', format('update estimate_milestones set deleted_at=now() where id=%L', MP), 'deny'),
+  ('milestone add on converted estimate, estimate_edit', 'u', '{"estimate_edit":true}', format('insert into estimate_milestones (org_id, estimate_id, name) values (%L,%L,''m'')', X, E1), 'deny'),
+  ('milestone add on project, sched_add_modify_projects', 'u', '{"sched_add_modify_projects":true}', format('insert into estimate_milestones (org_id, project_id, name) values (%L,%L,''m'')', X, PJ), 'allow'),
+  ('milestone convert: stamp wrong project, job_add', 'u', '{"job_add":true}', format('update estimate_milestones set project_id=%L where id=%L', PJ, MC), 'deny'),
+  ('milestone convert: stamp + rename, job_add', 'u', '{"job_add":true}', format('update estimate_milestones set project_id=%L, name=''z'' where id=%L', PJ2, MC), 'deny'),
+  ('milestone convert: stamp project, job_add', 'u', '{"job_add":true}', format('update estimate_milestones set project_id=%L where id=%L', PJ2, MC), 'allow'),
+  ('milestone stamped by the convert', 'u', '{}', format('do $c$ begin if not exists (select 1 from estimate_milestones where id=%L and project_id=%L) then raise exception ''not stamped''; end if; end $c$', MC, PJ2), 'allow'),
+  -- (no DELETE policy on estimate_milestones: a hard delete matches 0 rows)
+  ('milestone soft delete (estimate), no key', 'u', '{}', format('update estimate_milestones set deleted_at=now() where id=%L', M0), 'deny'),
+  ('milestone invoice RPC (project row), acct_add_modify_invoices', 'u', '{"acct_add_modify_invoices":true}', format('select public.create_invoice_from_milestone(%L, %L)', MP, C), 'allow'),
+  ('milestone invoiced by the RPC', 'u', '{}', format('do $c$ begin if not exists (select 1 from estimate_milestones where id=%L and status=''invoiced'') then raise exception ''not invoiced''; end if; end $c$', MP), 'allow'),
+  -- MI was repointed to I2 above; voiding I2 releases it through a definer trigger.
+  ('cascade: void releases milestone, acct_add_modify_invoices', 'u', '{"acct_add_modify_invoices":true}', format('update crm_invoices set status=''void'' where id=%L', I2), 'allow'),
+  ('milestone released by the void', 'u', '{}', format('do $c$ begin if not exists (select 1 from estimate_milestones where id=%L and status=''pending'' and invoice_id is null) then raise exception ''not released''; end if; end $c$', MI), 'allow'),
+  -- 20261209000200 crm_contract_notes / estimate_photos
+  ('contract note add, no key', 'u', '{}', format('insert into crm_contract_notes (org_id, contract_id, body) values (%L,%L,''n'')', X, K0), 'deny'),
+  ('contract note add, contract_edit', 'u', '{"contract_edit":true}', format('insert into crm_contract_notes (org_id, contract_id, body) values (%L,%L,''n'')', X, K0), 'allow'),
+  ('contract note add, contract_add (not own draft)', 'u', '{"contract_add":true}', format('insert into crm_contract_notes (org_id, contract_id, body) values (%L,%L,''n'')', X, K0), 'deny'),
+  ('contract note add on own draft, contract_add', 'u', '{"contract_add":true}', format('insert into crm_contract_notes (org_id, contract_id, body) values (%L,%L,''n'')', X, KD), 'allow'),
+  ('contract note soft delete, contract_create_invoices', 'u', '{"contract_create_invoices":true}', format('update crm_contract_notes set deleted_at=now() where id=%L', N0), 'deny'),
+  ('estimate photo add, no key', 'u', '{}', format('insert into estimate_photos (org_id, estimate_id, storage_path) values (%L,%L,%L)', X, E0, X::text || '/p.jpg'), 'deny'),
+  ('estimate photo add, estimate_edit', 'u', '{"estimate_edit":true}', format('insert into estimate_photos (org_id, estimate_id, storage_path) values (%L,%L,%L)', X, E0, X::text || '/p.jpg'), 'allow'),
+  ('estimate photo caption, estimate_send', 'u', '{"estimate_send":true}', format('update estimate_photos set caption=''c'' where id=%L', PH), 'deny'),
+  ('estimate photo add on own unsent, estimate_add', 'u', '{"estimate_add":true}', format('insert into estimate_photos (org_id, estimate_id, storage_path) values (%L,%L,%L)', X, EO, X::text || '/p.jpg'), 'allow'),
+  -- 20261209000300 assign_invoice_number
+  ('assign_invoice_number, CRM seat with no keys', 'u', '{}', format('select public.assign_invoice_number(%L)', I2), 'allow'),
+  ('assign_invoice_number, crew login', 'crew', '{}', format('select public.assign_invoice_number(%L)', I2), 'deny'),
+  ('assign_invoice_number, login without a CRM seat', 'nocrm', '{}', format('select public.assign_invoice_number(%L)', I2), 'deny'),
+  ('assign_invoice_number, service role', 'service', '{}', format('select public.assign_invoice_number(%L)', I2), 'allow');
 
   for tc in select * from probe_cases order by n loop
+    perform set_config('request.jwt.claims', '', true);
+    perform set_config('request.jwt.claim.sub', '', true);
     update crm_roles set permissions = tc.perms where id = R;
+    update profiles set role = case when tc.who = 'crew' then 'crew' else 'technician' end where id = U;
+    update crm_employees set is_active = (tc.who <> 'nocrm') where user_id = U and crm_role_id = R;
     if tc.who = 'service' then
       perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
       perform set_config('request.jwt.claim.sub', '', true);

@@ -216,6 +216,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const [svcQty, setSvcQty] = useState("");
   const [svcRate, setSvcRate] = useState("");
   const [svcBHrs, setSvcBHrs] = useState("");
+  const [svcTreatedArea, setSvcTreatedArea] = useState("");
   const [addingSvc, setAddingSvc] = useState(false);
   const [newSvcId, setNewSvcId] = useState("");
   const [newSvcRate, setNewSvcRate] = useState("");
@@ -527,11 +528,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     }
   }
 
-  function startEditSvc(s: { id: string; qty: number | null; rateCents: number | null; budgetedHours: number | null }) {
+  function startEditSvc(s: { id: string; qty: number | null; rateCents: number | null; budgetedHours: number | null; treatedArea?: number | null }) {
     setEditingSvcId(s.id);
     setSvcQty(String(s.qty ?? 1));
     setSvcRate(s.rateCents != null ? String(s.rateCents / 100) : "");
     setSvcBHrs(s.budgetedHours != null ? String(s.budgetedHours) : "0");
+    setSvcTreatedArea(s.treatedArea != null ? String(s.treatedArea) : "");
   }
 
   async function saveEditSvc() {
@@ -543,6 +545,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           qty: parsePositiveQty(svcQty),
           rate_cents: svcRate ? Math.round(parseFloat(svcRate) * 100) : null,
           budgeted_hours: parseFloat(svcBHrs) || 0,
+          treated_area: parseFloat(svcTreatedArea) > 0 ? parseFloat(svcTreatedArea) : null,
         },
       });
       setEditingSvcId(null);
@@ -1512,6 +1515,25 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       <tr key={s.id} className="group border-b last:border-0">
                         <td className="px-4 py-3 font-medium text-slate-800 dark:text-neutral-100">
                           {s.serviceName}
+                          {editingSvcId === s.id ? (
+                            <label className="mt-1 flex items-center gap-1.5 text-xs font-normal text-slate-500 dark:text-neutral-400">
+                              Treated area
+                              <Input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={svcTreatedArea}
+                                onChange={(e) => setSvcTreatedArea(e.target.value)}
+                                placeholder="property"
+                                className="h-6 w-24 text-right text-xs"
+                              />
+                              sq ft
+                            </label>
+                          ) : s.treatedArea != null ? (
+                            <p className="mt-0.5 text-xs font-normal text-slate-500 dark:text-neutral-400">
+                              Treated area: {s.treatedArea.toLocaleString()} sq ft
+                            </p>
+                          ) : null}
                           {(s.subitems ?? []).length > 0 && (
                             // What the crew sees under this service on their stop — names and
                             // quantities only; the sub-item dollars are already in the price.
