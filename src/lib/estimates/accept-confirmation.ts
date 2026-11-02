@@ -53,26 +53,41 @@ export async function sendConfiguredAcceptanceConfirmation(
     // The estimate document's own Confirmation Email settings win; otherwise
     // fall back to the org-level "Accepted Email" settings.
     const estimateDoc = await resolveEstimateDocument(supabase, args.estimateId);
-    const settings = estimateDoc?.confirmation_document_id
+    const orgSettings = getConfirmationSettings(org.customizations);
+    let settings = estimateDoc?.confirmation_document_id
       ? {
           documentId: estimateDoc.confirmation_document_id,
           recipient: estimateDoc.confirmation_recipient,
           includeEstimatePdf: estimateDoc.confirmation_include_estimate_pdf,
         }
-      : getConfirmationSettings(org.customizations);
+      : orgSettings;
     if (!settings.documentId) return "not_configured";
 
     // The document must still exist, be active, and be an email-capable type.
-    const { data: doc } = await supabase
-      .from("crm_document_templates")
-      .select("id, subject, doc_type, status")
-      .eq("id", settings.documentId)
-      .eq("org_id", est.org_id)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (!doc || doc.status !== "active" || !["client", "estimate"].includes(doc.doc_type)) {
-      return "not_configured";
+    const loadDoc = async (id: string) => {
+      const { data } = await supabase
+        .from("crm_document_templates")
+        .select("id, subject, doc_type, status")
+        .eq("id", id)
+        .eq("org_id", est.org_id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      return data && data.status === "active" && ["client", "estimate"].includes(data.doc_type) ? data : null;
+    };
+    let doc = await loadDoc(settings.documentId);
+    if (!doc && estimateDoc?.confirmation_document_id) {
+      // The estimate document points at a confirmation email that was deleted or deactivated:
+      // fall back to the org-level Accepted Email before the built-in one, and say so in the log.
+      log.warn("estimate document's confirmation email is deleted or inactive; using the org default", {
+        estimateId: args.estimateId,
+        documentId: settings.documentId,
+      });
+      if (orgSettings.documentId) {
+        settings = orgSettings;
+        doc = await loadDoc(orgSettings.documentId);
+      }
     }
+    if (!doc) return "not_configured";
 
     const { data: blocks } = await supabase
       .from("crm_document_blocks")

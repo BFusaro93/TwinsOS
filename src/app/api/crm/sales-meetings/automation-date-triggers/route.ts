@@ -3,11 +3,13 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 import { isEligibleForEnrollment, enrollClientInSequence, triggerConditionsMet, logSequenceExecution } from "@/lib/automations/sequence-enrollment";
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
-import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 
 /**
- * GET  /api/crm/sales-meetings/automation-date-triggers — called every 15
- * minutes by Vercel Cron (see vercel.json). Previously driven by a GitHub
+ * GET  /api/crm/sales-meetings/automation-date-triggers — called every 5
+ * minutes by Vercel Cron (see vercel.json); the builder offers 5- and 10-minute lead
+ * times, which a 15-minute schedule could never hit (both window edges missed a meeting
+ * on a quarter hour). Previously driven by a GitHub
  * Actions workflow instead (Vercel Hobby caps cron at once/day); moved back
  * to native Vercel Cron after the 2026-09 upgrade to Pro.
  * POST — manual trigger for testing.
@@ -77,7 +79,7 @@ async function handleRun(request: Request) {
   }
 
   let enrolled = 0;
-  const orgCanceled = createOrgCanceledResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase);
 
   for (const trigger of triggers ?? []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -92,6 +94,10 @@ async function handleRun(request: Request) {
     const minutes = Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_LEAD_MINUTES;
 
     const windowEnd = new Date(now.getTime() + minutes * 60_000);
+    // A minute of look-back absorbs cron jitter between consecutive 5-minute runs, so a
+    // meeting can't fall between one run's window end and the next run's start. Enrollment
+    // is deduped per meeting (isEligibleForEnrollment), so the overlap never double-fires.
+    const windowStart = new Date(now.getTime() - 60_000);
 
     const { data: meetings } = await supabase
       .from("crm_sales_meetings")
@@ -100,7 +106,7 @@ async function handleRun(request: Request) {
       .eq("status", "scheduled")
       .is("deleted_at", null)
       .not("client_id", "is", null)
-      .gte("scheduled_at", now.toISOString())
+      .gte("scheduled_at", windowStart.toISOString())
       .lte("scheduled_at", windowEnd.toISOString());
 
     for (const meeting of meetings ?? []) {

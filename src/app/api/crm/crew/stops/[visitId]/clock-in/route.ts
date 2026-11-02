@@ -45,6 +45,7 @@ interface VisitRow {
     service_city: string | null;
     notes_to_crew: string | null;
     notes_to_crew_updated_at: string | null;
+    client_properties?: { notes_to_crew: string | null } | { notes_to_crew: string | null }[] | null;
   } | null;
 }
 
@@ -67,12 +68,15 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 const VISIT_SELECT = `
   id, org_id, client_id, scheduled_date, crew_id, crew_unassigned, status, clocked_in_at,
   notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
-  crm_jobs(crew_id, status, property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at)
+  crm_jobs(crew_id, status, property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at, client_properties(notes_to_crew))
 `;
 
 /** The notes-to-crew this visit contributes to its stop, visit-level overriding job-level (same rule as groupVisitsIntoStops). */
 function notesForRow(row: VisitRow): { text: string | null; updatedAt: string | null } {
-  const text = row.notes_to_crew || row.crm_jobs?.notes_to_crew || null;
+  const property = row.crm_jobs?.client_properties;
+  const propertyNotes = (Array.isArray(property) ? property[0] : property)?.notes_to_crew ?? null;
+  // Visit, else job, else the property's standing note — the crew app shows the same text.
+  const text = row.notes_to_crew || row.crm_jobs?.notes_to_crew || propertyNotes || null;
   const updatedAt = [row.notes_to_crew_updated_at, row.crm_jobs?.notes_to_crew_updated_at]
     .filter((s): s is string => !!s)
     .sort()

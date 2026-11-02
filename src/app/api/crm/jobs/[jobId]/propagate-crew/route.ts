@@ -1,3 +1,4 @@
+import { rejectWithoutSchedulingPermission } from "@/lib/auth/scheduling-permission";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
@@ -23,6 +24,8 @@ export async function POST(
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = await rejectWithoutSchedulingPermission(supabase);
+  if (denied) return denied;
 
   const { jobId } = await params;
   if (!z.string().uuid().safeParse(jobId).success) {

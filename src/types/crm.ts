@@ -217,6 +217,10 @@ export interface NewClientFormValues {
   serviceCity?: string;
   serviceState?: string;
   serviceZip?: string;
+  /** Result of the address check run in the dialog, when it was for the address being saved. */
+  addressVerdict?: AddressVerdict | null;
+  lat?: number | null;
+  lng?: number | null;
   source: string;
   salesRepId: string;
   /** Initial lifecycle status. Defaults to "active"; the New Client dialog can create a Lead instead. */

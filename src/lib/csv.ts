@@ -23,6 +23,8 @@ export interface BulkImportResult {
   /** Rows deliberately not imported because they match an existing record
    *  (duplicates). Not errors; reported separately from `failed`. */
   skipped?: BulkImportRowError[];
+  /** Rows that imported, but with something the user should check (e.g. an unknown status). */
+  warnings?: BulkImportRowError[];
 }
 
 /** Type guard: does an `onImport` return value look like a `BulkImportResult`? */

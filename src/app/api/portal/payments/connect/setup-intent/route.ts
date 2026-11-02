@@ -51,8 +51,10 @@ export async function POST(request: Request) {
 
   // stripe_connect_livemode isn't in the generated Supabase types yet (added
   // by a migration this session wrote but did not apply/regenerate types for).
+  // Portal users have no profiles row, so the organizations policy (id = my_org_id()) returns
+  // nothing for their session: read the org with the service client (ctx.orgId is server-derived).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: org } = await (supabase.from("organizations") as any)
+  const { data: org } = await (createServiceClient().from("organizations") as any)
     .select("stripe_connect_account_id, stripe_connect_charges_enabled, ach_payments_enabled, stripe_connect_livemode")
     .eq("id", ctx.orgId)
     .single();
@@ -103,7 +105,9 @@ export async function POST(request: Request) {
   }
 }
 
-const SaveSchema = z.object({ setupIntentId: z.string(), enableAutopay: z.boolean().default(true) });
+// Off unless the customer ticks "use for autopay": a card saved only for manual payments
+// was being charged automatically.
+const SaveSchema = z.object({ setupIntentId: z.string(), enableAutopay: z.boolean().default(false) });
 
 export async function PUT(request: Request) {
   if (!isStripeConfigured() && !isStripeTestConfigured()) {
@@ -133,8 +137,10 @@ export async function PUT(request: Request) {
 
   // stripe_connect_livemode isn't in the generated Supabase types yet (added
   // by a migration this session wrote but did not apply/regenerate types for).
+  // Portal users have no profiles row, so the organizations policy (id = my_org_id()) returns
+  // nothing for their session: read the org with the service client (ctx.orgId is server-derived).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: org } = await (supabase.from("organizations") as any)
+  const { data: org } = await (createServiceClient().from("organizations") as any)
     .select("stripe_connect_account_id, stripe_connect_livemode")
     .eq("id", ctx.orgId)
     .single();

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { crewGroupVisitIds } from "@/lib/crew/crew-group-visits";
 import { z } from "zod";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { logger } from "@/lib/logger";
@@ -76,7 +77,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitError } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, job_id, org_id, crew_id, crew_unassigned, crm_jobs(crew_id)")
+    .select("id, job_id, org_id, crew_id, crew_unassigned, crew_group_id, crm_jobs(crew_id)")
     .eq("id", visitId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -94,10 +95,12 @@ export async function POST(
     .is("deleted_at", null)
     .maybeSingle();
   if (jpError) return NextResponse.json({ error: jpError.message }, { status: 500 });
+  // A per-visit row (recurring sub-item product) can only be recorded on its own stop — any
+  // crew of a multi-crew stop, since the rows live on the lead visit.
+  const stopVisitIds = jobProduct?.visit_id ? await crewGroupVisitIds(visit) : null;
   if (
     !jobProduct || jobProduct.job_id !== visit.job_id || jobProduct.org_id !== visit.org_id ||
-    // A per-visit row (recurring sub-item product) can only be recorded on its own visit.
-    (jobProduct.visit_id && jobProduct.visit_id !== visitId)
+    (jobProduct.visit_id && !stopVisitIds?.has(jobProduct.visit_id))
   ) {
     return NextResponse.json({ error: "Material not found on this job" }, { status: 404 });
   }

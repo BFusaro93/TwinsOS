@@ -62,7 +62,9 @@ export function useProjects(includeArchived = false) {
           (li: { purchase_orders: PoRef | null }) =>
             !li.purchase_orders?.deleted_at &&
             li.purchase_orders?.status !== "canceled" &&
-            li.purchase_orders?.status !== "rejected"
+            li.purchase_orders?.status !== "rejected" &&
+            // A draft PO isn't committed spend: the WIP report (rpt_projects_wip) leaves it out too.
+            li.purchase_orders?.status !== "draft"
         );
         // Rejected/closed requisitions are dead — no pending cost.
         const reqLines: {
@@ -72,7 +74,8 @@ export function useProjects(includeArchived = false) {
           (li: { requisitions: { deleted_at: string | null; status: string } | null }) =>
             !li.requisitions?.deleted_at &&
             li.requisitions?.status !== "rejected" &&
-            li.requisitions?.status !== "closed"
+            li.requisitions?.status !== "closed" &&
+            li.requisitions?.status !== "draft"
         );
         const directItems: { quantity: number; unit_cost: number; deleted_at: string | null }[] =
           row.project_direct_items ?? [];
@@ -238,7 +241,9 @@ export function useUpdateProject() {
     },
     onMutate: async ({ id, status, name, customerName, address, startDate, endDate, contractPrice, estimatedCostCents, laborHours, budgetHours, laborRateCents, burdenedRateCents, notes, clientId }) => {
       await queryClient.cancelQueries({ queryKey: ["projects"] });
-      const previous = queryClient.getQueryData<Project[]>(["projects"]);
+      // The list lives under ["projects", { includeArchived }]; snapshot every variant so the
+      // rollback restores what the optimistic patch changed (["projects"] alone never existed).
+      const previous = queryClient.getQueriesData<Project[]>({ queryKey: ["projects"] });
       const patch: Partial<Project> = {};
       if (status !== undefined) patch.status = status;
       if (name !== undefined) patch.name = name;
@@ -261,8 +266,8 @@ export function useUpdateProject() {
       return { previous };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData<Project[]>(["projects"], context.previous);
+      for (const [key, data] of context?.previous ?? []) {
+        queryClient.setQueryData(key, data);
       }
     },
     onSettled: (_, _err, { id }) => {

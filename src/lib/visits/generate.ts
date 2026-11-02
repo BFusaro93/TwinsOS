@@ -310,20 +310,26 @@ export interface GenerateResult {
 async function excludeInactiveParents(supabase: AnyClient, jobs: GeneratorJob[]): Promise<GeneratorJob[]> {
   const inactiveClients = new Set<string>();
   for (const ids of chunk([...new Set(jobs.map((j) => j.client_id))], 100)) {
-    const { data } = await supabase.from("clients").select("id, status, deleted_at").in("id", ids);
+    const { data, error } = await supabase.from("clients").select("id, status, deleted_at").in("id", ids);
+    // Fail closed: on a read error every client looked "active", and the run generated visits
+    // for cancelled/inactive clients and dead contracts.
+    if (error) throw new Error(`could not check client status: ${(error as { message: string }).message}`);
     for (const c of (data ?? []) as { id: string; status: string | null; deleted_at: string | null }[]) {
-      if (c.deleted_at || c.status === "cancelled") inactiveClients.add(c.id);
+      // Inactive is "a former active client" and lost is a closed lead: neither is on service.
+      if (c.deleted_at || c.status === "cancelled" || c.status === "inactive" || c.status === "lost") inactiveClients.add(c.id);
     }
   }
   const contractByJob = new Map<string, string>();
   for (const ids of chunk(jobs.map((j) => j.id), 100)) {
-    const { data } = await supabase.from("crm_jobs").select("id, contract_id").in("id", ids).not("contract_id", "is", null);
+    const { data, error } = await supabase.from("crm_jobs").select("id, contract_id").in("id", ids).not("contract_id", "is", null);
+    if (error) throw new Error(`could not check job contracts: ${(error as { message: string }).message}`);
     for (const r of (data ?? []) as { id: string; contract_id: string }[]) contractByJob.set(r.id, r.contract_id);
   }
   const deadContracts = new Set<string>();
   const contractEnd = new Map<string, string>();
   for (const ids of chunk([...new Set(contractByJob.values())], 100)) {
-    const { data } = await supabase.from("crm_contracts").select("id, status, deleted_at, end_date").in("id", ids);
+    const { data, error } = await supabase.from("crm_contracts").select("id, status, deleted_at, end_date").in("id", ids);
+    if (error) throw new Error(`could not check contract status: ${(error as { message: string }).message}`);
     for (const c of (data ?? []) as { id: string; status: string | null; deleted_at: string | null; end_date: string | null }[]) {
       if (c.deleted_at || c.status === "cancelled" || c.status === "expired") deadContracts.add(c.id);
       if (c.end_date) contractEnd.set(c.id, c.end_date);
@@ -353,7 +359,13 @@ export async function generateVisitsForJobs(
 ): Promise<GenerateResult> {
   const result: GenerateResult = { planned: 0, inserted: 0, insertedByJob: new Map(), errors: [] };
   if (allJobs.length === 0) return result;
-  const jobs = await excludeInactiveParents(supabase, allJobs);
+  let jobs: GeneratorJob[];
+  try {
+    jobs = await excludeInactiveParents(supabase, allJobs);
+  } catch (err) {
+    result.errors.push(err instanceof Error ? err.message : String(err));
+    return result;
+  }
   if (jobs.length === 0) return result;
 
   const todayByJob = new Map<string, string>();
@@ -450,10 +462,17 @@ export async function generateVisitsForJobs(
     liveCountByJob.set(j.id, count ?? 0);
   }
 
-  const { rows: scheduleRows, error: schedErr } = await selectAllRows<ScheduleRow & { org_id: string | null }>(() => supabase
-    .from("crm_schedules")
-    .select("org_id, name, frequency, day_of_week, week_pattern, anchor_date, week_of_month, season_start, season_end, custom_dates, excluded_dates, is_active")
-    .is("deleted_at", null));
+  // Only the orgs these jobs belong to (the cron calls this once per org; reading every org's
+  // schedules each time was O(orgs x schedules), and one failure failed every org).
+  const scheduleOrgIds = [...new Set(jobs.map((j) => j.org_id ?? opts.fallbackOrgId ?? null).filter((x): x is string => !!x))];
+  const { rows: scheduleRows, error: schedErr } = await selectAllRows<ScheduleRow & { org_id: string | null }>(() => {
+    let q = supabase
+      .from("crm_schedules")
+      .select("org_id, name, frequency, day_of_week, week_pattern, anchor_date, week_of_month, season_start, season_end, custom_dates, excluded_dates, is_active")
+      .is("deleted_at", null);
+    if (scheduleOrgIds.length) q = q.in("org_id", scheduleOrgIds);
+    return q;
+  });
   if (schedErr) { result.errors.push(schedErr); return result; }
   const schedulesByOrg = new Map<string, Map<string, ScheduleRow>>();
   for (const r of scheduleRows) {

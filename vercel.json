@@ -105,7 +105,7 @@
     },
     {
       "path": "/api/crm/sales-meetings/automation-date-triggers",
-      "schedule": "*/15 * * * *"
+      "schedule": "*/5 * * * *"
     }
   ]
 }

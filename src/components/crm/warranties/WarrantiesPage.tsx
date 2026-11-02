@@ -17,7 +17,7 @@ import { WarrantyTypesDialog } from "./WarrantyTypesDialog";
 
 export function WarrantiesPage() {
   const { data: warranties = [], isLoading } = useWarranties();
-  const { can } = usePermissions();
+  const { can, isLoading: permsLoading } = usePermissions();
   const { today } = useOrgDates();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | WarrantyDisplayState>("all");
@@ -33,6 +33,13 @@ export function WarrantiesPage() {
   }, [warranties, search, filter, today]);
 
   const expiring = warranties.filter((w) => warrantyDisplayState(w, today()).state === "expiring").length;
+
+  // The sidebar hides this page without warranty_view; a typed URL must not show it either.
+  if (!permsLoading && !can("warranty_view") && !can("warranty_manage")) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">You don&apos;t have access to warranties. Ask an administrator for the &ldquo;View Warranties&rdquo; permission.</div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col gap-4">

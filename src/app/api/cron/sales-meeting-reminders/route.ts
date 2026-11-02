@@ -5,7 +5,7 @@ import { EMAIL_FROM } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { resolveReminderRecipients } from "@/lib/notifications/reminder-recipients";
-import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 
 /**
  * GET /api/cron/sales-meeting-reminders — called every 15 minutes by Vercel
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
 
   const resend = new Resend(process.env.RESEND_API_KEY!);
   let notified = 0;
-  const orgCanceled = createOrgCanceledResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase);
 
   for (const meeting of upcoming as Record<string, unknown>[]) {
     if (await orgCanceled(meeting.org_id as string)) continue; // canceled orgs get no automated reminders

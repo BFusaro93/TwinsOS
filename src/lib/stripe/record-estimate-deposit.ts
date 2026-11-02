@@ -302,7 +302,30 @@ export async function recordEstimateDepositCharge({
       alreadyCollectedCents: estimate.deposit_collected_cents,
       existingReference: estimate.deposit_reference,
     });
-    return "error";
+    // Returning "error" made Stripe redeliver the event for days and the only record was a
+    // log line. Acknowledge it and leave a timeline entry + admin alert so someone refunds it.
+    const dupAmount = (paymentIntent.amount_received ?? paymentIntent.amount ?? 0) / 100;
+    await db.from("client_activity").insert({
+      org_id: orgId,
+      client_id: estimate.client_id,
+      activity_type: "payment",
+      subject: `Duplicate deposit charge of $${dupAmount.toFixed(2)} on Estimate #${estimate.estimate_number} needs a refund (Stripe ${paymentIntent.id})`,
+      ref_id: estimateId,
+      ref_table: "estimates",
+      amount_cents: 0,
+    });
+    const { data: admins } = await db.from("profiles").select("id").eq("org_id", orgId).eq("role", "admin").neq("status", "inactive");
+    const rows = ((admins ?? []) as { id: string }[]).map((a) => ({
+      org_id: orgId,
+      user_id: a.id,
+      type: "estimate_deposit_excess",
+      title: "Duplicate deposit charge",
+      message: `A second deposit of $${dupAmount.toFixed(2)} was charged on Estimate #${estimate.estimate_number}. Refund it in Stripe (${paymentIntent.id}); it was not credited to the client.`,
+      entity_id: estimateId,
+      entity_type: "estimate",
+    }));
+    if (rows.length) await db.from("notifications").insert(rows);
+    return "applied";
   }
   const { method } = await resolveMethod(db, orgId, paymentIntent, connectedAccountId);
 

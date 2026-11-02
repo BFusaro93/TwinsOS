@@ -53,6 +53,7 @@ export function ClientPortalGuide() {
           <TOCLink href="#estimates">Reviewing and accepting estimates</TOCLink>
           <TOCLink href="#branding">Branding and portal settings</TOCLink>
           <TOCLink href="#gotchas">Gotchas</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -66,9 +67,8 @@ export function ClientPortalGuide() {
           A client can view their balance and pay invoices online, see upcoming and completed job visits,
           review and act on open estimates (accept with an e-signature, decline, or request changes),
           submit support tickets, browse a shared document library, and manage their own contact info and
-          saved payment method. None of this requires a staff account — portal users authenticate as their
-          own Supabase Auth user, tagged with <code>user_metadata.portal</code> so they can never be confused
-          with a staff login.
+          saved payment method. None of this requires a staff account — portal users sign in with their own
+          login, linked to their client record by a portal link, separate from staff access.
         </p>
         <p>
           Every portal page is a server component that resolves the signed-in user to a <code>client_id</code>
@@ -129,11 +129,13 @@ export function ClientPortalGuide() {
       <Section id="signing-in" title="Signing in, and multi-company clients">
         <p>
           Portal sign-in lives at <code>/portal/login</code> — a completely separate page from staff login,
-          with its own email/password form. On successful sign-in the app checks for{" "}
-          <code>user.user_metadata.portal</code>; if it&apos;s missing (i.e. this is a staff account, not a
-          portal account) the session is immediately signed back out with &quot;This is a staff or crew login,
-          not a client portal account&quot; and a link to the regular sign-in page &mdash; so a staff
-          member or crew who types their own login here is pointed to where they belong. First-time visitors can also paste their invite link or bare token directly into
+          with its own email/password form. On sign-in the app looks for a live portal link for that login.
+          A login with no portal link at all (a staff member or crew typing their own login here) is signed
+          back out with &quot;This is a staff or crew login, not a client portal account&quot; and a link to
+          the regular sign-in page. A login whose portal access was removed &mdash; access reset, client
+          deleted, or the portal turned off for that company &mdash; is told &quot;Your portal access is no
+          longer active&quot; instead of being sent round the login form again. An owner or staff member who
+          is also a client of another company can sign in here with the same login. First-time visitors can also paste their invite link or bare token directly into
           the login page instead of clicking through email.
         </p>
         <p>
@@ -325,9 +327,26 @@ export function ClientPortalGuide() {
             records and switch between them at <code>/portal/select-org</code>.
           </li>
           <li>
-            <strong>Feature toggles hide the tab, not the route.</strong> Turning off &quot;Allow Tickets&quot;
-            etc. removes the nav item; verify server-side authorization separately if you&apos;re extending
-            these pages, rather than assuming a hidden tab means the underlying data is inaccessible.
+            <strong>Feature toggles block the page, not just the tab.</strong> Turning off &quot;Show
+            Estimates&quot; also blocks a bookmarked <code>/portal/estimates</code> visit and the accept,
+            decline and request-changes actions. If you extend these pages, check the setting on the server
+            too rather than relying on the hidden tab.
+          </li>
+        </ul>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Property managers see their sub-accounts.</strong> A client with sub-accounts (commercial property managers) sees the sub-accounts&apos; invoices, estimates, visits and tickets alongside their own when they sign in, each tagged with the sub-account&apos;s name. They can pay a sub-account&apos;s invoice (the payment is recorded on that sub-account&apos;s invoice) and choose which account a new ticket is for. Saved cards and autopay stay with the account that saved them.
+          </li>
+          <li>
+            <strong>Autopay is the client&apos;s choice.</strong> On the Account page a client with a saved card sees an <strong>Autopay</strong> switch. Saving a card has a “Use this card for autopay” checkbox that starts unticked, and removing the saved card turns autopay off.
+          </li>
+          <li>
+            <strong>Accepting an invite while signed in.</strong> If the invited person is already signed in with the invited email (for example an owner who is also a customer of another company), the invite page shows <strong>Add this company to my account</strong> with no password fields.
+          </li>
+          <li>
+            <strong>Accepted estimates stay Accepted.</strong> An estimate the office has converted to a job still shows as Accepted in the portal, never as expired.
           </li>
         </ul>
       </Section>

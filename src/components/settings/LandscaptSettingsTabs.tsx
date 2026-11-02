@@ -62,6 +62,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useOrgSettings, useUpdateOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useSettingsStore, type FieldRequirement } from "@/stores/settings-store";
 import {
@@ -121,14 +122,20 @@ function AccordionSection({
   children,
   defaultOpen = false,
   description,
+  openWhenQuery,
 }: {
   title: string;
   count?: number;
   children: React.ReactNode;
   defaultOpen?: boolean;
   description?: string;
+  /** Opens the section when the page URL carries this query parameter (e.g. returning from an OAuth flow). */
+  openWhenQuery?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => {
+    if (openWhenQuery && new URLSearchParams(window.location.search).has(openWhenQuery)) setOpen(true);
+  }, [openWhenQuery]);
   return (
     <div className="border-b last:border-0">
       <button
@@ -482,7 +489,7 @@ function DiscountsEditor() {
       )}
 
       {adding ? (
-        <div className="flex items-center gap-2 py-3">
+        <div className="flex flex-wrap items-center gap-2 py-3">
           <input
             autoFocus
             placeholder="e.g. Senior discount"
@@ -554,6 +561,11 @@ function ClientDefaultsSection() {
   const [billingTerms, setBillingTerms] = useState("due_on_receipt");
   const [invoiceFrequency, setInvoiceFrequency] = useState("daily");
   const [invoiceDelivery, setInvoiceDelivery] = useState("email");
+  // The counter moves every time a client is created. It is only written back when the user
+  // edits it here — saving the billing defaults used to rewrite it with the number this form
+  // loaded, rolling it back onto numbers already in use (every new client then failed).
+  const [nextDirty, setNextDirty] = useState(false);
+  const [checkingNext, setCheckingNext] = useState(false);
 
   useEffect(() => {
     if (!orgSettings || seeded.current) return;
@@ -566,24 +578,71 @@ function ClientDefaultsSection() {
     setInvoiceDelivery(orgSettings.defaultInvoiceDelivery);
   }, [orgSettings]);
 
-  function handleSave() {
+  // Keep showing the live counter until the user starts editing it.
+  useEffect(() => {
+    if (!orgSettings || nextDirty) return;
+    setNextNumber(String(orgSettings.accountNumberNext));
+  }, [orgSettings, nextDirty]);
+
+  /** Highest number already used by a client account with this prefix/suffix. */
+  async function highestUsedAccountNumber(p: string, sfx: string): Promise<number> {
+    const supabase = createSupabaseBrowserClient();
+    let max = 0;
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("account_number")
+        .not("account_number", "is", null)
+        .order("id")
+        .range(from, from + 999);
+      if (error) throw error;
+      for (const row of (data ?? []) as { account_number: string | null }[]) {
+        const acct = row.account_number ?? "";
+        if (!acct.startsWith(p) || !acct.endsWith(sfx)) continue;
+        const core = acct.slice(p.length, acct.length - sfx.length);
+        if (/^\d+$/.test(core)) max = Math.max(max, parseInt(core, 10));
+      }
+      if (!data || data.length < 1000) break;
+    }
+    return max;
+  }
+
+  async function handleSave() {
     const parsedNext = parseInt(nextNumber, 10);
-    if (!Number.isFinite(parsedNext) || parsedNext < 1) {
-      toast.error("Next account number must be a positive whole number");
-      return;
+    if (nextDirty) {
+      if (!Number.isFinite(parsedNext) || parsedNext < 1) {
+        toast.error("Next account number must be a positive whole number");
+        return;
+      }
+      setCheckingNext(true);
+      try {
+        const used = await highestUsedAccountNumber(prefix.trim(), suffix.trim());
+        if (parsedNext <= used) {
+          toast.error(`Account numbers up to ${prefix.trim()}${used}${suffix.trim()} are already in use. Pick a number above ${used}.`);
+          return;
+        }
+      } catch {
+        toast.error("Couldn't check existing account numbers. Try again.");
+        return;
+      } finally {
+        setCheckingNext(false);
+      }
     }
     updateOrgSettings(
       {
         accountNumberPrefix: prefix.trim(),
-        accountNumberNext: parsedNext,
+        ...(nextDirty ? { accountNumberNext: parsedNext } : {}),
         accountNumberSuffix: suffix.trim(),
         defaultBillingTerms: billingTerms,
         defaultInvoiceFrequency: invoiceFrequency,
         defaultInvoiceDelivery: invoiceDelivery,
       },
       {
-        onSuccess: () => toast.success("Client defaults saved"),
-        onError: () => toast.error("Failed to save client defaults"),
+        onSuccess: () => {
+          setNextDirty(false);
+          toast.success("Client defaults saved");
+        },
+        onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to save client defaults"),
       }
     );
   }
@@ -606,7 +665,7 @@ function ClientDefaultsSection() {
               type="number"
               min={1}
               value={nextNumber}
-              onChange={(e) => setNextNumber(e.target.value)}
+              onChange={(e) => { setNextNumber(e.target.value); setNextDirty(true); }}
             />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -654,8 +713,8 @@ function ClientDefaultsSection() {
       <p className="text-xs text-slate-400 dark:text-neutral-500">These apply to new clients only — existing clients keep their current settings.</p>
 
       <div>
-        <Button size="sm" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving…" : "Save Defaults"}
+        <Button size="sm" onClick={() => void handleSave()} disabled={saving || checkingNext}>
+          {saving || checkingNext ? "Saving…" : "Save Defaults"}
         </Button>
       </div>
     </div>
@@ -1034,6 +1093,7 @@ function ServiceRow({
 }) {
   const { mutateAsync: updateService } = useUpdateCRMService();
   const { mutateAsync: deleteService } = useDeleteCRMService();
+  const [confirm, confirmDialog] = useConfirm();
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(service.name);
   const [codeDraft, setCodeDraft] = useState(service.code ?? "");
@@ -1071,6 +1131,11 @@ function ServiceRow({
           code: codeDraft.trim().toUpperCase(),
           default_rate_cents: rateCents ?? null,
           production_rate_sqft_per_hr: productionRate,
+          // Same rule as adding a service: a production rate only drives estimate hours when
+          // the service budgets by it, so setting one here switches the method too.
+          ...(productionRate != null && productionRate > 0 && service.productionRateSqftPerHr == null
+            ? { budget_method: "production_rate" }
+            : {}),
         },
       });
       toast.success("Service updated");
@@ -1084,6 +1149,28 @@ function ServiceRow({
   }
 
   async function handleDelete() {
+    // One tap used to delete the service, even one live jobs use. Say how many before asking.
+    let inUse = 0;
+    try {
+      const { count } = await createSupabaseBrowserClient()
+        .from("crm_job_services")
+        .select("id, crm_jobs!inner(status, deleted_at)", { count: "exact", head: true })
+        .eq("service_id", service.id)
+        .is("crm_jobs.deleted_at", null)
+        .not("crm_jobs.status", "in", "(completed,cancelled)");
+      inUse = count ?? 0;
+    } catch {
+      inUse = 0;
+    }
+    const ok = await confirm({
+      title: `Delete "${service.name}"?`,
+      description: inUse > 0
+        ? `${inUse} open job service${inUse !== 1 ? "s" : ""} use this service. They keep their current price and name, but it will no longer be offered on new estimates and jobs.`
+        : "It will no longer be offered on new estimates and jobs. This cannot be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
       await deleteService(service.id);
@@ -1142,8 +1229,9 @@ function ServiceRow({
   }
 
   return (
-    <div className="flex items-center gap-3 py-2">
-      <span className="flex-1 text-sm text-slate-800 dark:text-neutral-100">{service.name}</span>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+      {confirmDialog}
+      <span className="min-w-0 flex-1 text-sm text-slate-800 dark:text-neutral-100">{service.name}</span>
       {service.code && (
         <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-slate-600 dark:text-neutral-400">{service.code}</span>
       )}
@@ -1164,8 +1252,9 @@ function ServiceRow({
         size="sm"
         variant="ghost"
         className="h-7 px-2 text-xs text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-400"
-        onClick={handleDelete}
+        onClick={() => void handleDelete()}
         disabled={deleting}
+        aria-label={`Delete ${service.name}`}
       >
         <X className="h-3.5 w-3.5" />
       </Button>
@@ -1406,6 +1495,20 @@ function ConnectAccountSection() {
 function QuickBooksConnectSection() {
   const { data: status, isLoading } = useQuickBooksStatus();
   const { mutateAsync: disconnect, isPending: disconnecting } = useDisconnectQuickBooks();
+  // Connecting and disconnecting are admin-only on the server; others got a raw JSON 403 page.
+  const { isAdmin, isLoading: permsLoading } = usePermissions();
+
+  // The OAuth callback returns here with ?quickbooks=connected|error; say how it went.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("quickbooks");
+    if (!result) return;
+    if (result === "connected") toast.success("QuickBooks connected");
+    else toast.error("Couldn't connect QuickBooks. Only an admin can connect it — please try again.");
+    params.delete("quickbooks");
+    const qs = params.toString();
+    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
+  }, []);
 
   if (isLoading) {
     return <p className="p-4 text-sm text-slate-400 dark:text-neutral-500">Loading…</p>;
@@ -1443,7 +1546,9 @@ function QuickBooksConnectSection() {
         Connect QuickBooks Online to push invoices and payments over automatically. This is a one-way sync — nothing
         is ever pulled back from QuickBooks or written from it into Landscapt.
       </p>
-      {status.connected ? (
+      {!permsLoading && !isAdmin ? (
+        <p className="text-xs text-muted-foreground">Only an admin can {status.connected ? "disconnect" : "connect"} QuickBooks.</p>
+      ) : status.connected ? (
         <Button size="sm" variant="outline" onClick={() => void handleDisconnect()} disabled={disconnecting}>
           {disconnecting ? "Disconnecting…" : "Disconnect"}
         </Button>
@@ -1577,8 +1682,8 @@ function AccountingTab() {
     try {
       await updateOrg({ achPaymentsEnabled: next });
       toast.success(next ? "ACH payments enabled" : "ACH payments disabled");
-    } catch {
-      toast.error("Failed to update ACH setting");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to update ACH setting");
     } finally {
       setAchSaving(false);
     }
@@ -1604,7 +1709,7 @@ function AccountingTab() {
     try {
       await updateOrg({ taxRatePercent: val });
       toast.success("Default tax rate saved");
-    } catch { toast.error("Failed to save tax rate"); }
+    } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to save tax rate"); }
     finally { setTaxSaving(false); }
   }
 
@@ -1628,13 +1733,13 @@ function AccountingTab() {
         ccProcessingFeeMode: feeModeDraft,
       });
       toast.success("Processing fee settings saved");
-    } catch { toast.error("Failed to save processing fee settings"); }
+    } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to save processing fee settings"); }
     finally { setFeeSaving(false); }
   }
 
   return (
     <div className="rounded-lg border bg-card shadow-sm">
-      <AccordionSection title="Sales Tax" defaultOpen description="Org-wide default tax rate applied to new invoices. Can be overridden per client.">
+      <AccordionSection title="Sales Tax" defaultOpen description="One rate for the whole company: the default on new invoices and estimates here and on new POs and requisitions in Equipt (the same setting as Settings → Organization). Can be overridden per client or record.">
         <div className="space-y-4 p-4">
           <div className="flex items-end gap-3">
             <div className="flex flex-col gap-1.5 w-48">
@@ -1689,6 +1794,7 @@ function AccountingTab() {
       <AccordionSection
         title="QuickBooks"
         description="Push invoices and payments to QuickBooks Online automatically — one-way sync, nothing is pulled back."
+        openWhenQuery="quickbooks"
       >
         <QuickBooksConnectSection />
         <QuickBooksSyncStatusSection />
@@ -1719,7 +1825,7 @@ function AccountingTab() {
             </UISelect>
             <p className="text-xs text-slate-400 dark:text-neutral-500">
               {feeModeDraft === "cover_fee"
-                ? "The charge is grossed up so that, after Stripe's card fee (2.9% + $0.30, taken from the whole charge including this fee), you receive the full invoice amount. The percent below is ignored."
+                ? "The charge is grossed up so that, after Stripe's card fee (2.9% + $0.30, taken from the whole charge including this fee), you receive the full invoice amount. The fee is capped at 4% of the balance (card-network ceiling), so very small balances net slightly less. The percent below is ignored."
                 : "A flat percent of the invoice balance. Stripe's card fee is taken from the whole charge, including this fee, so the fee itself costs you a little."}
             </p>
           </div>
@@ -2418,8 +2524,23 @@ const CRM_ENTITY_DISPLAY: { key: string; name: string }[] = [
 ];
 
 function CRMRequiredFieldsTab() {
-  const { requiredFields, setFieldRequirement } = useSettingsStore();
+  const { requiredFields: savedRequiredFields } = useSettingsStore();
   const { mutate: updateOrgSettings, isPending: saving } = useUpdateOrgSettings();
+  // Edited locally until Save succeeds. Writing straight into the shared store enforced
+  // unsaved requirements in every form for the rest of the session, even when the save failed.
+  const [draft, setDraft] = useState(savedRequiredFields);
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    if (!dirty) setDraft(savedRequiredFields);
+  }, [savedRequiredFields, dirty]);
+  const requiredFields = draft;
+  const setFieldRequirement = (entity: string, field: string, requirement: FieldRequirement) => {
+    setDirty(true);
+    setDraft((prev) => ({
+      ...prev,
+      [entity]: (prev[entity] ?? []).map((f) => (f.field === field ? { ...f, requirement } : f)),
+    }));
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -2466,7 +2587,23 @@ function CRMRequiredFieldsTab() {
         );
       })}
       <div className="flex justify-end">
-        <Button size="sm" disabled={saving} onClick={() => updateOrgSettings({ customizations: { requiredFields } })}>
+        <Button
+          size="sm"
+          disabled={saving || !dirty}
+          onClick={() =>
+            updateOrgSettings(
+              { customizations: { requiredFields: draft } },
+              {
+                // The hook's onSuccess reloads the shared store from the saved settings.
+                onSuccess: () => {
+                  setDirty(false);
+                  toast.success("Required fields saved");
+                },
+                onError: (err) => toast.error(err instanceof Error && err.message ? err.message : "Failed to save required fields"),
+              }
+            )
+          }
+        >
           {saving ? "Saving…" : "Save Required Fields"}
         </Button>
       </div>
@@ -2637,8 +2774,12 @@ function InvoiceNumberingSection() {
   async function save() {
     if (!valid) return;
     try {
-      await setNext.mutateAsync(parsed);
-      toast.success(`The next invoice will be #${parsed}`);
+      const effective = await setNext.mutateAsync(parsed);
+      toast.success(
+        effective === parsed
+          ? `The next invoice will be #${effective}`
+          : `You already have invoices up to #${effective - 1}, so the next invoice will be #${effective}`
+      );
       setDraft("");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to set the invoice number");
@@ -2649,7 +2790,9 @@ function InvoiceNumberingSection() {
     <div className="space-y-3 p-4">
       <p className="text-sm text-slate-600 dark:text-neutral-400">
         Next invoice number:{" "}
-        <span className="font-semibold text-slate-900 dark:text-neutral-100">{numbering ? `#${numbering.nextNumber}` : "…"}</span>
+        <span className="font-semibold text-slate-900 dark:text-neutral-100">
+          {!numbering ? "…" : numbering.nextNumber != null ? `#${numbering.nextNumber}` : "assigned automatically"}
+        </span>
         {numbering?.maxExisting != null && (
           <span className="text-slate-400 dark:text-neutral-500"> · highest existing invoice is #{numbering.maxExisting}</span>
         )}
@@ -2672,7 +2815,7 @@ function InvoiceNumberingSection() {
       </div>
       {overlaps && (
         <p className="text-xs text-amber-700 dark:text-amber-400">
-          You already have invoices up to #{numbering?.maxExisting}. Numbers an existing invoice already uses are skipped, so you won&apos;t get duplicates.
+          You already have invoices up to #{numbering?.maxExisting}, so numbering will continue at #{(numbering?.maxExisting ?? 0) + 1} to avoid duplicates.
         </p>
       )}
       <p className="text-xs text-slate-400 dark:text-neutral-500">

@@ -33,8 +33,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .select("role")
     .eq("id", user.id)
     .single();
-  if (!callerProfile || !["admin", "manager"].includes(callerProfile.role)) {
-    return NextResponse.json({ error: "Admin or manager role required" }, { status: 403 });
+  // profiles.role limits are Equipt-only; Landscapt access follows crm_roles, so a login
+  // whose Landscapt role may create/modify automations can approve their outbound steps too.
+  const roleAllowed = !!callerProfile && ["admin", "manager"].includes(callerProfile.role);
+  let keyAllowed = false;
+  if (!roleAllowed && callerProfile) {
+    const { data } = await supabase.rpc("has_settings_permission", { p_key: "automation_create_modify" });
+    keyAllowed = data === true;
+  }
+  if (!roleAllowed && !keyAllowed) {
+    return NextResponse.json({ error: "You need the Create/Modify Automation permission to approve automation steps" }, { status: 403 });
   }
 
   const body = (await req.json().catch(() => ({}))) as { action?: string };

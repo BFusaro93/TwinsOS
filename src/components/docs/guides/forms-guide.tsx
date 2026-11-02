@@ -66,6 +66,7 @@ export function FormsGuide() {
           <TOCLink href="#response-workflow">Responses tab &amp; the review workflow</TOCLink>
           <TOCLink href="#gotchas">One thing to know before you share a form</TOCLink>
           <TOCLink href="#spam-protection">Bot / spam protection (Cloudflare Turnstile)</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -426,6 +427,13 @@ export function FormsGuide() {
           <code>spam</code>/<code>ignored</code> response statuses on the Responses tab remain the
           backstop either way, since Turnstile only blocks obvious bots, not a determined human.
         </Callout>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Leads from forms.</strong> A lead created from a form gets the submitted address as both its service and billing address, so it can be scheduled and routed once converted, and it fires the Lead created automation trigger.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );

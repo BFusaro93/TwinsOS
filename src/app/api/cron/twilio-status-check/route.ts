@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { pollPendingRegistration } from "@/lib/twilio/provisioning";
 import { logger } from "@/lib/logger";
+import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
 const log = logger.child("cron twilio-status-check");
 
@@ -28,7 +29,13 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const results = await Promise.allSettled((pending ?? []).map((r: { org_id: string }) => pollPendingRegistration(supabase, r.org_id)));
+  // A canceled or expired-trial org's registration isn't polled while it is inactive.
+  const orgInactive = createOrgCanceledResolver(supabase);
+  const active: { org_id: string }[] = [];
+  for (const r of (pending ?? []) as { org_id: string }[]) {
+    if (!(await orgInactive(r.org_id))) active.push(r);
+  }
+  const results = await Promise.allSettled(active.map((r) => pollPendingRegistration(supabase, r.org_id)));
 
   const failures = results.filter((r) => r.status === "rejected");
   if (failures.length > 0) {

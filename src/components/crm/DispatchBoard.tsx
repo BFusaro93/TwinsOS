@@ -3,6 +3,7 @@
 import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { stopPunchMismatch } from "@/lib/utils/punch-mismatch";
 import { useState, useEffect, useRef, useMemo } from "react";
+import { LoadListDialog } from "@/components/crm/dispatch/LoadListDialog";
 import Link from "next/link";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
@@ -62,6 +63,7 @@ import {
   Users,
   MapPin,
   BarChart3,
+  Truck,
   Columns3,
   Route,
   RefreshCw,
@@ -887,7 +889,11 @@ function JobDetailSheet({
       qty: qty ? parseFloat(qty) : null,
       ...(rateCents !== seedRate ? { rate_cents: rateCents ? Math.round(parseFloat(rateCents) * 100) : null } : {}),
       notes_to_client: notesToClient || null,
-      invoice_description: invoiceDesc || null,
+      // The textarea shows the job's description as a fallback; saving it unchanged used to
+      // freeze that text onto the visit, so later edits to the job never reached its invoice.
+      ...(invoiceDesc !== (visit.invoiceDescription ?? job?.invoiceDescription ?? "")
+        ? { invoice_description: invoiceDesc && invoiceDesc !== (job?.invoiceDescription ?? "") ? invoiceDesc : null }
+        : {}),
       is_high_priority: highPriorityOverride,
     };
     if (status === "completed" && visit.status !== "completed") {
@@ -1053,7 +1059,7 @@ function JobDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-[800px] md:w-[800px] p-0 flex flex-col gap-0"
+        className="w-full max-w-[100vw] sm:max-w-[min(800px,100vw)] md:w-[800px] p-0 flex flex-col gap-0"
       >
         {/* Header — light gray, CMMS-style */}
         <SheetHeader className="shrink-0 border-b bg-slate-50 dark:bg-muted/40 px-5 py-4 pr-14">
@@ -2124,19 +2130,23 @@ function TeamAssignDialog({
   async function dispatchAll() {
     setPending(true);
     try {
-      const scheduled = visits.filter((v) => v.status === "scheduled" && effectiveCrewId(v));
-      await Promise.all(
-        scheduled.map((v) =>
-          updateVisit({
-            id: v.id,
-            updates: { status: "dispatched", dispatched_at: new Date().toISOString() },
-          })
-        )
+      // Only the day shown in the title: with a From/To range loaded, every scheduled
+      // visit in the range used to be dispatched. One bulk request (dispatched_at, chemical
+      // preload, activity, capped notifications) instead of ~4 requests per visit.
+      const scheduled = visits.filter((v) => v.status === "scheduled" && effectiveCrewId(v) && v.scheduledDate === selectedDate);
+      if (scheduled.length === 0) {
+        toast.info("No assigned visits left to dispatch for this day");
+        return;
+      }
+      // Only scheduled visits are sent, so the invoiced-visit override can't come up.
+      await postBulkVisitUpdate(
+        { ids: scheduled.map((v) => v.id), updates: { status: "dispatched" } },
+        { isAdmin: false, confirm: async () => false }
       );
       toast.success(`${scheduled.length} visit${scheduled.length !== 1 ? "s" : ""} dispatched`);
       onOpenChange(false);
-    } catch {
-      toast.error("Dispatch failed");
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Dispatch failed");
     } finally {
       setPending(false);
     }
@@ -2363,7 +2373,7 @@ function TeamAssignDialog({
               ))}
               {byCrew.length === 0 && (
                 <div className="flex-1 flex items-center justify-center">
-                  <p className="text-sm text-slate-400 dark:text-neutral-500">No crews configured</p>
+                  <p className="text-sm text-slate-400 dark:text-neutral-500">No crews yet. <Link href="/crm/team/crews" className="text-brand-600 dark:text-brand-400 hover:underline">Set up crews</Link></p>
                 </div>
               )}
             </div>
@@ -2622,7 +2632,7 @@ function EditJobTimesDialog({
   // empty roster here and had nobody to seed times for.
   const crewId = effectiveCrewId(visit);
 
-  const { data: memberTimes = [] } = useCrewMemberTimes(anchorVisitId);
+  const { data: memberTimes = [], isFetched: memberTimesFetched } = useCrewMemberTimes(anchorVisitId);
   const { data: crewsWithMembers } = useCrews(false);
   const { data: allEmployees = [] } = useEmployees(true);
   const upsert = useUpsertCrewMemberTime();
@@ -2672,13 +2682,15 @@ function EditJobTimesDialog({
   const seededRef = useRef(false);
   useEffect(() => {
     if (seededRef.current) return;
-    if (memberTimes.length > 0 || allMembers.length === 0) return;
+    // Wait for the punch query to resolve: an empty array while it was still loading
+    // seeded the roster with the visit's Start/End and overwrote real crew punches.
+    if (!memberTimesFetched || memberTimes.length > 0 || allMembers.length === 0) return;
     seededRef.current = true;
     const clockedInAt = visit.startTime ? dateAndTimeToIso(visitDate, visit.startTime.slice(0, 5), tz) : null;
     const clockedOutAt = visit.endTime ? dateAndTimeToIso(visitDate, visit.endTime.slice(0, 5), tz, visit.startTime && visit.endTime <= visit.startTime ? 1 : 0) : null;
     allMembers.forEach((m) => upsert.mutate({ visitId: anchorVisitId, crewMemberId: m.id, clockedInAt, clockedOutAt }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [memberTimes.length, allMembers.length]);
+  }, [memberTimesFetched, memberTimes.length, allMembers.length]);
 
   // Seed the dispatch board's Men column from how many crew members have a
   // time entry here — but ONLY when the visit has no men count yet (0/null).
@@ -3152,7 +3164,8 @@ function VisitRow({
   function saveMenCount(value: string) {
     const n = parseInt(value, 10);
     updateVisit.mutate(
-      { id: visit.id, updates: { men_count: Number.isNaN(n) || n < 0 ? 0 : n } },
+      // Same rule as the visit sheet and useCreateVisit (at least one person).
+      { id: visit.id, updates: { men_count: Number.isNaN(n) || n < 1 ? 1 : n } },
       { onError: () => toast.error("Failed to save crew size") }
     );
   }
@@ -3865,6 +3878,7 @@ export function DispatchBoard() {
     [customFieldDefs]
   );
   const [statsOpen,       setStatsOpen]       = useState(false);
+  const [loadListOpen,    setLoadListOpen]    = useState(false);
   const [mapOpen,         setMapOpen]         = useState(false);
   const { data: boardOrgSettings } = useOrgSettings();
   const [callAheadOpen,   setCallAheadOpen]   = useState(false);
@@ -3875,6 +3889,8 @@ export function DispatchBoard() {
   // Move-to-day dialog state
   const [moveDayDate, setMoveDayDate] = useState("");
   const [moveDayOpen, setMoveDayOpen] = useState(false);
+  // A second click while the bulk move is in flight sent the request twice.
+  const [movingDay, setMovingDay] = useState(false);
 
   // Route optimization state
   const [optimizing,         setOptimizing]         = useState(false);
@@ -4010,6 +4026,8 @@ export function DispatchBoard() {
     }
   }
   const createVisit = useCreateVisit();
+  // Matches already scheduled from this dialog (the match list never refreshes itself).
+  const [scheduledNearbyJobIds, setScheduledNearbyJobIds] = useState<Set<string>>(new Set());
   const { mutateAsync: returnToWaitingList } = useReturnVisitToWaitingList();
   const { matches: nearbyMatches, loading: nearbyLoading, error: nearbyError, findNearby } = useNearbyWaitingListJobs(3, selectedDate);
 
@@ -4753,14 +4771,16 @@ export function DispatchBoard() {
           <Input
             type="date"
             value={selectedDate}
-            onChange={(e) => { setSelectedDate(e.target.value); clearPendingOrder(); }}
+            // A half-typed date ("" while editing a segment) blanked the board and put NaN in the
+            // week strip; only a complete date is applied.
+            onChange={(e) => { if (!/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) return; setSelectedDate(e.target.value); clearPendingOrder(); }}
             className="h-7 max-lg:h-10 w-36 max-lg:w-44 px-2 text-xs md:text-xs"
           />
           <span className="font-medium">To</span>
           <Input
             type="date"
             value={endDate}
-            onChange={(e) => { setEndDate(e.target.value); clearPendingOrder(); }}
+            onChange={(e) => { if (e.target.value && !/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) return; setEndDate(e.target.value && e.target.value < selectedDate ? selectedDate : e.target.value); clearPendingOrder(); }}
             className="h-7 max-lg:h-10 w-36 max-lg:w-44 px-2 text-xs md:text-xs"
           />
           {endDate && (
@@ -4961,6 +4981,17 @@ export function DispatchBoard() {
             <BarChart3 className="h-3.5 w-3.5" />
             Stats
           </Button>
+          {can("view_report_center") && (
+            <Button
+              size="sm" variant="outline"
+              className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", loadListOpen && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
+              onClick={() => setLoadListOpen(true)}
+              title="What each crew loads for this day — chemicals and materials"
+            >
+              <Truck className="h-3.5 w-3.5" />
+              Load List
+            </Button>
+          )}
           <Button
             size="sm" variant="outline"
             className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", mapOpen && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
@@ -5428,6 +5459,8 @@ export function DispatchBoard() {
         </div>
       </div>
 
+      <LoadListDialog open={loadListOpen} onOpenChange={setLoadListOpen} date={selectedDate} />
+
       {/* Stats overlay panel */}
       {statsOpen && (
         <div className="bg-card border-b shadow-sm px-4 py-3 shrink-0">
@@ -5575,7 +5608,8 @@ export function DispatchBoard() {
             ) : displayVisits.length === 0 ? (
               <tr>
                 <td colSpan={20} className="py-20 text-center text-sm text-slate-400 dark:text-neutral-500">
-                  {search || crewFilters.length > 0 || statusFilter !== "all"
+                  {search || crewFilters.length > 0 || statusFilter !== "all" || tagFilters.length > 0 ||
+                    priorityFilters.length > 0 || serviceFilters.length > 0 || (colFilterKey && colFilterValue)
                     ? "No visits match the current filters"
                     : "No visits scheduled for this date"}
                 </td>
@@ -5683,8 +5717,9 @@ export function DispatchBoard() {
               <Button
                 size="sm"
                 className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white"
-                disabled={!moveDayDate}
+                disabled={!moveDayDate || movingDay}
                 onClick={async () => {
+                  if (movingDay) return;
                   // Only visits that aren't already on the target day — moving
                   // a visit onto its own date used to report "Moved 1 visit"
                   // while changing nothing.
@@ -5698,6 +5733,7 @@ export function DispatchBoard() {
                     );
                     return;
                   }
+                  setMovingDay(true);
                   try {
                     // 409s (package min-days rule, invoiced-visit lock) come
                     // back as the server's own message — shown as-is.
@@ -5713,10 +5749,12 @@ export function DispatchBoard() {
                     toast.success(`Moved ${ids.length} visit${ids.length > 1 ? "s" : ""} to ${moveDayDate}`);
                   } catch (err) {
                     toast.error(err instanceof Error ? err.message : "Failed to move visits");
+                  } finally {
+                    setMovingDay(false);
                   }
                 }}
               >
-                Move
+                {movingDay ? "Moving…" : "Move"}
               </Button>
             </div>
           </div>
@@ -5776,7 +5814,9 @@ export function DispatchBoard() {
                     <Button
                       size="sm"
                       className="h-7 text-xs bg-brand-500 hover:bg-brand-600 text-white"
+                      disabled={createVisit.isPending || scheduledNearbyJobIds.has(m.jobId)}
                       onClick={async () => {
+                        if (scheduledNearbyJobIds.has(m.jobId)) return;
                         try {
                           await createVisit.mutateAsync({
                             jobId: m.jobId,
@@ -5784,6 +5824,9 @@ export function DispatchBoard() {
                             scheduledDate: selectedDate,
                             jobType: "waiting_list",
                           });
+                          // The match list is local state and never refreshes, so remember
+                          // what was scheduled; a second tap used to create a second visit.
+                          setScheduledNearbyJobIds((prev) => new Set(prev).add(m.jobId));
                           toast.success(`Added ${m.clientName ?? "job"} to today's schedule`);
                           refetch();
                         } catch {

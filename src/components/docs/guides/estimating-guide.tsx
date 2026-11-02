@@ -56,6 +56,7 @@ export function EstimatingGuide() {
           <TOCLink href="#deposits">Taking a deposit on acceptance</TOCLink>
           <TOCLink href="#estimate-limits">Rate and probability limits</TOCLink>
           <TOCLink href="#converting">Converting an estimate to a job</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -153,7 +154,10 @@ export function EstimatingGuide() {
         <p>
           Approval Status runs on its own track: <strong>Not Required</strong>,{" "}
           <strong>Pending</strong>, <strong>Approved</strong>, or <strong>Rejected</strong>. It
-          exists to hold an estimate back regardless of what stage says.
+          exists to hold an estimate back regardless of what stage says. An approval covers the total
+          that was approved: if lines added afterwards push the total above it, Send and Copy link ask for
+          approval again (clicking Send resubmits it), and the estimate can&apos;t go out until it is
+          re-approved.
         </p>
         <Callout>
           <strong>The trap.</strong> An estimate can show stage &ldquo;Sent&rdquo; while its
@@ -413,10 +417,14 @@ export function EstimatingGuide() {
         <p>
           If a package service has a <strong>Rate Matrix</strong> keyed off a property field (such as
           Turf Sq. Ft.) and the estimate&rsquo;s property has a value for it, the matching band prices
-          that visit instead of the package&rsquo;s flat price. To copy the first visit&rsquo;s Qty,
+          that visit instead of the package&rsquo;s flat price; the visit&apos;s quantity is the
+          client&apos;s measurement, and if there is none the package&apos;s own price is kept. A package
+          step&apos;s price is per visit and is never multiplied by the client&apos;s square footage. To copy the first visit&rsquo;s Qty,
           Rate, B.Hr, Cost or Adj Rate down to every other visit, use the <strong>copy</strong> buttons
           on the package header. Deleting the package header asks for confirmation, then deletes all of
-          its visits.
+          its visits, including any hidden by the status tab. A line you add after a package is its own
+          line, priced and accepted separately, not part of the package. Adding the same package a second
+          time is refused.
         </p>
         <p>
           Each package ends with a <strong>Package subtotal</strong> row for its visits. To skip a
@@ -428,6 +436,11 @@ export function EstimatingGuide() {
           <strong>Bulk actions.</strong> Tick lines in the grid (the header checkbox selects every
           line, not section headers) and a bar appears above it with <strong>Change Status</strong>,{" "}
           <strong>Rate Increase</strong> and <strong>Delete</strong>. Delete asks for confirmation first.
+          The actions apply only to ticked lines that are showing on the current status tab (switching
+          tabs clears the ticks), and lines already converted to a job are skipped with a note saying how
+          many. A <strong>+$</strong> rate increase raises each line&apos;s total by that amount per
+          visit, whatever its unit; on a per-unit line too small to carry the amount in whole cents, use
+          a percentage instead.
         </p>
         <h3 className="text-base font-semibold">What the client sees</h3>
         <ul className="list-disc space-y-2 pl-5">
@@ -452,7 +465,11 @@ export function EstimatingGuide() {
           Converting an accepted package creates a <strong>Package job</strong>, not a plain job. See
           Jobs &amp; Packages for the details. Package lines convert one package at a time, and never in
           the same pass as ordinary lines; the convert window offers a button per package. Duplicating
-          an estimate keeps the package tags.
+          an estimate keeps the package tags. The convert window lists each step&apos;s planned visit
+          date: if the package&apos;s dates are already in the past the Program Start Date defaults to
+          today, and a package with no dated steps can&apos;t be converted until its steps have dates. A
+          package service that includes several visits is priced per visit on the job, so each completed
+          visit bills its own share.
         </p>
       </Section>
 
@@ -766,6 +783,19 @@ export function EstimatingGuide() {
           convert window locks Job Type to Package, takes the package&rsquo;s lines one package per
           pass, and treats Scheduled Date as the program start.
         </Callout>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Package totals on the proposal.</strong> A package&apos;s printed total includes its visits&apos; sub-items and line discounts, so it matches the estimate total.
+          </li>
+          <li>
+            <strong>Client-view toggles.</strong> Picking an Estimate Document or applying a bundle only asks whether to replace the client-view toggles when someone actually changed them on this estimate.
+          </li>
+          <li>
+            <strong>Estimate emails.</strong> Client documents used as the Estimate Email or Confirmation Email offer the estimate merge tags and a “View proposal” button link. If the confirmation document linked to an estimate document is deleted, the picker says so; until you choose another, the company&apos;s Accepted Email (or the built-in one) is sent.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );

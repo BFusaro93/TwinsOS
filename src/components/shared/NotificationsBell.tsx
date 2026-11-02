@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useQuery } from "@/lib/hooks/use-query";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -205,25 +206,30 @@ export function NotificationsBell() {
     (!on.pmSchedules || pmSchedulesQ.isFetched) &&
     (!on.maintenanceRequests || maintenanceRequestsQ.isFetched);
 
-  // Fetch persisted notifications (wo_comment type) from the DB
-  const [dbNotifications, setDbNotifications] = useState<Array<{
+  // Persisted notifications. The TopBar stays mounted across navigation, so a one-time
+  // fetch meant ticket assignments, mentions and reminders only appeared after a reload.
+  type DbNotificationRow = {
     id: string; type: string | null; title: string | null;
     message: string; entity_id: string | null; entity_type: string | null; created_at: string;
-  }>>([]);
-
-  useEffect(() => {
-    if (!currentUser.id) return;
-    const supabase = createClient();
-    supabase
-      .from("notifications")
-      .select("id, type, title, message, entity_id, entity_type, created_at")
-      .eq("user_id", currentUser.id)
-      .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_contributor_added", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed"])
-      .order("created_at", { ascending: false })
-      .limit(50)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .then(({ data }) => { if (data) setDbNotifications(data as any); });
-  }, [currentUser.id]);
+  };
+  const { data: dbNotifications = [] } = useQuery<DbNotificationRow[]>({
+    queryKey: ["notifications", "bell", currentUser.id],
+    enabled: !!currentUser.id,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("id, type, title, message, entity_id, entity_type, created_at")
+        .eq("user_id", currentUser.id)
+        .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_contributor_added", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed"])
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return (data ?? []) as DbNotificationRow[];
+    },
+  });
 
   const [open, setOpen] = useState(false);
 

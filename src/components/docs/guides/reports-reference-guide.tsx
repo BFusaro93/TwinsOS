@@ -125,6 +125,7 @@ const SECTIONS: ReportSection[] = [
         name: "Daily Load List",
         description: "What each crew needs to load on the truck for a given day — chemicals (concentrate amount and finished spray-mix volume) and general materials, grouped by crew.",
         notes: [
+          "Also available from the Dispatch Board: the Load List button next to Stats opens this report for the board's selected day, with Print and a link to the full report.",
           "Defaults to the org's current operating day. Chemical amounts use an already-entered application record for that visit when one exists, otherwise fall back to the default Application Rate × the area (the job service's treated area, else the service's own area measurement, else the org's Area Custom Field on the property) — the same estimate Materials Needed uses.",
           "Mix volume is the total finished spray solution (e.g. gallons of mix), computed from the product's default rate's dilution settings — it only appears when that rate has a Mixed with Water/Product ratio configured with convertible units.",
           "Crew is the visit's crew override if set, otherwise the job's default crew; visits/jobs with no crew assigned appear under Unassigned. A row that can't be reduced to one unit (e.g. stops recorded in different units) says why instead of printing a number.",

@@ -97,6 +97,7 @@ export function AutomationsGuide() {
           <TOCLink href="#email-windows">Email send windows &amp; approval</TOCLink>
           <TOCLink href="#automations-vs-campaigns">Automations vs. Sales Campaigns</TOCLink>
           <TOCLink href="#faq">FAQ</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -389,7 +390,7 @@ export function AutomationsGuide() {
             <tr className="border-b border-[#eceae3] dark:border-border">
               <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Audience</td>
               <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">One client at a time, as they hit the trigger</td>
-              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">A segment: All Clients, Active Clients, Leads, Past Clients, or a custom list</td>
+              <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">A segment: All Clients (active and inactive clients), Active Clients, Leads, Past Clients, or a custom list</td>
             </tr>
             <tr className="border-b border-[#eceae3] dark:border-border">
               <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">Channel</td>
@@ -475,6 +476,34 @@ export function AutomationsGuide() {
           </GuideLink>{" "}
           if you&apos;re also wiring up Zapier alongside an internal automation on the same event.
         </Callout>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Text steps need SMS set up.</strong> If your company hasn&apos;t finished SMS registration, text-message steps show “SMS setup not complete — this step is skipped” in the builder and the step&apos;s dialog, and when one is skipped your admins get one notification (at most once a month). The rest of the sequence still runs.
+          </li>
+          <li>
+            <strong>Short meeting reminders.</strong> “Meeting is coming up” triggers are checked every 5 minutes, so a 5- or 10-minute lead time fires on time.
+          </li>
+          <li>
+            <strong>Web-form leads.</strong> A lead created by a public web form fires <strong>Lead created</strong> as well as Form submitted, so lead automations pick it up.
+          </li>
+          <li>
+            <strong>Scheduling a campaign.</strong> Saving a campaign with a Schedule Send date keeps it as a draft. Use <strong>Mark Scheduled</strong> on the campaign row to arm it; scheduled campaigns go out at the top of the hour. Scheduling or sending needs Send/Launch Campaign.
+          </li>
+          <li>
+            <strong>Approvals.</strong> Held messages can be approved or rejected by admins, managers, and anyone with Create/Modify Automation.
+          </li>
+          <li>
+            <strong>Demo companies.</strong> Demo or sandbox companies never send automated emails or texts (sequences, campaigns, reminders, expiry notices, scheduled reports). Visits and invoices still generate so demos look real.
+          </li>
+          <li>
+            <strong>Expired trials.</strong> A company whose trial has ended stops sending automations until it subscribes; its pending steps wait and resume after.
+          </li>
+          <li>
+            <strong>Activity stats.</strong> The Email and SMS activity pages show figures for the most recent 500 messages and say so once that limit is reached.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );

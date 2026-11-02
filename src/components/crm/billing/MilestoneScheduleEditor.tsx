@@ -26,6 +26,8 @@ import {
   useCreateInvoiceFromMilestone,
 } from "@/lib/hooks/use-estimate-milestones";
 import type { EstimateMilestone } from "@/types/crm-estimates";
+import { useQuery } from "@/lib/hooks/use-query";
+import { createClient } from "@/lib/supabase/client";
 
 export function amountFor(type: "flat" | "percent", value: number, totalCents: number): number {
   return type === "percent" ? Math.round((totalCents * value) / 10000) : value;
@@ -268,8 +270,39 @@ export function MilestoneScheduleEditor({
   // over/under-allocation warning quote a number that matched neither the
   // rows above it nor what invoicing would actually bill. An invoiced
   // milestone keeps its billed amount: that one is history.
+  // On a project the basis is the PRE-tax contract price, but a flat milestone carried from a
+  // taxed estimate holds a gross figure (the invoice bills it as entered, tax inside). Compare
+  // its pre-tax share, or a complete gross schedule read as over-allocated and every Invoice
+  // button was disabled on the project.
+  const { data: netShareById } = useQuery({
+    queryKey: ["project-milestones", projectId, "net-share"],
+    enabled: !!projectId,
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("estimate_milestones")
+        .select("id, amount_is_pretax, estimate_id, estimates(total_cents, tax_cents)")
+        .eq("project_id", projectId)
+        .is("deleted_at", null);
+      if (error) throw error;
+      const map = new Map<string, number>();
+      for (const r of (data ?? []) as { id: string; amount_is_pretax: boolean | null; estimate_id: string | null; estimates: { total_cents: number | null; tax_cents: number | null } | null }[]) {
+        const total = r.estimates?.total_cents ?? 0;
+        const tax = r.estimates?.tax_cents ?? 0;
+        if (r.estimate_id && !r.amount_is_pretax && total > 0 && tax > 0) map.set(r.id, (total - tax) / total);
+      }
+      return map;
+    },
+  });
+  const preTax = (m: EstimateMilestone, cents: number) => {
+    const share = m.milestoneType === "flat" ? netShareById?.get(m.id) : undefined;
+    return share != null ? Math.round(cents * share) : cents;
+  };
   const liveAmount = (m: EstimateMilestone) =>
-    m.status === "invoiced" ? m.amountCents : amountFor(m.milestoneType, m.milestoneValue, totalCents);
+    m.status === "invoiced"
+      ? preTax(m, m.amountCents)
+      : preTax(m, amountFor(m.milestoneType, m.milestoneValue, totalCents));
 
   const totalAllocatedCents = milestones.reduce((s, m) => s + liveAmount(m), 0);
   const diffCents = totalCents - totalAllocatedCents;

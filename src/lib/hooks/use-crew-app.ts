@@ -9,6 +9,8 @@ import { groupVisitsIntoStops, type Stop, type VisitWithNotesStamp } from "@/lib
 import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/crm-jobs";
 import { mapServiceSubitems } from "@/lib/utils/job-service-subitems";
 import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { instantToZoneWallClock } from "@/lib/time/zone";
 import {
   crewVisitComparator,
   fetchRememberedRouteOrder,
@@ -131,13 +133,16 @@ function crewVisitSelect(hidePricing: boolean): string {
   // request. The visit-level notes_to_client (which does exist) is unaffected.
   const jobCols = [
     "id", "org_id", "client_id", "crew_id", "property_id", "job_type", "status",
-    "notes_to_crew", "notes_to_crew_updated_at", "notes",
+    // NB: no "notes" — crm_jobs.notes is the office-only "Internal notes" field.
+    "notes_to_crew", "notes_to_crew_updated_at",
     "service_address", "service_city", "service_state", "service_zip",
     "budgeted_hours",
   ].join(", ");
 
   // The job's linked property, for the stop-address fallback (resolveStopAddress).
-  const jobEmbeds = "client_properties(address, city, state, zip)";
+  // Also the property's gate/lock code and standing crew notes ("dog loose in back"),
+  // which the dispatch board and route sheet show and the crew must see too.
+  const jobEmbeds = "client_properties(address, city, state, zip, gate_lock_code, notes_to_crew)";
 
   const visitCols = [
     "id", "org_id", "job_id", "client_id", "job_service_id",
@@ -153,7 +158,7 @@ function crewVisitSelect(hidePricing: boolean): string {
 
   return `
     ${visitCols},
-    clients(display_name, primary_phone, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
+    clients(display_name, primary_phone, gate_lock_code, service_address, service_city, service_state, service_zip, billing_address, billing_city, billing_state, billing_zip),
     crm_crews(name),
     crm_jobs(${jobCols}, ${jobEmbeds}, crm_job_services(${serviceCols}, crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at)))
   `;
@@ -170,6 +175,8 @@ function mapJobRow(
     property: embeddedOne(job.client_properties as Record<string, unknown> | null) as Parameters<typeof resolveStopAddress>[0]["property"],
     client: client as Parameters<typeof resolveStopAddress>[0]["client"],
   });
+  const property = embeddedOne(job.client_properties as Record<string, unknown> | null) as
+    { notes_to_crew?: string | null; gate_lock_code?: string | null } | null;
   const services = Array.isArray(job.crm_job_services)
     ? (job.crm_job_services as Record<string, unknown>[]).map(s => ({
         id:            s.id as string,
@@ -196,7 +203,9 @@ function mapJobRow(
     // "the office changed the notes after you acknowledged them" re-arm.
     notesToCrewUpdatedAt: (job.notes_to_crew_updated_at as string) ?? null,
     notesToClient:  (job.notes_to_client as string) ?? null,
-    notes:          (job.notes as string) ?? null,
+    propertyNotesToCrew: property?.notes_to_crew ?? null,
+    // The property's code wins; the client's own code covers clients with no property row.
+    propertyGateCode: property?.gate_lock_code || ((client?.gate_lock_code as string | null) ?? null),
     serviceAddress: stopAddr?.parts.address ?? null,
     serviceCity:    stopAddr?.parts.city ?? null,
     serviceState:   stopAddr?.parts.state ?? null,
@@ -470,6 +479,42 @@ export function useVisitPhotos(visitId: string) {
         uploadedBy:  r.uploaded_by as string | null,
         createdAt:   r.created_at as string,
       }));
+    },
+  });
+}
+
+// ── useStopPhotos ──────────────────────────────────────────────────────────────
+// Every photo on the stop (all its visits, not just the anchor), with signed URLs in one
+// pass. The stop page used to show a grey tile per photo after a reload and refetch the
+// whole list on each tap to sign one URL; photos on sibling visits never showed at all.
+
+export type StopPhoto = VisitPhoto & { signedUrl: string | null };
+
+export function useStopPhotos(visitIds: string[]) {
+  const key = [...visitIds].sort();
+  return useQuery<StopPhoto[]>({
+    queryKey: ["crew-app-photos", "stop", key],
+    enabled: key.length > 0,
+    // Signed URLs last an hour; refresh well before that.
+    staleTime: 30 * 60 * 1000,
+    queryFn: async () => {
+      const lists = await Promise.all(
+        key.map(async (visitId) => {
+          const res = await fetch(`/api/crm/crew/visits/${visitId}/photos`);
+          if (!res.ok) throw await crewRequestError(res, "Couldn't load photos");
+          return (await res.json()) as Record<string, unknown>[];
+        })
+      );
+      return lists.flat().map((r) => ({
+        id:          r.id as string,
+        visitId:     r.visit_id as string,
+        jobId:       r.job_id as string,
+        storagePath: r.storage_path as string,
+        caption:     (r.caption as string | null) ?? null,
+        uploadedBy:  (r.uploaded_by as string | null) ?? null,
+        createdAt:   r.created_at as string,
+        signedUrl:   (r.signedUrl as string | null) ?? null,
+      })).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     },
   });
 }
@@ -755,17 +800,78 @@ export function useCrewDriveToday(date: string) {
 
 // ── mutations ─────────────────────────────────────────────────────────────────
 
+/** The moment the crew tapped, captured in the click handler. Without signal TanStack parks the
+ *  request and only runs it on reconnect, so stamping inside mutationFn recorded the reconnect
+ *  time (a 12:00 break that synced at 12:25 became ~0 minutes). The routes accept occurredAt
+ *  (bounded server-side, see crew/occurred-at.ts); localTime is the org's wall clock, which the
+ *  server writes to the visit's start/end time. */
+export interface CrewTap {
+  occurredAt: string;
+  localTime: string;
+}
+
+export function crewTap(timeZone: string): CrewTap {
+  const now = new Date();
+  return { occurredAt: now.toISOString(), localTime: instantToZoneWallClock(now, timeZone).time };
+}
+
+/** Returns a tap stamp in the org's timezone; call it inside the click handler. */
+export function useCrewTap(): () => CrewTap {
+  const tz = useOrgTimeZone();
+  return () => crewTap(tz);
+}
+
+export class CrewRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+  }
+}
+
+/** The server explains itself in `error` (already completed, office changed the notes, ...) —
+ *  show that, not "check your connection", which sent crews retrying something that can't work. */
+async function crewRequestError(res: Response, fallback: string): Promise<CrewRequestError> {
+  let message = "";
+  let code: string | undefined;
+  try {
+    const text = await res.text();
+    try {
+      const body = JSON.parse(text) as { error?: unknown; code?: unknown };
+      if (typeof body.error === "string") message = body.error;
+      if (typeof body.code === "string") code = body.code;
+    } catch {
+      if (text && text.length < 200 && !text.trimStart().startsWith("<")) message = text;
+    }
+  } catch { /* body unreadable */ }
+  if (res.status === 401) message = "You're signed out — sign in again to keep working.";
+  return new CrewRequestError(message || fallback, res.status, code);
+}
+
+/** Toast for a failed crew action, and a refetch when the server says our copy is stale (409). */
+function crewActionFailed(qc: ReturnType<typeof useQueryClient>, err: unknown, fallback: string) {
+  if (err instanceof CrewRequestError) {
+    toast.error(err.message);
+    if (err.status === 409) {
+      qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
+      qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
+    }
+    return;
+  }
+  // fetch() itself rejects only when the request never reached the server.
+  toast.error(err instanceof TypeError ? "No connection — try again when you have signal." : fallback);
+}
+
 export function useClockIn() {
   const qc = useQueryClient();
+  const tz = useOrgTimeZone();
   return useMutation({
     mutationFn: async (visitId: string) => {
-      const localTime = new Date().toTimeString().slice(0, 5);
+      const tap = crewTap(tz);
       const res = await fetch(`/api/crm/crew/visits/${visitId}/clock-in`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ localTime }),
+        body: JSON.stringify(tap),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await crewRequestError(res, "Failed to clock in");
       return res.json();
     },
     onSuccess: (_data, visitId) => {
@@ -773,21 +879,22 @@ export function useClockIn() {
       qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
-    onError: () => toast.error("Failed to clock in — check your connection and try again"),
+    onError: (err) => crewActionFailed(qc, err, "Failed to clock in — try again"),
   });
 }
 
 export function useClockOut() {
   const qc = useQueryClient();
+  const tz = useOrgTimeZone();
   return useMutation({
     mutationFn: async ({ visitId, notes }: { visitId: string; notes?: string }) => {
-      const localTime = new Date().toTimeString().slice(0, 5);
+      const tap = crewTap(tz);
       const res = await fetch(`/api/crm/crew/visits/${visitId}/clock-out`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes, localTime }),
+        body: JSON.stringify({ notes, ...tap }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await crewRequestError(res, "Failed to clock out");
       return res.json();
     },
     onSuccess: (_data, { visitId }) => {
@@ -795,31 +902,26 @@ export function useClockOut() {
       qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
-    onError: () => toast.error("Failed to clock out — check your connection and try again"),
+    onError: (err) => crewActionFailed(qc, err, "Failed to clock out — try again"),
   });
 }
 
 export function useStopClockIn() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (anchorVisitId: string) => {
-      const localTime = new Date().toTimeString().slice(0, 5);
+    mutationFn: async ({ anchorVisitId, tap }: { anchorVisitId: string; tap: CrewTap }) => {
       const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/clock-in`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ localTime }),
+        body: JSON.stringify(tap),
       });
-      if (!res.ok) {
-        // The route enforces the notes-acknowledgment gate server-side and
-        // explains itself in `error` (including "the office updated the
-        // notes, read them again") — show that instead of a generic
-        // connection message the crew can't act on.
-        const payload = await res.json().catch(() => null);
-        throw new Error(typeof payload?.error === "string" ? payload.error : "Failed to start job");
-      }
+      // The route enforces the notes-acknowledgment gate server-side and
+      // explains itself in `error` (including "the office updated the notes,
+      // read them again") — crewRequestError surfaces that.
+      if (!res.ok) throw await crewRequestError(res, "Failed to start job");
       return res.json();
     },
-    onSuccess: (data, anchorVisitId) => {
+    onSuccess: (data, { anchorVisitId }) => {
       if ((data as { warnings?: string[] } | null)?.warnings?.includes("crew_roster_empty")) {
         toast.warning("Nobody is on your crew today, so no time is being recorded for payroll. Tap Edit Crew to add the people working, or ask the office.", { duration: 10000 });
       }
@@ -838,8 +940,8 @@ export function useStopClockIn() {
       qc.invalidateQueries({ queryKey: ["crew-app-chemicals"] });
       qc.invalidateQueries({ queryKey: ["crew-app-chemical-confirmation"] });
     },
-    onError: (err, anchorVisitId) => {
-      toast.error(err instanceof Error ? err.message : "Failed to start job");
+    onError: (err, { anchorVisitId }) => {
+      crewActionFailed(qc, err, "Failed to start job — try again");
       // A rejected clock-in usually means our copy of the notes (or the
       // acknowledgment) is stale — pull fresh so the gate re-renders.
       qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
@@ -850,66 +952,82 @@ export function useStopClockIn() {
 export function useStartDrive() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/crm/crew/drive/start", { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
+    mutationFn: async (tap: CrewTap) => {
+      const res = await fetch("/api/crm/crew/drive/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ occurredAt: tap.occurredAt }),
+      });
+      if (!res.ok) throw await crewRequestError(res, "Failed to start drive time");
       return res.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crew-drive-today"] });
     },
-    onError: () => toast.error("Failed to start drive time — check your connection and try again"),
+    onError: (err) => crewActionFailed(qc, err, "Failed to start drive time — try again"),
   });
 }
 
 export function useEndDrive() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/crm/crew/drive/end", { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
+    mutationFn: async (tap: CrewTap) => {
+      const res = await fetch("/api/crm/crew/drive/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ occurredAt: tap.occurredAt }),
+      });
+      if (!res.ok) throw await crewRequestError(res, "Failed to end drive time");
       return res.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crew-drive-today"] });
     },
-    onError: () => toast.error("Failed to end drive time — check your connection and try again"),
+    onError: (err) => crewActionFailed(qc, err, "Failed to end drive time — try again"),
   });
 }
 
 export function useStopPause() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (anchorVisitId: string) => {
-      const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/pause`, { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
+    mutationFn: async ({ anchorVisitId, tap }: { anchorVisitId: string; tap: CrewTap }) => {
+      const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/pause`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ occurredAt: tap.occurredAt }),
+      });
+      if (!res.ok) throw await crewRequestError(res, "Failed to pause");
       return res.json();
     },
-    onSuccess: (_data, anchorVisitId) => {
+    onSuccess: (_data, { anchorVisitId }) => {
       qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
       qc.invalidateQueries({ queryKey: ["crew-app-visit"] });
       qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
-    onError: () => toast.error("Failed to pause — check your connection and try again"),
+    onError: (err) => crewActionFailed(qc, err, "Failed to pause — try again"),
   });
 }
 
 export function useStopResume() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (anchorVisitId: string) => {
-      const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/resume`, { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
+    mutationFn: async ({ anchorVisitId, tap }: { anchorVisitId: string; tap: CrewTap }) => {
+      const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ occurredAt: tap.occurredAt }),
+      });
+      if (!res.ok) throw await crewRequestError(res, "Failed to resume");
       return res.json();
     },
-    onSuccess: (_data, anchorVisitId) => {
+    onSuccess: (_data, { anchorVisitId }) => {
       qc.invalidateQueries({ queryKey: ["crew-app-stop", anchorVisitId] });
       qc.invalidateQueries({ queryKey: ["crew-app-visit"] });
       qc.invalidateQueries({ queryKey: ["crew-app-visits"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
-    onError: () => toast.error("Failed to resume — check your connection and try again"),
+    onError: (err) => crewActionFailed(qc, err, "Failed to resume — try again"),
   });
 }
 
@@ -918,25 +1036,19 @@ class ChemicalConfirmationRequiredError extends Error {}
 export function useStopClockOut() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ anchorVisitId, notes }: { anchorVisitId: string; notes?: string }) => {
-      const localTime = new Date().toTimeString().slice(0, 5);
+    mutationFn: async ({ anchorVisitId, notes, tap }: { anchorVisitId: string; notes?: string; tap: CrewTap }) => {
       const res = await fetch(`/api/crm/crew/stops/${anchorVisitId}/clock-out`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes, localTime }),
+        body: JSON.stringify({ notes, ...tap }),
       });
       if (!res.ok) {
-        const text = await res.text();
+        const err = await crewRequestError(res, "Failed to stop job");
         // The company's chemical-confirmation gate — say what to do, not "check your connection".
-        try {
-          const body = JSON.parse(text) as { error?: string; code?: string };
-          if (body.code === "chemical_confirmation_required") {
-            throw new ChemicalConfirmationRequiredError(body.error ?? "Confirm the chemicals applied first.");
-          }
-        } catch (e) {
-          if (e instanceof ChemicalConfirmationRequiredError) throw e;
+        if (err.code === "chemical_confirmation_required") {
+          throw new ChemicalConfirmationRequiredError(err.message || "Confirm the chemicals applied first.");
         }
-        throw new Error(text);
+        throw err;
       }
       return res.json();
     },
@@ -954,7 +1066,7 @@ export function useStopClockOut() {
         toast.error(err.message);
         qc.invalidateQueries({ queryKey: ["crew-app-chemicals"] });
       } else {
-        toast.error("Failed to stop job — check your connection and try again");
+        crewActionFailed(qc, err, "Failed to stop job — try again");
       }
     },
   });
@@ -969,7 +1081,7 @@ export function useSkipVisit() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await crewRequestError(res, "Failed to skip service");
       return res.json();
     },
     onSuccess: (_data, { visitId }) => {
@@ -978,7 +1090,7 @@ export function useSkipVisit() {
       qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
-    onError: () => toast.error("Failed to skip service — check your connection and try again"),
+    onError: (err) => crewActionFailed(qc, err, "Failed to skip service — try again"),
   });
 }
 
@@ -987,14 +1099,14 @@ export function useAcknowledgeNotes() {
   return useMutation({
     mutationFn: async (visitId: string) => {
       const res = await fetch(`/api/crm/crew/visits/${visitId}/acknowledge`, { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await crewRequestError(res, "Failed to acknowledge notes");
       return res.json();
     },
     onSuccess: (_data, visitId) => {
       qc.invalidateQueries({ queryKey: ["crew-app-visit", visitId] });
       qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
     },
-    onError: () => toast.error("Failed to acknowledge notes — check your connection and try again"),
+    onError: (err) => crewActionFailed(qc, err, "Failed to acknowledge notes — try again"),
   });
 }
 
@@ -1007,7 +1119,7 @@ export function useAddCrewNote() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ note }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await crewRequestError(res, "Failed to send note");
       return res.json();
     },
     onSuccess: (_data, { visitId }) => {
@@ -1015,7 +1127,7 @@ export function useAddCrewNote() {
       qc.invalidateQueries({ queryKey: ["crew-app-stop"] });
       qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
     },
-    onError: () => toast.error("Failed to send note — check your connection and try again"),
+    onError: (err) => crewActionFailed(qc, err, "Failed to send note — try again"),
   });
 }
 
@@ -1163,13 +1275,14 @@ export function useUploadVisitPhoto() {
         method: "POST",
         body: form,
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await crewRequestError(res, "Failed to upload photo");
       return res.json();
     },
     onSuccess: (_data, { visitId }) => {
       qc.invalidateQueries({ queryKey: ["crew-app-photos", visitId] });
+      qc.invalidateQueries({ queryKey: ["crew-app-photos", "stop"] });
     },
-    onError: () => toast.error("Failed to upload photo — check your connection and try again"),
+    onError: (err) => crewActionFailed(qc, err, "Failed to upload photo — try again"),
   });
 }
 
@@ -1235,7 +1348,7 @@ export function useCrewDayAction() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw await crewRequestError(res, "Couldn't update the crew's day");
       return res.json();
     },
     onSuccess: () => {
@@ -1243,7 +1356,7 @@ export function useCrewDayAction() {
       qc.invalidateQueries({ queryKey: ["crew-absences"] });
       qc.invalidateQueries({ queryKey: ["crew-member-times"] });
     },
-    onError: () => toast.error("Couldn't update the crew's day — try again"),
+    onError: (err) => crewActionFailed(qc, err, "Couldn't update the crew's day — try again"),
   });
 }
 
@@ -1420,10 +1533,10 @@ export function useToggleSubitemCheck() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ checked }),
       });
-      if (!res.ok) throw new Error("Couldn't save that tick");
+      if (!res.ok) throw await crewRequestError(res, "Couldn't save that tick");
       return res.json();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crew-visit-subitem-checks"] }),
-    onError: () => toast.error("Couldn't save that tick — check your connection and try again"),
+    onError: (err) => crewActionFailed(qc, err, "Couldn't save that tick — try again"),
   });
 }

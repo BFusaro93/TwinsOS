@@ -47,7 +47,9 @@ import { Plus, UserCheck, XCircle, Building2, Home, ChevronDown, X, Maximize2 } 
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
 import { usePermissions } from "@/lib/hooks/use-permissions";
-import { useEstimates } from "@/lib/hooks/use-estimates";
+import { useQuery } from "@/lib/hooks/use-query";
+import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { ColumnSelector, type ColumnDef } from "@/components/crm/shared/ColumnSelector";
 import { useColumnPrefs } from "@/lib/hooks/use-column-prefs";
 import { ACCOUNT_TYPE_COLOR } from "@/lib/account-type-colors";
@@ -88,11 +90,37 @@ const LEAD_DEFAULT_VISIBLE: Record<string, boolean> = {
   zip: false,
 };
 
+/** Open (not accepted/lost) estimate totals per client, in ONE query shared by every row —
+ *  each row used to run its own estimates query (300 leads = 300 requests on page open).
+ *  Keyed under "estimates" so estimate mutations refresh it. */
+function useOpenEstimateTotalsByClient() {
+  return useQuery({
+    queryKey: ["estimates", "open-totals-by-client"],
+    staleTime: 60_000,
+    queryFn: async (): Promise<Map<string, number>> => {
+      const supabase = createClient();
+      const rows = await fetchAllRows<{ client_id: string | null; total_cents: number | null }>(() =>
+        supabase
+          .from("estimates")
+          .select("client_id, total_cents")
+          .is("deleted_at", null)
+          .not("stage", "in", "(accepted,lost)")
+          .order("id"),
+      );
+      const totals = new Map<string, number>();
+      for (const r of rows) {
+        if (!r.client_id) continue;
+        totals.set(r.client_id, (totals.get(r.client_id) ?? 0) + (r.total_cents ?? 0));
+      }
+      return totals;
+    },
+  });
+}
+
 /** Sum of open (not accepted/lost) estimate totals for a lead. Shared by the table and list views. */
 export function LeadRevenuePotential({ leadId, className, hideEmpty }: { leadId: string; className?: string; hideEmpty?: boolean }) {
-  const { data: estimates } = useEstimates(leadId);
-  const open = (estimates ?? []).filter((e) => e.stage !== "accepted" && e.stage !== "lost");
-  const total = open.reduce((sum, e) => sum + e.totalCents, 0);
+  const { data: totals } = useOpenEstimateTotalsByClient();
+  const total = totals?.get(leadId) ?? 0;
   if (total <= 0) return hideEmpty ? null : <span className="text-slate-300 dark:text-neutral-500">—</span>;
   return <span className={cn("font-medium text-green-700 dark:text-green-400", className)}>{formatCurrency(total)}</span>;
 }
@@ -217,7 +245,8 @@ function ConvertDialog({ lead, open, onOpenChange }: { lead: Client; open: boole
 
   async function confirm() {
     try {
-      await convert(lead.id);
+      const result = await convert(lead.id);
+      if (result && result.converted === false) { toast.error("This record is no longer a lead."); onOpenChange(false); return; }
       toast.success(`${lead.displayName} converted to client`);
       onOpenChange(false);
       router.push(`/crm/clients/${lead.id}`);
@@ -399,6 +428,8 @@ export function LeadsList({ newDialogOpen, onNewDialogOpenChange, onSelect }: Le
       (l.primaryPhone ?? "").includes(q) ||
       (qDigits.length >= 3 && (l.primaryPhone ?? "").replace(/\D/g, "").includes(qDigits)) ||
       (l.primaryEmail ?? "").toLowerCase().includes(q) ||
+      // The row shows the service city; older leads may only have a billing city.
+      (l.serviceCity ?? "").toLowerCase().includes(q) ||
       (l.billingCity ?? "").toLowerCase().includes(q)
     )) return false;
     return matchesAllFilterRows(l, filterRows);

@@ -49,6 +49,7 @@ export function ContractsGuide() {
           <TOCLink href="#templates">Contract templates</TOCLink>
           <TOCLink href="#multi-property-example">Worked example: multi-property commercial contract</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -169,7 +170,8 @@ export function ContractsGuide() {
           <li>
             Idempotency is enforced per contract, per calendar month — a contract already invoiced
             this month is skipped, so re-running the cron or clicking Create Invoices twice can
-            never double-bill.
+            never double-bill. A contract invoice later consolidated or merged into another invoice
+            still counts as billed.
           </li>
         </ul>
         <p>
@@ -236,10 +238,12 @@ export function ContractsGuide() {
         </p>
         <p>
           If a billing day is missed (an outage, or the cron failing that morning), the contract is
-          billed later in the same month rather than skipped &mdash; for Monthly, Quarterly and
-          Annual contracts alike, as long as that period hasn&apos;t already been invoiced and the
-          contract existed on its billing day. A contract whose client has been{" "}
-          <strong>cancelled</strong> (or deleted) stops billing.
+          billed later in the same period rather than skipped &mdash; for Weekly, Biweekly, Monthly,
+          Quarterly and Annual contracts alike, as long as that period hasn&apos;t already been invoiced and the
+          contract existed on its billing day. A contract whose client is{" "}
+          <strong>cancelled</strong>, <strong>inactive</strong> or <strong>lost</strong> (or deleted)
+          stops billing, matching the visits, which also stop; reactivating the client resumes billing
+          on the next cycle.
         </p>
         <Table>
           <thead>
@@ -392,6 +396,19 @@ export function ContractsGuide() {
             </GuideLink>{" "}
             — adding properties to a client, and when to use the parent/child (sub-account)
             hierarchy instead.
+          </li>
+        </ul>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Why Create Invoices skipped a contract.</strong> When Create Invoices doesn&apos;t create an invoice it says why: already billed, a draft or unsigned contract, a contract that hasn&apos;t started, a $0 month, not a billing month, or an inactive client.
+          </li>
+          <li>
+            <strong>Prorated first invoice.</strong> The prorated first-period invoice&apos;s due date counts from its own invoice date, so its terms read correctly.
+          </li>
+          <li>
+            <strong>Visit usage.</strong> The Used counts against a contract&apos;s included visits leave out visits on deleted jobs.
           </li>
         </ul>
       </Section>

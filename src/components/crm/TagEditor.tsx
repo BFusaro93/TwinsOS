@@ -102,7 +102,7 @@ export function TagEditor({ tags, suggestions, onAdd, onRemove, disabled, classN
           {filtered.length === 0 && input.trim() && (
             <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-md border bg-card shadow-md px-3 py-2 text-xs text-slate-400 dark:text-neutral-500">
               {canCreateNew
-                ? "No matching tags. Add tags in Settings."
+                ? `Press Enter to add "${input.trim()}" as a new tag.`
                 : "No matching tags. You don't have permission to create new tags."}
             </div>
           )}

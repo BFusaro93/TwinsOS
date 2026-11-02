@@ -25,16 +25,21 @@ export default function PortalRegisterPage() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [invalidReason, setInvalidReason] = useState("");
+  // Signed in (staff or an existing portal login) as the invited email: the company is added
+  // to that account, so no password is asked for.
+  const [signedInAsInvitee, setSignedInAsInvitee] = useState(false);
 
   useEffect(() => {
     fetch(`/api/portal/invites/${token}`)
       .then((r) => r.json())
-      .then((d) => {
+      .then(async (d) => {
         if (d.error) {
           setInvalidReason(d.error);
           setStep("invalid");
         } else {
           setEmail(d.email);
+          const { data: { user } } = await createClient().auth.getUser();
+          setSignedInAsInvitee(!!user && (user.email ?? "").toLowerCase() === String(d.email).toLowerCase());
           setStep("setup");
         }
       })
@@ -49,7 +54,7 @@ export default function PortalRegisterPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!allRulesMet || !passwordsMatch) return;
+    if (!signedInAsInvitee && (!allRulesMet || !passwordsMatch)) return;
 
     setStep("submitting");
     setError(null);
@@ -57,7 +62,7 @@ export default function PortalRegisterPage() {
     const res = await fetch("/api/portal/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, password }),
+      body: JSON.stringify(signedInAsInvitee ? { token } : { token, password }),
     });
 
     const data = await res.json();
@@ -141,11 +146,31 @@ export default function PortalRegisterPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-2">
           <BrandMark variant="color" className="h-12 w-12 rounded-xl" />
-          <h1 className="text-2xl font-extrabold tracking-tight text-[#005642]">Set Up Your Account</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#005642]">
+            {signedInAsInvitee ? "Add This Company" : "Set Up Your Account"}
+          </h1>
           <p className="text-sm text-slate-500">{email}</p>
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+          {signedInAsInvitee ? (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <p className="text-sm text-slate-600">
+                You&apos;re signed in as {email}. Add this company&apos;s portal to your account — your password stays the same.
+              </p>
+              {error && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</p>
+              )}
+              <button
+                type="submit"
+                disabled={step === "submitting"}
+                className="h-9 rounded-md bg-brand-500 text-white text-sm font-medium flex items-center justify-center gap-2 hover:bg-brand-600 transition disabled:opacity-50"
+              >
+                {step === "submitting" && <Loader2 className="h-4 w-4 animate-spin" />}
+                Add this company to my account
+              </button>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-slate-700">Password</label>
@@ -206,6 +231,7 @@ export default function PortalRegisterPage() {
               Create Account
             </button>
           </form>
+          )}
         </div>
       </div>
     </div>

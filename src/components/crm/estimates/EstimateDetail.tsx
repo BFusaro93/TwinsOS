@@ -24,6 +24,7 @@ import { useCreateInvoiceFromEstimate } from "@/lib/hooks/use-invoices";
 import { SaleTypeSelect } from "@/components/crm/commissions/SaleTypeSelect";
 import { useCRMServices, useEstimateJobs, useEstimateConvertedLines } from "@/lib/hooks/use-crm-jobs";
 import { useApprovalFlow } from "@/lib/hooks/use-approval-flows";
+import { useApprovalRequests } from "@/lib/hooks/use-approval-requests";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
 import { ApprovalChain } from "@/components/shared/ApprovalChain";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -45,6 +46,7 @@ import { AIDraftDialog } from "./AIDraftDialog";
 import { ConvertToJobDialog } from "./ConvertToJobDialog";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 import { WonLostReasonDialog } from "./WonLostReasonDialog";
+import { packageHeadersEmptiedBy } from "@/lib/estimates/package-group";
 import { RateIncreaseDialog } from "./RateIncreaseDialog";
 import { BulkStatusDialog } from "./BulkStatusDialog";
 import { SendEstimateDialog } from "./SendEstimateDialog";
@@ -73,6 +75,7 @@ import {
   DEFAULT_DISPLAY_SETTINGS,
   displaySettingsEqual,
   hasHandSetDisplaySettings,
+  getOrgDefaultDisplaySettings,
   type DisplaySettings,
 } from "@/lib/estimate-display-settings";
 import {
@@ -518,6 +521,13 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { data: estimateApprovalFlow } = useApprovalFlow("crm_estimate");
   const { mutate: submitForApproval, isPending: submittingForApproval } = useSubmitForApproval();
   const hasApprovalGate = !!estimateApprovalFlow && estimateApprovalFlow.steps.length > 0;
+  // The amount the live approval covers; a larger total has to be re-approved (the send and
+  // share-link routes refuse it too).
+  const { data: approvalRequests = [] } = useApprovalRequests(estimate?.id ?? "");
+  const approvedTotalCents = approvalRequests
+    .filter((r) => r.status === "approved" && typeof r.entityTotalCents === "number")
+    .reduce<number | null>((max, r) => (max == null || (r.entityTotalCents as number) > max ? (r.entityTotalCents as number) : max), null);
+  const approvalOutgrown = estimate?.approvalStatus === "approved" && approvedTotalCents != null && estimate.totalCents > approvedTotalCents;
 
   function handleSendClick() {
     if (!estimate) return;
@@ -541,6 +551,15 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       return;
     }
 
+    if (approvalOutgrown) {
+      toast.info(`The total grew past the approved $${((approvedTotalCents ?? 0) / 100).toFixed(2)} — resubmitting for approval.`);
+      submitForApproval(
+        { entityId: estimate.id, entityType: "crm_estimate", grandTotalCents: estimate.totalCents },
+        { onSuccess: (result) => { if (result?.autoApproved) setSendDialogOpen(true); } }
+      );
+      return;
+    }
+
     // 'not_required' with no gate configured, or already 'approved'
     setSendDialogOpen(true);
   }
@@ -551,7 +570,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     if (
       !estimate ||
       displaySettingsEqual(estimate.displaySettings, incoming) ||
-      !hasHandSetDisplaySettings(estimate.displaySettings, estimate.displaySettingsBaseline)
+      !hasHandSetDisplaySettings(
+        estimate.displaySettings,
+        estimate.displaySettingsBaseline,
+        getOrgDefaultDisplaySettings(orgSettings?.customizations as Record<string, unknown> | null | undefined),
+      )
     ) {
       return Promise.resolve(true);
     }
@@ -565,9 +588,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   // Accepts an explicit patch for callers that fire save in the same tick as
   // patchHeader (e.g. Select onValueChange) — headerEdits state hasn't
   // re-rendered yet at that point, so reading it here would miss the just-set value.
-  async function saveHeader(explicitPatch?: Record<string, string | boolean | number | null>) {
+  /** Saves header edits; resolves true on success so callers can roll back their own staged edits. */
+  async function saveHeader(explicitPatch?: Record<string, string | boolean | number | null>): Promise<boolean> {
     const patch = explicitPatch ?? headerEdits;
-    if (!estimate || Object.keys(patch).length === 0) return;
+    if (!estimate || Object.keys(patch).length === 0) return false;
     // A date input happily yields "232026-09-01" when a year is mistyped, and
     // Postgres stores it — the estimate then never expires (or always has).
     const nextEstimateDate = (patch.estimate_date as string | undefined) ?? estimate.estimateDate;
@@ -577,20 +601,22 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     for (const d of [patch.estimate_date, patch.valid_until_date]) {
       if (typeof d === "string" && d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
         toast.error("Enter a valid date (4-digit year)");
-        return;
+        return false;
       }
     }
     if (nextValidUntil && nextEstimateDate && nextValidUntil < nextEstimateDate) {
       toast.error("Valid Until can't be before the estimate date");
-      return;
+      return false;
     }
     setSaving(true);
     try {
       await updateEstimate({ id: estimate.id, patch });
       setHeaderEdits({});
       toast.success("Saved");
+      return true;
     } catch (err) {
       toast.error(mutationErrorMessage(err, "Save failed"));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -628,17 +654,57 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     qc.invalidateQueries({ queryKey: ["estimates"] });
   }
 
+  /** Ticked lines that are still on screen: a tick left behind on another status tab (or on a
+   *  line deleted since) must never be acted on. */
+  function selectedVisibleLines() {
+    const ids = new Set(selectedLineItemIds);
+    return (estimate?.lineItems ?? []).filter(
+      (li) => !li.deletedAt && li.rowType !== "section" && ids.has(li.id) &&
+        (lineItemFilter === "all" || li.status === lineItemFilter)
+    );
+  }
+
+  /** Lines already turned into a job keep the job's price; bulk edits leave them alone. */
+  function splitConverted(lines: NonNullable<typeof estimate>["lineItems"]) {
+    const converted = convertedInfo?.convertedLineIds ?? new Set<string>();
+    const allConverted = !!convertedInfo?.legacyConverted;
+    const editable = (lines ?? []).filter((li) => !allConverted && !converted.has(li.id));
+    const skipped = (lines ?? []).length - editable.length;
+    if (skipped > 0) toast.info(`${skipped} line${skipped !== 1 ? "s" : ""} skipped — already on a job`);
+    return editable;
+  }
+
   async function handleRateIncrease(amount: number, isPercent: boolean) {
     if (!estimate) return;
-    const affected = (estimate.lineItems ?? []).filter(
-      (li) => !li.deletedAt && selectedLineItemIds.includes(li.id)
-    );
+    const affected = splitConverted(selectedVisibleLines());
     setRateIncreaseOpen(false);
+    // "+$X" is per visit: each line's total rises by $X for every visit, whatever its unit.
+    // A per-unit line spreads it over the quantity (rates are whole cents, so a very large
+    // quantity can't absorb a small per-visit amount exactly — those lines are skipped).
+    const flatCents = Math.round(amount * 100);
+    const notExact: string[] = [];
+    const flatRateDelta = (li: { calcType: number; qty: number; visits: number }): number | null => {
+      if (li.calcType !== 1) return flatCents * Math.max(1, li.visits || 1);
+      if (!(li.qty > 0)) return null;
+      const perUnit = Math.round(flatCents / li.qty);
+      const achieved = perUnit * li.qty;
+      return Math.abs(achieved - flatCents) <= Math.max(1, Math.abs(flatCents) * 0.01) ? perUnit : null;
+    };
+    const lines = isPercent ? affected : affected.filter((li) => {
+      if (flatRateDelta(li) != null) return true;
+      notExact.push(li.serviceName || "a line");
+      return false;
+    });
+    if (notExact.length > 0) {
+      toast.warning(`${notExact.length} line${notExact.length !== 1 ? "s" : ""} left unchanged — a $ amount per visit can't be spread over that quantity in whole cents. Use a % increase for those.`);
+    }
+    if (lines.length === 0) return;
     try {
       await Promise.all(
-        affected.map((li) => {
+        lines.map((li) => {
+          const delta = isPercent ? 0 : (flatRateDelta(li) ?? 0);
           const applyIncrease = (rate: number) =>
-            Math.max(0, isPercent ? Math.round(rate * (1 + amount / 100)) : rate + Math.round(amount * 100));
+            Math.max(0, isPercent ? Math.round(rate * (1 + amount / 100)) : rate + delta);
           const newRate = applyIncrease(li.rateCents);
           // computeLineItem prices off `adjRateCents ?? rateCents` — bumping
           // only rateCents was a no-op on any line using the Adj Rate
@@ -695,7 +761,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         })
       );
       await refreshEstimateTotals();
-      toast.success(`Rate updated on ${affected.length} line item${affected.length !== 1 ? "s" : ""}`);
+      toast.success(`Rate updated on ${lines.length} line item${lines.length !== 1 ? "s" : ""}`);
       setSelectedLineItemIds([]);
     } catch (err) {
       toast.error(mutationErrorMessage(err, "Rate increase failed"));
@@ -720,27 +786,42 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
   async function handleBulkDelete() {
     if (!estimate) return;
-    const affected = (estimate.lineItems ?? []).filter(
-      (li) => !li.deletedAt && selectedLineItemIds.includes(li.id)
-    );
+    const affected = splitConverted(selectedVisibleLines());
     setBulkDeleteOpen(false);
+    if (affected.length === 0) return;
+    // A package header whose visits are all going would be left empty (and still print).
+    const deleting = new Set(affected.map((li) => li.id));
+    const emptiedHeaders = packageHeadersEmptiedBy(deleting, estimate.lineItems ?? []);
+    let deleted = 0;
+    let failed = 0;
     try {
       // One at a time: each delete recalculates the estimate totals from the lines left.
-      for (const li of affected) await deleteLineItem({ id: li.id, estimateId: estimate.id });
-      await refreshEstimateTotals();
-      toast.success(`Deleted ${affected.length} line item${affected.length !== 1 ? "s" : ""}`);
+      for (const li of affected) {
+        try {
+          await deleteLineItem({ id: li.id, estimateId: estimate.id });
+          deleted++;
+        } catch {
+          failed++;
+        }
+      }
+      if (failed === 0) {
+        for (const headerId of emptiedHeaders) {
+          await deleteLineItem({ id: headerId, estimateId: estimate.id }).catch(() => undefined);
+        }
+      }
+    } finally {
+      await refreshEstimateTotals().catch(() => undefined);
       setSelectedLineItemIds([]);
-    } catch (err) {
-      toast.error(mutationErrorMessage(err, "Failed to delete the selected line items"));
     }
+    if (failed > 0) toast.error(`Deleted ${deleted} of ${affected.length} line items — ${failed} could not be deleted`);
+    else toast.success(`Deleted ${deleted} line item${deleted !== 1 ? "s" : ""}`);
   }
 
   async function handleBulkStatus(status: LineItemStatus) {
     if (!estimate) return;
-    const affected = (estimate.lineItems ?? []).filter(
-      (li) => !li.deletedAt && selectedLineItemIds.includes(li.id)
-    );
+    const affected = splitConverted(selectedVisibleLines());
     setBulkStatusOpen(false);
+    if (affected.length === 0) return;
     try {
       await Promise.all(
         affected.map((li) => upsertLineItem({ estimateId: estimate.id, item: { id: li.id, status } }))
@@ -882,6 +963,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     if (lineItemFilter === "all") return true;
     return li.status === lineItemFilter;
   });
+  const liveLineItems = (estimate.lineItems ?? []).filter((li) => !li.deletedAt);
+  const visibleIdSet = new Set(visibleLineItems.map((li) => li.id));
+  // What the bar, dialogs and handlers count: ticked AND on screen.
+  const selectedVisibleCount = selectedLineItemIds.filter((id) => visibleIdSet.has(id)).length;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -1492,17 +1577,28 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                               // the estimate: estimate > document > bundle > org default.
                               const docSettings = val ? allDocTemplates.find((t) => t.id === val)?.displaySettings ?? null : null;
                               patchHeader("document_template_id", val);
+                              // A failed save must not leave the document (and its toggles) queued in
+                              // headerEdits, where the next unrelated header save would apply them.
+                              const unstage = () => setHeaderEdits((p) => {
+                                const rest = { ...p };
+                                delete rest.document_template_id;
+                                delete rest.display_settings;
+                                delete rest.display_settings_baseline;
+                                return rest;
+                              });
                               if (docSettings && (await confirmReplaceToggles(docSettings))) {
                                 patchHeader("display_settings", { ...docSettings } as unknown as boolean);
-                                saveHeader({
+                                const ok = await saveHeader({
                                   ...headerEdits,
                                   document_template_id: val,
                                   display_settings: docSettings as unknown as boolean,
                                   display_settings_baseline: docSettings as unknown as boolean,
                                 });
-                                toast.success("Applied this document's display settings");
+                                if (ok) toast.success("Applied this document's display settings");
+                                else unstage();
                               } else {
-                                saveHeader({ ...headerEdits, document_template_id: val });
+                                const ok = await saveHeader({ ...headerEdits, document_template_id: val });
+                                if (!ok) unstage();
                               }
                             }}
                           >
@@ -1737,9 +1833,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               {/* Bulk actions for the ticked lines — shown right above the grid so the
                   checkboxes visibly do something, and pinned to the top of the scrolling
                   area so they stay reachable when the ticked lines are far down. */}
-              {selectedLineItemIds.length > 0 && (
+              {selectedVisibleCount > 0 && (
                 <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-md border shadow-sm border-brand-200 bg-brand-50 px-3 py-1.5 dark:border-neutral-700 dark:bg-neutral-800">
-                  <span className="text-xs font-medium">{selectedLineItemIds.length} selected</span>
+                  <span className="text-xs font-medium">{selectedVisibleCount} selected</span>
                   <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setBulkStatusOpen(true)}>
                     Change Status
                   </Button>
@@ -1771,7 +1867,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   return (
                     <button
                       key={t.value}
-                      onClick={() => setLineItemFilter(t.value)}
+                      // Ticks don't carry across tabs: an action must only touch rows on screen.
+                      onClick={() => { setLineItemFilter(t.value); setSelectedLineItemIds([]); }}
                       title={t.value === "all" ? "Show all line items" : `Filter to line items whose own status is "${t.label}" — separate from the estimate's overall stage above`}
                       className={cn(
                         "px-3 py-1.5 text-xs font-medium transition-colors border-b-2 -mb-px",
@@ -1795,7 +1892,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                 clientId={estimate.clientId}
                 propertyId={estimate.propertyId}
                 items={visibleLineItems}
-                selectedIds={selectedLineItemIds}
+                allItems={liveLineItems}
+                selectedIds={selectedLineItemIds.filter((id) => visibleIdSet.has(id))}
                 onSelectionChange={setSelectedLineItemIds}
                 tiersEnabled={estimate.tiersEnabled}
                 onItemStatusChange={promptMarkAcceptedIfWon}
@@ -2084,7 +2182,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       )}
 
       <RateIncreaseDialog
-        selectedCount={selectedLineItemIds.length}
+        selectedCount={selectedVisibleCount}
         open={rateIncreaseOpen}
         onApply={(amount, isPercent) => {
           setRateIncreaseOpen(false);
@@ -2094,7 +2192,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       />
 
       <BulkStatusDialog
-        selectedCount={selectedLineItemIds.length}
+        selectedCount={selectedVisibleCount}
         open={bulkStatusOpen}
         onApply={handleBulkStatus}
         onCancel={() => setBulkStatusOpen(false)}
@@ -2104,7 +2202,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Delete {selectedLineItemIds.length} line item{selectedLineItemIds.length !== 1 ? "s" : ""}?
+              Delete {selectedVisibleCount} line item{selectedVisibleCount !== 1 ? "s" : ""}?
             </AlertDialogTitle>
             <AlertDialogDescription>
               The selected lines are removed from this estimate and its totals are recalculated.

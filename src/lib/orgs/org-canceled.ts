@@ -67,3 +67,38 @@ export function createOrgCanceledResolver(db: AnyClient): OrgCanceledResolver {
 export async function isOrgCanceled(db: AnyClient, orgId: string | null | undefined): Promise<boolean> {
   return createOrgCanceledResolver(db)(orgId);
 }
+
+/**
+ * Outbound email/SMS from crons and automations is muted for an inactive org (as above) AND
+ * for a demo/sandbox org (organizations.is_demo): a real person added to a sandbox must not be
+ * mailed or texted about demo data. Visit and invoice generation still run for demo orgs so a
+ * demo stays alive — use createOrgCanceledResolver for those.
+ *
+ * Fails open (not muted) on a lookup error, like the canceled resolver.
+ */
+export function createOrgOutboundMutedResolver(db: AnyClient): OrgCanceledResolver {
+  const cache = new Map<string, boolean>();
+  return async (orgId) => {
+    if (!orgId) return false;
+    const hit = cache.get(orgId);
+    if (hit !== undefined) return hit;
+    const { data, error } = await db
+      .from("organizations")
+      .select("plan, trial_ends_at, is_platform_staff_org, is_demo")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (error) return false;
+    const row = data as (OrgPlanRow & { is_demo?: boolean | null }) | null;
+    const muted = isOrgInactive(row) || row?.is_demo === true;
+    cache.set(orgId, muted);
+    return muted;
+  };
+}
+
+/** True for a demo/sandbox org (organizations.is_demo). Fails open (false) on a lookup error. */
+export async function isOrgDemo(db: AnyClient, orgId: string | null | undefined): Promise<boolean> {
+  if (!orgId) return false;
+  const { data, error } = await db.from("organizations").select("is_demo").eq("id", orgId).maybeSingle();
+  if (error) return false;
+  return (data as { is_demo?: boolean | null } | null)?.is_demo === true;
+}

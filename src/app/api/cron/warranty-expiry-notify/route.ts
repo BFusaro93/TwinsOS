@@ -7,7 +7,7 @@ import { EMAIL_FROM } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { logger } from "@/lib/logger";
 import { resolveReminderRecipients } from "@/lib/notifications/reminder-recipients";
-import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
+import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
 
 const log = logger.child("warranty-expiry-notify cron");
 
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: expiring, error } = await (supabase as any)
     .from("crm_warranties")
-    .select("id, org_id, name, end_date, client_id, clients(display_name, sales_rep_id), projects(name)")
+    .select("id, org_id, name, end_date, client_id, clients(display_name, sales_rep_id, deleted_at, status), projects(name)")
     .eq("status", "active")
     .is("deleted_at", null)
     .gte("end_date", lower)
@@ -59,12 +59,17 @@ export async function GET(request: Request) {
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
   let notified = 0;
-  const orgCanceled = createOrgCanceledResolver(supabase);
+  const orgCanceled = createOrgOutboundMutedResolver(supabase);
 
   for (const w of expiring as Record<string, unknown>[]) {
     const endDate = w.end_date as string;
     const orgId = w.org_id as string;
-    if (await orgCanceled(orgId)) continue; // canceled orgs get no automated reminders
+    if (await orgCanceled(orgId)) continue; // inactive or demo orgs get no automated reminders
+    // A deleted or cancelled client's warranty needs no reminder.
+    {
+      const c = w.clients as { deleted_at?: string | null; status?: string | null } | null;
+      if (w.client_id && (!c || c.deleted_at || c.status === "cancelled")) continue;
+    }
     const orgToday = todayInZone(await getOrgTimeZone(supabase, orgId));
     if (endDate < orgToday || endDate > shiftYmd(orgToday, REMINDER_WINDOW_DAYS)) continue;
 
@@ -161,7 +166,7 @@ export async function GET(request: Request) {
         if (notifErr) throw notifErr;
       }
 
-      let emailFailed = false;
+      let emailedAny = false;
       for (const target of emailTargets) {
         const { error: sendErr } = await resend.emails.send({
           from: EMAIL_FROM,
@@ -175,12 +180,18 @@ export async function GET(request: Request) {
           </div>`,
         });
         if (sendErr) {
-          await releaseClaim("email send failed", sendErr.message);
-          emailFailed = true;
-          break;
+          // Release only when nobody has been emailed yet: releasing after some recipients got
+          // it made tomorrow's run email all of them again.
+          if (!emailedAny) {
+            await releaseClaim("email send failed", sendErr.message);
+            break;
+          }
+          log.error("warranty expiry email failed for one recipient", { warrantyId: w.id, error: sendErr.message });
+          continue;
         }
+        emailedAny = true;
       }
-      if (emailFailed) continue;
+      if (!emailedAny && emailTargets.length > 0) continue;
       notified++;
     } catch (err) {
       await releaseClaim("notification threw", err);

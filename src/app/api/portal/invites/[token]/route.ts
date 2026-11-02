@@ -26,9 +26,6 @@ export async function GET(
     return NextResponse.json({ error: "Invite has expired" }, { status: 410 });
   }
 
-  return NextResponse.json({
-    email: data.email,
-    clientId: data.client_id,
-    orgId: data.org_id,
-  });
+  // Only the email is needed to pre-fill the form; the client/org ids stay server-side.
+  return NextResponse.json({ email: data.email });
 }

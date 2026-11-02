@@ -90,7 +90,7 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: est } = await (supabase as any)
-    .from("estimates").select("id, org_id, approval_status, stage, sent_at").eq("id", estimateId).is("deleted_at", null).maybeSingle();
+    .from("estimates").select("id, org_id, approval_status, stage, sent_at, total_cents").eq("id", estimateId).is("deleted_at", null).maybeSingle();
   if (!est) return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
 
   // A lost estimate must not hand out a live link (the public accept route
@@ -110,6 +110,31 @@ export async function POST(
       },
       { status: 409 }
     );
+  }
+
+  // An approval covers the amount that was approved. If the estimate has grown since (lines
+  // added after approval), it has to go through approval again before it reaches the client.
+  if (est.approval_status === "approved") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: approvedRows } = await (supabase as any)
+      .from("approval_requests")
+      .select("entity_total_cents")
+      .eq("entity_id", estimateId)
+      .eq("status", "approved")
+      .eq("archived", false);
+    const approvedTotals = ((approvedRows ?? []) as { entity_total_cents: number | null }[])
+      .map((r) => r.entity_total_cents)
+      .filter((n): n is number => typeof n === "number");
+    const approvedTotal = approvedTotals.length ? Math.max(...approvedTotals) : null;
+    if (approvedTotal != null && (est.total_cents ?? 0) > approvedTotal) {
+      return NextResponse.json(
+        {
+          error: `This estimate was approved at $${(approvedTotal / 100).toFixed(2)} and now totals $${((est.total_cents ?? 0) / 100).toFixed(2)}. Resubmit it for approval before sharing the link.`,
+          code: "reapproval_required",
+        },
+        { status: 409 }
+      );
+    }
   }
 
   // Handing out the link is sending it: publish the current estimate so the

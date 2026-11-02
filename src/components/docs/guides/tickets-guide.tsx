@@ -67,6 +67,7 @@ export function TicketsGuide() {
           <TOCLink href="#client-link">Client link &amp; activity timeline</TOCLink>
           <TOCLink href="#field-upsells">Field upsells from crews</TOCLink>
           <TOCLink href="#automations-integrations">Automations, Zapier &amp; notifications</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -426,6 +427,16 @@ export function TicketsGuide() {
             ))}
           </tbody>
         </Table>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Who can change tickets.</strong> Editing, closing, reassigning, deleting and restoring tickets need View/Modify Tickets, checked in the database. A crew login can still edit a ticket it created (such as a field upsell suggestion).
+          </li>
+          <li>
+            <strong>Email from a ticket.</strong> The document picker offers Client documents only. If the status change you chose doesn&apos;t happen because someone else changed the ticket first, no Ticket closed or reopened automation fires.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );
