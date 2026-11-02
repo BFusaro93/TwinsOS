@@ -50,6 +50,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 /**
  * Why an invoice may not be voided, or null when it may.
@@ -476,7 +477,7 @@ export function InvoicesList({ clientId }: Props) {
       setVoidTarget(null);
       refetchInvoices();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to void invoice");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to void invoice"));
     } finally {
       setVoiding(false);
     }

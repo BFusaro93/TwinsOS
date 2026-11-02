@@ -77,6 +77,7 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import { Textarea } from "@/components/ui/textarea";
 import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { getDisplayInvoiceStatus } from "@/lib/invoice-status";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -287,9 +288,9 @@ function LineItemRow({
     setRow(next);
     try {
       await upsert({ invoiceId, item: buildUpsertPayload(next) });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to update discount");
+      toast.error(mutationErrorMessage(err, "Failed to update discount"));
     }
   }
 
@@ -299,7 +300,7 @@ function LineItemRow({
     try {
       await upsert({ invoiceId, item: buildUpsertPayload(row) });
       settleIfUnchanged(seq);
-    } catch { toast.error("Save failed"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Save failed")); }
   }
 
   async function saveRow(r: InvoiceLineItem) {
@@ -307,7 +308,7 @@ function LineItemRow({
     try {
       await upsert({ invoiceId, item: buildUpsertPayload(r) });
       settleIfUnchanged(seq);
-    } catch { toast.error("Save failed"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Save failed")); }
   }
 
   async function toggleTaxable() {
@@ -316,16 +317,16 @@ function LineItemRow({
     try {
       // recalc: persist the header's tax/total from the lines right away.
       await upsert({ invoiceId, item: buildUpsertPayload(next), recalc: true });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to update taxable setting");
+      toast.error(mutationErrorMessage(err, "Failed to update taxable setting"));
     }
   }
 
   async function handleDelete() {
     try {
       await remove({ id: row.id, invoiceId });
-    } catch { toast.error("Failed to delete item"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to delete item")); }
   }
 
   return (
@@ -586,7 +587,7 @@ function RecordPaymentDialog({
         : "Payment recorded");
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error && err.message ? err.message : "Failed to record payment");
+      toast.error(mutationErrorMessage(err, err instanceof Error && err.message ? err.message : "Failed to record payment"));
     }
   }
 
@@ -880,7 +881,7 @@ export function InvoiceDetail({
           sort_order: lineItems.length,
         },
       });
-    } catch { toast.error("Failed to add item"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to add item")); }
     finally { addingLineItemRef.current = false; }
   }
 
@@ -908,7 +909,7 @@ export function InvoiceDetail({
           sort_order: lineItems.length,
         },
       });
-    } catch { toast.error("Failed to add charge"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to add charge")); }
     finally { addingLineItemRef.current = false; }
   }
 
@@ -957,7 +958,7 @@ export function InvoiceDetail({
       const next = !invoice!.locked;
       await setLock({ id: invoice!.id, locked: next });
       toast.success(next ? "Invoice locked" : "Invoice unlocked");
-    } catch { toast.error("Failed to update lock"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to update lock")); }
   }
 
   async function handleSave() {
@@ -1020,8 +1021,8 @@ export function InvoiceDetail({
     if (!invoice) { onDiscard?.(); return; }
     try {
       await deleteInvoice({ id: invoice.id, clientId: invoice.clientId });
-    } catch {
-      toast.error("Failed to discard draft — it was not deleted");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to discard draft — it was not deleted"));
       return;
     }
     onDiscard?.();
@@ -1035,7 +1036,7 @@ export function InvoiceDetail({
       toast.success("Invoice deleted");
       setConfirmDeleteOpen(false);
       onDiscard?.();
-    } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to delete invoice"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, err instanceof Error && err.message ? err.message : "Failed to delete invoice")); }
     finally { setDeleting(false); }
   }
 
@@ -1047,7 +1048,7 @@ export function InvoiceDetail({
       toast.success("Invoice voided");
       setConfirmVoidOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to void invoice");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to void invoice"));
     }
     finally { setVoiding(false); }
   }
@@ -1084,14 +1085,18 @@ export function InvoiceDetail({
               Discard
             </Button>
           )}
-          <Button variant="outline" size="sm" className="h-8 text-xs"
-            onClick={handleToggleLock}
-            title={invoice.locked ? "Unlock invoice to make changes" : "Lock invoice"}>
-            {invoice.locked
-              ? <><Unlock className="mr-1 h-3.5 w-3.5 text-amber-500 dark:text-amber-400" /> Unlock</>
-              : <><Lock className="mr-1 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" /> Lock</>
-            }
-          </Button>
+          {/* Unlocking re-opens the amounts, so the database requires
+              acct_add_modify_invoices for it; anyone may lock. */}
+          {(!invoice.locked || can("acct_add_modify_invoices")) && (
+            <Button variant="outline" size="sm" className="h-8 text-xs"
+              onClick={handleToggleLock}
+              title={invoice.locked ? "Unlock invoice to make changes" : "Lock invoice"}>
+              {invoice.locked
+                ? <><Unlock className="mr-1 h-3.5 w-3.5 text-amber-500 dark:text-amber-400" /> Unlock</>
+                : <><Lock className="mr-1 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" /> Lock</>
+              }
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-8 text-xs"
             onClick={() => setPaymentOpen(true)}
             disabled={invoice.status === "void" || invoice.balanceCents <= 0}>
@@ -1724,7 +1729,7 @@ export function InvoiceDetail({
                         total += res.appliedCents;
                         remaining -= res.appliedCents;
                       } catch (err) {
-                        toast.error(err instanceof Error ? err.message : "Couldn't apply the credit");
+                        toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Couldn't apply the credit"));
                         break;
                       }
                     }

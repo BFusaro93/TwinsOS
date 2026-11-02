@@ -25,6 +25,7 @@ import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/serv
 import { RecipientChipInput } from "@/components/shared/RecipientChipInput";
 import { InvoicePhotosPanel } from "@/components/crm/invoices/InvoicePhotosPanel";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // Exported so bulk-send flows (InvoicesList's "Email Selected") send the
 // same default content a single manual send would, when no org default
@@ -176,7 +177,7 @@ export function InvoiceEmailDialog({
       onSent();
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to send invoice");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to send invoice"));
     } finally {
       setSending(false);
     }

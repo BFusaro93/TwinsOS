@@ -15,6 +15,7 @@ import { ConditionListEditor, type ConditionRow } from "./ConditionListEditor";
 import { validateConditionRows } from "@/lib/automations/custom-field-condition";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   open: boolean;
@@ -47,8 +48,8 @@ export function IfBranchEventDialog({ open, onOpenChange, event }: Props) {
         config: { conditions },
       });
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save IF branch");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save IF branch"));
     } finally {
       setSaving(false);
     }

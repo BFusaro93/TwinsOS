@@ -38,6 +38,7 @@ import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { PAYMENT_METHOD_OPTIONS } from "@/components/crm/ClientDetailPanel";
 import { availableRecordKinds } from "@/lib/automations/condition-applicability";
 import type { TriggerType, TriggerConfig } from "@/types/crm-automations";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // Trigger types that fire off a day-count gap rather than an event — the
 // builder shows a "days" input for these instead of just the type selector.
@@ -482,7 +483,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
 
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save sequence rules");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to save sequence rules"));
     } finally {
       setSaving(false);
     }

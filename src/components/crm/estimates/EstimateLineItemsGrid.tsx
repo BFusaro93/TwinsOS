@@ -67,6 +67,7 @@ import {
 import type { EstimateLineItem, LineItemStatus } from "@/types/crm-estimates";
 import type { CRMDiscount } from "@/types/crm-discounts";
 import type { BudgetMethod } from "@/types/crm-jobs";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const UNIT_TYPES = ["sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 
@@ -134,7 +135,7 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
 
   async function handleDelete(s: LineItemSubitem) {
     try { await deleteSubitem({ id: s.id, lineItemId }); }
-    catch { toast.error("Failed to delete sub-item"); }
+    catch (err) { toast.error(mutationErrorMessage(err, "Failed to delete sub-item")); }
   }
 
   return (
@@ -474,8 +475,8 @@ function LineItemRow({
         },
       });
       setDirty(false);
-    } catch {
-      toast.error("Failed to save line item");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save line item"));
     }
   }
 
@@ -493,9 +494,9 @@ function LineItemRow({
           applied_discount_id: patch.appliedDiscountId,
         },
       });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to update discount");
+      toast.error(mutationErrorMessage(err, "Failed to update discount"));
     }
   }
 
@@ -527,9 +528,9 @@ function LineItemRow({
           discount_cents: merged.discountCents,
         },
       });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to update budgeted hours");
+      toast.error(mutationErrorMessage(err, "Failed to update budgeted hours"));
     }
   }
 
@@ -546,8 +547,8 @@ function LineItemRow({
         },
       });
       setRow((r) => ({ ...r, ...notes }));
-    } catch {
-      toast.error("Failed to save notes");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save notes"));
     }
   }
 
@@ -577,9 +578,9 @@ function LineItemRow({
           discount_cents: next.discountCents,
         },
       });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to save complexity adjustment");
+      toast.error(mutationErrorMessage(err, "Failed to save complexity adjustment"));
     }
   }
 
@@ -684,8 +685,8 @@ function LineItemRow({
                 setRow((r) => ({ ...r, tier: val }));
                 try {
                   await upsert({ estimateId, item: { id: row.id, tier: val } });
-                } catch {
-                  toast.error("Failed to save tier");
+                } catch (err) {
+                  toast.error(mutationErrorMessage(err, "Failed to save tier"));
                 }
               }}
               className="w-full rounded border border-border bg-card px-1 py-0.5 text-[10px] focus:outline-none"
@@ -1109,8 +1110,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       }
       try {
         await deleteItem({ id, estimateId });
-      } catch {
-        toast.error("Failed to delete line item");
+      } catch (err) {
+        toast.error(mutationErrorMessage(err, "Failed to delete line item"));
       }
     },
     [deleteItem, estimateId, items]
@@ -1123,8 +1124,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     try {
       for (const lineId of pending.lineIds) await deleteItem({ id: lineId, estimateId });
       await deleteItem({ id: pending.id, estimateId });
-    } catch {
-      toast.error("Failed to delete the package");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to delete the package"));
     }
   }
 
@@ -1173,8 +1174,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         });
       }
       toast.success(`Copied from "${first.serviceName}" to ${rest.length} other visit${rest.length !== 1 ? "s" : ""}`);
-    } catch {
-      toast.error("Failed to copy the values down");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to copy the values down"));
     }
   }
 
@@ -1218,8 +1219,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
             sort_order: items.length,
           },
         });
-      } catch {
-        toast.error("Failed to duplicate line item");
+      } catch (err) {
+        toast.error(mutationErrorMessage(err, "Failed to duplicate line item"));
       }
     },
     [upsert, estimateId, items.length]
@@ -1436,8 +1437,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         });
       }
       return true;
-    } catch {
-      toast.error("Failed to add item");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add item"));
       return false;
     }
   }
@@ -1507,8 +1508,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           return;
         }
       }
-    } catch {
-      toast.error("Failed to add package");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add package"));
     }
   }
 
@@ -1530,8 +1531,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           calc_type: 1,
         },
       });
-    } catch {
-      toast.error("Failed to add section");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add section"));
     }
   }
 

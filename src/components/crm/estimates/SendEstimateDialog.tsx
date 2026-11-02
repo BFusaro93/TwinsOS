@@ -24,6 +24,7 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
 import { RecipientChipInput } from "@/components/shared/RecipientChipInput";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // Exported so bulk-send flows (EstimatesList's "Email Selected") send the
 // same default content a single manual send would, when no org default
@@ -193,7 +194,7 @@ export function SendEstimateDialog({
       onSent();
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to send estimate");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to send estimate"));
     } finally {
       setSending(false);
     }

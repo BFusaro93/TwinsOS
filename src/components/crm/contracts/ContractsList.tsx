@@ -75,6 +75,7 @@ import {
   useDeleteContractTemplate,
   type ContractTemplate,
 } from "@/lib/hooks/use-contract-templates";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const CONTRACT_STATUSES: ContractStatus[] = ["draft", "sent", "signed", "active", "expired", "cancelled"];
 
@@ -189,8 +190,8 @@ function ContractTemplateBar({
       toast.success("Template saved");
       setName("");
       setSaveOpen(false);
-    } catch {
-      toast.error("Failed to save template");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save template"));
     }
   }
 
@@ -201,8 +202,8 @@ function ContractTemplateBar({
       await deleteTemplate(applied.id);
       setApplied(null);
       toast.success("Template deleted");
-    } catch {
-      toast.error("Failed to delete template");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to delete template"));
     }
   }
 
@@ -791,8 +792,8 @@ function IncludedServiceRow({
         sortOrder: service.sortOrder,
       });
       setEditing(false);
-    } catch {
-      toast.error("Failed to update");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to update"));
     }
   }
 
@@ -856,8 +857,8 @@ function AddIncludedServiceRow({ contractId, sortOrder }: { contractId: string; 
       await upsert({ contractId, serviceId: service.id, serviceName: service.name, visitsIncluded, sortOrder });
       setServiceId("");
       setCount("1");
-    } catch {
-      toast.error("Failed to add");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add"));
     }
   }
 
@@ -977,7 +978,7 @@ function ContractNotesTab({ contractId }: { contractId?: string }) {
     try {
       await addNote({ contractId: contractId!, body: body.trim() });
       setBody("");
-    } catch { toast.error("Failed to add note"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to add note")); }
   }
 
   return (
@@ -1143,7 +1144,7 @@ export function ContractDialog({
       // Invalid state-machine transitions (e.g. cancelled -> active) throw a
       // descriptive Error from useUpdateContractStatus — surface that instead
       // of a generic failure message.
-      toast.error(err instanceof Error ? err.message : "Failed to update contract status");
+      toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to update contract status"));
     }
   }
 
@@ -1223,7 +1224,7 @@ export function ContractDialog({
         toast.success("Contract saved");
       }
       onOpenChange(false);
-    } catch { toast.error("Failed to save contract"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to save contract")); }
   }
 
   return (
@@ -1283,8 +1284,8 @@ export function ContractDialog({
                   try {
                     await acknowledgeChange({ id: contract.id, signedBy: contract.signedBy ?? undefined });
                     toast.success("Marked as approved by the client");
-                  } catch {
-                    toast.error("Failed to update contract");
+                  } catch (err) {
+                    toast.error(mutationErrorMessage(err, "Failed to update contract"));
                   }
                 }}
               >
@@ -1475,8 +1476,8 @@ export function ContractsList({ clientId }: Props) {
         toast.warning(`${problems.length} invoice${problems.length !== 1 ? "s" : ""} created with issues — check them: ${problems[0].reason}`);
       }
       clearSelection();
-    } catch {
-      toast.error("Failed to create invoices");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create invoices"));
     }
   }
 
@@ -1516,7 +1517,7 @@ export function ContractsList({ clientId }: Props) {
   async function handleDelete(c: CRMContract) {
     if (!(await confirm({ title: `Delete "${c.title}"?`, confirmLabel: "Delete Contract", destructive: true }))) return;
     try { await del(c.id); toast.success("Deleted"); }
-    catch { toast.error("Failed to delete"); }
+    catch (err) { toast.error(mutationErrorMessage(err, "Failed to delete")); }
   }
 
   function openNew() { setEditContract(undefined); setDialogOpen(true); }

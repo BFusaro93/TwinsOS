@@ -44,6 +44,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -163,8 +164,8 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
   async function handleChangeDays(member: CRMCrewMember, days: number[]) {
     try {
       await updateMember({ id: member.id, updates: { days_of_week: days } });
-    } catch {
-      toast.error("Failed to update days");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to update days"));
     }
   }
 
@@ -172,16 +173,16 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
     const cents = Math.round((parseFloat(dollarStr) || 0) * 100);
     try {
       await updateMember({ id: member.id, updates: { labor_burden_cents_per_hour: cents } });
-    } catch {
-      toast.error("Failed to update labor burden rate");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to update labor burden rate"));
     }
   }
 
   async function handleRemove(member: CRMCrewMember) {
     try {
       await removeMember({ crewId: crew.id, employeeId: member.employeeId });
-    } catch {
-      toast.error("Failed to remove assignment");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to remove assignment"));
     }
   }
 
@@ -611,8 +612,8 @@ function CrewDialog({
         toast.success("Team saved");
         onOpenChange(false);
       }
-    } catch {
-      toast.error("Failed to save team");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save team"));
     }
   }
 
@@ -735,8 +736,8 @@ export function CrewsList() {
     try {
       await update({ id, updates: { is_active: false } });
       toast.success(`${name} deactivated`);
-    } catch {
-      toast.error("Failed to deactivate");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to deactivate"));
     }
   }
 
@@ -744,8 +745,8 @@ export function CrewsList() {
     try {
       await update({ id, updates: { is_active: true } });
       toast.success("Crew activated");
-    } catch {
-      toast.error("Failed to activate");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to activate"));
     }
   }
 

@@ -24,6 +24,7 @@ import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { useCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // CSR was removed — it isn't a real field anywhere in the app (no
 // clients.csr column, no CSR concept outside this picker and a document
@@ -95,8 +96,8 @@ export function UpdateEventDialog({ open, onOpenChange, event }: Props) {
         config: field === "custom_field" ? { field, value, customFieldId } : { field, value },
       });
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save update event");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save update event"));
     } finally {
       setSaving(false);
     }

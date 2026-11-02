@@ -12,6 +12,7 @@ import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { EstimateDirectCost, DirectCostType } from "@/types/crm-estimates";
 import type { ProductItem } from "@/types";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const COST_TYPE_LABELS: Record<DirectCostType, string> = {
   labor:            "Labor",
@@ -73,8 +74,8 @@ function DirectCostRow({
         },
       });
       setDirty(false);
-    } catch {
-      toast.error("Failed to save cost");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save cost"));
     }
   }
 
@@ -96,16 +97,16 @@ function DirectCostRow({
         },
       });
       setDirty(false);
-    } catch {
-      toast.error("Failed to save cost");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save cost"));
     }
   }
 
   async function handleDelete() {
     try {
       await remove({ id: row.id, estimateId });
-    } catch {
-      toast.error("Failed to delete");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to delete"));
     }
   }
 
@@ -234,8 +235,8 @@ export function EstimateDirectCostsGrid({
           sort_order: items.length,
         },
       });
-    } catch {
-      toast.error("Failed to add cost");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add cost"));
     }
   }
 

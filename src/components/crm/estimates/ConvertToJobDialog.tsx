@@ -35,6 +35,7 @@ import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { useConvertLeadToClient } from "@/lib/hooks/use-clients";
 import { usePackages } from "@/lib/hooks/use-packages";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 /**
  * A line that is part of what the client agreed to: not lost, and not a
@@ -452,7 +453,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       // Show the real reason where there is one — "already converted" in
       // particular is actionable, and a bare "Failed to create job" invites
       // the user to keep clicking.
-      toast.error(err instanceof Error && err.message ? err.message : "Failed to create job");
+      toast.error(mutationErrorMessage(err, err instanceof Error && err.message ? err.message : "Failed to create job"));
     }
   }
 

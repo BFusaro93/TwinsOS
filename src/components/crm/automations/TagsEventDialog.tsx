@@ -22,6 +22,7 @@ import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import { useOrgTags } from "@/lib/hooks/use-clients";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   open: boolean;
@@ -72,8 +73,8 @@ export function TagsEventDialog({ open, onOpenChange, event }: Props) {
         config: { add_tags: addTags, remove_tags: removeTags },
       });
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save tags event");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save tags event"));
     } finally {
       setSaving(false);
     }

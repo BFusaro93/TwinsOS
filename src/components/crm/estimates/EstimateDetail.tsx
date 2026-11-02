@@ -43,6 +43,7 @@ import { EstimateMilestonesEditor } from "./EstimateMilestonesEditor";
 import { EstimateSummaryPanel } from "./EstimateSummaryPanel";
 import { AIDraftDialog } from "./AIDraftDialog";
 import { ConvertToJobDialog } from "./ConvertToJobDialog";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 import { WonLostReasonDialog } from "./WonLostReasonDialog";
 import { RateIncreaseDialog } from "./RateIncreaseDialog";
 import { BulkStatusDialog } from "./BulkStatusDialog";
@@ -437,7 +438,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       const res = await ensureShareLink(estimate.id);
       return res.url;
     } catch (err) {
-      toast.error(err instanceof Error && err.message ? err.message : "Failed to create proposal link");
+      toast.error(mutationErrorMessage(err, err instanceof Error && err.message ? err.message : "Failed to create proposal link"));
       return null;
     }
   }
@@ -447,9 +448,9 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     try {
       await navigator.clipboard.writeText(url);
       toast.success("Proposal link copied");
-    } catch {
+    } catch (err) {
       // Don't leave the user without the link — show it so it can be copied by hand.
-      toast.error("Couldn't copy automatically — copy the link below", {
+      toast.error(mutationErrorMessage(err, "Couldn't copy automatically — copy the link below"), {
         description: url,
         duration: 30000,
       });
@@ -588,8 +589,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       await updateEstimate({ id: estimate.id, patch });
       setHeaderEdits({});
       toast.success("Saved");
-    } catch {
-      toast.error("Save failed");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Save failed"));
     } finally {
       setSaving(false);
     }
@@ -606,7 +607,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       toast.success(`Marked as ${stageName(stage)}`);
       return true;
     } catch (err) {
-      toast.error(err instanceof Error && err.message ? err.message : "Failed to update stage");
+      toast.error(mutationErrorMessage(err, err instanceof Error && err.message ? err.message : "Failed to update stage"));
       return false;
     }
   }
@@ -696,8 +697,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       await refreshEstimateTotals();
       toast.success(`Rate updated on ${affected.length} line item${affected.length !== 1 ? "s" : ""}`);
       setSelectedLineItemIds([]);
-    } catch {
-      toast.error("Rate increase failed");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Rate increase failed"));
     }
   }
 
@@ -729,8 +730,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       await refreshEstimateTotals();
       toast.success(`Deleted ${affected.length} line item${affected.length !== 1 ? "s" : ""}`);
       setSelectedLineItemIds([]);
-    } catch {
-      toast.error("Failed to delete the selected line items");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to delete the selected line items"));
     }
   }
 
@@ -748,8 +749,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       toast.success(`Status updated on ${affected.length} line item${affected.length !== 1 ? "s" : ""}`);
       setSelectedLineItemIds([]);
       promptMarkAcceptedIfWon(status);
-    } catch {
-      toast.error("Status update failed");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Status update failed"));
     }
   }
 
@@ -810,8 +811,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
       );
       await refreshEstimateTotals();
       toast.success(`Added ${items.length} line item${items.length !== 1 ? "s" : ""} from AI draft`);
-    } catch {
-      toast.error("Failed to add AI-drafted items");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add AI-drafted items"));
     } finally {
       setSaving(false);
     }
@@ -843,8 +844,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         // fall back to the existing flat-rate behavior.
         perTypeOverhead: overheadSettings && hasPerTypeOverhead(overheadSettings) ? overheadSettings : undefined,
       });
-    } catch {
-      toast.error("Recalculation failed");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Recalculation failed"));
     } finally {
       setRecalcPending(false);
     }
@@ -933,7 +934,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               {estimateJobs.length > 1 ? `View Jobs (${estimateJobs.length})` : "View Job"}
             </Button>
           )}
-          {effectiveStage === "accepted" && (estimateJobs.length === 0 || canConvertMore) && (
+          {effectiveStage === "accepted" && can("job_add") && (estimateJobs.length === 0 || canConvertMore) && (
             <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700"
               title={estimateJobs.length > 0
                 ? `${unconvertedLineCount} accepted line${unconvertedLineCount !== 1 ? "s" : ""} not on a job yet`
@@ -995,108 +996,110 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
               )}
             </>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs"
-            disabled={creatingInvoice}
-            onClick={async () => {
-              if (!estimate) return;
-              try {
-                // The org's calendar day, not the browser's — the invoice date
-                // feeds due-date terms and every dated report.
-                const today = orgToday();
-                const taxRateBps = estimate.taxRateBps ?? 0;
-                // recalcEstimateTotals taxes the whole discounted subtotal —
-                // estimate lines carry no per-line taxability — so every
-                // invoice line has to be taxable for the invoice to reproduce
-                // the tax the client was quoted.
-                const isTaxable = taxRateBps > 0;
-
-                // Bill exactly what the estimate's totals count: non-lost,
-                // non-section lines of the chosen (or basis) tier. On a
-                // Good/Better/Best estimate, invoicing every open tier billed
-                // all the mutually exclusive options at once.
-                // 'draft' lines are "not yet part of the quote" (recalc and the
-                // proposal both exclude them), so they aren't billed either.
-                const liveLines = (estimate.lineItems ?? []).filter(
-                  (li) => !li.deletedAt && li.status !== "lost" && li.status !== "draft" && li.rowType !== "section"
-                );
-                const basis = tierBasis(
-                  !!estimate.tiersEnabled,
-                  liveLines.map((li) => ({
-                    tier: li.tier ?? null,
-                    status: li.status,
-                    netCents: Math.max(0, li.totalCents - (li.discountCents ?? 0)),
-                  }))
-                );
-                const invoiceLines = liveLines
-                  .filter((li) => !basis || !li.tier || li.tier === basis)
-                  .map((li) => ({
-                    serviceId: li.serviceId ?? null,
-                    name: li.serviceName ?? li.serviceId ?? "Service",
-                    description: li.invoiceDesc ?? "",
-                    qty: li.qty,
-                    rateCents: li.rateCents,
-                    totalCents: li.totalCents,
-                    discountCents: li.discountCents,
-                    discountType: li.discountType,
-                    discountValue: li.discountValue,
-                    isTaxable,
-                  }));
-
-                // Derive the header from the lines actually being written,
-                // using the same arithmetic the invoice recalc uses
-                // (deleteInvoiceLineItemAndRecalc / useUpdateInvoiceFinancials),
-                // rather than copying the estimate's own rollups. Copying them
-                // produced an invoice whose stored header disagreed with its
-                // own lines, so the first edit "recalculated" the client's
-                // total to a different number.
-                //
-                // Note: estimate subitem revenue is not carried onto the
-                // invoice (there are no subitem rows in any org today). If
-                // subitems ever ship, they need their own invoice lines here —
-                // otherwise this subtotal would under-bill them.
-                const netLine = (li: { totalCents: number; discountCents?: number }) =>
-                  li.totalCents - (li.discountCents ?? 0);
-                const subtotalCents = invoiceLines.reduce((s, li) => s + netLine(li), 0);
-                const discountCents = Math.max(0, Math.min(estimate.discountCents ?? 0, subtotalCents));
-                const taxableBase = Math.max(0, (isTaxable ? subtotalCents : 0) - discountCents);
-                const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
-                const totalCents = subtotalCents - discountCents + taxCents;
-
-                const invoice = await createInvoice({
-                  estimateId: estimate.id,
-                  clientId: estimate.clientId,
-                  salesRepId: estimate.salesRepId,
-                  description: estimate.description ?? `Invoice for estimate #${estimate.estimateNumber}`,
-                  invoiceDate: today,
-                  lineItems: invoiceLines,
-                  subtotalCents,
-                  discountCents,
-                  discountType: estimate.discountType,
-                  discountValue: estimate.discountValue,
-                  taxRateBps,
-                  taxCents,
-                  totalCents,
-                });
+          {can("acct_add_modify_invoices") && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              disabled={creatingInvoice}
+              onClick={async () => {
+                if (!estimate) return;
                 try {
-                  await updateStage({ id: estimate.id, stage: "invoiced" });
-                } catch {
-                  // The invoice exists; a failed stage move must not read as a
-                  // failed invoice (a retry would be blocked as a duplicate).
-                  toast.warning("Invoice created, but the estimate stage could not be updated");
+                  // The org's calendar day, not the browser's — the invoice date
+                  // feeds due-date terms and every dated report.
+                  const today = orgToday();
+                  const taxRateBps = estimate.taxRateBps ?? 0;
+                  // recalcEstimateTotals taxes the whole discounted subtotal —
+                  // estimate lines carry no per-line taxability — so every
+                  // invoice line has to be taxable for the invoice to reproduce
+                  // the tax the client was quoted.
+                  const isTaxable = taxRateBps > 0;
+
+                  // Bill exactly what the estimate's totals count: non-lost,
+                  // non-section lines of the chosen (or basis) tier. On a
+                  // Good/Better/Best estimate, invoicing every open tier billed
+                  // all the mutually exclusive options at once.
+                  // 'draft' lines are "not yet part of the quote" (recalc and the
+                  // proposal both exclude them), so they aren't billed either.
+                  const liveLines = (estimate.lineItems ?? []).filter(
+                    (li) => !li.deletedAt && li.status !== "lost" && li.status !== "draft" && li.rowType !== "section"
+                  );
+                  const basis = tierBasis(
+                    !!estimate.tiersEnabled,
+                    liveLines.map((li) => ({
+                      tier: li.tier ?? null,
+                      status: li.status,
+                      netCents: Math.max(0, li.totalCents - (li.discountCents ?? 0)),
+                    }))
+                  );
+                  const invoiceLines = liveLines
+                    .filter((li) => !basis || !li.tier || li.tier === basis)
+                    .map((li) => ({
+                      serviceId: li.serviceId ?? null,
+                      name: li.serviceName ?? li.serviceId ?? "Service",
+                      description: li.invoiceDesc ?? "",
+                      qty: li.qty,
+                      rateCents: li.rateCents,
+                      totalCents: li.totalCents,
+                      discountCents: li.discountCents,
+                      discountType: li.discountType,
+                      discountValue: li.discountValue,
+                      isTaxable,
+                    }));
+
+                  // Derive the header from the lines actually being written,
+                  // using the same arithmetic the invoice recalc uses
+                  // (deleteInvoiceLineItemAndRecalc / useUpdateInvoiceFinancials),
+                  // rather than copying the estimate's own rollups. Copying them
+                  // produced an invoice whose stored header disagreed with its
+                  // own lines, so the first edit "recalculated" the client's
+                  // total to a different number.
+                  //
+                  // Note: estimate subitem revenue is not carried onto the
+                  // invoice (there are no subitem rows in any org today). If
+                  // subitems ever ship, they need their own invoice lines here —
+                  // otherwise this subtotal would under-bill them.
+                  const netLine = (li: { totalCents: number; discountCents?: number }) =>
+                    li.totalCents - (li.discountCents ?? 0);
+                  const subtotalCents = invoiceLines.reduce((s, li) => s + netLine(li), 0);
+                  const discountCents = Math.max(0, Math.min(estimate.discountCents ?? 0, subtotalCents));
+                  const taxableBase = Math.max(0, (isTaxable ? subtotalCents : 0) - discountCents);
+                  const taxCents = Math.round((taxableBase * taxRateBps) / 10000);
+                  const totalCents = subtotalCents - discountCents + taxCents;
+
+                  const invoice = await createInvoice({
+                    estimateId: estimate.id,
+                    clientId: estimate.clientId,
+                    salesRepId: estimate.salesRepId,
+                    description: estimate.description ?? `Invoice for estimate #${estimate.estimateNumber}`,
+                    invoiceDate: today,
+                    lineItems: invoiceLines,
+                    subtotalCents,
+                    discountCents,
+                    discountType: estimate.discountType,
+                    discountValue: estimate.discountValue,
+                    taxRateBps,
+                    taxCents,
+                    totalCents,
+                  });
+                  try {
+                    await updateStage({ id: estimate.id, stage: "invoiced" });
+                  } catch {
+                    // The invoice exists; a failed stage move must not read as a
+                    // failed invoice (a retry would be blocked as a duplicate).
+                    toast.warning("Invoice created, but the estimate stage could not be updated");
+                  }
+                  toast.success("Invoice created");
+                  router.push(`/crm/accounting/invoices/${invoice.id}`);
+                } catch (err) {
+                  toast.error(mutationErrorMessage(err, err instanceof Error && err.message ? err.message : "Failed to create invoice"));
                 }
-                toast.success("Invoice created");
-                router.push(`/crm/accounting/invoices/${invoice.id}`);
-              } catch (err) {
-                toast.error(err instanceof Error && err.message ? err.message : "Failed to create invoice");
-              }
-            }}
-          >
-            <Receipt className="mr-1 h-3.5 w-3.5 text-teal-500 dark:text-teal-400" />
-            {creatingInvoice ? "Creating…" : "Invoice"}
-          </Button>
+              }}
+            >
+              <Receipt className="mr-1 h-3.5 w-3.5 text-teal-500 dark:text-teal-400" />
+              {creatingInvoice ? "Creating…" : "Invoice"}
+            </Button>
+          )}
           <div className="ml-1 h-5 w-px bg-slate-200 dark:bg-neutral-700" />
           <Button
             variant="outline"
@@ -1713,8 +1716,8 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                       // they've all settled (same as the AI-draft path).
                       await refreshEstimateTotals();
                       toast.success(`Applied bundle "${tpl.name}"`);
-                    } catch {
-                      toast.error("Failed to apply template");
+                    } catch (err) {
+                      toast.error(mutationErrorMessage(err, "Failed to apply template"));
                     } finally {
                       setSaving(false);
                     }
@@ -2074,7 +2077,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             // job with a second set of visits and its own auto-invoice stream.
             // The header button already swaps to "View Job" in this case; this
             // was the path around it.
-            if (stage === "accepted" && (estimateJobs.length === 0 || canConvertMore)) setConvertDialogOpen(true);
+            if (stage === "accepted" && can("job_add") && (estimateJobs.length === 0 || canConvertMore)) setConvertDialogOpen(true);
           }}
           onCancel={() => setWonLostDialog(null)}
         />
