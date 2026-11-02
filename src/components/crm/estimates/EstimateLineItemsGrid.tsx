@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState, useCallback, useEffect } from "react";
+import { fetchClientAreaValues, fetchPropertyAreaValues } from "@/lib/chemical-area";
 import { cn, formatCurrency } from "@/lib/utils";
 import { bpsToPercent, centsToDisplay, clampComplexityBps, computeLineItem, getBreakevenRateCents, resolveLineDiscountCents } from "@/lib/estimate-calc";
 import { useUpsertLineItem, useDeleteLineItem } from "@/lib/hooks/use-estimates";
@@ -1153,7 +1154,7 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     let matrixProductionRate: number | null = null;
     // A package service carries its own per-visit price (lockRate), which the
     // Rate Matrix must not silently replace.
-    if (svc.id && propertyId && !svc.lockRate) {
+    if (svc.id && (propertyId || clientId) && !svc.lockRate) {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: matrixRows } = await (supabase as any)
@@ -1175,15 +1176,15 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       // just narrowing it.
       let propertyValue: number | null = null;
       if (customFieldId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: fieldValueRow } = await (supabase as any)
-          .from("crm_property_custom_field_values")
-          .select("value_number")
-          .eq("property_id", propertyId)
-          .eq("field_def_id", customFieldId)
-          .maybeSingle();
-        const raw = (fieldValueRow as { value_number: number | null } | null)?.value_number;
-        propertyValue = raw != null ? Number(raw) : null;
+        // The property's own value first (a custom value, or the built-in Turf Sq. Ft.
+        // column behind it), then the client's own figure — the estimate may be for the
+        // client's address with no property chosen, and that's where its measurements live.
+        if (propertyId) {
+          propertyValue = (await fetchPropertyAreaValues(supabase, customFieldId, [propertyId])).get(propertyId) ?? null;
+        }
+        if (propertyValue == null && clientId) {
+          propertyValue = (await fetchClientAreaValues(supabase, customFieldId, [clientId])).get(clientId) ?? null;
+        }
       }
       if (rows.length > 0 && propertyValue != null) {
         const mapped: RateMatrixRow[] = rows.map((r) => ({

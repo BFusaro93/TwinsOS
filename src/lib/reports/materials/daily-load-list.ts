@@ -3,7 +3,7 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { calcChemicalAndSolution, createQuantityAccumulator } from "@/lib/chemical-mix-calc";
 import type { QuantityAccumulator } from "@/lib/chemical-mix-calc";
 import { embeddedOne, formatStopAddress, resolveStopAddress } from "@/lib/utils/stop-address";
-import { effectivePropertyId, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
+import { effectivePropertyId, fetchClientAreaValues, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
 
 // ============================================================
@@ -152,6 +152,10 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     .select("area_custom_field_id")
     .maybeSingle();
   const areaFieldId = settings?.area_custom_field_id ?? null;
+  const { data: areaDef } = areaFieldId
+    ? await supabase.from("crm_rate_matrix_field_defs").select("field_label").eq("id", areaFieldId).maybeSingle()
+    : { data: null };
+  const areaFieldName = (areaDef as { field_label?: string } | null)?.field_label ?? null;
   if (!areaFieldId) {
     notes.push(
       "Set an Area Custom Field under Settings > Chemical Tracking to estimate concentrate quantities for visits without an entered application record."
@@ -297,6 +301,14 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     ...new Set(liveVisits.map((v) => (v.crm_jobs ? jobPropertyId(v.crm_jobs) : null)).filter(Boolean) as string[]),
   ]);
 
+  // A job with no property chosen is for the client's own address, so the client's
+  // measurements stand in when no property row supplies a value.
+  const areaValueByClient = await fetchClientAreaValues(
+    supabase,
+    areaFieldId,
+    liveVisits.filter((v) => v.crm_jobs && !v.crm_jobs.property_id).map((v) => v.crm_jobs?.client_id ?? "")
+  );
+
   // ── already-entered application records for these visits (preferred over estimate) ──
   //
   // An entered record stores its own unit_of_measure_id / solution_unit_of_measure_id,
@@ -358,6 +370,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
     entered: boolean;
   }
   const demandByKey = new Map<string, ChemDemand>();
+  const skippedReasons = new Set<string>();
 
   const jobCrewIds = new Map<string, Set<string | null>>();
   const jobMetaMap = new Map<string, { clientName: string; address: string | null }>();
@@ -405,8 +418,20 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
 
         const rate = defaultRateByProduct.get(pid);
         const propertyId = jobPropertyId(job);
-        const areaValue = propertyId ? areaValueByProperty.get(propertyId) : undefined;
-        if (!rate || areaValue == null) continue;
+        const areaValue =
+          (propertyId ? areaValueByProperty.get(propertyId) : undefined) ??
+          (!job.property_id && job.client_id ? areaValueByClient.get(job.client_id) : undefined);
+        if (!rate || areaValue == null) {
+          // Say why instead of silently leaving the stop off the truck list.
+          const who = clientName;
+          const what = chemProductName.get(pid) ?? "a chemical";
+          skippedReasons.add(
+            !rate
+              ? `${who}: ${what} has no default Application Rate, so no amount could be estimated.`
+              : `${who}: no ${areaFieldName ?? "area"} value on the ${job.property_id ? "job's property" : "client record or its property"}, so ${what} could not be estimated. Enter it there or record the application.`
+          );
+          continue;
+        }
         // Resolved per-visit, not summed-then-converted — which of
         // chemical/solution is the rate's "primary" number depends on the
         // rate's own configured unit (see calcChemicalAndSolution).
@@ -635,6 +660,7 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
       "Some chemicals couldn't be totalled because their stops don't share a unit — those rows show the reason instead of a quantity."
     );
   }
+  for (const reason of skippedReasons) notes.push(`Left out of the estimate — ${reason}`);
   if (crews.length === 0) {
     notes.push("No outstanding visits with chemical or material demand are scheduled for this date.");
   }

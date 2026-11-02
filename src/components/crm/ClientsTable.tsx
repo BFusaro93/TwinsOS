@@ -498,7 +498,7 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
               <SlidersHorizontal className="h-3.5 w-3.5" />
               Filters
               {activeFilterCount > 0 && (
-                <Badge className="ml-0.5 h-4 min-w-4 rounded-full px-1 text-[10px]">{activeFilterCount}</Badge>
+                <Badge className="hover:bg-primary ml-0.5 h-4 min-w-4 rounded-full px-1 text-[10px]">{activeFilterCount}</Badge>
               )}
             </Button>
           </PopoverTrigger>

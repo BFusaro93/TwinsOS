@@ -106,9 +106,9 @@ const SECTIONS: ReportSection[] = [
       },
       {
         name: "Planned Chemical Usage Report",
-        description: "Chemical quantities needed for scheduled and dispatched (not-yet-started) visits — use to load the truck before the day's chemical jobs.",
+        description: "Chemical quantities needed for upcoming visits (estimated from the Application Rate and property area when nothing is recorded yet) — use to load the truck before the day's chemical jobs.",
         filters: "Scheduled Between",
-        notes: ["Includes visits in Scheduled or Dispatched status only; in-progress and completed visits are excluded."],
+        notes: ["Counts Scheduled, Dispatched and In Progress visits. Uses the visit's saved chemical record when it has one; otherwise the product's default Application Rate x the property's Area field (set under Settings > Chemical Tracking). The product must be attached to the service under Services > Chemicals."],
       },
       {
         name: "Materials Needed for Upcoming Jobs",

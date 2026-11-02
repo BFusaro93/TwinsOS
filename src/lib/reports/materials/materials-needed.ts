@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { calcChemicalAndSolution, convertQuantity } from "@/lib/chemical-mix-calc";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
-import { fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
+import { fetchClientAreaValues, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRateRow(row: any): ChemicalApplicationRate {
@@ -293,9 +293,16 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     supabase,
     allDemand.filter((d) => !d.propertyId).map((d) => d.clientId ?? "")
   );
+  // Jobs for the client's own address (no property chosen) can use the client's measurements.
+  const ownAddressJobIds = new Set(allDemand.filter((d) => !d.propertyId).map((d) => d.jobId));
   for (const d of allDemand) {
     if (!d.propertyId && d.clientId) d.propertyId = singlePropertyByClient.get(d.clientId) ?? null;
   }
+  const areaValueByClient = await fetchClientAreaValues(
+    supabase,
+    areaFieldId,
+    allDemand.filter((d) => ownAddressJobIds.has(d.jobId)).map((d) => d.clientId ?? "")
+  );
   const areaValueByProperty = await fetchPropertyAreaValues(supabase, areaFieldId, [
     ...new Set(allDemand.map((d) => d.propertyId).filter(Boolean) as string[]),
   ]);
@@ -498,7 +505,9 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     let unitMismatchJobs = 0;
     let unestimatedJobs = 0;
     for (const d of demand) {
-      const areaValue = d.propertyId ? areaValueByProperty.get(d.propertyId) : undefined;
+      const areaValue =
+        (d.propertyId ? areaValueByProperty.get(d.propertyId) : undefined) ??
+        (ownAddressJobIds.has(d.jobId) && d.clientId ? areaValueByClient.get(d.clientId) : undefined);
       perJobMeta.set(d.jobId, { jobName: d.jobName, neededBy: d.neededBy });
       nextNeededBy = earliest(nextNeededBy, d.neededBy);
 

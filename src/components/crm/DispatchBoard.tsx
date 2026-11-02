@@ -19,6 +19,21 @@ import {
 } from "@/lib/hooks/use-crm-jobs";
 import { useCreateInvoiceFromJob, useInvoiceForVisit } from "@/lib/hooks/use-invoices";
 import { useOrgTags, useClient } from "@/lib/hooks/use-clients";
+import { BulkTagDialog } from "@/components/crm/BulkTagDialog";
+import {
+  useDispatchSavedViews,
+  useCreateDispatchSavedView,
+  useUpdateDispatchSavedView,
+  useDeleteDispatchSavedView,
+  type DispatchViewFilters,
+  type DispatchSavedView,
+} from "@/lib/hooks/use-dispatch-saved-views";
+import {
+  DISPATCH_DATE_PRESETS,
+  isDispatchDateMode,
+  resolveDispatchDateMode,
+  type DispatchDateMode,
+} from "@/lib/utils/dispatch-date-presets";
 // Property-scoped defs, NOT the client-level ones: the property values these
 // columns render come from crm_property_custom_field_values, which keys off
 // crm_rate_matrix_field_defs. Reading the client-level def table here is what
@@ -54,6 +69,7 @@ import { instantToZoneWallClock, shiftYmd, zoneWallClockToInstant } from "@/lib/
 import { VisitCrewsSection } from "@/components/crm/dispatch/VisitCrewsSection";
 import { allocateStopHours, computeActualHours, computeBudgetedHours } from "@/lib/utils/visit-hours";
 import { printRouteSheets } from "@/lib/print";
+import { printChemicalRouteSheets } from "@/lib/chemical/route-sheet";
 import { toast } from "sonner";
 import {
   Calendar,
@@ -86,8 +102,11 @@ import {
   Mail,
   MoreHorizontal,
   TriangleAlert,
+  Bookmark,
+  CircleHelp,
 } from "lucide-react";
 import { ChemicalTrackingWizard } from "@/components/crm/chemical/ChemicalTrackingWizard";
+import { BulkSendChemicalNoticesDialog } from "@/components/crm/chemical/BulkSendChemicalNoticesDialog";
 import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
 import { JobAssetsSection } from "@/components/crm/jobs/JobAssetsSection";
 import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog";
@@ -339,10 +358,175 @@ function VisitOutcomeReasonDialog({
   );
 }
 
-function StatusCycleButton({ visit, isDriving }: { visit: CRMJobVisit; isDriving?: boolean }) {
+/** Every icon/badge the board renders, for the Show Legend dialog. The status
+ *  icons come from VisitStatusIcon itself so they can't drift from the rows. */
+function DispatchLegendDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const statusRows: { icon: React.ReactNode; label: string }[] = [
+    { icon: <VisitStatusIcon status="scheduled" />,   label: "Scheduled" },
+    { icon: <VisitStatusIcon status="dispatched" />,  label: "Dispatched — sent to the crew's phone" },
+    { icon: <VisitStatusIcon status="in_progress" />, label: "In progress — crew is on site" },
+    { icon: <Car className="h-4 w-4 text-blue-500 dark:text-blue-400" />, label: "Driving — crew is on the way to this stop" },
+    { icon: <VisitStatusIcon status="completed" />,   label: "Completed" },
+    { icon: <VisitStatusIcon status="cancelled" />,   label: "Cancelled" },
+    { icon: <VisitStatusIcon status="skipped" />,     label: "Skipped" },
+  ];
+  const iconRows: { icon: React.ReactNode; label: string }[] = [
+    { icon: <Flame className="h-4 w-4 text-red-500 dark:text-red-400" />, label: "High priority" },
+    { icon: <StickyNote className="h-4 w-4 text-amber-400" />, label: "Note to crew" },
+    { icon: <MessageSquareText className="h-4 w-4 text-blue-400" />, label: "Job comments" },
+    { icon: <Package className="h-4 w-4 text-purple-500 dark:text-purple-400" />, label: "Service has a linked product" },
+    { icon: <Phone className="h-4 w-4 text-slate-400" />, label: "Call ahead — tap to call the client" },
+    { icon: <TriangleAlert className="h-4 w-4 text-amber-500 dark:text-amber-400" />, label: "Punch mismatch — crew punches disagree with the visit's Start/End or hours" },
+    {
+      icon: <span className="rounded bg-violet-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">Lead</span>,
+      label: "Shared stop, lead crew — bills the stop (the other crew shows Shared)",
+    },
+    { icon: <Clock className="h-4 w-4 text-slate-400" />, label: "Edit job times — per-crew-member punches" },
+  ];
+  const section = (title: string, rows: { icon: React.ReactNode; label: string }[]) => (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-1.5">{title}</p>
+      <ul className="space-y-1.5">
+        {rows.map((r) => (
+          <li key={r.label} className="flex items-center gap-2.5 text-xs">
+            <span className="flex w-10 shrink-0 items-center justify-center">{r.icon}</span>
+            <span>{r.label}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Dispatch Board Legend</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          {section("Status (St column)", statusRows)}
+          {section("Row icons", iconRows)}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * The St icon's popover: status list on top (unchanged behavior, applies on
+ * click), then SA-style quick edits — Date, Start/End and Assign to — that
+ * apply together on one Save, and only the fields that changed. Mounted only
+ * while the popover is open so closed rows don't each load the crew list.
+ */
+function VisitQuickEditFields({
+  visit,
+  onSaveTime,
+  onDone,
+}: {
+  visit: CRMJobVisit;
+  /** The row's own Start/End save (moves punches + sibling visits of the stop). */
+  onSaveTime: (field: "start_time" | "end_time", value: string) => Promise<void>;
+  onDone: () => void;
+}) {
+  const { data: crews } = useCRMCrews();
+  const updateVisit = useUpdateVisit();
+  const { isAdmin } = usePermissions();
+  const [confirm, confirmDialog] = useConfirm();
+  const startInit = (visit.startTime ?? "").slice(0, 5);
+  const endInit = (visit.endTime ?? "").slice(0, 5);
+  const crewInit = effectiveCrewId(visit) ?? "";
+  const [date, setDate] = useState(visit.scheduledDate);
+  const [start, setStart] = useState(startInit);
+  const [end, setEnd] = useState(endInit);
+  const [crew, setCrew] = useState(crewInit);
+  const [saving, setSaving] = useState(false);
+
+  const dateChanged = !!date && date !== visit.scheduledDate;
+  const startChanged = start !== startInit;
+  const endChanged = end !== endInit;
+  const crewChanged = crew !== crewInit;
+  const dirty = dateChanged || startChanged || endChanged || crewChanged;
+  const completed = visit.status === "completed";
+
+  async function save() {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      toast.error("Enter a valid date");
+      return;
+    }
+    setSaving(true);
+    try {
+      // Same endpoint as Actions → Move to Day (package min-days rule,
+      // invoiced-visit lock).
+      if (dateChanged) {
+        const r = await postBulkVisitUpdate({ ids: [visit.id], updates: { scheduled_date: date } }, { isAdmin, confirm });
+        if (!r) return;
+      }
+      // A finished visit keeps the crew that did the work.
+      if (crewChanged && !completed) {
+        await updateVisit.mutateAsync({
+          id: visit.id,
+          updates: crew ? { crew_id: crew } : { crew_id: null, crew_unassigned: true },
+          jobId: visit.jobId,
+        });
+      }
+      if (startChanged) await onSaveTime("start_time", start);
+      if (endChanged) await onSaveTime("end_time", end);
+      toast.success("Saved");
+      onDone();
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const labelCls = "block text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 mb-0.5";
+  return (
+    <div className="border-t mt-1 pt-2 px-1 space-y-2">
+      {confirmDialog}
+      <div>
+        <label className={labelCls}>Date</label>
+        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-8 text-xs md:text-xs" />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className={labelCls}>Start</label>
+          <Input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="h-8 text-xs md:text-xs" />
+        </div>
+        <div>
+          <label className={labelCls}>End</label>
+          <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="h-8 text-xs md:text-xs" />
+        </div>
+      </div>
+      <div>
+        <label className={labelCls}>Assign to</label>
+        <Select value={crew || "none"} onValueChange={(v) => setCrew(v === "none" ? "" : v)} disabled={completed}>
+          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none" className="text-xs">Unassigned</SelectItem>
+            {(crews ?? []).map((c) => <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex justify-end pb-1">
+        <Button size="sm" className="h-7 text-xs bg-brand-500 hover:bg-brand-600 text-white" disabled={!dirty || saving} onClick={() => void save()}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StatusCycleButton({
+  visit,
+  isDriving,
+  onSaveTime,
+}: {
+  visit: CRMJobVisit;
+  isDriving?: boolean;
+  onSaveTime: (field: "start_time" | "end_time", value: string) => Promise<void>;
+}) {
   const { mutateAsync: updateStatus, isPending } = useUpdateVisitStatus();
   // Skipped / Cancelled go through the reason prompt first (D-10).
   const [pendingOutcome, setPendingOutcome] = useState<OutcomeStatus | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Explicit status menu instead of a one-click cycle: a stray click on the
   // icon used to flip a visit straight to Dispatched (firing the
@@ -370,8 +554,8 @@ function StatusCycleButton({ visit, isDriving }: { visit: CRMJobVisit; isDriving
       onConfirm={(reason) => { if (pendingOutcome) void setStatus(pendingOutcome, reason); }}
       onCancel={() => setPendingOutcome(null)}
     />
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+    <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+      <PopoverTrigger asChild>
         <button
           onClick={(e) => e.stopPropagation()}
           disabled={isPending}
@@ -380,21 +564,26 @@ function StatusCycleButton({ visit, isDriving }: { visit: CRMJobVisit; isDriving
         >
           {isDriving ? <Car className="h-4 w-4 text-blue-500 dark:text-blue-400" /> : <VisitStatusIcon status={visit.status} />}
         </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-40" onClick={(e) => e.stopPropagation()}>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-56 p-1" onClick={(e) => e.stopPropagation()}>
         {STATUS_OPTIONS.map((opt) => (
-          <DropdownMenuItem
+          <button
             key={opt.value}
-            className={cn("text-xs gap-2", opt.value === visit.status && "font-semibold")}
+            type="button"
+            className={cn(
+              "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60 disabled:opacity-50 disabled:hover:bg-transparent",
+              opt.value === visit.status && "font-semibold"
+            )}
             disabled={opt.value === visit.status}
-            onSelect={() => void setStatus(opt.value)}
+            onClick={() => { setMenuOpen(false); void setStatus(opt.value); }}
           >
             <VisitStatusIcon status={opt.value} />
             {opt.label}
-          </DropdownMenuItem>
+          </button>
         ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        {menuOpen && <VisitQuickEditFields visit={visit} onSaveTime={onSaveTime} onDone={() => setMenuOpen(false)} />}
+      </PopoverContent>
+    </Popover>
     </>
   );
 }
@@ -453,6 +642,14 @@ function visitServiceLabel(visit: CRMJobVisit, serviceCodeById: Map<string, stri
   return linkedService
     ? codeOrName(linkedService)
     : services.length > 0 ? services.map(codeOrName).join(", ") : "";
+}
+
+/** Service names a printed sheet should list for this visit: just the linked step
+ *  when the visit covers one step of a package, otherwise every service on the job. */
+function visitServiceNames(visit: CRMJobVisit): string {
+  const services = visit.job?.services ?? [];
+  const linked = visit.jobServiceId ? services.find((s) => s.id === visit.jobServiceId) : null;
+  return (linked ? [linked] : services).map((s) => s.serviceName).join(", ");
 }
 
 function formatSqft(n: number | null | undefined): string {
@@ -620,6 +817,17 @@ function JobDetailSheet({
   // not every step on the whole package.
   const linkedService = visit.jobServiceId ? services.find((s) => s.id === visit.jobServiceId) : null;
   const { data: jobProducts = [] } = useCRMJobProducts(visit.jobId);
+  // Billing mode comes from each covered service's catalog entry (flat rate /
+  // hourly / per unit) — a mixed job lists each distinct mode.
+  const { data: catalogServices } = useCRMServices();
+  const billingModeLabel = (() => {
+    const modes = new Set<string>();
+    for (const s of linkedService ? [linkedService] : services) {
+      const mode = catalogServices?.find((c) => c.id === s.serviceId)?.serviceMode;
+      if (mode) modes.add(mode === "hourly" ? "Hourly" : mode === "per_unit" ? "Per Unit" : "Flat Rate");
+    }
+    return modes.size > 0 ? [...modes].join(", ") : "—";
+  })();
   const serviceName = linkedService
     ? linkedService.serviceName
     : services.length > 0
@@ -1589,7 +1797,7 @@ function JobDetailSheet({
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-muted-foreground">Billing Mode</span>
-                  <span className="text-[11px] font-medium text-slate-700 dark:text-neutral-300">Flat Rate</span>
+                  <span className="text-[11px] font-medium text-slate-700 dark:text-neutral-300">{billingModeLabel}</span>
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
@@ -1756,14 +1964,18 @@ const VISIT_STATUS_LABELS: Record<string, string> = {
 };
 
 function PrintDialog({
-  open, onOpenChange, visits, crews, selectedDate,
+  open, onOpenChange, visits, crews, selectedDate, chemicalServiceIds,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   visits: CRMJobVisit[];
   crews: { id: string; name: string }[];
   selectedDate: string;
+  chemicalServiceIds: Set<string>;
 }) {
+  const chemicalVisitIds = visits
+    .filter((v) => (v.job?.services ?? []).some((s) => s.serviceId && chemicalServiceIds.has(s.serviceId)))
+    .map((v) => v.id);
   const [format, setFormat] = useState<"compact" | "detailed">("detailed");
   const { data: richCrews } = useCrews(false);
   const rosterByCrewId = new Map((richCrews ?? []).map((c) => [c.id, c.members ?? []]));
@@ -1798,7 +2010,7 @@ function PrintDialog({
         <tbody>
           {cv.map((v, i) => {
             const job = v.job;
-            const svc = (job?.services ?? []).map((s) => s.serviceName).join(", ");
+            const svc = visitServiceNames(v);
             const addr = [job?.serviceAddress, job?.serviceCity].filter(Boolean).join(", ");
             return (
               <tr key={v.id} className="border-b border-border">
@@ -1857,7 +2069,7 @@ function PrintDialog({
 
   function renderJobCard(v: CRMJobVisit, i: number) {
     const job = v.job;
-    const svc = (job?.services ?? []).map((s) => s.serviceName).join(", ");
+    const svc = visitServiceNames(v);
     const addr = [job?.serviceAddress, [job?.serviceCity, job?.serviceZip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
     const title = [v.clientName, addr].filter(Boolean).join(" - ");
     const notes = crewNotesFor(v);
@@ -1977,6 +2189,17 @@ function PrintDialog({
           <p className="text-[11px] text-slate-400 dark:text-neutral-500">Opens your browser&apos;s print dialog in a new window</p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>Close</Button>
+            {chemicalVisitIds.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => printChemicalRouteSheets({ visitIds: chemicalVisitIds, dateLabel })}
+              >
+                <Printer className="mr-1.5 h-3.5 w-3.5" />
+                Chemical sheets ({chemicalVisitIds.length})
+              </Button>
+            )}
             <Button
               size="sm"
               className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white"
@@ -3249,7 +3472,7 @@ function VisitRow({
 
       {/* St */}
       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
-        <StatusCycleButton visit={visit} isDriving={isDrivingToThis} />
+        <StatusCycleButton visit={visit} isDriving={isDrivingToThis} onSaveTime={saveVisitTime} />
       </td>
 
       {/* Client (+ address below, like the Jobs screen — City/Zip stay in
@@ -3811,6 +4034,9 @@ export function DispatchBoard() {
     urlRouter.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }, [selectedDate, searchParams, pathname, urlRouter, orgToday]);
   const [endDate,         setEndDate]         = useState("");
+  // Which relative range preset (if any) set the From/To dates — saved views
+  // store this instead of absolute dates. Cleared on any manual date edit.
+  const [dateMode,        setDateMode]        = useState<DispatchDateMode | null>(null);
   const [crewFilters,     setCrewFilters]     = useState<string[]>([]);
   const [tagFilters,      setTagFilters]       = useState<string[]>([]);
   // Values are "job_high" (the new high-priority job/visit flag) plus the
@@ -3833,6 +4059,9 @@ export function DispatchBoard() {
   const [bulkOutcome,     setBulkOutcome]     = useState<OutcomeStatus | null>(null);
   const [bulkOutcomePending, setBulkOutcomePending] = useState(false);
   const [bulkEmailOpen,   setBulkEmailOpen]   = useState(false);
+  const [bulkChemNoticeOpen, setBulkChemNoticeOpen] = useState(false);
+  const [bulkTagOpen,     setBulkTagOpen]     = useState(false);
+  const [legendOpen,      setLegendOpen]      = useState(false);
   const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
   const [colFilterValue,  setColFilterValue]  = useState("");
   // Service filter is multi-select (unlike the other Select-a-Filter text
@@ -4208,6 +4437,106 @@ export function DispatchBoard() {
 
   function isVisible(col: string) { return visibleKeys.includes(col); }
 
+  /** Quick From/To ranges (Today, Next 7 days, This week…) in the org's day. */
+  function applyDatePreset(mode: DispatchDateMode) {
+    const r = resolveDispatchDateMode(mode, orgToday(), weekdayOfDate);
+    setSelectedDate(r.from);
+    setEndDate(r.to);
+    setDateMode(mode);
+    clearPendingOrder();
+  }
+
+  // ── saved screen views ─────────────────────────────────────────────────────
+  const { data: savedViews = [] } = useDispatchSavedViews();
+  const createSavedView = useCreateDispatchSavedView();
+  const updateSavedView = useUpdateDispatchSavedView();
+  const deleteSavedView = useDeleteDispatchSavedView();
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [saveViewOpen, setSaveViewOpen] = useState(false);
+  const [saveViewName, setSaveViewName] = useState("");
+  const activeView = savedViews.find((v) => v.id === activeViewId) ?? null;
+
+  function captureViewFilters(): DispatchViewFilters {
+    return {
+      serviceFilters, crewFilters, tagFilters, priorityFilters, statusFilter, search,
+      colFilterKey, colFilterValue, visibleKeys, dateMode,
+    };
+  }
+
+  function applySavedView(view: DispatchSavedView) {
+    const f = view.filters;
+    setServiceFilters(f.serviceFilters ?? []);
+    setCrewFilters(f.crewFilters ?? []);
+    setTagFilters(f.tagFilters ?? []);
+    setPriorityFilters(f.priorityFilters ?? []);
+    setStatusFilter(FILTER_TABS.some((t) => t.value === f.statusFilter) ? (f.statusFilter as FilterTab) : "all");
+    setSearch(f.search ?? "");
+    setColFilterKey(f.colFilterKey ?? null);
+    setColFilterValue(f.colFilterValue ?? "");
+    // Only keys this board still knows — a column removed since the view was saved is dropped.
+    if (f.visibleKeys) {
+      const known = new Set(allColumnDefs.map((d) => d.key));
+      setVisibleKeys(f.visibleKeys.filter((k) => known.has(k)));
+    }
+    // Dates are a relative preset, so a view saved as "Next 7 days" always
+    // means the next 7 days from today. A view without one leaves the dates alone.
+    if (isDispatchDateMode(f.dateMode)) applyDatePreset(f.dateMode);
+    setSelectedIds(new Set());
+    setActiveViewId(view.id);
+  }
+
+  async function handleSaveNewView() {
+    const name = saveViewName.trim();
+    if (!name) return;
+    try {
+      const created = await createSavedView.mutateAsync({ name, filters: captureViewFilters() });
+      setActiveViewId(created.id);
+      setSaveViewOpen(false);
+      setSaveViewName("");
+      toast.success(`Saved view "${name}"`);
+    } catch (err) {
+      const duplicate = typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
+      toast.error(duplicate ? "You already have a view with that name" : "Failed to save view");
+    }
+  }
+
+  async function handleUpdateView() {
+    if (!activeView) return;
+    try {
+      await updateSavedView.mutateAsync({ id: activeView.id, filters: captureViewFilters() });
+      toast.success(`Updated view "${activeView.name}"`);
+    } catch {
+      toast.error("Failed to update view");
+    }
+  }
+
+  async function handleDeleteView(view: DispatchSavedView) {
+    try {
+      await deleteSavedView.mutateAsync(view.id);
+      if (activeViewId === view.id) setActiveViewId(null);
+    } catch {
+      toast.error("Failed to delete view");
+    }
+  }
+
+  // Alt+C → mark the selected visits Completed, same path as Actions → Change
+  // Status → Completed. Latest closure kept in a ref so the listener is bound once.
+  const altCompleteRef = useRef<() => void>(() => {});
+  altCompleteRef.current = () => {
+    if (selectedIds.size > 0) void applyBulkStatus("completed");
+  };
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.code !== "KeyC") return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
+      e.preventDefault();
+      altCompleteRef.current();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   /** See effectiveCrewId at the top of this file. */
   const effectiveCrewIdOf = effectiveCrewId;
 
@@ -4340,6 +4669,10 @@ export function DispatchBoard() {
           return 0;
         });
       })();
+
+  const selectedChemicalVisits = displayVisits.filter(
+    (v) => selectedIds.has(v.id) && (v.job?.services ?? []).some((s) => s.serviceId && chemicalServiceIds.has(s.serviceId))
+  );
 
   // Order numbers and drag/drop reordering are scoped per crew — each crew
   // runs its own separate route, so "#3" should mean the 3rd stop for THAT
@@ -4731,32 +5064,47 @@ export function DispatchBoard() {
           override the box renders at 14px text and clips the native
           calendar-picker icon off the right edge at desktop widths. */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 shrink-0">
-        <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); clearPendingOrder(); }} />
+        <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); setDateMode(null); clearPendingOrder(); }} />
 
         <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground ml-1">
           <span className="font-medium">From</span>
           <Input
             type="date"
             value={selectedDate}
-            onChange={(e) => { setSelectedDate(e.target.value); clearPendingOrder(); }}
+            onChange={(e) => { setSelectedDate(e.target.value); setDateMode(null); clearPendingOrder(); }}
             className="h-7 max-lg:h-10 w-36 max-lg:w-44 px-2 text-xs md:text-xs"
           />
           <span className="font-medium">To</span>
           <Input
             type="date"
             value={endDate}
-            onChange={(e) => { setEndDate(e.target.value); clearPendingOrder(); }}
+            onChange={(e) => { setEndDate(e.target.value); setDateMode(null); clearPendingOrder(); }}
             className="h-7 max-lg:h-10 w-36 max-lg:w-44 px-2 text-xs md:text-xs"
           />
           {endDate && (
             <button
               className="text-slate-400 dark:text-neutral-500 hover:text-slate-700 dark:hover:text-neutral-300"
-              onClick={() => { setEndDate(""); clearPendingOrder(); }}
+              onClick={() => { setEndDate(""); setDateMode(null); clearPendingOrder(); }}
               title="Clear end date"
             >
               <XIcon className="h-3.5 w-3.5" />
             </button>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="h-7 max-lg:h-10 flex items-center gap-1 rounded border bg-card px-2 text-xs text-slate-600 dark:text-neutral-300 hover:bg-slate-50 dark:hover:bg-muted/40">
+                {DISPATCH_DATE_PRESETS.find((p) => p.value === dateMode)?.label ?? "Quick range"}
+                <ChevronDown className="h-3 w-3 opacity-60" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-40">
+              {DISPATCH_DATE_PRESETS.map((p) => (
+                <DropdownMenuItem key={p.value} className="text-xs" onSelect={() => applyDatePreset(p.value)}>
+                  {p.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <div className="ml-auto flex max-w-full flex-wrap items-center gap-1.5 max-lg:w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:pb-1 max-lg:[&>*]:shrink-0">
@@ -5047,6 +5395,71 @@ export function DispatchBoard() {
           <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
         </button>
 
+        {/* Saved screen views — named snapshots of the filters below */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors max-w-[160px]">
+              <Bookmark className="h-3 w-3 shrink-0" />
+              <span className="truncate">{activeView ? activeView.name : "Saved views"}</span>
+              <ChevronDown className="h-2.5 w-2.5 opacity-60 shrink-0" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-1" align="start">
+            {savedViews.length === 0 && (
+              <p className="px-2 py-1.5 text-[11px] text-slate-400 dark:text-neutral-500">No saved views yet</p>
+            )}
+            {savedViews.map((v) => (
+              <div
+                key={v.id}
+                className={cn(
+                  "group flex items-center gap-1 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60",
+                  v.id === activeViewId && "font-semibold bg-slate-50 dark:bg-muted/40"
+                )}
+              >
+                <button type="button" className="flex-1 truncate text-left" onClick={() => applySavedView(v)}>{v.name}</button>
+                <button
+                  type="button"
+                  title="Delete view"
+                  className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+                  onClick={() => void handleDeleteView(v)}
+                >
+                  <XIcon className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            <div className="my-1 border-t" />
+            {activeView && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60"
+                disabled={updateSavedView.isPending}
+                onClick={() => void handleUpdateView()}
+              >
+                <RefreshCw className="h-3 w-3 text-slate-400" />
+                Update &ldquo;{activeView.name}&rdquo; with current filters
+              </button>
+            )}
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60"
+              onClick={() => { setSaveViewName(""); setSaveViewOpen(true); }}
+            >
+              <Plus className="h-3 w-3 text-slate-400" />
+              Save current as view…
+            </button>
+            {activeView && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-muted/60"
+                onClick={() => setActiveViewId(null)}
+              >
+                <XIcon className="h-3 w-3 text-slate-400" />
+                Deselect view
+              </button>
+            )}
+          </PopoverContent>
+        </Popover>
+
         {/* Status filter tabs */}
         <div className="flex items-center max-lg:max-w-full max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:[&>*]:shrink-0 max-lg:[&>*]:whitespace-nowrap">
           {FILTER_TABS.map((t) => {
@@ -5314,6 +5727,26 @@ export function DispatchBoard() {
                 </DropdownMenuItem>
               )}
 
+              {/* Send Notices of Treatment — only offered when a selected visit is a chemical service */}
+              {can("chem_send_application_notice") && selectedChemicalVisits.length > 0 && (
+                <DropdownMenuItem
+                  className="text-xs"
+                  onSelect={() => setBulkChemNoticeOpen(true)}
+                >
+                  <FlaskConical className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
+                  Send Chemical Notices ({selectedChemicalVisits.length})
+                </DropdownMenuItem>
+              )}
+
+              {/* Add/Remove Tags — on the selected visits' clients */}
+              <DropdownMenuItem
+                className="text-xs"
+                onSelect={() => setBulkTagOpen(true)}
+              >
+                <Tag className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
+                Add / Remove Tags…
+              </DropdownMenuItem>
+
               <DropdownMenuSeparator />
 
               {/* Return to Waiting List — only when every selected visit
@@ -5403,8 +5836,16 @@ export function DispatchBoard() {
           inputClassName="h-7 max-lg:h-9 text-xs"
         />
 
-        {/* Columns selector — far right of dark bar */}
-        <div className="ml-auto">
+        {/* Legend + Columns selector — far right of dark bar */}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setLegendOpen(true)}
+            title="Show Legend"
+            className="h-7 max-lg:h-9 flex items-center gap-1.5 rounded bg-[#5a5a5a] border border-[#6a6a6a] px-2.5 text-[10px] text-slate-200 hover:text-white transition-colors"
+          >
+            <CircleHelp className="h-3 w-3" />
+            Legend
+          </button>
           <ColumnChooser
             columns={allColumnDefs}
             visibleKeys={visibleKeys}
@@ -5616,6 +6057,12 @@ export function DispatchBoard() {
         }}
         onCancel={() => setBulkOutcome(null)}
       />
+      <BulkSendChemicalNoticesDialog
+        open={bulkChemNoticeOpen}
+        onClose={() => setBulkChemNoticeOpen(false)}
+        visits={selectedChemicalVisits.map((v) => ({ id: v.id, clientName: v.clientName }))}
+        dateLabel={selectedDate}
+      />
       <BulkEmailClientsDialog
         open={bulkEmailOpen}
         onClose={() => setBulkEmailOpen(false)}
@@ -5644,6 +6091,48 @@ export function DispatchBoard() {
           stopVisits={stopVisitsFor(editTimesVisit, allVisits)}
         />
       )}
+
+      <DispatchLegendDialog open={legendOpen} onOpenChange={setLegendOpen} />
+
+      {/* Save current filters as a named view */}
+      <Dialog open={saveViewOpen} onOpenChange={setSaveViewOpen}>
+        <DialogContent className="max-w-xs p-5 gap-4">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Save View</DialogTitle>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={saveViewName}
+            onChange={(e) => setSaveViewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void handleSaveNewView(); }}
+            placeholder="View name"
+            maxLength={60}
+            className="h-8 text-sm"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Saves the status tab, crew/tag/priority/service filters, search, columns{dateMode ? " and the date range" : ""}.
+            {!dateMode && " Pick a Quick range first if you want the view to include dates."}
+          </p>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setSaveViewOpen(false)}>Cancel</Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-brand-500 hover:bg-brand-600 text-white"
+              disabled={!saveViewName.trim() || createSavedView.isPending}
+              onClick={() => void handleSaveNewView()}
+            >
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk add/remove client tags for the selected visits */}
+      <BulkTagDialog
+        open={bulkTagOpen}
+        onOpenChange={setBulkTagOpen}
+        clientIds={[...new Set(displayVisits.filter((v) => selectedIds.has(v.id) && v.clientId).map((v) => v.clientId as string))]}
+      />
 
       {/* Move to Day dialog */}
       <Dialog open={moveDayOpen} onOpenChange={setMoveDayOpen}>
@@ -5715,6 +6204,7 @@ export function DispatchBoard() {
         visits={displayVisits}
         crews={crews ?? []}
         selectedDate={selectedDate}
+        chemicalServiceIds={chemicalServiceIds}
       />
 
       {/* Chemical Tracking wizard — day close-out */}

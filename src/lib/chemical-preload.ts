@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calcChemicalAndSolution } from "@/lib/chemical-mix-calc";
-import { effectivePropertyId, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
+import { effectivePropertyId, fetchClientAreaValues, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -147,6 +147,10 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
     if (propertyId) {
       const values = await fetchPropertyAreaValues(supabase, settings.area_custom_field_id, [propertyId]);
       areaValue = values.get(propertyId) ?? null;
+    }
+    // A job for the client's own address (no property chosen) uses the client's measurements.
+    if (areaValue == null && !job.property_id && job.client_id) {
+      areaValue = (await fetchClientAreaValues(supabase, settings.area_custom_field_id, [job.client_id])).get(job.client_id) ?? null;
     }
   }
 

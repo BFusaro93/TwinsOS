@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
-import { effectivePropertyId, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
+import { effectivePropertyId, fetchClientAreaValues, fetchPropertyAreaValues, fetchSinglePropertyByClient } from "@/lib/chemical-area";
 import type {
   ChemicalApplication,
   ChemicalApplicationRate,
@@ -616,9 +616,16 @@ export function useChemicalJobAreaValue(jobId: string, areaFieldId: string | nul
       if (!job) return null;
       const single = job.property_id ? new Map<string, string>() : await fetchSinglePropertyByClient(supabase, [job.client_id ?? ""]);
       const propertyId = effectivePropertyId(job, single);
-      if (!propertyId) return null;
-      const values = await fetchPropertyAreaValues(supabase, areaFieldId ?? null, [propertyId]);
-      return values.get(propertyId) ?? null;
+      if (propertyId) {
+        const values = await fetchPropertyAreaValues(supabase, areaFieldId ?? null, [propertyId]);
+        const v = values.get(propertyId);
+        if (v != null) return v;
+      }
+      // No property supplied a value: a job for the client's own address uses the client's measurements.
+      if (!job.property_id && job.client_id) {
+        return (await fetchClientAreaValues(supabase, areaFieldId ?? null, [job.client_id])).get(job.client_id) ?? null;
+      }
+      return null;
     },
     enabled: !!jobId && !!areaFieldId,
   });

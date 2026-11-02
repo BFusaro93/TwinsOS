@@ -322,6 +322,21 @@ export function ClientsGuide() {
           the <strong>Details</strong> tab, with its unit after the value. Fields with no value are hidden.
         </p>
         <p>
+          <strong>Custom fields on a property.</strong> A client&apos;s custom field value is the default
+          for everything about that client. If a client has more than one property, open{" "}
+          <strong>Edit Property</strong> and use its <strong>Custom Fields</strong> section to give
+          that property its own value (for example two different mulch colors); leave a field blank
+          and the property uses the client&apos;s value. The same applies to the measurements above:
+          a property&apos;s own figure wins, otherwise the client&apos;s is used, so you never have to
+          create a property just to repeat what is already on the client.
+        </p>
+        <p>
+          <strong>Custom fields in pricing.</strong> A <em>number</em> custom field can be chosen as
+          the <strong>Lookup field</strong> of a service&apos;s Rate Matrix (Services &amp; Pricing),
+          and as the Area Custom Field under Settings &rarr; Chemical Tracking. The estimate uses the
+          property&apos;s own value when it has one and the client&apos;s value otherwise.
+        </p>
+        <p>
           Typed takeoffs are one combined number per client. Aerial Measurement is the only place
           that breaks measurements down zone by zone and property by property.
         </p>

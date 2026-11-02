@@ -64,6 +64,7 @@ const MERGE_TAGS = [
   { tag: "[servicedate]", label: "Last service date" },
   { tag: "[nextservicename]", label: "Next scheduled service" },
   { tag: "[nextservicedate]", label: "Next service date" },
+  { tag: "[chemicalnotice]", label: "Notice of Treatment (last completed visit's chemical record)" },
 ];
 
 export function EmailEventDialog({ open, onOpenChange, event }: Props) {

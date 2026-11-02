@@ -8,7 +8,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, FlaskConical } from "lucide-react";
+import { ChevronLeft, ChevronRight, FlaskConical, Mail, Printer } from "lucide-react";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { BulkSendChemicalNoticesDialog } from "./BulkSendChemicalNoticesDialog";
+import { printChemicalRouteSheets } from "@/lib/chemical/route-sheet";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { ChemicalApplicationPanel } from "./ChemicalApplicationPanel";
 import type { CRMJobVisit } from "@/types/crm-jobs";
@@ -26,6 +29,8 @@ interface Props {
 export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Props) {
   const { data: allServices = [] } = useCRMServices();
   const [index, setIndex] = useState(0);
+  const [bulkSendOpen, setBulkSendOpen] = useState(false);
+  const { can } = usePermissions();
 
   const chemicalVisits = useMemo(() => {
     const chemicalServiceIds = new Set(allServices.filter((s) => s.trackChemicals).map((s) => s.id));
@@ -51,6 +56,23 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
           <DialogTitle className="flex items-center gap-2">
             <FlaskConical className="h-4 w-4 text-teal-600 dark:text-teal-400" />
             Chemical Tracking — {date}
+            {chemicalVisits.length > 0 && (
+              <div className="ml-auto mr-6 flex items-center gap-2">
+                {can("chem_send_application_notice") && (
+                  <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setBulkSendOpen(true)}>
+                    <Mail className="h-3.5 w-3.5" /> Send notices
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={() => printChemicalRouteSheets({ visitIds: chemicalVisits.map((v) => v.id), dateLabel: date })}
+                >
+                  <Printer className="h-3.5 w-3.5" /> Print route sheets
+                </Button>
+              </div>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -107,6 +129,12 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
           </div>
         )}
       </DialogContent>
+      <BulkSendChemicalNoticesDialog
+        open={bulkSendOpen}
+        onClose={() => setBulkSendOpen(false)}
+        visits={chemicalVisits.map((v) => ({ id: v.id, clientName: v.clientName }))}
+        dateLabel={date}
+      />
     </Dialog>
   );
 }

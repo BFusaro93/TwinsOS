@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mail, Plus, Trash2 } from "lucide-react";
+import { Mail, Plus, Printer, Trash2 } from "lucide-react";
 import {
   calcChemicalAndSolution,
   useChemicalApplicationRates,
@@ -30,6 +30,7 @@ import {
 import { useProducts } from "@/lib/hooks/use-products";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { SendApplicationNoticeDialog } from "./SendApplicationNoticeDialog";
+import { printAppliedNotice } from "@/lib/chemical/route-sheet";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ChemicalApplication } from "@/types/chemical-tracking";
 import { toast } from "sonner";
@@ -507,16 +508,26 @@ export function ChemicalApplicationPanel({ jobId, visitId }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      {applications.length > 0 && canSendNotice && (
-        <div className="flex justify-end">
+      {applications.length > 0 && (
+        <div className="flex justify-end gap-2">
           <Button
             size="sm"
             variant="outline"
             className="h-7 gap-1.5 text-xs"
-            onClick={() => setNoticeDialogOpen(true)}
+            onClick={() => printAppliedNotice(visitId)}
           >
-            <Mail className="h-3.5 w-3.5" /> Send Notice
+            <Printer className="h-3.5 w-3.5" /> Print Notice
           </Button>
+          {canSendNotice && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => setNoticeDialogOpen(true)}
+            >
+              <Mail className="h-3.5 w-3.5" /> Send Email
+            </Button>
+          )}
         </div>
       )}
       <SendApplicationNoticeDialog

@@ -191,18 +191,18 @@ export function InjuryCasesPage() {
                     {[c.injuryType, c.bodyPart].filter(Boolean).join(" · ") || c.description}
                   </TableCell>
                   <TableCell>
-                    <Badge className={`${INJURY_INCIDENT_TYPE_COLORS[c.incidentType]} text-xs`}>{INJURY_INCIDENT_TYPE_LABELS[c.incidentType]}</Badge>
+                    <Badge variant="outline" className={`border-transparent ${INJURY_INCIDENT_TYPE_COLORS[c.incidentType]} text-xs`}>{INJURY_INCIDENT_TYPE_LABELS[c.incidentType]}</Badge>
                   </TableCell>
                   <TableCell>
                     {c.severity ? (
-                      <Badge className={`${INJURY_SEVERITY_COLORS[c.severity]} text-xs`}>{INJURY_SEVERITY_LABELS[c.severity]}</Badge>
+                      <Badge variant="outline" className={`border-transparent ${INJURY_SEVERITY_COLORS[c.severity]} text-xs`}>{INJURY_SEVERITY_LABELS[c.severity]}</Badge>
                     ) : (
                       <span className="text-sm text-muted-foreground">—</span>
                     )}
                   </TableCell>
                   <TableCell className="text-sm">{formatDate(c.dateOfIncident)}</TableCell>
                   <TableCell>
-                    <Badge className={`${INJURY_STATUS_COLORS[c.status]} text-xs`}>{INJURY_CASE_STATUS_LABELS[c.status]}</Badge>
+                    <Badge variant="outline" className={`border-transparent ${INJURY_STATUS_COLORS[c.status]} text-xs`}>{INJURY_CASE_STATUS_LABELS[c.status]}</Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{c.claimRoute ? INJURY_CLAIM_ROUTE_LABELS[c.claimRoute] : "—"}</TableCell>
                   <TableCell className="text-right text-sm">{c.totalCost > 0 ? formatCurrency(c.totalCost) : "—"}</TableCell>

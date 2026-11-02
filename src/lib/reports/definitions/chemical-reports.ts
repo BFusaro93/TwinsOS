@@ -5,7 +5,7 @@ import {
   dateRangeFilterDef,
   dateRangeFilters,
 } from "@/lib/reports/helpers";
-import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { computeDailyLoadList } from "@/lib/reports/materials/daily-load-list";
 import { isoInZone, ymd, zoneDateParts } from "@/lib/time/zone";
 
 // ============================================================
@@ -70,7 +70,7 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
       "Chemical quantities needed for scheduled and dispatched (not-yet-started) visits — use to load the truck before the day's chemical jobs.",
     filters: [dateRangeFilterDef("Scheduled Between", "this_month")],
     notes: [
-      "Includes visits in Scheduled or Dispatched status only; in-progress and completed visits are excluded.",
+      "Counts visits that are Scheduled, Dispatched or In Progress; completed, cancelled and skipped visits are excluded. A visit's saved chemical record is used when it has one; otherwise the amount is the product's default Application Rate x the property's Area field (e.g. Turf Sq. Ft.), set under Settings > Chemical Tracking. The product must also be attached to the service (Services > Chemicals), and a package step only counts the product attached to that step's service.",
     ],
     run: async ({ supabase, params, timeZone }) => {
       const { from, to } = (() => {
@@ -85,59 +85,50 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
         return { from: f, to: t };
       })();
 
-      interface Row {
-        chemical_amount: number | null;
-        solution_amount: number | null;
-        unit: { name: string | null } | null;
-        product: { name: string | null } | null;
-        crm_job_visits: {
-          status: string | null;
-          scheduled_date: string | null;
-          clients: { display_name: string | null } | null;
-        } | null;
+      // Same numbers as the Daily Load List, one day at a time: a visit's saved
+      // application record when it has one, otherwise the product's default
+      // Application Rate x the property's Area field. Reading only saved records
+      // left every visit nobody had dispatched yet (so no record existed) blank.
+      const days: string[] = [];
+      if (from && to) {
+        const MAX_DAYS = 62;
+        for (let d = new Date(`${from}T00:00:00Z`); d <= new Date(`${to}T00:00:00Z`) && days.length < MAX_DAYS; d.setUTCDate(d.getUTCDate() + 1)) {
+          days.push(d.toISOString().slice(0, 10));
+        }
+      } else if (from || to) {
+        days.push((from ?? to) as string);
       }
-      // `!inner` makes the visit filters actually drop rows server-side (a
-      // plain embed only nulls out the embedded object, so every application
-      // in the org came back and was filtered here — and past 1000 rows the
-      // in-range ones fell off the end of the page).
-      const rows = await fetchAllRows<Row>(() => {
-        let query = supabase
-          .from("crm_chemical_applications")
-          .select(
-            "chemical_amount, solution_amount, unit:crm_chemical_lookup_items!crm_chemical_applications_unit_of_measure_id_fkey(name), product:product_id(name), crm_job_visits!inner(status, scheduled_date, clients:client_id(display_name))"
-          )
-          .is("deleted_at", null)
-          // Dispatched = on the crew's board but not started; still to be loaded.
-          .is("crm_job_visits.deleted_at", null)
-          .in("crm_job_visits.status", ["scheduled", "dispatched"]);
-        if (from) query = query.gte("crm_job_visits.scheduled_date", from);
-        if (to) query = query.lte("crm_job_visits.scheduled_date", to);
-        return query;
-      });
+      const dayResults: Awaited<ReturnType<typeof computeDailyLoadList>>[] = [];
+      for (let i = 0; i < days.length; i += 5) {
+        dayResults.push(...(await Promise.all(days.slice(i, i + 5).map((d) => computeDailyLoadList(supabase, d)))));
+      }
 
-      // Amounts are recorded in whatever unit each application used (gal, oz,
-      // lb…), so quantities are only addable within the SAME unit — group by
-      // chemical + unit instead of summing mixed units into one number.
+      // Amounts are in whatever unit each rate/application used (gal, oz, lb…), so
+      // quantities are only addable within the SAME unit — group by chemical + unit.
       const SEP = "\u0000";
       const totalsByChemical = new Map<string, number>();
       const usageByClientChemical = new Map<string, Map<string, number>>();
+      let unresolvedStops = 0;
+      const dayNotes = new Set<string>();
 
-      for (const r of rows) {
-        const visit = r.crm_job_visits;
-        if (!visit) continue;
-        const chemical = r.product?.name || "(unknown)";
-        const unit = r.unit?.name ?? "";
-        const chemKey = `${chemical}${SEP}${unit}`;
-        const amount = r.chemical_amount ?? 0;
-        totalsByChemical.set(chemKey, (totalsByChemical.get(chemKey) ?? 0) + amount);
-
-        const client = visit.clients?.display_name || "(unknown client)";
-        let byChemical = usageByClientChemical.get(client);
-        if (!byChemical) {
-          byChemical = new Map<string, number>();
-          usageByClientChemical.set(client, byChemical);
+      for (const day of dayResults) {
+        for (const n of day.notes) dayNotes.add(n);
+        for (const crew of day.crews) {
+          for (const chem of crew.chemicals) {
+            for (const stop of chem.visits) {
+              if (stop.qty == null) { unresolvedStops++; continue; }
+              const chemKey = `${chem.productName}${SEP}${stop.unitName ?? ""}`;
+              totalsByChemical.set(chemKey, (totalsByChemical.get(chemKey) ?? 0) + stop.qty);
+              const client = stop.clientName || "(unknown client)";
+              let byChemical = usageByClientChemical.get(client);
+              if (!byChemical) {
+                byChemical = new Map<string, number>();
+                usageByClientChemical.set(client, byChemical);
+              }
+              byChemical.set(chemKey, (byChemical.get(chemKey) ?? 0) + stop.qty);
+            }
+          }
         }
-        byChemical.set(chemKey, (byChemical.get(chemKey) ?? 0) + amount);
       }
 
       const resultRows = [...usageByClientChemical.entries()].flatMap(([client_name, byChemical]) =>
@@ -168,7 +159,11 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
           col("quantity", "Concentrate Needed", "number", false),
         ],
         resultRows,
-        [`Chemical Totals — ${totalNote}`]
+        [
+          `Chemical Totals — ${totalNote}`,
+          ...(unresolvedStops > 0 ? [`${unresolvedStops} stop${unresolvedStops === 1 ? "" : "s"} left out: no amount could be worked out (no default Application Rate, no property area, or mixed units).`] : []),
+          ...dayNotes,
+        ]
       );
     },
   },

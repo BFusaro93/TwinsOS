@@ -121,7 +121,7 @@ export function DamageCasesPage() {
                     >
                       <TableCell className="font-mono text-xs text-muted-foreground">{c.caseNumber}</TableCell>
                       <TableCell>
-                        <Badge className={`${TYPE_COLORS[c.caseType]} text-xs`}>
+                        <Badge variant="outline" className={`border-transparent ${TYPE_COLORS[c.caseType]} text-xs`}>
                           {DAMAGE_CASE_TYPE_LABELS[c.caseType]}
                         </Badge>
                       </TableCell>
@@ -129,7 +129,7 @@ export function DamageCasesPage() {
                       <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">{c.description}</TableCell>
                       <TableCell className="text-sm">{formatDate(c.dateOfIncident)}</TableCell>
                       <TableCell>
-                        <Badge className={`${STATUS_COLORS[c.status]} text-xs`}>
+                        <Badge variant="outline" className={`border-transparent ${STATUS_COLORS[c.status]} text-xs`}>
                           {DAMAGE_CASE_STATUS_LABELS[c.status]}
                         </Badge>
                       </TableCell>

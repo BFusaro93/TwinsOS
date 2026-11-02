@@ -479,8 +479,8 @@ function InjuriesTab({ employeeId }: { employeeId: string }) {
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-xs">{INJURY_INCIDENT_TYPE_LABELS[c.incidentType]}</Badge>
-            {c.severity && <Badge className={`${INJURY_SEVERITY_COLORS[c.severity]} text-xs`}>{INJURY_SEVERITY_LABELS[c.severity]}</Badge>}
-            <Badge className={`${INJURY_STATUS_COLORS[c.status]} text-xs`}>{INJURY_CASE_STATUS_LABELS[c.status]}</Badge>
+            {c.severity && <Badge variant="outline" className={`border-transparent ${INJURY_SEVERITY_COLORS[c.severity]} text-xs`}>{INJURY_SEVERITY_LABELS[c.severity]}</Badge>}
+            <Badge variant="outline" className={`border-transparent ${INJURY_STATUS_COLORS[c.status]} text-xs`}>{INJURY_CASE_STATUS_LABELS[c.status]}</Badge>
           </div>
         </Link>
       ))}
@@ -965,7 +965,7 @@ function EmployeeDetail({
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">{name}</h2>
               <div className="mt-1 flex items-center gap-2">
-                <Badge className={`capitalize text-xs border-0 ${STATUS_COLOR[employee.employmentStatus] ?? "bg-muted text-slate-600 dark:text-neutral-400"}`}>
+                <Badge variant="outline" className={`border-transparent capitalize text-xs border-0 ${STATUS_COLOR[employee.employmentStatus] ?? "bg-muted text-slate-600 dark:text-neutral-400"}`}>
                   {employee.employmentStatus.replace("_", " ")}
                 </Badge>
                 {employee.resourceCode && (
@@ -1278,7 +1278,7 @@ export function EmployeeListPanel({
                     {e.firstName} {e.lastName}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <Badge className={`shrink-0 rounded-full border-0 px-1.5 py-0 text-[10px] capitalize ${STATUS_COLOR[e.employmentStatus] ?? "bg-muted text-slate-600 dark:text-neutral-400"}`}>
+                    <Badge variant="outline" className={`border-transparent shrink-0 rounded-full border-0 px-1.5 py-0 text-[10px] capitalize ${STATUS_COLOR[e.employmentStatus] ?? "bg-muted text-slate-600 dark:text-neutral-400"}`}>
                       {e.employmentStatus.replace("_", " ")}
                     </Badge>
                     {e.resourceCode && (

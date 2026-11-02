@@ -1073,7 +1073,7 @@ export function InvoiceDetail({
             </h1>
             <p className="text-xs text-slate-400 dark:text-neutral-500">{invoice.clientName}</p>
           </div>
-          <Badge className={cn("text-[10px] capitalize", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
+          <Badge variant="outline" className={cn("text-[10px] capitalize border-transparent", STATUS_COLOR[getDisplayInvoiceStatus(invoice)])}>
             {getDisplayInvoiceStatus(invoice)}
           </Badge>
           {invoice.invoiceNumber == null && (
