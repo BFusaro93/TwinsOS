@@ -3,6 +3,7 @@
 import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { stopPunchMismatch } from "@/lib/utils/punch-mismatch";
 import { useState, useEffect, useRef, useMemo } from "react";
+import { LoadListDialog } from "@/components/crm/dispatch/LoadListDialog";
 import Link from "next/link";
 import { ColumnChooser } from "@/components/shared/ColumnChooser";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
@@ -62,6 +63,7 @@ import {
   Users,
   MapPin,
   BarChart3,
+  Truck,
   Columns3,
   Route,
   RefreshCw,
@@ -3876,6 +3878,7 @@ export function DispatchBoard() {
     [customFieldDefs]
   );
   const [statsOpen,       setStatsOpen]       = useState(false);
+  const [loadListOpen,    setLoadListOpen]    = useState(false);
   const [mapOpen,         setMapOpen]         = useState(false);
   const { data: boardOrgSettings } = useOrgSettings();
   const [callAheadOpen,   setCallAheadOpen]   = useState(false);
@@ -4978,6 +4981,17 @@ export function DispatchBoard() {
             <BarChart3 className="h-3.5 w-3.5" />
             Stats
           </Button>
+          {can("view_report_center") && (
+            <Button
+              size="sm" variant="outline"
+              className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", loadListOpen && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
+              onClick={() => setLoadListOpen(true)}
+              title="What each crew loads for this day — chemicals and materials"
+            >
+              <Truck className="h-3.5 w-3.5" />
+              Load List
+            </Button>
+          )}
           <Button
             size="sm" variant="outline"
             className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", mapOpen && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
@@ -5444,6 +5458,8 @@ export function DispatchBoard() {
           />
         </div>
       </div>
+
+      <LoadListDialog open={loadListOpen} onOpenChange={setLoadListOpen} date={selectedDate} />
 
       {/* Stats overlay panel */}
       {statsOpen && (
