@@ -1950,6 +1950,70 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     label: "Landscapt (CRM)",
     items: [
       {
+        q: "Why does my estimate say it needs approval again?",
+        a: "An approval covers the total that was approved. If lines added afterwards push the estimate above that amount, Send and Copy link resubmit it for approval, and it can't go out until it is approved again. Lowering the total doesn't need a new approval.",
+      },
+      {
+        q: "Why won't the job's Complete button finish the job?",
+        a: "Complete refuses while the job still has scheduled, dispatched or in-progress visits, because completing the job would bill every service as done and each visit also bills itself when it's completed. Complete, skip or cancel the open visits on the job's Visits tab, then the job completes itself (or click Complete again).",
+      },
+      {
+        q: "Why can't I move or change the status of a visit?",
+        a: "The crew is clocked in to it. While a stop is running you can't move it to another day, change its crew, change its status or delete it, from anywhere in the office. Have the crew tap Stop Job (or Skip) first. A stop the crew skipped after starting can be rescheduled or reopened normally.",
+      },
+      {
+        q: "Why did a client's visits and contract invoices stop?",
+        a: "The client is marked Inactive, Lost or Cancelled. Those statuses stop new recurring and package visits and stop contract invoices. Set the client back to Active to resume both on the next run.",
+      },
+      {
+        q: "Why didn't a text message send from an automation?",
+        a: "Your company hasn't finished SMS registration (Settings → Integrations → Your own texting number). Until it is approved, text steps are skipped and the rest of the sequence still runs; the builder shows “SMS setup not complete” on those steps and your admins get one notification.",
+      },
+      {
+        q: "Why can't I delete an invoice?",
+        a: "Invoices with payments applied, locked invoices and invoices already sent to QuickBooks can't be deleted. Refund or unapply the payments, unlock the invoice, or (for a QuickBooks-synced invoice) void it so QuickBooks is updated too.",
+      },
+      {
+        q: "Does a refund return the card processing fee?",
+        a: "Yes. A full refund returns the processing fee the client paid; a partial refund returns the fee's matching share. Your books still show the refund against the invoice amount.",
+      },
+      {
+        q: "Why does a client's portal say their access is no longer active?",
+        a: "Their portal link was removed: someone used Reset portal access, the client was deleted, or the client portal was turned off for your company. Send them a new portal invite from the client's Details tab.",
+      },
+      {
+        q: "Can a property manager see their sub-accounts in the portal?",
+        a: "Yes. A client with sub-accounts sees the sub-accounts' invoices, estimates, visits and tickets when they sign in, each labelled with the sub-account's name. They can pay a sub-account's invoice and pick which account a new ticket is for.",
+      },
+      {
+        q: "Can clients turn autopay on or off themselves?",
+        a: "Yes. A client with a saved card has an Autopay switch on the portal Account page. Saving a card asks whether to use it for autopay (off by default), and removing the saved card turns autopay off.",
+      },
+      {
+        q: "Why does a contract show Inactive client when I click Create Invoices?",
+        a: "Contracts don't bill clients marked Inactive, Lost or Cancelled. Reactivate the client to bill the contract. Create Invoices always says why it skipped a contract (already billed, draft, not started, $0 month, not a billing month, or inactive client).",
+      },
+      {
+        q: "Do account credits earn commission?",
+        a: "No. Commission earned when paid counts only money actually received, so account credits and AR write-offs applied to an invoice earn none.",
+      },
+      {
+        q: "Which clients does the campaign All Clients audience include?",
+        a: "Active and inactive clients with an email address that can be emailed. Lost leads and cancelled clients are left out; reach them with the Leads or Past Clients audience. Do-not-market, opt-outs and bounced addresses are always skipped.",
+      },
+      {
+        q: "Why can't my crew confirm chemicals yet?",
+        a: "Chemicals can only be confirmed once the stop is running, so the application record has real start and end times. Tap Start Job first. Confirming records the crew foreman as the applicator, with their license number.",
+      },
+      {
+        q: "Why is the QuickBooks invoice stuck on “name exists as a vendor or employee”?",
+        a: "QuickBooks won't create a customer whose name already belongs to a vendor or employee. Rename the Landscapt client (or link it to the existing QuickBooks customer), then edit and save the invoice to retry.",
+      },
+      {
+        q: "How do I see what my crews need to load on the truck?",
+        a: "On the Dispatch Board, click Load List next to Stats. It shows the Daily Load List for the board's day, chemicals with concentrate and mix volume and other materials, grouped by crew, with Print and a link to the full report. It needs the View Report Center permission.",
+      },
+      {
         q: "How do I schedule a job or visit?",
         a: "Use the Scheduling section of the Landscapt left menu, not Settings. Scheduling > Dispatch Board is where you put a visit on a day and assign it to a crew; Scheduling > Waiting List is for jobs that only have a date range and no firm date yet, where each row has a Schedule button. Scheduling > Jobs lists every job. The Schedules page under Administration only holds the reusable recurrence patterns (weekly, bi-weekly, seasonal) that a recurring job's Schedule dropdown uses.",
       },
@@ -2226,6 +2290,26 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Users & Settings",
     items: [
+      {
+        q: "Why does Settings → Clients say my next account number is too low?",
+        a: "The next account number can't be set at or below the highest account number already in use, so new clients never collide with existing ones. Leave it as shown, or pick a higher number.",
+      },
+      {
+        q: "Why does changing the timezone ask me to confirm?",
+        a: "The company timezone decides what “today” means everywhere: the dispatch board, crew days, billing dates and reports. Landscapt asks before changing it.",
+      },
+      {
+        q: "Why can't I change someone's Landscapt role on their employee record?",
+        a: "Only an admin can change an employee's Landscapt Role or link or unlink their login. Other roles see those controls disabled.",
+      },
+      {
+        q: "Why can't I deactivate a role?",
+        a: "Employees still hold it, and an inactive role grants nothing, so they would lose Landscapt access. Move them to another role first.",
+      },
+      {
+        q: "Where is the owner's employee record?",
+        a: "Signing up creates an employee record for the owner with the Owner role, so the owner can be picked as a sales rep or assignee and sees their own items in My Day. My Day shows Everyone for a login with no employee record.",
+      },
       {
         q: "Which Landscapt role permissions are actually enforced, and which only hide things?",
         a: "Most are enforced on the server, so a role without them is refused even through another route. Newly enforced: changing a client's Office Notes needs View Notes; changing the stored card or turning autopay on needs View Credit Card #'s plus Add/Modify Payments; changing a client balance directly needs View Balance plus Add/Modify Credits. Still hide-only: View Notes, View Credit Card #'s, View Balance, View Billing and Export Lists decide what the screen shows, but a login that queries the data directly could still read it, and exports are built in the browser from rows already loaded. Admins always pass.",

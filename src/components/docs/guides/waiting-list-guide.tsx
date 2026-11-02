@@ -29,6 +29,7 @@ export function WaitingListGuide() {
           <TOCLink href="#day-in-the-life">A day in the life</TOCLink>
           <TOCLink href="#location-matching">Location matching, and its limits</TOCLink>
           <TOCLink href="#see-also">See also</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -232,6 +233,16 @@ export function WaitingListGuide() {
             <strong>Dispatch Board guide</strong> — once a waiting-list job or package visit is
             dispatched from this page, it behaves like any other scheduled visit there, including the
             radius-based Nearby Waiting List lookup described above.
+          </li>
+        </ul>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Dispatching as Unassigned.</strong> Choosing Unassigned when dispatching a job that has a default crew really leaves the visit unassigned instead of putting it on the job&apos;s crew.
+          </li>
+          <li>
+            <strong>Skipped visits come back.</strong> A waiting-list service whose visit was skipped is offered again under the client&apos;s Schedule Job menu, the same as on the Waiting List page.
           </li>
         </ul>
       </Section>

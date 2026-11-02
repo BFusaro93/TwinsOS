@@ -53,6 +53,7 @@ export function CrewAppGuide() {
           <TOCLink href="#notes-photos">Notes and photos</TOCLink>
           <TOCLink href="#suggest-work">Suggesting work you spot</TOCLink>
           <TOCLink href="#office-side">What the office sees</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -88,7 +89,8 @@ export function CrewAppGuide() {
           are larger for gloved or one-handed use.
         </p>
         <p>
-          If an action is queued without signal (clock in/out, pause, resume, drive start/end), it is
+          If an action is queued without signal (clock in/out, pause, resume, drive start/end), a banner
+          says it&apos;s saved on the phone and will send when signal returns, and it is
           recorded at the moment it was tapped, not when the phone reconnects &mdash; so a lunch pause
           that syncs hours later still subtracts the right minutes. Taps older than 48 hours, or from
           a clearly wrong phone clock, fall back to the sync time.
@@ -340,7 +342,10 @@ export function CrewAppGuide() {
         <p>
           If the stop has chemicals, a <strong>Confirm chemicals applied</strong> card lists each one
           at its planned amount. Enter how much was actually used, or tick <strong>Not used</strong>,
-          then tap <strong>Confirm chemicals</strong>. When the company requires crew confirmation,{" "}
+          then tap <strong>Confirm chemicals</strong>. Confirming only works once the stop is running
+          (the card says &quot;Start the job first&quot; until then), and it records the crew foreman as
+          the applicator, with their applicator license, plus a matching mix volume when the amount
+          changed. When the company requires crew confirmation,{" "}
           <strong>Stop Job stays disabled</strong> until every chemical is confirmed. Chemicals on a
           service the crew skipped (or the office cancelled) aren&apos;t listed to mix or confirm and
           never hold up Stop Job. If the crew starts a stop the office never dispatched, its
@@ -365,7 +370,8 @@ export function CrewAppGuide() {
           for <em>your</em> crew, and your hours are worked out from your clock times and your
           headcount only. Nothing you do clocks the other crew in or out. The visit is billed once by
           the office from the lead crew&apos;s stop, so your stop doesn&apos;t create its own invoice,
-          and chemicals are confirmed on the lead crew&apos;s stop.
+          and chemicals are confirmed on the lead crew&apos;s stop. Materials and sub-items for the stop
+          show on your stop too, so either crew can record what was used.
         </p>
       </Section>
 
@@ -426,7 +432,9 @@ export function CrewAppGuide() {
           <strong>Notes to Office</strong> sends a message back from the field. It shows on the
           dispatch board against that stop, so it&apos;s the right place for &quot;couldn&apos;t reach the
           side bed, sprinkler running&quot; rather than a text message to somebody&apos;s phone.
-          If your connection drops and the app resends the note, it is saved once, not twice.
+          If your connection drops and the app resends the note, it is saved once, not twice. Each note
+          shows who wrote it and when: &quot;You&quot; for the crew&apos;s own notes, &quot;Office&quot; and
+          the person&apos;s name for remarks from the office.
         </p>
         <p>
           <strong>Notes from the office.</strong> The job&apos;s crew note appears under{" "}
@@ -493,6 +501,34 @@ export function CrewAppGuide() {
           For the office&apos;s half of this — stop order, route optimisation, and exactly how actual
           hours are compared against budget — see the <strong>Dispatch Board</strong> guide.
         </p>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Gate codes and property notes.</strong> The stop shows the property&apos;s gate or lock code in large type, and the property&apos;s crew notes count as notes to read before Start Job, the same as job notes.
+          </li>
+          <li>
+            <strong>Full addresses.</strong> The stop page shows the full address, including state and zip, and wraps it rather than cutting it off. Map links use the full address too.
+          </li>
+          <li>
+            <strong>Times in company time.</strong> Times on the crew screens are shown in the company&apos;s timezone, so a phone set to another zone still shows the right clock times.
+          </li>
+          <li>
+            <strong>Signed out or no connection.</strong> If the crew&apos;s sign-in has expired, My Schedule and the stop page say so with a sign-in button. With no connection they say they couldn&apos;t load and offer Retry, instead of looking like there&apos;s no work.
+          </li>
+          <li>
+            <strong>Finished stops.</strong> A stop the office cancelled shows as cancelled, with no Start Job. Skipped and cancelled stops count as done in the day&apos;s progress, and an <strong>All stops done</strong> card reminds the crew to tap End Day.
+          </li>
+          <li>
+            <strong>One-handed use.</strong> Start Job and Stop Job sit in a bar at the bottom of the screen, above the iPhone home bar, and small buttons are at least finger-sized. When a button is disabled, the reason shows under it.
+          </li>
+          <li>
+            <strong>Empty roster.</strong> If no one is on the crew today, Edit Crew explains how to add people (Team → Crews in the office), and a login that isn&apos;t linked to a crew doesn&apos;t show Edit Crew.
+          </li>
+          <li>
+            <strong>Photos.</strong> Photos for every service on the stop load together, so they show straight away after the page reloads.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );

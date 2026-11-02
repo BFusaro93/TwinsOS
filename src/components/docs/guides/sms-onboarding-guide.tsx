@@ -52,6 +52,7 @@ export function SmsOnboardingGuide() {
           <TOCLink href="#sample-wording">Sample wording that gets approved</TOCLink>
           <TOCLink href="#review-time">How long review takes</TOCLink>
           <TOCLink href="#faq">FAQ</TOCLink>
+          <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
       </div>
 
@@ -220,6 +221,13 @@ export function SmsOnboardingGuide() {
           retroactive changes — new outbound texts switch to your own number and campaign once approval
           completes; nothing about message history changes.
         </p>
+      </Section>
+      <Section id="good-to-know" title="Good to know">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Where you&apos;ll see it before you&apos;re approved.</strong> Until registration is approved, the Send Text dialog and automation text steps show that text messaging isn&apos;t set up yet, and your admins get one notification the first time an automation skips a text.
+          </li>
+        </ul>
       </Section>
     </DocsFontScope>
   );
