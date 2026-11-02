@@ -193,8 +193,8 @@ export function usePropertyCustomFieldDefs() {
         .order("field_label");
       if (error) throw error;
       return (data ?? [])
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         // Mirrors of client fields already have their own client column.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .filter((row: any) => !BUILT_IN_TAKEOFF_FIELD_KEYS.has(row.field_key) && !row.client_field_def_id)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((row: any): PropertyCustomFieldDef => ({
