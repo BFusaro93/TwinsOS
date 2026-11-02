@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { describeVisitWindow } from "@/lib/portal/visit-window";
+import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -48,6 +49,8 @@ interface Invoice {
   balance_cents: number;
   due_date: string;
   status: string;
+  /** Set when the row is on one of the login's sub-accounts. */
+  accountName?: string | null;
 }
 
 interface Visit {
@@ -58,6 +61,7 @@ interface Visit {
   jobDetail?: string | null;
   windowStart?: string | null;
   windowEnd?: string | null;
+  accountName?: string | null;
 }
 
 /** When a visit happens — a service window for package / waiting-list
@@ -75,6 +79,7 @@ interface Estimate {
   total_price_cents: number;
   status: string;
   expires_at: string | null;
+  accountName?: string | null;
 }
 
 interface Props {
@@ -88,7 +93,8 @@ interface Props {
   today: string;
   allowTickets: boolean;
   allowEstimates: boolean;
-  clientId: string;
+  /** The login's client plus its sub-accounts (getPortalAccounts). */
+  clientIds: string[];
   orgId: string;
 }
 
@@ -103,7 +109,7 @@ export default function PortalDashboard({
   today,
   allowTickets,
   allowEstimates,
-  clientId,
+  clientIds,
   orgId,
 }: Props) {
   const [upcomingVisits, setUpcomingVisits] = useState(initialVisits);
@@ -113,13 +119,14 @@ export default function PortalDashboard({
   // RLS's own portal-scoped policy (client_portal_multi_org.sql) is what
   // actually restricts delivery to this client's rows — the client_id filter
   // here is just to avoid subscribing to an unfiltered stream client-side.
+  const clientKey = clientIds.join(",");
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel(`portal-dashboard-visits-${clientId}`)
+      .channel(`portal-dashboard-visits-${clientIds[0]}`)
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "crm_job_visits", filter: `client_id=eq.${clientId}` },
+        { event: "UPDATE", schema: "public", table: "crm_job_visits", filter: `client_id=in.(${clientKey})` },
         (payload) => {
           const updated = payload.new as { id: string; status: string };
           setUpcomingVisits((prev) =>
@@ -130,7 +137,7 @@ export default function PortalDashboard({
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, orgId]);
+  }, [clientKey, orgId]);
 
   const inProgressVisit = upcomingVisits.find((v) => v.status === "in_progress");
   const nextVisit = inProgressVisit ?? upcomingVisits[0];
@@ -283,6 +290,7 @@ export default function PortalDashboard({
                   <DateTile visit={v} today={today} />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-slate-800">{v.jobTitle}</p>
+                    <SubAccountLabel name={v.accountName} />
                     <p className="truncate text-xs text-slate-500">
                       {whenLabel(v, today)}
                       {v.jobDetail && ` · ${v.jobDetail}`}
@@ -304,7 +312,10 @@ export default function PortalDashboard({
               <ul className="flex flex-col gap-2">
                 {estimates.map((est) => (
                   <li key={est.id} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="truncate text-slate-700">{est.title ?? `Est. #${est.estimate_number}`}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-slate-700">{est.title ?? `Est. #${est.estimate_number}`}</span>
+                      <SubAccountLabel name={est.accountName} />
+                    </span>
                     <span className="shrink-0 font-semibold text-slate-900">{fmt(est.total_price_cents)}</span>
                   </li>
                 ))}
@@ -339,8 +350,9 @@ export default function PortalDashboard({
                 const pastDue = isPastDue(inv);
                 return (
                   <li key={inv.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-sm font-medium text-slate-800">Invoice #{inv.invoice_number}</p>
+                      <SubAccountLabel name={inv.accountName} />
                       <p className={`text-xs ${pastDue ? "font-medium text-red-600" : "text-slate-500"}`}>
                         {inv.due_date ? `${pastDue ? "Past due" : "Due"} ${fmtDate(inv.due_date)}` : "No due date"}
                       </p>
@@ -383,6 +395,7 @@ export default function PortalDashboard({
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-slate-800">{v.jobTitle}</p>
+                    <SubAccountLabel name={v.accountName} />
                     <p className="truncate text-xs text-slate-500">
                       Completed {fmtDate(v.scheduled_date)}
                       {v.jobDetail && ` · ${v.jobDetail}`}

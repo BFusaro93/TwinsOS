@@ -2022,6 +2022,34 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Use the Package visits toggle in the estimate's 'What the client sees' settings (it is off by default, and can also be set on an Estimate document or the org default). Off shows only the package name, wording and total. On lists each visit as a plain row under the package's main line. It applies to the proposal page, the client portal, the PDF and the [estimategrid] table in emails.",
       },
       {
+        q: "How do I skip one step of a package on an estimate?",
+        a: "Set that visit's status to Draft. Draft and Lost visits are excluded from the package subtotal, the estimate total and the proposal, and the client still sees one package line. Set it back to Quote to include it again.",
+      },
+      {
+        q: "How do I delete a whole package from an estimate?",
+        a: "Click the trash icon on the package's header row and confirm. The header and all of its visits are deleted together.",
+      },
+      {
+        q: "How do I copy the first package visit's values to the other visits?",
+        a: "On the package header row use the copy buttons (Qty, Rate, B.Hr, Cost, Adj Rate or All). Each copies that value from the first visit to every other visit in the package and recalculates the totals.",
+      },
+      {
+        q: "How do I change the status of or delete several estimate line items at once?",
+        a: "Tick the lines in the grid (the header checkbox selects all lines). A bar appears above the grid with Change Status, Rate Increase and Delete. Delete asks you to confirm.",
+      },
+      {
+        q: "How do I copy a service's rate matrix to other services?",
+        a: "Open the service, go to its Rate Matrix tab and click Copy to other services. Tick the services and click Copy. The rows, lookup field and overflow rule are copied, replacing any matrix the targets already have. Rate matrix edits save when you click out of a field.",
+      },
+      {
+        q: "How do I price a property larger than my last rate matrix row without adding hundreds of rows?",
+        a: "Use the Overflow rule on the service's Rate Matrix tab: Every Y over X is $R more, plus hours and cost. At or above X, the estimate starts from the last row and adds one increment for each full Y, counting the first interval. It takes priority over a Tail row.",
+      },
+      {
+        q: "How do I see which estimate or invoice an audit log entry belongs to?",
+        a: "In the Audit Log report (Report Center, Audits) use the Record column. It shows the estimate or invoice number, PO number, client name, contract title, project name, job number, service, package or crew that changed.",
+      },
+      {
         q: "What happens when I convert an estimate that has a package on it?",
         a: "Convert to Job creates a Package job instead of a plain job, with the package, its total steps, each step's date window (with Min Days spacing), the package's invoice description and one visit per dated step. Convert one package at a time, and not in the same pass as ordinary lines; the convert window has a button per package and locks Job Type to Package. Scheduled Date acts as a Program Start Date that moves every step window by the same number of days.",
       },

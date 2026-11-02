@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalAccounts, getPortalContext, subAccountNames } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import PortalBillingPage from "@/components/portal/PortalBillingPage";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -7,6 +7,7 @@ import { todayInZone } from "@/lib/time/zone";
 
 interface InvoiceRow {
   id: string;
+  client_id: string;
   invoice_number: number;
   total_cents: number;
   balance_cents: number;
@@ -22,7 +23,12 @@ export default async function BillingPage() {
 
   const supabase = createServiceClient();
 
-  const cols = "id, invoice_number, total_cents, balance_cents, amount_paid_cents, due_date, status, created_at";
+  // A parent client's login also sees (and can pay) its sub-accounts' invoices.
+  const accounts = await getPortalAccounts(ctx);
+  const clientIds = accounts.map((a) => a.id);
+  const accountNames = subAccountNames(accounts);
+
+  const cols = "id, client_id, invoice_number, total_cents, balance_cents, amount_paid_cents, due_date, status, created_at";
   // Recent history is capped, but anything still owing is always included —
   // otherwise a customer with 50+ newer invoices could not see (or pay) an
   // older unpaid one.
@@ -30,7 +36,7 @@ export default async function BillingPage() {
     supabase
       .from("crm_invoices")
       .select(cols)
-      .eq("client_id", ctx.clientId)
+      .in("client_id", clientIds)
       .eq("org_id", ctx.orgId)
       // Drafts are unfinished staff work — never shown to the customer.
       .neq("status", "draft")
@@ -40,7 +46,7 @@ export default async function BillingPage() {
     supabase
       .from("crm_invoices")
       .select(cols)
-      .eq("client_id", ctx.clientId)
+      .in("client_id", clientIds)
       .eq("org_id", ctx.orgId)
       .in("status", ["printed", "sent", "viewed", "partial", "overdue"])
       .gt("balance_cents", 0)
@@ -58,5 +64,10 @@ export default async function BillingPage() {
   // the portal, not the server's UTC day or the viewer's.
   const today = todayInZone(await getOrgTimeZone(supabase, ctx.orgId));
 
-  return <PortalBillingPage invoices={invoices ?? []} today={today} />;
+  return (
+    <PortalBillingPage
+      invoices={invoices.map((inv) => ({ ...inv, accountName: accountNames.get(inv.client_id) ?? null }))}
+      today={today}
+    />
+  );
 }

@@ -21,7 +21,7 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { useClient, useClientProperties } from "@/lib/hooks/use-clients";
 import { useCustomFieldDefs, useClientCustomFieldValues } from "@/lib/hooks/use-client-custom-fields";
-import { usePropertyCustomFieldValues, lookupRateMatrixMatch, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
+import { usePropertyCustomFieldValues, lookupRateMatrixMatch, applyMatrixTail, type RateMatrixRow } from "@/lib/hooks/use-rate-matrix";
 import { createClient } from "@/lib/supabase/client";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { usePackages } from "@/lib/hooks/use-packages";
@@ -68,6 +68,7 @@ import {
 import type { EstimateLineItem, LineItemStatus } from "@/types/crm-estimates";
 import type { CRMDiscount } from "@/types/crm-discounts";
 import type { BudgetMethod } from "@/types/crm-jobs";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const UNIT_TYPES = ["sqft", "lf", "cuyd", "acres", "hr", "each", "lb", "gal"];
 
@@ -135,7 +136,7 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
 
   async function handleDelete(s: LineItemSubitem) {
     try { await deleteSubitem({ id: s.id, lineItemId }); }
-    catch { toast.error("Failed to delete sub-item"); }
+    catch (err) { toast.error(mutationErrorMessage(err, "Failed to delete sub-item")); }
   }
 
   return (
@@ -475,8 +476,8 @@ function LineItemRow({
         },
       });
       setDirty(false);
-    } catch {
-      toast.error("Failed to save line item");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save line item"));
     }
   }
 
@@ -494,9 +495,9 @@ function LineItemRow({
           applied_discount_id: patch.appliedDiscountId,
         },
       });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to update discount");
+      toast.error(mutationErrorMessage(err, "Failed to update discount"));
     }
   }
 
@@ -528,9 +529,9 @@ function LineItemRow({
           discount_cents: merged.discountCents,
         },
       });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to update budgeted hours");
+      toast.error(mutationErrorMessage(err, "Failed to update budgeted hours"));
     }
   }
 
@@ -547,8 +548,8 @@ function LineItemRow({
         },
       });
       setRow((r) => ({ ...r, ...notes }));
-    } catch {
-      toast.error("Failed to save notes");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save notes"));
     }
   }
 
@@ -578,9 +579,9 @@ function LineItemRow({
           discount_cents: next.discountCents,
         },
       });
-    } catch {
+    } catch (err) {
       setRow(row);
-      toast.error("Failed to save complexity adjustment");
+      toast.error(mutationErrorMessage(err, "Failed to save complexity adjustment"));
     }
   }
 
@@ -685,8 +686,8 @@ function LineItemRow({
                 setRow((r) => ({ ...r, tier: val }));
                 try {
                   await upsert({ estimateId, item: { id: row.id, tier: val } });
-                } catch {
-                  toast.error("Failed to save tier");
+                } catch (err) {
+                  toast.error(mutationErrorMessage(err, "Failed to save tier"));
                 }
               }}
               className="w-full rounded border border-border bg-card px-1 py-0.5 text-[10px] focus:outline-none"
@@ -1115,8 +1116,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
       }
       try {
         await deleteItem({ id, estimateId });
-      } catch {
-        toast.error("Failed to delete line item");
+      } catch (err) {
+        toast.error(mutationErrorMessage(err, "Failed to delete line item"));
       }
     },
     [deleteItem, estimateId, everyItem]
@@ -1129,8 +1130,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
     try {
       for (const lineId of pending.lineIds) await deleteItem({ id: lineId, estimateId });
       await deleteItem({ id: pending.id, estimateId });
-    } catch {
-      toast.error("Failed to delete the package");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to delete the package"));
     }
   }
 
@@ -1183,8 +1184,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         });
       }
       toast.success(`Copied from "${first.serviceName}" to ${rest.length} other visit${rest.length !== 1 ? "s" : ""}`);
-    } catch {
-      toast.error("Failed to copy the values down");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to copy the values down"));
     }
   }
 
@@ -1228,8 +1229,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
             sort_order: items.length,
           },
         });
-      } catch {
-        toast.error("Failed to duplicate line item");
+      } catch (err) {
+        toast.error(mutationErrorMessage(err, "Failed to duplicate line item"));
       }
     },
     [upsert, estimateId, items.length]
@@ -1338,6 +1339,24 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           tailOverQty: r.tail_over_qty != null ? Number(r.tail_over_qty) : null,
         }));
         let match = lookupRateMatrixMatch(mapped, propertyValue);
+        // Past the end of the bands: the service's overflow rule ("every Y over
+        // X adds $R") takes over from a tail row or the flat rate.
+        if (!match || match.isTailRow) {
+          const { data: tailSvc } = await (supabase as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+            .from("crm_services")
+            .select("matrix_tail_every_qty, matrix_tail_over_qty, matrix_tail_rate_cents, matrix_tail_hours, matrix_tail_cost_cents")
+            .eq("id", svc.id)
+            .maybeSingle();
+          if (tailSvc) {
+            match = applyMatrixTail(mapped, propertyValue, {
+              everyQty: Number(tailSvc.matrix_tail_every_qty ?? 0),
+              overQty: Number(tailSvc.matrix_tail_over_qty ?? 0),
+              rateCents: tailSvc.matrix_tail_rate_cents ?? 0,
+              hours: Number(tailSvc.matrix_tail_hours ?? 0),
+              costCents: tailSvc.matrix_tail_cost_cents ?? 0,
+            }) ?? match;
+          }
+        }
         // A package step with its own price under a per-unit band: the visit's quantity is the
         // client's takeoff, else the very value the band was matched on. With no quantity at
         // all, keep the step's locked price rather than one unit of a per-sq-ft rate.
@@ -1435,8 +1454,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
         });
       }
       return true;
-    } catch {
-      toast.error("Failed to add item");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add item"));
       return false;
     }
   }
@@ -1512,8 +1531,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           return;
         }
       }
-    } catch {
-      toast.error("Failed to add package");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add package"));
     }
   }
 
@@ -1535,8 +1554,8 @@ export function EstimateLineItemsGrid({ estimateId, clientId, propertyId, items,
           calc_type: 1,
         },
       });
-    } catch {
-      toast.error("Failed to add section");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add section"));
     }
   }
 

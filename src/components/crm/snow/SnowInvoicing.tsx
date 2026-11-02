@@ -36,6 +36,7 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMJobVisit } from "@/types/crm-jobs";
 import { useUpdateVisit } from "@/lib/hooks/use-crm-jobs";
 import { Input } from "@/components/ui/input";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 
 /** Per-inch visits completed from the crew app have no depth (only the office
@@ -50,8 +51,8 @@ function SnowDepthInput({ visit, onSaved }: { visit: CRMJobVisit; onSaved: () =>
     try {
       await updateVisit({ id: visit.id, jobId: visit.jobId, updates: { snow_depth_inches: depth } });
       onSaved();
-    } catch {
-      toast.error("Couldn't save the snow depth");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Couldn't save the snow depth"));
     }
   }
   return (
@@ -227,8 +228,8 @@ export function SnowInvoicing() {
       }
       setSelectedIds(new Set());
       void refetch();
-    } catch {
-      toast.error("Failed to generate invoices");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to generate invoices"));
     }
   }
 

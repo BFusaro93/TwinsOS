@@ -117,6 +117,7 @@ import { lineTotalCents } from "@/lib/invoices/auto-invoice-tax";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // ── status icon ───────────────────────────────────────────────────────────────
 
@@ -1045,8 +1046,8 @@ function JobDetailSheet({
       toast.success(invoice.alreadyInvoiced ? "This visit is already invoiced" : "Invoice created");
       onOpenChange(false);
       router.push(`/crm/accounting/invoices/${invoice.id}`);
-    } catch {
-      toast.error("Failed to create invoice");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create invoice"));
     }
   }
 
@@ -1124,7 +1125,8 @@ function JobDetailSheet({
                   View Job →
                 </Button>
               )}
-              {visit.status === "completed" && visit.clientId && !visit.crewGroupSecondary && (
+              {visit.status === "completed" && visit.clientId && !visit.crewGroupSecondary
+                && (existingInvoice || can("acct_add_modify_invoices")) && (
                 <Button
                   size="sm"
                   className="h-7 text-xs bg-brand-500 hover:bg-brand-600 text-white px-3"

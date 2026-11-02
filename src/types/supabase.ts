@@ -17746,7 +17746,17 @@ export type Database = {
         Args: { p_entity_id: string; p_entity_type: string; p_status: string }
         Returns: undefined
       }
+      _crm_changed_outside: {
+        Args: { p_allowed: string[]; p_new: Json; p_old: Json }
+        Returns: boolean
+      }
+      _crm_direct_user_write: { Args: never; Returns: boolean }
+      _crm_has_any_permission: { Args: { p_keys: string[] }; Returns: boolean }
       _equipt_org_mismatch: { Args: { p_org: string }; Returns: boolean }
+      _estimate_is_own_unsent_draft: {
+        Args: { p_estimate_id: string }
+        Returns: boolean
+      }
       _next_work_order_number_for_org: {
         Args: { p_org_id: string }
         Returns: string

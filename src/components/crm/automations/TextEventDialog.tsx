@@ -23,6 +23,7 @@ import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { SMS_EVENT_MERGE_TAGS } from "@/types/crm-proposals";
 import { useSmsReadiness, SMS_NOT_READY_MESSAGE } from "@/lib/hooks/use-sms-readiness";
 import { toast } from "sonner";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   open: boolean;
@@ -72,8 +73,8 @@ export function TextEventDialog({ open, onOpenChange, event }: Props) {
         config: { message, to, require_approval: requireApproval },
       });
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save text message event");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save text message event"));
     } finally {
       setSaving(false);
     }

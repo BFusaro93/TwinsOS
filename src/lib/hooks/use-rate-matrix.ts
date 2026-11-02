@@ -399,3 +399,39 @@ export function lookupRateMatrixMatch(
   // Value exceeded all non-tail ranges — return tail row if present
   return tailRow;
 }
+
+/** SA-style overflow rule on the service: "Every Y over X is +$R, +H hrs, +$C". */
+export interface MatrixTailRule {
+  everyQty: number;
+  overQty: number;
+  rateCents: number;
+  hours: number;
+  costCents: number;
+}
+
+/**
+ * Prices a value past the end of the matrix by stepping up from the last band.
+ * Each full `everyQty` at or above `overQty` adds one increment, counting the
+ * first interval (26,000–26,999 with over=26,000, every=1,000 is one step above
+ * the last band). Returns null when the rule is unset or the value is below
+ * `overQty`, so the caller keeps its normal band / flat-rate behavior.
+ */
+export function applyMatrixTail(
+  rows: RateMatrixRow[],
+  propertyValue: number,
+  tail: MatrixTailRule
+): RateMatrixRow | null {
+  if (!(tail.everyQty > 0) || !(tail.overQty > 0) || propertyValue < tail.overQty) return null;
+  const base = rows
+    .filter((r) => !r.isTailRow)
+    .sort((a, b) => a.fromVal - b.fromVal || a.sortOrder - b.sortOrder)
+    .at(-1);
+  if (!base) return null;
+  const steps = Math.floor((propertyValue - tail.overQty) / tail.everyQty) + 1;
+  return {
+    ...base,
+    rateCents: base.rateCents + steps * tail.rateCents,
+    budgetedHours: base.budgetedHours + steps * tail.hours,
+    budgetedCostCents: base.budgetedCostCents + Math.round(steps * tail.costCents),
+  };
+}

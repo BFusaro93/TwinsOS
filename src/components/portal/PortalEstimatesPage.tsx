@@ -5,6 +5,7 @@ import { FileText, Clock, CheckCircle2, XCircle, Loader2, Download, MessageSquar
 import { groupIntoSections, DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } from "@/lib/estimate-display-settings";
 import { looksLikeHtml } from "@/lib/utils/sanitize-html";
 import { stripHtml } from "@/lib/utils/strip-html";
+import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -39,6 +40,8 @@ interface Estimate {
   status: string;
   expires_at: string | null;
   created_at: string;
+  /** Set when the estimate is for one of the login's sub-accounts. */
+  accountName?: string | null;
   display_settings?: DisplaySettings;
   /** Good/Better/Best estimate: the client accepts exactly one tier. */
   tiers_enabled?: boolean;
@@ -157,6 +160,9 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
           <p className="text-sm text-slate-500 mt-1">
             {estimate.title ?? `Estimate #${estimate.estimate_number}`} · {fmt(estimate.total_price_cents)}
           </p>
+          {estimate.accountName && (
+            <p className="text-xs text-slate-500 mt-1">For {estimate.accountName}</p>
+          )}
         </div>
 
         {tiersEnabled && (
@@ -487,6 +493,7 @@ export default function PortalEstimatesPage({ estimates: initial, today }: { est
                 <p className="text-sm font-medium text-slate-800">
                   {est.title ?? `Estimate #${est.estimate_number}`}
                 </p>
+                <SubAccountLabel name={est.accountName} />
                 <p className="text-xs text-slate-500">
                   Sent {fmtDate(est.created_at)}
                   {est.expires_at && !["accepted", "lost", "invoiced", "won"].includes(est.status) && (

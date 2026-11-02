@@ -680,10 +680,12 @@ export function WaitingList() {
         title="Waiting List"
         description="Jobs queued for opportunistic scheduling"
         action={
-          <Button size="sm" onClick={() => setAddOpen(true)}>
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            Add to Waiting List
-          </Button>
+          can("job_add") ? (
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              Add to Waiting List
+            </Button>
+          ) : undefined
         }
       />
 

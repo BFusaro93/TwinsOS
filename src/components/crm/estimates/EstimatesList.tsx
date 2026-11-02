@@ -37,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const ESTIMATE_COLUMNS: ColumnDef[] = [
   { key: "number",      label: "Estimate #",   locked: true },
@@ -287,7 +288,7 @@ export function EstimatesList({ clientId }: Props) {
       }
       setSelectedIds(new Set());
       refetch();
-    } catch { toast.error("Failed to update estimates"); }
+    } catch (err) { toast.error(mutationErrorMessage(err, "Failed to update estimates")); }
   }
 
   // Actually sends an email per selected estimate (via the same endpoint the
@@ -645,10 +646,16 @@ export function EstimatesList({ clientId }: Props) {
           stages={estimateStages}
           onEstimateClick={(id) => { if (canEdit) router.push(`/crm/estimates/${id}`); }}
           onStageChange={(id, stage) => {
+            // Moving a card edits the estimate; the database refuses it
+            // without estimate_edit, so say so up front.
+            if (!canEdit) {
+              toast.error("You do not have permission to edit estimates");
+              return;
+            }
             // Guard errors (active jobs/invoices, tier pick) used to be an unhandled
             // rejection: the card just didn't move and nothing said why.
             updateStage({ id, stage }).catch((err: unknown) =>
-              toast.error(err instanceof Error ? err.message : "Couldn't move that estimate")
+              toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Couldn't move that estimate"))
             );
           }}
         />

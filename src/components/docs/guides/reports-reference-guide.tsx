@@ -490,6 +490,7 @@ const SECTIONS: ReportSection[] = [
         filters: "Date, Category, Record Type, Changed By, Action",
         notes: [
           "Entries are written by database triggers, not the app, so they cover every path a change can arrive through — the UI, the API, an automation, or an import.",
+          "The Record column names what was changed, for example an estimate or invoice number, a PO number, a client name or a service name. It is blank for record types that have no friendly name.",
           "Changed By reads \"system\" when the change came from a background job (a contract renewal, a scheduled invoice run) rather than a signed-in person.",
         ],
       },

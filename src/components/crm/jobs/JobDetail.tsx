@@ -26,7 +26,8 @@ import {
 } from "@/lib/hooks/use-crm-jobs";
 import { JobProductsSection } from "@/components/crm/jobs/JobProductsSection";
 import { JobAssetsSection } from "@/components/crm/jobs/JobAssetsSection";
-import { useCreateInvoiceFromJob, useInvoiceForJob } from "@/lib/hooks/use-invoices";
+import { useAutoInvoiceCompletedJob, useCreateInvoiceFromJob, useInvoiceForJob } from "@/lib/hooks/use-invoices";
+import { BILLABLE_JOB_PRODUCT_STATUSES } from "@/lib/invoices/create-from-job";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -108,13 +109,8 @@ import { PermissionGate } from "@/components/shared/PermissionGate";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import { useConfirm } from "@/components/shared/useConfirm";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
-/**
- * crm_job_products statuses that still owe the client an invoice line —
- * see buildPendingProductLineItems(). `used_no_invoice` and `not_used` are
- * deliberately absent, and `invoiced` has already been billed.
- */
-const BILLABLE_JOB_PRODUCT_STATUSES: string[] = ["pending", "used"];
 
 const STATUS_COLOR: Record<string, string> = {
   scheduled:   "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400",
@@ -186,6 +182,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const createVisit = useCreateVisit();
   const updateStatus = useUpdateJobStatus();
   const createInvoice = useCreateInvoiceFromJob();
+  const autoInvoice = useAutoInvoiceCompletedJob();
   const { data: existingInvoice } = useInvoiceForJob(jobId);
 
   const updateJobService = useUpdateJobService();
@@ -255,8 +252,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           menCount: job.manCount,
         });
         await qc.invalidateQueries({ queryKey: ['crm-job-visits', 'job', job.id] });
-      } catch {
-        toast.error("Failed to auto-schedule this job's visit — add one manually");
+      } catch (err) {
+        toast.error(mutationErrorMessage(err, "Failed to auto-schedule this job's visit — add one manually"));
       }
     })();
   }, [job, visits, visitsLoading]);
@@ -302,7 +299,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           if (!ok) return;
         }
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to check existing visits");
+        toast.error(mutationErrorMessage(e, e instanceof Error ? e.message : "Failed to check existing visits"));
         return;
       }
     }
@@ -340,8 +337,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         if (effect.regenerate) {
           try {
             await resumeJobVisits(job.id);
-          } catch {
-            toast.error("Job saved, but its visits could not be regenerated — use Generate Visits");
+          } catch (err) {
+            toast.error(mutationErrorMessage(err, "Job saved, but its visits could not be regenerated — use Generate Visits"));
           }
         }
         await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
@@ -394,8 +391,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       setEdits({});
       setEditing(false);
       toast.success("Job saved");
-    } catch {
-      toast.error("Failed to save");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save"));
     } finally {
       setSaving(false);
     }
@@ -470,37 +467,24 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     try {
       await updateStatus.mutateAsync({ id: job.id, status, scheduledDate: job.scheduledDate ?? "" });
       toast.success(`Marked ${STATUS_LABEL[status] ?? status}`);
-      // Auto-create a draft invoice when a one-time job is completed.
-      // useCreateInvoiceFromJob skips (alreadyInvoiced) when any live invoice
+      // Auto-create a draft invoice when a one-time job is completed. Built on
+      // the server from the job's services and products (as the service role,
+      // like visit completion), so roles that may complete jobs but not write
+      // invoices still get it. It skips (alreadyInvoiced) when any live invoice
       // already covers the job or one of its visits — invoiced first, split
       // per-service visits auto-invoiced on completion, or cancel → reopen →
-      // complete — and resolves tax exactly like the server auto-invoice.
+      // complete — and resolves tax exactly like the visit auto-invoice.
       if (status === "completed" && job.jobType === "one_time") {
         try {
-          const today = orgToday();
-          const serviceDate = job.scheduledDate ?? today;
-          const svcs = job.services ?? [];
-          const productLineItems = buildPendingProductLineItems(serviceDate);
-          const svcLineItems = svcs.length > 0
-            ? svcs.map((s) => ({ name: s.serviceName, description: job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service", qty: s.qty ?? 1, rateCents: s.rateCents ?? 0, totalCents: lineTotalCents(s.rateCents ?? 0, s.qty ?? 1), serviceDate, jobServiceId: s.id }))
-            : productLineItems.length > 0
-              ? []
-              : [{ name: "Service", description: job.invoiceDescription || "Service", qty: 1, rateCents: job.rateCents ?? 0, totalCents: job.rateCents ?? 0, serviceDate }];
-          const created = await createInvoice.mutateAsync({
-            jobId: job.id,
-            clientId: job.clientId,
-            description: `Service: ${svcs.map((s) => s.serviceName).join(", ") || "Job"}`,
-            invoiceDate: today,
-            lineItems: [...svcLineItems, ...productLineItems],
-          });
+          const created = await autoInvoice.mutateAsync({ jobId: job.id, clientId: job.clientId });
           if (created.alreadyInvoiced) return;
           toast.success("Invoice created automatically — check Accounting");
-        } catch {
-          toast.error("Job marked completed, but the automatic invoice failed to create — add one manually");
+        } catch (err) {
+          toast.error(mutationErrorMessage(err, "Job marked completed, but the automatic invoice failed to create — add one manually"));
         }
       }
     } catch (err) {
-      toast.error(err instanceof Error && err.message ? err.message : "Failed to update status");
+      toast.error(mutationErrorMessage(err, err instanceof Error && err.message ? err.message : "Failed to update status"));
     }
   }
 
@@ -524,8 +508,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       setNewVisitServiceId("");
       setNewVisitInvoiceDesc("");
       toast.success("Visit scheduled");
-    } catch {
-      toast.error("Failed to add visit");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add visit"));
     }
   }
 
@@ -549,7 +533,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         toast.success("Visits already up to date");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to generate visits");
+      toast.error(mutationErrorMessage(e, e instanceof Error ? e.message : "Failed to generate visits"));
     } finally {
       setGenerating(false);
     }
@@ -575,8 +559,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       });
       setEditingSvcId(null);
       toast.success("Service updated");
-    } catch {
-      toast.error("Failed to update service");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to update service"));
     }
   }
 
@@ -602,8 +586,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       setNewSvcBHrs("0");
       setNewSvcStartDate("");
       toast.success(newSvcStartDate ? "Service added and visit scheduled" : "Service added");
-    } catch {
-      toast.error("Failed to add service");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add service"));
     }
   }
 
@@ -611,8 +595,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     try {
       await deleteJobService.mutateAsync({ id });
       toast.success("Service removed");
-    } catch {
-      toast.error("Failed to remove service");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to remove service"));
     }
   }
 
@@ -661,8 +645,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       });
       toast.success(invoice.alreadyInvoiced ? "This job is already invoiced" : "Invoice created");
       router.push(`/crm/accounting/invoices/${invoice.id}`);
-    } catch {
-      toast.error("Failed to create invoice");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create invoice"));
     } finally {
       setInvoicing(false);
     }
@@ -819,7 +803,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               </Button>
             </PermissionGate>
           )}
-          {job.jobType !== "recurring" && job.jobType !== "package" && (
+          {job.jobType !== "recurring" && job.jobType !== "package" && can("acct_add_modify_invoices") && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               disabled={invoicing}
               onClick={handleInvoice}>
@@ -1136,7 +1120,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                   setSelectedSchedId(newSched.id);
                                   setCreatingSchedule(false);
                                   toast.success("Schedule created");
-                                } catch { toast.error("Failed to create schedule"); }
+                                } catch (err) { toast.error(mutationErrorMessage(err, "Failed to create schedule")); }
                               }}>
                                 Save Schedule
                               </Button>
@@ -1937,7 +1921,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             await deleteVisit.mutateAsync(v.id);
                             toast.success("Visit deleted");
                           } catch (err) {
-                            toast.error(err instanceof Error ? err.message : "Failed to delete visit");
+                            toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to delete visit"));
                           }
                         }}
                         onSaveNote={async (note) => {
@@ -2447,7 +2431,7 @@ function VisitRow({
                   setDispatching(false);
                 } catch (err) {
                   // e.g. package min-days violation from useUpdateVisit
-                  toast.error(err instanceof Error ? err.message : "Failed to dispatch visit");
+                  toast.error(mutationErrorMessage(err, err instanceof Error ? err.message : "Failed to dispatch visit"));
                 } finally {
                   setDispatchSaving(false);
                 }

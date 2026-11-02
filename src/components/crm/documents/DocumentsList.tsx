@@ -51,6 +51,7 @@ import { DOC_TYPE_LABELS, PLAIN_TEXT_DOC_TYPES } from "@/types/crm-documents";
 import type { DocStatus, DocType, DocumentTemplate } from "@/types/crm-documents";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -102,8 +103,8 @@ function NewDocumentDialog({
       toast.success("Document created");
       onOpenChange(false);
       router.push(`/crm/settings/documents/${doc.id}`);
-    } catch {
-      toast.error("Failed to create document");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create document"));
     } finally {
       setSaving(false);
     }
@@ -337,8 +338,8 @@ function DocumentRow({
     try {
       const copy = await duplicateDoc.mutateAsync(doc.id);
       toast.success(`Created "${copy.name}"`);
-    } catch {
-      toast.error("Failed to copy document");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to copy document"));
     }
   }
 

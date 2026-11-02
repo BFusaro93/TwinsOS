@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { shiftYmd } from "@/lib/time/zone";
 import type { Estimate } from "@/types/crm-estimates";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const schema = z.object({
   clientId:       z.string().min(1, "Client is required"),
@@ -263,8 +264,8 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
       } else {
         router.push(`/crm/estimates/${estimate.id}`);
       }
-    } catch {
-      toast.error("Failed to create estimate");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to create estimate"));
     }
   }
 

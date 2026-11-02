@@ -23,6 +23,7 @@ import { computePackageVisitSchedule, type PackageVisitSchedule } from "@/lib/pa
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import type { CRMPackage, CRMPackageService } from "@/types/crm-packages";
 import type { CRMService } from "@/types/crm-jobs";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 type Tab = "details" | "services" | "audit";
 
@@ -132,7 +133,7 @@ function PackageServiceRow({
         default_rate_cents: next.defaultRate !== "" ? Math.round(parseFloat(next.defaultRate) * 100) : null,
       },
     }, {
-      onError: () => toast.error("Failed to save visit"),
+      onError: (err) => toast.error(mutationErrorMessage(err, "Failed to save visit")),
     });
   }
 
@@ -266,8 +267,8 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
         setActivePackageId(created.id);
         setTab("services");
       }
-    } catch {
-      toast.error("Failed to save package");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save package"));
     }
   }
 
@@ -285,8 +286,8 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
           sort_order: (pkg.services?.length ?? 0),
         },
       });
-    } catch {
-      toast.error("Failed to add service");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add service"));
     }
   }
 
@@ -411,7 +412,7 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
                       services={services}
                       schedule={scheduleByServiceId.get(s.id) ?? null}
                       onDelete={() => deleteSvc.mutate(s.id, {
-                        onError: () => toast.error("Failed to delete visit"),
+                        onError: (err) => toast.error(mutationErrorMessage(err, "Failed to delete visit")),
                       })}
                     />
                   ))}

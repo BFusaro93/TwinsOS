@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalAccounts, getPortalContext, subAccountNames } from "@/lib/portal/get-portal-context";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getPublishedProposal } from "@/lib/estimates/proposal-content";
 import PortalEstimatesPage from "@/components/portal/PortalEstimatesPage";
@@ -23,6 +23,7 @@ interface LineItemRow {
 
 interface EstimateRow {
   id: string;
+  client_id: string;
   estimate_number: string;
   title: string | null;
   total_price_cents: number;
@@ -56,16 +57,18 @@ export default async function EstimatesPage() {
   // Portal customers have NO RLS read path to estimates/estimate_line_items
   // (a direct PostgREST read would expose cost, margin and internal-note
   // columns and every draft), so read with the service client, scoped here to
-  // this client + org and to client-safe columns only.
+  // this client (and its sub-accounts) + org and to client-safe columns only.
   const service = createServiceClient();
+  const accounts = await getPortalAccounts(ctx);
+  const accountNames = subAccountNames(accounts);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: estimates } = await (service as any)
     .from("estimates")
     .select(
-      "id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
+      "id, client_id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
         "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, status, sort_order, row_type, section_name, tier, package_id)"
     )
-    .eq("client_id", ctx.clientId)
+    .in("client_id", accounts.map((a) => a.id))
     .eq("org_id", ctx.orgId)
     // Draft and Quote (ready but not yet sent) are internal stages — the
     // customer only sees an estimate once it has been sent.
@@ -124,5 +127,10 @@ export default async function EstimatesPage() {
   // same rule the accept route enforces (isEstimatePastValidUntil).
   const today = todayInZone(await getOrgTimeZone(service, ctx.orgId));
 
-  return <PortalEstimatesPage estimates={normalized} today={today} />;
+  return (
+    <PortalEstimatesPage
+      estimates={normalized.map((e) => ({ ...e, accountName: accountNames.get(e.client_id) ?? null }))}
+      today={today}
+    />
+  );
 }

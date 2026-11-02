@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useUpdateEvent } from "@/lib/hooks/use-crm-automations";
 import type { CRMSequenceEvent } from "@/types/crm-automations";
 import { toast } from "sonner";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   open: boolean;
@@ -41,8 +42,8 @@ export function NoteEventDialog({ open, onOpenChange, event }: Props) {
         config: { content },
       });
       onOpenChange(false);
-    } catch {
-      toast.error("Failed to save note event");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to save note event"));
     } finally {
       setSaving(false);
     }

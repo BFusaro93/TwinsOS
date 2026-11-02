@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatCurrency } from "@/lib/utils";
 import { useOtherCharges, useAddOtherChargeToInvoices } from "@/lib/hooks/use-other-charges";
 import { formatPercentBps, parsePercentToBps } from "@/lib/invoices/other-charges";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
   invoiceIds: string[];
@@ -82,8 +83,8 @@ export function BulkAddOtherChargeDialog({ invoiceIds, open, onClose, onDone }: 
       }
       onDone();
       close();
-    } catch {
-      toast.error("Failed to add charge");
+    } catch (err) {
+      toast.error(mutationErrorMessage(err, "Failed to add charge"));
     }
   }
 

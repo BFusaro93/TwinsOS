@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalAccounts, getPortalContext, subAccountNames } from "@/lib/portal/get-portal-context";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getEffectiveTicketCategories } from "@/lib/portal/ticket-categories";
 import PortalTicketsPage from "@/components/portal/PortalTicketsPage";
@@ -7,6 +7,7 @@ import type { PortalSettingsRow } from "@/lib/portal/portal-db";
 
 interface TicketRow {
   id: string;
+  client_id: string;
   ticket_number: number;
   subject: string | null;
   category: string | null;
@@ -21,6 +22,10 @@ export default async function TicketsPage() {
   if (!ctx) redirect("/portal/login");
 
   const supabase = createServiceClient();
+  // A parent client's login also sees its sub-accounts' tickets, and may file
+  // one under any of them.
+  const accounts = await getPortalAccounts(ctx);
+  const accountNames = subAccountNames(accounts);
 
   const [settingsRes, ticketsRes] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,8 +37,8 @@ export default async function TicketsPage() {
 
     supabase
       .from("crm_tickets")
-      .select("id, ticket_number, subject, category, status, priority, created_at, body")
-      .eq("client_id", ctx.clientId)
+      .select("id, client_id, ticket_number, subject, category, status, priority, created_at, body")
+      .in("client_id", accounts.map((a) => a.id))
       .eq("org_id", ctx.orgId)
       .eq("visible_to_client", true)
       .is("deleted_at", null)
@@ -52,8 +57,9 @@ export default async function TicketsPage() {
 
   return (
     <PortalTicketsPage
-      tickets={(ticketsRes.data ?? []) as TicketRow[]}
+      tickets={((ticketsRes.data ?? []) as TicketRow[]).map((t) => ({ ...t, accountName: accountNames.get(t.client_id) ?? null }))}
       categories={categories}
+      accounts={accounts}
     />
   );
 }
