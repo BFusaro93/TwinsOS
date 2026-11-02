@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClientsPage } from "@/lib/hooks/use-clients";
 import { useClientFilterFields } from "@/lib/hooks/use-client-filter-fields";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { useLoadMoreSentinel } from "@/lib/hooks/use-load-more-sentinel";
 import { ClientFilterPopover } from "@/components/crm/shared/ClientFilterPopover";
-import { matchesAllFilterRows, parseMultiValue, type FilterRow } from "@/lib/client-filters";
+import { parseMultiValue, type FilterRow } from "@/lib/client-filters";
+import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,35 +27,30 @@ const STATUS_COLOR: Record<string, string> = {
 interface Props {
   selectedId: string | null;
   onSelect: (client: Client) => void;
-  /** Seeds the filter rows, e.g. from a dashboard deep-link (?status=active). */
-  initialFilterRows?: FilterRow[];
+  /** Search + filter state is owned by the page so it survives switching to
+   *  the table view and drives CSV export. */
+  search: string;
+  onSearchChange: (search: string) => void;
+  filterRows: FilterRow[];
+  onFilterRowsChange: Dispatch<SetStateAction<FilterRow[]>>;
 }
 
-export function ClientList({ selectedId, onSelect, initialFilterRows }: Props) {
-  const { data: clients, isLoading } = useClients();
-  const { fields: FILTER_FIELDS, ctx: filterCtx } = useClientFilterFields();
-  const [search, setSearch] = useState("");
-  const [filterRows, setFilterRows] = useState<FilterRow[]>(initialFilterRows ?? []);
+export function ClientList({
+  selectedId, onSelect, search, onSearchChange: setSearch, filterRows, onFilterRowsChange: setFilterRows,
+}: Props) {
+  const { fields: FILTER_FIELDS } = useClientFilterFields();
   const router = useRouter();
 
   const activeFilterCount = filterRows.filter((r) => r.value !== "").length;
 
-  const filtered = useMemo(() => {
-    return (clients ?? []).filter((c) => {
-      const q = search.toLowerCase();
-      // Digits-only comparison so "9785550100" finds a phone stored as "(978) 555-0100".
-      const qDigits = q.replace(/\D/g, "");
-      if (q && !(
-        c.displayName.toLowerCase().includes(q) ||
-        (c.primaryEmail ?? "").toLowerCase().includes(q) ||
-        (c.primaryPhone ?? "").includes(q) ||
-        (qDigits.length >= 3 && (c.primaryPhone ?? "").replace(/\D/g, "").includes(qDigits)) ||
-        (c.billingCity ?? "").toLowerCase().includes(q) ||
-        (c.tags ?? []).some((t) => t.toLowerCase().includes(q))
-      )) return false;
-      return matchesAllFilterRows(c, filterRows, filterCtx);
-    });
-  }, [clients, search, filterRows, filterCtx]);
+  // Search, filters and paging all run server-side (crm_search_clients).
+  const debouncedSearch = useDebouncedValue(search);
+  const { data, isPending, isFetching, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    useClientsPage({ search: debouncedSearch, filters: filterRows });
+  const isLoading = isPending;
+  const filtered = useMemo(() => data?.pages.flatMap((p) => p.clients) ?? [], [data]);
+  const total = data?.pages[0]?.total ?? filtered.length;
+  const sentinelRef = useLoadMoreSentinel({ hasNextPage, isFetchingNextPage, fetchNextPage });
 
   return (
     <div className="flex h-full flex-col">
@@ -99,7 +97,8 @@ export function ClientList({ selectedId, onSelect, initialFilterRows }: Props) {
       {/* Count */}
       <div className="border-b px-3 py-2">
         <span className="text-xs text-muted-foreground">
-          {isLoading ? "Loading…" : `${filtered.length} client${filtered.length !== 1 ? "s" : ""}`}
+          {isLoading ? "Loading…" : `${total.toLocaleString()} client${total !== 1 ? "s" : ""}`}
+          {isFetching && !isLoading && !isFetchingNextPage && <span className="ml-1.5 text-slate-400 dark:text-neutral-500">· Updating…</span>}
         </span>
       </div>
 
@@ -164,6 +163,13 @@ export function ClientList({ selectedId, onSelect, initialFilterRows }: Props) {
                 </div>
               );
             })}
+            {hasNextPage && (
+              <div ref={sentinelRef} className="flex justify-center p-3">
+                <Button variant="ghost" size="sm" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>
+                  {isFetchingNextPage ? "Loading…" : `Load more (${(total - filtered.length).toLocaleString()} left)`}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -145,6 +145,9 @@ The Resend dashboard webhook must point to `/api/webhooks/resend` and subscribe 
 ### Texts send but replies and delivery statuses never appear
 Messaging Service inbound URL not set in Twilio Console (must be `<site>/api/webhooks/twilio/inbound`), or `X-Twilio-Signature` verification failing because the request URL Twilio signed differs from the URL the app computes (proxy/domain change). Check the route logs for signature failures.
 
+### Clients list, client pickers or global client search show nothing or error
+The Clients list (List and Table), every client picker, Link Parent, global search, campaign audiences and counts, My Day's client cards and Statements all go through the `crm_search_clients` RPC (plus `crm_client_filter_options` for the Source/Sales Rep filter values). A `PGRST202` / 404 on `rpc/crm_search_clients` means migration `20261210000100_crm_search_clients` is missing on that environment: apply it (section 4.2). It is SECURITY INVOKER, so a user who gets an empty list when others don't is an RLS/permissions question (see the cross-org playbook below), not a search bug. When a filter result looks wrong, compare the filter CASE inside `crm_search_clients()` (SQL) with `matchesFilterRow()` in `src/lib/client-filters.ts`; they must implement the same rules.
+
 ### A card charge succeeded in Stripe but is missing on the invoice
 Webhooks are the only writer of payment results. In Stripe -> Developers -> Webhooks, look for failed deliveries to `/api/crm/payments/connect-webhook` or `/api/billing/webhook`, fix the cause (secret mismatch, 5xx), and **resend the event**. Do not hand-insert a payment before checking allocations sum to `amount_paid`.
 

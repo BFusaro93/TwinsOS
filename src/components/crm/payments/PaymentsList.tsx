@@ -8,7 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { usePayments, useRecordPayment, useUpdatePayment, useRefundPayment, useInvoices, usePaymentAllocations, useBulkImportPayments } from "@/lib/hooks/use-invoices";
-import { useClients, useChildClients } from "@/lib/hooks/use-clients";
+import { useClient, useChildClients } from "@/lib/hooks/use-clients";
 import { useConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import {
@@ -174,7 +174,6 @@ export function AddPaymentDialog({
   const isEdit = !!payment;
   const isCreditMode = mode === "credit" || (isEdit && !!payment?.isCredit);
   const queryClient = useQueryClient();
-  const { data: clients } = useClients();
   const { mutateAsync: record, isPending: isRecording } = useRecordPayment();
   const { mutateAsync: update, isPending: isUpdating } = useUpdatePayment();
   const isPending = isRecording || isUpdating;
@@ -389,7 +388,8 @@ export function AddPaymentDialog({
   const chargeAllocations = allocations
     .filter((a) => a.amountCents > 0)
     .map((a) => ({ invoiceId: a.invoiceId, amountCents: a.amountCents }));
-  const selectedClientForCharge = (clients ?? []).find((c) => c.id === clientId);
+  const { data: selectedClient } = useClient(clientId);
+  const selectedClientForCharge = selectedClient;
   const chargeSavedMethodType = selectedClientForCharge?.savedPaymentMethodType ?? null;
   const chargeSavedMethodSummary = selectedClientForCharge?.savedPaymentMethodSummary ?? null;
 
@@ -520,7 +520,6 @@ export function AddPaymentDialog({
     }
   }
 
-  const selectedClient = (clients ?? []).find((c) => c.id === clientId);
 
   // When the client has sub-accounts, split the allocation rows into one
   // group per account (parent first, then children in the same order as
@@ -645,7 +644,6 @@ export function AddPaymentDialog({
                 <ClientCombobox
                   value={clientId}
                   onValueChange={handleClientChange}
-                  clients={clients ?? []}
                   noneLabel="Search clients..."
                 />
               )}

@@ -71,6 +71,7 @@ export function ClientsGuide() {
         </h2>
         <div className="flex flex-col gap-1">
           <TOCLink href="#creating-a-client">Creating a client</TOCLink>
+          <TOCLink href="#finding-clients">Finding clients: search, filters &amp; export</TOCLink>
           <TOCLink href="#status">Client status &amp; the Lead-to-Client transition</TOCLink>
           <TOCLink href="#client-since">Client Since, and how leads are counted</TOCLink>
           <TOCLink href="#hierarchy">Commercial parent/child hierarchy</TOCLink>
@@ -112,6 +113,57 @@ export function ClientsGuide() {
           Sales Rep filter on the Clients list and the rep reports. <strong>Client is taxable</strong> on
           the same screen marks a tax-exempt client: unchecked means no sales tax on their invoices.
         </p>
+      </Section>
+
+      <Section id="finding-clients" title="Finding clients: search, filters & export">
+        <p>
+          <strong>CRM &gt; Clients</strong> has two views of the same list: <strong>List</strong>{" "}
+          (with the client&apos;s record open beside it) and <strong>Table</strong> (more columns,
+          bulk actions). Your search and filters carry over when you switch between them.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Loading as you scroll.</strong> The count at the top is the full number of
+            matching clients, but the list shows them 100 at a time. More load automatically as you
+            scroll down, or click <strong>Load more</strong> at the bottom. Searching and filtering
+            always cover every client, not just the ones on screen.
+          </li>
+          <li>
+            <strong>Search</strong> matches name, account number, email, phone, billing and service
+            address, city, ZIP, and tags. Phone numbers match on digits alone once you type three or
+            more, so <em>9785550100</em> finds <em>(978) 555-0100</em>.
+          </li>
+          <li>
+            <strong>Filters</strong> are the same in both views: Status, Account Type, Balance,
+            Billing City, Service City, ZIP, Client Source, Sales Rep, Priority, Client Since, Tags,
+            your custom fields, Referred By, Do Not Market, Taxable, OK to Email, and{" "}
+            <strong>Has Scheduled Job For</strong> / <strong>Has Completed Job For</strong> a
+            service. Pick several values in one filter to match any of them.
+          </li>
+          <li>
+            <strong>Billing City vs. Service City.</strong> The table&apos;s{" "}
+            <strong>Service Address</strong> column shows where the work happens. To filter on that
+            town, use <strong>Service City</strong>; <strong>Billing City</strong> filters on the
+            billing address.
+          </li>
+          <li>
+            <strong>Selecting clients in the Table.</strong> The header checkbox selects the rows
+            loaded so far. When there are more matches, a <strong>Select all N matching
+            clients</strong> link appears above the table to select every client the current search
+            and filters match, ready for a bulk action.
+          </li>
+          <li>
+            <strong>Export.</strong> <strong>Import / Export &gt; Export</strong> downloads a CSV of
+            exactly the clients your current search and filters match, all of them, not just the
+            ones loaded on screen. Clear the search and filters first to export everyone.
+          </li>
+        </ul>
+        <Callout>
+          <strong>Picking a client elsewhere.</strong> Client pickers on invoices, estimates, jobs,
+          contracts, payments, tickets, projects and the global search (⌘K) search as you type and
+          show up to 50 matches. If the client you want isn&apos;t listed, keep typing: a few
+          letters of the name, an account number or part of the address narrows it down.
+        </Callout>
       </Section>
 
       <Section id="status" title="Client status & the Lead-to-Client transition">
@@ -217,6 +269,12 @@ export function ClientsGuide() {
           parent of its own can be picked as a parent. A client that&apos;s already a child is
           filtered out of the parent picker entirely — you&apos;d need to unlink it from its current
           parent first before it could become a parent itself.
+        </p>
+        <p>
+          The Link Parent Account picker shows the first 50 eligible clients. Type a name, account
+          number or address to search all of them. If the client you&apos;re linking already has
+          sub-accounts of its own, the picker explains that it can&apos;t be given a parent instead
+          of listing choices, since that would make the hierarchy two levels deep.
         </p>
         <p>
           The parent&apos;s detail page shows a <strong>Sub-Accounts</strong> banner listing every

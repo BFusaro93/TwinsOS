@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import { X, GripVertical } from "lucide-react";
-import { useClients } from "@/lib/hooks/use-clients";
 import { useCreateInvoice, useDeleteInvoice } from "@/lib/hooks/use-invoices";
 import { InvoiceDetail } from "./InvoiceDetail";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
@@ -54,8 +53,6 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
   openRef.current = open;
 
   const orgTimeZone = useOrgTimeZone();
-  const { data: clients } = useClients();
-  const invoiceableClients = (clients ?? []).filter((c) => c.status !== "lead");
   const { mutateAsync: createInvoice } = useCreateInvoice();
   const { mutateAsync: deleteInvoice } = useDeleteInvoice();
   const qc = useQueryClient();
@@ -232,7 +229,7 @@ export function NewInvoiceSheet({ open, onClose, defaultClientId, defaultProject
                   <ClientCombobox
                     value=""
                     onValueChange={handleSelectClient}
-                    clients={invoiceableClients}
+                    excludeStatuses={["lead"]}
                     noneLabel="Search clients..."
                     disabled={creating}
                   />

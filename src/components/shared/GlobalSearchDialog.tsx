@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useRouter } from "next/navigation";
 import {
@@ -39,7 +39,8 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProjects } from "@/lib/hooks/use-projects";
 import { usePhotoJobs } from "@/modules/photo-docs/hooks/usePhotoJobs";
-import { useClients, useLeads } from "@/lib/hooks/use-clients";
+import { useClientSearch, useLeads } from "@/lib/hooks/use-clients";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useInvoices } from "@/lib/hooks/use-invoices";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { usePOStore, useCMMSStore, useCurrentUserStore } from "@/stores";
@@ -128,10 +129,15 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
   const showLeads = !permsLoading && canCrm("lead_list");
   const showInvoices = !permsLoading && canCrm("acct_view_invoice_list");
   const showEstimates = !permsLoading && canCrm("estimate_list");
-  const { data: allClients = [] } = useClients();
-  // useClients() returns leads too, and they have their own group below —
-  // leaving them here listed every lead twice.
-  const clients = allClients.filter((c) => c.status !== "lead");
+  // Clients are searched server-side (an org can have thousands) — leads are
+  // left out because they have their own group below.
+  const [query, setQuery] = useState("");
+  const clientTerm = useDebouncedValue(query.trim());
+  const { data: clients = [] } = useClientSearch(
+    clientTerm,
+    { excludeStatuses: ["lead"], limit: 20 },
+    showFullSearch && showClients && clientTerm.length > 0,
+  );
   const { data: leads = [] } = useLeads();
   const { data: invoices = [] } = useInvoices();
   const { data: estimates = [] } = useEstimates();
@@ -149,7 +155,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
 
   return (
     <>
-      <CommandInput placeholder={isCrew ? "Search job photos and dispatch jobs…" : "Search clients, leads, invoices, work orders, assets…"} />
+      <CommandInput value={query} onValueChange={setQuery} placeholder={isCrew ? "Search job photos and dispatch jobs…" : "Search clients, leads, invoices, work orders, assets…"} />
       <CommandList className="max-h-[480px]">
         <CommandEmpty>No results found.</CommandEmpty>
 
@@ -162,7 +168,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
               return (
               <CommandItem
                 key={client.id}
-                value={`${client.displayName} ${client.primaryEmail ?? ""} ${typeof client.billingAddress === "object" && client.billingAddress ? Object.values(client.billingAddress).filter(Boolean).join(" ") : ""} ${[client.serviceAddress, client.serviceCity, client.serviceState, client.serviceZip].filter(Boolean).join(" ")} ${phones.join(" ")} ${phones.map((p) => p.replace(/\D/g, "")).join(" ")} client`}
+                value={`${client.displayName} ${client.accountNumber ?? ""} ${(client.tags ?? []).join(" ")} ${client.primaryEmail ?? ""} ${typeof client.billingAddress === "object" && client.billingAddress ? Object.values(client.billingAddress).filter(Boolean).join(" ") : ""} ${[client.serviceAddress, client.serviceCity, client.serviceState, client.serviceZip].filter(Boolean).join(" ")} ${phones.join(" ")} ${phones.map((p) => p.replace(/\D/g, "")).join(" ")} client`}
                 onSelect={() => go(`/crm/clients/${client.id}`)}
                 className="flex items-center gap-3"
               >

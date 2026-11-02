@@ -1,22 +1,25 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, type Dispatch, type SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import {
-  useClients,
-  useOrgTags,
+  useClientsPage,
+  fetchFilteredClientIds,
   useBulkCancelClients,
   useBulkActivateClients,
   useBulkUpdateClients,
 } from "@/lib/hooks/use-clients";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
-import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { useClientFilterFields } from "@/lib/hooks/use-client-filter-fields";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { useLoadMoreSentinel } from "@/lib/hooks/use-load-more-sentinel";
+import { ClientFilterPopover } from "@/components/crm/shared/ClientFilterPopover";
+import { parseMultiValue, type FilterRow } from "@/lib/client-filters";
 import { Input } from "@/components/ui/input";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -34,7 +37,7 @@ import { ColumnSelector, type ColumnDef } from "@/components/crm/shared/ColumnSe
 import { useColumnPrefs } from "@/lib/hooks/use-column-prefs";
 import {
   Building2, Home, Maximize2, Tag, X, ChevronDown,
-  SlidersHorizontal, Ban, CheckCircle, Pencil,
+  Ban, CheckCircle, Pencil,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
@@ -52,7 +55,8 @@ const CLIENT_COLUMNS: ColumnDef[] = [
   { key: "status",        label: "Status" },
   { key: "phone",         label: "Phone" },
   { key: "email",         label: "Email" },
-  { key: "city",          label: "City" },
+  // Key stays "city" so saved column prefs carry over; it shows the service address.
+  { key: "city",          label: "Service Address" },
   { key: "zip",           label: "Zip" },
   { key: "balance",       label: "Balance" },
   { key: "source",        label: "Source" },
@@ -65,44 +69,6 @@ const CLIENT_DEFAULT_VISIBLE: Record<string, boolean> = {
   tags: true, type: true, status: true, phone: true, email: true, city: true, balance: true,
   source: false, clientSince: false, accountNumber: false, zip: false,
 };
-
-// ── Filter query builder types ────────────────────────────────────────────────
-
-type FilterOperator = "eq" | "neq" | "contains" | "starts_with" | "lt" | "gt" | "lte" | "gte";
-type FilterFieldType = "text" | "select" | "number" | "date" | "boolean";
-
-interface FilterFieldDef {
-  value: string;
-  label: string;
-  type: FilterFieldType;
-  options?: { v: string; l: string }[];
-}
-
-interface FilterRow {
-  id: string;
-  field: string;
-  operator: FilterOperator;
-  value: string;
-}
-
-function operatorsFor(type: FilterFieldType): { value: FilterOperator; label: string }[] {
-  switch (type) {
-    case "text":    return [{ value: "contains", label: "Contains" }, { value: "starts_with", label: "Starts With" }, { value: "eq", label: "= Equal To" }];
-    case "select":  return [{ value: "eq", label: "= Equal To" }, { value: "neq", label: "≠ Does Not Equal" }];
-    case "number":
-    case "date":    return [{ value: "lt", label: "< Less Than" }, { value: "gt", label: "> Greater Than" }, { value: "eq", label: "= Equal To" }, { value: "lte", label: "≤ Less Than Or Equal To" }, { value: "gte", label: "≥ Greater Than Or Equal To" }];
-    case "boolean": return [{ value: "eq", label: "= Equal To" }];
-  }
-}
-
-function defaultOperator(type: FilterFieldType): FilterOperator {
-  switch (type) {
-    case "text":    return "contains";
-    case "number":
-    case "date":    return "lt";
-    default:        return "eq";
-  }
-}
 
 const STATUS_COLOR: Record<string, string> = {
   active:    "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
@@ -253,13 +219,17 @@ function BulkEditDialog({
 
 interface Props {
   onSelect?: (client: Client) => void;
-  /** Seeds the filter rows, e.g. from a dashboard deep-link (?status=active). */
-  initialFilterRows?: FilterRow[];
+  /** Search + filter state is owned by the page so it survives switching to
+   *  the list view and drives CSV export. */
+  search: string;
+  onSearchChange: (search: string) => void;
+  filterRows: FilterRow[];
+  onFilterRowsChange: Dispatch<SetStateAction<FilterRow[]>>;
 }
 
-export function ClientsTable({ onSelect, initialFilterRows }: Props) {
-  const { data: clients, isLoading } = useClients();
-  const orgTags = useOrgTags();
+export function ClientsTable({
+  onSelect, search, onSearchChange: setSearch, filterRows, onFilterRowsChange: setFilterRows,
+}: Props) {
   const { mutateAsync: bulkCancel } = useBulkCancelClients();
   const qc = useQueryClient();
   const [askConfirm, askConfirmDialog] = useConfirm();
@@ -272,13 +242,11 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
   // grants the same thing under its own, more literal name.
   const canActivateDeactivate = can("client_allow_delete") || can("client_activate_deactivate");
 
-  const { data: crmServices = [] } = useCRMServices();
+  // Same filter fields (and the same server-side evaluation) as the list view.
+  const { fields: FILTER_FIELDS } = useClientFilterFields();
 
-  const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [filterRows, setFilterRows] = useState<FilterRow[]>(initialFilterRows ?? []);
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [fieldSearch, setFieldSearch] = useState("");
+  const [selectingAll, setSelectingAll] = useState(false);
 
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
@@ -289,173 +257,20 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
   // +checkbox +name +actions
   const visibleColumnCount = 3 + CLIENT_COLUMNS.filter((c) => cols[c.key] ?? true).length;
 
-  // Derived options for dynamic select fields
-  const uniqueSources = useMemo(() =>
-    Array.from(new Set((clients ?? []).map((c) => c.source).filter((s): s is string => !!s))),
-    [clients]
-  );
-  const uniqueSalesReps = useMemo(() =>
-    Array.from(
-      new Map(
-        (clients ?? [])
-          .filter((c) => c.salesRepId && c.salesRepName)
-          .map((c) => [c.salesRepId!, { id: c.salesRepId!, name: c.salesRepName! }])
-      ).values()
-    ),
-    [clients]
-  );
-  const serviceNames = useMemo(() =>
-    Array.from(new Set(crmServices.map((s: { name?: string }) => s.name).filter((n): n is string => !!n))),
-    [crmServices]
-  );
-
-  const FILTER_FIELDS: FilterFieldDef[] = useMemo(() => [
-    { value: "status",         label: "Status",           type: "select",
-      options: [{ v: "active", l: "Active" }, { v: "lead", l: "Lead" }, { v: "inactive", l: "Inactive" }, { v: "cancelled", l: "Cancelled" }, { v: "lost", l: "Lost" }] },
-    { value: "account_type",   label: "Account Type",     type: "select",
-      options: [{ v: "residential", l: "Residential" }, { v: "commercial", l: "Commercial" }] },
-    { value: "balance",        label: "Balance",          type: "number" },
-    { value: "city",           label: "City",             type: "text" },
-    { value: "service_city",   label: "Service City",     type: "text" },
-    { value: "source",         label: "Client Source",    type: "select",
-      options: uniqueSources.map((s) => ({ v: s, l: s })) },
-    { value: "sales_rep",      label: "Sales Rep",        type: "select",
-      options: uniqueSalesReps.map((r) => ({ v: r.id, l: r.name })) },
-    { value: "priority",       label: "Priority",         type: "select",
-      options: [{ v: "low", l: "Low" }, { v: "normal", l: "Normal" }, { v: "high", l: "High" }] },
-    { value: "client_since",   label: "Client Since Date", type: "date" },
-    { value: "tags",           label: "Tags",             type: "select",
-      options: orgTags.map((t) => ({ v: t, l: t })) },
-    { value: "active_service", label: "Active Service",   type: "select",
-      options: serviceNames.map((n) => ({ v: n, l: n })) },
-    { value: "referred_by",    label: "Referred By",      type: "boolean" },
-    { value: "do_not_market",  label: "Do Not Market",    type: "boolean" },
-    { value: "taxable",        label: "Taxable",          type: "boolean" },
-    { value: "ok_to_email",    label: "OK to Email",      type: "boolean" },
-  ], [uniqueSources, uniqueSalesReps, orgTags, serviceNames]);
-
-  function addFilterRow() {
-    setFilterRows((prev) => [...prev, { id: crypto.randomUUID(), field: "status", operator: "eq", value: "" }]);
-  }
   function removeFilterRow(id: string) {
     setFilterRows((prev) => prev.filter((r) => r.id !== id));
   }
-  function updateFilterRow(id: string, patch: Partial<FilterRow>) {
-    setFilterRows((prev) => prev.map((r) => r.id === id ? { ...r, ...patch } : r));
-  }
-  function clearFilters() { setFilterRows([]); }
 
   const activeFilterCount = filterRows.filter((r) => r.value !== "").length;
 
-  const filtered = useMemo(() => {
-    const base = (clients ?? []).filter((c) => {
-      // search
-      const q = search.toLowerCase();
-      // Digits-only comparison so "9785550100" finds a phone stored as "(978) 555-0100".
-      const qDigits = q.replace(/\D/g, "");
-      if (q && !(
-        c.displayName.toLowerCase().includes(q) ||
-        (c.primaryEmail ?? "").toLowerCase().includes(q) ||
-        (c.primaryPhone ?? "").includes(q) ||
-        (qDigits.length >= 3 && (c.primaryPhone ?? "").replace(/\D/g, "").includes(qDigits)) ||
-        (c.billingCity ?? "").toLowerCase().includes(q) ||
-        (c.tags ?? []).some((t) => t.toLowerCase().includes(q))
-      )) return false;
-
-      // filter rows
-      for (const row of filterRows) {
-        if (!row.value) continue;
-        const op = row.operator;
-        switch (row.field) {
-          case "status":
-            if (op === "eq" && c.status !== row.value) return false;
-            if (op === "neq" && c.status === row.value) return false;
-            break;
-          case "account_type":
-            if (op === "eq" && c.accountType !== row.value) return false;
-            if (op === "neq" && c.accountType === row.value) return false;
-            break;
-          case "balance": {
-            const bal = (c.balanceOutstandingCents ?? 0) / 100;
-            const val = parseFloat(row.value);
-            if (isNaN(val)) break;
-            if (op === "eq"  && bal !== val) return false;
-            if (op === "lt"  && bal >= val)  return false;
-            if (op === "gt"  && bal <= val)  return false;
-            if (op === "lte" && bal > val)   return false;
-            if (op === "gte" && bal < val)   return false;
-            break;
-          }
-          case "city": {
-            const city = (c.billingCity ?? "").toLowerCase();
-            const val = row.value.toLowerCase();
-            if (op === "contains"    && !city.includes(val))    return false;
-            if (op === "starts_with" && !city.startsWith(val))  return false;
-            if (op === "eq"          && city !== val)           return false;
-            break;
-          }
-          case "service_city": {
-            const city = (c.serviceCity ?? "").toLowerCase();
-            const val = row.value.toLowerCase();
-            if (op === "contains"    && !city.includes(val))    return false;
-            if (op === "starts_with" && !city.startsWith(val))  return false;
-            if (op === "eq"          && city !== val)           return false;
-            break;
-          }
-          case "source":
-            if (op === "eq"  && c.source !== row.value) return false;
-            if (op === "neq" && c.source === row.value) return false;
-            break;
-          case "sales_rep":
-            if (op === "eq"  && c.salesRepId !== row.value) return false;
-            if (op === "neq" && c.salesRepId === row.value) return false;
-            break;
-          case "priority": {
-            const pri = c.priority ?? "normal";
-            if (op === "eq"  && pri !== row.value) return false;
-            if (op === "neq" && pri === row.value) return false;
-            break;
-          }
-          case "client_since": {
-            if (!c.clientSince) return false;
-            const cDate = c.clientSince.slice(0, 10);
-            const val   = row.value;
-            if (op === "eq"  && cDate !== val)  return false;
-            if (op === "lt"  && cDate >= val)   return false;
-            if (op === "gt"  && cDate <= val)   return false;
-            if (op === "lte" && cDate > val)    return false;
-            if (op === "gte" && cDate < val)    return false;
-            break;
-          }
-          case "tags":
-            if (op === "eq"  && !(c.tags ?? []).includes(row.value)) return false;
-            if (op === "neq" && (c.tags ?? []).includes(row.value))  return false;
-            break;
-          case "active_service":
-            // Future: join against crm_jobs; skip filtering for now
-            break;
-          case "referred_by":
-            if (op === "eq" && row.value === "yes" && !c.referredBy) return false;
-            if (op === "eq" && row.value === "no"  && !!c.referredBy) return false;
-            break;
-          case "do_not_market":
-            if (op === "eq" && row.value === "yes" && !c.doNotMarket) return false;
-            if (op === "eq" && row.value === "no"  && c.doNotMarket)  return false;
-            break;
-          case "taxable":
-            if (op === "eq" && row.value === "yes" && !c.isTaxable) return false;
-            if (op === "eq" && row.value === "no"  && c.isTaxable)  return false;
-            break;
-          case "ok_to_email":
-            if (op === "eq" && row.value === "yes" && !c.okToEmail) return false;
-            if (op === "eq" && row.value === "no"  && c.okToEmail)  return false;
-            break;
-        }
-      }
-      return true;
-    });
-    return base;
-  }, [clients, search, filterRows]);
+  // Search, filters and paging all run server-side (crm_search_clients).
+  const debouncedSearch = useDebouncedValue(search);
+  const queryParams = useMemo(() => ({ search: debouncedSearch, filters: filterRows }), [debouncedSearch, filterRows]);
+  const { data, isPending: isLoading, isFetching, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    useClientsPage(queryParams);
+  const filtered = useMemo(() => data?.pages.flatMap((p) => p.clients) ?? [], [data]);
+  const total = data?.pages[0]?.total ?? filtered.length;
+  const sentinelRef = useLoadMoreSentinel({ hasNextPage, isFetchingNextPage, fetchNextPage });
 
   const allSelected = filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id));
   const someSelected = filtered.some((c) => selectedIds.has(c.id)) && !allSelected;
@@ -476,6 +291,20 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
 
   function clearSelection() { setSelectedIds(new Set()); }
 
+  // The header checkbox covers the rows loaded so far; this extends the
+  // selection to every client matching the current search + filters.
+  const canSelectAllMatching = allSelected && total > filtered.length && selectedCount < total;
+  async function selectAllMatching() {
+    setSelectingAll(true);
+    try {
+      setSelectedIds(new Set(await fetchFilteredClientIds(queryParams)));
+    } catch {
+      toast.error("Couldn't select all matching clients");
+    } finally {
+      setSelectingAll(false);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col gap-3">
       {/* Toolbar */}
@@ -488,154 +317,7 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
           onChange={setSearch}
         />
 
-        <Popover open={filterOpen} onOpenChange={setFilterOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className={cn("h-8 gap-1.5", activeFilterCount > 0 && "border-brand-500 text-brand-600 dark:text-brand-400")}
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Filters
-              {activeFilterCount > 0 && (
-                <Badge className="ml-0.5 h-4 min-w-4 rounded-full px-1 text-[10px]">{activeFilterCount}</Badge>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-[540px] p-0">
-            {/* Header */}
-            <div className="flex items-center justify-between px-3 py-2 border-b bg-[#4a4a4a] rounded-t-md">
-              <span className="text-sm font-semibold text-white">Filters</span>
-              {filterRows.length > 0 && (
-                <button onClick={clearFilters} className="text-xs text-white/70 hover:text-white underline">
-                  Clear all
-                </button>
-              )}
-            </div>
-            {/* Filter rows */}
-            <div className="p-3 space-y-2 max-h-[60vh] overflow-y-auto">
-              {filterRows.length === 0 && (
-                <p className="text-xs text-slate-400 dark:text-neutral-500 text-center py-4">No filters applied. Click &ldquo;+ Add Filter&rdquo; to start.</p>
-              )}
-              {filterRows.map((row) => {
-                const fieldDef = FILTER_FIELDS.find((f) => f.value === row.field) ?? FILTER_FIELDS[0];
-                const ops = operatorsFor(fieldDef.type);
-                return (
-                  <div key={row.id} className="flex items-center gap-1.5">
-                    {/* Field selector */}
-                    <div className="relative w-44 shrink-0">
-                      <Select
-                        value={row.field}
-                        onValueChange={(v) => {
-                          const def = FILTER_FIELDS.find((f) => f.value === v) ?? FILTER_FIELDS[0];
-                          updateFilterRow(row.id, { field: v, operator: defaultOperator(def.type), value: "" });
-                        }}
-                      >
-                        <SelectTrigger className="h-7 text-xs w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-64">
-                          <div className="px-2 py-1.5 sticky top-0 bg-card border-b">
-                            <Input
-                              className="h-6 text-xs"
-                              placeholder="Filter: Enter keywords"
-                              value={fieldSearch}
-                              onChange={(e) => setFieldSearch(e.target.value)}
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                          {FILTER_FIELDS
-                            .filter((f) => !fieldSearch || f.label.toLowerCase().includes(fieldSearch.toLowerCase()))
-                            .map((f) => (
-                              <SelectItem key={f.value} value={f.value} className="text-xs">{f.label}</SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    {/* Operator selector */}
-                    <Select
-                      value={row.operator}
-                      onValueChange={(v) => updateFilterRow(row.id, { operator: v as FilterOperator, value: "" })}
-                    >
-                      <SelectTrigger className="h-7 text-xs w-44 shrink-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ops.map((op) => (
-                          <SelectItem key={op.value} value={op.value} className="text-xs">{op.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {/* Value input */}
-                    <div className="flex-1 min-w-0">
-                      {fieldDef.type === "boolean" ? (
-                        <Select value={row.value} onValueChange={(v) => updateFilterRow(row.id, { value: v })}>
-                          <SelectTrigger className="h-7 text-xs w-full">
-                            <SelectValue placeholder="Select…" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="yes" className="text-xs">Yes</SelectItem>
-                            <SelectItem value="no"  className="text-xs">No</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : fieldDef.type === "select" && fieldDef.options && fieldDef.options.length > 0 ? (
-                        <Select value={row.value} onValueChange={(v) => updateFilterRow(row.id, { value: v })}>
-                          <SelectTrigger className="h-7 text-xs w-full">
-                            <SelectValue placeholder="Select…" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-48">
-                            {fieldDef.options.map((opt) => (
-                              <SelectItem key={opt.v} value={opt.v} className="text-xs">{opt.l}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : fieldDef.type === "date" ? (
-                        <Input
-                          type="date"
-                          className="h-7 text-xs w-full"
-                          value={row.value}
-                          onChange={(e) => updateFilterRow(row.id, { value: e.target.value })}
-                        />
-                      ) : fieldDef.type === "number" ? (
-                        <Input
-                          type="number"
-                          className="h-7 text-xs w-full"
-                          placeholder="0.00"
-                          value={row.value}
-                          onChange={(e) => updateFilterRow(row.id, { value: e.target.value })}
-                        />
-                      ) : (
-                        <Input
-                          className="h-7 text-xs w-full"
-                          placeholder="Enter value…"
-                          value={row.value}
-                          onChange={(e) => updateFilterRow(row.id, { value: e.target.value })}
-                        />
-                      )}
-                    </div>
-                    {/* Remove row */}
-                    <button
-                      onClick={() => removeFilterRow(row.id)}
-                      className="shrink-0 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 p-0.5"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-            {/* Footer */}
-            <div className="border-t px-3 py-2">
-              <button
-                onClick={addFilterRow}
-                className="text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-400 font-medium"
-              >
-                + Add Filter
-              </button>
-            </div>
-          </PopoverContent>
-        </Popover>
+        <ClientFilterPopover fields={FILTER_FIELDS} rows={filterRows} onRowsChange={setFilterRows} />
 
         {/* Active filter chips */}
         {activeFilterCount > 0 && (
@@ -648,7 +330,9 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
                 lt: "<", gt: ">", lte: "≤", gte: "≥",
               };
               const opLabel = opLabels[row.operator] ?? row.operator;
-              const valLabel = fieldDef?.options?.find((o) => o.v === row.value)?.l ?? row.value;
+              const valLabel = fieldDef?.options
+                ? parseMultiValue(row.value).map((v) => fieldDef.options!.find((o) => o.v === v)?.l ?? v).join(", ")
+                : row.value;
               return (
                 <Badge
                   key={row.id}
@@ -715,10 +399,24 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
           </DropdownMenu>
         ) : (
           <span className="ml-auto text-sm text-slate-400 dark:text-neutral-500">
-            {isLoading ? "…" : `${filtered.length} client${filtered.length !== 1 ? "s" : ""}`}
+            {isLoading ? "…" : `${total.toLocaleString()} client${total !== 1 ? "s" : ""}`}
+            {isFetching && !isLoading && !isFetchingNextPage && " · Updating…"}
           </span>
         )}
       </div>
+
+      {canSelectAllMatching && (
+        <div className="rounded-md border bg-muted/40 px-3 py-1.5 text-center text-xs text-slate-600 dark:text-neutral-400">
+          All {filtered.length.toLocaleString()} loaded clients are selected.{" "}
+          <button
+            className="font-medium text-brand-600 dark:text-brand-400 underline disabled:opacity-50"
+            disabled={selectingAll}
+            onClick={selectAllMatching}
+          >
+            {selectingAll ? "Selecting…" : `Select all ${total.toLocaleString()} matching clients`}
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="flex-1 overflow-auto rounded-lg border bg-card shadow-sm">
@@ -739,7 +437,7 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
               {cols.status && <th className="px-4 py-3">Status</th>}
               {cols.phone && <th className="px-4 py-3">Phone</th>}
               {cols.email && <th className="px-4 py-3">Email</th>}
-              {cols.city && <th className="px-4 py-3">City</th>}
+              {cols.city && <th className="px-4 py-3">Service Address</th>}
               {cols.zip && <th className="px-4 py-3">Zip</th>}
               {cols.balance && <th className="px-4 py-3 text-right">Balance</th>}
               {cols.source && <th className="px-4 py-3">Source</th>}
@@ -851,6 +549,13 @@ export function ClientsTable({ onSelect, initialFilterRows }: Props) {
             )}
           </tbody>
         </table>
+        {hasNextPage && !isLoading && (
+          <div ref={sentinelRef} className="flex justify-center p-3">
+            <Button variant="ghost" size="sm" disabled={isFetchingNextPage} onClick={() => fetchNextPage()}>
+              {isFetchingNextPage ? "Loading…" : `Load more (${(total - filtered.length).toLocaleString()} left)`}
+            </Button>
+          </div>
+        )}
       </div>
 
       <BulkTagDialog

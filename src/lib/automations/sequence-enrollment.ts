@@ -391,7 +391,7 @@ async function getClientJobFacts(supabase: AnyClient, clientId: string) {
   };
 }
 
-/** Service names (lowercased) a client currently has scheduled / has ever completed, mirroring useClientServiceHistory()'s per-visit → per-service-line resolution. */
+/** Service names (lowercased) a client currently has scheduled / has ever completed, mirroring crm_search_clients()'s per-visit → per-service-line resolution (the Clients list's "Has Scheduled/Completed Job For" filters). */
 async function getClientServiceSets(
   supabase: AnyClient,
   clientId: string

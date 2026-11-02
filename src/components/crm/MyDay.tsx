@@ -9,7 +9,7 @@ import { useCurrentUserStore } from "@/stores";
 import { useTickets } from "@/lib/hooks/use-tickets";
 import { useEstimates } from "@/lib/hooks/use-estimates";
 import { useInvoices } from "@/lib/hooks/use-invoices";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClientCount } from "@/lib/hooks/use-clients";
 import { usePendingSequenceApprovals } from "@/lib/hooks/use-sequence-approvals";
 import type { EstimateStage } from "@/types/crm-estimates";
 import type { InvoiceStatus } from "@/types/crm-invoices";
@@ -101,7 +101,6 @@ export function MyDay() {
       );
   const { data: allOrgEstimates, isLoading: estimatesLoading } = useEstimates();
   const { data: allInvoices, isLoading: invoicesLoading } = useInvoices();
-  const { data: allClients, isLoading: clientsLoading } = useClients();
   const { data: pendingApprovals, isLoading: approvalsLoading } = usePendingSequenceApprovals();
   // Revenue/AR snapshot is Report Center / accounting data — hide it (and skip
   // its queries) for logins that hold neither permission.
@@ -161,10 +160,14 @@ export function MyDay() {
   );
   const totalBalanceCents = outstandingInvoices.reduce((s, i) => s + i.balanceCents, 0);
 
-  const activeClients = (allClients ?? []).filter((c) => c.status === "active");
-  const newThisMonth = activeClients.filter(
-    (c) => c.createdAt >= startOfMonth
-  ).length;
+  // Counted server-side — no need to download every client for two numbers.
+  const activeFilter = [{ id: "active", field: "status", operator: "eq" as const, value: "active" }];
+  const { data: activeClientCount = 0, isLoading: clientsLoading } = useClientCount({ filters: activeFilter });
+  const { data: newThisMonth = 0 } = useClientCount(
+    { filters: activeFilter },
+    { createdSince: startOfMonth },
+    !!startOfMonth,
+  );
 
   const recentTickets = (openTickets ?? []).slice(0, 5);
   const recentEstimates = (allEstimates ?? []).slice(0, 5);
@@ -285,7 +288,7 @@ export function MyDay() {
             {clientsLoading ? (
               <Skeleton className="h-8 w-16 mb-1" />
             ) : (
-              <p className="text-3xl font-bold text-slate-900 dark:text-neutral-100">{activeClients.length}</p>
+              <p className="text-3xl font-bold text-slate-900 dark:text-neutral-100">{activeClientCount}</p>
             )}
             <div className="text-xs text-slate-400 dark:text-neutral-500 mt-1">
               {clientsLoading ? (

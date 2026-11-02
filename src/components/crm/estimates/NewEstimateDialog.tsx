@@ -26,7 +26,7 @@ import {
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { recalcEstimateTotals, useCreateEstimate, useUpsertLineItem } from "@/lib/hooks/use-estimates";
 import { useEstimateTemplates, copyTemplateSubitemsToLine } from "@/lib/hooks/use-estimate-templates";
-import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
+import { useClientProperties } from "@/lib/hooks/use-clients";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
 import { useDocumentTemplates } from "@/lib/hooks/use-crm-documents";
@@ -72,7 +72,6 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   const router = useRouter();
   const qc = useQueryClient();
   const { today: orgToday } = useOrgDates();
-  const { data: clients }   = useClients();
   const { data: allTemplates } = useEstimateTemplates();
   const { data: docTemplates } = useDocumentTemplates();
   // Only bundles marked for estimates (or both) belong in this picker —
@@ -86,19 +85,6 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
   const breakevenRateCents = getBreakevenRateCents(orgSettings?.customizations);
   const { data: crmServices } = useCRMServices();
   const rf = useRequiredFields("estimate");
-
-  const selectableClients = (clients ?? [])
-    .filter((c) => c.status !== "inactive" && c.status !== "cancelled")
-    .sort((a, b) => {
-      if (a.status === "lead" && b.status !== "lead") return 1;
-      if (a.status !== "lead" && b.status === "lead") return -1;
-      return a.displayName.localeCompare(b.displayName);
-    })
-    .map((c) => ({
-      id: c.id,
-      displayName: c.status === "lead" ? `${c.displayName} (lead)` : c.displayName,
-      billingAddress: c.billingAddress,
-    }));
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -285,7 +271,7 @@ export function NewEstimateDialog({ open, onOpenChange, defaultClientId, onCreat
             <div className="flex flex-col gap-1.5">
               <Label>Client *</Label>
               <ClientCombobox
-                clients={selectableClients}
+                excludeStatuses={["inactive", "cancelled"]}
                 value={watch("clientId")}
                 onValueChange={(v) => setValue("clientId", v)}
                 noneLabel="Select client…"

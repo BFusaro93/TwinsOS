@@ -22,7 +22,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateProject, useUpdateProject } from "@/lib/hooks/use-projects";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
-import { useClients } from "@/lib/hooks/use-clients";
+import { useClient } from "@/lib/hooks/use-clients";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useSettingsStore } from "@/stores/settings-store";
 import { formatCurrency } from "@/lib/utils";
@@ -62,7 +62,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
   const [clientId, setClientId] = useState("");
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
-  const { data: clients = [] } = useClients();
+  const { data: defaultClient } = useClient(defaultClientId ?? "");
   const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
 
   useEffect(() => {
@@ -87,7 +87,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
       setNotes(initialData.notes ?? "");
       setClientId(initialData.clientId ?? "");
     } else if (open && !initialData && defaultClientId) {
-      const client = clients.find((c) => c.id === defaultClientId);
+      const client = defaultClient;
       setClientId(defaultClientId);
       setCustomerName(client?.displayName ?? "");
       setAddress(client?.billingAddress ?? "");
@@ -101,7 +101,7 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
       }
       if (defaultName) setName((prev) => prev || defaultName);
     }
-  }, [open, initialData, defaultClientId, clients, defaultContractPriceCents, defaultName]);
+  }, [open, initialData, defaultClientId, defaultClient, defaultContractPriceCents, defaultName]);
 
   const isValid = name.trim() !== "" && customerName.trim() !== "";
 
@@ -200,9 +200,8 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
                 <Label htmlFor="project-client-link">Link to Client (optional)</Label>
                 <ClientCombobox
                   id="project-client-link"
-                  clients={clients}
                   value={clientId}
-                  onValueChange={setClientId}
+                  onValueChange={(id) => setClientId(id)}
                   noneLabel="No client linked — matched by name only"
                 />
               </div>

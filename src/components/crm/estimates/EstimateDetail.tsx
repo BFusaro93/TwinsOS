@@ -31,7 +31,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { CommentsSection } from "@/components/shared/CommentsSection";
 import { useEstimateTemplates, copyTemplateSubitemsToLine } from "@/lib/hooks/use-estimate-templates";
-import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
+import { useClientProperties } from "@/lib/hooks/use-clients";
+import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useDocumentTemplates } from "@/lib/hooks/use-crm-documents";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
@@ -402,7 +403,6 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const { data: allTemplates } = useEstimateTemplates();
   // Same show_when filter the New Estimate dialog applies.
   const templates = (allTemplates ?? []).filter((t) => t.showWhen !== "jobs");
-  const { data: clients }   = useClients();
   const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { mutateAsync: updateEstimate } = useUpdateEstimate();
@@ -1369,31 +1369,14 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                           />
                         </FieldRow>
                         <FieldRow label="Client">
-                          <Select
+                          {/* Leads are legitimate estimate recipients (most
+                              estimates are written for prospects); the current
+                              client always shows by name, whatever its status. */}
+                          <ClientCombobox
                             value={(headerEdits.client_id as string) ?? estimate.clientId}
-                            onValueChange={(v) => { patchHeader("client_id", v); }}
-                          >
-                            <SelectTrigger className="h-8">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {/* Leads are legitimate estimate recipients (most
-                                  estimates are written for prospects), and the
-                                  estimate's current client must always be listed
-                                  regardless of status — otherwise the combobox
-                                  renders blank and invites an accidental reassign. */}
-                              {(clients ?? [])
-                                .filter((c) => c.id === estimate.clientId || (c.status !== "inactive" && c.status !== "cancelled"))
-                                .map((c) => (
-                                  <SelectItem key={c.id} value={c.id}>
-                                    {c.displayName}{c.status === "lead" ? " (lead)" : ""}
-                                  </SelectItem>
-                                ))}
-                              {estimate.clientId && !(clients ?? []).some((c) => c.id === estimate.clientId) && (
-                                <SelectItem value={estimate.clientId}>{estimate.clientName ?? "Current client"}</SelectItem>
-                              )}
-                            </SelectContent>
-                          </Select>
+                            onValueChange={(v) => { if (v) patchHeader("client_id", v); }}
+                            excludeStatuses={["inactive", "cancelled"]}
+                          />
                         </FieldRow>
                         {(clientProperties?.length ?? 0) > 0 && (
                           <FieldRow label="Property">

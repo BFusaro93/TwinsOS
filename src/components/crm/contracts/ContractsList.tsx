@@ -24,7 +24,7 @@ import {
   useContractJobServiceRows,
   type CRMContractService,
 } from "@/lib/hooks/use-contracts";
-import { useClients, useClientProperties } from "@/lib/hooks/use-clients";
+import { useClientProperties } from "@/lib/hooks/use-clients";
 import { useCRMServices, useJobsByContract } from "@/lib/hooks/use-crm-jobs";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { Button } from "@/components/ui/button";
@@ -314,7 +314,6 @@ function ContractDetailsTab({
   state,
   onChange,
   hideClient,
-  clients,
   signedAt,
   createdAt,
   hadMonthOverrides,
@@ -322,7 +321,6 @@ function ContractDetailsTab({
   state: DetailsState;
   onChange: (patch: Partial<DetailsState>) => void;
   hideClient?: boolean;
-  clients: { id: string; displayName: string }[];
   /** Fall back after the start date for the cadence anchor, as the billing engine does. */
   signedAt?: string | null;
   createdAt?: string | null;
@@ -401,7 +399,6 @@ function ContractDetailsTab({
           {!hideClient && (
             <FieldRow label="Client">
               <ClientCombobox
-                clients={clients}
                 value={state.clientId}
                 onValueChange={(v) => onChange({ clientId: v })}
                 noneLabel="Search clients…"
@@ -1213,13 +1210,11 @@ export function ContractDialog({
   onOpenChange,
   contract,
   defaultClientId,
-  clients,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   contract?: CRMContract;
   defaultClientId?: string;
-  clients: { id: string; displayName: string }[];
 }) {
   const isNew = !contract;
   const tabs = isNew ? NEW_TABS : EDIT_TABS;
@@ -1477,7 +1472,6 @@ export function ContractDialog({
               state={details}
               onChange={patchDetails}
               hideClient={!!defaultClientId}
-              clients={clients}
               signedAt={contract?.signedAt}
               createdAt={contract?.createdAt}
               hadMonthOverrides={
@@ -1571,7 +1565,6 @@ export function ContractsList({ clientId }: Props) {
 
   const activeOnly = filter === "active" ? true : filter === "inactive" ? false : undefined;
   const { data: contracts, isLoading } = useContracts(clientId, activeOnly);
-  const { data: clients } = useClients();
   const { mutateAsync: del } = useDeleteContract();
   const { mutateAsync: updateContract } = useUpdateContract();
   const { mutateAsync: generateInvoices, isPending: generatingInvoices } = useGenerateContractInvoices();
@@ -1957,7 +1950,6 @@ export function ContractsList({ clientId }: Props) {
         onOpenChange={(o) => { setDialogOpen(o); if (!o) setEditContract(undefined); }}
         contract={editContract}
         defaultClientId={clientId}
-        clients={clients ?? []}
       />
       {confirmDialog}
     </div>
