@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CalendarDays, CheckCircle2, Loader2, Wrench, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatVisitWindow } from "@/lib/portal/visit-window";
+import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 
 function fmtDate(iso: string) {
   return new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
@@ -24,12 +25,15 @@ interface Visit {
   jobType: string;
   windowStart?: string | null;
   windowEnd?: string | null;
+  /** Set when the visit is on one of the login's sub-accounts. */
+  accountName?: string | null;
 }
 
 interface Props {
   upcoming: Visit[];
   completed: Visit[];
-  clientId: string;
+  /** The login's client plus its sub-accounts (getPortalAccounts). */
+  clientIds: string[];
   orgId: string;
 }
 
@@ -40,7 +44,7 @@ const STATUS_PILL: Record<string, { label: string; color: string }> = {
   cancelled:   { label: "Cancelled",    color: "bg-slate-100 text-slate-500 border-slate-200" },
 };
 
-export default function PortalServicesPage({ upcoming: initialUpcoming, completed, clientId, orgId }: Props) {
+export default function PortalServicesPage({ upcoming: initialUpcoming, completed, clientIds, orgId }: Props) {
   const [upcoming, setUpcoming] = useState(initialUpcoming);
   const [liveVisitId, setLiveVisitId] = useState<string | null>(
     initialUpcoming.find((v) => v.status === "in_progress")?.id ?? null
@@ -52,18 +56,19 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
   // policy (client_portal_multi_org.sql) is what actually restricts delivery
   // to this client's rows — the client_id filter here is just to avoid
   // subscribing to an unfiltered stream client-side.
+  const clientKey = clientIds.join(",");
   useEffect(() => {
     const supabase = createClient();
 
     const channel = supabase
-      .channel(`portal-visits-${clientId}`)
+      .channel(`portal-visits-${clientIds[0]}`)
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
           table: "crm_job_visits",
-          filter: `client_id=eq.${clientId}`,
+          filter: `client_id=in.(${clientKey})`,
         },
         (payload) => {
           const updated = payload.new as { id: string; status: string; client_id?: string };
@@ -79,7 +84,7 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
 
     return () => { supabase.removeChannel(channel); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, orgId]);
+  }, [clientKey, orgId]);
 
   const inProgressVisit = upcoming.find((v) => v.status === "in_progress");
 
@@ -123,6 +128,7 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-800">{v.jobTitle}</p>
+                    <SubAccountLabel name={v.accountName} />
                     <p className="text-xs text-slate-500">
                       {v.windowStart && v.windowEnd
                         ? `Anytime ${formatVisitWindow(v.windowStart, v.windowEnd)}`
@@ -157,6 +163,7 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-800">{v.jobTitle}</p>
+                  <SubAccountLabel name={v.accountName} />
                   <p className="text-xs text-slate-500">
                     {fmtDate(v.scheduled_date)}
                     {v.jobDetail && ` · ${v.jobDetail}`}

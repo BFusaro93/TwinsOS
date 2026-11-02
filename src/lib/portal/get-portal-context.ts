@@ -58,6 +58,46 @@ export async function getPortalContext(): Promise<PortalContext | null> {
   return { userId: user.id, clientId: active.client_id, orgId: active.org_id, email: active.email };
 }
 
+export interface PortalAccount {
+  id: string;
+  displayName: string;
+  /** True for the client the login belongs to; false for its sub-accounts. */
+  isSelf: boolean;
+}
+
+/**
+ * The accounts a portal login may see and pay: its own client plus that
+ * client's live sub-accounts (clients.parent_client_id = it — one level, a
+ * commercial property manager's properties). Self is always first. Read with
+ * the service client so it doesn't depend on what the portal user's own RLS
+ * lets them read of `clients`; fails closed to just the login's own client.
+ * Every portal ownership check accepts exactly these ids and nothing else.
+ */
+export async function getPortalAccounts(ctx: PortalContext): Promise<PortalAccount[]> {
+  const { data, error } = await createServiceClient()
+    .from("clients")
+    .select("id, display_name, parent_client_id")
+    .eq("org_id", ctx.orgId)
+    .or(`id.eq.${ctx.clientId},parent_client_id.eq.${ctx.clientId}`)
+    .is("deleted_at", null);
+  const rows = error ? [] : (data ?? []);
+  const self = rows.find((r) => r.id === ctx.clientId);
+  const children = rows
+    .filter((r) => r.id !== ctx.clientId && r.parent_client_id === ctx.clientId)
+    .sort((a, b) => (a.display_name ?? "").localeCompare(b.display_name ?? ""));
+  return [
+    { id: ctx.clientId, displayName: self?.display_name ?? "", isSelf: true },
+    ...children.map((c) => ({ id: c.id, displayName: c.display_name ?? "Sub-account", isSelf: false })),
+  ];
+}
+
+/** Sub-account id → display name, for labelling rows that aren't the login's
+ * own account. The login's own client is absent, so a lookup miss means
+ * "no label". */
+export function subAccountNames(accounts: PortalAccount[]): Map<string, string> {
+  return new Map(accounts.filter((a) => !a.isSelf).map((a) => [a.id, a.displayName]));
+}
+
 /** The portal is a plan add-on; an org that no longer has it can't serve one. */
 async function portalIncluded(orgId: string): Promise<boolean> {
   return orgHasAddon(createServiceClient(), orgId, "client_portal");

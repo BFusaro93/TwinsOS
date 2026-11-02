@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
@@ -12,12 +12,14 @@ export async function GET() {
   // The customer's portal shows the SERVICE PROVIDER's day — a customer in
   // another timezone must see the same schedule the crew works to.
   const today = todayInZone(await getOrgTimeZone(supabase, ctx.orgId));
+  // A parent client's login also sees its sub-accounts' work.
+  const clientIds = (await getPortalAccounts(ctx)).map((a) => a.id);
 
   const [invoicesRes, upcomingRes, recentRes, estimatesRes] = await Promise.all([
     supabase
       .from("crm_invoices")
-      .select("id, invoice_number, total_cents, balance_cents, due_date, status, created_at")
-      .eq("client_id", ctx.clientId)
+      .select("id, client_id, invoice_number, total_cents, balance_cents, due_date, status, created_at")
+      .in("client_id", clientIds)
       .eq("org_id", ctx.orgId)
       .in("status", ["printed", "sent", "viewed", "partial", "overdue"])
       .is("deleted_at", null)
@@ -30,7 +32,7 @@ export async function GET() {
     supabase
       .from("crm_job_visits")
       .select(`id, scheduled_date, status, completed_at, crm_jobs!inner(id, title, job_type, client_id)`)
-      .eq("crm_jobs.client_id", ctx.clientId)
+      .in("crm_jobs.client_id", clientIds)
       .eq("org_id", ctx.orgId)
       .is("deleted_at", null)
       // A multi-crew stop is one visit to the customer — show the lead's only.
@@ -43,7 +45,7 @@ export async function GET() {
     supabase
       .from("crm_job_visits")
       .select(`id, scheduled_date, status, completed_at, crm_jobs!inner(id, title, job_type, client_id)`)
-      .eq("crm_jobs.client_id", ctx.clientId)
+      .in("crm_jobs.client_id", clientIds)
       .eq("org_id", ctx.orgId)
       .is("deleted_at", null)
       .eq("crew_group_secondary", false)
@@ -56,8 +58,8 @@ export async function GET() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (createServiceClient() as any)
       .from("estimates")
-      .select("id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at")
-      .eq("client_id", ctx.clientId)
+      .select("id, client_id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at")
+      .in("client_id", clientIds)
       .eq("org_id", ctx.orgId)
       .eq("stage", "sent")
       .is("deleted_at", null)

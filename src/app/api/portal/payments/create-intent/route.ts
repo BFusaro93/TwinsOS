@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { applyCreditBeforeCharge } from "@/lib/stripe/apply-credit-first";
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { getPortalContext } from "@/lib/portal/get-portal-context";
+import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
@@ -49,7 +49,9 @@ export async function POST(request: Request) {
     .from("crm_invoices")
     .select("id, org_id, client_id, invoice_number, balance_cents, status, open_dispute_payment_id")
     .eq("id", invoiceId)
-    .eq("client_id", ctx.clientId)
+    // A parent client's login may pay its sub-accounts' invoices; the charge
+    // still records against the invoice's own client (metadata below).
+    .in("client_id", (await getPortalAccounts(ctx)).map((a) => a.id))
     .eq("org_id", ctx.orgId)
     // A draft isn't visible in the portal, so it can't be paid from it either.
     .neq("status", "draft")
