@@ -12,7 +12,7 @@ import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useContracts } from "@/lib/hooks/use-contracts";
 import { useUpdateJob } from "@/lib/hooks/use-crm-jobs";
-import { formatCurrency } from "@/lib/utils";
+import { summarizeContractAmount } from "@/lib/utils/contract-frequency";
 
 /** "Monthly Flat Rate" snow billing has no billing engine of its own — it
  *  rides the same recurring-invoice cron that bills Contracts (daily,
@@ -52,7 +52,7 @@ export function SnowMonthlyBillingLink({
           <SelectItem value="none">Not linked</SelectItem>
           {contracts.map((c) => (
             <SelectItem key={c.id} value={c.id}>
-              {c.title} — {formatCurrency(c.monthlyAmountCents)}/mo{c.isActive && c.autoGenerate ? "" : " (inactive)"}
+              {c.title} — {summarizeContractAmount(c).label}{c.isActive && c.autoGenerate ? "" : " (inactive)"}
             </SelectItem>
           ))}
         </SelectContent>
