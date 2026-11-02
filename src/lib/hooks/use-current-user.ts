@@ -29,6 +29,20 @@ function isPortalSession(user: User | null | undefined): boolean {
 }
 
 /**
+ * postgrest-js reports a fetch that never reached Supabase (no signal, a
+ * backgrounded iOS tab resuming, a request aborted mid-navigation) as an
+ * ordinary `{ error }` with an empty code and a "TypeError: Load failed" /
+ * "Failed to fetch" message — not a thrown exception. Crew open /crm/crew on
+ * phones in the field, so this is routine there and says nothing about the
+ * account or its RLS access.
+ */
+function isTransientNetworkError(error: { message?: string; code?: string }): boolean {
+  return !error.code && /load failed|failed to fetch|networkerror|network request failed/i.test(error.message ?? "");
+}
+
+const NETWORK_RETRY_DELAY_MS = 1500;
+
+/**
  * Syncs the Zustand currentUser store with the authenticated Supabase session.
  * Call once near the top of the layout — subsequent renders are no-ops.
  *
@@ -55,17 +69,30 @@ export function useSyncCurrentUser() {
       // maybeSingle(), not single(): zero rows is a state to report on its
       // own terms, not a PostgREST error indistinguishable from a real
       // query failure.
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle();
+      const fetchProfile = () =>
+        supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+
+      let { data, error } = await fetchProfile();
+
+      // One quiet retry for a dropped connection before treating it as a failure.
+      if (error && isTransientNetworkError(error) && !cancelled) {
+        await new Promise((resolve) => setTimeout(resolve, NETWORK_RETRY_DELAY_MS));
+        if (cancelled) return;
+        ({ data, error } = await fetchProfile());
+      }
 
       // Unmounted (or signed out) mid-request: the pending fetch aborting is
       // expected, so bail before logging anything.
       if (cancelled) return;
 
       if (error) {
+        // Still offline after the retry: warn, not error. The store stays on
+        // its placeholder until the next auth event (token refresh, tab focus)
+        // re-runs the sync, so there is nothing for Sentry to act on.
+        if (isTransientNetworkError(error)) {
+          log.warn("profile lookup failed: network unreachable", { error, userId });
+          return;
+        }
         log.error("failed to load profile for current user", { error, userId });
         return;
       }
