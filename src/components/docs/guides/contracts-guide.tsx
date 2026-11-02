@@ -21,7 +21,7 @@ const STATUS_FLOW: [string, string][] = [
 const BILLING_FREQUENCIES: [string, string][] = [
   ["Weekly", "Bills every 7 days, counted from the contract’s start date. Billing Day of Month doesn’t apply."],
   ["Biweekly", "Bills every 14 days, counted from the contract’s start date. Billing Day of Month doesn’t apply."],
-  ["Monthly", "The default and by far the most common — matches how most maintenance and package programs are sold; bills on the Billing Day of Month."],
+  ["Monthly", "The default and by far the most common — matches how most maintenance and package programs are sold; bills on the Billing Day of Month. The only frequency with the 12-month grid, so it’s also the one for seasonal contracts whose months bill different amounts."],
   ["Quarterly", "Bills every third month, counted from the contract’s start month, on the Billing Day of Month."],
   ["Annual", "Bills once a year, in the contract’s start month, on the Billing Day of Month — e.g. a lump-sum snow contract."],
   ["One-time", "Bills exactly once, on the first run on or after the start date; once any invoice exists on the contract it never bills again."],
@@ -73,10 +73,14 @@ export function ContractsGuide() {
             once per contract and is the same on every invoice; only the amount can vary by month.
           </li>
           <li>
-            <strong>A monthly amount grid</strong> — twelve fields, one per calendar month
-            (January–December), each independently editable. &quot;Auto Fill&quot; copies January&apos;s
-            amount into all twelve if you want a flat rate; otherwise leave months at $0 to skip
-            billing entirely in that month.
+            <strong>A billing frequency and amount</strong> — Monthly contracts get a twelve-field
+            grid, one per calendar month (January–December), each the amount of that month&apos;s
+            invoice. &quot;Auto Fill&quot; copies January&apos;s amount into all twelve if you want a
+            flat rate; otherwise leave months at $0 to skip billing entirely in that month. The line
+            above the grid shows what the contract bills in a year. Every other frequency (Quarterly,
+            Annual, Weekly, Every 2 weeks, One time) has a single <strong>Amount per invoice</strong>{" "}
+            field instead &mdash; see <a href="#billing-frequency" className="underline">Billing
+            frequency options</a>.
           </li>
           <li>
             <strong>Billing settings</strong> — billing day of month, whether to bill a month in
@@ -211,10 +215,24 @@ export function ContractsGuide() {
       <Section id="billing-frequency" title="Billing frequency options">
         <p>
           Every contract has a Billing Frequency, and both billing paths (the daily cron and
-          Create Invoices) honor it. It&apos;s shown in Contract reports and as the{" "}
-          <strong>Frequency</strong> column on the Invoices list. There is currently no field in
-          the Contract dialog to set it; new contracts default to Monthly, and a different
-          frequency is set through the API or MCP connector.
+          Create Invoices) honor it. Set it in the contract&apos;s <strong>Contract Details</strong>{" "}
+          tab, at the top of the Invoice Details settings; new contracts default to Monthly. It can
+          also be set through the API, the MCP connector and the contract CSV import. It&apos;s shown
+          in Contract reports, as the <strong>Frequency</strong> column on the Invoices list, and in
+          the contracts list&apos;s Amount column (&quot;$3,000.00 / quarter&quot;).
+        </p>
+        <p>
+          For any frequency other than Monthly, the twelve-month grid is replaced by one{" "}
+          <strong>Amount per invoice</strong> field and a line saying when the contract will bill:
+          the months for Quarterly and Annual (&quot;Invoices in Jan, Apr, Jul, Oct&quot;, counted
+          from the start date &mdash; or the signed or created date when there&apos;s no start
+          date), the 7- or 14-day cadence for Weekly and Every 2 weeks, and the first date for One
+          time. Settings that don&apos;t apply are hidden: Weekly and Every 2 weeks have no Billing Day
+          of Month, Bill 1 Month in Advance or mid-cycle proration, and One time has no Billing Day
+          of Month or proration. Switching frequency carries the amount across (a flat monthly grid
+          becomes the single amount and back; a seasonal grid is kept as it is). If a non-monthly
+          contract created through the API or import had different amounts for some months, the
+          dialog says so, and saving replaces them with the one amount.
         </p>
         <p>
           If a billing day is missed (an outage, or the cron failing that morning), the contract is
@@ -246,8 +264,24 @@ export function ContractsGuide() {
           contract worth $3,000 a quarter should store $3,000, and an annual $12,000 contract
           stores $12,000. Quarterly and annual contracts can&apos;t double-bill: a manual Create
           Invoices click mid-period bills that period and the cron then skips it. Bill 1 Month in
-          Advance only applies to monthly, quarterly, and annual contracts.
+          Advance only applies to monthly, quarterly, annual and one-time contracts.
         </Callout>
+        <p>
+          <strong>Seasonal contracts with different monthly amounts.</strong> A contract that bills,
+          say, April through November at different amounts stays on <strong>Monthly</strong>: enter
+          each billed month&apos;s amount in the grid and leave the other months at $0. It sends
+          eight invoices a year, each for its own month&apos;s amount. Because no single amount
+          describes it, the contracts list, the client&apos;s contract badge and the snow-billing
+          contract picker show its yearly total instead &mdash; &quot;$4,100.00 / yr &middot; 8 months
+          (varies)&quot;. A seasonal contract with the same amount every billed month reads
+          &quot;$500.00 / month &middot; 8 months&quot;.
+        </p>
+        <p>
+          <strong>Exporting.</strong> The contracts list&apos;s Export button writes Billing
+          Frequency, Billing Day (blank for weekly, every-2-weeks and one-time contracts), Amount per
+          invoice (&quot;varies by month&quot; for a seasonal grid with different amounts) and Yearly
+          Total (blank for one-time contracts).
+        </p>
       </Section>
 
       <Section id="ending-contracts" title="Ending or cancelling a contract">
@@ -272,8 +306,9 @@ export function ContractsGuide() {
             <strong>Save as template</strong> at the top of the tab and give it a name. A template
             stores the contract name, invoice line items, default service, the twelve monthly
             amounts, billing day of month, bill-a-month-in-advance, payment type, auto-generate
-            invoices, and include sub-properties. It does <strong>not</strong> store the client or the
-            start and end dates.
+            invoices, and include sub-properties. It does <strong>not</strong> store the client, the
+            start and end dates, or the billing frequency &mdash; applying a template keeps whatever
+            frequency the contract already has.
           </li>
           <li>
             <strong>Use one.</strong> On a new contract, choose it from{" "}
