@@ -214,8 +214,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const { data: org } = await db.from("organizations").select("oauth_write_roles").eq("id", existing.org_id).maybeSingle();
-    const allowedForCurrentRole = allowedScopeStringsForRole(currentProfile?.role ?? "", org?.oauth_write_roles ?? []);
+    const allowedForCurrentRole = allowedScopeStringsForRole(currentProfile.role);
     const cappedScopes = (existing.scopes ?? []).filter((s: string) => allowedForCurrentRole.has(s));
     if (cappedScopes.length === 0) {
       return NextResponse.json({ error: "invalid_grant", error_description: "No scopes remain valid for this user's current role" }, { status: 400 });

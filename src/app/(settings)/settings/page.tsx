@@ -81,9 +81,6 @@ function MasterAccountSettings() {
                 <ZapierIntegrationCard />
                 <ApiKeysCard />
                 <OAuthConnectionsCard />
-                {/* OAuth Write Access (OAuthWriteRolesCard) is not shown: only admins can
-                    approve an OAuth connection (api/mcp/oauth/authorize), and admins always
-                    have write, so opting other roles in changed nothing. */}
               </div>
               <HomeShortcutsCard />
             </div>

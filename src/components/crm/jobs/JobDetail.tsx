@@ -1543,7 +1543,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             </label>
                           ) : s.treatedArea != null ? (
                             <p className="mt-0.5 text-xs font-normal text-slate-500 dark:text-neutral-400">
-                              Treated area: {s.treatedArea.toLocaleString()} sq ft
+                              Treated area: {s.treatedArea.toLocaleString()}
                             </p>
                           ) : null}
                           {(s.subitems ?? []).length > 0 && (

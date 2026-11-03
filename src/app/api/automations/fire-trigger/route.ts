@@ -98,24 +98,6 @@ const VERIFIED_TRIGGERS: Partial<Record<TriggerType, VerifiedTrigger>> = {
   },
 };
 
-/**
- * Client-level events a bulk action (tag, cancel, activate, bulk edit) can
- * fire for many clients in one request: none needs a record id, and the
- * match value is the same for every client in the batch.
- */
-const BULK_TRIGGER_TYPES: ReadonlySet<TriggerType> = new Set([
-  "tag_added",
-  "tag_removed",
-  "client_cancelled",
-  "lead_cancelled",
-  "client_reactivated",
-  "lead_converted_to_client",
-  "client_source_updated",
-  "has_opted_in_emails",
-]);
-/** Kept small: each client may enroll in sequences that send immediately. */
-const MAX_BULK_CLIENTS = 50;
-
 export async function POST(req: NextRequest) {
   const supabase = await createServerClient();
   const {
@@ -126,8 +108,6 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {
     triggerType?: string;
     clientId?: string;
-    /** Bulk form: the same event for several clients (BULK_TRIGGER_TYPES only). */
-    clientIds?: string[];
     estimateId?: string;
     ticketId?: string;
     invoiceId?: string;
@@ -136,15 +116,7 @@ export async function POST(req: NextRequest) {
   if (!body.triggerType || !ALLOWED_TRIGGER_TYPES.has(body.triggerType as TriggerType)) {
     return NextResponse.json({ error: "unsupported triggerType" }, { status: 400 });
   }
-  const bulkIds = Array.isArray(body.clientIds) ? body.clientIds.filter((v) => typeof v === "string") : null;
-  if (bulkIds) {
-    if (!BULK_TRIGGER_TYPES.has(body.triggerType as TriggerType)) {
-      return NextResponse.json({ error: "this triggerType can't be fired in bulk" }, { status: 400 });
-    }
-    if (bulkIds.length === 0 || bulkIds.length > MAX_BULK_CLIENTS) {
-      return NextResponse.json({ error: `clientIds must hold 1–${MAX_BULK_CLIENTS} ids` }, { status: 400 });
-    }
-  } else if (!body.clientId) {
+  if (!body.clientId) {
     return NextResponse.json({ error: "clientId is required" }, { status: 400 });
   }
 
@@ -159,17 +131,6 @@ export async function POST(req: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as unknown as any;
-
-  if (bulkIds) {
-    return fireBulk(db, {
-      userId: user.id,
-      orgId,
-      triggerType: body.triggerType as TriggerType,
-      clientIds: bulkIds,
-      matchValues: Array.isArray(body.matchValues) ? body.matchValues.filter((v) => typeof v === "string") : undefined,
-    });
-  }
-  if (!body.clientId) return NextResponse.json({ error: "clientId is required" }, { status: 400 });
 
   // Confirm the client actually belongs to the caller's org before firing —
   // this route runs with the caller's own RLS-scoped session, but org_id is
@@ -278,60 +239,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true });
-}
-
-/**
- * Bulk form of the unverified path above: the same org check (one query for
- * the whole batch, under the caller's RLS session) and the same per-client
- * replay limit, then one enrollment per client. Clients that aren't in the
- * org, or were just fired, are skipped rather than failing the batch.
- */
-async function fireBulk(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
-  args: { userId: string; orgId: string; triggerType: TriggerType; clientIds: string[]; matchValues?: string[] }
-) {
-  const { data: owned, error } = await db
-    .from("clients")
-    .select("id")
-    .eq("org_id", args.orgId)
-    .in("id", args.clientIds);
-  if (error) {
-    logger.error("[fire-trigger] bulk client lookup failed", { error: error.message });
-    return NextResponse.json({ error: "Failed to fire triggers" }, { status: 500 });
-  }
-  const recordSuffix = args.matchValues?.[0];
-  const enrollmentIds: string[] = [];
-  let fired = 0;
-  for (const { id: clientId } of (owned ?? []) as { id: string }[]) {
-    const key = `fire:${args.userId}:${args.triggerType}:${recordSuffix ?? clientId}:${clientId}`;
-    if (!(await checkAuthRateLimit(key, 3, 600))) continue;
-    enrollmentIds.push(
-      ...(await fireSimpleTrigger(db, {
-        orgId: args.orgId,
-        clientId,
-        estimateId: null,
-        ticketId: null,
-        invoiceId: null,
-        triggerType: args.triggerType,
-        matchValues: args.matchValues,
-      }))
-    );
-    fired++;
-  }
-
-  if (enrollmentIds.length > 0) {
-    const admin = createServiceClient();
-    for (const enrollmentId of enrollmentIds) {
-      try {
-        await processEnrollmentImmediately(admin, enrollmentId);
-      } catch (err) {
-        logger.error("[fire-trigger] immediate processing failed", {
-          enrollmentId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-  }
-  return NextResponse.json({ ok: true, fired });
 }

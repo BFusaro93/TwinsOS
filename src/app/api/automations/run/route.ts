@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/supabase";
 import { processDueEnrollment } from "@/lib/automations/sequence-processor";
+import { drainTriggerQueue } from "@/lib/automations/trigger-queue";
 import { notifyZapierSubscribers } from "@/lib/integrations/zapier";
 import { POLLING_TRIGGERS } from "@/lib/integrations/zapier-triggers";
 import { logger } from "@/lib/logger";
@@ -575,6 +576,18 @@ async function handleRun(request: Request) {
     fired.push({ automationId: auto.id, name: auto.name, result: outcome.result });
   }
 
+  // ── Queued bulk-action triggers ──────────────────────────────────────────
+  // Large Clients/Leads bulk actions queue their automation events instead of
+  // firing them in the request. Drained before the processor below so the
+  // enrollments they create send their due steps in this same run.
+  let queuedTriggers = { processed: 0, failed: 0 };
+  const queueStartedAt = Date.now();
+  try {
+    queuedTriggers = await drainTriggerQueue(adminClient, { budgetMs: 60_000, orgId: callerOrgId });
+  } catch (queueErr) {
+    log.error("trigger queue drain failed", { error: queueErr instanceof Error ? queueErr.message : String(queueErr) });
+  }
+
   // ── CRM sequence enrollment processor ────────────────────────────────────
   const crmFired: { enrollmentId: string; action: string }[] = [];
   const crmSkipped: { enrollmentId: string; reason: string }[] = [];
@@ -587,7 +600,8 @@ async function handleRun(request: Request) {
     // semantics are unchanged. Rows already seen this run (e.g. skipped but
     // still due) are not re-processed; the loop ends when a batch brings
     // nothing new.
-    const POLL_BUDGET_MS = 240_000;
+    // Shares the function's time limit with the queue drain above.
+    const POLL_BUDGET_MS = Math.max(60_000, 240_000 - (Date.now() - queueStartedAt));
     const BATCH_SIZE = 50;
     const startedAt = Date.now();
     const seenEnrollmentIds = new Set<string>();
@@ -651,5 +665,6 @@ async function handleRun(request: Request) {
     skipped: skipped.length,
     details: { fired, skipped },
     crm: { fired: crmFired.length, skipped: crmSkipped.length, details: { fired: crmFired, skipped: crmSkipped } },
+    queuedTriggers,
   });
 }

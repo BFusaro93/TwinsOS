@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
-import { buildChemicalAreaResolver, effectivePropertyId, fetchSinglePropertyByClient } from "@/lib/chemical-area";
+import { buildChemicalAreaResolver, effectivePropertyId, fetchSinglePropertyByClient, type ChemicalArea } from "@/lib/chemical-area";
 import type {
   ChemicalApplication,
   ChemicalApplicationRate,
@@ -613,7 +613,7 @@ export function useChemicalJobAreaValue(
 ) {
   return useQuery({
     queryKey: ["chemical-job-area-value", jobId, areaFieldId, productId ?? null, visitId ?? null],
-    queryFn: async (): Promise<number | null> => {
+    queryFn: async (): Promise<ChemicalArea | null> => {
       const supabase = createClient();
       const { data: job } = await supabase
         .from("crm_jobs")

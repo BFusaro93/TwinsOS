@@ -24,30 +24,54 @@ import type { ChemicalApplicationRate, ChemicalLookupItem, ChemicalUnitClass } f
 export function calcAutoQuantity(
   rate: ChemicalApplicationRate,
   areaValue: number,
-  unitsById?: Map<string, ChemicalLookupItem>
+  unitsById?: Map<string, ChemicalLookupItem>,
+  /** What `areaValue` measures: square feet ("area") or linear feet ("linear"). */
+  areaKind: AreaKind = "area"
 ): number | null {
   if (!rate.areaQty || rate.rateQty == null) return null;
   const areaUnit = rate.areaUnitId ? unitsById?.get(rate.areaUnitId) : undefined;
-  return (areaValue / (rate.areaQty * areaBasisSqFt(areaUnit))) * rate.rateQty;
+  const basis = areaBasis(areaUnit);
+  // A per-linear-foot rate against a square-foot measurement (or the reverse)
+  // has no meaningful answer — no estimate beats a wrong one.
+  if (basis.kind !== areaKind) return null;
+  return (areaValue / (rate.areaQty * basis.factor)) * rate.rateQty;
 }
 
+/** What a rate's basis or a property measurement counts: square feet or linear (running) feet. */
+export type AreaKind = "area" | "linear";
+
+export interface AreaBasis {
+  kind: AreaKind;
+  /** Square feet (kind "area") or feet (kind "linear") in ONE unit of the basis. */
+  factor: number;
+}
+
+const LINEAR_UNIT_RE = /\blin(?:ear|\.)?\b|\bln\.?\s*f|\blf\b|\bmlf\b|running\s*f/;
+
 /**
- * Square feet in ONE unit of a rate's area basis. The property's area custom
- * field is square feet, so a label rate of "1.5 oz per 1,000 sq ft" entered as
- * qty 1 of the "1,000 Sq Ft" unit must divide the property by 1,000 — treating
- * it as qty 1 of a square foot overdoses by 1,000x ("per Acre" by 43,560x).
- * Area units carry no conversion metadata (they're free-text lookup rows), so
- * the scale is read from the name; an unrecognised or missing unit keeps the
- * historical behaviour of treating the qty as square feet.
+ * The basis of ONE unit of a rate's "per ..." quantity. A label rate of "1.5 oz
+ * per 1,000 sq ft" entered as qty 1 of the "1,000 Sq Ft" unit must divide the
+ * property by 1,000 — treating it as qty 1 of a square foot overdoses by
+ * 1,000x ("per Acre" by 43,560x). Perimeter and barrier products are labelled
+ * per linear foot ("per 100 lin ft"), which is a different kind of measurement
+ * entirely and only sizes against a linear-foot field. Area units carry no
+ * conversion metadata (they're free-text lookup rows), so kind and scale are
+ * read from the name; an unrecognised or missing unit keeps the historical
+ * behaviour of treating the qty as square feet.
  */
-export function areaBasisSqFt(unit: ChemicalLookupItem | undefined): number {
+export function areaBasis(unit: ChemicalLookupItem | undefined): AreaBasis {
   const name = unit?.name.trim().toLowerCase() ?? "";
-  if (!name) return 1;
-  if (name.includes("acre")) return 43560;
-  if (/(^|[^\d.])1[,\s]?000(\D|$)/.test(name) || name.includes("k sq") || name.includes("msf")) return 1000;
-  if (/(^|[^\d.])100\s*(sq|square|ft)/.test(name)) return 100;
-  if (/sq(uare|\.)?\s*(yd|yard)/.test(name)) return 9;
-  return 1;
+  if (!name) return { kind: "area", factor: 1 };
+  if (LINEAR_UNIT_RE.test(name)) {
+    if (/(^|[^\d.])1[,\s]?000(\D|$)/.test(name) || name.includes("mlf")) return { kind: "linear", factor: 1000 };
+    if (/(^|[^\d.])100(\D|$)/.test(name)) return { kind: "linear", factor: 100 };
+    return { kind: "linear", factor: 1 };
+  }
+  if (name.includes("acre")) return { kind: "area", factor: 43560 };
+  if (/(^|[^\d.])1[,\s]?000(\D|$)/.test(name) || name.includes("k sq") || name.includes("msf")) return { kind: "area", factor: 1000 };
+  if (/(^|[^\d.])100\s*(sq|square|ft)/.test(name)) return { kind: "area", factor: 100 };
+  if (/sq(uare|\.)?\s*(yd|yard)/.test(name)) return { kind: "area", factor: 9 };
+  return { kind: "area", factor: 1 };
 }
 
 /** A lookup row carrying enough metadata to convert within its own class. */
@@ -177,9 +201,11 @@ export interface ChemicalCalcResult {
 export function calcChemicalAndSolution(
   rate: ChemicalApplicationRate,
   areaValue: number,
-  unitsById: Map<string, ChemicalLookupItem>
+  unitsById: Map<string, ChemicalLookupItem>,
+  /** What `areaValue` measures — a mismatch with the rate's basis returns null. */
+  areaKind: AreaKind = "area"
 ): ChemicalCalcResult | null {
-  const appliedAmount = calcAutoQuantity(rate, areaValue, unitsById);
+  const appliedAmount = calcAutoQuantity(rate, areaValue, unitsById, areaKind);
   if (appliedAmount == null || !rate.unitOfMeasureId) return null;
 
   const unresolved: ChemicalCalcResult = {

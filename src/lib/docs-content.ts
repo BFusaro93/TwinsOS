@@ -2128,11 +2128,15 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I quote a spot treatment or part of a property so chemical quantities use that area?",
-        a: "On the estimate line open the notes menu and use the Treated Area tab to enter the sq ft you will actually treat. It carries to the job service when you convert, and you can also edit it on the job's Services tab. Materials Needed, the Daily Load List, the crew's preloaded amounts and the application panel use it instead of the property measurement. Leave it blank to use the property's measurement.",
+        a: "On the estimate line open the notes menu and use the Treated Area tab to enter the area you will actually treat, in the same unit as the service's area field (sq ft, or linear ft for a perimeter service). It carries to the job service when you convert, and you can also edit it on the job's Services tab. Materials Needed, the Daily Load List, the crew's preloaded amounts and the application panel use it instead of the property measurement. Leave it blank to use the property's measurement.",
       },
       {
         q: "How do I make a service like parking-lot weed control use the Parking Lot square footage?",
         a: "Open the service, go to its Chemicals tab and set Area measurement for chemical quantities to Parking Lot / Hardscape Sq. Ft. Without it the service uses the org's Area Custom Field from Settings > Chemical Tracking (for example Turf Sq. Ft.). A treated area on the job service overrides both.",
+      },
+      {
+        q: "How do I estimate a perimeter or barrier product that is labelled per linear foot?",
+        a: "In Settings > Chemical Tracking add an area unit such as 100 Linear Ft or 1,000 Linear Ft (new orgs already have both) and use it on the product's Application Rate. Then open the service's Chemicals tab and set Area measurement for chemical quantities to a linear-foot field such as Linear Ft. Perimeter. A linear-foot rate is only sized from a linear-foot field and a square-foot rate only from an area field; when they don't match no amount is estimated and the Daily Load List and application panel say why.",
       },
       {
         q: "How do I skip one step of a package on an estimate?",

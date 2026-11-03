@@ -141,7 +141,8 @@ export function ProductCatalogGuide() {
           (for example Turf Sq. Ft.), the planned amount is the product&apos;s default Application
           Rate multiplied by the property&apos;s area. The rate&apos;s area unit is honored, so a
           rate &ldquo;per 1,000 Sq Ft&rdquo; or &ldquo;per Acre&rdquo; is converted to square feet
-          before the math. The built-in takeoff fields count as an Area Custom Field, and a job
+          before the math, and a field measured in acres or square yards is converted too. The built-in
+          takeoff fields count as an Area Custom Field, and a job
           with no property of its own uses the client&apos;s property when the client has exactly
           one. A client with two or more properties and no property on the job gets no estimate
           rather than a guess. Start and end time inputs on the application record are optional.
@@ -158,6 +159,17 @@ export function ProductCatalogGuide() {
           the Daily Load List, the crew&apos;s preloaded amounts and the application panel all use the same
           order, so they agree. Rate Matrix pricing uses the same property-then-client lookup for its
           keyed field.
+        </p>
+        <p>
+          <strong>Per-linear-foot rates.</strong> Perimeter and barrier products are often labelled per
+          linear foot. Add an area unit such as &ldquo;100 Linear Ft&rdquo; or &ldquo;1,000 Linear Ft&rdquo;
+          (new orgs get both), use it on the product&apos;s Application Rate, and set the service&apos;s area
+          measurement to a linear-foot field such as Linear Ft. Perimeter or Linear Ft. Edging. A linear-foot
+          rate is only sized from a linear-foot field, and a square-foot rate only from an area field: when they
+          don&apos;t match, no amount is estimated and the Daily Load List and the application panel say why,
+          so enter that amount by hand. A treated area on the job service is in the same unit as the field the
+          service sizes from. Fields that can&apos;t size a rate, such as Yards of Mulch or a count, aren&apos;t
+          offered.
         </p>
         <p>
           <strong>Stock.</strong> When a visit is completed, each confirmed, used chemical

@@ -68,11 +68,9 @@ export default async function OAuthAuthorizePage({
   }
   const { data: org } = await supabase
     .from("organizations")
-    .select("name, oauth_write_roles")
+    .select("name")
     .eq("id", profile.org_id)
     .single();
-  const orgWriteRoles = org?.oauth_write_roles ?? [];
-  const canGrantWrite = profile.role === "admin" || orgWriteRoles.includes(profile.role);
 
   // client_name is whatever the registering caller chose at DCR time (any
   // caller can self-register a client under any name, including "Claude" or
@@ -98,11 +96,6 @@ export default async function OAuthAuthorizePage({
           You&apos;ll be redirected to <span className="font-mono font-medium text-slate-700">{redirectHost}</span> after approving.
           Only continue if you recognize this destination.
         </p>
-        {!canGrantWrite && (
-          <p className="mt-1 text-xs text-slate-400">
-            Your role ({profile.role}) can grant read-only access. An admin can grant write access from their own account, or opt your role into write access org-wide.
-          </p>
-        )}
 
         <ConsentForm
           clientId={clientId}
@@ -110,7 +103,7 @@ export default async function OAuthAuthorizePage({
           codeChallenge={codeChallenge}
           codeChallengeMethod={codeChallengeMethod}
           state={state}
-          resources={oauthResourcesForRole(profile.role, orgWriteRoles)}
+          resources={oauthResourcesForRole(profile.role)}
         />
       </div>
     </div>

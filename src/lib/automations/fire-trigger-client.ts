@@ -23,27 +23,3 @@ export function fireAutomationTrigger(params: {
     body: JSON.stringify(params),
   }).catch(() => {});
 }
-
-/**
- * The same event for many clients (a bulk tag / cancel / activate / edit).
- * One request per 50 clients, sent one after another, instead of a request
- * per client: a 4,000-client selection used to fire 4,000 parallel fetches.
- * Best-effort and never awaited by callers, like fireAutomationTrigger.
- */
-export function fireAutomationTriggerForClients(params: {
-  triggerType: TriggerType;
-  clientIds: string[];
-  matchValues?: string[];
-}): void {
-  const { clientIds, ...rest } = params;
-  if (clientIds.length === 0) return;
-  void (async () => {
-    for (let i = 0; i < clientIds.length; i += 50) {
-      await fetch("/api/automations/fire-trigger", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...rest, clientIds: clientIds.slice(i, i + 50) }),
-      }).catch(() => {});
-    }
-  })();
-}
