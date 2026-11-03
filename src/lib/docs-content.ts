@@ -770,7 +770,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Packages",
             detail:
-              "Go to CRM > Settings > Packages to bundle recurring services (e.g. a 7-Step Fertilizer program) under one program. A package's Services tab defines each visit — its service, date window, minimum days between visits, and default budgeted hours/rate. The fixed monthly billing amount, discount, and renewal terms live on the resulting job once a client is signed up, not on the package template itself.",
+              "Go to CRM > Settings > Packages to bundle recurring services (e.g. a 7-Step Fertilizer program) under one program. A package's Services tab defines each visit — its service, date window, minimum days between visits, and default budgeted hours/rate. The fixed monthly billing amount and discount live on the resulting job once a client is signed up, not on the package template itself. Next season, Renew for next season (on the job's More menu, or Renew Packages on the Jobs list) copies the job forward a year.",
           },
           {
             step: "Projects",
@@ -2145,6 +2145,34 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I copy the first package visit's values to the other visits?",
         a: "On the package header row use the copy buttons (Qty, Rate, B.Hr, Cost, Adj Rate or All). Each copies that value from the first visit to every other visit in the package and recalculates the totals.",
+      },
+      {
+        q: "How do I renew a package job for next season?",
+        a: "Open the package job, click More (…) and choose Renew for next season. The window shows last season and the new season, every step with its new date and rate, and any warnings; click Renew for the new year. It creates a new package job for the same client and property with the same services, rates, budgets, Min Days, crew, sales rep and crew notes, with every step date moved forward one year. Its visits are created the same way as Add Job, it is marked as a Renewal sale for commissions, and Date Sold is today. The old job is left as it was. To renew many at once, use Renew Packages on the Jobs list.",
+      },
+      {
+        q: "How do I renew all of last season's package jobs at once?",
+        a: "On Scheduling, Jobs, click Renew Packages. Pick the season to renew from. Every package job from that season is listed with its renewal state; the ones not yet renewed and not marked Don't renew are ticked. Untick any you want to leave out and click Renew. Each job is renewed one at a time, and any that can't be renewed (already renewed, or the client already has that package for the new season) are skipped with the reason shown on its row.",
+      },
+      {
+        q: "Does renewing a package use last season's dates or the package template's dates?",
+        a: "Last season's job, unless you tick Use the package's current dates. By default each step keeps the date it had on the old job, moved forward one year (Feb 29 becomes Feb 28), so per-client changes carry over. With the box ticked (in the renew window, or Use each package's current dates in Renew Packages), each step's window comes from the package in Settings, Packages, moved to the new season, so it works whether you have already updated the package's dates or not. Either way the renewal keeps the job's own steps and rates: a step the package doesn't have keeps last season's date, and a step the package has but the job doesn't is not added (the window lists both). A package with no step dates keeps last season's dates. Min Days spacing is applied in both cases. Rates are copied as they are, so run a Price Adjustment after renewing if prices go up. If the old job is from a season that ended more than a year ago, the dates move forward enough years to land on the coming season.",
+      },
+      {
+        q: "What stops a package job from being renewed twice?",
+        a: "A package job can have only one live renewal. Renewing it again, from either the job or Renew Packages, is refused with the number of the existing renewal. If the client already has the same package at the same property for the new season (for example added with Add Job), renewing warns you and needs Renew anyway ticked. Deleting the renewal lets the old job be renewed again.",
+      },
+      {
+        q: "How do I mark a package client as not renewing?",
+        a: "On the package job, click More (…) and choose Mark as not renewing, or click Don't renew on its row in Renew Packages. Renew Packages leaves it unticked and the Custom Package Renewal Report shows it as Don't renew. Choose Renew as usual to undo it. You can still renew a job marked this way from the job itself.",
+      },
+      {
+        q: "What carries over when a package job is renewed, and what doesn't?",
+        a: "Carried over: the client, property, package, services and their rates, quantities, budgets, team size, Min Days and taxable setting, the crew, sales rep, crew notes, office notes, invoice description, payment and invoicing settings, each service's crew checklist (sub-items), and planned job materials that weren't recorded on a visit. Not carried over: visits, completions, invoices, the PO number, and a contract that ends before the new season starts (the window says so; the renewal then bills on its own until you link a renewed contract). Renewing fires the same Job Created and Package Created automations as adding a package job.",
+      },
+      {
+        q: "How do I see which package jobs have been renewed?",
+        a: "Run the Custom Package Renewal Report (Report Center, Service Reports). It lists every package job with its season and a Renewal column: Renewed (with the new job's number and season), Not renewed, or Don't renew. Filter by Season and Renewal to get a to-do list. On a job, the header shows Renewed as #… or Renewal of #… with a link.",
       },
       {
         q: "How do I change the status of or delete several estimate line items at once?",
