@@ -384,10 +384,10 @@ export function ClientsGuide() {
           the <strong>Details</strong> tab, with its unit after the value. Fields with no value are hidden.
         </p>
         <p>
-          <strong>Number custom fields on a property.</strong> A number custom field&apos;s value on the
+          <strong>Custom fields on a property.</strong> A number or text custom field&apos;s value on the
           client is the default for all of that client&apos;s properties. If a client has more than one
           property, open <strong>Edit Property</strong> and use its <strong>Custom Fields</strong>{" "}
-          section to give that property its own figure; leave a field blank and the property uses the
+          section to give that property its own value (for example two different mulch colors); leave a field blank and the property uses the
           client&apos;s value. The same applies to the measurements above: a property&apos;s own figure
           wins, otherwise the client&apos;s is used, so you never have to create a property just to
           repeat what is already on the client.

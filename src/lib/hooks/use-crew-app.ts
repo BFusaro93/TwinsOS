@@ -538,6 +538,16 @@ export interface VisitChemicalApplication {
   preloaded: boolean;
   /** When the crew confirmed what was actually used (null = still an estimate). */
   confirmedAt: string | null;
+  productId: string | null;
+  /** From the product, so the crew can read the label's directions without leaving the stop. */
+  epaNumber: string | null;
+  reEntryInterval: string | null;
+  labelInstructions: string | null;
+  restricted: boolean;
+  /** How it is being applied; the crew can change these when confirming. */
+  applicationMethodId: string | null;
+  targetIds: string[];
+  areasTreatedIds: string[];
 }
 
 /** Batched by visit id (a stop can bundle several same-day visits) so the
@@ -552,8 +562,8 @@ export function useVisitChemicals(visitIds: string[]) {
       const { data, error } = await (supabase as any)
         .from("crm_chemical_applications")
         .select(
-          "id, visit_id, chemical_amount, solution_amount, used, application_rate_label, preloaded, confirmed_at, " +
-          "product:product_id(name), unit:unit_of_measure_id(name), " +
+          "id, visit_id, product_id, chemical_amount, solution_amount, used, application_rate_label, preloaded, confirmed_at, application_method_id, target_ids, areas_treated_ids, " +
+          "product:product_id(name, epa_registration_number, re_entry_interval, label_instructions, restricted_product), unit:unit_of_measure_id(name), " +
           "solution_unit:solution_unit_of_measure_id(name)"
         )
         .in("visit_id", visitIds)
@@ -573,6 +583,14 @@ export function useVisitChemicals(visitIds: string[]) {
         applicationRateLabel: row.application_rate_label,
         preloaded: row.preloaded === true,
         confirmedAt: row.confirmed_at ?? null,
+        productId: row.product_id ?? null,
+        epaNumber: row.product?.epa_registration_number ?? null,
+        reEntryInterval: row.product?.re_entry_interval ?? null,
+        labelInstructions: row.product?.label_instructions ?? null,
+        restricted: row.product?.restricted_product === true,
+        applicationMethodId: row.application_method_id ?? null,
+        targetIds: row.target_ids ?? [],
+        areasTreatedIds: row.areas_treated_ids ?? [],
       }));
     },
     enabled: visitIds.length > 0,
@@ -593,14 +611,101 @@ export function useChemicalConfirmationStatus(visitIds: string[]) {
   });
 }
 
+export interface ChemicalConfirmItem {
+  id: string;
+  used: boolean;
+  chemicalAmount?: number;
+  applicationMethodId?: string | null;
+  targetIds?: string[];
+  areasTreatedIds?: string[];
+}
+
+export interface ChemicalConditionsInput {
+  temperature?: number;
+  windSpeed?: number;
+  windDirection?: string;
+  phLevel?: number;
+}
+
+/** A National Weather Service reading near the stop (see src/lib/weather/nws-conditions.ts). */
+export interface ConditionsReading {
+  temperatureF: number | null;
+  windMph: number | null;
+  windDirection: string | null;
+  description: string | null;
+  observedAt: string;
+  source: "observation" | "forecast";
+}
+
+/** Current conditions at the stop, to fill the chemical conditions instead of typing them. */
+export function useCrewConditions(visitId: string | undefined) {
+  return useQuery<{ reading: ConditionsReading | null }>({
+    queryKey: ["crew-app-chemical-conditions", visitId],
+    queryFn: async () => {
+      const res = await fetch(`/api/crm/crew/chemicals/conditions?visitId=${visitId}`);
+      if (!res.ok) return { reading: null };
+      return res.json();
+    },
+    enabled: !!visitId,
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+}
+
+export interface CrewChemicalCatalog {
+  products: { id: string; name: string; defaultUnitId: string | null }[];
+  units: { id: string; name: string }[];
+  methods: { id: string; name: string }[];
+  targets: { id: string; name: string }[];
+  areasTreated: { id: string; name: string }[];
+  conditionsDisplay: "weather" | "ph" | "both" | "neither";
+}
+
+/** What the crew needs to add a chemical at a stop, and which conditions the company records. */
+export function useCrewChemicalCatalog(visitId: string | undefined) {
+  return useQuery<CrewChemicalCatalog>({
+    queryKey: ["crew-app-chemical-catalog", visitId],
+    queryFn: async () => {
+      const res = await fetch(`/api/crm/crew/chemicals/catalog?visitId=${visitId}`);
+      if (!res.ok) throw new Error("Couldn't load chemicals");
+      return res.json();
+    },
+    enabled: !!visitId,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Add a chemical the office didn't preload; it is saved already confirmed. */
+export function useAddCrewChemical() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { visitId: string; productId: string; chemicalAmount: number; unitOfMeasureId: string }) => {
+      const res = await fetch("/api/crm/crew/chemicals/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+        throw new Error(typeof body?.error === "string" ? body.error : "Couldn't add the chemical");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crew-app-chemicals"] });
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+}
+
 export function useConfirmChemicals() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (items: { id: string; used: boolean; chemicalAmount?: number }[]) => {
+    mutationFn: async ({ items, conditions }: { items: ChemicalConfirmItem[]; conditions?: ChemicalConditionsInput }) => {
       const res = await fetch("/api/crm/crew/chemicals/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, conditions }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
@@ -1539,4 +1644,39 @@ export function useToggleSubitemCheck() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["crew-visit-subitem-checks"] }),
     onError: (err) => crewActionFailed(qc, err, "Couldn't save that tick — try again"),
   });
+}
+
+// ── Reference Library ────────────────────────────────────────────────────────
+
+export interface CrewReferenceDocument {
+  id: string;
+  category: "sds" | "label" | "sop" | "training" | "equipment" | "other";
+  title: string;
+  description: string | null;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  revisionDate: string | null;
+  productIds: string[];
+}
+
+/** The company's labels, Safety Data Sheets, SOPs and training the crew may open. */
+export function useCrewReference() {
+  return useQuery<CrewReferenceDocument[]>({
+    queryKey: ["crew-app-reference"],
+    queryFn: async () => {
+      const res = await fetch("/api/crm/crew/reference");
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Opens a document in a new tab through a short-lived signed link. */
+export async function openCrewReference(id: string): Promise<void> {
+  const res = await fetch(`/api/crm/crew/reference/${id}/url`);
+  if (!res.ok) throw new Error("Couldn't open the document");
+  const { url } = (await res.json()) as { url: string };
+  window.open(url, "_blank", "noopener");
 }

@@ -102,9 +102,14 @@ export default function HomeScreen() {
             <Text style={styles.eyebrow}>Today</Text>
             <Text style={styles.title}>{crewName ? crewName : session?.user.email ?? 'Crew'}</Text>
           </View>
-          <Pressable onPress={handleSignOut} hitSlop={12}>
-            <Text style={styles.signOutLink}>Sign out</Text>
-          </Pressable>
+          <View style={{ alignItems: 'flex-end', gap: 8 }}>
+            <Pressable onPress={() => router.push('/reference')} hitSlop={12}>
+              <Text style={styles.signOutLink}>Reference</Text>
+            </Pressable>
+            <Pressable onPress={handleSignOut} hitSlop={12}>
+              <Text style={styles.signOutLink}>Sign out</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.chipRow}>

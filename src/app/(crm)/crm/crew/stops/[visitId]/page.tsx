@@ -1,7 +1,7 @@
 "use client";
 
 import { RichNotes } from "@/components/shared/RichNotes";
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseISO, differenceInMinutes } from "date-fns";
 import {
@@ -18,6 +18,10 @@ import {
   useVisitChemicals,
   useChemicalConfirmationStatus,
   useConfirmChemicals,
+  useCrewChemicalCatalog,
+  useCrewConditions,
+  useCrewReference,
+  type ChemicalConfirmItem,
   useStopClockIn,
   useStopClockOut,
   useStopPause,
@@ -40,6 +44,10 @@ import {
   type VisitRequisitionStatus,
 } from "@/lib/hooks/use-crew-app";
 import { Input } from "@/components/ui/input";
+import {
+  AddChemicalForm, ChemicalApplyFields, ChemicalConditionsFields, ChemicalLabel, EMPTY_CONDITIONS, conditionsFromReading, conditionsPayload,
+  type ChemApplyEdit, type ConditionsDraft,
+} from "@/components/crm/crew/CrewChemicalParts";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -197,6 +205,25 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const { data: chemConfirmStatus } = useChemicalConfirmationStatus(stopVisitIds);
   const confirmChemicals = useConfirmChemicals();
   const [chemEdits, setChemEdits] = useState<Record<string, { amount: string; notUsed: boolean }>>({});
+  const [chemConditions, setChemConditions] = useState<ConditionsDraft>(EMPTY_CONDITIONS);
+  const [chemApply, setChemApply] = useState<Record<string, ChemApplyEdit>>({});
+  // The visit a crew-added chemical is recorded against: the one that already carries the
+  // stop's chemicals, else the first visit of the stop.
+  const chemAddVisitId = chemicals[0]?.visitId ?? stop?.visits[0]?.id;
+  const { data: crewDocs = [] } = useCrewReference();
+  const docsFor = (productId: string | null) => (productId ? crewDocs.filter((d) => d.productIds.includes(productId)) : []);
+  const { data: chemCatalog } = useCrewChemicalCatalog(unconfirmedChemicals.length > 0 ? chemAddVisitId : undefined);
+  // Weather from the National Weather Service fills the conditions once, so the crew only
+  // corrects it rather than typing it; "Update" re-applies the reading.
+  const { data: chemWeather } = useCrewConditions(unconfirmedChemicals.length > 0 ? chemAddVisitId : undefined);
+  const weatherAppliedRef = useRef(false);
+  useEffect(() => {
+    const reading = chemWeather?.reading;
+    if (reading && !weatherAppliedRef.current) {
+      weatherAppliedRef.current = true;
+      setChemConditions((prev) => conditionsFromReading(reading, prev));
+    }
+  }, [chemWeather]);
   const waived = new Set(chemConfirmStatus?.waivedVisitIds ?? []);
   const chemBlocked =
     (chemConfirmStatus?.mode ?? "crew_required") === "crew_required" &&
@@ -205,7 +232,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     return chemEdits[c.id] ?? { amount: c.chemicalAmount != null ? String(c.chemicalAmount) : "", notUsed: false };
   }
   async function handleConfirmChemicals() {
-    const items: { id: string; used: boolean; chemicalAmount?: number }[] = [];
+    const items: ChemicalConfirmItem[] = [];
     for (const c of unconfirmedChemicals) {
       const e = chemEditFor(c);
       if (e.notUsed) {
@@ -217,9 +244,18 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         toast.error(`Enter how much ${c.productName ?? "chemical"} was used, or mark it Not used`);
         return;
       }
-      items.push({ id: c.id, used: true, chemicalAmount: amount });
+      // Only what the crew actually changed is sent; the rest stays as the office planned it.
+      const apply = chemApply[c.id];
+      items.push({
+        id: c.id,
+        used: true,
+        chemicalAmount: amount,
+        ...(apply?.methodId !== undefined ? { applicationMethodId: apply.methodId } : {}),
+        ...(apply?.targetIds !== undefined ? { targetIds: apply.targetIds } : {}),
+        ...(apply?.areasTreatedIds !== undefined ? { areasTreatedIds: apply.areasTreatedIds } : {}),
+      });
     }
-    await confirmChemicals.mutateAsync(items);
+    await confirmChemicals.mutateAsync({ items, conditions: conditionsPayload(chemConditions) });
     toast.success("Chemicals confirmed");
   }
   const { data: orgSettings } = useOrgSettings();
@@ -680,9 +716,18 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 return (
                   <div key={c.id} className="rounded-lg bg-card border border-border px-3 py-2">
                     <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{c.productName ?? "Chemical"}</p>
-                    {c.chemicalAmount != null && (
+                    {c.chemicalAmount != null ? (
                       <p className="text-xs text-muted-foreground">Planned: {c.chemicalAmount} {c.unitName ?? ""}</p>
+                    ) : (
+                      // The office's estimate is rate x the property's area, so no planned amount means
+                      // no area (or rate) was on file. Say so rather than leave a blank box.
+                      <p className="flex items-start gap-1 text-xs text-amber-700 dark:text-amber-400">
+                        <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        No amount was planned (no property area or application rate on file). Measure what you apply and enter it.
+                      </p>
                     )}
+                    <ChemicalLabel chemical={c} documents={docsFor(c.productId)} />
+                    <ChemicalApplyFields chemical={c} catalog={chemCatalog} edit={chemApply[c.id]} onChange={(next) => setChemApply((prev) => ({ ...prev, [c.id]: next }))} />
                     <div className="mt-2 flex items-center gap-3">
                       <Input
                         type="number"
@@ -709,6 +754,14 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   </div>
                 );
               })}
+              <ChemicalConditionsFields
+                display={chemCatalog?.conditionsDisplay ?? "weather"}
+                value={chemConditions}
+                onChange={setChemConditions}
+                reading={chemWeather?.reading}
+                onUseReading={() => chemWeather?.reading && setChemConditions((prev) => conditionsFromReading(chemWeather.reading!, prev))}
+              />
+              {chemAddVisitId && <AddChemicalForm visitId={chemAddVisitId} disabled={!isActive} />}
               <Button
                 className="w-full h-12 text-base font-bold bg-emerald-600 hover:bg-emerald-700"
                 onClick={handleConfirmChemicals}
@@ -768,9 +821,14 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                     {a.applicationRateLabel && (
                       <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">{a.applicationRateLabel}</p>
                     )}
+                    <ChemicalLabel chemical={a} documents={docsFor(a.productId)} />
                   </div>
                 );
               })}
+              {/* While chemicals are still unconfirmed the confirm card above carries the add button. */}
+              {unconfirmedChemicals.length === 0 && chemAddVisitId && (
+                <AddChemicalForm visitId={chemAddVisitId} disabled={!isActive} />
+              )}
             </div>
           </div>
         )}

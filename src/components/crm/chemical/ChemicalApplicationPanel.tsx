@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -34,6 +34,8 @@ import { printAppliedNotice } from "@/lib/chemical/route-sheet";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ChemicalApplication } from "@/types/chemical-tracking";
 import { toast } from "sonner";
+import { fetchJobConditions } from "@/lib/hooks/use-chemical-wizard";
+
 import { useConfirm } from "@/components/shared/useConfirm";
 
 interface Props {
@@ -41,6 +43,8 @@ interface Props {
   visitId: string;
   /** Accepted for caller compatibility; area is resolved from the job (see useChemicalJobAreaValue). */
   propertyId?: string | null;
+  /** Receives a function that saves every row edited since it loaded (returns how many), or null on unmount. */
+  registerSaver?: (fn: (() => Promise<number>) | null) => void;
 }
 
 /** ISO instant -> the "YYYY-MM-DDTHH:mm" a datetime-local input wants, in the viewer's zone. */
@@ -83,6 +87,12 @@ function MultiCheck({
   );
 }
 
+/** What the panel needs from a row to save it on its behalf. */
+interface RowSaver {
+  dirty: boolean;
+  save: () => Promise<void>;
+}
+
 function ApplicationRow({
   application,
   jobId,
@@ -95,6 +105,7 @@ function ApplicationRow({
   employees,
   fallbackStartTime,
   fallbackEndTime,
+  register,
 }: {
   application: ChemicalApplication;
   jobId: string;
@@ -108,6 +119,8 @@ function ApplicationRow({
   /** Crew clock-in/out, offered as the start/end time until one is entered. */
   fallbackStartTime: string | null;
   fallbackEndTime: string | null;
+  /** Lets the panel save every edited row at once (Save & Next in the Chemical Tracking dialog). */
+  register?: (id: string, api: RowSaver | null) => void;
 }) {
   const [confirm, confirmDialog] = useConfirm();
   const { can } = usePermissions();
@@ -143,7 +156,7 @@ function ApplicationRow({
     setAreasTreatedIds((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]));
   }
 
-  function handleSave() {
+  async function doSave() {
     // applicatorLicenseNumber is a compliance snapshot, not a live join — it
     // must only be (re)captured when the applicator assignment itself is
     // actually changing. Re-sending the CURRENT employee's license on every
@@ -152,7 +165,8 @@ function ApplicationRow({
     // employee's license was renewed/changed/revoked in the meantime.
     const applicatorChanged = (applicatorEmployeeId || null) !== (application.applicatorEmployeeId ?? null);
     const employee = applicatorChanged ? employees.find((e) => e.id === applicatorEmployeeId) : null;
-    save.mutate(
+    try {
+      await save.mutateAsync(
       {
         id: application.id,
         jobId,
@@ -173,10 +187,39 @@ function ApplicationRow({
         notes: notes || null,
         // Saving the row is the office confirming what was actually used.
         confirm: true,
-      },
-      { onError: () => toast.error("Failed to save chemical application") }
-    );
+      }
+      );
+    } catch {
+      toast.error("Failed to save chemical application");
+      throw new Error("save failed");
+    }
   }
+  function handleSave() {
+    void doSave().catch(() => undefined);
+  }
+
+  // Edited since it was loaded? Saving also CONFIRMS the amount, so Save & Next must only touch
+  // rows the office actually changed.
+  const num = (v: string) => (v.trim() === "" ? null : parseFloat(v));
+  const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
+  const dirty =
+    num(chemicalAmount) !== (application.chemicalAmount ?? null) ||
+    num(solutionAmount) !== (application.solutionAmount ?? null) ||
+    (unitOfMeasureId || null) !== (application.unitOfMeasureId ?? null) ||
+    (solutionUnitOfMeasureId || null) !== (application.solutionUnitOfMeasureId ?? null) ||
+    (applicationMethodId || null) !== (application.applicationMethodId ?? null) ||
+    !sameSet(targetIds, application.targetIds) ||
+    !sameSet(areasTreatedIds, application.areasTreatedIds) ||
+    used !== application.used ||
+    (applicatorEmployeeId || null) !== (application.applicatorEmployeeId ?? null) ||
+    (notes || null) !== (application.notes || null) ||
+    startEdit !== (application.applicationStartTime ? toLocalInput(application.applicationStartTime) : null) ||
+    endEdit !== (application.applicationEndTime ? toLocalInput(application.applicationEndTime) : null);
+  useEffect(() => {
+    register?.(application.id, { dirty, save: doSave });
+    return () => register?.(application.id, null);
+  });
+
 
   return (
     <div className="rounded-md border p-3 flex flex-col gap-2.5">
@@ -350,7 +393,24 @@ function ApplicationRow({
 }
 
 /** Per-visit chemical application logging — the compliance-critical record. */
-export function ChemicalApplicationPanel({ jobId, visitId }: Props) {
+export function ChemicalApplicationPanel({ jobId, visitId, registerSaver }: Props) {
+  // Rows report whether they've been edited and how to save themselves; the dialog's
+  // Save & Next asks the panel to save the edited ones.
+  const rowSavers = useRef(new Map<string, RowSaver>());
+  const registerRow = useCallback((id: string, api: RowSaver | null) => {
+    if (api) rowSavers.current.set(id, api);
+    else rowSavers.current.delete(id);
+  }, []);
+  const saveAllDirty = useCallback(async () => {
+    const dirtyRows = [...rowSavers.current.values()].filter((r) => r.dirty);
+    await Promise.all(dirtyRows.map((r) => r.save()));
+    return dirtyRows.length;
+  }, []);
+  useEffect(() => {
+    registerSaver?.(saveAllDirty);
+    return () => registerSaver?.(null);
+  }, [registerSaver, saveAllDirty]);
+
   const { can, isAdmin } = usePermissions();
   const canEdit = can("chem_add_edit_usage");
   const canSendNotice = can("chem_send_application_notice");
@@ -487,6 +547,26 @@ export function ChemicalApplicationPanel({ jobId, visitId }: Props) {
     setAddingProductId("");
   }
 
+  // Temperature and wind from the National Weather Service near the property, at the time the
+  // chemicals went on (the crew's clock-in), so the office doesn't have to look it up.
+  const [fillingWeather, setFillingWeather] = useState(false);
+  async function fillFromWeather() {
+    setFillingWeather(true);
+    try {
+      const reading = await fetchJobConditions(jobId, applications[0]?.applicationStartTime ?? clockTimes?.clockedInAt ?? undefined);
+      if (!reading) {
+        toast.error("No weather is available for this property and time.");
+        return;
+      }
+      if (reading.temperatureF != null) setTemperature(String(reading.temperatureF));
+      if (reading.windMph != null) setWindSpeed(String(reading.windMph));
+      if (reading.windDirection) setWindDirection(reading.windDirection);
+      toast.success(`Filled from the National Weather Service${reading.source === "forecast" ? " forecast" : ""} — review, then Apply to all`);
+    } finally {
+      setFillingWeather(false);
+    }
+  }
+
   function applyConditionsToAll() {
     applications.forEach((a) => {
       saveApplication.mutate(
@@ -563,7 +643,12 @@ export function ChemicalApplicationPanel({ jobId, visitId }: Props) {
               </div>
             )}
           </div>
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex justify-end gap-2">
+            {showWeather && (
+              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={fillFromWeather} disabled={fillingWeather}>
+                {fillingWeather ? "Looking up…" : "Fill from weather"}
+              </Button>
+            )}
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={applyConditionsToAll}>
               Apply to all chemicals on this visit
             </Button>
@@ -624,6 +709,7 @@ export function ChemicalApplicationPanel({ jobId, visitId }: Props) {
           employees={employees}
           fallbackStartTime={clockTimes?.clockedInAt ?? null}
           fallbackEndTime={clockTimes?.clockedOutAt ?? null}
+          register={registerRow}
         />
       ))}
 

@@ -58,6 +58,10 @@ import { useParts } from "@/lib/hooks/use-parts";
 import { useDeleteProduct, useUpdateProduct, useAdjustProductQuantityManual } from "@/lib/hooks/use-products";
 import { WO_STATUS_LABELS } from "@/lib/constants";
 import { ChemicalApplicationRatesEditor } from "@/components/crm/chemical/ChemicalApplicationRatesEditor";
+import { openReferenceDocument, useProductReferenceDocuments } from "@/lib/hooks/use-reference-documents";
+import { referenceCategoryLabel } from "@/types/crm-reference";
+import { DocumentDialog } from "@/components/crm/reference/ReferenceLibrary";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ProductItem } from "@/types";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
 
@@ -419,6 +423,79 @@ function HistoryTab({
   );
 }
 
+/** Labels and Safety Data Sheets linked to this product in the Reference Library. */
+function ProductReferenceDocuments({ productId }: { productId: string }) {
+  const { data: docs } = useProductReferenceDocuments(productId);
+  const { can, isLoading: permsLoading } = usePermissions();
+  // Adding to the library is a CRM Settings permission, same as in the library itself.
+  const canAdd = !permsLoading && can("crm_settings");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  return (
+    <>
+      <Separator />
+      <div>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
+            Labels &amp; Safety Data Sheets
+          </p>
+          {canAdd && (
+            <>
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.txt"
+                className="hidden"
+                onChange={(e) => {
+                  const picked = [...(e.target.files ?? [])];
+                  if (picked.length === 0) return;
+                  setFiles(picked.slice(0, 1));
+                  setDialogOpen(true);
+                  e.target.value = "";
+                }}
+              />
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => fileInput.current?.click()}>
+                Add document
+              </Button>
+            </>
+          )}
+        </div>
+        {docs.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            None linked yet.{canAdd ? " Add the label or SDS here and it is saved to the Reference Library." : " Ask someone with access to add them in the Reference Library."}
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {docs.map((d) => (
+              <li key={d.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="min-w-0 truncate">
+                  {d.title} <span className="text-xs text-muted-foreground">({referenceCategoryLabel(d.category)})</span>
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => openReferenceDocument(d.storagePath).catch(() => toast.error("Couldn't open the document"))}
+                >
+                  View
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <DocumentDialog
+        open={dialogOpen}
+        onClose={() => { setDialogOpen(false); setFiles([]); }}
+        editing={null}
+        files={files}
+        initialProductIds={[productId]}
+      />
+    </>
+  );
+}
+
 function ChemicalTab({ product }: { product: ProductItem }) {
   return (
     <div className="p-6 flex flex-col gap-5">
@@ -494,6 +571,8 @@ function ChemicalTab({ product }: { product: ProductItem }) {
           </div>
         </>
       )}
+
+      <ProductReferenceDocuments productId={product.id} />
 
       <Separator />
       <div>

@@ -41,8 +41,8 @@ export async function GET(request: Request) {
   const { data, error } = await (supabase as any)
     .from("crm_chemical_applications")
     .select(
-      "id, visit_id, chemical_amount, solution_amount, used, application_rate_label, preloaded, confirmed_at, " +
-      "product:product_id(name), unit:unit_of_measure_id(name), " +
+      "id, visit_id, product_id, chemical_amount, solution_amount, used, application_rate_label, preloaded, confirmed_at, application_method_id, target_ids, areas_treated_ids, " +
+      "product:product_id(name, epa_registration_number, re_entry_interval, label_instructions, restricted_product), unit:unit_of_measure_id(name), " +
       "solution_unit:solution_unit_of_measure_id(name)"
     )
     .in("visit_id", visitIds)
@@ -63,5 +63,13 @@ export async function GET(request: Request) {
     applicationRateLabel: row.application_rate_label,
     preloaded: row.preloaded === true,
     confirmedAt: row.confirmed_at ?? null,
+    productId: row.product_id ?? null,
+    epaNumber: row.product?.epa_registration_number ?? null,
+    reEntryInterval: row.product?.re_entry_interval ?? null,
+    labelInstructions: row.product?.label_instructions ?? null,
+    restricted: row.product?.restricted_product === true,
+    applicationMethodId: row.application_method_id ?? null,
+    targetIds: row.target_ids ?? [],
+    areasTreatedIds: row.areas_treated_ids ?? [],
   })));
 }
