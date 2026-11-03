@@ -565,6 +565,9 @@ export function ChemicalApplicationPanel({ jobId, visitId, registerSaver }: Prop
       if (reading.windMph != null) setWindSpeed(String(reading.windMph));
       if (reading.windDirection) setWindDirection(reading.windDirection);
       toast.success(`Filled from the National Weather Service${reading.source === "forecast" ? " forecast" : ""} — review, then Apply to all`);
+    } catch {
+      // fetch rejects on a dropped/blocked connection; without this it's an unhandled rejection.
+      toast.error("Couldn't reach the weather service. Check your connection and try again.");
     } finally {
       setFillingWeather(false);
     }

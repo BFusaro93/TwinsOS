@@ -53,6 +53,8 @@ export function ApplyConditionsToVisitsDialog({ open, onClose, visitIds, weather
       if (reading.temperatureF != null) setTemperature(String(reading.temperatureF));
       if (reading.windMph != null) setWindSpeed(String(reading.windMph));
       if (reading.windDirection) setWindDirection(reading.windDirection);
+    } catch {
+      toast.error("Couldn't reach the weather service. Check your connection and try again.");
     } finally {
       setLooking(false);
     }
