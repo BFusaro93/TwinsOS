@@ -16,8 +16,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Calendar, ChevronRight, Plus } from "lucide-react";
+import { Calendar, ChevronRight, Plus, RefreshCw } from "lucide-react";
 import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
+import { RenewPackagesDialog } from "@/components/crm/jobs/RenewPackagesDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMJob } from "@/types/crm-jobs";
@@ -146,6 +147,7 @@ export function JobsList() {
     setToDate(w.to);
   }, [orgTimeZone]);
   const [newJobOpen, setNewJobOpen] = useState(false);
+  const [renewOpen, setRenewOpen] = useState(false);
 
   // Status/date filtering happens client-side below, per-occurrence — a job's
   // own status/scheduled_date don't reflect its individual generated visits.
@@ -235,6 +237,12 @@ export function JobsList() {
               <Button size="sm" variant="outline" onClick={() => setNewJobOpen(true)}>
                 <Plus className="mr-1.5 h-4 w-4" />
                 Add Job
+              </Button>
+            )}
+            {can("job_add") && (
+              <Button size="sm" variant="outline" onClick={() => setRenewOpen(true)}>
+                <RefreshCw className="mr-1.5 h-4 w-4" />
+                Renew Packages
               </Button>
             )}
             <Link href="/crm/scheduling/dispatch">
@@ -391,6 +399,7 @@ export function JobsList() {
         open={newJobOpen}
         onOpenChange={setNewJobOpen}
       />
+      <RenewPackagesDialog open={renewOpen} onOpenChange={setRenewOpen} />
     </div>
   );
 }

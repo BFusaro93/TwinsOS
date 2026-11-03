@@ -15,6 +15,19 @@ import {
 } from "@/lib/reports/contract-schedule";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
+import { DO_NOT_RENEW, packageSeasonYear } from "@/lib/package-renewal";
+
+// Package Renewal report: seasons around this year (package programs are
+// sold a season ahead), and the renewal states the report derives.
+const PACKAGE_SEASON_OPTIONS = (() => {
+  const y = new Date().getFullYear();
+  return [y + 1, y, y - 1, y - 2, y - 3].map((s) => ({ value: String(s), label: String(s) }));
+})();
+const PACKAGE_RENEWAL_OPTIONS = [
+  { value: "Not renewed", label: "Not renewed" },
+  { value: "Renewed", label: "Renewed" },
+  { value: "Don't renew", label: "Don't renew" },
+];
 
 // ============================================================
 // Second-wave reports — SA parity gaps identified after the
@@ -211,56 +224,81 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
     key: "custom-package-renewal",
     section: "service",
     name: "Custom Package Renewal Report",
-    description: "A list of packages with a renewal setting, ready to renew.",
-    filters: [],
-    run: async ({ supabase }) => {
+    description:
+      "Every package job for a season and whether it has been renewed for the next one — renewed, not renewed yet, or marked Don't renew.",
+    filters: [
+      { key: "season", label: "Season", type: "select", options: PACKAGE_SEASON_OPTIONS },
+      { key: "renewal", label: "Renewal", type: "select", options: PACKAGE_RENEWAL_OPTIONS },
+    ],
+    notes: [
+      "Season is the year the package program starts (its window start, else its first step date).",
+      "Renewed = a live package job was created from this one with Renew for next season (job detail, or Renew Packages on the Jobs list).",
+      "Don't renew = the job is marked as not renewing; Renew Packages leaves it unchecked.",
+    ],
+    run: async ({ supabase, params }) => {
       interface Row {
+        id: string;
+        job_number: number;
         package_name: string | null;
         package_renewal: string | null;
-        package_step: number | null;
-        package_total_steps: number | null;
-        scheduled_date: string | null;
-        rate_cents: number | null;
+        renewed_from_job_id: string | null;
+        waiting_list_start: string | null;
+        waiting_list_end: string | null;
         total_cents: number | null;
         status: string | null;
         clients: { display_name: string | null } | null;
+        crm_job_services: { start_date: string | null; complete_by_date: string | null }[] | null;
       }
       // Paged: a single .limit(5000) is capped at 1000 rows by PostgREST, which
-      // silently dropped every renewal past the 1000th on a large org.
+      // silently dropped every package job past the 1000th on a large org.
       const data = await fetchAllRows<Row>(() =>
         supabase
           .from("crm_jobs")
           .select(
-            "package_name, package_renewal, package_step, package_total_steps, scheduled_date, rate_cents, total_cents, status, clients:client_id(display_name)"
+            "id, job_number, package_name, package_renewal, renewed_from_job_id, waiting_list_start, waiting_list_end, total_cents, status, clients:client_id(display_name), crm_job_services(start_date, complete_by_date)"
           )
           .eq("job_type", "package")
-          .not("package_renewal", "is", null)
           .is("deleted_at", null)
       );
-      const rows = data.map((r) => ({
-        client_name: r.clients?.display_name ?? "",
-        package_name: r.package_name,
-        renewal: r.package_renewal,
-        step: r.package_step,
-        total_steps: r.package_total_steps,
-        scheduled_date: r.scheduled_date,
-        status: r.status,
-        total_cents: r.total_cents ?? r.rate_cents ?? 0,
-      }));
-      rows.sort((a, b) => (a.client_name > b.client_name ? 1 : -1));
+      // Renewals are package jobs too, so the same rows answer "was this renewed?".
+      const renewedInto = new Map<string, Row>();
+      for (const r of data) if (r.renewed_from_job_id) renewedInto.set(r.renewed_from_job_id, r);
+
+      const season = params.season ? parseInt(String(params.season), 10) : null;
+      const rows = data
+        .map((r) => {
+          const next = renewedInto.get(r.id) ?? null;
+          const renewal = next ? "Renewed" : r.package_renewal === DO_NOT_RENEW ? "Don't renew" : "Not renewed";
+          return {
+            client_name: r.clients?.display_name ?? "",
+            package_name: r.package_name,
+            job_number: r.job_number,
+            season_year: packageSeasonYear(r),
+            status: r.status,
+            total_cents: r.total_cents ?? 0,
+            renewal,
+            renewed_job: next ? next.job_number : null,
+            renewed_season: next ? String(packageSeasonYear(next) ?? "") : null,
+          };
+        })
+        .filter((r) => season == null || r.season_year === season)
+        .filter((r) => !params.renewal || r.renewal === params.renewal);
+      rows.sort((a, b) => (b.season_year ?? 0) - (a.season_year ?? 0) || a.client_name.localeCompare(b.client_name));
 
       return buildResult(
         [
           col("client_name", "Client"),
           col("package_name", "Package"),
-          col("renewal", "Renewal"),
-          col("step", "Step", "number", false),
-          col("total_steps", "Total Steps", "number", false),
-          col("scheduled_date", "Scheduled", "date"),
+          col("job_number", "Job #", "number", false),
+          col("season", "Season"),
           col("status", "Status"),
           col("total_cents", "Amount", "money"),
+          col("renewal", "Renewal"),
+          col("renewed_job", "Renewed Job #", "number", false),
+          col("renewed_season", "Renewed Season"),
         ],
-        rows
+        // Years as text — a number column would print "2,027".
+        rows.map(({ season_year, ...r }) => ({ ...r, season: season_year != null ? String(season_year) : "" }))
       );
     },
   },
