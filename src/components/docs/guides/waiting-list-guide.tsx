@@ -211,7 +211,8 @@ export function WaitingListGuide() {
         <p>
           The Dispatch Board has a separate, more literal proximity tool — a{" "}
           <strong>Nearby Waiting List</strong> button that geocodes today&apos;s scheduled visits and
-          every waiting-list job, then returns matches within a set radius (3 miles by default) using
+          every waiting-list job (plus package jobs whose next step is due), then returns matches
+          within a set radius (3 miles by default) using
           actual distance, not just matching text fields. It&apos;s a different feature living on a
           different page — see the Dispatch Board guide below — but it&apos;s the closer equivalent
           to true geofencing if City/Zip filtering here isn&apos;t narrowing things down enough.
@@ -223,6 +224,44 @@ export function WaitingListGuide() {
           Map positions stay current on their own: when a job&apos;s address, its property, or the
           client&apos;s service or billing address changes, the saved position for the affected jobs
           is cleared and looked up again the next time you use Nearby Waiting List or the map.
+        </p>
+      </Section>
+
+      <Section id="nearby-schedule-today" title="Nearby → Schedule Today, step by step">
+        <p>
+          Schedule Today never doubles anything up. While a waiting-list job waits, it has{" "}
+          <strong>no visit at all</strong>: what you see on the Waiting List is the job and its
+          services, not visits. Dispatching a service gives it its one visit, and that is what moves
+          it off the list and onto the board. Here is how it plays out for a job with two services,
+          Spring Clean-up and Mulch:
+        </p>
+        <ol className="list-decimal space-y-2 pl-5">
+          <li>Both services sit on the Waiting List. The job has no visits.</li>
+          <li>
+            You dispatch Spring Clean-up for Monday. It gets its visit, lands on Monday&apos;s board,
+            and leaves the list. Mulch stays.
+          </li>
+          <li>The crew completes Spring Clean-up on Monday.</li>
+          <li>
+            On Thursday a crew is working next door, so you open <strong>Nearby Waiting List</strong>{" "}
+            and click <strong>Schedule Today</strong> on that client. Spring Clean-up already has a
+            visit (completed), so only Mulch is scheduled: it gets its first and only visit for
+            Thursday, leaves the list, and lands on Thursday&apos;s board.
+          </li>
+        </ol>
+        <p>
+          The job ends with exactly two visits, one per service, each billed once. A visit that was
+          skipped or cancelled never happened, so its service goes back on the list and Nearby can
+          offer it again.
+        </p>
+        <p>
+          <strong>Package jobs work a little differently.</strong> Each package step already has a
+          placeholder visit from the day the job was created. So Nearby, like the Waiting List&apos;s
+          own Schedule button, <em>moves</em> the next due step&apos;s placeholder to today and marks
+          it dispatched; it never creates a second visit. A package only shows up once its next
+          step&apos;s window has opened (and hasn&apos;t passed) and its <strong>Min Days</strong>{" "}
+          since the previous step are met, and the row names the step, e.g.{" "}
+          <em>Step 3: Grub Control</em>. Later steps stay where they are.
         </p>
       </Section>
 

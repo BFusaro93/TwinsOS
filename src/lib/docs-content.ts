@@ -2067,6 +2067,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Yes. The Date Window on the Waiting List has a preset dropdown (Next 30 days, This week, This month, This quarter, This year, Next 90 days) and Custom range if you edit either date. Your choice is saved to your login, so it is still there after a refresh. Presets are remembered by name, so 'This quarter' still means the current quarter next month.",
       },
       {
+        q: "Does Nearby → Schedule Today create a duplicate visit for a waiting-list job?",
+        a: "No. A waiting-list job has no visit while it waits; the Waiting List shows the job's services, not visits. Dispatching a service gives it its one visit, which moves it off the list and onto the board. Example: a job has Spring Clean-up and Mulch. You dispatch Spring Clean-up for Monday and the crew completes it. On Thursday, Nearby → Schedule Today next to that client creates Mulch's first and only visit for Thursday, so Mulch leaves the list and lands on Thursday's board. The job ends with exactly two visits, each billed once. A skipped or cancelled visit never happened, so its service goes back on the list. Package jobs are different: each step already has a placeholder visit, so Nearby (like the Waiting List) moves the next due step's placeholder to today instead of creating one, and only offers it once that step's window has opened and its Min Days since the previous step are met.",
+      },
+      {
         q: "Can I schedule a waiting-list job from the client's record?",
         a: "Yes. On the client's Home tab, open the waiting-list job's MORE menu and choose Schedule Job, pick a date and optionally a crew, and dispatch it. It then leaves the Waiting List and shows on the Dispatch Board. The item only appears while the job has no visit yet, and only for logins with the Waiting List permission. View Upcoming in the same menu has a Schedule button per service if you want to send one service out and keep the others waiting.",
       },

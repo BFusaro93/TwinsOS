@@ -4255,6 +4255,8 @@ export function DispatchBoard() {
     }
   }
   const createVisit = useCreateVisit();
+  // Moves a package step's placeholder visit onto the day from Nearby.
+  const moveNearbyPlaceholder = useUpdateVisit();
   // Matches already scheduled from this dialog (the match list never refreshes itself).
   const [scheduledNearbyJobIds, setScheduledNearbyJobIds] = useState<Set<string>>(new Set());
   const { mutateAsync: returnToWaitingList } = useReturnVisitToWaitingList();
@@ -6298,6 +6300,11 @@ export function DispatchBoard() {
                 <div key={m.jobId} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                   <div className="min-w-0">
                     <p className="truncate font-medium text-slate-800 dark:text-neutral-100">{m.clientName ?? "Unknown client"}</p>
+                    {m.packageStep && (
+                      <p className="truncate text-xs text-slate-600 dark:text-neutral-300">
+                        {m.packageStep.stepNumber > 0 ? `Step ${m.packageStep.stepNumber}: ` : ""}{m.packageStep.serviceName}
+                      </p>
+                    )}
                     <p className="truncate text-xs text-muted-foreground">{m.address || "No address"}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -6305,11 +6312,26 @@ export function DispatchBoard() {
                     <Button
                       size="sm"
                       className="h-7 text-xs bg-brand-500 hover:bg-brand-600 text-white"
-                      disabled={createVisit.isPending || scheduledNearbyJobIds.has(m.jobId)}
+                      disabled={createVisit.isPending || moveNearbyPlaceholder.isPending || scheduledNearbyJobIds.has(m.jobId)}
                       onClick={async () => {
                         if (scheduledNearbyJobIds.has(m.jobId)) return;
                         try {
-                          if (m.pendingServices.length > 0) {
+                          if (m.packageStep) {
+                            // A package step already has its placeholder visit:
+                            // move it onto the day and mark it dispatched, exactly
+                            // as the Waiting List's dispatch does — never a new
+                            // visit. Its crew stays as it is.
+                            await moveNearbyPlaceholder.mutateAsync({
+                              id: m.packageStep.visitId,
+                              updates: {
+                                scheduled_date: selectedDate,
+                                status: "dispatched",
+                                dispatched_at: new Date().toISOString(),
+                              },
+                              jobId: m.jobId,
+                              jobType: "package",
+                            });
+                          } else if (m.pendingServices.length > 0) {
                             // Split job: one visit per service still waiting,
                             // exactly as the Waiting List dispatches it.
                             for (const service of m.pendingServices) {
@@ -6334,8 +6356,9 @@ export function DispatchBoard() {
                           setScheduledNearbyJobIds((prev) => new Set(prev).add(m.jobId));
                           toast.success(`Added ${m.clientName ?? "job"} to today's schedule`);
                           refetch();
-                        } catch {
-                          toast.error("Failed to schedule job");
+                        } catch (err) {
+                          // e.g. a package step's Min Days spacing refused by the database.
+                          toast.error(err instanceof Error && err.message ? err.message : "Failed to schedule job");
                         }
                       }}
                     >
