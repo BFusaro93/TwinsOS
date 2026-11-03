@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2 } from "lucide-react";
-import { usePackages, useDeletePackage } from "@/lib/hooks/use-packages";
+import { usePackages, useDeletePackage, fetchPackageUsage } from "@/lib/hooks/use-packages";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { CRMPackage } from "@/types/crm-packages";
 import { toast } from "sonner";
@@ -109,7 +109,21 @@ export function PackagesList({ onAdd, onEdit }: Props) {
                     {canDelete && (
                       <button
                         onClick={async () => {
-                          if (await confirm({ title: `Delete "${pkg.name}"?`, confirmLabel: "Delete Package", destructive: true })) {
+                          const usage = await fetchPackageUsage(pkg.id).catch(() => null);
+                          const inUse = usage && (usage.openJobs > 0 || usage.openEstimates > 0)
+                            ? [
+                                usage.openJobs > 0 ? `${usage.openJobs} active job${usage.openJobs === 1 ? "" : "s"}` : null,
+                                usage.openEstimates > 0 ? `${usage.openEstimates} open estimate${usage.openEstimates === 1 ? "" : "s"}` : null,
+                              ].filter(Boolean).join(" and ")
+                            : null;
+                          if (await confirm({
+                            title: `Delete "${pkg.name}"?`,
+                            description: inUse
+                              ? `It is still used by ${inUse}. Those jobs keep their steps and the estimates can still be converted, but it can no longer be added to new jobs or estimates. To stop offering it while keeping it, mark it inactive instead.`
+                              : undefined,
+                            confirmLabel: "Delete Package",
+                            destructive: true,
+                          })) {
                             deletePackage.mutate(pkg.id, {
                               onError: () => toast.error(`Failed to delete "${pkg.name}"`),
                             });

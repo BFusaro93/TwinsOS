@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("zapier-hooks");
 
 /**
  * DELETE /api/integrations/zapier/hooks/[id] — Zapier's REST Hook
@@ -19,6 +23,11 @@ export async function DELETE(
     return NextResponse.json({ error: "Rate limit exceeded — slow down" }, { status: 429 });
   }
 
+  // A non-uuid id reached Postgres and came back as its raw cast error.
+  if (!z.string().uuid().safeParse(id).success) {
+    return NextResponse.json({ error: "Subscription not found" }, { status: 404 });
+  }
+
   const { error } = await db
     .from("zapier_webhook_subscriptions")
     .update({ deleted_at: new Date().toISOString() })
@@ -26,7 +35,8 @@ export async function DELETE(
     .eq("org_id", auth.orgId);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    log.error("unsubscribe failed", { error: error.message });
+    return NextResponse.json({ error: "unsubscribe failed" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

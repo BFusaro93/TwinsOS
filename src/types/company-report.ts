@@ -167,4 +167,7 @@ export interface CompanyReportData {
   operations: OperationsSection;
   collections: CollectionsSection;
   flags: CompanyReportFlag[];
+  /** True when the viewer's role lacks the estimate report keys: the close
+   *  ratio, open pipeline and won-estimate sections are returned empty. */
+  estimatesRestricted?: boolean;
 }

@@ -389,7 +389,7 @@ export function ChemicalApplicationPanel({ jobId, visitId }: Props) {
 
   const [addingProductId, setAddingProductId] = useState("");
   const { data: addingProductRates = [] } = useChemicalApplicationRates(addingProductId || undefined);
-  const { data: areaValue = null } = useChemicalJobAreaValue(jobId, settings?.areaCustomFieldId, addingProductId || null);
+  const { data: areaValue = null } = useChemicalJobAreaValue(jobId, settings?.areaCustomFieldId, addingProductId || null, visitId);
   const unitsById = new Map([...units, ...areaUnits].map((u) => [u.id, u]));
 
   const employees = employeesRaw.map((e) => ({
@@ -451,7 +451,7 @@ export function ChemicalApplicationPanel({ jobId, visitId }: Props) {
     let solutionAmount: number | null | undefined;
     let solutionUnitOfMeasureId: string | null | undefined;
 
-    if (settings?.autoCalcQuantity && settings.areaCustomFieldId) {
+    if (settings?.autoCalcQuantity) {
       const defaultRate = addingProductRates.find((r) => r.isDefault) ?? addingProductRates[0];
       if (defaultRate && areaValue != null) {
         const computed = calcChemicalAndSolution(defaultRate, areaValue, unitsById);

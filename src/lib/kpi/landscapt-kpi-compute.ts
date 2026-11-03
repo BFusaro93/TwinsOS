@@ -389,9 +389,11 @@ interface ClientRow {
 
 interface MaintenanceJobRow {
   client_id: string;
+  job_type: string;
   status: string;
   created_at: string;
   recurrence_end: string | null;
+  waiting_list_end: string | null;
 }
 
 /** Job types that constitute ongoing maintenance (vs. one-time/project work). */
@@ -411,7 +413,7 @@ async function computeClients(supabase: Client, w: YearWindow): Promise<Values> 
     fetchAll<MaintenanceJobRow>((from, to) =>
       supabase
         .from("crm_jobs")
-        .select("client_id, status, created_at, recurrence_end")
+        .select("client_id, job_type, status, created_at, recurrence_end, waiting_list_end")
         .in("job_type", MAINTENANCE_JOB_TYPES)
         .is("deleted_at", null)
         .order("created_at", { ascending: true })
@@ -455,15 +457,27 @@ async function computeClients(supabase: Client, w: YearWindow): Promise<Values> 
   // Maintenance retention: a "maintenance client" has a recurring or package
   // job. Base = clients with such a job created before Jan 1 who weren't
   // closed before Jan 1. Retained = still open at period end AND still holding
-  // a non-cancelled maintenance job whose recurrence hasn't ended before period end.
+  // an open maintenance job: a recurring job whose recurrence hasn't ended
+  // before period end, or a package whose program window reaches this year.
   const hadMaintenanceBefore = new Set<string>();
   const hasLiveMaintenance = new Set<string>();
   for (const j of maintenanceJobs) {
     if (new Date(j.created_at).getTime() < jan1) hadMaintenanceBefore.add(j.client_id);
+    if (j.status === "cancelled" || j.status === "completed" || j.status === "skipped") continue;
+    if (j.job_type === "package") {
+      // A package is one season's program and never completes or gets a
+      // recurrence_end, so it is live only when its program window reaches into
+      // this year: last season's 7-Step that wasn't renewed doesn't count as
+      // retained. A package with no window is treated as running to the end of
+      // the year it was sold.
+      const windowEnd = j.waiting_list_end ?? `${isoInZone(new Date(j.created_at), w.timeZone).slice(0, 4)}-12-31`;
+      if (windowEnd >= w.from) hasLiveMaintenance.add(j.client_id);
+      continue;
+    }
     // Retained = still holding live maintenance at period end, so a recurrence that ended
     // after Jan 1 but before today no longer counts.
     const ended = j.recurrence_end ? new Date(`${j.recurrence_end}T23:59:59`).getTime() < end : false;
-    if (j.status !== "cancelled" && !ended) hasLiveMaintenance.add(j.client_id);
+    if (!ended) hasLiveMaintenance.add(j.client_id);
   }
   const maintenanceBase = rows.filter(
     (r) => hadMaintenanceBefore.has(r.id) && !before(r.closed_at, jan1)

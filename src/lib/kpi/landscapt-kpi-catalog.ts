@@ -467,7 +467,7 @@ export const KPI_CATALOG: KpiCatalogMetric[] = [
     auto: true,
     defaultTarget: 90,
     source:
-      "Jobs + Clients: clients with a recurring or package job before Jan 1 who, by year end (or today), are still open and still have a non-cancelled recurring/package job ÷ those clients on Jan 1.",
+      "Jobs + Clients: clients with a recurring or package job before Jan 1 who, by year end (or today), are still open and still have live maintenance — a recurring job that isn't cancelled, completed or past its end date, or a package whose program window reaches this year (last season's package that wasn't renewed doesn't count) ÷ those clients on Jan 1.",
   },
   {
     key: "maintenance_retention_residential",

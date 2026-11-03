@@ -131,7 +131,10 @@ export function JobsPackagesGuide() {
             window and rate are seeded from the package template (rates default from the package or
             the service&apos;s own pricing). <strong>Changing the Start Date shifts every step window
             by the same number of days</strong>, so a program that starts two weeks late re-anchors
-            as a whole instead of leaving its steps on the template dates. The dialog shows the
+            as a whole instead of leaving its steps on the template dates. A package whose dates
+            are from an earlier season starts today instead (every step keeps its spacing), and the
+            dialog tells you so. A step with <strong>Visits Included</strong> above 1 adds that many
+            rows, one per visit, each at the step&apos;s rate. The dialog shows the
             billing summary as <strong>Monthly $X · Total $Y</strong> — the total is the sum of the
             step rates, spread evenly over the months the program covers.
           </li>
@@ -340,11 +343,17 @@ export function JobsPackagesGuide() {
           <li>A date window (start/end) the visit should land inside</li>
           <li>Minimum days (<strong>Min Days</strong>) that must elapse between it and the step before it in the sequence</li>
           <li>Default budgeted hours and a default rate, used to seed the job once a client signs up</li>
+          <li>
+            <strong>Visits Included</strong> — how many visits the step is. A step with 3 becomes 3
+            separate visits on the job, each billed at the step&apos;s rate. They are spaced Min Days
+            apart when the step sets Min Days, otherwise evenly across the step&apos;s date window
+            (or a week apart when it has no end date).
+          </li>
         </ul>
         <Callout>
           <strong>Worked example — &quot;Gold Maintenance,&quot; three bundled services.</strong> The
-          template defines three rows on the Services tab: Mowing (visits_included high, weekly
-          cadence via min-days), Spring Cleanup (one visit, dated window in March–April), and Fall
+          template defines three rows on the Services tab: Mowing (Visits Included 26, Min Days 7,
+          so 26 weekly visits), Spring Cleanup (one visit, dated window in March–April), and Fall
           Cleanup (one visit, dated window in October–November) — each with its own default budgeted
           hours and rate. None of that is a dollar amount a client is billed; it&apos;s a cadence and
           cost template. Only once a client actually signs up does a real <code>package</code>-type job
@@ -363,12 +372,22 @@ export function JobsPackagesGuide() {
           the Min Days spacing, the package&apos;s invoice description, and one visit per dated step.
           The convert window&apos;s <strong>Scheduled Date</strong> becomes a Program Start Date that
           moves every step window by the same number of days. Convert one package at a time, and not
-          together with ordinary lines. A package service with more than one included visit becomes a
-          single step on the job, billed at that line&apos;s full price.
+          together with ordinary lines. A package service with more than one included visit becomes
+          that many steps on the job, one visit each, each billed at the per-visit share of the
+          line. Convert refuses a line that no longer matches a step of the package (the package
+          was edited after the estimate was built), since that visit would never be scheduled or
+          billed. An estimate whose package was later deleted still converts against the
+          package&apos;s steps.
         </p>
         <p>
           Until a package job&apos;s recurring dates are actually set, it behaves like a Waiting List
           job — no fixed date, only a range — and surfaces on the Waiting List page the same way.
+          A dispatched step that didn&apos;t happen (rained out, say) can go back: select it on the
+          Dispatch Board and choose <strong>Return to Waiting List</strong>. Its visit becomes the
+          step&apos;s undispatched placeholder again and the step is listed on the Waiting List,
+          where Dispatch defaults to the placeholder&apos;s date (or today, if that has passed).
+          Later steps are re-spaced when it is completed. Deleting a step&apos;s visit (the client
+          opted out of that application) is permanent — the step isn&apos;t re-created.
         </p>
         <Callout>
           <strong>Min Days is enforced, not just suggested.</strong> Once a package job&apos;s visits

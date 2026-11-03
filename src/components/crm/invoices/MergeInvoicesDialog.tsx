@@ -10,6 +10,7 @@ import { formatCurrency } from "@/lib/utils";
 import { computeMergedInvoiceTotals } from "@/lib/invoice-merge";
 import type { CRMInvoice } from "@/types/crm-invoices";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
+import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 
 interface Props {
   invoices: CRMInvoice[];
@@ -70,7 +71,7 @@ export function MergeInvoicesDialog({ invoices, onClose }: Props) {
       const data = await res.json() as { ok?: boolean; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Consolidation failed");
       await qc.refetchQueries({ queryKey: ["crm-invoices"] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
       toast.success("Invoices consolidated onto the parent account");
       onClose();
     } catch (err) {

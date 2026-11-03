@@ -4,7 +4,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import { deleteInvoiceLineItemAndRecalc } from "./use-invoices";
+import { fireQuickBooksInvoiceUpdate } from "@/lib/integrations/quickbooks-client";
+import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { roundHours, formatMonthDay } from "@/lib/utils";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
@@ -16,7 +17,7 @@ import type { TriggerType } from "@/types/crm-automations";
 import type { CRMJob, CRMService, CRMCrew, BudgetMethod } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
 import { jobActivityLabel } from "@/lib/utils/job-activity-label";
-import { planPackageLineSteps } from "@/lib/package-schedule";
+import { expandPackageStepVisits, planPackageLineSteps, type PackageStepVisitDates } from "@/lib/package-schedule";
 import { stripHtml } from "@/lib/utils/strip-html";
 import type { CRMPackageService } from "@/types/crm-packages";
 import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
@@ -1844,6 +1845,10 @@ export function useCreateClientJob() {
             client_id: values.clientId,
             job_service_id: serviceIdBySortOrder[i] ?? null,
             scheduled_date: s.startDate,
+            // The step's occurrence, as the visit generator stamps it: a
+            // deleted step visit only stays deleted while it holds its
+            // occurrence — without one the daily cron re-created it.
+            occurrence_date: s.startDate,
             status: 'scheduled',
             crew_id: values.crewId || null,
             men_count: s.teamSize || jobManCount,
@@ -2383,14 +2388,26 @@ export function useCreateJobsFromEstimate() {
           pkgServices,
           // The estimate's full line order when given (skipped lines keep their step); otherwise
           // just the services being created.
-          packageStepLines ?? services.map((sv) => ({ id: sv.estimateLineItemId ?? sv.serviceName, serviceId: sv.serviceId, serviceName: sv.serviceName })),
+          (packageStepLines && packageStepLines.length > 0 ? packageStepLines : null) ?? services.map((sv) => ({ id: sv.estimateLineItemId ?? sv.serviceName, serviceId: sv.serviceId, serviceName: sv.serviceName })),
           scheduledDate,
         );
-        // One step per selected line, so a visit the client skipped (line set to
-        // Draft) doesn't leave the job reading "Step 3 of 5" with four visits.
-        pkgTotalSteps = services.length || 1;
+        // One step per converted visit (set below, once multi-visit lines are
+        // expanded), so a visit the client skipped (line set to Draft) doesn't
+        // leave the job reading "Step 3 of 5" with four visits.
       }
       const stepByLine = new Map((pkgPlan?.steps ?? []).map((st) => [st.lineId, st]));
+      // A package line with "Visits Included" N is N steps on the job — one
+      // visit each, billed at the per-visit rate — spread across the step's
+      // window (expandPackageStepVisits). Only the first carries the estimate
+      // line (it is unique per job service) and its sub-items.
+      const serviceRows: { sv: (typeof services)[number]; dates: PackageStepVisitDates | null; first: boolean }[] = isPackageJob
+        ? services.flatMap((sv) => {
+            const step = stepByLine.get(sv.estimateLineItemId ?? sv.serviceName);
+            return expandPackageStepVisits(step?.startDate ?? null, step?.completeByDate ?? null, step?.minDays ?? null, sv.maxVisits)
+              .map((dates, i) => ({ sv, dates, first: i === 0 }));
+          })
+        : services.map((sv) => ({ sv, dates: null, first: true }));
+      if (isPackageJob) pkgTotalSteps = serviceRows.length || 1;
 
       const jobManCount = Math.max(1, Math.round(manCount ?? 1));
       const totalBudgetedHours = roundHours(services.reduce((s, sv) => s + (sv.budgetedHours ?? 0), 0));
@@ -2499,7 +2516,7 @@ export function useCreateJobsFromEstimate() {
         const { data: insertedServices, error: svcError } = await (supabase as any)
           .from("crm_job_services")
           .insert(
-            services.map((s, i) => ({
+            serviceRows.map(({ sv: s, dates, first }, i) => ({
               job_id: jobId,
               service_id: s.serviceId,
               service_name: s.serviceName,
@@ -2524,12 +2541,13 @@ export function useCreateJobsFromEstimate() {
               team_size: jobManCount,
               days_count: 1,
               is_taxable: s.isTaxable ?? estimateIsTaxed,
-              estimate_line_item_id: s.estimateLineItemId ?? null,
+              estimate_line_item_id: first ? (s.estimateLineItemId ?? null) : null,
               treated_area: s.treatedArea ?? null,
-              max_visits: (jobType === "recurring" || jobType === "package") && s.maxVisits && s.maxVisits > 0 ? Math.round(s.maxVisits) : null,
-              start_date: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.startDate ?? null,
-              complete_by_date: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.completeByDate ?? null,
-              min_days: stepByLine.get(s.estimateLineItemId ?? s.serviceName)?.minDays ?? null,
+              // Package steps are one visit each (expanded above).
+              max_visits: jobType === "recurring" && s.maxVisits && s.maxVisits > 0 ? Math.round(s.maxVisits) : null,
+              start_date: dates?.startDate ?? null,
+              complete_by_date: dates?.completeByDate ?? null,
+              min_days: dates?.minDays ?? null,
             }))
           )
           .select("id");
@@ -2550,8 +2568,8 @@ export function useCreateJobsFromEstimate() {
         // only: the dollars are already inside the service's price, and this
         // table is never billed. Best-effort — the job is already created.
         const lineToServiceId = new Map<string, string>();
-        services.forEach((sv, i) => {
-          if (sv.estimateLineItemId && insertedServiceIds[i]) lineToServiceId.set(sv.estimateLineItemId, insertedServiceIds[i]);
+        serviceRows.forEach(({ sv, first }, i) => {
+          if (first && sv.estimateLineItemId && insertedServiceIds[i]) lineToServiceId.set(sv.estimateLineItemId, insertedServiceIds[i]);
         });
         if (lineToServiceId.size > 0) {
           try {
@@ -2642,14 +2660,17 @@ export function useCreateJobsFromEstimate() {
       if (isPackageJob) {
         // One visit per dated step (the package's own windows), linked to its
         // service — mirrors useCreateClientJob's package branch.
-        const stepRows = services
-          .map((sv, i) => ({ sv, sid: insertedServiceIds[i], step: stepByLine.get(sv.estimateLineItemId ?? sv.serviceName) }))
-          .filter((x) => x.sid && x.step?.startDate)
+        const stepRows = serviceRows
+          .map((row, i) => ({ sid: insertedServiceIds[i], date: row.dates?.startDate ?? null }))
+          .filter((x) => x.sid && x.date)
           .map((x) => ({
             job_id: jobId,
             client_id: clientId,
             job_service_id: x.sid,
-            scheduled_date: x.step!.startDate,
+            scheduled_date: x.date,
+            // Holds the step's occurrence so deleting the visit sticks (the
+            // generator re-creates an unclaimed step).
+            occurrence_date: x.date,
             status: "scheduled",
             crew_id: crewId,
             men_count: jobManCount,
@@ -3617,22 +3638,23 @@ export function useSetJobProductStatus() {
       invoiceLineItemId?: string | null;
     }) => {
       const supabase = createClient();
-      // Reopening a billed material removes its invoice line afterwards. A
-      // locked invoice rejects that delete, so check BEFORE flipping the status:
-      // the flip restores stock and frees the material, and doing it first left
-      // the line on the (locked) invoice with the material back at pending —
-      // billable a second time.
+      // Taking a billed material off its invoice is one server-side step
+      // (crm_release_job_product_from_invoice): status + stock, the invoice
+      // line, and the invoice totals together. Done as separate writes from
+      // here, a role without Add/Modify Invoices got the status/stock change
+      // committed and the line delete refused — the customer stayed billed.
+      // The RPC refuses a locked invoice, and one already printed/sent unless
+      // the user holds the invoice key.
       if (p.newStatus !== "invoiced" && p.invoiceLineItemId) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: lineInv } = await (supabase as any)
-          .from("crm_invoice_line_items")
-          .select("crm_invoices(locked)")
-          .eq("id", p.invoiceLineItemId)
-          .maybeSingle();
-        const lockedInvoice = Array.isArray(lineInv?.crm_invoices) ? lineInv.crm_invoices[0] : lineInv?.crm_invoices;
-        if (lockedInvoice?.locked) {
-          throw new Error("This material is on a locked invoice. Unlock the invoice before changing it.");
-        }
+        const { data, error } = await (supabase.rpc as any)("crm_release_job_product_from_invoice", {
+          p_job_product_id: p.id,
+          p_new_status: p.newStatus,
+        });
+        if (error) throw error;
+        const invoiceId = (data as string | null) ?? undefined;
+        if (invoiceId) fireQuickBooksInvoiceUpdate(invoiceId);
+        return { invoiceId };
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.rpc as any)("set_job_product_status", {
@@ -3640,31 +3662,15 @@ export function useSetJobProductStatus() {
         p_new_status: p.newStatus,
       });
       if (error) throw error;
-
-      let invoiceId: string | undefined;
-      if (p.newStatus !== "invoiced" && p.invoiceLineItemId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: li } = await (supabase as any)
-          .from('crm_invoice_line_items')
-          .select('invoice_id')
-          .eq('id', p.invoiceLineItemId)
-          .single();
-        if (li?.invoice_id) {
-          invoiceId = li.invoice_id;
-          await deleteInvoiceLineItemAndRecalc(supabase, p.invoiceLineItemId, li.invoice_id);
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
-          .from('crm_job_products')
-          .update({ invoice_line_item_id: null })
-          .eq('id', p.id);
-      }
-      return { invoiceId };
+      return { invoiceId: undefined as string | undefined };
     },
     onSuccess: (data, v) => {
       qc.invalidateQueries({ queryKey: ['crm-job-products', v.jobId] });
       qc.invalidateQueries({ queryKey: ['crm-jobs', 'detail', v.jobId] });
-      if (data?.invoiceId) qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", data.invoiceId] });
+      if (data?.invoiceId) {
+        qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", data.invoiceId] });
+        invalidateClientBalances(qc);
+      }
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["products"] });
     },

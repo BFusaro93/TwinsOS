@@ -6,15 +6,23 @@ import type { ConfirmOptions } from "@/components/shared/useConfirm";
  * (/api/crm/clients/upcoming-visits) does the counting and the cancelling.
  */
 
+/** The route takes at most 500 ids per call; a bulk selection is sent in
+ *  batches of 200, one after another, and the counts summed. */
+const BATCH = 200;
+
 async function post(clientIds: string[], action: "preview" | "cancel"): Promise<number> {
-  const res = await fetch("/api/crm/clients/upcoming-visits", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ clientIds, action }),
-  });
-  const out = (await res.json().catch(() => ({}))) as { count?: number; error?: string };
-  if (!res.ok) throw new Error(out.error ?? "Failed to check upcoming visits");
-  return out.count ?? 0;
+  let total = 0;
+  for (let i = 0; i < clientIds.length; i += BATCH) {
+    const res = await fetch("/api/crm/clients/upcoming-visits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientIds: clientIds.slice(i, i + BATCH), action }),
+    });
+    const out = (await res.json().catch(() => ({}))) as { count?: number; error?: string };
+    if (!res.ok) throw new Error(out.error ?? "Failed to check upcoming visits");
+    total += out.count ?? 0;
+  }
+  return total;
 }
 
 /** How many visits answering Yes would cancel. 0 when nothing qualifies (or the caller can't ask). */

@@ -81,15 +81,14 @@ function LinkOutCard({ def }: { def: PrebuiltReportDef }) {
 }
 
 function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
-  const [values, setValues] = useState<Record<string, string>>(() =>
-    defaultFilterValues(def.filters)
-  );
-  const { data: result, isFetching, error, refetch } = useRunReport(def.key, values);
-
   // The chart's date window must match the table's, and the table's is
   // resolved server-side against the ORG's zone — so this has to use the same
   // zone, not the browser's.
   const orgTimeZone = useOrgTimeZone();
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    defaultFilterValues(def.filters, orgTimeZone)
+  );
+  const { data: result, isFetching, error, refetch } = useRunReport(def.key, values);
   const headerVisuals = def.headerVisuals?.(values, orgTimeZone) ?? [];
   const [chartResults, setChartResults] = useState<Record<string, ReportResult>>({});
   const handleChartData = (title: string, chartResult: ReportResult) => {

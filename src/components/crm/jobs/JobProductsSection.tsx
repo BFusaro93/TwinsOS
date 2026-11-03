@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn, formatCurrency } from "@/lib/utils";
 import { toast } from "sonner";
+import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 import { Plus, Pencil, Trash2, Check, X, ChevronDown } from "lucide-react";
 
 // 'Used' vs 'Used, not billed' is the distinction that matters to the office at
@@ -303,7 +304,7 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
                             },
                             {
                               onSuccess: () => toast.success(`Marked ${JOB_PRODUCT_STATUS_LABEL[next]}`),
-                              onError: () => toast.error("Failed to update product status"),
+                              onError: (err) => toast.error(mutationErrorMessage(err, "Failed to update product status")),
                             }
                           );
                         }}

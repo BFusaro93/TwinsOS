@@ -267,6 +267,19 @@ function formatDate(ymd: string | null): string {
   return new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
+/** The notice's Date: the day the application started (company timezone), which is what
+ *  the Time beside it and the email's [applicationdate] report — the scheduled day only
+ *  when no start time was recorded. A visit worked a day late used to read the planned day. */
+export function chemicalNoticeDateText(d: Pick<ChemicalNoticeData, "startTime" | "serviceDate">, timeZone?: string): string {
+  if (d.startTime) {
+    const t = new Date(d.startTime);
+    if (!Number.isNaN(t.getTime())) {
+      return t.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", ...(timeZone ? { timeZone } : {}) });
+    }
+  }
+  return formatDate(d.serviceDate);
+}
+
 function formatTime(iso: string | null, timeZone?: string): string {
   if (!iso) return "";
   return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", ...(timeZone ? { timeZone } : {}) });
@@ -369,7 +382,7 @@ export function renderChemicalNoticeHtml(d: ChemicalNoticeData, org: ChemicalNot
   <div style="${font}font-size:${roomy ? 20 : 16}px;font-weight:bold;color:${accent};margin-bottom:4px;">Chemical Application Notice</div>
   <div style="${font}font-size:${fs}px;color:#64748b;margin-bottom:${roomy ? 18 : 10}px;">${escapeHtml(d.clientName)}${d.addressLine ? ` &middot; ${escapeHtml(d.addressLine)}` : ""}${d.serviceName ? ` &middot; ${escapeHtml(d.serviceName)}` : ""}</div>
   <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:${roomy ? 20 : 12}px;"><tr>
-    ${meta("Date", formatDate(d.serviceDate), BLANK)}
+    ${meta("Date", chemicalNoticeDateText(d, opts.timeZone), BLANK)}
     ${meta("Time", timeRange, `AM / PM ${BLANK}`)}
     ${meta("Weather", conditions, `${BLANK} &deg;F &nbsp; Sun / Rain / Clouds`)}
     ${meta("Applicator", [d.applicatorName, d.applicatorLicense ? `Lic. ${d.applicatorLicense}` : ""].filter(Boolean).join(" · "), BLANK)}

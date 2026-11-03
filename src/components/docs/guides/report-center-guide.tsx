@@ -208,8 +208,9 @@ export function ReportCenterGuide() {
             defaulting to &quot;This Month&quot; (<code>dateRangeFilterDef(&quot;Scheduled
             Between&quot;, &quot;this_month&quot;)</code>). Changing the preset (This Month, Last
             Month, Last 30/90 Days, This Year, All Time, or Custom) recomputes the{" "}
-            <code>from</code>/<code>to</code> window client-side
-            (<code>computePresetRange</code>) and re-runs the
+            <code>from</code>/<code>to</code> window client-side on the company&apos;s calendar
+            (<code>computePresetRange</code>, in the org&apos;s timezone rather than the
+            viewer&apos;s) and re-runs the
             query. <strong>All Time</strong> sends an explicitly unbounded range — it really means
             every row, not a silent fallback to This Month.
           </li>
@@ -511,7 +512,11 @@ export function ReportCenterGuide() {
             Cash Collected counts cash payments only — no account credits or AR write-offs, net of
             refunds. A dash means there was nothing to compute from for that year — for
             example Revenue (Sold) needs jobs with a Date Sold, and Maintenance Retention needs
-            recurring or package jobs that existed before January&nbsp;1.
+            recurring or package jobs that existed before January&nbsp;1. A package counts as
+            retained only when its program window reaches the year you are scoring, so last
+            season&apos;s package that wasn&apos;t renewed counts as lost. Metrics built on visit
+            labor cost (Gross Profit, Labor % of Revenue, Revenue per Man-Hour) need one of the
+            job-costing report permissions, the same as the Job Costing reports.
           </li>
           <li>
             <strong>Manual</strong> — click the Actual cell and type the value. These are things
@@ -614,9 +619,11 @@ export function ReportCenterGuide() {
           <code>src/lib/company-report/flags.ts</code> and are easy to retune.
         </Callout>
         <p>
-          Gated the same as the rest of the Report Center: <code>view_report_center</code> to
-          open it, Landscapt module required, hidden from crew. There&apos;s nothing to edit on
-          this page — no Manage Report Center split, unlike the KPI Scorecard.
+          Gated the same as the rest of the Report Center: <code>view_report_center</code> plus
+          View Company Report to open it, Landscapt module required, hidden from crew. The close
+          ratio, open pipeline and won-estimate cards also need one of the estimate report
+          permissions; without one they are replaced by a short note. There&apos;s nothing to
+          edit on this page — no Manage Report Center split, unlike the KPI Scorecard.
         </p>
       </Section>
 
@@ -762,7 +769,10 @@ export function ReportCenterGuide() {
           addresses and pick a <strong>Send time</strong> (an hour of the day, Eastern). An hourly
           job delivers each schedule on the <strong>first run at or after its scheduled hour</strong>{" "}
           — so a 7 AM schedule goes out on the 7 AM run, or the 8 AM run if the 7 AM one fired late
-          — and never twice in the same day. Times inside the PDF are formatted in Eastern.
+          — and never twice in the same day. Times inside the PDF are formatted in Eastern. Creating
+          a schedule, changing its recipients or turning it back on needs Manage Report Center
+          <em> and</em> permission to view the report itself (for these, a job-costing report
+          permission), because the email goes out without checking the recipient&apos;s role.
         </p>
       </Section>
 

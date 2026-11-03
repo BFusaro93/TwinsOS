@@ -1451,20 +1451,25 @@ export function ContractDialog({
             <ContractTemplateBar
               details={details}
               isNew={isNew}
-              onApply={(t) =>
+              onApply={(t) => {
+                // Every month explicitly set — see the note on the initial monthlyAmounts above.
+                const templateGrid = MONTHS.reduce((acc, { key }) => { acc[key] = t.monthlyAmounts[key] ?? 0; return acc; }, {} as MonthlyAmounts);
                 patchDetails({
                   ...(t.title ? { title: t.title } : {}),
                   defaultService: t.defaultService ?? "",
                   lineItems: t.invoiceLineItems,
-                  // Every month explicitly set — see the note on the initial monthlyAmounts above.
-                  monthlyAmounts: MONTHS.reduce((acc, { key }) => { acc[key] = t.monthlyAmounts[key] ?? 0; return acc; }, {} as MonthlyAmounts),
+                  monthlyAmounts: templateGrid,
+                  // A non-monthly contract bills the single per-invoice amount
+                  // and save() ignores the grid, so carry the template's price
+                  // across the same way changing the frequency does.
+                  ...(details.billingFrequency !== "monthly" ? { invoiceAmountCents: averageBilledCents(templateGrid) } : {}),
                   billingDayOfMonth: t.billingDayOfMonth,
                   billMonthInAdvance: t.billMonthInAdvance,
                   paymentType: t.paymentType ?? "",
                   autoGenerate: t.autoGenerate,
                   includeSubProperties: t.includeSubProperties,
-                })
-              }
+                });
+              }}
             />
           )}
           {activeTab === "details" && (

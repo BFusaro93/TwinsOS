@@ -309,60 +309,70 @@ function CompanyReportBody({ data }: { data: CompanyReportData }) {
             </Table>
           </Card>
 
-          <Card
-            accent="blue"
-            title="Close Ratios"
-            subtitle={`${currentMonth?.label ?? ""} · ${sales.closeRatios.closeRatioPct != null ? pct(sales.closeRatios.closeRatioPct) : "—"} of ${sales.closeRatios.totalEstimates} decided · ${sales.closeRatios.closeRatioOfSentPct != null ? pct(sales.closeRatios.closeRatioOfSentPct) : "—"} of ${sales.closeRatios.totalSent} sent (incl. pending) · ${money(sales.closeRatios.totalWonAmountCents)} won`}
-          >
-            <Table accent="blue" headers={["Sales Rep", "Won Count", "Close %", "Won Amount", "Amt %"]}>
-              {sales.closeRatios.rows.map((r) => (
-                <Row
-                  key={r.salesRep}
-                  cells={[r.salesRep, r.wonCount.toLocaleString(), pct(r.countPct), money(r.wonAmountCents), pct(r.amountPct)]}
-                />
-              ))}
-            </Table>
-          </Card>
+          {data.estimatesRestricted ? (
+            <Card accent="blue" title="Estimates">
+              <p className="text-sm text-muted-foreground">
+                Close ratios, the open pipeline and won estimates are hidden because your role doesn&apos;t include the estimate reports.
+              </p>
+            </Card>
+          ) : (
+            <Card
+              accent="blue"
+              title="Close Ratios"
+              subtitle={`${currentMonth?.label ?? ""} · ${sales.closeRatios.closeRatioPct != null ? pct(sales.closeRatios.closeRatioPct) : "—"} of ${sales.closeRatios.totalEstimates} decided · ${sales.closeRatios.closeRatioOfSentPct != null ? pct(sales.closeRatios.closeRatioOfSentPct) : "—"} of ${sales.closeRatios.totalSent} sent (incl. pending) · ${money(sales.closeRatios.totalWonAmountCents)} won`}
+            >
+              <Table accent="blue" headers={["Sales Rep", "Won Count", "Close %", "Won Amount", "Amt %"]}>
+                {sales.closeRatios.rows.map((r) => (
+                  <Row
+                    key={r.salesRep}
+                    cells={[r.salesRep, r.wonCount.toLocaleString(), pct(r.countPct), money(r.wonAmountCents), pct(r.amountPct)]}
+                  />
+                ))}
+              </Table>
+            </Card>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Card
-            accent="blue"
-            title="Open Pipeline"
-            subtitle={`${money(sales.openPipeline.totalAmountCents)} · ${sales.openPipeline.totalCount} estimates`}
-          >
-            <Table accent="blue" headers={["Stage", "Value", "%"]}>
-              {sales.openPipeline.byStage.map((s) => (
-                <Row key={s.stage} cells={[s.stage, money(s.amountCents), pct(s.pct)]} />
-              ))}
-            </Table>
-            <h4 className="mt-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Top 5 Open Estimates</h4>
-            <Table accent="blue" headers={["Client", "Value"]}>
-              {sales.openPipeline.topEstimates.map((e, i) => (
-                <Row key={i} cells={[e.clientName, money(e.amountCents)]} />
-              ))}
-            </Table>
-            {sales.openPipeline.byRep.length > 0 && (
-              <p className="text-xs italic text-slate-400 dark:text-neutral-500">
-                Pipeline by rep: {sales.openPipeline.byRep.map((r) => `${r.label} ${money(r.amountCents)}`).join(" | ")}
-              </p>
-            )}
-          </Card>
+        {!data.estimatesRestricted && (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card
+              accent="blue"
+              title="Open Pipeline"
+              subtitle={`${money(sales.openPipeline.totalAmountCents)} · ${sales.openPipeline.totalCount} estimates`}
+            >
+              <Table accent="blue" headers={["Stage", "Value", "%"]}>
+                {sales.openPipeline.byStage.map((s) => (
+                  <Row key={s.stage} cells={[s.stage, money(s.amountCents), pct(s.pct)]} />
+                ))}
+              </Table>
+              <h4 className="mt-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Top 5 Open Estimates</h4>
+              <Table accent="blue" headers={["Client", "Value"]}>
+                {sales.openPipeline.topEstimates.map((e, i) => (
+                  <Row key={i} cells={[e.clientName, money(e.amountCents)]} />
+                ))}
+              </Table>
+              {sales.openPipeline.byRep.length > 0 && (
+                <p className="text-xs italic text-slate-400 dark:text-neutral-500">
+                  Pipeline by rep: {sales.openPipeline.byRep.map((r) => `${r.label} ${money(r.amountCents)}`).join(" | ")}
+                </p>
+              )}
+            </Card>
 
-          <Card accent="blue" title="Won Estimates YTD Leaderboard" subtitle={money(sales.wonEstimatesYtd.totalAmountCents) + " total won"}>
-            <Table accent="blue" headers={["Sales Rep", "Won Value"]}>
-              {sales.wonEstimatesYtd.rows.map((r) => (
-                <Row key={r.label} cells={[r.label, <span key="v" className="font-semibold text-emerald-600 dark:text-emerald-400">{money(r.amountCents)}</span>]} />
-              ))}
-              <Row bold cells={["Total Won YTD", <span key="v" className="font-bold text-emerald-700 dark:text-emerald-400">{money(sales.wonEstimatesYtd.totalAmountCents)}</span>]} />
-            </Table>
-            {sales.wonEstimatesYtd.openCountByRep.length > 0 && (
-              <p className="text-xs italic text-slate-400 dark:text-neutral-500">
-                Open estimates by rep: {sales.wonEstimatesYtd.openCountByRep.map((r) => `${r.label} ${r.count}`).join(" | ")}
-              </p>
-            )}
-          </Card>
-        </div>
+            <Card accent="blue" title="Won Estimates YTD Leaderboard" subtitle={money(sales.wonEstimatesYtd.totalAmountCents) + " total won"}>
+              <Table accent="blue" headers={["Sales Rep", "Won Value"]}>
+                {sales.wonEstimatesYtd.rows.map((r) => (
+                  <Row key={r.label} cells={[r.label, <span key="v" className="font-semibold text-emerald-600 dark:text-emerald-400">{money(r.amountCents)}</span>]} />
+                ))}
+                <Row bold cells={["Total Won YTD", <span key="v" className="font-bold text-emerald-700 dark:text-emerald-400">{money(sales.wonEstimatesYtd.totalAmountCents)}</span>]} />
+              </Table>
+              {sales.wonEstimatesYtd.openCountByRep.length > 0 && (
+                <p className="text-xs italic text-slate-400 dark:text-neutral-500">
+                  Open estimates by rep: {sales.wonEstimatesYtd.openCountByRep.map((r) => `${r.label} ${r.count}`).join(" | ")}
+                </p>
+              )}
+            </Card>
+          </div>
+        )}
 
         <Card accent="blue" title={`New Clients — ${currentMonth?.label ?? ""}`} subtitle={`${sales.newClientsThisMonth.total} total`}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

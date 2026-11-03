@@ -22,6 +22,8 @@ import {
   useUpdateChemicalLookupItem,
 } from "@/lib/hooks/use-chemical-tracking";
 import { useCustomFieldDefs } from "@/lib/hooks/use-rate-matrix";
+import { useCustomFieldDefs as useClientFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import { isSquareFootAreaField } from "@/lib/chemical-area";
 import type { ChemicalConditionsDisplay, ChemicalLookupType, ChemicalUnitClass } from "@/types/chemical-tracking";
 
 function Section({
@@ -57,7 +59,13 @@ function GeneralChemicalSettings() {
   const { data: settings } = useChemicalSettings();
   const update = useUpdateChemicalSettings();
   const { data: propertyFieldDefs = [] } = useCustomFieldDefs("property");
-  const numericFieldDefs = propertyFieldDefs.filter((d) => d.fieldType === "number");
+  const { data: clientFieldDefs = [] } = useClientFieldDefs();
+  const clientUnitById = new Map(clientFieldDefs.map((d) => [d.id, d.unit]));
+  // Rates are per square foot; Linear Ft. / Yards / Acres fields mis-sized every amount.
+  // A field already chosen stays listed so the setting never looks blank.
+  const numericFieldDefs = propertyFieldDefs.filter(
+    (d) => d.fieldType === "number" && (isSquareFootAreaField(d, clientUnitById) || d.id === settings?.areaCustomFieldId)
+  );
 
   function handleConditionsChange(v: ChemicalConditionsDisplay) {
     update.mutate(

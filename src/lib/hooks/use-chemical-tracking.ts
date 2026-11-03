@@ -607,23 +607,31 @@ export function useChemicalJobAreaValue(
   jobId: string,
   areaFieldId: string | null | undefined,
   /** The product being applied: its service may size from its own field or carry a treated-area override. */
-  productId?: string | null
+  productId?: string | null,
+  /** Scopes to the visit's own job service, as preload does, when the same product sits on two services. */
+  visitId?: string | null
 ) {
   return useQuery({
-    queryKey: ["chemical-job-area-value", jobId, areaFieldId, productId ?? null],
+    queryKey: ["chemical-job-area-value", jobId, areaFieldId, productId ?? null, visitId ?? null],
     queryFn: async (): Promise<number | null> => {
       const supabase = createClient();
       const { data: job } = await supabase
         .from("crm_jobs")
-        .select("client_id, property_id, crm_job_services(service_id, included, treated_area)")
+        .select("client_id, property_id, crm_job_services(id, service_id, included, treated_area)")
         .eq("id", jobId)
         .maybeSingle();
       if (!job) return null;
+      let visitJobServiceId: string | null = null;
+      if (visitId) {
+        const { data: visit } = await supabase.from("crm_job_visits").select("job_service_id").eq("id", visitId).maybeSingle();
+        visitJobServiceId = visit?.job_service_id ?? null;
+      }
       const single = job.property_id ? new Map<string, string>() : await fetchSinglePropertyByClient(supabase, [job.client_id ?? ""]);
       const propertyId = effectivePropertyId(job, single);
-      const jobServices = ((job as unknown as {
-        crm_job_services: { service_id: string | null; included: boolean | null; treated_area: number | null }[] | null;
+      const performed = ((job as unknown as {
+        crm_job_services: { id: string; service_id: string | null; included: boolean | null; treated_area: number | null }[] | null;
       }).crm_job_services ?? []).filter((js) => js.included !== false && js.service_id);
+      const jobServices = visitJobServiceId ? performed.filter((js) => js.id === visitJobServiceId) : performed;
       // The job service that attaches this product (first match), if any.
       let serviceId: string | null = null;
       let treatedArea: number | null = null;
@@ -646,7 +654,9 @@ export function useChemicalJobAreaValue(
       );
       return resolveArea({ propertyId, clientId: job.client_id, serviceId, treatedArea }) ?? null;
     },
-    enabled: !!jobId && !!areaFieldId,
+    // A service's own area field or treated-area override sizes the amount even when the
+    // org has no Area Custom Field — preload and the reports already worked that way.
+    enabled: !!jobId,
   });
 }
 

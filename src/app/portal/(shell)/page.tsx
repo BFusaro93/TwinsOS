@@ -5,6 +5,7 @@ import PortalDashboard from "@/components/portal/PortalDashboard";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { hourInZone, todayInZone } from "@/lib/time/zone";
 import { labelPortalVisits, loadUpcomingPortalVisits } from "@/lib/portal/visit-labels";
+import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
 
 interface EstimateRow {
   id: string;
@@ -14,6 +15,7 @@ interface EstimateRow {
   total_price_cents: number;
   status: string;
   expires_at: string | null;
+  created_at: string;
 }
 
 export default async function PortalHomePage() {
@@ -41,51 +43,68 @@ export default async function PortalHomePage() {
     // Balance across the login's own account and its sub-accounts. Service
     // client: the portal user's RLS only reads their own clients row; the
     // ids are already scoped to this login by getPortalAccounts.
-    createServiceClient()
-      .from("clients")
-      .select("balance_outstanding_cents, balance_credits_cents")
-      .in("id", clientIds)
-      .eq("org_id", ctx.orgId),
+    queryByClientIds(clientIds, (ids) =>
+      createServiceClient()
+        .from("clients")
+        .select("id, balance_outstanding_cents, balance_credits_cents")
+        .in("id", ids)
+        .eq("org_id", ctx.orgId)
+    ),
 
-    supabase
-      .from("crm_invoices")
-      .select("id, client_id, invoice_number, total_cents, balance_cents, due_date, status")
-      .in("client_id", clientIds)
-      .eq("org_id", ctx.orgId)
-      .in("status", ["printed", "sent", "viewed", "partial", "overdue"])
-      // A fully-paid (or $0) invoice can still sit in "printed"/"sent";
-      // it isn't outstanding and mustn't flag the account as past due.
-      .gt("balance_cents", 0)
-      .is("deleted_at", null)
-      .order("due_date", { ascending: true })
-      .limit(5),
+    queryByClientIds(
+      clientIds,
+      (ids) =>
+        supabase
+          .from("crm_invoices")
+          .select("id, client_id, invoice_number, total_cents, balance_cents, due_date, status")
+          .in("client_id", ids)
+          .eq("org_id", ctx.orgId)
+          .in("status", ["printed", "sent", "viewed", "partial", "overdue"])
+          // A fully-paid (or $0) invoice can still sit in "printed"/"sent";
+          // it isn't outstanding and mustn't flag the account as past due.
+          .gt("balance_cents", 0)
+          .is("deleted_at", null)
+          .order("due_date", { ascending: true })
+          .limit(5),
+      { compare: byColumn("due_date", true), limit: 5 }
+    ),
 
     loadUpcomingPortalVisits(supabase, { clientIds, orgId: ctx.orgId, today, limit: 5 }),
 
-    supabase
-      .from("crm_job_visits")
-      .select("id, client_id, scheduled_date, status, job_id, job_service_id, invoice_description")
-      .in("client_id", clientIds)
-      .eq("org_id", ctx.orgId)
-      .is("deleted_at", null)
-      // A multi-crew stop is one visit to the customer — show the lead's only.
-      .eq("crew_group_secondary", false)
-      .eq("status", "completed")
-      .order("scheduled_date", { ascending: false })
-      .limit(3),
+    queryByClientIds(
+      clientIds,
+      (ids) =>
+        supabase
+          .from("crm_job_visits")
+          .select("id, client_id, scheduled_date, status, job_id, job_service_id, invoice_description")
+          .in("client_id", ids)
+          .eq("org_id", ctx.orgId)
+          .is("deleted_at", null)
+          // A multi-crew stop is one visit to the customer — show the lead's only.
+          .eq("crew_group_secondary", false)
+          .eq("status", "completed")
+          .order("scheduled_date", { ascending: false })
+          .limit(3),
+      { compare: byColumn("scheduled_date", false), limit: 3 }
+    ),
 
     // Portal customers have no RLS read path to estimates (it would expose
     // internal cost/margin columns) — service client, scoped to this client.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (createServiceClient() as any)
-      .from("estimates")
-      .select("id, client_id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date")
-      .in("client_id", clientIds)
-      .eq("org_id", ctx.orgId)
-      .eq("stage", "sent")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .limit(3) as Promise<{ data: EstimateRow[] | null }>,
+    queryByClientIds<EstimateRow>(
+      clientIds,
+      (ids) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (createServiceClient() as any)
+          .from("estimates")
+          .select("id, client_id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at")
+          .in("client_id", ids)
+          .eq("org_id", ctx.orgId)
+          .eq("stage", "sent")
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .limit(3) as Promise<{ data: EstimateRow[] | null; error: unknown }>,
+      { compare: byColumn("created_at", false), limit: 3 }
+    ),
 
     // Same service-client read the (shell) layout does for branding —
     // portal users have no RLS path to client_portal_settings.
@@ -99,7 +118,14 @@ export default async function PortalHomePage() {
 
   const client = clientRes.data;
   const balanceCents = (balancesRes.data ?? []).reduce((sum, c) => sum + (c.balance_outstanding_cents ?? 0), 0);
-  const creditsCents = (balancesRes.data ?? []).reduce((sum, c) => sum + (c.balance_credits_cents ?? 0), 0);
+  // Credit is per account: paying a sub-account's invoice draws only on that
+  // sub-account's credit, so a single summed figure overstated what any one
+  // payment would use. Show the login's own credit, then each sub-account's.
+  const creditsCents = (balancesRes.data ?? []).find((c) => c.id === ctx.clientId)?.balance_credits_cents ?? 0;
+  const subAccountCredits = (balancesRes.data ?? [])
+    .filter((c) => c.id !== ctx.clientId && (c.balance_credits_cents ?? 0) > 0)
+    .map((c) => ({ accountName: accountNames.get(c.id) ?? "Sub-account", cents: c.balance_credits_cents ?? 0 }))
+    .sort((a, b) => a.accountName.localeCompare(b.accountName));
   const firstName = client?.first_name ?? client?.display_name?.split(" ")[0] ?? "there";
   // Server clock is UTC — greet on the service provider's wall clock.
   const hour = hourInZone(new Date(), timeZone);
@@ -128,6 +154,7 @@ export default async function PortalHomePage() {
       greeting={`${greeting}, ${firstName}!`}
       balanceCents={balanceCents}
       creditsCents={creditsCents}
+      subAccountCredits={subAccountCredits}
       invoices={(invoicesRes.data ?? []).map((inv) => ({
         id: inv.id,
         invoice_number: String(inv.invoice_number),

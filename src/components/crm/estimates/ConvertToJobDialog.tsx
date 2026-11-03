@@ -34,7 +34,7 @@ import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import type { Estimate, EstimateLineItem, EstimateDirectCost } from "@/types/crm-estimates";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { useConvertLeadToClient } from "@/lib/hooks/use-clients";
-import { usePackages } from "@/lib/hooks/use-packages";
+import { usePackageById, usePackages } from "@/lib/hooks/use-packages";
 import { planPackageLineSteps } from "@/lib/package-schedule";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
@@ -332,11 +332,16 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   // Package lines force a package job; the Job Type picker is locked to it.
   const effectiveJobType = hasPackageSel ? "package" : jobType;
   const { data: crmPackages = [] } = usePackages(true);
-  const packageName = (id: string) => crmPackages.find((p) => p.id === id)?.name ?? "Package";
+  // The selected package is fetched by id, deleted ones included: a package
+  // removed after the estimate was built used to resolve to nothing, and the
+  // job converted with no step dates and no visits.
+  const { data: selectedPackageRow, isLoading: selectedPackageLoading } = usePackageById(hasPackageSel ? selectedPackageIds[0] : null);
+  const packageName = (id: string) =>
+    crmPackages.find((p) => p.id === id)?.name ?? (selectedPackageRow?.id === id ? selectedPackageRow.name : "Package");
 
   // The package job's step dates, as the convert will create them: shown before converting so
   // past-dated or missing dates are caught here, not on the board.
-  const selectedPackage = hasPackageSel ? crmPackages.find((p) => p.id === selectedPackageIds[0]) ?? null : null;
+  const selectedPackage = hasPackageSel ? selectedPackageRow ?? null : null;
   // Every line of the package in estimate order, with the ones not being converted marked
   // skipped: a skipped step still uses up its package step, so the later steps keep their dates.
   const packageStepLines = selectedPackage
@@ -355,11 +360,15 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const packageStepDates = packagePlan
     ? selectedItems.map((li) => ({
         id: li.id,
-        name: li.serviceName ?? "Service",
+        // A multi-visit line becomes that many steps, from this date on.
+        name: (li.visits ?? 1) > 1 ? `${li.serviceName ?? "Service"} (${li.visits} visits, from)` : li.serviceName ?? "Service",
         date: packagePlan.steps.find((s) => s.lineId === li.id)?.startDate ?? null,
       }))
     : [];
   const packageHasNoDates = !!packagePlan && packageStepDates.length > 0 && packageStepDates.every((s) => !s.date);
+  // A selected line that matches no step (the package was edited after the
+  // estimate was built) would convert with no visit and never be billed.
+  const packageUndatedLines = packagePlan ? packageStepDates.filter((s) => !s.date) : [];
   const orgTodayStr = todayInZone(orgTimeZone);
 
   // A package set up last season has step dates in the past: start the program today unless
@@ -374,10 +383,10 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   }, [selectedPackage?.id, packageTemplateStart, orgTodayStr]);
   const convertiblePackageIds = [...new Set(convertibleLines.filter((li) => isQuoted(li)).map((li) => li.packageId).filter((x): x is string => !!x))];
   const recurring = effectiveJobType === "recurring";
-  // Only recurring lines are priced per visit. A package job gets ONE visit per step
-  // (generate.ts), so splitting a multi-visit package line's price across its visits
-  // billed a single share and lost the rest; the one step bills the line's full price.
-  const perVisit = (_li: EstimateLineItem) => recurring;
+  // Recurring and package lines are priced per visit: a package line with N
+  // included visits becomes N steps on the job (one visit each), each billed
+  // at the per-visit share of the line.
+  const perVisit = (_li: EstimateLineItem) => recurring || effectiveJobType === "package";
   // Lines whose accepted price doesn't divide evenly by their visit count — the
   // job bills a few cents less than accepted (jobServicePricing).
   const pricingShortfallCents = selectedItems.reduce((s, li) => {
@@ -403,8 +412,19 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
       toast.error("Select the lines of one package at a time — each package becomes its own job");
       return;
     }
+    if (hasPackageSel && !selectedPackage) {
+      toast.error(selectedPackageLoading ? "Still loading the package — try again in a moment" : "This package no longer exists, so its steps can't be scheduled.");
+      return;
+    }
     if (packageHasNoDates) {
       toast.error("None of this package's steps have a start date, so no visits would be created. Set step dates on the package (Packages), then convert.");
+      return;
+    }
+    if (packageUndatedLines.length > 0) {
+      toast.error(
+        `No visit date for ${packageUndatedLines.map((s) => s.name).join(", ")} — the package's steps no longer match these lines. ` +
+        "Give the step a start date in Packages (or leave the line out), then convert."
+      );
       return;
     }
     if (effectiveJobType === "recurring" && !schedule) {

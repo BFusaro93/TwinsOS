@@ -8,7 +8,7 @@ import type { CompanyReportData } from "@/types/company-report";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
-import { PAYMENT_DATASET_KEYS } from "@/lib/reports/report-permissions";
+import { ESTIMATE_DATASET_KEYS, PAYMENT_DATASET_KEYS } from "@/lib/reports/report-permissions";
 
 const log = logger.child("api/crm/company-report");
 
@@ -38,6 +38,12 @@ export async function GET() {
     p_key: "view_report_center",
   });
   if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Same key the /dashboards/crm page is gated on (useDashboardPermission).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canViewDashboard } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "view_dashboard_company_report",
+  });
+  if (!canViewDashboard) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // The report is built on invoices, payments, AR aging and estimate pricing,
   // so it also needs the same accounting keys analysis/run requires for those
@@ -52,6 +58,10 @@ export async function GET() {
     // getFullYear() flips to next year at 7-8pm Eastern on Dec 31.
     const timeZone = await getMyTimeZone(supabase);
     const year = Number(todayInZone(timeZone).slice(0, 4));
+
+    // Close ratios, pipeline and won estimates read rpt_estimates — gated by
+    // the estimate dataset keys in analysis/run, so blank them for other roles.
+    const canSeeEstimates = await hasAnySettingsPermission(supabase, ESTIMATE_DATASET_KEYS);
 
     const [report, kpiActuals, targets] = await Promise.all([
       computeCompanyReport(supabase, timeZone, now),
@@ -73,6 +83,15 @@ export async function GET() {
         newLeadsYtd: { value: kpiActuals.values.new_leads_ytd, target: targets.new_leads_ytd ?? null },
       },
     };
+    if (!canSeeEstimates) {
+      data.sales = {
+        ...data.sales,
+        closeRatios: { totalEstimates: 0, totalSent: 0, totalWonCount: 0, closeRatioPct: null, closeRatioOfSentPct: null, totalWonAmountCents: 0, rows: [] },
+        openPipeline: { totalAmountCents: 0, totalCount: 0, byStage: [], topEstimates: [], byRep: [] },
+        wonEstimatesYtd: { totalAmountCents: 0, rows: [], openCountByRep: [] },
+      };
+      data.estimatesRestricted = true;
+    }
     data.flags = generateCompanyReportFlags(data, timeZone, now);
 
     return NextResponse.json(data);

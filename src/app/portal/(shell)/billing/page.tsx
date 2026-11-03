@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import PortalBillingPage from "@/components/portal/PortalBillingPage";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
 
 interface InvoiceRow {
   id: string;
@@ -33,25 +34,32 @@ export default async function BillingPage() {
   // otherwise a customer with 50+ newer invoices could not see (or pay) an
   // older unpaid one.
   const [recentRes, owingRes] = await Promise.all([
-    supabase
-      .from("crm_invoices")
-      .select(cols)
-      .in("client_id", clientIds)
-      .eq("org_id", ctx.orgId)
-      // Drafts are unfinished staff work — never shown to the customer.
-      .neq("status", "draft")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .limit(50) as unknown as Promise<{ data: InvoiceRow[] | null; error: unknown }>,
-    supabase
-      .from("crm_invoices")
-      .select(cols)
-      .in("client_id", clientIds)
-      .eq("org_id", ctx.orgId)
-      .in("status", ["printed", "sent", "viewed", "partial", "overdue"])
-      .gt("balance_cents", 0)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false }) as unknown as Promise<{ data: InvoiceRow[] | null; error: unknown }>,
+    queryByClientIds<InvoiceRow>(
+      clientIds,
+      (ids) =>
+        supabase
+          .from("crm_invoices")
+          .select(cols)
+          .in("client_id", ids)
+          .eq("org_id", ctx.orgId)
+          // Drafts are unfinished staff work — never shown to the customer.
+          .neq("status", "draft")
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .limit(50) as unknown as Promise<{ data: InvoiceRow[] | null; error: unknown }>,
+      { compare: byColumn("created_at", false), limit: 50 }
+    ),
+    queryByClientIds<InvoiceRow>(clientIds, (ids) =>
+      supabase
+        .from("crm_invoices")
+        .select(cols)
+        .in("client_id", ids)
+        .eq("org_id", ctx.orgId)
+        .in("status", ["printed", "sent", "viewed", "partial", "overdue"])
+        .gt("balance_cents", 0)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false }) as unknown as Promise<{ data: InvoiceRow[] | null; error: unknown }>
+    ),
   ]);
   const error = recentRes.error ?? owingRes.error;
   const merged = new Map<string, InvoiceRow>();

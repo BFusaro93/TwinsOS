@@ -9,6 +9,7 @@ import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
+import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 
 /** `.in()` list size per request — keeps the query string well under URL limits. */
 const IN_CHUNK = 200;
@@ -538,7 +539,7 @@ export function useGenerateSnowInvoices() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["snow-invoicing"] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
     },
   });
 }

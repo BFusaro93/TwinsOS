@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useWaitingListJobs } from "@/lib/hooks/use-crm-jobs";
 import { haversineMiles } from "@/lib/geo";
-import type { CRMJobVisit } from "@/types/crm-jobs";
+import type { CRMJobService, CRMJobVisit } from "@/types/crm-jobs";
 
 export interface NearbyWaitingListMatch {
   jobId: string;
@@ -11,6 +11,10 @@ export interface NearbyWaitingListMatch {
   clientName: string | null;
   address: string;
   distanceMiles: number;
+  /** Services still waiting for a visit when the job is dispatched one visit
+   *  per service (more than one service, or already split). Empty means the
+   *  job goes out as a single whole-job visit. */
+  pendingServices: CRMJobService[];
 }
 
 interface GeocodeResult {
@@ -105,6 +109,13 @@ export function useNearbyWaitingListJobs(radiusMiles = 3, targetDate?: string) {
             clientName: job.clientName ?? null,
             address: [job.serviceAddress, job.serviceCity, job.serviceState].filter(Boolean).join(", ") || (addressById.get(job.id) ?? ""),
             distanceMiles: Math.round(minDist * 10) / 10,
+            // Same rule as the Waiting List's own dispatch: a split job must get
+            // one visit per remaining service — a whole-job visit would bill
+            // every service again, or none if one was already invoiced.
+            pendingServices:
+              (job.services ?? []).length > 1 || (job.visits ?? []).some((v) => v.jobServiceId)
+                ? job.services ?? []
+                : [],
           });
         }
       }

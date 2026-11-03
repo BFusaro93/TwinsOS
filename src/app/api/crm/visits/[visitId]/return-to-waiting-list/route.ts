@@ -15,6 +15,13 @@ import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
  * care about job_type/scheduled_date). Logs a client_activity entry so the
  * dispatch attempt isn't silently erased, and fires the (previously dormant)
  * 'visit_moved_to_waiting_list' automation trigger.
+ *
+ * A package step (e.g. a rained-out fert application) goes back differently:
+ * its visit is the step's placeholder, so it is kept and returned to the
+ * placeholder state ('scheduled', not dispatched) — that is what lists the
+ * step on the Waiting List again. Deleting it would leave the step with no
+ * visit at all. Later steps are re-spaced when this one is completed
+ * (recalcNextPackageVisitDate).
  */
 export async function POST(
   request: Request,
@@ -39,7 +46,7 @@ export async function POST(
 
   const { data: visit, error: visitErr } = await db
     .from("crm_job_visits")
-    .select("id, job_id, client_id, scheduled_date, status, clocked_in_at")
+    .select("id, job_id, job_service_id, client_id, scheduled_date, status, clocked_in_at")
     .eq("id", visitId)
     .is("deleted_at", null)
     .single();
@@ -65,35 +72,49 @@ export async function POST(
   if (jobErr || !job) {
     return NextResponse.json({ error: "Job not found" }, { status: 404 });
   }
-  if (job.job_type !== "waiting_list") {
-    return NextResponse.json({ error: "Only waiting-list jobs can be returned to the waiting list" }, { status: 400 });
+  if (job.job_type !== "waiting_list" && job.job_type !== "package") {
+    return NextResponse.json({ error: "Only waiting-list and package jobs can be returned to the waiting list" }, { status: 400 });
   }
 
   const nowIso = new Date().toISOString();
 
-  const { error: deleteErr } = await db
-    .from("crm_job_visits")
-    .update({ deleted_at: nowIso })
-    .eq("id", visitId);
-  if (deleteErr) return NextResponse.json({ error: deleteErr.message }, { status: 500 });
+  if (job.job_type === "package") {
+    if (!visit.job_service_id) {
+      return NextResponse.json({ error: "This package visit isn't linked to a step, so it can't go back to the waiting list" }, { status: 400 });
+    }
+    if (visit.status === "scheduled") {
+      return NextResponse.json({ error: "This package step isn't dispatched — it is already on the waiting list" }, { status: 409 });
+    }
+    const { error: resetErr } = await db
+      .from("crm_job_visits")
+      .update({ status: "scheduled", dispatched_at: null })
+      .eq("id", visitId);
+    if (resetErr) return NextResponse.json({ error: resetErr.message }, { status: 500 });
+  } else {
+    const { error: deleteErr } = await db
+      .from("crm_job_visits")
+      .update({ deleted_at: nowIso })
+      .eq("id", visitId);
+    if (deleteErr) return NextResponse.json({ error: deleteErr.message }, { status: 500 });
 
-  // A multi-service waiting-list job is dispatched one service at a time, so
-  // other services may still have live visits. Clearing the job's date and crew
-  // under them would strip the crew from every visit that inherits it from the
-  // job — only reset the job once nothing else is scheduled on it.
-  const { count: remainingVisits, error: remainingErr } = await db
-    .from("crm_job_visits")
-    .select("id", { count: "exact", head: true })
-    .eq("job_id", job.id)
-    .is("deleted_at", null);
-  if (remainingErr) return NextResponse.json({ error: remainingErr.message }, { status: 500 });
+    // A multi-service waiting-list job is dispatched one service at a time, so
+    // other services may still have live visits. Clearing the job's date and crew
+    // under them would strip the crew from every visit that inherits it from the
+    // job — only reset the job once nothing else is scheduled on it.
+    const { count: remainingVisits, error: remainingErr } = await db
+      .from("crm_job_visits")
+      .select("id", { count: "exact", head: true })
+      .eq("job_id", job.id)
+      .is("deleted_at", null);
+    if (remainingErr) return NextResponse.json({ error: remainingErr.message }, { status: 500 });
 
-  if ((remainingVisits ?? 0) === 0) {
-    const { error: jobUpdateErr } = await db
-      .from("crm_jobs")
-      .update({ scheduled_date: null, crew_id: null })
-      .eq("id", job.id);
-    if (jobUpdateErr) return NextResponse.json({ error: jobUpdateErr.message }, { status: 500 });
+    if ((remainingVisits ?? 0) === 0) {
+      const { error: jobUpdateErr } = await db
+        .from("crm_jobs")
+        .update({ scheduled_date: null, crew_id: null })
+        .eq("id", job.id);
+      if (jobUpdateErr) return NextResponse.json({ error: jobUpdateErr.message }, { status: 500 });
+    }
   }
 
   if (visit.client_id) {

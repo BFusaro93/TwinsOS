@@ -1,6 +1,6 @@
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 import type { ChemicalNoticeData, ChemicalNoticeOrg } from "@/lib/chemical/application-notice";
-import { chemicalConditionsText } from "@/lib/chemical/application-notice";
+import { chemicalConditionsText, chemicalNoticeDateText } from "@/lib/chemical/application-notice";
 
 /**
  * The emailed PDF copy of the Notice of Treatment — one roomy portrait page,
@@ -10,11 +10,6 @@ import { chemicalConditionsText } from "@/lib/chemical/application-notice";
  */
 
 const COL = { product: "21%", targets: "13%", areas: "13%", ratio: "15%", amount: "14%", method: "13%", reEntry: "11%" } as const;
-
-function formatDate(ymd: string | null): string {
-  if (!ymd) return "—";
-  return new Date(`${ymd}T00:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-}
 
 function formatTime(iso: string | null, timeZone?: string): string {
   if (!iso) return "";
@@ -85,7 +80,7 @@ export function ChemicalNoticeDocument({
         </Text>
 
         <View style={S.metaRow}>
-          <View style={S.metaItem}><Text style={S.metaLabel}>Date</Text><Text style={S.metaValue}>{formatDate(data.serviceDate)}</Text></View>
+          <View style={S.metaItem}><Text style={S.metaLabel}>Date</Text><Text style={S.metaValue}>{chemicalNoticeDateText(data, timeZone) || "—"}</Text></View>
           <View style={S.metaItem}><Text style={S.metaLabel}>Time</Text><Text style={S.metaValue}>{timeRange || "—"}</Text></View>
           <View style={S.metaItem}><Text style={S.metaLabel}>Weather</Text><Text style={S.metaValue}>{conditions || "—"}</Text></View>
           <View style={S.metaItem}><Text style={S.metaLabel}>Applicator</Text><Text style={S.metaValue}>{applicator || "—"}</Text></View>

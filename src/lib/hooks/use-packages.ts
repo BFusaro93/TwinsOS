@@ -67,6 +67,55 @@ export function usePackages(includeInactive = false) {
   });
 }
 
+/** One package by id, INCLUDING a deleted or inactive one — an estimate built
+ *  from a package that was later removed still converts against its steps. */
+export function usePackageById(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ["crm-packages", "by-id", id ?? null],
+    enabled: !!id,
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_packages")
+        .select("*, crm_package_services(*)")
+        .eq("id", id)
+        .is("crm_package_services.deleted_at", null)
+        .order("sort_order", { foreignTable: "crm_package_services" })
+        .maybeSingle();
+      if (error) throw error;
+      return data ? (mapPackage(data) as CRMPackage) : null;
+    },
+  });
+}
+
+/** What still references a package: live package jobs that aren't finished,
+ *  and estimates with not-yet-accepted lines added from it. Shown before a
+ *  delete so it isn't done blind. */
+export async function fetchPackageUsage(packageId: string): Promise<{ openJobs: number; openEstimates: number }> {
+  const supabase = createClient();
+  const [jobs, lines] = await Promise.all([
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
+      .from("crm_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("package_id", packageId)
+      .is("deleted_at", null)
+      .not("status", "in", '("completed","cancelled")'),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
+      .from("estimate_line_items")
+      .select("estimate_id")
+      .eq("package_id", packageId)
+      .is("deleted_at", null)
+      .in("status", ["quote", "draft"]),
+  ]);
+  if (jobs.error) throw jobs.error;
+  if (lines.error) throw lines.error;
+  const estimateIds = new Set(((lines.data ?? []) as { estimate_id: string }[]).map((r) => r.estimate_id));
+  return { openJobs: jobs.count ?? 0, openEstimates: estimateIds.size };
+}
+
 // ── create ────────────────────────────────────────────────────────────────────
 
 export function useCreatePackage() {

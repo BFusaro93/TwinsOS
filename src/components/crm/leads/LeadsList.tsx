@@ -59,20 +59,22 @@ import { useColumnPrefs } from "@/lib/hooks/use-column-prefs";
 import { ACCOUNT_TYPE_COLOR } from "@/lib/account-type-colors";
 import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { isoInZone } from "@/lib/time/zone";
 
 /** "Date added" for the leads table: the lead-specific client_since date when
- *  set, else the row's created_at. Both are rendered in the browser's local
- *  timezone — a date-only string is pinned to noon so it can't roll back a day
- *  in negative-offset zones, and a timestamp is formatted as-is (never via
- *  toISOString().slice(0,10), which is UTC and reads as tomorrow after ~8 PM ET). */
-function formatDateAdded(lead: Client): string {
+ *  set, else the day created_at falls on in the org's timezone — the same date
+ *  the Date Added filter (crm_search_clients) compares, so a lead created near
+ *  midnight shows on the day the filter puts it, whatever the viewer's zone.
+ *  The date-only string is pinned to noon so it can't roll back a day. */
+function formatDateAdded(lead: Client, orgTimeZone: string): string {
   const fmt: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" };
-  if (lead.clientSince) return new Date(lead.clientSince + "T12:00:00").toLocaleDateString("en-US", fmt);
-  if (lead.createdAt) {
+  let day: string | null = lead.clientSince ?? null;
+  if (!day && lead.createdAt) {
     const d = new Date(lead.createdAt);
-    if (!isNaN(d.getTime())) return d.toLocaleDateString("en-US", fmt);
+    if (!isNaN(d.getTime())) day = isoInZone(d, orgTimeZone);
   }
-  return "—";
+  return day ? new Date(day + "T12:00:00").toLocaleDateString("en-US", fmt) : "—";
 }
 
 // ── Column visibility ─────────────────────────────────────────────────────────
@@ -418,6 +420,7 @@ export function LeadsList({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectingAll, setSelectingAll] = useState(false);
   const [bulkCloseOpen, setBulkCloseOpen] = useState(false);
+  const orgTimeZone = useOrgTimeZone();
 
   const { visible: cols, toggle: toggleCol } = useColumnPrefs("crm-leads-table-columns", LEAD_DEFAULT_VISIBLE);
   // +checkbox +name +actions
@@ -433,10 +436,21 @@ export function LeadsList({
   // Search, filters and paging all run server-side (crm_search_clients,
   // scoped to status = lead), 100 at a time.
   const debouncedSearch = useDebouncedValue(search);
+  // Filter text/number inputs update on every keystroke; debounce them like the search box.
+  const debouncedFilters = useDebouncedValue(filterRows);
   const queryParams = useMemo(
-    () => leadQueryParams({ search: debouncedSearch, filters: filterRows }),
-    [debouncedSearch, filterRows],
+    () => leadQueryParams({ search: debouncedSearch, filters: debouncedFilters }),
+    [debouncedSearch, debouncedFilters],
   );
+
+  // A selection belongs to the search + filters it was made under: once they
+  // change, rows that are no longer shown must not stay selected (a "select all
+  // 4,600 matching" then narrowed to 50 would otherwise act on the hidden 4,550).
+  const [selectionParams, setSelectionParams] = useState(queryParams);
+  if (selectionParams !== queryParams) {
+    setSelectionParams(queryParams);
+    setSelectedIds(new Set());
+  }
   const { data, isPending: isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useClientsPage(queryParams);
   const filtered = useMemo(() => data?.pages.flatMap((p) => p.clients) ?? [], [data]);
   const total = data?.pages[0]?.total ?? filtered.length;
@@ -658,7 +672,7 @@ export function LeadsList({
                     )}
                     {cols.dateAdded && (
                       <td className="px-4 py-2.5 text-xs text-slate-400 dark:text-neutral-500">
-                        {formatDateAdded(lead)}
+                        {formatDateAdded(lead, orgTimeZone)}
                       </td>
                     )}
                     <td className="px-4 py-2.5">

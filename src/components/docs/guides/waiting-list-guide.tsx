@@ -215,6 +215,9 @@ export function WaitingListGuide() {
           actual distance, not just matching text fields. It&apos;s a different feature living on a
           different page — see the Dispatch Board guide below — but it&apos;s the closer equivalent
           to true geofencing if City/Zip filtering here isn&apos;t narrowing things down enough.
+          Its <strong>Schedule Today</strong> dispatches a job the same way this page does: a job
+          that goes out one service at a time gets one visit for each service still waiting, never
+          a single visit that would bill every service again.
         </p>
         <p>
           Map positions stay current on their own: when a job&apos;s address, its property, or the

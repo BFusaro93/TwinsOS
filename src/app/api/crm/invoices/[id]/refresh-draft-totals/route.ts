@@ -28,7 +28,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: inv } = await (supabase as any)
     .from("crm_invoices")
-    .select("id, status, amount_paid_cents, tax_rate_bps, discount_cents, discount_type, discount_value, subtotal_cents, total_cents, crm_invoice_line_items(total_cents, discount_cents, is_taxable)")
+    .select("id, status, amount_paid_cents, tax_rate_bps, discount_cents, discount_type, discount_value, subtotal_cents, tax_cents, total_cents, balance_cents, crm_invoice_line_items(total_cents, discount_cents, is_taxable)")
     .eq("id", id)
     .eq("org_id", orgId)
     .is("deleted_at", null)
@@ -44,7 +44,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     discountValue: inv.discount_value ?? null,
     taxRateBps: inv.tax_rate_bps ?? 0,
   });
-  if (computed.totalCents === (inv.total_cents ?? 0) && computed.subtotalCents === (inv.subtotal_cents ?? 0)) {
+  const balanceCents = Math.max(0, computed.totalCents - (inv.amount_paid_cents ?? 0));
+  // Every stored total, not just subtotal/total: the caller no longer re-derives a draft's
+  // totals from its own session after this, so a stale tax/discount/balance must be fixed here.
+  if (
+    computed.totalCents === (inv.total_cents ?? 0) &&
+    computed.subtotalCents === (inv.subtotal_cents ?? 0) &&
+    computed.taxCents === (inv.tax_cents ?? 0) &&
+    computed.discountCents === (inv.discount_cents ?? 0) &&
+    balanceCents === (inv.balance_cents ?? 0)
+  ) {
     return NextResponse.json({ ok: true, changed: false });
   }
 
@@ -56,7 +65,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       discount_cents: computed.discountCents,
       tax_cents: computed.taxCents,
       total_cents: computed.totalCents,
-      balance_cents: Math.max(0, computed.totalCents - (inv.amount_paid_cents ?? 0)),
+      balance_cents: balanceCents,
     })
     .eq("id", id)
     .eq("org_id", orgId)

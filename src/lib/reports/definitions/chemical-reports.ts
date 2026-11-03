@@ -90,9 +90,11 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
       // Application Rate x the property's Area field. Reading only saved records
       // left every visit nobody had dispatched yet (so no record existed) blank.
       const days: string[] = [];
+      const MAX_DAYS = 62;
+      let truncatedAfter: string | null = null;
       if (from && to) {
-        const MAX_DAYS = 62;
-        for (let d = new Date(`${from}T00:00:00Z`); d <= new Date(`${to}T00:00:00Z`) && days.length < MAX_DAYS; d.setUTCDate(d.getUTCDate() + 1)) {
+        for (let d = new Date(`${from}T00:00:00Z`); d <= new Date(`${to}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)) {
+          if (days.length === MAX_DAYS) { truncatedAfter = days[days.length - 1]; break; }
           days.push(d.toISOString().slice(0, 10));
         }
       } else if (from || to) {
@@ -161,6 +163,9 @@ export const CHEMICAL_REPORTS: PrebuiltReportDef[] = [
         resultRows,
         [
           `Chemical Totals — ${totalNote}`,
+          // Each day is worked out like a Daily Load List, so the range is capped; say so
+          // rather than quietly dropping the tail of a long range.
+          ...(truncatedAfter ? [`Only the first ${MAX_DAYS} days are included (through ${truncatedAfter}). Run a shorter range for the rest.`] : []),
           ...(unresolvedStops > 0 ? [`${unresolvedStops} stop${unresolvedStops === 1 ? "" : "s"} left out: no amount could be worked out (no default Application Rate, no property area, or mixed units).`] : []),
           ...dayNotes,
         ]

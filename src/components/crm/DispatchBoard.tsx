@@ -39,7 +39,7 @@ import {
 // columns render come from crm_property_custom_field_values, which keys off
 // crm_rate_matrix_field_defs. Reading the client-level def table here is what
 // made every custom takeoff column permanently blank.
-import { usePropertyCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import { jobCustomFieldValue, usePropertyCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
 import type { PropertyCustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { downloadXLSX } from "@/lib/xlsx-export";
@@ -3831,7 +3831,7 @@ function VisitRow({
       {customFieldDefs.map((def) => {
         const key = customColKey(def.id);
         if (!isVisible(key)) return null;
-        const val = job?.propertyCustomFieldValues?.find((v) => v.fieldDefId === def.id);
+        const val = jobCustomFieldValue(job?.propertyCustomFieldValues, def);
         const display = val ? (val.valueText ?? (val.valueNumber != null ? val.valueNumber.toLocaleString() : null)) ?? "—" : "—";
         return (
           <td key={key} className="px-2 py-2 text-muted-foreground max-w-[160px] truncate" title={display}>
@@ -3957,7 +3957,7 @@ function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit
         if (!isVisible(key)) return null;
         if (def.fieldType !== "number") return <td key={def.id} />;
         const total = propertyRows.reduce((s, v) => {
-          const val = v.job?.propertyCustomFieldValues?.find((cv) => cv.fieldDefId === def.id);
+          const val = jobCustomFieldValue(v.job?.propertyCustomFieldValues, def);
           return s + (val?.valueNumber ?? 0);
         }, 0);
         return <td key={def.id} className="px-2 py-1.5 text-right">{total > 0 ? total.toLocaleString() : "—"}</td>;
@@ -4976,7 +4976,7 @@ export function DispatchBoard() {
         ...visibleCols.map((c) => exportCellValue(c.key, v, cellCtx)),
         ...visibleExtraCols.map((c) => exportCellValue(c.key, v, cellCtx)),
         ...visibleCustomDefs.map((d) => {
-          const val = job?.propertyCustomFieldValues?.find((cv) => cv.fieldDefId === d.id);
+          const val = jobCustomFieldValue(job?.propertyCustomFieldValues, d);
           return val ? val.valueNumber ?? val.valueText ?? "" : "";
         }),
         jobNotes,
@@ -5796,8 +5796,9 @@ export function DispatchBoard() {
               <DropdownMenuSeparator />
 
               {/* Return to Waiting List — only when every selected visit
-                  belongs to a waiting-list job that never got done. */}
-              {displayVisits.filter((v) => selectedIds.has(v.id)).every((v) => v.job?.jobType === "waiting_list") && (
+                  belongs to a waiting-list job, or is a package step (e.g.
+                  rained out), that never got done. */}
+              {displayVisits.filter((v) => selectedIds.has(v.id)).every((v) => v.job?.jobType === "waiting_list" || (v.job?.jobType === "package" && !!v.jobServiceId && v.status !== "scheduled")) && (
                 <DropdownMenuItem
                   className="text-xs"
                   onSelect={async () => {
@@ -6308,12 +6309,26 @@ export function DispatchBoard() {
                       onClick={async () => {
                         if (scheduledNearbyJobIds.has(m.jobId)) return;
                         try {
-                          await createVisit.mutateAsync({
-                            jobId: m.jobId,
-                            clientId: m.clientId,
-                            scheduledDate: selectedDate,
-                            jobType: "waiting_list",
-                          });
+                          if (m.pendingServices.length > 0) {
+                            // Split job: one visit per service still waiting,
+                            // exactly as the Waiting List dispatches it.
+                            for (const service of m.pendingServices) {
+                              await createVisit.mutateAsync({
+                                jobId: m.jobId,
+                                clientId: m.clientId,
+                                scheduledDate: selectedDate,
+                                jobServiceId: service.id,
+                                jobType: "waiting_list",
+                              });
+                            }
+                          } else {
+                            await createVisit.mutateAsync({
+                              jobId: m.jobId,
+                              clientId: m.clientId,
+                              scheduledDate: selectedDate,
+                              jobType: "waiting_list",
+                            });
+                          }
                           // The match list is local state and never refreshes, so remember
                           // what was scheduled; a second tap used to create a second visit.
                           setScheduledNearbyJobIds((prev) => new Set(prev).add(m.jobId));

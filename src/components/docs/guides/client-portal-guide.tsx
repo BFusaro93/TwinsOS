@@ -9,7 +9,7 @@ import {
 } from "@/components/docs/DocsBrand";
 
 const NAV_TABS: [string, string, string][] = [
-  ["Home", "/portal", "A greeting with the balance due (or an all-caught-up message), the next visit, credits on account, upcoming visits, open estimates, recent invoices, and completed-visit history, plus quick actions (Pay balance, My schedule, Request service, Estimates). Always shown."],
+  ["Home", "/portal", "A greeting with the balance due (or an all-caught-up message), the next visit, credits on account (a parent account also sees each sub-account's credit listed separately, since a credit only applies to its own account's invoices), upcoming visits, open estimates, recent invoices, and completed-visit history, plus quick actions (Pay balance, My schedule, Request service, Estimates). Always shown."],
   ["Billing", "/portal/billing", "Every invoice, split into Outstanding and History, with Pay and PDF-download actions. Always shown."],
   ["Services", "/portal/services", "Upcoming and completed job visits, with a live in-progress banner. Always shown."],
   ["Estimates", "/portal/estimates", "Open and past estimates, with Accept / Decline / Request Changes on open ones. Hidden if the org turns off “Show Estimates.”"],

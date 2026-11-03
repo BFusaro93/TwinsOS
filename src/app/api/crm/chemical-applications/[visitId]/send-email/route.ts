@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { getOrgReplyTo } from "@/lib/email/reply-to";
-import { orgEmailFrom, mapSendError } from "@/lib/email/send";
+import { buildCanSpamFooter, orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
@@ -46,12 +46,19 @@ export async function POST(
     kind?: "chemical" | "chemical_recommendation" | "chemical_upsell";
     /** Attach the Notice of Treatment PDF (Client Instruction only); defaults to true. */
     attachPdf?: boolean;
+    /** Send a Client Instruction even though one was already emailed for this visit. */
+    resend?: boolean;
   };
   const kind = body.kind ?? "chemical";
   if (kind !== "chemical" && kind !== "chemical_recommendation" && kind !== "chemical_upsell") {
     return NextResponse.json({ error: "Unknown email type" }, { status: 400 });
   }
   const kindLabel = kind === "chemical_recommendation" ? "Recommendation" : kind === "chemical_upsell" ? "Upsale" : "Chemical Application Notice";
+  // The Upsale pitches a service the client hasn't bought — commercial mail, so it honours
+  // the marketing opt-outs and carries the unsubscribe footer, like a bulk marketing send.
+  // The Client Instruction is a regulatory record and the Recommendation is about work
+  // already done at the property; both stay exempt.
+  const isMarketing = kind === "chemical_upsell";
 
   if (!body.subject?.trim() || !body.bodyHtml?.trim()) {
     return NextResponse.json({ error: "subject and bodyHtml are required" }, { status: 400 });
@@ -61,7 +68,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitErr } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, client_id, scheduled_date, clients(display_name, primary_email, email_bounced_at)")
+    .select("id, client_id, scheduled_date, clients(display_name, primary_email, email_bounced_at, do_not_market, ok_to_email, unsubscribe_token)")
     .eq("id", visitId)
     .single();
 
@@ -79,6 +86,26 @@ export async function POST(
   // there is no corrected-address path to exempt.
   if (visit.clients?.email_bounced_at) {
     return NextResponse.json({ error: "Client's email address has hard-bounced. Update it, or send to a different address." }, { status: 422 });
+  }
+  if (isMarketing && visit.clients?.ok_to_email === false) {
+    return NextResponse.json({ error: "Client is marked Not OK to Email" }, { status: 422 });
+  }
+  if (isMarketing && visit.clients?.do_not_market) {
+    return NextResponse.json({ error: "Client has opted out of marketing email" }, { status: 422 });
+  }
+  // A bulk run re-sent to everyone already emailed when "Send N more" was clicked before
+  // the eligibility refetch landed. A repeat Client Instruction now has to be asked for.
+  if (kind === "chemical" && !body.resend) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: prior } = await (supabase as any)
+      .from("crm_chemical_application_emails")
+      .select("id")
+      .eq("visit_id", visitId)
+      .eq("email_type", "chemical_application")
+      .limit(1);
+    if (prior && prior.length > 0) {
+      return NextResponse.json({ error: "A notice was already emailed for this visit" }, { status: 409 });
+    }
   }
 
   // Fetch org
@@ -207,7 +234,13 @@ export async function POST(
   };
 
   const resolvedSubject = resolveSubjectMergeTags(body.subject, mergeVars);
-  const resolvedBody    = resolveMergeTags(body.bodyHtml, mergeVars);
+  let resolvedBody      = resolveMergeTags(body.bodyHtml, mergeVars);
+  let unsubscribeUrl: string | null = null;
+  if (isMarketing && visit.clients?.unsubscribe_token) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://landscapt.com";
+    unsubscribeUrl = `${appUrl}/api/crm/unsubscribe/${visit.clients.unsubscribe_token}`;
+    resolvedBody += buildCanSpamFooter(orgName, (org?.address as Record<string, string> | null) ?? null, unsubscribeUrl);
+  }
 
   // Send via Resend
   const replyTo = effOrgId ? await getOrgReplyTo(supabase, effOrgId) : null;
@@ -220,6 +253,9 @@ export async function POST(
     ...(replyTo ? { replyTo } : {}),
     ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails } : {}),
     ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
+    ...(unsubscribeUrl
+      ? { headers: { "List-Unsubscribe": `<${unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } }
+      : {}),
   });
 
   if (sendErr) {

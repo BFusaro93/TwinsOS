@@ -52,6 +52,15 @@ type DragItem =
 
 const TV_REFRESH_MS = 30_000;
 
+/** Visits a crew move may still rewrite. Finished work stays credited to the crew that did
+ *  it — moving a job used to rewrite crew_id on its completed (even invoiced) visits too. */
+const FINISHED_STATUSES = new Set(["completed", "skipped", "cancelled"]);
+
+function jobDragItem(j: { jobId: string; visits: CRMJobVisit[] }, fromCrewId: string | null): DragItem | null {
+  const visitIds = j.visits.filter((v) => !FINISHED_STATUSES.has(v.status)).map((v) => v.id);
+  return visitIds.length > 0 ? { kind: "job", jobId: j.jobId, visitIds, fromCrewId } : null;
+}
+
 function dragKey(item: DragItem): string {
   return item.kind === "member" ? `m:${item.id}` : item.kind === "equipment" ? `e:${item.key}` : `j:${item.jobId}`;
 }
@@ -331,6 +340,14 @@ export function CrewBoard() {
     e.stopPropagation();
     setHeld({ item, label });
   };
+  /** A job card's tap: picks up its unfinished visits; a fully finished job explains why it stays put. */
+  const pickUpJob = (j: { jobId: string; visits: CRMJobVisit[] }, fromCrewId: string | null) => (e: React.MouseEvent) => {
+    const item = jobDragItem(j, fromCrewId);
+    if (item) return pickUp(item, j.visits[0]?.clientName ?? "Job")(e);
+    if (tv || held) return;
+    e.stopPropagation();
+    toast.info("This job is finished — it stays with the crew that did it");
+  };
 
   const dateNav = (
     <div className="flex flex-wrap items-center gap-2">
@@ -588,10 +605,10 @@ export function CrewBoard() {
                         visits={j.visits}
                         color={color}
                         big={big}
-                        draggable={!tv}
+                        draggable={!tv && !!jobDragItem(j, crew.id)}
                         held={heldKey === `j:${j.jobId}`}
-                        onClick={pickUp({ kind: "job", jobId: j.jobId, visitIds: j.visits.map((v) => v.id), fromCrewId: crew.id }, j.visits[0]?.clientName ?? "Job")}
-                        onDragStart={() => startDrag({ kind: "job", jobId: j.jobId, visitIds: j.visits.map((v) => v.id), fromCrewId: crew.id })}
+                        onClick={pickUpJob(j, crew.id)}
+                        onDragStart={() => { const item = jobDragItem(j, crew.id); if (item) startDrag(item); }}
                         onDragEnd={endDrag}
                       />
                     ))}
@@ -619,10 +636,10 @@ export function CrewBoard() {
                     visits={j.visits}
                     color="#64748b"
                     big={big}
-                    draggable={!tv}
+                    draggable={!tv && !!jobDragItem(j, null)}
                     held={heldKey === `j:${j.jobId}`}
-                    onClick={pickUp({ kind: "job", jobId: j.jobId, visitIds: j.visits.map((v) => v.id), fromCrewId: null }, j.visits[0]?.clientName ?? "Job")}
-                    onDragStart={() => startDrag({ kind: "job", jobId: j.jobId, visitIds: j.visits.map((v) => v.id), fromCrewId: null })}
+                    onClick={pickUpJob(j, null)}
+                    onDragStart={() => { const item = jobDragItem(j, null); if (item) startDrag(item); }}
                     onDragEnd={endDrag}
                   />
                 ))}

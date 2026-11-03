@@ -3,6 +3,13 @@ import { adminClient, authenticateZapierRequest, checkZapierRateLimit, isZapierT
 import { POLLING_TRIGGERS } from "@/lib/integrations/zapier-triggers";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("zapier-trigger");
+
+// Zapier dedupes on `id`, so a page only has to cover what changed since the
+// last poll — 25 dropped events whenever a bulk change (an import) outran it.
+const PAGE_SIZE = 100;
 
 /**
  * GET /api/integrations/zapier/triggers/[event] — the polling-trigger
@@ -42,16 +49,18 @@ export async function GET(
 
   const { data, error } = await query
     .order(config.orderBy, { ascending: false })
-    .limit(config.postFilter ? 200 : 25);
+    .limit(config.postFilter ? 500 : PAGE_SIZE);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Don't hand raw database errors (column/constraint names) to the caller.
+    log.error("poll failed", { event, error: error.message });
+    return NextResponse.json({ error: "poll failed" }, { status: 500 });
   }
 
   const searchParams = new URL(request.url).searchParams;
   const ctx = { orgToday: todayInZone(await getOrgTimeZone(db, auth.orgId)) };
   const rows = config.postFilter
-    ? (data ?? []).filter((row) => config.postFilter!(row, searchParams, ctx)).slice(0, 25)
+    ? (data ?? []).filter((row) => config.postFilter!(row, searchParams, ctx)).slice(0, PAGE_SIZE)
     : (data ?? []);
   return NextResponse.json(rows.map(config.map));
 }

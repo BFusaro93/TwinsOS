@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getReport } from "@/lib/reports/registry";
+import { canAccessReportData } from "@/lib/reports/report-access";
+import { getMyTimeZone } from "@/lib/time/org-timezone";
 
 const createScheduleSchema = z.object({
   reportKey: z.string().min(1),
@@ -68,6 +70,11 @@ export async function POST(request: Request) {
   const def = getReport(parsed.data.reportKey);
   if (!def || !def.schedulable) {
     return NextResponse.json({ error: "This report can't be scheduled" }, { status: 400 });
+  }
+  // The cron renders the report with the service role, so this is the only
+  // place the caller's report/dataset keys are checked.
+  if (!(await canAccessReportData(supabase, parsed.data.reportKey, await getMyTimeZone(supabase)))) {
+    return NextResponse.json({ error: "Your role can't view this report" }, { status: 403 });
   }
 
   const { data, error } = await supabase

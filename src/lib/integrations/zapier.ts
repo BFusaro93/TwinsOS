@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import { z } from "zod";
 import { logger } from "@/lib/logger";
+import { isOrgInactive, type OrgPlanRow } from "@/lib/orgs/org-canceled";
 import { postJsonToPublicUrl } from "@/lib/net/ssrf-guard";
 import type { TriggerType } from "@/types/crm-automations";
 
@@ -68,6 +70,14 @@ export function isZapierTriggerType(value: string): value is ZapierTriggerType {
   return (ZAPIER_TRIGGER_TYPES as readonly string[]).includes(value);
 }
 
+/**
+ * Zapier sends "" for a field the Zap left unmapped; that means "not
+ * provided". Without this, an optional `email` / enum / date field rejected
+ * every Zap that didn't map it (a phone-only form lead got "Invalid email").
+ */
+export const blankToUndefined = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), schema.optional());
+
 export function adminClient(): AdminClient {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -115,8 +125,14 @@ export async function authenticateZapierRequest(
   // read_only_when_canceled_* RLS policies — so a canceled org's Zap would keep
   // creating clients, jobs and work orders in an account that is supposed to be
   // read-only. (The public v1 API already stops at orgHasAddon for the same case.)
-  const { data: org } = await db.from("organizations").select("plan").eq("id", data.org_id).maybeSingle();
-  if (org?.plan === "canceled") return null;
+  // An expired trial is read-only in the database too (my_org_is_read_only),
+  // so it is cut off here the same way — isOrgInactive is that definition.
+  const { data: org } = await db
+    .from("organizations")
+    .select("plan, trial_ends_at, is_platform_staff_org")
+    .eq("id", data.org_id)
+    .maybeSingle();
+  if (isOrgInactive(org as OrgPlanRow | null)) return null;
 
   return { orgId: data.org_id as string, integrationId: data.id as string };
 }
@@ -157,6 +173,16 @@ export async function notifyZapierSubscribers(
   triggerType: ZapierTriggerType,
   payload: Record<string, unknown>
 ): Promise<void> {
+  // A disabled integration delivers nothing, even to subscriptions that are
+  // still on file (the key check only guards inbound calls).
+  const { data: integration } = await db
+    .from("integrations")
+    .select("enabled")
+    .eq("org_id", orgId)
+    .eq("provider", "zapier")
+    .maybeSingle();
+  if (!integration?.enabled) return;
+
   const { data: subscriptions } = await db
     .from("zapier_webhook_subscriptions")
     .select("id, target_url")

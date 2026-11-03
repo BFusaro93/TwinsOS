@@ -36,6 +36,8 @@ import {
   useCustomFieldDefs,
 } from "@/lib/hooks/use-rate-matrix";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { useCustomFieldDefs as useClientFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import { isSquareFootAreaField } from "@/lib/chemical-area";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useServiceChemicals, useSaveServiceChemicals } from "@/lib/hooks/use-chemical-tracking";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
@@ -778,7 +780,12 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
   const [tab, setTab] = useState<Tab>("details");
   const [form, setForm] = useState<FormState>(emptyForm());
   const { data: propertyFieldDefs = [] } = useCustomFieldDefs("property");
-  const areaFieldDefs = propertyFieldDefs.filter((d) => d.fieldType === "number");
+  const { data: clientFieldDefs = [] } = useClientFieldDefs();
+  const clientUnitById = new Map(clientFieldDefs.map((d) => [d.id, d.unit]));
+  // Only square-foot fields can size a per-sq-ft rate; a field already chosen stays listed.
+  const areaFieldDefs = propertyFieldDefs.filter(
+    (d) => d.fieldType === "number" && (isSquareFootAreaField(d, clientUnitById) || d.id === form.chemicalAreaFieldId)
+  );
   // Tracks the saved service — set from prop on open, or updated after create so tabs unlock immediately
   const [activeService, setActiveService] = useState<CRMService | null>(service);
 

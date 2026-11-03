@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
+import { isUuid } from "../../id-param";
 import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { INVOICE_SELECT, INVOICE_LINE_ITEM_SELECT, shapeInvoice, shapeInvoiceLineItem } from "../shape";
 
@@ -9,6 +10,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "invoices:read", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // A non-uuid id reached Postgres as a cast error and came back a 500.
+  if (!isUuid(id)) return jsonError("Invoice not found", 404);
 
   const { data, error } = await db
     .from("crm_invoices")

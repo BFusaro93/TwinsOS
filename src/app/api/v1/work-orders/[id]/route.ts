@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
+import { isUuid } from "../../id-param";
 import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { WORK_ORDER_SELECT, shapeWorkOrder } from "../shape";
 import { updateWorkOrderSchema } from "../validation";
+import { fireEventAutomations, type AdminClient } from "@/lib/automations/cmms-automation-actions";
+import { notifyZapierSubscribers } from "@/lib/integrations/zapier";
+import { POLLING_TRIGGERS } from "@/lib/integrations/zapier-triggers";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("api/v1/work-orders");
 
 /** GET /api/v1/work-orders/[id] — fetch one work order. Requires scope "work_orders:read". */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -10,6 +17,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "work_orders:read", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // A non-uuid id reached Postgres as a cast error and came back a 500.
+  if (!isUuid(id)) return jsonError("Work order not found", 404);
 
   const { data, error } = await db
     .from("work_orders")
@@ -30,6 +39,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "work_orders:write:safe", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // A non-uuid id reached Postgres as a cast error and came back a 500.
+  if (!isUuid(id)) return jsonError("Work order not found", 404);
 
   const parsed = updateWorkOrderSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
@@ -113,6 +124,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   const primaryAssigneeId = assigneeIds[0] ?? null;
 
+  // The status before this edit: a real status change fires the same
+  // wo_status_change automations (and Zapier work_order_completed hook) the
+  // app's status menu fires through /api/automations/run.
+  const { data: beforeStatus } =
+    body.status !== undefined
+      ? await db.from("work_orders").select("status").eq("org_id", auth.orgId).eq("id", id).is("deleted_at", null).maybeSingle()
+      : { data: null };
+
   const { data, error } = await db
     .from("work_orders")
     .update({
@@ -141,5 +160,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (error) return jsonServerError("PATCH /api/v1/work-orders/[id]", error);
   if (!data) return jsonError("Work order not found", 404);
+
+  if (body.status !== undefined && beforeStatus && beforeStatus.status !== body.status) {
+    // Best-effort, like the app: the work order is already saved.
+    try {
+      if (body.status === "done") {
+        const config = POLLING_TRIGGERS.work_order_completed;
+        const { data: wo } = await db.from("work_orders").select(config.columns).eq("id", id).eq("org_id", auth.orgId).maybeSingle();
+        if (wo) await notifyZapierSubscribers(db, auth.orgId, "work_order_completed", config.map(wo));
+      }
+      await fireEventAutomations(db as unknown as AdminClient, {
+        orgId: auth.orgId,
+        eventTrigger: "wo_status_change",
+        toStatus: body.status,
+      });
+    } catch (e) {
+      log.error("status-change automations failed", { workOrderId: id, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   return NextResponse.json(shapeWorkOrder(data));
 }

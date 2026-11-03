@@ -82,8 +82,10 @@ export function LeadsListView({
   const { fields: FILTER_FIELDS } = useLeadFilterFields();
   // Search, filters and paging run server-side, 100 leads at a time.
   const debouncedSearch = useDebouncedValue(search);
+  // Filter text/number inputs update on every keystroke; debounce them like the search box.
+  const debouncedFilters = useDebouncedValue(filterRows);
   const { data, isPending: isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useClientsPage(
-    leadQueryParams({ search: debouncedSearch, filters: filterRows }),
+    leadQueryParams({ search: debouncedSearch, filters: debouncedFilters }),
   );
   const filtered = useMemo(() => data?.pages.flatMap((p) => p.clients) ?? [], [data]);
   const total = data?.pages[0]?.total ?? filtered.length;

@@ -33,6 +33,26 @@ const BUILT_IN_AREA_COLUMNS: Record<string, string> = {
   parking_lot_sqft: "parking_lot_sqft",
 };
 
+const SQUARE_FOOT_RE = /sq\.?\s*f(?:ee)?t|sqft|square\s*f(?:ee|oo)?t|ft²|ft2/i;
+const NOT_AREA_RE = /\b(?:linear|lin\.?\s*ft|perimeter|yards?|yds?|cubic|cu\.?\s*ft|acres?|gallons?|gal|count|each|inch(?:es)?|depth|height|lbs?|pounds?)\b/i;
+
+/**
+ * Whether a property field can size a chemical amount. Application rates are per square
+ * foot, so the pickers used to offer Linear Ft. Edging, Yards of Mulch or a client "Lawn
+ * Acres" field and quietly mis-size every amount (acres by 43,560×). A mirrored client
+ * field is judged by its unit when it has one; otherwise the label decides, and a label
+ * that names no unit at all ("Lawn Area") is given the benefit of the doubt.
+ */
+export function isSquareFootAreaField(
+  def: { label: string; clientFieldDefId?: string | null },
+  clientUnitById?: Map<string, string | null>
+): boolean {
+  const unit = def.clientFieldDefId ? clientUnitById?.get(def.clientFieldDefId)?.trim() : "";
+  if (unit) return SQUARE_FOOT_RE.test(unit);
+  if (SQUARE_FOOT_RE.test(def.label)) return true;
+  return !NOT_AREA_RE.test(def.label);
+}
+
 /** True for the takeoff fields stored as literal columns (Turf Sq. Ft., …) rather than as custom values. */
 export function isBuiltInAreaKey(fieldKey: string | null | undefined): boolean {
   return !!fieldKey && fieldKey in BUILT_IN_AREA_COLUMNS;

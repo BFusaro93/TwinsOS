@@ -283,7 +283,10 @@ export function PackageDialog({ open, packageId, onClose }: Props) {
           service_id: null,
           service_name: "",
           visits_included: 1,
-          sort_order: (pkg.services?.length ?? 0),
+          // After the highest existing step: the live-row count collided with
+          // the last step once a middle one was deleted, and tied steps have
+          // no defined order (min-days spacing skipped them).
+          sort_order: (pkg.services ?? []).reduce((max, s) => Math.max(max, s.sortOrder + 1), 0),
         },
       });
     } catch (err) {

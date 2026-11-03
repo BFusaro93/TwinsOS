@@ -78,6 +78,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { getDisplayInvoiceStatus } from "@/lib/invoice-status";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
+import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -738,6 +739,11 @@ export function InvoiceDetail({
   const [chargeCardOpen, setChargeCardOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const { can } = usePermissions();
+  // Amounts, lines, header fields, void and delete are Add/Modify Invoices only
+  // (the DB guard refuses them otherwise); anyone who can open the invoice may
+  // still print it, and Email Invoices holders may email it.
+  const canModifyInvoice = can("acct_add_modify_invoices");
+  const readOnly = !!invoice?.locked || !canModifyInvoice;
   const [selectedPayment, setSelectedPayment] = useState<CRMPayment | null>(null);
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
@@ -947,7 +953,7 @@ export function InvoiceDetail({
       wasDraft ? updateStatus({ id: invoice!.id, status: "printed" }) : Promise.resolve(),
     ])
       .then(() => toast.info("Invoice locked after print"))
-      .catch(() => {});
+      .catch((err: unknown) => toast.error(mutationErrorMessage(err, "Printed, but the invoice could not be marked printed")));
   }
 
   function handleDownloadPDF() {
@@ -963,6 +969,12 @@ export function InvoiceDetail({
   }
 
   async function handleSave() {
+    // Checked before anything is written: assigning the number first and then
+    // having the totals refused burned an invoice number and logged "Invoice #N".
+    if (!canModifyInvoice) {
+      toast.error("You don't have permission to modify invoices");
+      return;
+    }
     setSaving(true);
     try {
       const savedLines = await settledLineItems();
@@ -1120,7 +1132,7 @@ export function InvoiceDetail({
               <Mail className="mr-1 h-3.5 w-3.5 text-blue-500 dark:text-blue-400" /> Email
             </Button>
           )}
-          <Button size="sm" className="h-8 text-xs" onClick={handleSave} disabled={saving || invoice.locked}>
+          <Button size="sm" className="h-8 text-xs" onClick={handleSave} disabled={saving || readOnly}>
             <Save className="mr-1 h-3.5 w-3.5" />{saving ? "Saving…" : "Save Invoice"}
           </Button>
           <DropdownMenu>
@@ -1133,8 +1145,8 @@ export function InvoiceDetail({
               <DropdownMenuItem onSelect={handleDownloadPDF}>
                 <Printer className="mr-2 h-3.5 w-3.5 text-muted-foreground" /> Download PDF
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {invoice.status !== "void" && (
+              {canModifyInvoice && <DropdownMenuSeparator />}
+              {canModifyInvoice && invoice.status !== "void" && (
                 <DropdownMenuItem
                   disabled={voidBlocked !== null}
                   title={voidBlocked ?? undefined}
@@ -1146,15 +1158,19 @@ export function InvoiceDetail({
                   <Ban className="mr-2 h-3.5 w-3.5 text-muted-foreground" /> Void Invoice
                 </DropdownMenuItem>
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
-                disabled={voidBlocked !== null}
-                title={voidBlocked !== null ? "Invoices with payments applied can't be deleted — refund or unapply the payments first" : undefined}
-                onSelect={() => setConfirmDeleteOpen(true)}
-              >
-                <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete Invoice
-              </DropdownMenuItem>
+              {canModifyInvoice && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+                    disabled={voidBlocked !== null}
+                    title={voidBlocked !== null ? "Invoices with payments applied can't be deleted — refund or unapply the payments first" : undefined}
+                    onSelect={() => setConfirmDeleteOpen(true)}
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete Invoice
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -1259,7 +1275,7 @@ export function InvoiceDetail({
                 onSave={commitInvoiceNumber}
                 type="number"
                 className="ml-1 w-20 bg-brand-700 text-white text-sm font-semibold border-brand-500"
-                disabled={invoice.locked}
+                disabled={readOnly}
               />
             </span>
             {invoice.clientName && (
@@ -1267,7 +1283,7 @@ export function InvoiceDetail({
             )}
             <Select
               value={invoice.status}
-              disabled={invoice.locked}
+              disabled={readOnly}
               onValueChange={(v) => {
                 // Voiding needs to zero the balance and resync the client's total,
                 // so route it through the confirm dialog instead of a bare status write.
@@ -1304,7 +1320,7 @@ export function InvoiceDetail({
                   onSave={(v) => updateHeader({ id: invoice.id, patch: { service_address: v || null } })}
                   className="text-xs text-slate-600 dark:text-neutral-400 w-full"
                   placeholder="Click to set a different service address…"
-                  disabled={invoice.locked}
+                  disabled={readOnly}
                 />
               </div>
             </div>
@@ -1322,20 +1338,20 @@ export function InvoiceDetail({
                         onSave={commitInvoiceNumber}
                         type="number"
                         className="w-28"
-                        disabled={invoice.locked}
+                        disabled={readOnly}
                       />
                     </td>
                   </tr>
                   <tr className="border-b border-slate-50 dark:border-neutral-800">
                     <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium">Invoice Date</td>
                     <td className="py-2 text-slate-700 dark:text-neutral-300">
-                      <InlineEdit value={invoiceDate} onSave={handleInvoiceDateChange} type="date" className="w-32" disabled={invoice.locked} />
+                      <InlineEdit value={invoiceDate} onSave={handleInvoiceDateChange} type="date" className="w-32" disabled={readOnly} />
                     </td>
                   </tr>
                   <tr className="border-b border-slate-50 dark:border-neutral-800">
                     <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium">Terms</td>
                     <td className="py-2">
-                      <Select value={terms} onValueChange={handleTermsChange} disabled={invoice.locked}>
+                      <Select value={terms} onValueChange={handleTermsChange} disabled={readOnly}>
                         <SelectTrigger className="h-7 text-xs w-40 border border-border shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue />
                         </SelectTrigger>
@@ -1350,7 +1366,7 @@ export function InvoiceDetail({
                   <tr className="border-b border-slate-50 dark:border-neutral-800">
                     <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium">Due Date</td>
                     <td className="py-2 text-slate-700 dark:text-neutral-300">
-                      <InlineEdit value={dueDate} onSave={setDueDate} type="date" className="w-32" disabled={invoice.locked} />
+                      <InlineEdit value={dueDate} onSave={setDueDate} type="date" className="w-32" disabled={readOnly} />
                     </td>
                   </tr>
                   <tr>
@@ -1359,7 +1375,7 @@ export function InvoiceDetail({
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
-                          disabled={invoice.locked}
+                          disabled={readOnly}
                           onClick={() => {
                             const fallback = invoice.clientIsTaxable === false
                               ? 0
@@ -1389,7 +1405,7 @@ export function InvoiceDetail({
                               cents={taxRateBps}
                               onChange={(bps) => setTaxRateBps(Math.min(10000, Math.max(0, bps)))}
                               className="h-7 w-24 text-right text-xs"
-                              disabled={invoice.locked}
+                              disabled={readOnly}
                               aria-label="Tax rate percent"
                             />
                             <span className="text-muted-foreground font-medium">%</span>
@@ -1423,10 +1439,10 @@ export function InvoiceDetail({
                             if (discountType === "flat") setDiscountValue(cents);
                           }}
                           className="h-7 w-24 text-right text-xs"
-                          disabled={invoice.locked}
+                          disabled={readOnly}
                         />
                         {activeDiscounts.length > 0 && (
-                          <Select onValueChange={applyNamedDiscount} disabled={invoice.locked}>
+                          <Select onValueChange={applyNamedDiscount} disabled={readOnly}>
                             <SelectTrigger className="h-7 w-48 max-w-full min-w-0 text-xs disabled:opacity-60 disabled:cursor-not-allowed">
                               <SelectValue placeholder="Apply a saved discount…" />
                             </SelectTrigger>
@@ -1452,7 +1468,7 @@ export function InvoiceDetail({
                         onSave={(v) => updateHeader({ id: invoice.id, patch: { po_number: v || null } })}
                         className="w-36"
                         placeholder="Click to add…"
-                        disabled={invoice.locked}
+                        disabled={readOnly}
                       />
                     </td>
                   </tr>
@@ -1462,7 +1478,7 @@ export function InvoiceDetail({
                       <Select
                         value={invoice.salesRepId ?? ""}
                         onValueChange={(v) => updateHeader({ id: invoice.id, patch: { sales_rep_id: v || null } })}
-                        disabled={invoice.locked}
+                        disabled={readOnly}
                       >
                         <SelectTrigger className="h-7 text-xs w-44 border border-border shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue placeholder="Assign sales rep…" />
@@ -1488,7 +1504,7 @@ export function InvoiceDetail({
                       <SaleTypeSelect
                         className="h-7 w-44 text-xs"
                         value={invoice.saleType}
-                        disabled={invoice.locked}
+                        disabled={readOnly}
                         onChange={(v) => updateHeader({ id: invoice.id, patch: { sale_type: v } })}
                       />
                     </td>
@@ -1499,7 +1515,7 @@ export function InvoiceDetail({
                       <Select
                         value={invoice.preferredPaymentMethod ?? invoice.clientDefaultPaymentMethod ?? ""}
                         onValueChange={(v) => updateHeader({ id: invoice.id, patch: { preferred_payment_method: v || null } })}
-                        disabled={invoice.locked}
+                        disabled={readOnly}
                       >
                         <SelectTrigger className="h-7 text-xs w-44 border border-border shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue placeholder="Select method…" />
@@ -1550,7 +1566,7 @@ export function InvoiceDetail({
               </thead>
               <tbody>
                 {lineItems.map((li) => (
-                  <LineItemRow key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} discounts={activeDiscounts} locked={invoice.locked} />
+                  <LineItemRow key={li.id} item={li} invoiceId={invoice.id} taxRateBps={taxRateBps} discounts={activeDiscounts} locked={readOnly} />
                 ))}
                 {lineItems.length === 0 && (
                   <tr>
@@ -1565,16 +1581,16 @@ export function InvoiceDetail({
             {/* Add item + totals */}
             <div className="border-t p-4 flex items-start justify-between gap-4 bg-slate-50 dark:bg-muted/40">
               <Popover
-                open={lineItemPickerOpen && !invoice.locked}
+                open={lineItemPickerOpen && !readOnly}
                 onOpenChange={(o) => {
-                  if (invoice.locked) return;
+                  if (readOnly) return;
                   setLineItemPickerOpen(o);
                   if (!o) setLineItemSearch("");
                   else setTimeout(() => lineItemSearchRef.current?.focus(), 50);
                 }}
               >
                 <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-8 text-xs" disabled={invoice.locked}>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" disabled={readOnly}>
                     <Plus className="mr-1 h-3.5 w-3.5" /> Add Line Item
                     <ChevronDown className="ml-1 h-3 w-3 text-slate-400 dark:text-neutral-500" />
                   </Button>
@@ -1840,7 +1856,7 @@ export function InvoiceDetail({
             // (nested in the invoice query) showed it right away.
             queryClient.invalidateQueries({ queryKey: ["crm-payments"] });
             queryClient.invalidateQueries({ queryKey: ["clients", invoice.clientId] });
-            queryClient.invalidateQueries({ queryKey: ["clients"] });
+            invalidateClientBalances(queryClient);
           };
           invalidate();
           // The card charge is confirmed client-side, but the invoice/balance

@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 
 export interface CreateSetupIntentResult {
   clientSecret: string;
@@ -56,7 +57,7 @@ export function useSaveSetupIntent() {
     },
     onSuccess: (_result, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
     },
   });
 }
@@ -76,7 +77,7 @@ export function useSetAutopayEnabled() {
     },
     onSuccess: (_result, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
     },
   });
@@ -97,7 +98,7 @@ export function useRemoveSavedPaymentMethod() {
     },
     onSuccess: (_result, { clientId }) => {
       qc.invalidateQueries({ queryKey: ["clients", clientId] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
     },
   });
 }

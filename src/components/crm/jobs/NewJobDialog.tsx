@@ -32,7 +32,8 @@ import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { usePackages } from "@/lib/hooks/use-packages";
 import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
-import { computePackageVisitSchedule } from "@/lib/package-schedule";
+import { computePackageVisitSchedule, expandPackageStepVisits, packageSeasonShiftDays } from "@/lib/package-schedule";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
 import { formatCurrency, roundHours } from "@/lib/utils";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
@@ -156,6 +157,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const { data: crmServices } = useCRMServices();
   const { data: crmSchedules } = useCRMSchedules();
   const { data: orgSettings } = useOrgSettings();
+  const { today: orgToday } = useOrgDates();
   const { data: crmPackages } = usePackages(false);
   const { data: products } = useProducts();
   const { data: employees } = useSelectableEmployees();
@@ -328,33 +330,50 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
 
     const visitSchedule = computePackageVisitSchedule(pkg.services ?? []);
     const dated = visitSchedule.filter((v) => v.scheduledDate);
+    // A package set up last season has step dates in the past: start the
+    // program today instead (every step keeps its spacing), as Convert to Job does.
+    const templateStart = dated.length > 0
+      ? toLocalDateStr(dated.reduce((min, v) => (v.scheduledDate! < min ? v.scheduledDate! : min), dated[0].scheduledDate!))
+      : null;
+    const shift = packageSeasonShiftDays(templateStart, orgToday());
+    if (shift > 0) {
+      toast.info(`"${pkg.name}" is dated for an earlier season — its steps were moved to start today, keeping their spacing. Change the Start Date to re-anchor.`);
+    }
+    const shifted = (d: string) => (d && shift > 0 ? shiftDateStr(d, shift) : d);
     if (dated.length > 0) {
       const earliest = dated.reduce((min, v) => (v.scheduledDate! < min ? v.scheduledDate! : min), dated[0].scheduledDate!);
       const latest = dated.reduce((max, v) => {
         const end = v.service.endDate ? new Date(v.service.endDate + "T00:00:00") : v.scheduledDate!;
         return end > max ? end : max;
       }, earliest);
-      setStartDate(toLocalDateStr(earliest));
-      setCompleteByDate(toLocalDateStr(latest));
-      setPackageAnchor(toLocalDateStr(earliest));
+      setStartDate(shifted(toLocalDateStr(earliest)));
+      setCompleteByDate(shifted(toLocalDateStr(latest)));
+      setPackageAnchor(shifted(toLocalDateStr(earliest)));
     } else {
       setPackageAnchor(null);
     }
 
     setServices(
       visitSchedule.length > 0
-        ? visitSchedule.map(({ service, scheduledDate }) => {
+        ? visitSchedule.flatMap(({ service, scheduledDate }) => {
             // Package steps may reference the service by id OR only carry its
             // name (older packages) — fall back to a name match so the step
             // still inherits the service's default rate / production rate.
             const matchingService = (crmServices ?? []).find((s) => s.id === service.serviceId)
               ?? (crmServices ?? []).find((s) => s.name.trim().toLowerCase() === service.serviceName.trim().toLowerCase());
             const qty = 1;
-            return {
+            // "Visits Included" N = N separate visits, each billed at the step's rate.
+            const visits = expandPackageStepVisits(
+              scheduledDate ? shifted(toLocalDateStr(scheduledDate)) : null,
+              service.endDate ? shifted(service.endDate) : null,
+              service.minDays ?? null,
+              service.visitsIncluded,
+            );
+            return visits.map((v) => ({
               serviceId: service.serviceId ?? matchingService?.id ?? "",
               serviceName: service.serviceName,
-              startDate: scheduledDate ? toLocalDateStr(scheduledDate) : "",
-              completeByDate: service.endDate ?? "",
+              startDate: v.startDate ?? "",
+              completeByDate: v.completeByDate ?? "",
               qty,
               rateCents: (service.defaultRateCents || matchingService?.defaultRateCents) ?? 0,
               // teamSize is 1 here so the division is a no-op today — routed
@@ -365,9 +384,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 : service.defaultBHrs ?? 0,
               budgetMethod: matchingService?.budgetMethod ?? "manual",
               teamSize: 1,
-              minDays: service.minDays ?? null,
+              minDays: v.minDays,
               startDateEdited: false,
-            };
+            }));
           })
         : [blankServiceRow(startDate)]
     );
@@ -593,11 +612,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const marginPct = serviceTotalCents > 0 ? (grossProfitCents / serviceTotalCents) * 100 : 0;
 
   const selectedPackage = (crmPackages ?? []).find((p) => p.id === packageId) ?? null;
-  // Total included visits for the selected package = sum of each service row's
-  // visits_included (defaulting to 1 per row), not the number of service rows —
-  // matches the same aggregation used in PackageDialog when saving visits_per_season.
+  // One step per visit row: a step with "Visits Included" N was expanded into
+  // N rows by pickPackage, and rows the user removed aren't steps any more.
   const selectedPackageTotalSteps = selectedPackage
-    ? (selectedPackage.services?.reduce((sum, s) => sum + (s.visitsIncluded || 1), 0) || 1)
+    ? Math.max(1, services.filter((r) => r.serviceName).length)
     : null;
   // Package billing summary — the program total is the sum of its step rates;
   // the monthly installment spreads it over the months the program covers.

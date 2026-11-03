@@ -106,9 +106,11 @@ export function matchesFilterRow(c: Client, row: FilterRow, ctx?: FilterContext)
       return true;
     }
     case row.field === "zip": {
-      const zip = c.billingZip ?? c.serviceZip ?? "";
-      if (op === "eq"       && zip !== row.value)          return false;
-      if (op === "contains" && !zip.includes(row.value))   return false;
+      // Either zip counts: the Zip column shows the service zip first, while a
+      // commercial account is often billed at a different (HQ) zip.
+      const zips = [c.billingZip, c.serviceZip].filter((z): z is string => !!z);
+      if (op === "eq"       && !zips.some((z) => z === row.value))        return false;
+      if (op === "contains" && !zips.some((z) => z.includes(row.value)))  return false;
       return true;
     }
     case row.field === "source": {

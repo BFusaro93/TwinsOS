@@ -15,6 +15,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { realtimeClientFilter } from "@/lib/portal/client-id-chunks";
 import { describeVisitWindow } from "@/lib/portal/visit-window";
 import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 
@@ -85,7 +86,10 @@ interface Estimate {
 interface Props {
   greeting: string;
   balanceCents: number;
+  /** The login's own account credit. */
   creditsCents: number;
+  /** Credit sitting on sub-accounts — each applies only to that account's invoices. */
+  subAccountCredits: { accountName: string; cents: number }[];
   invoices: Invoice[];
   upcomingVisits: Visit[];
   recentVisits: Visit[];
@@ -102,6 +106,7 @@ export default function PortalDashboard({
   greeting,
   balanceCents,
   creditsCents,
+  subAccountCredits,
   invoices,
   upcomingVisits: initialVisits,
   recentVisits,
@@ -126,7 +131,7 @@ export default function PortalDashboard({
       .channel(`portal-dashboard-visits-${clientIds[0]}`)
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "crm_job_visits", filter: `client_id=in.(${clientKey})` },
+        { event: "UPDATE", schema: "public", table: "crm_job_visits", filter: realtimeClientFilter(clientKey.split(","), orgId) },
         (payload) => {
           const updated = payload.new as { id: string; status: string };
           setUpcomingVisits((prev) =>
@@ -264,6 +269,11 @@ export default function PortalDashboard({
           {creditsCents > 0 && (
             <p className="text-xs font-medium text-brand-600">Credits on account: {fmt(creditsCents)}</p>
           )}
+          {subAccountCredits.map((c, i) => (
+            <p key={`${c.accountName}-${i}`} className="text-xs font-medium text-brand-600">
+              Credit on {c.accountName}: {fmt(c.cents)}
+            </p>
+          ))}
           {balanceCents > 0 ? (
             <a
               href="/portal/billing"

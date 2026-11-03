@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
+import { adminClient, authenticateZapierRequest, blankToUndefined, checkZapierRateLimit } from "@/lib/integrations/zapier";
 import { createRequisitionRecord } from "@/lib/requisitions/create-requisition";
 import { REQUISITION_SELECT, shapeRequisition } from "@/app/api/v1/requisitions/shape";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("zapier-action");
 
 const lineItemSchema = z.object({
   productItemId: z.string().uuid(),
@@ -13,9 +16,10 @@ const lineItemSchema = z.object({
 
 const createRequisitionSchema = z.object({
   title: z.string().min(1),
-  vendorId: z.string().uuid().optional(),
-  workOrderId: z.string().uuid().optional(),
-  notes: z.string().optional(),
+  // Zapier posts "" for an unmapped field (see blankToUndefined).
+  vendorId: blankToUndefined(z.string().uuid()),
+  workOrderId: blankToUndefined(z.string().uuid()),
+  notes: blankToUndefined(z.string()),
   // Optional because the Zapier "Create Requisition" trigger predates line
   // items being collected — most configured Zaps only pass header fields.
   // When present, this goes through createRequisitionRecord just like the
@@ -117,7 +121,9 @@ export async function POST(request: Request) {
     );
 
     if (createError || !requisition) {
-      return NextResponse.json({ error: createError ?? "create failed" }, { status: 500 });
+      // createRequisitionRecord hands back raw DB/RPC messages; don't pass them on.
+      log.error("create requisition failed", { error: createError });
+      return NextResponse.json({ error: "create failed" }, { status: 500 });
     }
 
     const shaped = shapeRequisition(requisition);
@@ -146,10 +152,8 @@ export async function POST(request: Request) {
     p_org_id_override: auth.orgId,
   });
   if (numberErr || !requisitionNumber) {
-    return NextResponse.json(
-      { error: numberErr?.message ?? "Failed to generate requisition number" },
-      { status: 500 }
-    );
+    log.error("requisition number failed", { error: numberErr?.message });
+    return NextResponse.json({ error: "Failed to generate requisition number" }, { status: 500 });
   }
 
   const { data, error } = await db
@@ -170,7 +174,7 @@ export async function POST(request: Request) {
 
   if (error || !data) {
     // Don't hand raw database errors (constraint/column names) to the caller.
-    console.error("[zapier action] create failed:", error?.message);
+    log.error("create requisition failed", { error: error?.message });
     return NextResponse.json({ error: "create failed" }, { status: 500 });
   }
 

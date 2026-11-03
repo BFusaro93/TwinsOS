@@ -547,12 +547,18 @@ export function InvoicesList({ clientId }: Props) {
     const ids = selected.map((i) => i.id).join(",");
     const win = window.open(`/api/crm/invoices/bulk-pdf?ids=${ids}`, "_blank");
     if (win) win.addEventListener("load", () => win.print(), { once: true });
+    let reported = false;
     for (const inv of selected) {
       const wasDraft = inv.status === "draft";
       void Promise.all([
         setLock({ id: inv.id, locked: true }),
         wasDraft ? updateStatus({ id: inv.id, status: "printed" }) : Promise.resolve(),
-      ]).catch(() => {});
+      ]).catch((err: unknown) => {
+        // One toast for the batch, not one per invoice.
+        if (reported) return;
+        reported = true;
+        toast.error(mutationErrorMessage(err, "Some printed invoices could not be marked printed"));
+      });
     }
     toast.info(`Opening ${selected.length} invoice${selected.length !== 1 ? "s" : ""} to print…`);
   }
@@ -888,19 +894,27 @@ export function InvoicesList({ clientId }: Props) {
                   </DropdownMenuItem>
                 </>
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={!someSelected}
-                onSelect={() => bulkUpdateStatus("sent")}
-              >
-                Mark as Sent
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!someSelected}
-                onSelect={() => bulkUpdateStatus("paid")}
-              >
-                Mark as Paid
-              </DropdownMenuItem>
+              {/* Marking sent needs Email Invoices (the DB refuses draft -> sent
+                  without it); paid, merge and void need Add/Modify Invoices. */}
+              {(can("acct_send_invoices") || can("acct_add_modify_invoices")) && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={!someSelected}
+                    onSelect={() => bulkUpdateStatus("sent")}
+                  >
+                    Mark as Sent
+                  </DropdownMenuItem>
+                </>
+              )}
+              {can("acct_add_modify_invoices") && (
+                <DropdownMenuItem
+                  disabled={!someSelected}
+                  onSelect={() => bulkUpdateStatus("paid")}
+                >
+                  Mark as Paid
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               {can("acct_add_modify_invoices") && (
                 <DropdownMenuItem
@@ -910,22 +924,26 @@ export function InvoicesList({ clientId }: Props) {
                   Add Other Charge…
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem
-                disabled={selectedIds.size < 2}
-                onSelect={() => setMergeOpen(true)}
-                className="flex items-center gap-2"
-              >
-                <GitMerge className="h-3.5 w-3.5" />
-                Merge / Consolidate Invoices
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={!someSelected}
-                className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
-                onSelect={requestBulkVoid}
-              >
-                Void Selected
-              </DropdownMenuItem>
+              {can("acct_add_modify_invoices") && (
+                <>
+                  <DropdownMenuItem
+                    disabled={selectedIds.size < 2}
+                    onSelect={() => setMergeOpen(true)}
+                    className="flex items-center gap-2"
+                  >
+                    <GitMerge className="h-3.5 w-3.5" />
+                    Merge / Consolidate Invoices
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={!someSelected}
+                    className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+                    onSelect={requestBulkVoid}
+                  >
+                    Void Selected
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
           <button
@@ -1181,7 +1199,7 @@ export function InvoicesList({ clientId }: Props) {
                           </Button>
                         </span>
                       )}
-                      {inv.status !== "void" && (() => {
+                      {inv.status !== "void" && can("acct_add_modify_invoices") && (() => {
                         const blocked = voidBlockedReason(inv);
                         return (
                           // Buttons are pointer-events:none when disabled, so the tooltip

@@ -7,7 +7,8 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
-import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
+import { fireAutomationTrigger, fireAutomationTriggerForClients } from "@/lib/automations/fire-trigger-client";
+import { chunk } from "@/lib/utils/chunk";
 import { isAreaZone, isLinearZone, sumLinearFt, sumZoneSqft } from "@/lib/property-zones";
 import type { AddressVerdict } from "@/types/address-verification";
 import { logger } from "@/lib/logger";
@@ -59,6 +60,28 @@ export async function logClientActivity(
     if (error) throw error;
   } catch (err) {
     logger.warn("client_activity log failed", { clientId, subject, error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/** logClientActivity for many clients: one insert per 500 rows instead of
+ *  two requests per client. Same never-throws contract. */
+async function logClientActivities(
+  supabase: ReturnType<typeof createClient>,
+  clientIds: string[],
+  subject: string,
+) {
+  if (clientIds.length === 0) return;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    for (const ids of chunk(clientIds, 500)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("client_activity").insert(
+        ids.map((client_id) => ({ client_id, activity_type: "note", subject, body: null, created_by: user?.id ?? null }))
+      );
+      if (error) throw error;
+    }
+  } catch (err) {
+    logger.warn("client_activity bulk log failed", { count: clientIds.length, subject, error: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -556,6 +579,26 @@ export function useClient(id: string) {
       return mapClient(data);
     },
     enabled: !!id,
+  });
+}
+
+/** A client's name even if it was soft-deleted — for pickers whose record
+ *  still points at a client that has since been deleted. */
+export function useClientDisplayName(id: string, enabled = true) {
+  return useQuery({
+    queryKey: ["clients", id, "display-name"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("clients")
+        .select("display_name, deleted_at")
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? { displayName: data.display_name as string, deleted: !!data.deleted_at } : null;
+    },
+    enabled: !!id && enabled,
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -2274,23 +2317,24 @@ export function useBulkAddTag() {
   return useMutation({
     mutationFn: async ({ clientIds, tag }: { clientIds: string[]; tag: string }) => {
       const supabase = createClient();
-      const rows = clientIds.map((client_id) => ({ client_id, tag }));
-      // ignoreDuplicates returns only the rows actually inserted, so clients that
-      // already had the tag aren't reported (or re-triggered) as newly tagged.
-      const { data, error } = await supabase
-        .from("client_tags")
-        .upsert(rows, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true })
-        .select("client_id");
-      if (error) throw error;
-      return { addedClientIds: (data ?? []).map((r) => r.client_id as string) };
+      const addedClientIds: string[] = [];
+      for (const ids of chunk(clientIds, 500)) {
+        // ignoreDuplicates returns only the rows actually inserted, so clients that
+        // already had the tag aren't reported (or re-triggered) as newly tagged.
+        const { data, error } = await supabase
+          .from("client_tags")
+          .upsert(ids.map((client_id) => ({ client_id, tag })), { onConflict: "org_id,client_id,tag", ignoreDuplicates: true })
+          .select("client_id");
+        if (error) throw error;
+        addedClientIds.push(...(data ?? []).map((r) => r.client_id as string));
+      }
+      return { addedClientIds };
     },
     onSuccess: (result, { tag }) => {
       invalidateAllClientRecords(qc);
       // The single-client add fires tag_added; a bulk add silently skipped every
       // "when tag X is added" automation for the whole selection.
-      for (const clientId of result?.addedClientIds ?? []) {
-        fireAutomationTrigger({ triggerType: "tag_added", clientId, matchValues: [tag] });
-      }
+      fireAutomationTriggerForClients({ triggerType: "tag_added", clientIds: result?.addedClientIds ?? [], matchValues: [tag] });
     },
   });
 }
@@ -2301,21 +2345,24 @@ export function useBulkRemoveTag() {
   return useMutation({
     mutationFn: async ({ clientIds, tag }: { clientIds: string[]; tag: string }) => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("client_tags")
-        .delete()
-        .in("client_id", clientIds)
-        .eq("tag", tag)
-        .select("client_id");
-      if (error) throw error;
-      return { removedClientIds: (data ?? []).map((r) => r.client_id as string) };
+      const removedClientIds: string[] = [];
+      // Chunked: `.in()` goes in the URL, and a few hundred ids overflow it.
+      for (const ids of chunk(clientIds)) {
+        const { data, error } = await supabase
+          .from("client_tags")
+          .delete()
+          .in("client_id", ids)
+          .eq("tag", tag)
+          .select("client_id");
+        if (error) throw error;
+        removedClientIds.push(...(data ?? []).map((r) => r.client_id as string));
+      }
+      return { removedClientIds };
     },
     onSuccess: (result, { tag }) => {
       invalidateAllClientRecords(qc);
       // Mirrors the single-client remove, which fires tag_removed.
-      for (const clientId of result?.removedClientIds ?? []) {
-        fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
-      }
+      fireAutomationTriggerForClients({ triggerType: "tag_removed", clientIds: result?.removedClientIds ?? [], matchValues: [tag] });
     },
   });
 }
@@ -2421,12 +2468,15 @@ export function useBulkCloseLeadsAsLost() {
       const supabase = createClient();
       // Selected rows that are no longer leads (converted meanwhile) are
       // left alone rather than being flipped to "lost".
-      const { error } = await supabase
-        .from("clients")
-        .update({ status: "lost", cancellation_reason: reason, closed_at: new Date().toISOString() })
-        .in("id", clientIds)
-        .eq("status", "lead");
-      if (error) throw error;
+      const closedAt = new Date().toISOString();
+      for (const ids of chunk(clientIds)) {
+        const { error } = await supabase
+          .from("clients")
+          .update({ status: "lost", cancellation_reason: reason, closed_at: closedAt })
+          .in("id", ids)
+          .eq("status", "lead");
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       invalidateAllClientRecords(qc);
@@ -2445,23 +2495,27 @@ export function useBulkUpdateClients() {
       // client, so it needs the prior values.
       const watchSource = "source" in patch;
       const watchEmail = patch.ok_to_email === true;
-      let before: { id: string; source: string | null; ok_to_email: boolean | null }[] = [];
-      if (watchSource || watchEmail) {
-        const { data, error: readErr } = await supabase
+      const before: { id: string; source: string | null; ok_to_email: boolean | null }[] = [];
+      const updatedIds = new Set<string>();
+      // Chunked: `.in()` goes in the URL, and a few hundred ids overflow it.
+      for (const ids of chunk(clientIds)) {
+        if (watchSource || watchEmail) {
+          const { data, error: readErr } = await supabase
+            .from("clients")
+            .select("id, source, ok_to_email")
+            .in("id", ids);
+          if (readErr) throw readErr;
+          before.push(...(data ?? []));
+        }
+        const { data: updated, error } = await supabase
           .from("clients")
-          .select("id, source, ok_to_email")
-          .in("id", clientIds);
-        if (readErr) throw readErr;
-        before = data ?? [];
+          // `as never`: postgrest rejects excess properties on a dynamically-built patch.
+          .update(patch as never)
+          .in("id", ids)
+          .select("id");
+        if (error) throw error;
+        for (const u of updated ?? []) updatedIds.add(u.id);
       }
-      const { data: updated, error } = await supabase
-        .from("clients")
-        // `as never`: postgrest rejects excess properties on a dynamically-built patch.
-        .update(patch as never)
-        .in("id", clientIds)
-        .select("id");
-      if (error) throw error;
-      const updatedIds = new Set((updated ?? []).map((u) => u.id));
       const changed = before.filter((b) => updatedIds.has(b.id));
       const newSource = (patch.source as string | null | undefined) ?? null;
       return {
@@ -2472,16 +2526,12 @@ export function useBulkUpdateClients() {
     },
     onSuccess: (result) => {
       invalidateAllClientRecords(qc);
-      for (const id of result.sourceChangedIds) {
-        fireAutomationTrigger({
-          triggerType: "client_source_updated",
-          clientId: id,
-          matchValues: result.newSource ? [result.newSource] : undefined,
-        });
-      }
-      for (const id of result.emailsOptedInIds) {
-        fireAutomationTrigger({ triggerType: "has_opted_in_emails", clientId: id });
-      }
+      fireAutomationTriggerForClients({
+        triggerType: "client_source_updated",
+        clientIds: result.sourceChangedIds,
+        matchValues: result.newSource ? [result.newSource] : undefined,
+      });
+      fireAutomationTriggerForClients({ triggerType: "has_opted_in_emails", clientIds: result.emailsOptedInIds });
     },
   });
 }
@@ -2492,32 +2542,35 @@ export function useBulkCancelClients() {
   return useMutation({
     mutationFn: async ({ clientIds, reason }: { clientIds: string[]; reason: string }) => {
       const supabase = createClient();
-      // Skip records already cancelled/lost so their original reason isn't overwritten.
-      const { data: rows, error: readErr } = await supabase
-        .from("clients")
-        .select("id, status")
-        .in("id", clientIds)
-        .not("status", "in", "(cancelled,lost)");
-      if (readErr) throw readErr;
-      const targets = rows ?? [];
-      if (targets.length === 0) return { changed: [] as { id: string; wasLead: boolean }[] };
-      const { data: updated, error } = await supabase
-        .from("clients")
-        .update({ status: "cancelled", cancellation_reason: reason, closed_at: new Date().toISOString() })
-        .in("id", targets.map((t) => t.id))
-        .not("status", "in", "(cancelled,lost)")
-        .select("id");
-      if (error) throw error;
-      const updatedIds = new Set((updated ?? []).map((u) => u.id));
-      return {
-        changed: targets.filter((t) => updatedIds.has(t.id)).map((t) => ({ id: t.id, wasLead: t.status === "lead" })),
-      };
+      const changed: { id: string; wasLead: boolean }[] = [];
+      const closedAt = new Date().toISOString();
+      // Chunked: `.in()` goes in the URL, and a few hundred ids overflow it.
+      for (const ids of chunk(clientIds)) {
+        // Skip records already cancelled/lost so their original reason isn't overwritten.
+        const { data: rows, error: readErr } = await supabase
+          .from("clients")
+          .select("id, status")
+          .in("id", ids)
+          .not("status", "in", "(cancelled,lost)");
+        if (readErr) throw readErr;
+        const targets = rows ?? [];
+        if (targets.length === 0) continue;
+        const { data: updated, error } = await supabase
+          .from("clients")
+          .update({ status: "cancelled", cancellation_reason: reason, closed_at: closedAt })
+          .in("id", targets.map((t) => t.id))
+          .not("status", "in", "(cancelled,lost)")
+          .select("id");
+        if (error) throw error;
+        const updatedIds = new Set((updated ?? []).map((u) => u.id));
+        changed.push(...targets.filter((t) => updatedIds.has(t.id)).map((t) => ({ id: t.id, wasLead: t.status === "lead" })));
+      }
+      return { changed };
     },
     onSuccess: (result) => {
       invalidateAllClientRecords(qc);
-      for (const c of result.changed) {
-        fireAutomationTrigger({ triggerType: c.wasLead ? "lead_cancelled" : "client_cancelled", clientId: c.id });
-      }
+      fireAutomationTriggerForClients({ triggerType: "lead_cancelled", clientIds: result.changed.filter((c) => c.wasLead).map((c) => c.id) });
+      fireAutomationTriggerForClients({ triggerType: "client_cancelled", clientIds: result.changed.filter((c) => !c.wasLead).map((c) => c.id) });
     },
   });
 }
@@ -2529,40 +2582,49 @@ export function useBulkActivateClients() {
   return useMutation({
     mutationFn: async (clientIds: string[]) => {
       const supabase = createClient();
-      const { data: rows, error: readErr } = await supabase
-        .from("clients")
-        .select("id, status")
-        .in("id", clientIds)
-        .neq("status", "active");
-      if (readErr) throw readErr;
       // Leads and lost leads never became clients: activating them is a conversion.
       const isLead = (st: string | null) => st === "lead" || st === "lost";
-      const leadIds = (rows ?? []).filter((r) => isLead(r.status)).map((r) => r.id);
-      const otherIds = (rows ?? []).filter((r) => !isLead(r.status)).map((r) => r.id);
-      if (leadIds.length > 0) {
-        const { error } = await supabase
+      const leadIds: string[] = [];
+      const otherIds: string[] = [];
+      // Chunked: `.in()` goes in the URL, and a few hundred ids overflow it.
+      for (const ids of chunk(clientIds)) {
+        const { data: rows, error: readErr } = await supabase
           .from("clients")
-          .update({ status: "active", cancellation_reason: null, closed_at: null, client_since: todayInZone(orgTimeZone) })
-          .in("id", leadIds)
-          .in("status", ["lead", "lost"]);
-        if (error) throw error;
-        for (const id of leadIds) await logClientActivity(supabase, id, "Converted from lead to client");
+          .select("id, status")
+          .in("id", ids)
+          .neq("status", "active");
+        if (readErr) throw readErr;
+        const leads = (rows ?? []).filter((r) => isLead(r.status)).map((r) => r.id);
+        const others = (rows ?? []).filter((r) => !isLead(r.status)).map((r) => r.id);
+        if (leads.length > 0) {
+          const { data, error } = await supabase
+            .from("clients")
+            .update({ status: "active", cancellation_reason: null, closed_at: null, client_since: todayInZone(orgTimeZone) })
+            .in("id", leads)
+            .in("status", ["lead", "lost"])
+            .select("id");
+          if (error) throw error;
+          leadIds.push(...(data ?? []).map((r) => r.id));
+        }
+        if (others.length > 0) {
+          const { data, error } = await supabase
+            .from("clients")
+            .update({ status: "active", cancellation_reason: null, closed_at: null })
+            .in("id", others)
+            .not("status", "in", "(lead,lost)")
+            .select("id");
+          if (error) throw error;
+          otherIds.push(...(data ?? []).map((r) => r.id));
+        }
       }
-      if (otherIds.length > 0) {
-        const { error } = await supabase
-          .from("clients")
-          .update({ status: "active", cancellation_reason: null, closed_at: null })
-          .in("id", otherIds)
-          .not("status", "in", "(lead,lost)");
-        if (error) throw error;
-        for (const id of otherIds) await logClientActivity(supabase, id, "Client reactivated");
-      }
+      await logClientActivities(supabase, leadIds, "Converted from lead to client");
+      await logClientActivities(supabase, otherIds, "Client reactivated");
       return { leadIds, otherIds };
     },
     onSuccess: (result) => {
       invalidateAllClientRecords(qc);
-      for (const id of result.leadIds) fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
-      for (const id of result.otherIds) fireAutomationTrigger({ triggerType: "client_reactivated", clientId: id });
+      fireAutomationTriggerForClients({ triggerType: "lead_converted_to_client", clientIds: result.leadIds });
+      fireAutomationTriggerForClients({ triggerType: "client_reactivated", clientIds: result.otherIds });
     },
   });
 }

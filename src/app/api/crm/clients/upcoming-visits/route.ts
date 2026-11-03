@@ -5,6 +5,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { cancelClientVisits } from "@/lib/visits/client-visits";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { chunk } from "@/lib/utils/chunk";
 
 const Body = z.object({
   clientIds: z.array(z.string().uuid()).min(1).max(500),
@@ -48,14 +49,18 @@ export async function POST(request: Request) {
   );
   if (!gates.some(Boolean)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: owned, error: ownedErr } = await (supabase as any)
-    .from("clients")
-    .select("id")
-    .eq("org_id", orgId)
-    .in("id", clientIds);
-  if (ownedErr) return NextResponse.json({ error: ownedErr.message }, { status: 500 });
-  const ownedIds = ((owned ?? []) as { id: string }[]).map((c) => c.id);
+  // Chunked: `.in()` goes in the URL, and a few hundred ids overflow it.
+  const ownedIds: string[] = [];
+  for (const ids of chunk(clientIds)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: owned, error: ownedErr } = await (supabase as any)
+      .from("clients")
+      .select("id")
+      .eq("org_id", orgId)
+      .in("id", ids);
+    if (ownedErr) return NextResponse.json({ error: "Failed to check upcoming visits" }, { status: 500 });
+    ownedIds.push(...((owned ?? []) as { id: string }[]).map((c) => c.id));
+  }
   if (ownedIds.length === 0) return NextResponse.json({ count: 0, jobs: 0 });
 
   try {

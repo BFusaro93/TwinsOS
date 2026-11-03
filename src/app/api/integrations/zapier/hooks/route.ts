@@ -6,6 +6,9 @@ import {
   isZapierTriggerType,
 } from "@/lib/integrations/zapier";
 import { assertPublicHttpsUrl } from "@/lib/net/ssrf-guard";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("zapier-hooks");
 
 /**
  * POST /api/integrations/zapier/hooks — Zapier's REST Hook "subscribe" call,
@@ -58,7 +61,7 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !data) {
-    console.error("[zapier hooks] subscribe failed:", error?.message);
+    log.error("subscribe failed", { error: error?.message });
     return NextResponse.json({ error: "subscribe failed" }, { status: 500 });
   }
 
@@ -84,7 +87,7 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("[zapier hooks] list failed:", error.message);
+    log.error("list failed", { error: error.message });
     return NextResponse.json({ error: "list failed" }, { status: 500 });
   }
 
