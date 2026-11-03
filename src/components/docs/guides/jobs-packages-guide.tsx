@@ -40,6 +40,7 @@ export function JobsPackagesGuide() {
           <TOCLink href="#job-vs-visit-status">Job status vs. visit status</TOCLink>
           <TOCLink href="#equipment">Equipment to bring</TOCLink>
           <TOCLink href="#packages">Packages, in detail</TOCLink>
+          <TOCLink href="#package-renewal">Renewing a package for next season</TOCLink>
           <TOCLink href="#projects">Projects (Landscapt vs. Equipt/PO)</TOCLink>
           <TOCLink href="#recurring-setup">Setting up a recurring job</TOCLink>
           <TOCLink href="#schedule-templates">Schedule templates</TOCLink>
@@ -358,7 +359,7 @@ export function JobsPackagesGuide() {
           hours and rate. None of that is a dollar amount a client is billed; it&apos;s a cadence and
           cost template. Only once a client actually signs up does a real <code>package</code>-type job
           get created from the template, and <em>that job</em> — not the package — is where the fixed
-          monthly billing amount, any discount, and renewal terms actually live. Two different clients
+          monthly billing amount, any discount, and its renewal (see below) actually live. Two different clients
           signed up to the same &quot;Gold Maintenance&quot; package can end up on different monthly
           amounts; the package template only guarantees they get the same services on the same
           cadence.
@@ -407,6 +408,76 @@ export function JobsPackagesGuide() {
           sitting in Remaining forever. Earned revenue is completed visits × the per-visit amount;
           Pending is the job total minus Earned, which means a package job with no visits generated
           yet shows as entirely Pending.
+        </p>
+      </Section>
+
+      <Section id="package-renewal" title="Renewing a package for next season">
+        <p>
+          A package job covers one season. When the client signs up again, <strong>Renew for next
+          season</strong> creates next season&apos;s job from last season&apos;s instead of building it
+          again with Add Job. Open the package job, click <strong>More (…)</strong>, and choose{" "}
+          <strong>Renew for next season</strong>. The window shows the season it renews from and to,
+          every step with its new date and rate, and the program total. Click <strong>Renew for
+          (year)</strong> and the new job opens.
+        </p>
+        <p>
+          The new job is for the same client and property, with the same package, services, rates,
+          quantities, budgets, team size, Min Days and taxable setting, the same crew and sales rep, and
+          the same crew notes, office notes and invoice description. Each service&apos;s crew checklist
+          (its sub-items) comes along, and so do planned job materials that were never recorded on a
+          visit. By default every step date is last season&apos;s date on <em>this job</em> moved
+          forward one year (Feb 29 becomes Feb 28), so anything you changed for this client carries
+          over. Tick <strong>Use the package&apos;s current dates</strong> (or <strong>Use each
+          package&apos;s current dates</strong> in Renew Packages) to take each step&apos;s window from
+          Settings → Packages instead, moved to the new season — it doesn&apos;t matter whether
+          you&apos;ve updated the package&apos;s dates for the new year yet. The job&apos;s own steps and
+          rates are kept either way: a step the package doesn&apos;t have keeps last season&apos;s date,
+          a step the package has but the job doesn&apos;t is not added (the window lists both), and a
+          package with no step dates keeps last season&apos;s dates. Min Days spacing is applied in
+          both cases. Visits are then created exactly as Add Job creates them for a package, one per
+          dated step. The new job&apos;s Sale Type is <strong>Renewal</strong> (for commissions), its
+          Date Sold is today, and it fires the same Job Created and Package Created automations as a
+          new package job. Last season&apos;s job is not changed.
+        </p>
+        <Callout>
+          <strong>Renewing a client who skipped a season.</strong> If the old job&apos;s season ended
+          more than a year ago, the dates move forward as many years as it takes to land on the coming
+          season, not on one that is already over. If some steps still land before today (renewing
+          mid-season), the window warns you so you can move them on the new job.
+        </Callout>
+        <p>
+          <strong>Renewing many at once.</strong> On the Jobs list, click <strong>Renew
+          Packages</strong>. Pick the season to renew from and every package job from that season is
+          listed with its renewal state. The ones not yet renewed, and not marked Don&apos;t renew, are
+          ticked. Untick any you want to leave out and click <strong>Renew</strong>; each is renewed in
+          turn and its row shows the new job, or why it was skipped.
+        </p>
+        <p>
+          <strong>What stops a double renewal.</strong> A package job can have only one live renewal —
+          renewing it a second time, from anywhere, is refused with the existing renewal&apos;s number.
+          If the client already has the same package at the same property for the new season (say it
+          was added with Add Job), you are warned and have to tick <strong>Renew anyway</strong>; Renew
+          Packages skips those. Deleting the renewal lets the old job be renewed again.
+        </p>
+        <p>
+          <strong>Contracts.</strong> A renewal stays linked to last season&apos;s contract only if that
+          contract is still active and runs into the new season. Otherwise the window says so and the
+          renewal is not linked, which means it bills on its own on the client&apos;s invoice frequency
+          — link the renewed contract on the new job if it should bill under one. Rates are copied as
+          they were; run a Price Adjustment afterwards if prices go up.
+        </p>
+        <p>
+          <strong>Clients who aren&apos;t coming back.</strong> On the job, More (…) →{" "}
+          <strong>Mark as not renewing</strong> (or <strong>Don&apos;t renew</strong> on its Renew
+          Packages row). Renew Packages leaves it unticked and the report shows it as Don&apos;t renew;{" "}
+          <strong>Renew as usual</strong> undoes it. The job header shows <em>Renewal of #…</em> and{" "}
+          <em>Renewed as #…</em> links between the seasons.
+        </p>
+        <p>
+          The <strong>Custom Package Renewal Report</strong> (Report Center → Service Reports) lists
+          every package job with its season and a Renewal column — Renewed (with the new job&apos;s
+          number and season), Not renewed, or Don&apos;t renew. Filter by Season and Renewal for a
+          renewal to-do list.
         </p>
       </Section>
 

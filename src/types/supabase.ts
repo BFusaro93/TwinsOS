@@ -6797,6 +6797,7 @@ export type Database = {
           recurrence_end: string | null
           recurrence_rule: string | null
           recurrence_start: string | null
+          renewed_from_job_id: string | null
           sale_type: string | null
           sales_rep_id: string | null
           sales_rep_legacy_name: string | null
@@ -6875,6 +6876,7 @@ export type Database = {
           recurrence_end?: string | null
           recurrence_rule?: string | null
           recurrence_start?: string | null
+          renewed_from_job_id?: string | null
           sale_type?: string | null
           sales_rep_id?: string | null
           sales_rep_legacy_name?: string | null
@@ -6953,6 +6955,7 @@ export type Database = {
           recurrence_end?: string | null
           recurrence_rule?: string | null
           recurrence_start?: string | null
+          renewed_from_job_id?: string | null
           sale_type?: string | null
           sales_rep_id?: string | null
           sales_rep_legacy_name?: string | null

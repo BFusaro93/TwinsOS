@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { CRMPackage, CRMPackageService } from "@/types/crm-packages";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapPackageService(row: any): CRMPackageService {
+export function mapPackageService(row: any): CRMPackageService {
   return {
     id: row.id,
     orgId: row.org_id,
