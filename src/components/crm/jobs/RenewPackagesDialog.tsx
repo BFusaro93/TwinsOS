@@ -28,7 +28,7 @@ import {
   type PackageRenewalCandidate,
 } from "@/lib/hooks/use-package-renewal";
 
-type RowResult = { ok: true; newJobId: string } | { ok: false; message: string };
+type RowResult = { ok: true; newJobId: string; usedJobDates: boolean } | { ok: false; message: string };
 
 /** Season whose package jobs are shown first: this year from July on, last year before. */
 function defaultSeason(today: string, seasons: number[]): number | null {
@@ -57,6 +57,7 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<Record<string, RowResult>>({});
   const [running, setRunning] = useState(false);
+  const [useTemplateDates, setUseTemplateDates] = useState(false);
 
   useEffect(() => {
     if (open && season == null && seasons.length > 0) setSeason(defaultSeason(today, seasons));
@@ -74,7 +75,7 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
 
   function close(o: boolean) {
     if (running) return;
-    if (!o) { setResults({}); setSeason(null); }
+    if (!o) { setResults({}); setSeason(null); setUseTemplateDates(false); }
     onOpenChange(o);
   }
 
@@ -89,8 +90,11 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
     let ok = 0;
     for (const id of ids) {
       try {
-        const res = await renew.mutateAsync({ jobId: id });
-        setResults((prev) => ({ ...prev, [id]: { ok: true, newJobId: res.newJobId } }));
+        const res = await renew.mutateAsync({ jobId: id, useTemplateDates });
+        setResults((prev) => ({
+          ...prev,
+          [id]: { ok: true, newJobId: res.newJobId, usedJobDates: useTemplateDates && res.dateSource === "job" },
+        }));
         ok++;
       } catch (err) {
         const message = err instanceof PackageRenewalRefused ? err.message : mutationErrorMessage(err, (err as Error)?.message || "Failed");
@@ -141,6 +145,11 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
               {rows.length} package job{rows.length === 1 ? "" : "s"} · {rows.filter((r) => r.renewedTo).length} renewed
             </span>
           )}
+          <label className="ml-auto flex items-center gap-2 text-slate-700 dark:text-neutral-300"
+            title="Each step's window comes from Settings → Packages (moved to the new season) instead of last season's job. Packages with no step dates keep last season's dates.">
+            <Checkbox checked={useTemplateDates} disabled={running} onCheckedChange={(v) => setUseTemplateDates(v === true)} />
+            Use each package&rsquo;s current dates
+          </label>
         </div>
 
         {isLoading ? (
@@ -194,7 +203,9 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
                       <td className="px-2 py-1.5 text-right tabular-nums">{formatCurrency(r.totalCents)}</td>
                       <td className={cn("px-2 py-1.5", result && !result.ok && "text-red-600 dark:text-red-400")}>
                         {result?.ok ? (
-                          <Link className="text-green-700 hover:underline dark:text-green-400" href={`/crm/scheduling/jobs/${result.newJobId}`}>Renewed — open</Link>
+                          <Link className="text-green-700 hover:underline dark:text-green-400" href={`/crm/scheduling/jobs/${result.newJobId}`}>
+                            {result.usedJobDates ? "Renewed (package has no dates — used last season's)" : "Renewed — open"}
+                          </Link>
                         ) : result ? (
                           result.message
                         ) : r.renewedTo ? (

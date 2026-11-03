@@ -40,7 +40,8 @@ export function RenewPackageDialog({
   onOpenChange: (open: boolean) => void;
   onRenewed?: (newJobId: string) => void;
 }) {
-  const { data: plan, isLoading, error } = usePackageRenewalPlan(jobId, open);
+  const [useTemplateDates, setUseTemplateDates] = useState(false);
+  const { data: plan, isLoading, error } = usePackageRenewalPlan(jobId, useTemplateDates, open);
   const renew = useRenewPackageJob();
   const [allowSameSeason, setAllowSameSeason] = useState(false);
 
@@ -53,7 +54,7 @@ export function RenewPackageDialog({
 
   async function handleRenew() {
     try {
-      const res = await renew.mutateAsync({ jobId, allowSameSeason });
+      const res = await renew.mutateAsync({ jobId, allowSameSeason, useTemplateDates });
       toast.success(`Renewed for ${res.targetSeason ?? "next season"}`);
       onOpenChange(false);
       onRenewed?.(res.newJobId);
@@ -63,13 +64,14 @@ export function RenewPackageDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) setAllowSameSeason(false); onOpenChange(o); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { setAllowSameSeason(false); setUseTemplateDates(false); } onOpenChange(o); }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Renew for next season</DialogTitle>
           <DialogDescription>
             Creates a new package job for the same client and property with the same services, rates and
-            crew. Every step date moves forward a year; visits are created the same way as Add Job.
+            crew. Step dates are last season&rsquo;s moved forward a year, or the package&rsquo;s current
+            dates if you tick the box below. Visits are created the same way as Add Job.
           </DialogDescription>
         </DialogHeader>
 
@@ -86,6 +88,30 @@ export function RenewPackageDialog({
                 <> — <span className="font-medium">{plan.sourceSeason} → {plan.targetSeason}</span></>
               )}
             </p>
+
+            <label
+              className="flex items-start gap-2 text-slate-700 dark:text-neutral-300"
+              title={plan.templateAvailable ? undefined : "This package has no step dates set in Settings → Packages"}
+            >
+              <Checkbox
+                className="mt-0.5"
+                checked={useTemplateDates}
+                disabled={!plan.templateAvailable && !useTemplateDates}
+                onCheckedChange={(v) => setUseTemplateDates(v === true)}
+              />
+              <span>
+                Use the package&rsquo;s current dates
+                <span className="block text-xs text-slate-500 dark:text-neutral-400">
+                  {plan.templateAvailable
+                    ? "Each step's window comes from Settings → Packages (moved to the new season), not last season's job."
+                    : "Not available — this package has no step dates in Settings → Packages."}
+                </span>
+              </span>
+            </label>
+
+            {plan.templateNote && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">{plan.templateNote}</p>
+            )}
 
             {plan.existingRenewal && (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">

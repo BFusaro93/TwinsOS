@@ -1,4 +1,6 @@
 import type { BudgetMethod, NewClientJobFormValues, NewClientJobServiceValues } from "@/types/crm-jobs";
+import type { CRMPackageService } from "@/types/crm-packages";
+import { planPackageLineSteps } from "@/lib/package-schedule";
 
 /**
  * Package renewal ("Renew for next season") — the pure part.
@@ -6,9 +8,12 @@ import type { BudgetMethod, NewClientJobFormValues, NewClientJobServiceValues } 
  * A renewal copies last season's package job (client, property, services,
  * rates, crew, budgets, Min Days) into a new package job and moves every step
  * date forward by whole years. It deliberately keeps the job's own dates
- * rather than re-reading the package template: per-client adjustments made on
- * last season's job (a moved step, a changed rate) carry over, and a template
- * edit only reaches new sign-ups. Min Days spacing is re-applied afterwards. The new job goes through the same
+ * by default rather than re-reading the package template: per-client
+ * adjustments made on last season's job (a moved step, a changed rate) carry
+ * over, and a template edit only reaches new sign-ups. "Use the package's
+ * current dates" (templateDates) takes each step's window from the template
+ * instead — still the job's own steps and rates. Min Days spacing is
+ * re-applied afterwards either way. The new job goes through the same
  * useCreateClientJob path as Add Job, so its visits are created the same way.
  */
 
@@ -156,21 +161,98 @@ export function renewalYearsAhead(programEnd: string | null, today: string): num
   return years;
 }
 
+export interface RenewalStepDates {
+  startDate: string | null;
+  completeByDate: string | null;
+  minDays: number | null;
+}
+
+export interface TemplateRenewalDates {
+  /** One entry per job step, in step order; null = no matching template step (keeps the job's own date). */
+  steps: (RenewalStepDates | null)[];
+  windowStart: string | null;
+  windowEnd: string | null;
+  /** Job steps with no matching template step. */
+  unmatchedSteps: string[];
+  /** Template steps this job doesn't have (a renewal doesn't add them). */
+  missingSteps: string[];
+}
+
+/**
+ * The package template's step windows for the renewed season, matched onto
+ * the job's steps the same way estimate convert does (planPackageLineSteps:
+ * service id, then name, in order; Min Days spacing applied). The template's
+ * dates move by whole years so its first date lands in `targetSeason` — a
+ * template still showing last year's dates and one already updated for the
+ * new season both work. Null when the template has no dated steps.
+ */
+export function templateRenewalDates(
+  templateServices: CRMPackageService[],
+  jobServices: RenewalSourceService[],
+  targetSeason: number,
+): TemplateRenewalDates | null {
+  const named = templateServices.filter((t) => t.serviceName.trim());
+  const firstTemplateDate = named.map((t) => t.startDate).filter((d): d is string => !!d).sort()[0];
+  if (!firstTemplateDate) return null;
+  const years = targetSeason - parseInt(firstTemplateDate.slice(0, 4), 10);
+
+  const ordered = [...jobServices].sort((a, b) => a.sort_order - b.sort_order);
+  const plan = planPackageLineSteps(
+    named,
+    ordered.map((s) => ({ id: s.id, serviceId: s.service_id, serviceName: s.service_name })),
+  );
+  const byLine = new Map(plan.steps.map((st) => [st.lineId, st]));
+  const steps = ordered.map((s): RenewalStepDates | null => {
+    const st = byLine.get(s.id);
+    if (!st?.startDate) return null;
+    return {
+      startDate: shiftYmdYears(st.startDate, years),
+      completeByDate: shiftOrNull(st.completeByDate, years),
+      minDays: st.minDays,
+    };
+  });
+
+  // Template steps left over after matching = steps the job doesn't have.
+  const norm = (n: string) => n.trim().toLowerCase();
+  const leftover = [...named].sort((a, b) => a.sortOrder - b.sortOrder);
+  for (const s of ordered) {
+    let i = leftover.findIndex((t) => !!s.service_id && t.serviceId === s.service_id);
+    if (i === -1) i = leftover.findIndex((t) => norm(t.serviceName) === norm(s.service_name));
+    if (i !== -1) leftover.splice(i, 1);
+  }
+
+  return {
+    steps,
+    windowStart: shiftOrNull(plan.windowStart, years),
+    windowEnd: shiftOrNull(plan.windowEnd, years),
+    unmatchedSteps: ordered.filter((_s, i) => !steps[i]).map((s) => s.service_name),
+    missingSteps: leftover.map((t) => t.serviceName),
+  };
+}
+
 export interface BuildRenewalOptions {
   years: number;
   /** Org-local "today", stamped as Date Sold. */
   today: string;
   /** Last season's contract still covers the renewed season. */
   keepContract: boolean;
+  /** "Use the package's current dates": template windows per step (see templateRenewalDates). */
+  templateDates?: TemplateRenewalDates | null;
 }
 
 /** The Add Job form values for the renewed job. */
 export function buildRenewalValues(
   job: RenewalSourceJob,
   products: RenewalSourceProduct[],
-  { years, today, keepContract }: BuildRenewalOptions,
+  { years, today, keepContract, templateDates }: BuildRenewalOptions,
 ): NewClientJobFormValues {
   const services = [...(job.crm_job_services ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+  const stepDates = (idx: number, s: RenewalSourceService): RenewalStepDates =>
+    templateDates?.steps[idx] ?? {
+      startDate: shiftOrNull(s.start_date, years),
+      completeByDate: shiftOrNull(s.complete_by_date, years),
+      minDays: s.min_days,
+    };
   return {
     clientId: job.client_id,
     propertyId: job.property_id,
@@ -201,8 +283,8 @@ export function buildRenewalValues(
     callAhead: job.call_ahead ?? false,
     arrivalWindowHours: job.arrival_window_hours,
     scheduledDate: null,
-    waitingListStart: shiftOrNull(job.waiting_list_start, years),
-    waitingListEnd: shiftOrNull(job.waiting_list_end, years),
+    waitingListStart: templateDates?.windowStart ?? shiftOrNull(job.waiting_list_start, years),
+    waitingListEnd: templateDates?.windowEnd ?? shiftOrNull(job.waiting_list_end, years),
     startDateWindow: null,
     endDateWindow: null,
     recurrenceEnd: null,
@@ -214,8 +296,8 @@ export function buildRenewalValues(
     services: applyMinDaysSpacing(services.map((s, idx): NewClientJobServiceValues => ({
       serviceId: s.service_id,
       serviceName: s.service_name,
-      startDate: shiftOrNull(s.start_date, years),
-      completeByDate: shiftOrNull(s.complete_by_date, years),
+      startDate: stepDates(idx, s).startDate,
+      completeByDate: stepDates(idx, s).completeByDate,
       startRecurring: null,
       assignedTo: s.assigned_to,
       qty: s.qty ?? 1,
@@ -228,7 +310,7 @@ export function buildRenewalValues(
       timeEnd: s.time_end,
       included: s.included ?? true,
       sortOrder: idx,
-      minDays: s.min_days,
+      minDays: stepDates(idx, s).minDays,
       isTaxable: s.is_taxable,
       maxVisits: s.max_visits,
       treatedArea: s.treated_area,

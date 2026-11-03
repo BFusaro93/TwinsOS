@@ -406,10 +406,16 @@ export function JobsPackagesGuide() {
           quantities, budgets, team size, Min Days and taxable setting, the same crew and sales rep, and
           the same crew notes, office notes and invoice description. Each service&apos;s crew checklist
           (its sub-items) comes along, and so do planned job materials that were never recorded on a
-          visit. Every step date is last season&apos;s date on <em>this job</em> moved forward one year
-          (Feb 29 becomes Feb 28); the package template&apos;s current dates are not re-read, so
-          anything you changed for this client carries over and template edits only reach new
-          sign-ups. Visits are then created exactly as Add Job creates them for a package, one per
+          visit. By default every step date is last season&apos;s date on <em>this job</em> moved
+          forward one year (Feb 29 becomes Feb 28), so anything you changed for this client carries
+          over. Tick <strong>Use the package&apos;s current dates</strong> (or <strong>Use each
+          package&apos;s current dates</strong> in Renew Packages) to take each step&apos;s window from
+          Settings → Packages instead, moved to the new season — it doesn&apos;t matter whether
+          you&apos;ve updated the package&apos;s dates for the new year yet. The job&apos;s own steps and
+          rates are kept either way: a step the package doesn&apos;t have keeps last season&apos;s date,
+          a step the package has but the job doesn&apos;t is not added (the window lists both), and a
+          package with no step dates keeps last season&apos;s dates. Min Days spacing is applied in
+          both cases. Visits are then created exactly as Add Job creates them for a package, one per
           dated step. The new job&apos;s Sale Type is <strong>Renewal</strong> (for commissions), its
           Date Sold is today, and it fires the same Job Created and Package Created automations as a
           new package job. Last season&apos;s job is not changed.

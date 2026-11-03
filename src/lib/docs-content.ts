@@ -2156,7 +2156,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Does renewing a package use last season's dates or the package template's dates?",
-        a: "Last season's job. Each step keeps the date it had on the old job, moved forward one year (Feb 29 becomes Feb 28), so any per-client changes carry over. Changes made to the package template since then are not applied; they only affect new sign-ups. Rates are copied as they are, so run a Price Adjustment after renewing if prices go up. If the old job is from a season that already ended more than a year ago, the dates move forward enough years to land on the coming season.",
+        a: "Last season's job, unless you tick Use the package's current dates. By default each step keeps the date it had on the old job, moved forward one year (Feb 29 becomes Feb 28), so per-client changes carry over. With the box ticked (in the renew window, or Use each package's current dates in Renew Packages), each step's window comes from the package in Settings, Packages, moved to the new season, so it works whether you have already updated the package's dates or not. Either way the renewal keeps the job's own steps and rates: a step the package doesn't have keeps last season's date, and a step the package has but the job doesn't is not added (the window lists both). A package with no step dates keeps last season's dates. Min Days spacing is applied in both cases. Rates are copied as they are, so run a Price Adjustment after renewing if prices go up. If the old job is from a season that ended more than a year ago, the dates move forward enough years to land on the coming season.",
       },
       {
         q: "What stops a package job from being renewed twice?",

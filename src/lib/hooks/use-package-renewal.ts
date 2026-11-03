@@ -7,14 +7,18 @@ import { useCreateClientJob } from "@/lib/hooks/use-crm-jobs";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { mapPackageService } from "@/lib/hooks/use-packages";
 import {
   buildRenewalValues,
   packageProgramSpan,
   packageSeasonYear,
   renewalYearsAhead,
+  templateRenewalDates,
   type RenewalSourceJob,
   type RenewalSourceProduct,
+  type TemplateRenewalDates,
 } from "@/lib/package-renewal";
+import type { CRMPackageService } from "@/types/crm-packages";
 import type { NewClientJobFormValues } from "@/types/crm-jobs";
 
 // "Renew for next season" for package jobs. The pure date/copy rules live in
@@ -69,6 +73,12 @@ export interface PackageRenewalPlan {
   /** Steps whose renewed date is already before today. */
   pastStepCount: number;
   doNotRenew: boolean;
+  /** Which dates `values` uses. 'template' only when asked for AND the package has dated steps. */
+  dateSource: "job" | "template";
+  /** The package template has dated steps, so "Use the package's current dates" is possible. */
+  templateAvailable: boolean;
+  /** Template-dates caveats: job steps the template doesn't have, template steps the job doesn't have. */
+  templateNote: string | null;
 }
 
 function samePackage(
@@ -79,10 +89,39 @@ function samePackage(
   return (a.package_name ?? "").trim().toLowerCase() === (b.package_name ?? "").trim().toLowerCase();
 }
 
+/** The job's package template steps — by package id, else (older jobs) by package name. */
+async function loadTemplateServices(supabase: AnyClient, job: RenewalSourceJob): Promise<CRMPackageService[]> {
+  if (!job.package_id && !job.package_name?.trim()) return [];
+  let q = supabase
+    .from("crm_packages")
+    .select("id, crm_package_services(*)")
+    .is("deleted_at", null)
+    .is("crm_package_services.deleted_at", null)
+    .order("sort_order", { foreignTable: "crm_package_services" })
+    .limit(1);
+  q = job.package_id ? q.eq("id", job.package_id) : q.ilike("name", (job.package_name ?? "").trim());
+  const { data, error } = await q;
+  if (error) throw error;
+  const pkg = (data ?? [])[0] as { crm_package_services: unknown[] | null } | undefined;
+  return (pkg?.crm_package_services ?? []).map(mapPackageService);
+}
+
+function describeTemplateGaps(t: TemplateRenewalDates): string | null {
+  const parts: string[] = [];
+  if (t.unmatchedSteps.length > 0) {
+    parts.push(`Not in the package, so kept at last season's date +1 year: ${t.unmatchedSteps.join(", ")}.`);
+  }
+  if (t.missingSteps.length > 0) {
+    parts.push(`In the package but not on this job (not added): ${t.missingSteps.join(", ")}.`);
+  }
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
 export async function loadPackageRenewalPlan(
   supabase: AnyClient,
   jobId: string,
   today: string,
+  useTemplateDates = false,
 ): Promise<PackageRenewalPlan> {
   const { data: src, error } = await supabase
     .from("crm_jobs")
@@ -98,6 +137,11 @@ export async function loadPackageRenewalPlan(
   const sourceSeason = packageSeasonYear(job);
   const years = renewalYearsAhead(packageProgramSpan(job).end, today);
   const targetSeason = sourceSeason == null ? null : sourceSeason + years;
+
+  const template = targetSeason == null
+    ? null
+    : templateRenewalDates(await loadTemplateServices(supabase, job), job.crm_job_services ?? [], targetSeason);
+  const templateDates = useTemplateDates ? template : null;
 
   const [productsRes, renewalRes, siblingsRes, contractRes] = await Promise.all([
     // Job-level planned materials only: anything recorded against a visit, or
@@ -150,7 +194,7 @@ export async function loadPackageRenewalPlan(
     packageSeasonYear(s) === targetSeason
   );
 
-  const values0 = buildRenewalValues(job, [], { years, today, keepContract: false });
+  const values0 = buildRenewalValues(job, [], { years, today, keepContract: false, templateDates });
   const firstDate = values0.waitingListStart
     ?? values0.services.map((s) => s.startDate).filter((d): d is string => !!d).sort()[0]
     ?? null;
@@ -171,7 +215,7 @@ export async function loadPackageRenewalPlan(
     }
   }
 
-  const values = buildRenewalValues(job, (productsRes.data ?? []) as RenewalSourceProduct[], { years, today, keepContract });
+  const values = buildRenewalValues(job, (productsRes.data ?? []) as RenewalSourceProduct[], { years, today, keepContract, templateDates });
   const stepDates = values.services.map((s) => s.startDate).filter((d): d is string => !!d).sort();
 
   return {
@@ -189,15 +233,18 @@ export async function loadPackageRenewalPlan(
     contractNote,
     pastStepCount: stepDates.filter((d) => d < today).length,
     doNotRenew: job.package_renewal === "do_not_renew",
+    dateSource: templateDates ? "template" : "job",
+    templateAvailable: !!template,
+    templateNote: templateDates ? describeTemplateGaps(templateDates) : null,
   };
 }
 
 /** Preview of what renewing this job would create (and why it might be refused). */
-export function usePackageRenewalPlan(jobId: string | null, enabled = true) {
+export function usePackageRenewalPlan(jobId: string | null, useTemplateDates = false, enabled = true) {
   const today = todayInZone(useOrgTimeZone());
   return useQuery({
-    queryKey: ["package-renewal", "plan", jobId, today],
-    queryFn: () => loadPackageRenewalPlan(createClient(), jobId as string, today),
+    queryKey: ["package-renewal", "plan", jobId, today, useTemplateDates],
+    queryFn: () => loadPackageRenewalPlan(createClient(), jobId as string, today, useTemplateDates),
     enabled: !!jobId && enabled,
   });
 }
@@ -260,10 +307,15 @@ export function useRenewPackageJob() {
   const createJob = useCreateClientJob();
   const today = todayInZone(useOrgTimeZone());
   return useMutation({
-    mutationFn: async ({ jobId, allowSameSeason = false }: { jobId: string; allowSameSeason?: boolean }) => {
+    mutationFn: async ({
+      jobId,
+      allowSameSeason = false,
+      useTemplateDates = false,
+    }: { jobId: string; allowSameSeason?: boolean; useTemplateDates?: boolean }) => {
       const supabase = createClient();
       // Always re-read: a preview can be stale (someone else renewed meanwhile).
-      const plan = await loadPackageRenewalPlan(supabase, jobId, today);
+      // useTemplateDates falls back to the job's own dates when the package has none.
+      const plan = await loadPackageRenewalPlan(supabase, jobId, today, useTemplateDates);
       if (plan.existingRenewal) {
         throw new PackageRenewalRefused(`Already renewed as job #${plan.existingRenewal.jobNumber}.`);
       }
@@ -287,7 +339,7 @@ export function useRenewPackageJob() {
       }
       // Sub-items are a crew checklist (no money); a failure here leaves a usable job.
       await copyServiceSubitems(supabase, plan, created.id).catch(() => {});
-      return { newJobId: created.id, targetSeason: plan.targetSeason };
+      return { newJobId: created.id, targetSeason: plan.targetSeason, dateSource: plan.dateSource };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["package-renewal"] });
