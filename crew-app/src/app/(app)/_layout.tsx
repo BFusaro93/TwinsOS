@@ -39,6 +39,7 @@ export default function AppLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="home" />
+      <Stack.Screen name="reference" options={{ headerShown: true, title: 'Reference' }} />
       <Stack.Screen name="visit/[id]" options={{ headerShown: true, title: 'Visit' }} />
       <Stack.Screen
         name="visit/request-materials"

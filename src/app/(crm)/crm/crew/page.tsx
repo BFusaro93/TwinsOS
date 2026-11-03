@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, parseISO, differenceInMinutes } from "date-fns";
-import { MapPin, Clock, Users, Sun, Moon, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
+import { MapPin, Clock, Users, Sun, Moon, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, BookOpen, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
 import { useMyCrewStops, useStopPartnerCrews, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive, useCrewDay, useCrewDayAction, useCrewTap } from "@/lib/hooks/use-crew-app";
 import { useCurrentUserStore } from "@/stores";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
@@ -162,12 +162,20 @@ export default function CrewSchedulePage() {
             tablet is signed in as (shared crew accounts — easy to grab the
             wrong tablet, so make it obvious). */}
         <div className="flex items-center justify-between gap-3 py-2">
-          <Button variant="outline" size="sm" className="gap-1.5" asChild>
-            <Link href="/home">
-              <Home className="h-4 w-4" />
-              Home
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5" asChild>
+              <Link href="/home">
+                <Home className="h-4 w-4" />
+                Home
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1.5" asChild>
+              <Link href="/crm/crew/reference">
+                <BookOpen className="h-4 w-4" />
+                Reference
+              </Link>
+            </Button>
+          </div>
           {currentUserLoaded && (
             <div className="flex min-w-0 items-center gap-2 rounded-lg bg-brand-50 dark:bg-brand-900/30 px-3 py-1.5 text-right">
               <UserCircle2 className="h-5 w-5 shrink-0 text-brand-600 dark:text-brand-400" />

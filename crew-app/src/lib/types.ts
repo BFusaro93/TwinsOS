@@ -168,6 +168,54 @@ export interface VisitChemicalApplication {
   preloaded: boolean;
   /** When the crew confirmed what was actually used (null = still an estimate). */
   confirmedAt: string | null;
+  productId: string | null;
+  /** From the product, so the crew can read the label without leaving the stop. */
+  epaNumber: string | null;
+  reEntryInterval: string | null;
+  labelInstructions: string | null;
+  restricted: boolean;
+  /** How it is being applied; the crew can change these when confirming. */
+  applicationMethodId: string | null;
+  targetIds: string[];
+  areasTreatedIds: string[];
+}
+
+/** One row of POST /api/crm/crew/chemicals/confirm; a key left out = unchanged. */
+export interface ChemicalConfirmItem {
+  id: string;
+  used: boolean;
+  chemicalAmount?: number;
+  applicationMethodId?: string | null;
+  targetIds?: string[];
+  areasTreatedIds?: string[];
+}
+
+/** Optional weather / pH recorded on every chemical confirmed in the same request. */
+export interface ChemicalConditionsInput {
+  temperature?: number;
+  windSpeed?: number;
+  windDirection?: string;
+  phLevel?: number;
+}
+
+/** A National Weather Service reading near the stop; GET /api/crm/crew/chemicals/conditions. */
+export interface ConditionsReading {
+  temperatureF: number | null;
+  windMph: number | null;
+  windDirection: string | null;
+  description: string | null;
+  observedAt: string;
+  source: 'observation' | 'forecast';
+}
+
+/** GET /api/crm/crew/chemicals/catalog?visitId=… — what the crew needs to add a chemical. */
+export interface ChemicalCatalog {
+  products: { id: string; name: string; defaultUnitId: string | null }[];
+  units: { id: string; name: string }[];
+  methods: { id: string; name: string }[];
+  targets: { id: string; name: string }[];
+  areasTreated: { id: string; name: string }[];
+  conditionsDisplay: 'weather' | 'ph' | 'both' | 'neither';
 }
 
 // GET /api/crm/crew/chemicals/confirm — whether the confirm-chemicals gate
@@ -239,4 +287,17 @@ export interface VisitRequisition {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** GET /api/crm/crew/reference — the company's labels, Safety Data Sheets, SOPs and training. */
+export interface ReferenceDocument {
+  id: string;
+  category: 'sds' | 'label' | 'sop' | 'training' | 'equipment' | 'other';
+  title: string;
+  description: string | null;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  revisionDate: string | null;
+  productIds: string[];
 }
