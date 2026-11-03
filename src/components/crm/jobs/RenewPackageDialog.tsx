@@ -22,6 +22,9 @@ import {
   usePackageRenewalPlan,
   useRenewPackageJob,
 } from "@/lib/hooks/use-package-renewal";
+import { renewedRateCents } from "@/lib/package-renewal";
+import type { RoundingRule } from "@/lib/pricing/adjust";
+import { RenewalRateIncreaseFields, parseRenewalRateIncrease } from "@/components/crm/jobs/RenewalRateIncreaseFields";
 
 function fmtDate(ymd: string | null): string {
   if (!ymd) return "—";
@@ -44,17 +47,26 @@ export function RenewPackageDialog({
   const { data: plan, isLoading, error } = usePackageRenewalPlan(jobId, useTemplateDates, open);
   const renew = useRenewPackageJob();
   const [allowSameSeason, setAllowSameSeason] = useState(false);
+  const [percentText, setPercentText] = useState("");
+  const [rounding, setRounding] = useState<RoundingRule>("cent");
+  const rateIncrease = parseRenewalRateIncrease(percentText, rounding);
 
   const services = plan?.values.services ?? [];
+  // The plan carries last season's rates; the raise is shown here and applied for real on Renew.
+  const lineCents = (rateCents: number, qty: number, raised: boolean) =>
+    Math.round((raised ? renewedRateCents(rateCents || 0, rateIncrease) : rateCents || 0) * (qty || 1));
   const totalCents = services
     .filter((s) => s.included)
-    .reduce((sum, s) => sum + Math.round((s.rateCents || 0) * (s.qty || 1)), 0);
+    .reduce((sum, s) => sum + lineCents(s.rateCents, s.qty, true), 0);
+  const oldTotalCents = services
+    .filter((s) => s.included)
+    .reduce((sum, s) => sum + lineCents(s.rateCents, s.qty, false), 0);
   const blocked = !plan || !!plan.existingRenewal || services.length === 0
-    || (!!plan.sameSeasonJob && !allowSameSeason);
+    || (!!plan.sameSeasonJob && !allowSameSeason) || rateIncrease === null;
 
   async function handleRenew() {
     try {
-      const res = await renew.mutateAsync({ jobId, allowSameSeason, useTemplateDates });
+      const res = await renew.mutateAsync({ jobId, allowSameSeason, useTemplateDates, rateIncrease: rateIncrease ?? null });
       toast.success(`Renewed for ${res.targetSeason ?? "next season"}`);
       onOpenChange(false);
       onRenewed?.(res.newJobId);
@@ -64,7 +76,7 @@ export function RenewPackageDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { setAllowSameSeason(false); setUseTemplateDates(false); } onOpenChange(o); }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { setAllowSameSeason(false); setUseTemplateDates(false); setPercentText(""); setRounding("cent"); } onOpenChange(o); }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Renew for next season</DialogTitle>
@@ -108,6 +120,13 @@ export function RenewPackageDialog({
                 </span>
               </span>
             </label>
+
+            <RenewalRateIncreaseFields
+              percentText={percentText}
+              onPercentTextChange={setPercentText}
+              rounding={rounding}
+              onRoundingChange={setRounding}
+            />
 
             {plan.templateNote && (
               <p className="text-xs text-amber-700 dark:text-amber-400">{plan.templateNote}</p>
@@ -174,7 +193,12 @@ export function RenewPackageDialog({
                     <tr key={i} className="border-t dark:border-neutral-700">
                       <td className="px-2 py-1.5 text-slate-800 dark:text-neutral-200">{s.serviceName}</td>
                       <td className="px-2 py-1.5 text-slate-600 dark:text-neutral-400">{fmtDate(s.startDate)}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums">{formatCurrency(Math.round((s.rateCents || 0) * (s.qty || 1)))}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">
+                        {rateIncrease && (
+                          <span className="mr-1.5 text-slate-400 line-through dark:text-neutral-500">{formatCurrency(lineCents(s.rateCents, s.qty, false))}</span>
+                        )}
+                        {formatCurrency(lineCents(s.rateCents, s.qty, true))}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -183,7 +207,12 @@ export function RenewPackageDialog({
                     <td className="px-2 py-1.5" colSpan={2}>
                       Program {fmtDate(plan.firstDate)} – {fmtDate(plan.lastDate)}
                     </td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">{formatCurrency(totalCents)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {rateIncrease && (
+                        <span className="mr-1.5 font-normal text-slate-400 line-through dark:text-neutral-500">{formatCurrency(oldTotalCents)}</span>
+                      )}
+                      {formatCurrency(totalCents)}
+                    </td>
                   </tr>
                 </tfoot>
               </table>
