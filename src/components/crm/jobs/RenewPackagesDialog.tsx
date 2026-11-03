@@ -27,6 +27,12 @@ import {
   useSetPackageRenewalSetting,
   type PackageRenewalCandidate,
 } from "@/lib/hooks/use-package-renewal";
+import type { RoundingRule } from "@/lib/pricing/adjust";
+import { RenewalRateIncreaseFields, parseRenewalRateIncrease } from "@/components/crm/jobs/RenewalRateIncreaseFields";
+
+/** Renewals in flight at once. One client's jobs always run one after another, so the
+ *  "already has this package for that season" check sees the client's earlier renewals. */
+const CONCURRENCY = 4;
 
 type RowResult = { ok: true; newJobId: string; usedJobDates: boolean } | { ok: false; message: string };
 
@@ -58,6 +64,18 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
   const [results, setResults] = useState<Record<string, RowResult>>({});
   const [running, setRunning] = useState(false);
   const [useTemplateDates, setUseTemplateDates] = useState(false);
+  const [percentText, setPercentText] = useState("");
+  const [rounding, setRounding] = useState<RoundingRule>("cent");
+  const rateIncrease = parseRenewalRateIncrease(percentText, rounding);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+
+  // Closing or reloading the tab mid-run stops the renewals that haven't started yet.
+  useEffect(() => {
+    if (!running) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [running]);
 
   useEffect(() => {
     if (open && season == null && seasons.length > 0) setSeason(defaultSeason(today, seasons));
@@ -75,7 +93,7 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
 
   function close(o: boolean) {
     if (running) return;
-    if (!o) { setResults({}); setSeason(null); setUseTemplateDates(false); }
+    if (!o) { setResults({}); setSeason(null); setUseTemplateDates(false); setPercentText(""); setRounding("cent"); }
     onOpenChange(o);
   }
 
@@ -85,12 +103,13 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
 
   async function handleRenew() {
     const ids = selectedIds;
-    if (ids.length === 0) return;
+    if (ids.length === 0 || rateIncrease === null) return;
     setRunning(true);
+    setProgress({ done: 0, total: ids.length });
     let ok = 0;
-    for (const id of ids) {
+    const renewOne = async (id: string) => {
       try {
-        const res = await renew.mutateAsync({ jobId: id, useTemplateDates });
+        const res = await renew.mutateAsync({ jobId: id, useTemplateDates, rateIncrease: rateIncrease ?? null });
         setResults((prev) => ({
           ...prev,
           [id]: { ok: true, newJobId: res.newJobId, usedJobDates: useTemplateDates && res.dateSource === "job" },
@@ -100,7 +119,21 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
         const message = err instanceof PackageRenewalRefused ? err.message : mutationErrorMessage(err, (err as Error)?.message || "Failed");
         setResults((prev) => ({ ...prev, [id]: { ok: false, message } }));
       }
+      setProgress((p) => ({ ...p, done: p.done + 1 }));
+    };
+    const clientOf = new Map(rows.map((r) => [r.id, r.clientId]));
+    const byClient = new Map<string, string[]>();
+    for (const id of ids) {
+      const key = clientOf.get(id) ?? id;
+      byClient.set(key, [...(byClient.get(key) ?? []), id]);
     }
+    const queue = [...byClient.values()];
+    const worker = async () => {
+      for (let group = queue.shift(); group; group = queue.shift()) {
+        for (const id of group) await renewOne(id);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
     setRunning(false);
     const failed = ids.length - ok;
     if (failed === 0) toast.success(`Renewed ${ok} package job${ok === 1 ? "" : "s"}`);
@@ -150,6 +183,21 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
             <Checkbox checked={useTemplateDates} disabled={running} onCheckedChange={(v) => setUseTemplateDates(v === true)} />
             Use each package&rsquo;s current dates
           </label>
+        </div>
+
+        <div className="space-y-1">
+          <RenewalRateIncreaseFields
+            percentText={percentText}
+            onPercentTextChange={setPercentText}
+            rounding={rounding}
+            onRoundingChange={setRounding}
+            disabled={running}
+          />
+          {rateIncrease && (
+            <p className="text-xs text-slate-500 dark:text-neutral-400">
+              Applied to every step&rsquo;s rate on each renewed job. Amounts below are last season&rsquo;s.
+            </p>
+          )}
         </div>
 
         {isLoading ? (
@@ -238,9 +286,9 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
 
         <DialogFooter>
           <Button variant="outline" onClick={() => close(false)} disabled={running}>Close</Button>
-          <Button onClick={handleRenew} disabled={running || selectedIds.length === 0}>
+          <Button onClick={handleRenew} disabled={running || selectedIds.length === 0 || rateIncrease === null}>
             <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", running && "animate-spin")} />
-            {running ? "Renewing…" : `Renew ${selectedIds.length} selected`}
+            {running ? `Renewing ${progress.done} of ${progress.total}…` : `Renew ${selectedIds.length} selected`}
           </Button>
         </DialogFooter>
       </DialogContent>
