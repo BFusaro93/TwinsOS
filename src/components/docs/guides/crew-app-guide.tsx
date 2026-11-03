@@ -352,6 +352,29 @@ export function CrewAppGuide() {
           chemicals are loaded at Start Job so the card, the confirmation and the stock deduction
           still work.
         </p>
+        <p>
+          <strong>Label, how applied, conditions and extra products.</strong> These work the same in the browser crew page and in the iOS and Android crew app. Each chemical has a{" "}
+          <strong>View label</strong> link showing its EPA number, re-entry interval, whether it is
+          restricted-use, and the label directions the office entered on the product. If a chemical
+          has no planned amount (no area or application rate was on file), the card says so and the
+          crew enters what they measured. <strong>How applied</strong> opens the method, target and area treated, starting from what the office planned; changing them saves the new values on the record when the chemical is confirmed. Under the list, <strong>Conditions</strong> takes the
+          temperature and wind (and/or pH, depending on the company&apos;s Chemical Tracking
+          setting). The temperature and wind are filled in from the National Weather Service reading nearest the
+          property (tap <strong>Update</strong> to refresh it) and can be corrected; if no reading is
+          available they are typed as before. They&apos;re optional and are saved on every chemical confirmed in that tap.{" "}
+          <strong>Add a chemical</strong> records a product the office didn&apos;t preload, such as a
+          spot treatment or a substitute: choose the product, the amount and the unit. It is saved
+          already confirmed, with the foreman as applicator, and counts toward the compliance report
+          and stock like any other. When the office has filed a label or Safety Data Sheet for the
+          product, <strong>View label</strong> also shows an <strong>Open</strong> button for it.
+        </p>
+        <p>
+          <strong>Reference.</strong> The <strong>Reference</strong> button on the crew home screen
+          (browser) or the top of the schedule (iOS/Android) opens the company&apos;s library of labels,
+          Safety Data Sheets, SOPs and training. Search by title, filter by type, and tap a document to
+          open it. Documents the office marked office-only don&apos;t appear, and opening one needs a
+          connection.
+        </p>
         <Callout>
           If the office left <strong>notes for the crew</strong> on the job, the stop asks the crew to{" "}
           <strong>Acknowledge</strong> them — and <strong>Start Job is disabled until they do</strong>.

@@ -2,7 +2,12 @@ import { File, UploadType } from 'expo-file-system';
 
 import { supabase } from '@/lib/supabase';
 import type {
+  ChemicalCatalog,
+  ChemicalConditionsInput,
   ChemicalConfirmationStatus,
+  ChemicalConfirmItem,
+  ConditionsReading,
+  ReferenceDocument,
   CrewDay,
   CrewDayAction,
   CrewVisitsResponse,
@@ -262,12 +267,49 @@ export async function fetchChemicalConfirmationStatus(visitIds: string[]): Promi
  * chemical_confirmation_required) while any preloaded row is unconfirmed.
  */
 export async function confirmChemicals(
-  items: { id: string; used: boolean; chemicalAmount?: number }[]
+  items: ChemicalConfirmItem[],
+  conditions?: ChemicalConditionsInput
 ): Promise<{ confirmed: number }> {
   return authedFetch(`/api/crm/crew/chemicals/confirm`, {
     method: 'POST',
-    body: JSON.stringify({ items }),
+    body: JSON.stringify({ items, conditions }),
   }) as Promise<{ confirmed: number }>;
+}
+
+/**
+ * GET /api/crm/crew/chemicals/conditions?visitId=… — current temperature and wind at the stop from
+ * the National Weather Service, so conditions are filled in rather than typed. `reading` is null
+ * when the stop has no coordinates, is outside the US, or no station answered.
+ */
+export async function fetchChemicalConditions(visitId: string): Promise<ConditionsReading | null> {
+  const body = (await authedFetch(
+    `/api/crm/crew/chemicals/conditions?visitId=${encodeURIComponent(visitId)}`
+  )) as { reading: ConditionsReading | null };
+  return body.reading;
+}
+
+/** GET /api/crm/crew/chemicals/catalog?visitId=… — products, units, methods, targets and areas. */
+export async function fetchChemicalCatalog(visitId: string): Promise<ChemicalCatalog> {
+  return authedFetch(
+    `/api/crm/crew/chemicals/catalog?visitId=${encodeURIComponent(visitId)}`
+  ) as Promise<ChemicalCatalog>;
+}
+
+/**
+ * POST /api/crm/crew/chemicals/add — records a chemical the office didn't preload.
+ * Saved already confirmed. Online-only, like confirming: it is part of the record
+ * the server checks before Stop Job.
+ */
+export async function addCrewChemical(input: {
+  visitId: string;
+  productId: string;
+  chemicalAmount: number;
+  unitOfMeasureId: string;
+}): Promise<{ id: string }> {
+  return authedFetch(`/api/crm/crew/chemicals/add`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }) as Promise<{ id: string }>;
 }
 
 /** GET /api/crm/crew/upsell-services — services crews may suggest from the field. */
@@ -497,4 +539,15 @@ export function todayLocalDate(): string {
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/** GET /api/crm/crew/reference — Reference Library documents the crew may open. */
+export async function fetchReferenceDocuments(): Promise<ReferenceDocument[]> {
+  return authedFetch(`/api/crm/crew/reference`) as Promise<ReferenceDocument[]>;
+}
+
+/** GET /api/crm/crew/reference/:id/url — a short-lived link to open one document. */
+export async function fetchReferenceDocumentUrl(id: string): Promise<string> {
+  const body = (await authedFetch(`/api/crm/crew/reference/${encodeURIComponent(id)}/url`)) as { url: string };
+  return body.url;
 }

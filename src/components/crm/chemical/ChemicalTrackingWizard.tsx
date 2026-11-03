@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,8 +8,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, FlaskConical, Mail, Printer } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, CloudSun, FlaskConical, Mail, Printer } from "lucide-react";
+import { toast } from "sonner";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useChemicalNoticeStatus } from "@/lib/hooks/use-chemical-wizard";
+import { ApplyConditionsToVisitsDialog } from "./ApplyConditionsToVisitsDialog";
 import { BulkSendChemicalNoticesDialog } from "./BulkSendChemicalNoticesDialog";
 import { printChemicalRouteSheets } from "@/lib/chemical/route-sheet";
 import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
@@ -30,6 +33,13 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
   const { data: allServices = [] } = useCRMServices();
   const [index, setIndex] = useState(0);
   const [bulkSendOpen, setBulkSendOpen] = useState(false);
+  const [conditionsOpen, setConditionsOpen] = useState(false);
+  // Saves whatever the open visit's rows have had edited (null when none is mounted).
+  const saverRef = useRef<(() => Promise<number>) | null>(null);
+  const registerSaver = useCallback((fn: (() => Promise<number>) | null) => {
+    saverRef.current = fn;
+  }, []);
+  const [saving, setSaving] = useState(false);
   const { can } = usePermissions();
 
   const chemicalVisits = useMemo(() => {
@@ -48,6 +58,22 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
   // which would otherwise leave `index` pointing past the end of the array.
   const safeIndex = Math.min(index, Math.max(chemicalVisits.length - 1, 0));
   const current = chemicalVisits[safeIndex];
+  const { data: noticeStatus } = useChemicalNoticeStatus(chemicalVisits.map((v) => v.id), open);
+  const sentCount = chemicalVisits.filter((v) => noticeStatus?.has(v.id)).length;
+
+  /** Saves the open visit's edited rows, then runs `after`. A failed save keeps you on the visit. */
+  async function saveThen(after: () => void) {
+    setSaving(true);
+    try {
+      const saved = await saverRef.current?.();
+      if (saved) toast.success(`Saved ${saved} chemical${saved === 1 ? "" : "s"}`);
+      after();
+    } catch {
+      // The row already showed its own error; stay here so nothing edited is lost.
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -58,9 +84,14 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
             Chemical Tracking — {date}
             {chemicalVisits.length > 0 && (
               <div className="ml-auto mr-6 flex items-center gap-2">
+                {can("chem_add_edit_usage") && (
+                  <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setConditionsOpen(true)}>
+                    <CloudSun className="h-3.5 w-3.5" /> Conditions
+                  </Button>
+                )}
                 {can("chem_send_application_notice") && (
                   <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setBulkSendOpen(true)}>
-                    <Mail className="h-3.5 w-3.5" /> Send notices
+                    <Mail className="h-3.5 w-3.5" /> Send notices{noticeStatus ? ` (${sentCount}/${chemicalVisits.length} sent)` : ""}
                   </Button>
                 )}
                 <Button
@@ -95,40 +126,59 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
                     : ""}
                 </p>
               </div>
-              <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                {safeIndex + 1} of {chemicalVisits.length}
-              </span>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span className="text-xs font-medium text-muted-foreground">
+                  {safeIndex + 1} of {chemicalVisits.length}
+                </span>
+                {noticeStatus && (
+                  noticeStatus.has(current.id) ? (
+                    <span className="flex items-center gap-1 text-[10px] font-medium text-green-700 dark:text-green-400">
+                      <CheckCircle2 className="h-3 w-3" /> Notice sent {new Date(noticeStatus.get(current.id)!).toLocaleDateString()}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">Notice not sent</span>
+                  )
+                )}
+              </div>
             </div>
 
             <ChemicalApplicationPanel
               jobId={current.jobId}
               visitId={current.id}
               propertyId={current.job?.propertyId}
+              registerSaver={registerSaver}
             />
 
             <div className="flex items-center justify-between border-t pt-3">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIndex((i) => Math.max(0, i - 1))}
-                disabled={safeIndex === 0}
+                onClick={() => void saveThen(() => setIndex((i) => Math.max(0, i - 1)))}
+                disabled={saving || safeIndex === 0}
               >
                 <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Previous
               </Button>
-              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+              <Button variant="outline" size="sm" onClick={() => void saveThen(() => onOpenChange(false))} disabled={saving}>
                 Save &amp; Close
               </Button>
               <Button
                 size="sm"
-                onClick={() => setIndex((i) => Math.min(chemicalVisits.length - 1, i + 1))}
-                disabled={safeIndex === chemicalVisits.length - 1}
+                onClick={() => void saveThen(() => setIndex((i) => Math.min(chemicalVisits.length - 1, i + 1)))}
+                disabled={saving || safeIndex === chemicalVisits.length - 1}
               >
-                Next <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                Save &amp; Next <ChevronRight className="ml-1 h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
         )}
       </DialogContent>
+      <ApplyConditionsToVisitsDialog
+        open={conditionsOpen}
+        onClose={() => setConditionsOpen(false)}
+        visitIds={chemicalVisits.map((v) => v.id)}
+        weatherJobId={chemicalVisits[0]?.jobId}
+        dateLabel={date}
+      />
       <BulkSendChemicalNoticesDialog
         open={bulkSendOpen}
         onClose={() => setBulkSendOpen(false)}

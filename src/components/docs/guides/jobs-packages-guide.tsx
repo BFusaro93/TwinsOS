@@ -449,8 +449,10 @@ export function JobsPackagesGuide() {
           <strong>Renewing many at once.</strong> On the Jobs list, click <strong>Renew
           Packages</strong>. Pick the season to renew from and every package job from that season is
           listed with its renewal state. The ones not yet renewed, and not marked Don&apos;t renew, are
-          ticked. Untick any you want to leave out and click <strong>Renew</strong>; each is renewed in
-          turn and its row shows the new job, or why it was skipped.
+          ticked. Untick any you want to leave out and click <strong>Renew</strong>. Several are renewed
+          at once (one client&apos;s jobs in order), the button counts progress, and each row shows the
+          new job or why it was skipped. Keep the window open until it finishes — the browser warns you
+          if you try to leave mid-run.
         </p>
         <p>
           <strong>What stops a double renewal.</strong> A package job can have only one live renewal —
@@ -463,8 +465,14 @@ export function JobsPackagesGuide() {
           <strong>Contracts.</strong> A renewal stays linked to last season&apos;s contract only if that
           contract is still active and runs into the new season. Otherwise the window says so and the
           renewal is not linked, which means it bills on its own on the client&apos;s invoice frequency
-          — link the renewed contract on the new job if it should bill under one. Rates are copied as
-          they were; run a Price Adjustment afterwards if prices go up.
+          — link the renewed contract on the new job if it should bill under one.
+        </p>
+        <p>
+          <strong>Raising prices.</strong> Rates are copied as they were unless you fill in{" "}
+          <strong>Raise rates by __ %</strong> (both renew windows) and pick a rounding — exact cent,
+          nearest $0.25, $1 or $5. Every step&apos;s rate on the new job goes up by that percent, rounded
+          the same way as a Price Adjustment run; a $0 step stays $0. The single-job window shows each
+          step&apos;s old and new rate and the new total. Last season&apos;s job is not changed.
         </p>
         <p>
           <strong>Clients who aren&apos;t coming back.</strong> On the job, More (…) →{" "}

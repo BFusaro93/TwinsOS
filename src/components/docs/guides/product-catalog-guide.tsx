@@ -209,6 +209,34 @@ export function ProductCatalogGuide() {
           even one with no chemicals recorded.
         </p>
         <p>
+          <strong>Reference Library (labels and Safety Data Sheets).</strong> Open{" "}
+          <strong>Reference Library</strong> in the <strong>Tools</strong> sidebar to keep every
+          chemical label and Safety Data Sheet in one place, along with SOPs, training material
+          and equipment lists. <strong>Upload documents</strong> takes PDFs, images, Word and Excel
+          files, several at a time; each one gets a type (SDS, label, SOP, training, equipment,
+          other), an optional revision date, and the chemical products it covers. Documents linked to
+          a product appear on that product&apos;s page under <strong>Labels &amp; Safety Data Sheets</strong>{" "}
+          and open from the crew&apos;s <strong>View label</strong> on a stop. You can also add one straight from the product: <strong>Add document</strong> on its page uploads the file into the library already linked to that product. Everything in the library is
+          also on the crew app&apos;s <strong>Reference</strong> screen (browser and iOS/Android), with
+          search and filters; untick <strong>Show to crews</strong> to keep a document office-only.
+          Anyone with a CRM seat can open the library; adding, editing and deleting needs the
+          CRM Settings permission.
+        </p>
+        <p>
+          <strong>Working through a day in the Chemical Tracking dialog.</strong> Open it from the
+          Dispatch Board&apos;s <strong>Chemical Tracking</strong> button. <strong>Save &amp; Next</strong>{" "}
+          saves any chemical you edited on the open visit and moves on (visits you didn&apos;t touch
+          are left as they are, so nothing is confirmed by accident); <strong>Previous</strong> and{" "}
+          <strong>Save &amp; Close</strong> save the same way. Each visit shows whether its Notice of
+          Treatment email has been sent, and <strong>Send notices</strong> shows how many of the day&apos;s
+          visits have gone out. <strong>Conditions</strong> records one temperature, wind and pH for
+          every visit in the list at once, and <strong>Fill from weather</strong> there (and on each
+          visit&apos;s own Conditions box) pulls the temperature and wind from the National Weather
+          Service &mdash; the same service as the board&apos;s weather chip &mdash; using the reading
+          nearest the time the chemicals went on, when that is within the last week. You can edit
+          the figures before saving.
+        </p>
+        <p>
           <strong>Sending many notices at once.</strong> In the Chemical Tracking wizard click{" "}
           <strong>Send notices</strong>, or select visits on the Dispatch Board and choose{" "}
           <strong>Actions &gt; Send Chemical Notices</strong>. The dialog sorts the visits into{" "}

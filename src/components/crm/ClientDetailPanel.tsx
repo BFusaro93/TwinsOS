@@ -1990,13 +1990,13 @@ function AddPropertyDialog({ clientId, open, onOpenChange, property }: { clientI
   );
 }
 
-// The client's number custom fields, as this property's own values. The client's value is
+// The client's custom fields (number and text), as this property's own values. The client's value is
 // the default (set on Edit Client > Custom Fields); a value entered here overrides it for
-// this property only — two properties can carry two different areas. Auto-saves per field on blur — independent of the dialog's own Save button, same pattern
+// this property only — two properties can carry two mulch colors, or two different areas. Auto-saves per field on blur — independent of the dialog's own Save button, same pattern
 // as other property sub-panels. The built-in takeoffs are the Measurements inputs above.
 function PropertyCustomFieldsSection({ propertyId, clientId }: { propertyId: string; clientId: string }) {
   const { data: fieldDefs = [] } = useRateMatrixFieldDefs("property");
-  const customDefs = fieldDefs.filter((d) => d.fieldType === "number" && !isBuiltInAreaKey(d.fieldKey));
+  const customDefs = fieldDefs.filter((d) => (d.fieldType === "number" || d.fieldType === "text") && !isBuiltInAreaKey(d.fieldKey));
   const { data: values = [] } = usePropertyCustomFieldValues(propertyId);
   const { data: clientValues = [] } = useClientCustomFieldValues(clientId);
   const upsertValue = useUpsertPropertyCustomFieldValue();

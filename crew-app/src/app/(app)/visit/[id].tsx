@@ -15,10 +15,24 @@ import {
 } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 
+import {
+  AddChemicalForm,
+  ChemicalApplyFields,
+  ChemicalConditionsFields,
+  ChemicalLabel,
+  EMPTY_CONDITIONS,
+  conditionsFromReading,
+  conditionsPayload,
+  type ChemApplyEdit,
+  type ConditionsDraft,
+} from '@/components/chemical-crew';
 import { SyncStatusChip } from '@/components/sync-status-chip';
 import { ThemedText } from '@/components/themed-text';
 import {
   confirmChemicals,
+  fetchChemicalCatalog,
+  fetchChemicalConditions,
+  fetchReferenceDocuments,
   fetchChemicalConfirmationStatus,
   fetchJobProducts,
   fetchStopChemicals,
@@ -51,7 +65,11 @@ import type {
   SuggestWorkPayload,
 } from '@/lib/offline/types';
 import type {
+  ChemicalCatalog,
   ChemicalConfirmationStatus,
+  ChemicalConfirmItem,
+  ConditionsReading,
+  ReferenceDocument,
   CrewStopVisit,
   JobProductMaterial,
   UpsellService,
@@ -127,6 +145,11 @@ export default function StopDetailScreen() {
     waivedVisitIds: [],
   });
   const [chemEdits, setChemEdits] = useState<Record<string, { amount: string; notUsed: boolean }>>({});
+  const [chemCatalog, setChemCatalog] = useState<ChemicalCatalog | null>(null);
+  const [chemApply, setChemApply] = useState<Record<string, ChemApplyEdit>>({});
+  const [chemConditions, setChemConditions] = useState<ConditionsDraft>(EMPTY_CONDITIONS);
+  const [chemWeather, setChemWeather] = useState<ConditionsReading | null>(null);
+  const [refDocs, setRefDocs] = useState<ReferenceDocument[]>([]);
   const [isConfirmingChemicals, setIsConfirmingChemicals] = useState(false);
   const [chemError, setChemError] = useState<string | null>(null);
   const [upsellServices, setUpsellServices] = useState<UpsellService[]>([]);
@@ -219,6 +242,7 @@ export default function StopDetailScreen() {
   // truth — e.g. server-computed actual_hours after a clock-out, or a newly
   // created requisition's real status.
   const prevActiveCountRef = useRef(0);
+  const chemCatalogLoadedRef = useRef(false);
   useEffect(() => {
     const activeCount = queueItems.filter((i) => i.status !== 'failed').length;
     if (prevActiveCountRef.current > 0 && activeCount === 0) {
@@ -263,6 +287,26 @@ export default function StopDetailScreen() {
       ]);
       setChemicals(data);
       setChemConfirm(status);
+      // The pickers for method / target / area and "Add a chemical". Loaded once per
+      // stop; a stale or missing catalog just hides those controls.
+      const catalogVisitId = data[0]?.visitId ?? stopVisitIds[0];
+      if (catalogVisitId && !chemCatalogLoadedRef.current) {
+        chemCatalogLoadedRef.current = true;
+        fetchChemicalCatalog(catalogVisitId).then(setChemCatalog, () => {
+          chemCatalogLoadedRef.current = false;
+        });
+        // Label / SDS documents the office filed for these products.
+        fetchReferenceDocuments().then(setRefDocs, () => undefined);
+        // Weather near the stop fills the conditions once, so the crew corrects rather than types.
+        fetchChemicalConditions(catalogVisitId).then(
+          (reading) => {
+            if (!reading) return;
+            setChemWeather(reading);
+            setChemConditions((prev) => conditionsFromReading(reading, prev));
+          },
+          () => undefined
+        );
+      }
     } catch {
       // Same tolerance as loadPhotos()/loadRequisitions() above — a stale
       // (or empty) list while offline is acceptable; the server still
@@ -352,7 +396,7 @@ export default function StopDetailScreen() {
     chemEdits[c.id] ?? { amount: c.chemicalAmount != null ? String(c.chemicalAmount) : '', notUsed: false };
 
   const handleConfirmChemicals = async () => {
-    const items: { id: string; used: boolean; chemicalAmount?: number }[] = [];
+    const items: ChemicalConfirmItem[] = [];
     for (const c of unconfirmedChemicals) {
       const e = chemEditFor(c);
       if (e.notUsed) {
@@ -364,13 +408,23 @@ export default function StopDetailScreen() {
         setChemError(`Enter how much ${c.productName ?? 'chemical'} was used, or mark it Not used.`);
         return;
       }
-      items.push({ id: c.id, used: true, chemicalAmount: amount });
+      // Only what the crew actually changed is sent; the rest stays as the office planned it.
+      const apply = chemApply[c.id];
+      items.push({
+        id: c.id,
+        used: true,
+        chemicalAmount: amount,
+        ...(apply?.methodId !== undefined ? { applicationMethodId: apply.methodId } : {}),
+        ...(apply?.targetIds !== undefined ? { targetIds: apply.targetIds } : {}),
+        ...(apply?.areasTreatedIds !== undefined ? { areasTreatedIds: apply.areasTreatedIds } : {}),
+      });
     }
     setChemError(null);
     setIsConfirmingChemicals(true);
     try {
-      await confirmChemicals(items);
+      await confirmChemicals(items, conditionsPayload(chemConditions));
       setChemEdits({});
+      setChemApply({});
       await loadChemicals();
       // A Stop Job that was refused while these were unconfirmed is parked as
       // failed in the queue — nothing to retry automatically, the crew taps it.
@@ -594,10 +648,28 @@ export default function StopDetailScreen() {
           isConfirming={isConfirmingChemicals}
           error={chemError}
           blocking={chemBlocked}
+          catalog={chemCatalog}
+          applyEdits={chemApply}
+          onApplyChange={(chemId, next) => setChemApply((prev) => ({ ...prev, [chemId]: next }))}
+          conditions={chemConditions}
+          onConditionsChange={setChemConditions}
+          weather={chemWeather}
+          refDocs={refDocs}
+          addVisitId={activeChemicals[0]?.visitId ?? stopVisitIds[0]}
+          canAdd={progress === 'clocked_in'}
+          onAdded={() => void loadChemicals()}
         />
       ) : null}
 
-      <ChemicalsSection chemicals={activeChemicals} />
+      <ChemicalsSection
+        chemicals={activeChemicals}
+        catalog={chemCatalog}
+        refDocs={refDocs}
+        showAdd={unconfirmedChemicals.length === 0}
+        addVisitId={activeChemicals[0]?.visitId ?? stopVisitIds[0]}
+        canAdd={progress === 'clocked_in'}
+        onAdded={() => void loadChemicals()}
+      />
 
       {progress === 'on_break' && stop.pausedAt ? (
         <View style={styles.blueBanner}>
@@ -813,6 +885,16 @@ function ConfirmChemicalsCard({
   isConfirming,
   error,
   blocking,
+  catalog,
+  applyEdits,
+  onApplyChange,
+  conditions,
+  onConditionsChange,
+  weather,
+  refDocs,
+  addVisitId,
+  canAdd,
+  onAdded,
 }: {
   chemicals: VisitChemicalApplication[];
   editFor: (c: VisitChemicalApplication) => { amount: string; notUsed: boolean };
@@ -821,6 +903,16 @@ function ConfirmChemicalsCard({
   isConfirming: boolean;
   error: string | null;
   blocking: boolean;
+  catalog: ChemicalCatalog | null;
+  applyEdits: Record<string, ChemApplyEdit>;
+  onApplyChange: (id: string, next: ChemApplyEdit) => void;
+  conditions: ConditionsDraft;
+  onConditionsChange: (next: ConditionsDraft) => void;
+  weather: ConditionsReading | null;
+  refDocs: ReferenceDocument[];
+  addVisitId: string | undefined;
+  canAdd: boolean;
+  onAdded: () => void;
 }) {
   return (
     <View style={styles.card}>
@@ -842,7 +934,24 @@ function ConfirmChemicalsCard({
                 <Text style={styles.chemicalRateLabel}>
                   Planned: {c.chemicalAmount} {c.unitName ?? ''}
                 </Text>
-              ) : null}
+              ) : (
+                // The office's estimate is rate x the property's area, so no planned amount means
+                // no area (or rate) was on file. Say so rather than leave a blank box.
+                <Text style={styles.errorText}>
+                  No amount was planned (no property area or application rate on file). Measure what you
+                  apply and enter it.
+                </Text>
+              )}
+              <ChemicalLabel
+                chemical={c}
+                documents={c.productId ? refDocs.filter((d) => d.productIds.includes(c.productId as string)) : []}
+              />
+              <ChemicalApplyFields
+                chemical={c}
+                catalog={catalog}
+                edit={applyEdits[c.id]}
+                onChange={(next) => onApplyChange(c.id, next)}
+              />
               <View style={styles.plannedMaterialActionsRow}>
                 <TextInput
                   style={[styles.qtyInput, e.notUsed && styles.markUsedButtonDisabled]}
@@ -867,6 +976,16 @@ function ConfirmChemicalsCard({
             </View>
           );
         })}
+        <ChemicalConditionsFields
+          display={catalog?.conditionsDisplay ?? 'weather'}
+          value={conditions}
+          onChange={onConditionsChange}
+          reading={weather}
+          onUseReading={weather ? () => onConditionsChange(conditionsFromReading(weather, conditions)) : undefined}
+        />
+        {addVisitId ? (
+          <AddChemicalForm visitId={addVisitId} catalog={catalog} disabled={!canAdd} onAdded={onAdded} />
+        ) : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         <Pressable
           style={({ pressed }) => [
@@ -1280,7 +1399,24 @@ function ServicesSection({
  * nothing when there's nothing marked used for this visit — most visits
  * have no chemical tracking at all.
  */
-function ChemicalsSection({ chemicals }: { chemicals: VisitChemicalApplication[] }) {
+function ChemicalsSection({
+  chemicals,
+  catalog,
+  refDocs,
+  showAdd,
+  addVisitId,
+  canAdd,
+  onAdded,
+}: {
+  chemicals: VisitChemicalApplication[];
+  catalog: ChemicalCatalog | null;
+  refDocs: ReferenceDocument[];
+  /** The confirm card carries the add button while chemicals are still unconfirmed. */
+  showAdd: boolean;
+  addVisitId: string | undefined;
+  canAdd: boolean;
+  onAdded: () => void;
+}) {
   const used = chemicals.filter((c) => c.used);
   if (used.length === 0) return null;
 
@@ -1310,8 +1446,15 @@ function ChemicalsSection({ chemicals }: { chemicals: VisitChemicalApplication[]
             {a.applicationRateLabel ? (
               <Text style={styles.chemicalRateLabel}>{a.applicationRateLabel}</Text>
             ) : null}
+            <ChemicalLabel
+              chemical={a}
+              documents={a.productId ? refDocs.filter((d) => d.productIds.includes(a.productId as string)) : []}
+            />
           </View>
         ))}
+        {showAdd && addVisitId ? (
+          <AddChemicalForm visitId={addVisitId} catalog={catalog} disabled={!canAdd} onAdded={onAdded} />
+        ) : null}
       </View>
     </View>
   );

@@ -16,6 +16,7 @@ import {
   templateRenewalDates,
   type RenewalSourceJob,
   type RenewalSourceProduct,
+  type RenewalRateIncrease,
   type TemplateRenewalDates,
 } from "@/lib/package-renewal";
 import type { CRMPackageService } from "@/types/crm-packages";
@@ -81,6 +82,13 @@ export interface PackageRenewalPlan {
   templateNote: string | null;
 }
 
+export interface RenewalOptions {
+  /** Take step windows from the package template (falls back to the job's dates when it has none). */
+  useTemplateDates?: boolean;
+  /** Raise every step's rate by a percent. */
+  rateIncrease?: RenewalRateIncrease | null;
+}
+
 function samePackage(
   a: { package_id: string | null; package_name: string | null },
   b: { package_id: string | null; package_name: string | null },
@@ -121,7 +129,7 @@ export async function loadPackageRenewalPlan(
   supabase: AnyClient,
   jobId: string,
   today: string,
-  useTemplateDates = false,
+  { useTemplateDates = false, rateIncrease = null }: RenewalOptions = {},
 ): Promise<PackageRenewalPlan> {
   const { data: src, error } = await supabase
     .from("crm_jobs")
@@ -215,7 +223,9 @@ export async function loadPackageRenewalPlan(
     }
   }
 
-  const values = buildRenewalValues(job, (productsRes.data ?? []) as RenewalSourceProduct[], { years, today, keepContract, templateDates });
+  const values = buildRenewalValues(job, (productsRes.data ?? []) as RenewalSourceProduct[], {
+    years, today, keepContract, templateDates, rateIncrease,
+  });
   const stepDates = values.services.map((s) => s.startDate).filter((d): d is string => !!d).sort();
 
   return {
@@ -239,12 +249,14 @@ export async function loadPackageRenewalPlan(
   };
 }
 
-/** Preview of what renewing this job would create (and why it might be refused). */
+/** Preview of what renewing this job would create (and why it might be refused). Rates are
+ *  last season's — the dialog applies "Raise rates by X%" for display (renewedRateCents)
+ *  so typing a percent doesn't re-query; the renewal itself applies it for real. */
 export function usePackageRenewalPlan(jobId: string | null, useTemplateDates = false, enabled = true) {
   const today = todayInZone(useOrgTimeZone());
   return useQuery({
     queryKey: ["package-renewal", "plan", jobId, today, useTemplateDates],
-    queryFn: () => loadPackageRenewalPlan(createClient(), jobId as string, today, useTemplateDates),
+    queryFn: () => loadPackageRenewalPlan(createClient(), jobId as string, today, { useTemplateDates }),
     enabled: !!jobId && enabled,
   });
 }
@@ -311,11 +323,12 @@ export function useRenewPackageJob() {
       jobId,
       allowSameSeason = false,
       useTemplateDates = false,
-    }: { jobId: string; allowSameSeason?: boolean; useTemplateDates?: boolean }) => {
+      rateIncrease = null,
+    }: { jobId: string; allowSameSeason?: boolean } & RenewalOptions) => {
       const supabase = createClient();
       // Always re-read: a preview can be stale (someone else renewed meanwhile).
       // useTemplateDates falls back to the job's own dates when the package has none.
-      const plan = await loadPackageRenewalPlan(supabase, jobId, today, useTemplateDates);
+      const plan = await loadPackageRenewalPlan(supabase, jobId, today, { useTemplateDates, rateIncrease });
       if (plan.existingRenewal) {
         throw new PackageRenewalRefused(`Already renewed as job #${plan.existingRenewal.jobNumber}.`);
       }
@@ -369,6 +382,7 @@ export function useSetPackageRenewalSetting() {
 
 export interface PackageRenewalCandidate {
   id: string;
+  clientId: string;
   jobNumber: number;
   clientName: string;
   packageName: string | null;
@@ -387,7 +401,7 @@ export function usePackageRenewalCandidates(enabled = true) {
     queryFn: async (): Promise<PackageRenewalCandidate[]> => {
       const supabase = createClient();
       type Row = {
-        id: string; job_number: number; status: string; package_name: string | null;
+        id: string; client_id: string; job_number: number; status: string; package_name: string | null;
         package_renewal: string | null; renewed_from_job_id: string | null; total_cents: number | null;
         waiting_list_start: string | null; waiting_list_end: string | null;
         clients: { display_name: string | null } | null;
@@ -396,7 +410,7 @@ export function usePackageRenewalCandidates(enabled = true) {
       const rows = await fetchAllRows<Row>(() =>
         (supabase as AnyClient)
           .from("crm_jobs")
-          .select("id, job_number, status, package_name, package_renewal, renewed_from_job_id, total_cents, waiting_list_start, waiting_list_end, clients(display_name), crm_job_services(start_date, complete_by_date)")
+          .select("id, client_id, job_number, status, package_name, package_renewal, renewed_from_job_id, total_cents, waiting_list_start, waiting_list_end, clients(display_name), crm_job_services(start_date, complete_by_date)")
           .eq("job_type", "package")
           .is("deleted_at", null)
       );
@@ -407,6 +421,7 @@ export function usePackageRenewalCandidates(enabled = true) {
       return rows
         .map((r) => ({
           id: r.id,
+          clientId: r.client_id,
           jobNumber: r.job_number,
           clientName: r.clients?.display_name ?? "",
           packageName: r.package_name,

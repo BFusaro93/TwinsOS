@@ -21,8 +21,19 @@ const Item = z.object({
   used: z.boolean(),
   /** Concentrate amount actually used, in the row's existing unit. Required when used. */
   chemicalAmount: z.number().positive().max(1_000_000).optional(),
+  /** How it was actually applied, when the crew changed it from what the office planned. */
+  applicationMethodId: z.string().uuid().nullable().optional(),
+  targetIds: z.array(z.string().uuid()).max(30).optional(),
+  areasTreatedIds: z.array(z.string().uuid()).max(30).optional(),
 });
-const Body = z.object({ items: z.array(Item).min(1).max(50) });
+/** Conditions at the stop (the company's Conditions setting decides which the crew is asked for). */
+const Conditions = z.object({
+  temperature: z.number().min(-60).max(150).optional(),
+  windSpeed: z.number().min(0).max(200).optional(),
+  windDirection: z.string().trim().max(8).optional(),
+  phLevel: z.number().min(0).max(14).optional(),
+});
+const Body = z.object({ items: z.array(Item).min(1).max(50), conditions: Conditions.optional() });
 
 export async function POST(request: Request) {
   const { supabase, user } = await getRouteAuth(request);
@@ -30,7 +41,7 @@ export async function POST(request: Request) {
 
   const parsed = Body.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  const { items } = parsed.data;
+  const { items, conditions } = parsed.data;
 
   for (const it of items) {
     if (it.used && it.chemicalAmount === undefined) {
@@ -48,6 +59,23 @@ export async function POST(request: Request) {
   if (rowsError) return NextResponse.json({ error: rowsError.message }, { status: 500 });
   if ((rows ?? []).length !== items.length) {
     return NextResponse.json({ error: "Chemical entry not found" }, { status: 404 });
+  }
+
+  // Method/target/area ids come from the client and the write below uses the service role, so
+  // make sure every one is a lookup item of the same company as the rows being confirmed.
+  const lookupIds = [...new Set(items.flatMap((i) => [i.applicationMethodId ?? null, ...(i.targetIds ?? []), ...(i.areasTreatedIds ?? [])]).filter((v): v is string => !!v))];
+  if (lookupIds.length > 0) {
+    const orgIds = [...new Set((rows as { org_id: string }[]).map((r) => r.org_id))];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: found } = await (db as any)
+      .from("crm_chemical_lookup_items")
+      .select("id")
+      .in("id", lookupIds)
+      .in("org_id", orgIds)
+      .is("deleted_at", null);
+    if ((found ?? []).length !== lookupIds.length) {
+      return NextResponse.json({ error: "Unknown method, target or area" }, { status: 400 });
+    }
   }
 
   // A row with no visit can't be tied to the caller's stop, and `rows` was read with the
@@ -145,6 +173,14 @@ export async function POST(request: Request) {
           ? { application_start_time: visit.clocked_in_at }
           : {}),
         ...(it.used && !row.application_end_time ? { application_end_time: nowIso } : {}),
+        // What the crew recorded about the weather / spray water, on the rows actually applied.
+        ...(it.used && it.applicationMethodId !== undefined ? { application_method_id: it.applicationMethodId } : {}),
+        ...(it.used && it.targetIds !== undefined ? { target_ids: it.targetIds } : {}),
+        ...(it.used && it.areasTreatedIds !== undefined ? { areas_treated_ids: it.areasTreatedIds } : {}),
+        ...(it.used && conditions?.temperature !== undefined ? { temperature: conditions.temperature } : {}),
+        ...(it.used && conditions?.windSpeed !== undefined ? { wind_speed: conditions.windSpeed } : {}),
+        ...(it.used && conditions?.windDirection ? { wind_direction: conditions.windDirection } : {}),
+        ...(it.used && conditions?.phLevel !== undefined ? { ph_level: conditions.phLevel } : {}),
         confirmed_at: nowIso,
         confirmed_by: user.id,
       })

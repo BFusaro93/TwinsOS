@@ -1,6 +1,7 @@
 import type { BudgetMethod, NewClientJobFormValues, NewClientJobServiceValues } from "@/types/crm-jobs";
 import type { CRMPackageService } from "@/types/crm-packages";
 import { planPackageLineSteps } from "@/lib/package-schedule";
+import { adjustCents, type RoundingRule } from "@/lib/pricing/adjust";
 
 /**
  * Package renewal ("Renew for next season") — the pure part.
@@ -238,13 +239,30 @@ export interface BuildRenewalOptions {
   keepContract: boolean;
   /** "Use the package's current dates": template windows per step (see templateRenewalDates). */
   templateDates?: TemplateRenewalDates | null;
+  /** "Raise rates by X%": applied to every step's rate. */
+  rateIncrease?: RenewalRateIncrease | null;
+}
+
+export interface RenewalRateIncrease {
+  /** Percent (5 => +5%); decimals allowed. */
+  percent: number;
+  rounding: RoundingRule;
+}
+
+/**
+ * A step's renewed rate. Same maths and rounding as a Price Adjustment run
+ * (adjustCents): a $0 step stays $0, nothing goes below $0.
+ */
+export function renewedRateCents(cents: number, increase: RenewalRateIncrease | null | undefined): number {
+  if (!increase || !increase.percent) return cents;
+  return adjustCents(cents, { method: "percent", amount: increase.percent, rounding: increase.rounding });
 }
 
 /** The Add Job form values for the renewed job. */
 export function buildRenewalValues(
   job: RenewalSourceJob,
   products: RenewalSourceProduct[],
-  { years, today, keepContract, templateDates }: BuildRenewalOptions,
+  { years, today, keepContract, templateDates, rateIncrease }: BuildRenewalOptions,
 ): NewClientJobFormValues {
   const services = [...(job.crm_job_services ?? [])].sort((a, b) => a.sort_order - b.sort_order);
   const stepDates = (idx: number, s: RenewalSourceService): RenewalStepDates =>
@@ -301,7 +319,7 @@ export function buildRenewalValues(
       startRecurring: null,
       assignedTo: s.assigned_to,
       qty: s.qty ?? 1,
-      rateCents: s.rate_cents ?? 0,
+      rateCents: renewedRateCents(s.rate_cents ?? 0, rateIncrease),
       budgetedHours: s.budgeted_hours ?? 0,
       budgetMethod: (s.budget_method ?? "manual") as BudgetMethod,
       teamSize: s.team_size ?? 1,
