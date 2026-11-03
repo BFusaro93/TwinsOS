@@ -25,14 +25,17 @@ export async function GET(
   const clientIds = (await getPortalAccounts(ctx)).map((a) => a.id);
   const { data: owned } = await supabase
     .from("crm_invoices")
-    .select("id")
+    .select("id, client_id")
     .eq("id", id)
-    .in("client_id", clientIds)
     .eq("org_id", ctx.orgId)
     .neq("status", "draft")
     .is("deleted_at", null)
     .maybeSingle();
-  if (!owned) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  // Ownership checked in code, not with .in("client_id", ...): a property
+  // manager's few hundred sub-account ids overflow the URL limit.
+  if (!owned || !clientIds.includes(owned.client_id)) {
+    return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  }
 
   try {
     const result = await renderInvoicePDF(supabase, id, ctx.orgId, null);

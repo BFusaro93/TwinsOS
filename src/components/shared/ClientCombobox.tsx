@@ -18,7 +18,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { CLIENT_SEARCH_LIMIT, useClient, useClientSearch } from "@/lib/hooks/use-clients";
+import { CLIENT_SEARCH_LIMIT, useClient, useClientDisplayName, useClientSearch } from "@/lib/hooks/use-clients";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import type { Client, ClientStatus } from "@/types/crm";
 
@@ -36,6 +36,9 @@ interface ClientComboboxProps {
   excludeIds?: string[];
   /** When set, a first option with this label clears the selection. */
   clearLabel?: string;
+  /** Name to show for `value` while (or if) its record can't be loaded —
+   *  e.g. the client name stored on the estimate. */
+  selectedLabel?: string | null;
 }
 
 /**
@@ -52,6 +55,7 @@ export function ClientCombobox({
   excludeStatuses,
   excludeIds,
   clearLabel,
+  selectedLabel,
 }: ClientComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -60,7 +64,15 @@ export function ClientCombobox({
   const { data: clients = [], isFetching } = useClientSearch(term, { excludeStatuses, excludeIds }, open);
   // The selected client may not be in the current results — resolve its name
   // from its own (cached) record.
-  const { data: selectedClient } = useClient(value);
+  const { data: selectedClient, isError: selectedMissing } = useClient(value);
+  // useClient skips soft-deleted clients, so a record still pointing at a
+  // deleted client rendered "Select client..." and invited an accidental
+  // reassign. Show its name (marked deleted) instead.
+  const { data: fallbackName } = useClientDisplayName(value, selectedMissing && !selectedLabel);
+  const selectedName =
+    selectedClient?.displayName ??
+    selectedLabel ??
+    (fallbackName ? `${fallbackName.displayName}${fallbackName.deleted ? " (deleted)" : ""}` : null);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -74,8 +86,8 @@ export function ClientCombobox({
           disabled={disabled}
           className="w-full justify-between font-normal"
         >
-          <span className={cn("truncate", !selectedClient && "text-muted-foreground")}>
-            {selectedClient?.displayName ?? noneLabel}
+          <span className={cn("truncate", !selectedName && "text-muted-foreground")}>
+            {selectedName ?? noneLabel}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>

@@ -110,6 +110,7 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { shiftYmd, todayInZone } from "@/lib/time/zone";
 import { SearchInput } from "@/components/shared/SearchInput";
+import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 
 // ── multi-invoice charge form (fresh card/bank entry) ───────────────────────
 
@@ -439,7 +440,7 @@ export function AddPaymentDialog({
       queryClient.invalidateQueries({ queryKey: ["crm-invoices"] });
       queryClient.invalidateQueries({ queryKey: ["crm-payments"] });
       queryClient.invalidateQueries({ queryKey: ["clients", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(queryClient);
     };
     invalidate();
     // The card charge is confirmed client-side, but the invoice/balance

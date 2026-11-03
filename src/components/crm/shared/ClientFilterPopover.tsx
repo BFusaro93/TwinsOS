@@ -139,7 +139,7 @@ export function ClientFilterPopover({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[540px] p-0">
+      <PopoverContent align="end" className="w-[min(540px,calc(100vw-1rem))] p-0">
         <div className="flex items-center justify-between px-3 py-2 border-b bg-[#4a4a4a] rounded-t-md">
           <span className="text-sm font-semibold text-white">Filters</span>
           {rows.length > 0 && (
@@ -156,7 +156,8 @@ export function ClientFilterPopover({
             const fieldDef = fields.find((f) => f.value === row.field) ?? fields[0];
             const ops = operatorsFor(fieldDef.type);
             return (
-              <div key={row.id} className="flex items-center gap-1.5">
+              // Phone width: field + operator share the first line, the value gets its own.
+              <div key={row.id} className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap">
                 <Select
                   value={row.field}
                   onValueChange={(v) => {
@@ -164,7 +165,7 @@ export function ClientFilterPopover({
                     updateRow(row.id, { field: v, operator: defaultOperator(def.type), value: "" });
                   }}
                 >
-                  <SelectTrigger className="h-7 text-xs w-44 shrink-0">
+                  <SelectTrigger className="h-7 text-xs min-w-0 flex-1 sm:w-44 sm:flex-none sm:shrink-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="max-h-64">
@@ -189,7 +190,7 @@ export function ClientFilterPopover({
                   value={row.operator}
                   onValueChange={(v) => updateRow(row.id, { operator: v as FilterOperator, value: "" })}
                 >
-                  <SelectTrigger className="h-7 text-xs w-44 shrink-0">
+                  <SelectTrigger className="h-7 text-xs min-w-0 flex-1 sm:w-44 sm:flex-none sm:shrink-0">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -198,7 +199,7 @@ export function ClientFilterPopover({
                     ))}
                   </SelectContent>
                 </Select>
-                <div className="flex-1 min-w-0">
+                <div className="order-last basis-full min-w-0 sm:order-none sm:basis-auto sm:flex-1">
                   {fieldDef.type === "boolean" ? (
                     <Select value={row.value} onValueChange={(v) => updateRow(row.id, { value: v })}>
                       <SelectTrigger className="h-7 text-xs w-full"><SelectValue placeholder="Select…" /></SelectTrigger>

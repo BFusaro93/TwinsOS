@@ -45,19 +45,25 @@ export async function POST(request: Request) {
 
   const supabase = await createClient();
 
-  const { data: invoice } = await supabase
-    .from("crm_invoices")
-    .select("id, org_id, client_id, invoice_number, balance_cents, status, open_dispute_payment_id")
-    .eq("id", invoiceId)
-    // A parent client's login may pay its sub-accounts' invoices; the charge
-    // still records against the invoice's own client (metadata below).
-    .in("client_id", (await getPortalAccounts(ctx)).map((a) => a.id))
-    .eq("org_id", ctx.orgId)
-    // A draft isn't visible in the portal, so it can't be paid from it either.
-    .neq("status", "draft")
-    .is("deleted_at", null)
-    .single();
-  if (!invoice) return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  const [{ data: invoice }, accounts] = await Promise.all([
+    supabase
+      .from("crm_invoices")
+      .select("id, org_id, client_id, invoice_number, balance_cents, status, open_dispute_payment_id")
+      .eq("id", invoiceId)
+      .eq("org_id", ctx.orgId)
+      // A draft isn't visible in the portal, so it can't be paid from it either.
+      .neq("status", "draft")
+      .is("deleted_at", null)
+      .maybeSingle(),
+    getPortalAccounts(ctx),
+  ]);
+  // A parent client's login may pay its sub-accounts' invoices; the charge
+  // still records against the invoice's own client (metadata below). The
+  // membership check is done here rather than as an .in() filter, which put
+  // every sub-account id in the URL and broke past a few hundred.
+  if (!invoice || !accounts.some((a) => a.id === invoice.client_id)) {
+    return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+  }
   if (invoice.status === "void") {
     return NextResponse.json({ error: "This invoice has been voided" }, { status: 400 });
   }

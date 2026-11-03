@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { ymd } from "@/lib/time/zone";
 import { getDashboardTemplate } from "@/lib/reports/dashboard-templates";
 import { panelFromGraphic } from "@/lib/reports/panel-from-graphic";
 import { ALL_REPORTS } from "@/lib/reports/registry";
@@ -56,7 +57,8 @@ import { getReport } from "@/lib/reports/registry";
 import { REPORT_SECTIONS } from "@/types/crm-reports";
 import type { CustomReport, DashboardPanel, DashboardTab, VisualSpec, VisualType } from "@/types/crm-reports";
 import { AnalysisConfigEditor } from "./AnalysisConfigEditor";
-import { defaultFilterValues } from "./ReportFilterBar";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { computePresetRange, defaultFilterValues } from "./ReportFilterBar";
 import { ReportTable } from "./ReportTable";
 import { VisualRenderer } from "./VisualRenderer";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -171,19 +173,14 @@ function panelFromReport(reportKey: string, name: string): DashboardPanel {
   };
 }
 
-/** "This month" range used for panel previews, in the viewer's LOCAL
- *  calendar day — computed fresh on each call (not a module-level constant,
- *  so a long-lived tab doesn't keep previewing last month once it rolls
- *  over) using local Y/M/D components directly rather than
- *  `.toISOString()`, which converts through UTC and can shift the date by
- *  a day for timezones ahead of UTC. */
-function previewDateRange(): { from: string; to: string } {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1);
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return { from: iso(from), to: iso(to) };
+/** "This month" (1st to last day) used for panel previews, on the ORG's
+ *  calendar so it matches what the server runs — computed fresh on each call
+ *  (not a module-level constant, so a long-lived tab doesn't keep previewing
+ *  last month once it rolls over). */
+function previewDateRange(timeZone: string): { from: string; to: string } {
+  const { to: today } = computePresetRange("this_month", timeZone);
+  const [y, m] = today.split("-").map(Number);
+  return { from: ymd(y, m - 1, 1), to: ymd(y, m, 0) };
 }
 
 export function DashboardBuilder({ dashboardId }: { dashboardId?: string }) {
@@ -763,9 +760,10 @@ function PanelPreviewCard({
 }
 
 function VisualPanelPreview({ visual }: { visual: VisualSpec }) {
+  const orgTimeZone = useOrgTimeZone();
   const { data, isLoading, error } = useRunVisualQuery(
     visual,
-    visual.useTabDateRange ? previewDateRange() : undefined
+    visual.useTabDateRange ? previewDateRange(orgTimeZone) : undefined
   );
   if (isLoading) return <Skeleton className="h-32 w-full" />;
   if (error) {
@@ -789,10 +787,11 @@ function ReportPanelPreview({
   params?: Record<string, string>;
 }) {
   const def = getReport(reportKey);
+  const timeZone = useOrgTimeZone();
   const effectiveParams = useMemo(
     // Shared with ReportViewer so an "all_time" default writes range=all here too.
-    () => ({ ...(def ? defaultFilterValues(def.filters) : {}), ...params }),
-    [def, params]
+    () => ({ ...(def ? defaultFilterValues(def.filters, timeZone) : {}), ...params }),
+    [def, params, timeZone]
   );
   const { data, isFetching, error } = useRunReport(reportKey, effectiveParams);
 
@@ -1015,11 +1014,12 @@ function PanelEditor({ panel, tabUsesDateFilter, tabUsesRepFilter, onSave, onCan
   );
 
   const [previewVisual, setPreviewVisual] = useState<VisualSpec | undefined>(undefined);
+  const orgTimeZone = useOrgTimeZone();
   const {
     data: previewData,
     isLoading: previewLoading,
     error: previewError,
-  } = useRunVisualQuery(previewVisual, previewVisual?.useTabDateRange ? previewDateRange() : undefined);
+  } = useRunVisualQuery(previewVisual, previewVisual?.useTabDateRange ? previewDateRange(orgTimeZone) : undefined);
 
   const { grouped, groupBy, aggregates, columns, numericFields, fields, formulas } = builder;
 

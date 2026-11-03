@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { canAccessReportData } from "@/lib/reports/report-access";
+import { getMyTimeZone } from "@/lib/time/org-timezone";
 
 const updateScheduleSchema = z.object({
   recipients: z.array(z.string().email()).min(1).optional(),
@@ -47,6 +49,21 @@ export async function PATCH(
   }
 
   const { recipients, enabled, hourLocal } = parsed.data;
+  // Changing recipients or turning a schedule back on re-sends its data, so the
+  // editor must be able to view the report themselves (the cron sends with
+  // the service role). Pausing (enabled: false) or changing the hour stays open.
+  if (recipients !== undefined || enabled === true) {
+    const { data: existing } = await supabase
+      .from("report_schedules")
+      .select("report_key")
+      .eq("id", id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!existing) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    if (!(await canAccessReportData(supabase, existing.report_key as string, await getMyTimeZone(supabase)))) {
+      return NextResponse.json({ error: "Your role can't view this report" }, { status: 403 });
+    }
+  }
   const { data, error } = await supabase
     .from("report_schedules")
     .update({

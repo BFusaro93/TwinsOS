@@ -214,25 +214,36 @@ export function UsersRolesGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Invoices and invoice lines</strong> need Add/Modify Invoices. Without it, a
-            role can still print, email or QuickBooks-sync an invoice it can see (which locks it
-            and moves a draft to Printed or Sent), but not unlock it or change it. Generate Snow
-            Invoices and Create Invoices from Contracts let a role create the draft invoices those
-            screens generate. Completing a visit, or a one-time job, still creates its automatic
-            invoice for anyone allowed to complete it.
+            role can still print or QuickBooks-sync an invoice it can see (which locks it and
+            moves a draft to Printed), but not unlock it or change it. Marking an invoice Sent, or
+            emailing it, needs Email Invoices. Generate Snow Invoices and Create Invoices from
+            Contracts let a role create the draft invoices those screens generate. Completing a
+            visit, or a one-time job, still creates its automatic invoice for anyone allowed to
+            complete it. Once a job has been invoiced, changing its service rates, quantities or
+            taxable flag needs Add/Modify Invoices.
+          </li>
+          <li>
+            <strong>Job materials on an invoice</strong>: anyone who can work a job&apos;s
+            Products list can take a material off its invoice (Remove from Invoice, Used — do not
+            Invoice, Not Used) while that invoice is still an unlocked draft; the invoice line and
+            totals update with it. Once the invoice has been printed or sent, that needs
+            Add/Modify Invoices, and a locked invoice must be unlocked first.
           </li>
           <li>
             <strong>Estimates</strong> (and their line items, sub-items, equipment, direct
             costs, photos and payment-plan milestones) need Add Estimate to create and Edit
             Estimate to change or delete. Add Estimate alone also covers finishing a new estimate
-            you created that hasn&apos;t been sent. Send Estimate alone can mark an estimate sent,
-            and Add Job alone can mark it accepted when converting it.
+            you created that hasn&apos;t been sent. Send Estimate alone can mark an estimate sent
+            (and nothing else), and Add Job alone can mark an open estimate accepted when
+            converting it to a job.
           </li>
           <li>
             <strong>Project billing milestones</strong> need Add/Modify Projects or Add/Modify
             Invoices. Once an estimate is converted to a project, its milestones belong to the
             project: they show as read-only on the estimate for a role that can edit estimates but
             not projects. Converting the estimate (Add Job) carries them onto the project.
-            Invoicing a milestone needs Add/Modify Invoices on either screen.
+            Invoicing a milestone, or changing whether it is invoiced, needs Add/Modify Invoices
+            on either screen.
           </li>
           <li>
             <strong>Contracts</strong> (and their notes) need Add, Edit or Delete Contract for

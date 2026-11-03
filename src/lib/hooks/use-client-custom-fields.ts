@@ -151,6 +151,23 @@ export interface PropertyCustomFieldDef {
   name: string;
   fieldType: "text" | "number" | "select" | "date";
   sortOrder: number;
+  /** Set when this property field mirrors a client number field: the client's
+   *  own value (keyed by the client def id) shows when the property has none. */
+  clientFieldDefId: string | null;
+}
+
+/**
+ * A job's value for a board/waiting-list custom column: the property's own
+ * value first, then — for a mirrored client field — the client's value.
+ */
+export function jobCustomFieldValue(
+  values: { fieldDefId: string; valueNumber: number | null; valueText: string | null }[] | undefined,
+  def: Pick<PropertyCustomFieldDef, "id" | "clientFieldDefId">,
+) {
+  const has = (v: { valueNumber: number | null; valueText: string | null }) => v.valueNumber != null || v.valueText != null;
+  const own = values?.find((v) => v.fieldDefId === def.id && has(v));
+  if (own) return own;
+  return def.clientFieldDefId ? values?.find((v) => v.fieldDefId === def.clientFieldDefId && has(v)) : undefined;
 }
 
 /**
@@ -190,9 +207,11 @@ export function usePropertyCustomFieldDefs() {
         .order("field_label");
       if (error) throw error;
       return (data ?? [])
-        // Mirrors of client fields already have their own client column.
+        // Mirrors of client number fields are included: the board has no
+        // client-field columns, so this is the only place they can show (with
+        // the client's value as the fallback — jobCustomFieldValue).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .filter((row: any) => !BUILT_IN_TAKEOFF_FIELD_KEYS.has(row.field_key) && !row.client_field_def_id)
+        .filter((row: any) => !BUILT_IN_TAKEOFF_FIELD_KEYS.has(row.field_key))
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((row: any): PropertyCustomFieldDef => ({
           id: row.id,
@@ -200,6 +219,7 @@ export function usePropertyCustomFieldDefs() {
           name: row.field_label,
           fieldType: row.field_type,
           sortOrder: row.sort_order ?? 0,
+          clientFieldDefId: row.client_field_def_id ?? null,
         })) as PropertyCustomFieldDef[];
     },
   });

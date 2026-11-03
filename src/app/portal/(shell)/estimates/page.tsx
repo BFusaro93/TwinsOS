@@ -6,6 +6,7 @@ import PortalEstimatesPage from "@/components/portal/PortalEstimatesPage";
 import { toDisplaySettings } from "@/lib/estimate-display-settings";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
 
 interface LineItemRow {
   id: string;
@@ -61,23 +62,28 @@ export default async function EstimatesPage() {
   const service = createServiceClient();
   const accounts = await getPortalAccounts(ctx);
   const accountNames = subAccountNames(accounts);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: estimates } = await (service as any)
-    .from("estimates")
-    .select(
-      "id, client_id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
-        "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, status, sort_order, row_type, section_name, tier, package_id)"
-    )
-    .in("client_id", accounts.map((a) => a.id))
-    .eq("org_id", ctx.orgId)
-    // Draft and Quote (ready but not yet sent) are internal stages — the
-    // customer only sees an estimate once it has been sent.
-    .not("stage", "in", "(draft,quote)")
-    .is("deleted_at", null)
-    .is("estimate_line_items.deleted_at", null)
-    .order("created_at", { ascending: false })
-    .order("sort_order", { referencedTable: "estimate_line_items", ascending: true })
-    .limit(50) as { data: EstimateRow[] | null };
+  const { data: estimates } = await queryByClientIds<EstimateRow>(
+    accounts.map((a) => a.id),
+    (ids) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (service as any)
+        .from("estimates")
+        .select(
+          "id, client_id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
+            "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, status, sort_order, row_type, section_name, tier, package_id)"
+        )
+        .in("client_id", ids)
+        .eq("org_id", ctx.orgId)
+        // Draft and Quote (ready but not yet sent) are internal stages — the
+        // customer only sees an estimate once it has been sent.
+        .not("stage", "in", "(draft,quote)")
+        .is("deleted_at", null)
+        .is("estimate_line_items.deleted_at", null)
+        .order("created_at", { ascending: false })
+        .order("sort_order", { referencedTable: "estimate_line_items", ascending: true })
+        .limit(50) as Promise<{ data: EstimateRow[] | null; error: unknown }>,
+    { compare: byColumn("created_at", false), limit: 50 }
+  );
 
   // A sent estimate shows the version the client was sent, not edits the
   // office hasn't sent yet (see lib/estimates/proposal-content.ts). The

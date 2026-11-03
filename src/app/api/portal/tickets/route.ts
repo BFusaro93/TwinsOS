@@ -9,6 +9,7 @@ import { orgEmailFrom } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { logger } from "@/lib/logger";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
+import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
 
 const log = logger.child("portal/tickets");
 
@@ -31,15 +32,20 @@ export async function GET() {
     .single() as { data: Pick<PortalSettingsRow, "allow_tickets" | "portal_ticket_categories"> | null };
 
   const clientIds = (await getPortalAccounts(ctx)).map((a) => a.id);
-  const { data: tickets } = await supabase
-    .from("crm_tickets")
-    .select("id, client_id, ticket_number, subject, category, status, priority, created_at, body")
-    .in("client_id", clientIds)
-    .eq("org_id", ctx.orgId)
-    .eq("visible_to_client", true)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const { data: tickets } = await queryByClientIds(
+    clientIds,
+    (ids) =>
+      supabase
+        .from("crm_tickets")
+        .select("id, client_id, ticket_number, subject, category, status, priority, created_at, body")
+        .in("client_id", ids)
+        .eq("org_id", ctx.orgId)
+        .eq("visible_to_client", true)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(50),
+    { compare: byColumn("created_at", false), limit: 50 }
+  );
 
   const categories = await getEffectiveTicketCategories(supabase, ctx.orgId, settings?.portal_ticket_categories);
 

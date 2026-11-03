@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
+import { isUuid } from "../../id-param";
 import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { PM_SCHEDULE_SELECT, shapePmSchedule } from "../shape";
 import { updatePmScheduleSchema } from "../validation";
@@ -10,6 +11,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "pm_schedules:read", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // A non-uuid id reached Postgres as a cast error and came back a 500.
+  if (!isUuid(id)) return jsonError("PM schedule not found", 404);
 
   const { data, error } = await db
     .from("pm_schedules")
@@ -30,6 +33,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "pm_schedules:write:safe", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // A non-uuid id reached Postgres as a cast error and came back a 500.
+  if (!isUuid(id)) return jsonError("PM schedule not found", 404);
 
   const parsed = updatePmScheduleSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);

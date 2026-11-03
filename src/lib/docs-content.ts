@@ -2067,6 +2067,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Yes. The Date Window on the Waiting List has a preset dropdown (Next 30 days, This week, This month, This quarter, This year, Next 90 days) and Custom range if you edit either date. Your choice is saved to your login, so it is still there after a refresh. Presets are remembered by name, so 'This quarter' still means the current quarter next month.",
       },
       {
+        q: "Does Nearby → Schedule Today create a duplicate visit for a waiting-list job?",
+        a: "No. A waiting-list job has no visit while it waits; the Waiting List shows the job's services, not visits. Dispatching a service gives it its one visit, which moves it off the list and onto the board. Example: a job has Spring Clean-up and Mulch. You dispatch Spring Clean-up for Monday and the crew completes it. On Thursday, Nearby → Schedule Today next to that client creates Mulch's first and only visit for Thursday, so Mulch leaves the list and lands on Thursday's board. The job ends with exactly two visits, each billed once. A skipped or cancelled visit never happened, so its service goes back on the list. Package jobs are different: each step already has a placeholder visit, so Nearby (like the Waiting List) moves the next due step's placeholder to today instead of creating one, and only offers it once that step's window has opened and its Min Days since the previous step are met.",
+      },
+      {
         q: "Can I schedule a waiting-list job from the client's record?",
         a: "Yes. On the client's Home tab, open the waiting-list job's MORE menu and choose Schedule Job, pick a date and optionally a crew, and dispatch it. It then leaves the Waiting List and shows on the Dispatch Board. The item only appears while the job has no visit yet, and only for logins with the Waiting List permission. View Upcoming in the same menu has a Schedule button per service if you want to send one service out and keep the others waiting.",
       },
@@ -2128,11 +2132,15 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I quote a spot treatment or part of a property so chemical quantities use that area?",
-        a: "On the estimate line open the notes menu and use the Treated Area tab to enter the sq ft you will actually treat. It carries to the job service when you convert, and you can also edit it on the job's Services tab. Materials Needed, the Daily Load List, the crew's preloaded amounts and the application panel use it instead of the property measurement. Leave it blank to use the property's measurement.",
+        a: "On the estimate line open the notes menu and use the Treated Area tab to enter the area you will actually treat, in the same unit as the service's area field (sq ft, or linear ft for a perimeter service). It carries to the job service when you convert, and you can also edit it on the job's Services tab. Materials Needed, the Daily Load List, the crew's preloaded amounts and the application panel use it instead of the property measurement. Leave it blank to use the property's measurement.",
       },
       {
         q: "How do I make a service like parking-lot weed control use the Parking Lot square footage?",
         a: "Open the service, go to its Chemicals tab and set Area measurement for chemical quantities to Parking Lot / Hardscape Sq. Ft. Without it the service uses the org's Area Custom Field from Settings > Chemical Tracking (for example Turf Sq. Ft.). A treated area on the job service overrides both.",
+      },
+      {
+        q: "How do I estimate a perimeter or barrier product that is labelled per linear foot?",
+        a: "In Settings > Chemical Tracking add an area unit such as 100 Linear Ft or 1,000 Linear Ft (new orgs already have both) and use it on the product's Application Rate. Then open the service's Chemicals tab and set Area measurement for chemical quantities to a linear-foot field such as Linear Ft. Perimeter. A linear-foot rate is only sized from a linear-foot field and a square-foot rate only from an area field; when they don't match no amount is estimated and the Daily Load List and application panel say why.",
       },
       {
         q: "How do I skip one step of a package on an estimate?",

@@ -155,6 +155,14 @@ export function ClientsGuide() {
             and filters match, ready for a bulk action.
           </li>
           <li>
+            <strong>Bulk actions run on the server.</strong> Tags, Bulk Edit, Activate, Cancel and
+            Close as Lost apply to the whole selection in one step (up to 10,000 clients), and each
+            changed client gets a timeline entry. You can close the tab once the success message
+            shows. Automations they set off (for example &quot;when tag X is added&quot;) run right
+            away for up to 50 clients; for a bigger selection they are queued and go out within
+            about 15 minutes.
+          </li>
+          <li>
             <strong>Export.</strong> <strong>Import / Export &gt; Export</strong> downloads a CSV of
             exactly the clients your current search and filters match, all of them, not just the
             ones loaded on screen. Clear the search and filters first to export everyone.

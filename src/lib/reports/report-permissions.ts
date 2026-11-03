@@ -23,7 +23,7 @@ export const ESTIMATE_DATASET_KEYS = [
 // Visit-level labor cost / job costing. Deliberately the union of the costing
 // reports' own keys (cogs, job costing, job cost summary) plus job hours, so no
 // role that can already see those reports is locked out of the matching data.
-const JOB_COSTING_DATASET_KEYS = [
+export const JOB_COSTING_DATASET_KEYS = [
   "sched_rpt_job_costing",
   "sched_rpt_job_cost_summary",
   "sched_rpt_cogs",
@@ -148,6 +148,14 @@ export const REPORT_PERMISSION_KEYS: Record<string, string[]> = {
   "statements": [...ACCOUNTING_DATASET_KEYS, "crm_rpt_client_balance"],
   "production-rate-accuracy": JOB_COSTING_DATASET_KEYS,
   "avb-hours-custom": JOB_COSTING_DATASET_KEYS,
+  // The fixed-window AvB reports read the same rpt_job_visits labor/revenue
+  // rows; without an entry they showed in every role's catalog and could be
+  // scheduled by email to anyone.
+  "avb-hours-today": JOB_COSTING_DATASET_KEYS,
+  "avb-hours-yesterday": JOB_COSTING_DATASET_KEYS,
+  "avb-hours-week-to-date": JOB_COSTING_DATASET_KEYS,
+  "avb-hours-last-week": JOB_COSTING_DATASET_KEYS,
+  "avb-hours-month-to-date": JOB_COSTING_DATASET_KEYS,
   "contract-service-usage": CONTRACT_DATASET_KEYS,
   "clients-leads-stats": ["crm_rpt_new_clients", "crm_rpt_new_leads", "crm_rpt_new_client_count", "crm_rpt_company_scorecard"],
   "address-verification": ["crm_rpt_client_contact_list", "crm_rpt_client_phone_list", "sched_rpt_visits"],

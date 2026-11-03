@@ -45,8 +45,10 @@ export function ClientList({
 
   // Search, filters and paging all run server-side (crm_search_clients).
   const debouncedSearch = useDebouncedValue(search);
+  // Filter text/number inputs update on every keystroke; debounce them like the search box.
+  const debouncedFilters = useDebouncedValue(filterRows);
   const { data, isPending, isFetching, hasNextPage, isFetchingNextPage, fetchNextPage } =
-    useClientsPage({ search: debouncedSearch, filters: filterRows });
+    useClientsPage({ search: debouncedSearch, filters: debouncedFilters });
   const isLoading = isPending;
   const filtered = useMemo(() => data?.pages.flatMap((p) => p.clients) ?? [], [data]);
   const total = data?.pages[0]?.total ?? filtered.length;

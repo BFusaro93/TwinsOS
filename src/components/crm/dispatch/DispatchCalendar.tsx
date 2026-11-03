@@ -142,6 +142,9 @@ export function DispatchCalendar({
   );
 
   const { data: visits = [], isLoading } = useVisitsForDate(from, to);
+  // A card held across a week change isn't in the new week's data, so the tap that should
+  // place it silently did nothing. Put it down when the week changes.
+  useEffect(() => { setHeld(null); }, [from]);
   const { data: crews = [] } = useCrews(true);
   const updateVisit = useUpdateVisit();
 

@@ -31,6 +31,7 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { SendApplicationNoticeDialog } from "./SendApplicationNoticeDialog";
 import { printAppliedNotice } from "@/lib/chemical/route-sheet";
+import { areaKindMismatchHint } from "@/lib/chemical-area";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ChemicalApplication } from "@/types/chemical-tracking";
 import { toast } from "sonner";
@@ -449,7 +450,7 @@ export function ChemicalApplicationPanel({ jobId, visitId, registerSaver }: Prop
 
   const [addingProductId, setAddingProductId] = useState("");
   const { data: addingProductRates = [] } = useChemicalApplicationRates(addingProductId || undefined);
-  const { data: areaValue = null } = useChemicalJobAreaValue(jobId, settings?.areaCustomFieldId, addingProductId || null);
+  const { data: area = null } = useChemicalJobAreaValue(jobId, settings?.areaCustomFieldId, addingProductId || null, visitId);
   const unitsById = new Map([...units, ...areaUnits].map((u) => [u.id, u]));
 
   const employees = employeesRaw.map((e) => ({
@@ -511,10 +512,12 @@ export function ChemicalApplicationPanel({ jobId, visitId, registerSaver }: Prop
     let solutionAmount: number | null | undefined;
     let solutionUnitOfMeasureId: string | null | undefined;
 
-    if (settings?.autoCalcQuantity && settings.areaCustomFieldId) {
+    if (settings?.autoCalcQuantity) {
       const defaultRate = addingProductRates.find((r) => r.isDefault) ?? addingProductRates[0];
-      if (defaultRate && areaValue != null) {
-        const computed = calcChemicalAndSolution(defaultRate, areaValue, unitsById);
+      if (defaultRate && area) {
+        const computed = calcChemicalAndSolution(defaultRate, area.value, unitsById, area.kind);
+        const mismatch = computed == null ? areaKindMismatchHint(defaultRate, area, unitsById) : null;
+        if (mismatch) toast.info(`No amount estimated: ${mismatch}. Enter the amount by hand.`);
         if (computed != null) {
           chemicalAmount = Math.round(computed.chemicalAmount * 10000) / 10000;
           unitOfMeasureId = computed.chemicalUnitOfMeasureId;

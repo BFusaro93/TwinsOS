@@ -265,7 +265,18 @@ export function ClientsTable({
 
   // Search, filters and paging all run server-side (crm_search_clients).
   const debouncedSearch = useDebouncedValue(search);
-  const queryParams = useMemo(() => ({ search: debouncedSearch, filters: filterRows }), [debouncedSearch, filterRows]);
+  // Filter text/number inputs update on every keystroke; debounce them like the search box.
+  const debouncedFilters = useDebouncedValue(filterRows);
+  const queryParams = useMemo(() => ({ search: debouncedSearch, filters: debouncedFilters }), [debouncedSearch, debouncedFilters]);
+
+  // A selection belongs to the search + filters it was made under: once they
+  // change, rows that are no longer shown must not stay selected (a "select all
+  // 4,600 matching" then narrowed to 50 would otherwise act on the hidden 4,550).
+  const [selectionParams, setSelectionParams] = useState(queryParams);
+  if (selectionParams !== queryParams) {
+    setSelectionParams(queryParams);
+    setSelectedIds(new Set());
+  }
   const { data, isPending: isLoading, isFetching, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useClientsPage(queryParams);
   const filtered = useMemo(() => data?.pages.flatMap((p) => p.clients) ?? [], [data]);

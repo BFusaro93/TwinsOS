@@ -1376,6 +1376,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                             value={(headerEdits.client_id as string) ?? estimate.clientId}
                             onValueChange={(v) => { if (v) patchHeader("client_id", v); }}
                             excludeStatuses={["inactive", "cancelled"]}
+                            selectedLabel={headerEdits.client_id ? null : estimate.clientName}
                           />
                         </FieldRow>
                         {(clientProperties?.length ?? 0) > 0 && (

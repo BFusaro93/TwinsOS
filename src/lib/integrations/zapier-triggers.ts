@@ -22,8 +22,8 @@ export interface PollingTriggerConfig {
    * on the same row (quantity_on_hand vs minimum_stock), "due by today"
    * (next_due_date vs now), or a threshold check parameterized by the Zap
    * author's own trigger input fields (meter_threshold's meterId/threshold/
-   * operator query params). Fetches a wider page (200) before filtering and
-   * slicing to the usual 25, since the filter can reject most rows.
+   * operator query params). Fetches a wider page (500) before filtering and
+   * slicing to the usual page size, since the filter can reject most rows.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   postFilter?: (row: any, searchParams: URLSearchParams, ctx: { orgToday: string }) => boolean;
@@ -58,8 +58,11 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
     table: "clients",
     columns: "id, display_name, primary_email, primary_phone, client_since, updated_at",
     filters: { status: "active" },
+    // Ordered by when the client converted, not by updated_at: any edit to an
+    // old active client used to bump it to the top of the page.
+    requireNotNull: ["client_since"],
     hasSoftDelete: true,
-    orderBy: "updated_at",
+    orderBy: "client_since",
     map: (c) => ({
       id: c.id, displayName: c.display_name, email: c.primary_email, phone: c.primary_phone,
       clientSince: c.client_since, updatedAt: c.updated_at,
@@ -155,7 +158,10 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
     columns: "id, invoice_number, client_id, invoice_date, due_date, status, amount_paid_cents, balance_cents, created_at",
     filters: { status: "paid" },
     hasSoftDelete: true,
-    orderBy: "invoice_date",
+    // crm_invoices has no paid_at; updated_at is when it last changed, which
+    // includes going paid. Ordering by invoice_date never surfaced an old
+    // invoice paid today. (id is unchanged, so later edits don't re-fire.)
+    orderBy: "updated_at",
     map: (i) => ({
       id: i.id, invoiceNumber: i.invoice_number, clientId: i.client_id, invoiceDate: i.invoice_date,
       dueDate: i.due_date, status: i.status, amountPaidCents: i.amount_paid_cents,
@@ -220,13 +226,16 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
   },
   work_order_completed: {
     table: "work_orders",
-    columns: "id, work_order_number, title, asset_id, asset_name, priority, updated_at",
+    columns: "id, work_order_number, title, asset_id, asset_name, priority, completed_at, updated_at",
     filters: { status: "done" },
+    // completed_at, not updated_at: editing an old done work order reported it
+    // as "completed" again with the edit time.
+    requireNotNull: ["completed_at"],
     hasSoftDelete: true,
-    orderBy: "updated_at",
+    orderBy: "completed_at",
     map: (w) => ({
       id: w.id, workOrderNumber: w.work_order_number, title: w.title, assetId: w.asset_id,
-      assetName: w.asset_name, priority: w.priority, completedAt: w.updated_at,
+      assetName: w.asset_name, priority: w.priority, completedAt: w.completed_at ?? w.updated_at,
     }),
   },
   requisition_created: {
@@ -270,8 +279,12 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
     // next_due_date is an org-calendar date; compare as YYYY-MM-DD strings
     // against the org's today (parsing it as a Date meant UTC midnight).
     postFilter: (p, _searchParams, { orgToday }) => !!p.next_due_date && p.next_due_date <= orgToday,
+    // Zapier dedupes on id, so a bare schedule id fired once EVER — the next
+    // due date never triggered. One event per schedule per due date; the
+    // schedule's own id is scheduleId.
     map: (p) => ({
-      id: p.id, title: p.title, assetId: p.asset_id, assetName: p.asset_name, frequency: p.frequency,
+      id: `${p.id}:${p.next_due_date}`, scheduleId: p.id,
+      title: p.title, assetId: p.asset_id, assetName: p.asset_name, frequency: p.frequency,
       nextDueDate: p.next_due_date, lastCompletedDate: p.last_completed_date,
     }),
   },
@@ -281,8 +294,11 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
     hasSoftDelete: true,
     orderBy: "updated_at",
     postFilter: (p) => Number(p.quantity_on_hand) <= Number(p.minimum_stock),
+    // One event per change while low (a bare part id fired once ever, so a
+    // part restocked and run low again never re-alerted); partId is the part.
     map: (p) => ({
-      id: p.id, name: p.name, partNumber: p.part_number, category: p.category,
+      id: `${p.id}:${p.updated_at}`, partId: p.id,
+      name: p.name, partNumber: p.part_number, category: p.category,
       quantityOnHand: p.quantity_on_hand, minimumStock: p.minimum_stock,
       vendorId: p.vendor_id, vendorName: p.vendor_name,
     }),
@@ -316,8 +332,10 @@ export const POLLING_TRIGGERS: Record<ZapierTriggerType, PollingTriggerConfig> =
       const value = Number(m.current_value);
       return operator === "lte" ? value <= threshold : value >= threshold;
     },
+    // One event per reading (a bare meter id fired once ever); meterId is the meter.
     map: (m) => ({
-      id: m.id, name: m.name, unit: m.unit, currentValue: m.current_value, assetId: m.asset_id,
+      id: `${m.id}:${m.last_reading_at ?? m.updated_at}`, meterId: m.id,
+      name: m.name, unit: m.unit, currentValue: m.current_value, assetId: m.asset_id,
       assetName: m.asset_name, lastReadingAt: m.last_reading_at, updatedAt: m.updated_at,
     }),
   },

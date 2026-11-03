@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getEffectiveTicketCategories } from "@/lib/portal/ticket-categories";
 import PortalTicketsPage from "@/components/portal/PortalTicketsPage";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
+import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
 
 interface TicketRow {
   id: string;
@@ -35,15 +36,20 @@ export default async function TicketsPage() {
       .eq("org_id", ctx.orgId)
       .single() as Promise<{ data: Pick<PortalSettingsRow, "allow_tickets" | "portal_ticket_categories"> | null }>,
 
-    supabase
-      .from("crm_tickets")
-      .select("id, client_id, ticket_number, subject, category, status, priority, created_at, body")
-      .in("client_id", accounts.map((a) => a.id))
-      .eq("org_id", ctx.orgId)
-      .eq("visible_to_client", true)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .limit(50),
+    queryByClientIds(
+      accounts.map((a) => a.id),
+      (ids) =>
+        supabase
+          .from("crm_tickets")
+          .select("id, client_id, ticket_number, subject, category, status, priority, created_at, body")
+          .in("client_id", ids)
+          .eq("org_id", ctx.orgId)
+          .eq("visible_to_client", true)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .limit(50),
+      { compare: byColumn("created_at", false), limit: 50 }
+    ),
   ]);
 
   const settings = settingsRes.data;

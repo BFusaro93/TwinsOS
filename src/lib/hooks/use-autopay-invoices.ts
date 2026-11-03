@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 
 /** Thrown when the server refuses a charge because one covering the same
  * invoice is already in flight. Carries its own type so a bulk run can report
@@ -66,7 +67,7 @@ export function useChargeAutopayInvoice() {
       // IS invalidated here) showed it immediately.
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       if (data?.clientId) qc.invalidateQueries({ queryKey: ["clients", data.clientId] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
     },
   });
 }

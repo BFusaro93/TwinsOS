@@ -23,14 +23,17 @@ export async function GET(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: owned } = await (supabase as any)
     .from("estimates")
-    .select("id, estimate_number")
+    .select("id, client_id, estimate_number")
     .eq("id", id)
-    .in("client_id", clientIds)
     .eq("org_id", ctx.orgId)
     .not("stage", "in", "(draft,quote)")
     .is("deleted_at", null)
-    .maybeSingle() as { data: { id: string; estimate_number: string | number } | null };
-  if (!owned) return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
+    .maybeSingle() as { data: { id: string; client_id: string; estimate_number: string | number } | null };
+  // Ownership checked in code, not with .in("client_id", ...): a property
+  // manager's few hundred sub-account ids overflow the URL limit.
+  if (!owned || !clientIds.includes(owned.client_id)) {
+    return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
+  }
 
   // renderEstimatePDF logs and returns null on a render failure.
   const buffer = await renderEstimatePDF(supabase, id, ctx.orgId, { published: true });

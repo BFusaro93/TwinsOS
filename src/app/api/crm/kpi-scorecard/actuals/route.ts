@@ -8,6 +8,7 @@ import { computeLandscaptKpiActuals } from "@/lib/kpi/landscapt-kpi-compute";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import {
   ESTIMATE_DATASET_KEYS,
+  JOB_COSTING_DATASET_KEYS,
   PAYMENT_DATASET_KEYS,
   TIMESHEET_DATASET_KEYS,
 } from "@/lib/reports/report-permissions";
@@ -36,6 +37,14 @@ export async function GET(request: Request) {
     p_key: "view_report_center",
   });
   if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // The page itself is gated on view_dashboard_kpis (useDashboardPermission);
+  // enforce the same key here so the numbers aren't one fetch away for a role
+  // that can't open the dashboard.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canViewDashboard } = await (supabase.rpc as any)("has_settings_permission", {
+    p_key: "view_dashboard_kpis",
+  });
+  if (!canViewDashboard) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const url = new URL(request.url);
   const parsed = QuerySchema.safeParse({
@@ -51,12 +60,16 @@ export async function GET(request: Request) {
     // and payroll areas are computed only for roles holding the matching keys
     // (admins pass inside has_settings_permission). Other areas stay open
     // behind view_report_center, as before.
-    const [money, estimates, payroll] = await Promise.all([
+    const [money, estimates, payroll, jobCosting] = await Promise.all([
       hasAnySettingsPermission(supabase, PAYMENT_DATASET_KEYS),
       hasAnySettingsPermission(supabase, ESTIMATE_DATASET_KEYS),
       hasAnySettingsPermission(supabase, TIMESHEET_DATASET_KEYS),
+      hasAnySettingsPermission(supabase, JOB_COSTING_DATASET_KEYS),
     ]);
-    const allowedAreas = new Set(["clients", "visits", "tickets", "damage_cases", "injury_cases"]);
+    const allowedAreas = new Set(["clients", "tickets", "damage_cases", "injury_cases"]);
+    // The visits area reads rpt_job_visits (labor cost, gross profit, revenue
+    // per man-hour) — the job-costing keys, as analysis/run requires.
+    if (jobCosting) allowedAreas.add("visits");
     if (money) ["invoices", "payments", "contracts"].forEach((a) => allowedAreas.add(a));
     if (estimates) ["jobs", "estimates"].forEach((a) => allowedAreas.add(a));
     if (payroll) ["timesheets", "employees"].forEach((a) => allowedAreas.add(a));

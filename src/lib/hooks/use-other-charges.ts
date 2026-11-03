@@ -11,6 +11,7 @@ import {
   resolveOtherChargeCents,
   type OtherChargeType,
 } from "@/lib/invoices/other-charges";
+import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -225,7 +226,7 @@ export function useAddOtherChargeToInvoices() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
     },
   });
 }

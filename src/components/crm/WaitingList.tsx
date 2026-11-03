@@ -51,7 +51,7 @@ import { usePersistedColumns, usePersistedPref } from "@/lib/hooks/use-ui-prefs"
 // columns render come from crm_property_custom_field_values, which keys off
 // crm_rate_matrix_field_defs. Reading the client-level def table here is what
 // made every custom takeoff column permanently blank.
-import { usePropertyCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import { jobCustomFieldValue, usePropertyCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
 import type { PropertyCustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
 import { useOrgTags } from "@/lib/hooks/use-clients";
 import { Flame, Tag, Users } from "lucide-react";
@@ -168,7 +168,18 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
   const updateVisit = useUpdateVisit();
   const singleService = items.length === 1 ? items[0].service : null;
   const { today: orgToday } = useOrgDates();
-  const [date, setDate] = useState(() => singleService?.startDate || orgToday());
+  // A package step defaults to its placeholder visit's date — completing an
+  // earlier step can push it past the template's start date, and that start
+  // date would then fail the Min Days check. A placeholder already in the past
+  // (a rained-out step) defaults to today.
+  const [date, setDate] = useState(() => {
+    const today = orgToday();
+    const placeholderDate = singleService
+      ? (items[0].job.visits ?? []).find((v) => v.jobServiceId === singleService.id && v.status === "scheduled")?.scheduledDate
+      : undefined;
+    if (placeholderDate) return placeholderDate < today ? today : placeholderDate;
+    return singleService?.startDate || today;
+  });
   // Seeded from the jobs' own crew when they all share one. Defaulting to
   // "Unassigned" wrote crew_id: null onto every visit dispatched from here, so
   // an already-crewed job landed on the board — and on the printed route
@@ -407,7 +418,7 @@ function WaitingJobRow({
       {customFieldDefs.map((def) => {
         const key = customColKey(def.id);
         if (!isVisible(key)) return null;
-        const val = job.propertyCustomFieldValues?.find((v) => v.fieldDefId === def.id);
+        const val = jobCustomFieldValue(job.propertyCustomFieldValues, def);
         const display = val ? (val.valueText ?? (val.valueNumber != null ? val.valueNumber.toLocaleString() : null)) ?? "—" : "—";
         return (
           <td key={key} className="max-w-[160px] truncate px-4 py-3 text-muted-foreground" title={display}>

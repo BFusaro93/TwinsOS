@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calcChemicalAndSolution } from "@/lib/chemical-mix-calc";
-import { buildChemicalAreaResolver, effectivePropertyId, fetchSinglePropertyByClient } from "@/lib/chemical-area";
+import { buildChemicalAreaResolver, effectivePropertyId, fetchSinglePropertyByClient, type ChemicalArea } from "@/lib/chemical-area";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -140,7 +140,7 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
 
   // Area is per product: the service that attaches it can size from its own
   // property measurement or carry a treated-area override (see chemical-area.ts).
-  const areaByProduct = new Map<string, number>();
+  const areaByProduct = new Map<string, ChemicalArea>();
   if (settings?.auto_calc_quantity) {
     const single = job.property_id
       ? new Map<string, string>()
@@ -164,8 +164,8 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
   const { data: { user } } = await supabase.auth.getUser();
   const rows = (products ?? []).map((p) => {
     const rate = rateByProduct.get(p.id);
-    const areaValue = areaByProduct.get(p.id) ?? null;
-    const computed = rate && areaValue != null ? calcChemicalAndSolution(rate, areaValue, unitsById) : null;
+    const area = areaByProduct.get(p.id);
+    const computed = rate && area ? calcChemicalAndSolution(rate, area.value, unitsById, area.kind) : null;
     return {
       job_id: visit.job_id,
       visit_id: visitId,

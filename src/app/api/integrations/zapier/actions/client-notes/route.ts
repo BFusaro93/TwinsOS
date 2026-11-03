@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
+import { adminClient, authenticateZapierRequest, blankToUndefined, checkZapierRateLimit } from "@/lib/integrations/zapier";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("zapier-action");
 
 const createNoteSchema = z.object({
   clientId: z.string().uuid(),
   body: z.string().min(1),
-  subject: z.string().optional(),
+  subject: blankToUndefined(z.string()),
 });
 
 /**
@@ -54,7 +57,7 @@ export async function POST(request: Request) {
 
   if (error || !data) {
     // Don't hand raw database errors (constraint/column names) to the caller.
-    console.error("[zapier action] create failed:", error?.message);
+    log.error("create failed", { error: error?.message });
     return NextResponse.json({ error: "create failed" }, { status: 500 });
   }
 

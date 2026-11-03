@@ -1,15 +1,27 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
+import { adminClient, authenticateZapierRequest, blankToUndefined, checkZapierRateLimit } from "@/lib/integrations/zapier";
+import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
+import { logger } from "@/lib/logger";
 
+const log = logger.child("zapier-action");
+
+// Optional fields tolerate Zapier's "" for an unmapped field (see blankToUndefined).
 const createTicketSchema = z.object({
   clientId: z.string().uuid(),
   subject: z.string().min(1),
-  body: z.string().optional(),
-  priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
-  category: z.string().optional(),
-  type: z.string().optional(),
-  dueDate: z.string().optional(),
+  body: blankToUndefined(z.string()),
+  priority: blankToUndefined(
+    z
+      .string()
+      .transform((v) => v.trim().toLowerCase())
+      .pipe(z.enum(["low", "normal", "high", "urgent"], { message: "priority must be low, normal, high or urgent" }))
+  ),
+  category: blankToUndefined(z.string()),
+  type: blankToUndefined(z.string()),
+  // due_date is a `date` column: an unvalidated string failed the insert as an opaque 500.
+  dueDate: blankToUndefined(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dueDate must be YYYY-MM-DD")),
 });
 
 /**
@@ -62,8 +74,48 @@ export async function POST(request: Request) {
 
   if (error || !data) {
     // Don't hand raw database errors (constraint/column names) to the caller.
-    console.error("[zapier action] create failed:", error?.message);
+    log.error("create ticket failed", { error: error?.message });
     return NextResponse.json({ error: "create failed" }, { status: 500 });
+  }
+
+  // Same follow-through as the in-app New Ticket dialog (useCreateTicket): a
+  // client-timeline row, the staff "new ticket" notification, and the
+  // ticket_created automation trigger (which also feeds Zapier REST hooks).
+  // All best-effort — the ticket already exists.
+  const { error: activityError } = await db.from("client_activity").insert({
+    org_id: auth.orgId,
+    client_id: body.clientId,
+    activity_type: "ticket",
+    subject: body.subject,
+    body: body.body ?? null,
+    status: "open",
+    ref_id: data.id,
+    ref_table: "crm_tickets",
+  });
+  if (activityError) log.error("ticket activity insert failed", { ticketId: data.id, error: activityError.message });
+  try {
+    await notifyStaffOfNewTicket(db, {
+      orgId: auth.orgId,
+      ticketId: data.id as string,
+      ticketNumber: data.ticket_number as number,
+      subject: data.subject as string | null,
+      assignedToName: null,
+      createdByUserId: null,
+      source: "Zapier",
+    });
+  } catch (e) {
+    log.error("ticket notify failed", { ticketId: data.id, error: e instanceof Error ? e.message : String(e) });
+  }
+  try {
+    await fireSimpleTrigger(db, {
+      orgId: auth.orgId,
+      clientId: body.clientId,
+      ticketId: data.id as string,
+      triggerType: "ticket_created",
+      matchValues: body.category ? [body.category] : undefined,
+    });
+  } catch {
+    // enrollment failure must not fail the create
   }
 
   return NextResponse.json({

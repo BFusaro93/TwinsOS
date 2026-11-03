@@ -3,7 +3,9 @@
 import { useCallback, useState } from "react";
 import { useWaitingListJobs } from "@/lib/hooks/use-crm-jobs";
 import { haversineMiles } from "@/lib/geo";
-import type { CRMJobVisit } from "@/types/crm-jobs";
+import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
+import { createClient } from "@/lib/supabase/client";
+import type { CRMJob, CRMJobService, CRMJobVisit } from "@/types/crm-jobs";
 
 export interface NearbyWaitingListMatch {
   jobId: string;
@@ -11,6 +13,30 @@ export interface NearbyWaitingListMatch {
   clientName: string | null;
   address: string;
   distanceMiles: number;
+  /** Services still waiting for a visit when the job is dispatched one visit
+   *  per service (more than one service, or already split). Empty means the
+   *  job goes out as a single whole-job visit. */
+  pendingServices: CRMJobService[];
+  /** Package job: its next due step. Schedule Today MOVES this step's
+   *  placeholder visit to the day (as the Waiting List's dispatch does) —
+   *  it never creates a visit. */
+  packageStep?: { visitId: string; serviceName: string; stepNumber: number };
+}
+
+/** A package job's next step still on the Waiting List, when it can go out on
+ *  `targetDate`: the lowest-ordered step left on the list (the list has
+ *  already dropped dispatched steps), whose window has opened and not passed
+ *  (the same window the Waiting List rows use), and which still holds its
+ *  placeholder visit somewhere other than that day. Min Days is checked later,
+ *  only for jobs that turn out to be nearby. */
+function nextDuePackageStep(job: CRMJob, targetDate: string): { service: CRMJobService; visitId: string } | null {
+  const next = [...(job.services ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)[0];
+  if (!next) return null;
+  if (next.startDate && next.startDate > targetDate) return null;
+  if (next.completeByDate && next.completeByDate < targetDate) return null;
+  const placeholder = (job.visits ?? []).find((v) => v.jobServiceId === next.id && v.status === "scheduled");
+  if (!placeholder || placeholder.scheduledDate === targetDate) return null;
+  return { service: next, visitId: placeholder.id };
 }
 
 interface GeocodeResult {
@@ -43,7 +69,17 @@ export function useNearbyWaitingListJobs(radiusMiles = 3, targetDate?: string) {
     setLoading(true);
     setError(null);
     try {
-      const wlJobs = (waitingListJobs ?? []).filter((j) => j.jobType === "waiting_list");
+      // Package jobs qualify only through their next due step (see
+      // nextDuePackageStep); a package with nothing due that day is left out
+      // before geocoding.
+      const packageSteps = new Map<string, { service: CRMJobService; visitId: string }>();
+      const wlJobs = (waitingListJobs ?? []).filter((j) => {
+        if (j.jobType === "waiting_list") return true;
+        if (j.jobType !== "package" || !targetDate) return false;
+        const step = nextDuePackageStep(j, targetDate);
+        if (step) packageSteps.set(j.id, step);
+        return !!step;
+      });
       const scheduledJobIds = Array.from(new Set(todaysVisits.map((v) => v.jobId)));
       const waitingJobIds = wlJobs.map((j) => j.id);
 
@@ -99,14 +135,60 @@ export function useNearbyWaitingListJobs(radiusMiles = 3, targetDate?: string) {
         if (!coord) continue;
         const minDist = Math.min(...scheduledCoords.map((sc) => haversineMiles(coord, sc)));
         if (minDist <= radiusMiles) {
+          if (job.jobType === "package") {
+            const step = packageSteps.get(job.id);
+            if (!step) continue;
+            found.push({
+              jobId: job.id,
+              clientId: job.clientId,
+              clientName: job.clientName ?? null,
+              address: [job.serviceAddress, job.serviceCity, job.serviceState].filter(Boolean).join(", ") || (addressById.get(job.id) ?? ""),
+              distanceMiles: Math.round(minDist * 10) / 10,
+              pendingServices: [],
+              packageStep: { visitId: step.visitId, serviceName: step.service.serviceName, stepNumber: 0 },
+            });
+            continue;
+          }
           found.push({
             jobId: job.id,
             clientId: job.clientId,
             clientName: job.clientName ?? null,
             address: [job.serviceAddress, job.serviceCity, job.serviceState].filter(Boolean).join(", ") || (addressById.get(job.id) ?? ""),
             distanceMiles: Math.round(minDist * 10) / 10,
+            // Same rule as the Waiting List's own dispatch: a split job must get
+            // one visit per remaining service — a whole-job visit would bill
+            // every service again, or none if one was already invoiced.
+            pendingServices:
+              (job.services ?? []).length > 1 || (job.visits ?? []).some((v) => v.jobServiceId)
+                ? job.services ?? []
+                : [],
           });
         }
+      }
+      // Nearby package steps: number each step within its job and drop any whose
+      // Min Days since the previous step isn't met yet on that day — the same
+      // check the visit update makes, so Schedule Today never offers a move the
+      // database would refuse.
+      const packageMatches = found.filter((m) => m.packageStep);
+      if (packageMatches.length > 0 && targetDate) {
+        const supabase = createClient();
+        const { data: stepRows } = await supabase
+          .from("crm_job_services")
+          .select("id, job_id, sort_order")
+          .in("job_id", packageMatches.map((m) => m.jobId));
+        const steps = (stepRows ?? []) as { id: string; job_id: string; sort_order: number }[];
+        const blocked = new Set<string>();
+        await Promise.all(
+          packageMatches.map(async (m) => {
+            const step = packageSteps.get(m.jobId);
+            if (!step || !m.packageStep) return;
+            const ordered = steps.filter((s) => s.job_id === m.jobId).sort((a, b) => a.sort_order - b.sort_order);
+            m.packageStep.stepNumber = ordered.findIndex((s) => s.id === step.service.id) + 1;
+            const violation = await checkPackageMinDaysViolation(supabase, step.visitId, targetDate);
+            if (violation) blocked.add(m.jobId);
+          })
+        );
+        found.splice(0, found.length, ...found.filter((m) => !blocked.has(m.jobId)));
       }
       found.sort((a, b) => a.distanceMiles - b.distanceMiles);
       setMatches(found);
@@ -116,7 +198,7 @@ export function useNearbyWaitingListJobs(radiusMiles = 3, targetDate?: string) {
     } finally {
       setLoading(false);
     }
-  }, [waitingListJobs, radiusMiles]);
+  }, [waitingListJobs, radiusMiles, targetDate]);
 
   return { matches, loading, error, findNearby };
 }

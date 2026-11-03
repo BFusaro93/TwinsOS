@@ -1,24 +1,47 @@
 import { NextResponse } from "next/server";
-import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { z } from "zod";
-import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
-import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { todayInZone } from "@/lib/time/zone";
-import { jobActivityLabel } from "@/lib/utils/job-activity-label";
+import { adminClient, authenticateZapierRequest, blankToUndefined, checkZapierRateLimit } from "@/lib/integrations/zapier";
+import { createCrmJob } from "@/lib/integrations/create-crm-job";
+import { logger } from "@/lib/logger";
 
+const log = logger.child("zapier-action");
+
+// YYYY-MM-DD only: these are `date` columns, and an ISO instant is cast in UTC
+// (a day early for a US org). Same rule as the v1 API.
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be a YYYY-MM-DD date");
+
+// Optional fields tolerate Zapier's "" for an unmapped field (see blankToUndefined).
 const createJobSchema = z.object({
   clientId: z.string().uuid(),
-  jobType: z.enum(["recurring", "one_time", "waiting_list", "package", "snow", "project"]).optional(),
-  scheduledDate: z.string().optional(),
-  notes: z.string().optional(),
-  /** YYYY-MM-DD. Defaults to today (America/New_York) — drives the Sales by Date Sold reports. */
-  dateSold: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "dateSold must be YYYY-MM-DD").optional(),
+  jobType: blankToUndefined(
+    z
+      .string()
+      .transform((v) => v.trim().toLowerCase())
+      .pipe(
+        z.enum(["recurring", "one_time", "waiting_list", "package", "snow", "project"], {
+          message: "jobType must be recurring, one_time, waiting_list, package, snow or project",
+        })
+      )
+  ),
+  /** For jobType waiting_list this is the START of the availability window. */
+  scheduledDate: blankToUndefined(isoDate),
+  waitingListEnd: blankToUndefined(isoDate),
+  /** With a service, the job gets its line item and (if dated) a dispatch-board visit. */
+  serviceId: blankToUndefined(z.string().uuid()),
+  crewId: blankToUndefined(z.string().uuid()),
+  propertyId: blankToUndefined(z.string().uuid()),
+  rateCents: blankToUndefined(z.coerce.number().int().nonnegative()),
+  notes: blankToUndefined(z.string()),
+  notesToCrew: blankToUndefined(z.string()),
+  /** YYYY-MM-DD. Defaults to today in the org's timezone — drives the Sales by Date Sold reports. */
+  dateSold: blankToUndefined(isoDate),
 });
 
 /**
  * POST /api/integrations/zapier/actions/jobs — Zapier action ("Create Job").
- * clientId must belong to the authenticated org — checked explicitly rather
- * than trusted from the body, same guard as the clients/tickets actions.
+ * Same creation rules as POST /api/v1/jobs (createCrmJob): ids checked
+ * against the org, waiting-list window instead of a board visit, service line
+ * + visit when a service is given, timeline row and job_created trigger.
  */
 export async function POST(request: Request) {
   const db = adminClient();
@@ -32,63 +55,24 @@ export async function POST(request: Request) {
 
   const parsed = createJobSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
-  }
-  const body = parsed.data;
-
-  const { data: client } = await db
-    .from("clients")
-    .select("org_id")
-    .eq("id", body.clientId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!client || client.org_id !== auth.orgId) {
-    return NextResponse.json({ error: "Client not found" }, { status: 404 });
+    const issue = parsed.error.issues[0];
+    const message = issue ? `${issue.path.join(".") || "input"}: ${issue.message}` : "Invalid input";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  const { data, error } = await db
-    .from("crm_jobs")
-    .insert({
-      org_id: auth.orgId,
-      client_id: body.clientId,
-      job_type: body.jobType ?? "one_time",
-      scheduled_date: body.scheduledDate ?? null,
-      notes: body.notes ?? null,
-      date_sold: body.dateSold ?? todayInZone(await getOrgTimeZone(db, auth.orgId)),
-      status: "scheduled",
-    })
-    .select("id, job_number, job_type, status, scheduled_date, created_at")
-    .single();
-
-  if (error || !data) {
-    // Don't hand raw database errors (constraint/column names) to the caller.
-    console.error("[zapier action] create failed:", error?.message);
-    return NextResponse.json({ error: "create failed" }, { status: 500 });
-  }
-
-  // Same client-timeline row the in-app New Job dialog writes (see
-  // useCreateClientJob). Admin client → org_id must be explicit. Best-effort.
-  await db.from("client_activity").insert({
-    org_id: auth.orgId,
-    client_id: body.clientId,
-    activity_type: "job",
-    subject: `Job created: ${jobActivityLabel({ jobType: body.jobType ?? "one_time" })}`,
-    ref_id: data.id,
-    ref_table: "crm_jobs",
+  const result = await createCrmJob(db, auth.orgId, parsed.data, {
+    select: "id, job_number, job_type, status, scheduled_date, waiting_list_start, waiting_list_end, created_at",
+    context: "zapier create job",
   });
-
-  // The in-app New Job dialog fires job_created; without it a job made through
-  // Zapier never enrolled in job_created automations. Best-effort.
-  try {
-    await fireSimpleTrigger(db, {
-      orgId: auth.orgId,
-      clientId: body.clientId,
-      triggerType: "job_created",
-      matchValues: [body.jobType ?? "one_time"],
-    });
-  } catch {
-    // enrollment failure must not fail the create
+  if (!result.ok) {
+    if (result.status === 500) {
+      // Don't hand raw database errors (constraint/column names) to the caller.
+      log.error(result.context, { error: result.cause });
+      return NextResponse.json({ error: "create failed" }, { status: 500 });
+    }
+    return NextResponse.json({ error: result.error }, { status: result.status });
   }
+  const data = result.job;
 
   return NextResponse.json({
     id: data.id,
@@ -96,6 +80,8 @@ export async function POST(request: Request) {
     jobType: data.job_type,
     status: data.status,
     scheduledDate: data.scheduled_date,
+    waitingListStart: data.waiting_list_start,
+    waitingListEnd: data.waiting_list_end,
     createdAt: data.created_at,
   });
 }

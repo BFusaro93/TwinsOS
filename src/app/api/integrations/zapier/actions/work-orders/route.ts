@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
+import { adminClient, authenticateZapierRequest, blankToUndefined, checkZapierRateLimit } from "@/lib/integrations/zapier";
+import { logger } from "@/lib/logger";
 
-// Zapier sends "" for a field the Zap left unmapped; that means "not provided".
-const blankToUndefined = <T extends z.ZodTypeAny>(schema: T) =>
-  z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), schema.optional());
+const log = logger.child("zapier-action");
 
 const createWorkOrderSchema = z.object({
   title: z.string().min(1),
-  assetId: z.string().uuid().optional(),
-  description: z.string().optional(),
+  assetId: blankToUndefined(z.string().uuid()),
+  description: blankToUndefined(z.string()),
   // work_orders has CHECK constraints on priority and wo_type and `date` on
   // due_date: an unrecognised value ("High", "Urgent", "10/31/2026") used to
   // get through here and fail the insert as an opaque 500 "create failed".
@@ -94,7 +93,7 @@ export async function POST(request: Request) {
 
   if (error || !data) {
     // Don't hand raw database errors (constraint/column names) to the caller.
-    console.error("[zapier action] create failed:", error?.message);
+    log.error("create failed", { error: error?.message });
     return NextResponse.json({ error: "create failed" }, { status: 500 });
   }
 

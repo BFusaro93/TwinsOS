@@ -260,8 +260,27 @@ export function MilestoneScheduleEditor({
   const rowReadOnly = (m: EstimateMilestone) =>
     readOnly || (m.projectId ? !canEditProjectRows : !canEditEstimateRows);
   // A milestone added to a converted estimate lands on its project (the
-  // link-project trigger), so it needs the project rights too.
-  const addsToProject = !!projectId || milestones.some((m) => m.projectId);
+  // link-project trigger), so it needs the project rights too. The DB resolves
+  // that through the converted job, so an estimate converted to a project with
+  // no milestones yet counts too — not just one whose rows already carry it.
+  const { data: convertedToProject = false } = useQuery({
+    queryKey: ["estimate-converted-project", estimateId],
+    enabled: !projectId && !!estimateId,
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_jobs")
+        .select("id")
+        .eq("estimate_id", estimateId)
+        .not("project_id", "is", null)
+        .is("deleted_at", null)
+        .limit(1);
+      if (error) throw error;
+      return (data ?? []).length > 0;
+    },
+  });
+  const addsToProject = !!projectId || convertedToProject || milestones.some((m) => m.projectId);
   const canAdd = !readOnly && (addsToProject ? canEditProjectRows : canEditEstimateRows);
 
   // A pending percent milestone is worth a percentage of the CURRENT basis,

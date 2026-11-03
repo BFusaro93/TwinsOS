@@ -120,9 +120,10 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
 
             <TabsContent value="treated_area" className="mt-0">
               <p className="mb-1.5 text-xs text-muted-foreground">
-                Sq ft this line actually treats (a spot treatment, the front lawn only). Chemical quantities on the
-                Materials Needed, Load List and crew app use this instead of the property measurement. Leave blank to
-                use the property measurement.
+                Area this line actually treats (a spot treatment, the front lawn only), in the same unit as the
+                service&apos;s area field: sq ft, or linear ft for a service sized by a linear-foot field such as
+                Perimeter. Chemical quantities on the Materials Needed, Load List and crew app use this instead of the
+                property measurement. Leave blank to use the property measurement.
               </p>
               <Input
                 type="number"
@@ -134,7 +135,7 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
                   const v = parseFloat(e.target.value);
                   setDraft((d) => ({ ...d, treatedArea: Number.isFinite(v) && v > 0 ? v : null }));
                 }}
-                placeholder="Sq ft"
+                placeholder="Sq ft / lin ft"
               />
             </TabsContent>
           </div>

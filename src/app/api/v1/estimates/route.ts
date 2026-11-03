@@ -6,6 +6,7 @@ import { ESTIMATE_SELECT, ESTIMATE_LINE_ITEM_SELECT, shapeEstimate, shapeEstimat
 import { createEstimateSchema } from "./validation";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 
 /**
  * GET /api/v1/estimates — list the org's estimates. Requires scope
@@ -172,6 +173,21 @@ export async function POST(request: Request) {
     ref_id: estimate.id,
     ref_table: "estimates",
   });
+
+  // The app's New Estimate fires estimate_created (filterable by sales rep);
+  // without it an estimate made through the API never reached those
+  // automations or Zapier hooks. Best-effort.
+  try {
+    await fireSimpleTrigger(db, {
+      orgId: auth.orgId,
+      clientId: body.clientId,
+      estimateId: estimate.id as string,
+      triggerType: "estimate_created",
+      matchValues: body.salesRepId ? [body.salesRepId] : undefined,
+    });
+  } catch {
+    // enrollment failure must not fail the create
+  }
 
   const { data: finalEstimate } = await db
     .from("estimates")

@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
 
 export interface PortalVisitRow {
   id: string;
@@ -114,11 +115,11 @@ export async function loadUpcomingPortalVisits(
 ): Promise<{ visits: PortalUpcomingVisit[]; labels: Map<string, PortalVisitLabel> }> {
   const { clientIds, orgId, today, limit } = params;
   const cols = "id, client_id, scheduled_date, status, job_id, job_service_id, invoice_description";
-  const base = () =>
+  const base = (ids: string[]) =>
     supabase
       .from("crm_job_visits")
       .select(cols)
-      .in("client_id", clientIds)
+      .in("client_id", ids)
       .eq("org_id", orgId)
       .is("deleted_at", null)
       // A multi-crew stop is one visit to the customer — show the lead's only.
@@ -128,8 +129,16 @@ export async function loadUpcomingPortalVisits(
 
   const yearAgo = new Date(Date.parse(today + "T00:00:00Z") - 365 * 86_400_000).toISOString().slice(0, 10);
   const [futureRes, openWindowRes] = await Promise.all([
-    base().gte("scheduled_date", today).order("scheduled_date", { ascending: true }).limit(limit),
-    base().lt("scheduled_date", today).gte("scheduled_date", yearAgo).order("scheduled_date", { ascending: true }).limit(50),
+    queryByClientIds<PortalUpcomingVisit>(
+      clientIds,
+      (ids) => base(ids).gte("scheduled_date", today).order("scheduled_date", { ascending: true }).limit(limit),
+      { compare: byColumn("scheduled_date", true), limit }
+    ),
+    queryByClientIds<PortalUpcomingVisit>(
+      clientIds,
+      (ids) => base(ids).lt("scheduled_date", today).gte("scheduled_date", yearAgo).order("scheduled_date", { ascending: true }).limit(50),
+      { compare: byColumn("scheduled_date", true), limit: 50 }
+    ),
   ]);
 
   const future = (futureRes.data ?? []) as PortalUpcomingVisit[];

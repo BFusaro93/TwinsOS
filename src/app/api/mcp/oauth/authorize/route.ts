@@ -79,12 +79,11 @@ export async function POST(request: Request) {
       { status: 403 }
     );
   }
-  const { data: org } = await db.from("organizations").select("oauth_write_roles").eq("id", profile.org_id).single();
 
   // Never trust the submitted checkboxes alone -- the consent page (PR 3)
-  // already hides write scopes above the org's configured cap, but
+  // already hides write scopes the role can't grant, but
   // re-check here too in case of a forged/replayed form post.
-  const allowedForRole = allowedScopeStringsForRole(profile.role, org?.oauth_write_roles ?? []);
+  const allowedForRole = allowedScopeStringsForRole(profile.role);
   const scopes = requestedScopes.filter((s) => isKnownScope(s) && allowedForRole.has(s));
   if (scopes.length === 0) {
     return redirectWithParams({ error: "invalid_scope", error_description: "No valid scope was selected" });

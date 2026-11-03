@@ -1186,10 +1186,16 @@ export async function pushInvoiceToQuickBooks(
     const created = await createInvoice(conn, createInput, `inv-${invoiceId}`);
     const qboInvoiceId = created.id;
     const drift = driftMessage(createInput, created);
-    const { error: linkErr } = await db
+    // The link is written as the service role: a user session may only touch
+    // qbo_sync_error / qbo_sync_attempted_at (DB guard), so no CRM seat can
+    // repoint an invoice at another QuickBooks invoice and have the next sync
+    // overwrite or void it there. The invoice was read above through `db`, so
+    // the caller could see it.
+    const { error: linkErr } = await createServiceClient()
       .from("crm_invoices")
       .update({ qbo_invoice_id: qboInvoiceId, qbo_sync_error: drift, qbo_sync_attempted_at: attemptedAt })
-      .eq("id", invoiceId);
+      .eq("id", invoiceId)
+      .eq("org_id", orgId);
     if (linkErr) {
       // The invoice exists in QuickBooks but we failed to remember its id: record the attempt so
       // the cron doesn't create it again every run, and surface the error on the invoice.

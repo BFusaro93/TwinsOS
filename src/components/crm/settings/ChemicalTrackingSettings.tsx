@@ -22,6 +22,8 @@ import {
   useUpdateChemicalLookupItem,
 } from "@/lib/hooks/use-chemical-tracking";
 import { useCustomFieldDefs } from "@/lib/hooks/use-rate-matrix";
+import { useCustomFieldDefs as useClientFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import { chemicalFieldMeasure, isChemicalAreaField } from "@/lib/chemical-area";
 import type { ChemicalConditionsDisplay, ChemicalLookupType, ChemicalUnitClass } from "@/types/chemical-tracking";
 
 function Section({
@@ -57,7 +59,14 @@ function GeneralChemicalSettings() {
   const { data: settings } = useChemicalSettings();
   const update = useUpdateChemicalSettings();
   const { data: propertyFieldDefs = [] } = useCustomFieldDefs("property");
-  const numericFieldDefs = propertyFieldDefs.filter((d) => d.fieldType === "number");
+  const { data: clientFieldDefs = [] } = useClientFieldDefs();
+  const clientUnitById = new Map(clientFieldDefs.map((d) => [d.id, d.unit]));
+  // Area (sq ft, acres) and linear-ft fields size a rate of the same kind; Yards of Mulch and
+  // counts can't size any rate.
+  // A field already chosen stays listed so the setting never looks blank.
+  const numericFieldDefs = propertyFieldDefs.filter(
+    (d) => d.fieldType === "number" && (isChemicalAreaField(d, clientUnitById) || d.id === settings?.areaCustomFieldId)
+  );
 
   function handleConditionsChange(v: ChemicalConditionsDisplay) {
     update.mutate(
@@ -175,7 +184,9 @@ function GeneralChemicalSettings() {
             <SelectContent>
               <SelectItem value="none">— None —</SelectItem>
               {numericFieldDefs.map((d) => (
-                <SelectItem key={d.id} value={d.id}>{d.label}</SelectItem>
+                <SelectItem key={d.id} value={d.id}>{d.label}
+                  {chemicalFieldMeasure(d, clientUnitById)?.kind === "linear" ? " (linear ft — per-linear-ft rates only)" : ""}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -280,8 +291,10 @@ const DEFAULT_LOOKUP_ITEMS: Partial<Record<ChemicalLookupType, string[]>> = {
   volume_unit: DEFAULT_VOLUME_UNITS.map((u) => u.name),
   // Square Foot and 1,000 Sq Ft kept adjacent (a lawn-chemical rate is almost
   // always expressed as one or the other) with Acre last, rather than
-  // alphabetical order which splits them apart.
-  area_unit: ["Square Foot", "1,000 Sq Ft", "Acre"],
+  // alphabetical order which splits them apart. The linear-foot units are for
+  // perimeter/barrier labels ("per 100 lin ft"); they only size against a
+  // linear-foot property field (see areaBasis in chemical-mix-calc.ts).
+  area_unit: ["Square Foot", "1,000 Sq Ft", "Acre", "100 Linear Ft", "1,000 Linear Ft"],
 };
 
 /** Which chem_create_* permission key gates adding a new item to each lookup
@@ -309,7 +322,7 @@ function LookupListEditor({ listType, addPlaceholder }: { listType: ChemicalLook
   useEffect(() => {
     const defaults = DEFAULT_LOOKUP_ITEMS[listType];
     if (!defaults || isLoading || seedInFlightRef.current) return;
-    // Seeding writes 13 volume + 3 area rows into the org's catalog, so it is
+    // Seeding writes 13 volume + 5 area rows into the org's catalog, so it is
     // a create and has to respect the same permission as the Add button —
     // chem_create_uom is app-layer only (RLS lets any member insert), so
     // without this check a crew or viewer just opening the tab populated the

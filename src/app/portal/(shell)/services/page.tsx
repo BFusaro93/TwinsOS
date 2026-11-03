@@ -5,6 +5,7 @@ import PortalServicesPage from "@/components/portal/PortalServicesPage";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { labelPortalVisits, loadUpcomingPortalVisits } from "@/lib/portal/visit-labels";
+import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
 
 export default async function ServicesPage() {
   const ctx = await getPortalContext();
@@ -22,17 +23,22 @@ export default async function ServicesPage() {
   const [upcoming, completedRes] = await Promise.all([
     loadUpcomingPortalVisits(supabase, { clientIds, orgId: ctx.orgId, today, limit: 25 }),
 
-    supabase
-      .from("crm_job_visits")
-      .select("id, client_id, scheduled_date, status, completed_at, job_id, job_service_id, invoice_description")
-      .in("client_id", clientIds)
-      .eq("org_id", ctx.orgId)
-      .is("deleted_at", null)
-      // A multi-crew stop is one visit to the customer — show the lead's only.
-      .eq("crew_group_secondary", false)
-      .eq("status", "completed")
-      .order("scheduled_date", { ascending: false })
-      .limit(25),
+    queryByClientIds(
+      clientIds,
+      (ids) =>
+        supabase
+          .from("crm_job_visits")
+          .select("id, client_id, scheduled_date, status, completed_at, job_id, job_service_id, invoice_description")
+          .in("client_id", ids)
+          .eq("org_id", ctx.orgId)
+          .is("deleted_at", null)
+          // A multi-crew stop is one visit to the customer — show the lead's only.
+          .eq("crew_group_secondary", false)
+          .eq("status", "completed")
+          .order("scheduled_date", { ascending: false })
+          .limit(25),
+      { compare: byColumn("scheduled_date", false), limit: 25 }
+    ),
   ]);
 
   const upcomingRows = upcoming.visits;

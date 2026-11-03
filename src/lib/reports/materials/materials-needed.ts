@@ -511,7 +511,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
     let unitMismatchJobs = 0;
     let unestimatedJobs = 0;
     for (const d of demand) {
-      const areaValue = resolveArea({ propertyId: d.propertyId, clientId: d.clientId, serviceId: d.serviceId, treatedArea: d.treatedArea });
+      const area = resolveArea({ propertyId: d.propertyId, clientId: d.clientId, serviceId: d.serviceId, treatedArea: d.treatedArea });
       perJobMeta.set(d.jobId, { jobName: d.jobName, neededBy: d.neededBy });
       nextNeededBy = earliest(nextNeededBy, d.neededBy);
 
@@ -524,7 +524,7 @@ export async function computeMaterialsNeeded(supabase: SupabaseClient): Promise<
       // differenced against on-hand. Subtracting 355 fluid ounces from 4
       // gallons is what turned 2.8 gallons of real demand into a one-click
       // purchase order for 351.
-      const computed = rate && areaValue != null ? calcChemicalAndSolution(rate, areaValue, unitsById) : null;
+      const computed = rate && area ? calcChemicalAndSolution(rate, area.value, unitsById, area.kind) : null;
       if (!computed) {
         unestimatedJobs += 1;
         continue;

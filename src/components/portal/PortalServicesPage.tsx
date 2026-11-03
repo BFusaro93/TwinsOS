@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CalendarDays, CheckCircle2, Loader2, Wrench, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatVisitWindow } from "@/lib/portal/visit-window";
+import { realtimeClientFilter } from "@/lib/portal/client-id-chunks";
 import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 
 function fmtDate(iso: string) {
@@ -68,7 +69,7 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
           event: "UPDATE",
           schema: "public",
           table: "crm_job_visits",
-          filter: `client_id=in.(${clientKey})`,
+          filter: realtimeClientFilter(clientKey.split(","), orgId),
         },
         (payload) => {
           const updated = payload.new as { id: string; status: string; client_id?: string };

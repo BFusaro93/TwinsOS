@@ -179,7 +179,8 @@ export function SendApplicationNoticeDialog({ visitId, open, onClose, onSent, in
       const res = await fetch(`/api/crm/chemical-applications/${visitId}/send-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, bodyHtml, ccEmails, kind, attachPdf }),
+        // A one-off send from the panel is deliberate, so a repeat notice is allowed.
+        body: JSON.stringify({ subject, bodyHtml, ccEmails, kind, attachPdf, resend: true }),
       });
       if (!res.ok) {
         const data = await res.json();

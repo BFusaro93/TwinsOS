@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { areaBasis, type AreaKind } from "@/lib/chemical-mix-calc";
+import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
 
 // Resolves "how much area does this job treat" for the chemical estimate
 // (rate x area), used by the application panel and the load-list /
@@ -32,6 +34,69 @@ const BUILT_IN_AREA_COLUMNS: Record<string, string> = {
   yards_of_mulch: "yards_of_mulch",
   parking_lot_sqft: "parking_lot_sqft",
 };
+
+const SQUARE_FOOT_RE = /sq\.?\s*f(?:ee)?t|sqft|square\s*f(?:ee|oo)?t|ft²|ft2/i;
+const SQUARE_YARD_RE = /sq\.?\s*y(?:ar)?ds?|square\s*yards?|yd²|yd2/i;
+const ACRE_RE = /\bacres?\b|\bac\b/i;
+const LINEAR_RE = /\blinear\b|\blin\.?\s*f|\bln\.?\s*f|\blf\b|perimeter|edging|running\s*f/i;
+const NOT_AREA_RE = /\b(?:yards?|yds?|cubic|cu\.?\s*ft|gallons?|gal|count|each|inch(?:es)?|depth|height|lbs?|pounds?)\b/i;
+
+/** How a property measurement sizes a chemical rate: its kind, and base units (sq ft or ft) per unit of the field. */
+export interface FieldMeasure {
+  kind: AreaKind;
+  factor: number;
+}
+
+/**
+ * What a property field measures, for sizing a chemical rate — or null when it
+ * can't size one at all (Yards of Mulch, a count, a depth). Square feet and
+ * acres are areas (acres converted to square feet); Linear Ft. Edging,
+ * Perimeter and other running-foot fields are linear and only size a
+ * per-linear-foot rate. A mirrored client field is judged by its unit when it
+ * has one; otherwise the label decides, and a label that names no unit at all
+ * ("Lawn Area") is given the benefit of the doubt as square feet.
+ */
+export function chemicalFieldMeasure(
+  def: { label: string; fieldKey?: string | null; clientFieldDefId?: string | null },
+  clientUnitById?: Map<string, string | null>
+): FieldMeasure | null {
+  const unit = def.clientFieldDefId ? clientUnitById?.get(def.clientFieldDefId)?.trim() : "";
+  const text = unit || `${def.label} ${(def.fieldKey ?? "").replace(/_/g, " ")}`;
+  if (SQUARE_FOOT_RE.test(text)) return { kind: "area", factor: 1 };
+  if (SQUARE_YARD_RE.test(text)) return { kind: "area", factor: 9 };
+  if (ACRE_RE.test(text)) return { kind: "area", factor: 43560 };
+  if (LINEAR_RE.test(text)) return { kind: "linear", factor: 1 };
+  if (NOT_AREA_RE.test(text)) return null;
+  return { kind: "area", factor: 1 };
+}
+
+/** Whether a property field can size a chemical amount (square feet, acres or linear feet). */
+export function isChemicalAreaField(
+  def: { label: string; fieldKey?: string | null; clientFieldDefId?: string | null },
+  clientUnitById?: Map<string, string | null>
+): boolean {
+  return chemicalFieldMeasure(def, clientUnitById) != null;
+}
+
+/** "sq ft" / "linear ft" for a measurement in base units. */
+export function areaKindLabel(kind: AreaKind): string {
+  return kind === "linear" ? "linear ft" : "sq ft";
+}
+
+/**
+ * Why a default rate produced no estimate for a resolved measurement, when the
+ * reason is a kind mismatch ("per 100 lin ft" against a square-foot field) —
+ * null when the kinds agree.
+ */
+export function areaKindMismatchHint(
+  rate: ChemicalApplicationRate,
+  area: ChemicalArea,
+  unitsById: Map<string, ChemicalLookupItem>
+): string | null {
+  const basis = areaBasis(rate.areaUnitId ? unitsById.get(rate.areaUnitId) : undefined);
+  if (basis.kind === area.kind) return null;
+  return `its rate is per ${areaKindLabel(basis.kind)} but the measurement is in ${areaKindLabel(area.kind)}`;
+}
 
 /** True for the takeoff fields stored as literal columns (Turf Sq. Ft., …) rather than as custom values. */
 export function isBuiltInAreaKey(fieldKey: string | null | undefined): boolean {
@@ -196,7 +261,13 @@ export interface ChemicalAreaArgs {
   treatedArea?: number | null;
 }
 
-export type ChemicalAreaResolver = (args: ChemicalAreaArgs) => number | undefined;
+/** A resolved measurement: the value in base units (sq ft, or ft for linear) and what it measures. */
+export interface ChemicalArea {
+  value: number;
+  kind: AreaKind;
+}
+
+export type ChemicalAreaResolver = (args: ChemicalAreaArgs) => ChemicalArea | undefined;
 
 /**
  * "How much area does this service treat on this job" for the chemical
@@ -204,6 +275,11 @@ export type ChemicalAreaResolver = (args: ChemicalAreaArgs) => number | undefine
  * lawn only), else the property measurement named by the service's
  * chemical_area_field_id (parking-lot weed control sizes from Parking Lot
  * Sq. Ft.), else the org's Area Custom Field.
+ *
+ * The result carries its kind so a per-linear-foot rate only sizes against a
+ * linear-foot field. A treated-area override is in the same kind of unit as
+ * the field the service would otherwise size from (linear feet for a
+ * perimeter service), square feet when there is no field.
  */
 export async function buildChemicalAreaResolver(
   supabase: SupabaseClient,
@@ -221,6 +297,7 @@ export async function buildChemicalAreaResolver(
     }
   }
   const fieldIds = [...new Set([...(orgAreaFieldId ? [orgAreaFieldId] : []), ...serviceFieldById.values()])];
+  const measureByField = await fetchFieldMeasures(supabase, fieldIds);
   const valuesByField = new Map<string, Map<string, number>>();
   const clientValuesByField = new Map<string, Map<string, number>>();
   for (const fieldId of fieldIds) {
@@ -228,12 +305,41 @@ export async function buildChemicalAreaResolver(
     clientValuesByField.set(fieldId, await fetchClientAreaValues(supabase, fieldId, clientIds));
   }
   return ({ propertyId, clientId, serviceId, treatedArea }) => {
-    if (treatedArea != null && treatedArea > 0) return Number(treatedArea);
     const fieldId = (serviceId ? serviceFieldById.get(serviceId) : undefined) ?? orgAreaFieldId;
-    if (!fieldId) return undefined;
+    const measure = fieldId ? measureByField.get(fieldId) : undefined;
+    if (treatedArea != null && treatedArea > 0) {
+      return { value: Number(treatedArea), kind: measure?.kind ?? "area" };
+    }
+    // A field that can't size a rate (Yards of Mulch) gives no estimate rather than a wrong one.
+    if (!fieldId || !measure) return undefined;
     // Property value first, then the client's own value for the same field.
     const onProperty = propertyId ? valuesByField.get(fieldId)?.get(propertyId) : undefined;
-    if (onProperty != null) return onProperty;
-    return clientId ? clientValuesByField.get(fieldId)?.get(clientId) : undefined;
+    const raw = onProperty ?? (clientId ? clientValuesByField.get(fieldId)?.get(clientId) : undefined);
+    return raw == null ? undefined : { value: raw * measure.factor, kind: measure.kind };
   };
+}
+
+/** field id -> what it measures, read from the def's label/key or its mirrored client field's unit. */
+async function fetchFieldMeasures(supabase: SupabaseClient, fieldIds: string[]): Promise<Map<string, FieldMeasure>> {
+  const out = new Map<string, FieldMeasure>();
+  if (fieldIds.length === 0) return out;
+  const { data: defs } = await supabase
+    .from("crm_rate_matrix_field_defs")
+    .select("id, field_key, field_label, client_field_def_id")
+    .in("id", fieldIds);
+  const rows = (defs ?? []) as { id: string; field_key: string; field_label: string; client_field_def_id: string | null }[];
+  const clientIds = rows.map((r) => r.client_field_def_id).filter(Boolean) as string[];
+  const clientUnitById = new Map<string, string | null>();
+  if (clientIds.length > 0) {
+    const { data: clientDefs } = await supabase.from("crm_custom_field_defs").select("id, unit").in("id", clientIds);
+    for (const d of (clientDefs ?? []) as { id: string; unit: string | null }[]) clientUnitById.set(d.id, d.unit);
+  }
+  for (const r of rows) {
+    const measure = chemicalFieldMeasure(
+      { label: r.field_label, fieldKey: r.field_key, clientFieldDefId: r.client_field_def_id },
+      clientUnitById
+    );
+    if (measure) out.set(r.id, measure);
+  }
+  return out;
 }

@@ -36,6 +36,8 @@ import {
   useCustomFieldDefs,
 } from "@/lib/hooks/use-rate-matrix";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
+import { useCustomFieldDefs as useClientFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import { chemicalFieldMeasure, isChemicalAreaField } from "@/lib/chemical-area";
 import { useProducts } from "@/lib/hooks/use-products";
 import { useServiceChemicals, useSaveServiceChemicals } from "@/lib/hooks/use-chemical-tracking";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
@@ -778,7 +780,13 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
   const [tab, setTab] = useState<Tab>("details");
   const [form, setForm] = useState<FormState>(emptyForm());
   const { data: propertyFieldDefs = [] } = useCustomFieldDefs("property");
-  const areaFieldDefs = propertyFieldDefs.filter((d) => d.fieldType === "number");
+  const { data: clientFieldDefs = [] } = useClientFieldDefs();
+  const clientUnitById = new Map(clientFieldDefs.map((d) => [d.id, d.unit]));
+  // Area (sq ft, acres) and linear-ft fields can size a rate of the same kind; Yards of Mulch
+  // and counts can't. A field already chosen stays listed.
+  const areaFieldDefs = propertyFieldDefs.filter(
+    (d) => d.fieldType === "number" && (isChemicalAreaField(d, clientUnitById) || d.id === form.chemicalAreaFieldId)
+  );
   // Tracks the saved service — set from prop on open, or updated after create so tabs unlock immediately
   const [activeService, setActiveService] = useState<CRMService | null>(service);
 
@@ -1193,7 +1201,9 @@ export function ServiceDialog({ open, service, onClose, onCreated }: Props) {
                 <SelectContent>
                   <SelectItem value="default">Org default (Settings → Chemical Tracking)</SelectItem>
                   {areaFieldDefs.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>{d.label}</SelectItem>
+                    <SelectItem key={d.id} value={d.id}>{d.label}
+                    {chemicalFieldMeasure(d, clientUnitById)?.kind === "linear" ? " (linear ft — per-linear-ft rates only)" : ""}
+                  </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

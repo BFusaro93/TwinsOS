@@ -3,7 +3,7 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { calcChemicalAndSolution, createQuantityAccumulator } from "@/lib/chemical-mix-calc";
 import type { QuantityAccumulator } from "@/lib/chemical-mix-calc";
 import { embeddedOne, formatStopAddress, resolveStopAddress } from "@/lib/utils/stop-address";
-import { buildChemicalAreaResolver, effectivePropertyId, fetchSinglePropertyByClient } from "@/lib/chemical-area";
+import { areaKindMismatchHint, buildChemicalAreaResolver, effectivePropertyId, fetchSinglePropertyByClient } from "@/lib/chemical-area";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
 
 // ============================================================
@@ -418,8 +418,8 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
 
         const rate = defaultRateByProduct.get(pid);
         const propertyId = jobPropertyId(job);
-        const areaValue = resolveArea({ propertyId, clientId: job.client_id, serviceId: sid, treatedArea });
-        if (!rate || areaValue == null) {
+        const area = resolveArea({ propertyId, clientId: job.client_id, serviceId: sid, treatedArea });
+        if (!rate || !area) {
           // Say why instead of silently leaving the stop off the truck list.
           const what = chemProductName.get(pid) ?? "a chemical";
           skippedReasons.add(
@@ -432,8 +432,12 @@ export async function computeDailyLoadList(supabase: SupabaseClient, date: strin
         // Resolved per-visit, not summed-then-converted — which of
         // chemical/solution is the rate's "primary" number depends on the
         // rate's own configured unit (see calcChemicalAndSolution).
-        const computed = calcChemicalAndSolution(rate, areaValue, unitsById);
-        if (!computed) continue;
+        const computed = calcChemicalAndSolution(rate, area.value, unitsById, area.kind);
+        if (!computed) {
+          const mismatch = areaKindMismatchHint(rate, area, unitsById);
+          if (mismatch) skippedReasons.add(`${clientName}: ${chemProductName.get(pid) ?? "a chemical"} could not be estimated — ${mismatch}.`);
+          continue;
+        }
         demandByKey.set(key, {
           crewId,
           jobId: job.id,

@@ -204,8 +204,17 @@ export async function POST(request: Request) {
     if (!currentProfile || currentProfile.status !== "active" || currentProfile.org_id !== existing.org_id) {
       return NextResponse.json({ error: "invalid_grant" }, { status: 400 });
     }
-    const { data: org } = await db.from("organizations").select("oauth_write_roles").eq("id", existing.org_id).maybeSingle();
-    const allowedForCurrentRole = allowedScopeStringsForRole(currentProfile?.role ?? "", org?.oauth_write_roles ?? []);
+    // Only an admin can approve a connection (authorize/route.ts). Every role
+    // keeps the :read scopes in allowedScopeStringsForRole, so without this an
+    // admin who connected and was later demoted kept full read access for as
+    // long as the client kept refreshing.
+    if (currentProfile.role !== "admin") {
+      return NextResponse.json(
+        { error: "invalid_grant", error_description: "Only an admin can keep this connection — ask an admin to reconnect" },
+        { status: 400 }
+      );
+    }
+    const allowedForCurrentRole = allowedScopeStringsForRole(currentProfile.role);
     const cappedScopes = (existing.scopes ?? []).filter((s: string) => allowedForCurrentRole.has(s));
     if (cappedScopes.length === 0) {
       return NextResponse.json({ error: "invalid_grant", error_description: "No scopes remain valid for this user's current role" }, { status: 400 });

@@ -140,3 +140,60 @@ export function planPackageLineSteps(
     windowEnd: ends[ends.length - 1] ?? null,
   };
 }
+
+export interface PackageStepVisitDates {
+  startDate: string | null;
+  completeByDate: string | null;
+  /** Spacing from the visit before it: the step's own Min Days for the first
+   *  visit, the in-step spacing for the rest (only when the step set Min Days). */
+  minDays: number | null;
+}
+
+/**
+ * A package step with "Visits Included" N is N separate visits, each billed at
+ * the step's rate. Spreads them from the step's start date: Min Days apart when
+ * the step sets it, otherwise evenly across the step's window, otherwise a week
+ * apart. Each visit's window runs to the day before the next one (the last one
+ * keeps the step's own end date). A step with no start date stays undated.
+ */
+export function expandPackageStepVisits(
+  startDate: string | null,
+  completeByDate: string | null,
+  minDays: number | null,
+  visitsIncluded: number | null | undefined,
+): PackageStepVisitDates[] {
+  const count = Math.max(1, Math.floor(visitsIncluded || 1));
+  if (count === 1 || !startDate) {
+    return Array.from({ length: count }, (_, i) => ({
+      startDate,
+      completeByDate,
+      minDays: i === 0 ? minDays : null,
+    }));
+  }
+  const start = parseDate(startDate);
+  let spacing: number;
+  if (minDays && minDays > 0) {
+    spacing = minDays;
+  } else if (completeByDate && completeByDate > startDate) {
+    const windowDays = Math.round((parseDate(completeByDate).getTime() - start.getTime()) / 86_400_000) + 1;
+    spacing = Math.max(1, Math.floor(windowDays / count));
+  } else {
+    spacing = 7;
+  }
+  const dates = Array.from({ length: count }, (_, i) => toDateStr(addDays(start, i * spacing)));
+  return dates.map((d, i) => ({
+    startDate: d,
+    completeByDate: i < count - 1 ? toDateStr(addDays(parseDate(dates[i + 1]), -1)) : completeByDate,
+    minDays: i === 0 ? minDays : minDays && minDays > 0 ? minDays : null,
+  }));
+}
+
+/**
+ * Shift a package's template dates into the current season: when the
+ * program's first dated step is before `today`, returns the number of days to
+ * add so it starts `today` (every step keeps its spacing); 0 otherwise.
+ */
+export function packageSeasonShiftDays(earliestStart: string | null, today: string): number {
+  if (!earliestStart || earliestStart >= today) return 0;
+  return Math.round((parseDate(today).getTime() - parseDate(earliestStart).getTime()) / 86_400_000);
+}

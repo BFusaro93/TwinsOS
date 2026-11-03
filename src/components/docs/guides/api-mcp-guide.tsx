@@ -325,14 +325,11 @@ export function ApiMcpGuide() {
           <li>Test it — ask Claude something like &quot;show me my 5 most recent open work orders.&quot;</li>
         </ol>
         <Callout>
-          <strong>Every signed-in user can do this themselves</strong> — it&apos;s not a shared,
-          org-wide key. Each connection is tied to whoever signed in and approved it, with whatever
-          scopes <em>they</em> picked. By default, <strong>only admins can grant Write access</strong> —
-          every other role&apos;s consent screen only ever shows Read checkboxes, so a manager,
-          technician, purchaser, or viewer connecting this way gets read-only access no matter what they
-          check, enforced server-side, not just hidden in the UI. An admin can opt specific roles into
-          write access from <strong>Settings → Public API Keys → OAuth Write Access</strong> — e.g. letting
-          managers or purchasers grant write scopes too, while everyone else stays read-only.
+          <strong>Only an admin can connect this way</strong> — anyone else who signs in is asked to
+          have an admin approve the connection. It&apos;s not a shared, org-wide key: each connection is
+          tied to the admin who signed in and approved it, with whatever scopes <em>they</em> picked.
+          If that person is later deactivated or is no longer an admin, the connection stops working the
+          next time Claude refreshes it, and an admin has to reconnect.
         </Callout>
         <p>
           Manage or disconnect an OAuth sign-in from <strong>Settings → Public API Keys → Connected

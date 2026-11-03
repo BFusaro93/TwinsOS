@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Plus, RotateCcw, Settings2, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -513,7 +514,9 @@ function CategoryEditor({
 // ── Main scorecard ────────────────────────────────────────────────────────────
 
 export function LandscaptKpiScorecard() {
-  const currentYear = new Date().getFullYear();
+  // The org's calendar year (the actuals are computed on it), not the browser's.
+  const { today } = useOrgDates();
+  const currentYear = Number(today().slice(0, 4));
   const years = [currentYear - 1, currentYear, currentYear + 1].map(String);
   const [period, setPeriod] = useState(String(currentYear));
   const [draft, setDraft] = useState<KpiScorecardConfig | null>(null);

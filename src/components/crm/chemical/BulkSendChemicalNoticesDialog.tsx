@@ -121,12 +121,17 @@ export function BulkSendChemicalNoticesDialog({ open, onClose, visits, dateLabel
     return c;
   }, [eligibility, visitIds]);
 
+  // Visits emailed in this dialog session. The eligibility data can lag (or its refetch
+  // fail), and "Send N more" used to re-send to every client just emailed.
+  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
+
   const targets = useMemo(
     () => visits.filter((v) => {
+      if (sentIds.has(v.id)) return false;
       const e = eligibility?.get(v.id);
       return e === "ready" || (includeSent && e === "sent");
     }),
-    [visits, eligibility, includeSent]
+    [visits, eligibility, includeSent, sentIds]
   );
 
   const [running, setRunning] = useState(false);
@@ -141,6 +146,7 @@ export function BulkSendChemicalNoticesDialog({ open, onClose, visits, dateLabel
       setFinished(false);
       setFailures([]);
       setProgress({ done: 0, total: 0 });
+      setSentIds(new Set());
       cancelRef.current = false;
     }
   }, [open]);
@@ -156,6 +162,7 @@ export function BulkSendChemicalNoticesDialog({ open, onClose, visits, dateLabel
     cancelRef.current = false;
     let done = 0;
     let ok = 0;
+    const sentNow: string[] = [];
     const failed: { id: string; name: string; error: string }[] = [];
 
     async function worker() {
@@ -165,13 +172,14 @@ export function BulkSendChemicalNoticesDialog({ open, onClose, visits, dateLabel
           const res = await fetch(`/api/crm/chemical-applications/${v.id}/send-email`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ subject, bodyHtml, kind: "chemical", attachPdf }),
+            body: JSON.stringify({ subject, bodyHtml, kind: "chemical", attachPdf, resend: includeSent }),
           });
           if (!res.ok) {
             const data = await res.json().catch(() => ({}));
             throw new Error(data.error ?? `Send failed (${res.status})`);
           }
           ok++;
+          sentNow.push(v.id);
         } catch (err) {
           failed.push({ id: v.id, name: v.clientName ?? "Unknown client", error: err instanceof Error ? err.message : "Send failed" });
         }
@@ -181,10 +189,12 @@ export function BulkSendChemicalNoticesDialog({ open, onClose, visits, dateLabel
     }
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total) }, worker));
 
+    setSentIds((prev) => new Set([...prev, ...sentNow]));
     setFailures(failed);
+    // Show the next "Send N more" count only once eligibility reflects this run.
+    await queryClient.invalidateQueries({ queryKey: ["chemical-bulk-eligibility"] }).catch(() => {});
     setRunning(false);
     setFinished(true);
-    queryClient.invalidateQueries({ queryKey: ["chemical-bulk-eligibility"] });
     if (failed.length === 0) toast.success(`Sent ${ok} notice${ok === 1 ? "" : "s"}`);
     else toast.warning(`Sent ${ok}, ${failed.length} failed`);
   }

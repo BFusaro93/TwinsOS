@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import type { ImportPreviewRow } from "@/lib/stripe/import-saved-methods";
+import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 
 export interface CreatePaymentIntentResult {
   clientSecret: string;
@@ -97,7 +98,7 @@ export function useApplySavedMethodImport() {
       return body as SavedMethodImportResult;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
     },
   });
 }
@@ -130,7 +131,7 @@ export function useCreateCrmPaymentIntent() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
     },
   });
 }

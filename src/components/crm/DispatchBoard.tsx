@@ -39,7 +39,7 @@ import {
 // columns render come from crm_property_custom_field_values, which keys off
 // crm_rate_matrix_field_defs. Reading the client-level def table here is what
 // made every custom takeoff column permanently blank.
-import { usePropertyCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import { jobCustomFieldValue, usePropertyCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
 import type { PropertyCustomFieldDef } from "@/lib/hooks/use-client-custom-fields";
 import { usePersistedColumns } from "@/lib/hooks/use-ui-prefs";
 import { downloadXLSX } from "@/lib/xlsx-export";
@@ -3831,7 +3831,7 @@ function VisitRow({
       {customFieldDefs.map((def) => {
         const key = customColKey(def.id);
         if (!isVisible(key)) return null;
-        const val = job?.propertyCustomFieldValues?.find((v) => v.fieldDefId === def.id);
+        const val = jobCustomFieldValue(job?.propertyCustomFieldValues, def);
         const display = val ? (val.valueText ?? (val.valueNumber != null ? val.valueNumber.toLocaleString() : null)) ?? "—" : "—";
         return (
           <td key={key} className="px-2 py-2 text-muted-foreground max-w-[160px] truncate" title={display}>
@@ -3957,7 +3957,7 @@ function TotalsRow({ visits, isVisible, customFieldDefs }: { visits: CRMJobVisit
         if (!isVisible(key)) return null;
         if (def.fieldType !== "number") return <td key={def.id} />;
         const total = propertyRows.reduce((s, v) => {
-          const val = v.job?.propertyCustomFieldValues?.find((cv) => cv.fieldDefId === def.id);
+          const val = jobCustomFieldValue(v.job?.propertyCustomFieldValues, def);
           return s + (val?.valueNumber ?? 0);
         }, 0);
         return <td key={def.id} className="px-2 py-1.5 text-right">{total > 0 ? total.toLocaleString() : "—"}</td>;
@@ -4255,6 +4255,8 @@ export function DispatchBoard() {
     }
   }
   const createVisit = useCreateVisit();
+  // Moves a package step's placeholder visit onto the day from Nearby.
+  const moveNearbyPlaceholder = useUpdateVisit();
   // Matches already scheduled from this dialog (the match list never refreshes itself).
   const [scheduledNearbyJobIds, setScheduledNearbyJobIds] = useState<Set<string>>(new Set());
   const { mutateAsync: returnToWaitingList } = useReturnVisitToWaitingList();
@@ -4976,7 +4978,7 @@ export function DispatchBoard() {
         ...visibleCols.map((c) => exportCellValue(c.key, v, cellCtx)),
         ...visibleExtraCols.map((c) => exportCellValue(c.key, v, cellCtx)),
         ...visibleCustomDefs.map((d) => {
-          const val = job?.propertyCustomFieldValues?.find((cv) => cv.fieldDefId === d.id);
+          const val = jobCustomFieldValue(job?.propertyCustomFieldValues, d);
           return val ? val.valueNumber ?? val.valueText ?? "" : "";
         }),
         jobNotes,
@@ -5796,8 +5798,9 @@ export function DispatchBoard() {
               <DropdownMenuSeparator />
 
               {/* Return to Waiting List — only when every selected visit
-                  belongs to a waiting-list job that never got done. */}
-              {displayVisits.filter((v) => selectedIds.has(v.id)).every((v) => v.job?.jobType === "waiting_list") && (
+                  belongs to a waiting-list job, or is a package step (e.g.
+                  rained out), that never got done. */}
+              {displayVisits.filter((v) => selectedIds.has(v.id)).every((v) => v.job?.jobType === "waiting_list" || (v.job?.jobType === "package" && !!v.jobServiceId && v.status !== "scheduled")) && (
                 <DropdownMenuItem
                   className="text-xs"
                   onSelect={async () => {
@@ -6297,6 +6300,11 @@ export function DispatchBoard() {
                 <div key={m.jobId} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                   <div className="min-w-0">
                     <p className="truncate font-medium text-slate-800 dark:text-neutral-100">{m.clientName ?? "Unknown client"}</p>
+                    {m.packageStep && (
+                      <p className="truncate text-xs text-slate-600 dark:text-neutral-300">
+                        {m.packageStep.stepNumber > 0 ? `Step ${m.packageStep.stepNumber}: ` : ""}{m.packageStep.serviceName}
+                      </p>
+                    )}
                     <p className="truncate text-xs text-muted-foreground">{m.address || "No address"}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -6304,23 +6312,53 @@ export function DispatchBoard() {
                     <Button
                       size="sm"
                       className="h-7 text-xs bg-brand-500 hover:bg-brand-600 text-white"
-                      disabled={createVisit.isPending || scheduledNearbyJobIds.has(m.jobId)}
+                      disabled={createVisit.isPending || moveNearbyPlaceholder.isPending || scheduledNearbyJobIds.has(m.jobId)}
                       onClick={async () => {
                         if (scheduledNearbyJobIds.has(m.jobId)) return;
                         try {
-                          await createVisit.mutateAsync({
-                            jobId: m.jobId,
-                            clientId: m.clientId,
-                            scheduledDate: selectedDate,
-                            jobType: "waiting_list",
-                          });
+                          if (m.packageStep) {
+                            // A package step already has its placeholder visit:
+                            // move it onto the day and mark it dispatched, exactly
+                            // as the Waiting List's dispatch does — never a new
+                            // visit. Its crew stays as it is.
+                            await moveNearbyPlaceholder.mutateAsync({
+                              id: m.packageStep.visitId,
+                              updates: {
+                                scheduled_date: selectedDate,
+                                status: "dispatched",
+                                dispatched_at: new Date().toISOString(),
+                              },
+                              jobId: m.jobId,
+                              jobType: "package",
+                            });
+                          } else if (m.pendingServices.length > 0) {
+                            // Split job: one visit per service still waiting,
+                            // exactly as the Waiting List dispatches it.
+                            for (const service of m.pendingServices) {
+                              await createVisit.mutateAsync({
+                                jobId: m.jobId,
+                                clientId: m.clientId,
+                                scheduledDate: selectedDate,
+                                jobServiceId: service.id,
+                                jobType: "waiting_list",
+                              });
+                            }
+                          } else {
+                            await createVisit.mutateAsync({
+                              jobId: m.jobId,
+                              clientId: m.clientId,
+                              scheduledDate: selectedDate,
+                              jobType: "waiting_list",
+                            });
+                          }
                           // The match list is local state and never refreshes, so remember
                           // what was scheduled; a second tap used to create a second visit.
                           setScheduledNearbyJobIds((prev) => new Set(prev).add(m.jobId));
                           toast.success(`Added ${m.clientName ?? "job"} to today's schedule`);
                           refetch();
-                        } catch {
-                          toast.error("Failed to schedule job");
+                        } catch (err) {
+                          // e.g. a package step's Min Days spacing refused by the database.
+                          toast.error(err instanceof Error && err.message ? err.message : "Failed to schedule job");
                         }
                       }}
                     >

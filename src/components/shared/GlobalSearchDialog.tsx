@@ -164,6 +164,9 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
       <CommandList className="max-h-[480px]">
         <CommandEmpty>No results found.</CommandEmpty>
 
+        {/* Clients and leads come from the server search, which already decided they
+            match (it also matches phone digits in any format, billing fields, etc.).
+            The live query is part of each value so cmdk's substring filter never hides one. */}
         {showFullSearch && showClients && clients.length > 0 && (
           <CommandGroup heading="Clients">
             {clients.map((client) => {
@@ -173,7 +176,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
               return (
               <CommandItem
                 key={client.id}
-                value={`${client.displayName} ${client.accountNumber ?? ""} ${(client.tags ?? []).join(" ")} ${client.primaryEmail ?? ""} ${typeof client.billingAddress === "object" && client.billingAddress ? Object.values(client.billingAddress).filter(Boolean).join(" ") : ""} ${[client.serviceAddress, client.serviceCity, client.serviceState, client.serviceZip].filter(Boolean).join(" ")} ${phones.join(" ")} ${phones.map((p) => p.replace(/\D/g, "")).join(" ")} client`}
+                value={`${client.displayName} ${client.accountNumber ?? ""} ${(client.tags ?? []).join(" ")} ${client.primaryEmail ?? ""} ${[client.billingAddress, client.billingCity, client.billingZip].filter(Boolean).join(" ")} ${[client.serviceAddress, client.serviceCity, client.serviceState, client.serviceZip].filter(Boolean).join(" ")} ${phones.join(" ")} ${phones.map((p) => p.replace(/\D/g, "")).join(" ")} client ${query}`}
                 onSelect={() => go(`/crm/clients/${client.id}`)}
                 className="flex items-center gap-3"
               >
@@ -181,7 +184,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{client.displayName}</span>
                   <span className="truncate text-xs text-slate-400 dark:text-neutral-500">
-                    {[client.primaryPhone, client.primaryEmail, typeof client.billingAddress === "object" && client.billingAddress ? (client.billingAddress as Record<string, string>).city : null].filter(Boolean).join(" · ")}
+                    {[client.primaryPhone, client.primaryEmail, client.billingCity ?? client.serviceCity].filter(Boolean).join(" · ")}
                   </span>
                 </div>
                 <StatusBadge variant={client.status as Parameters<typeof StatusBadge>[0]["variant"]} label={client.status} />
@@ -202,7 +205,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
               return (
               <CommandItem
                 key={lead.id}
-                value={`${lead.displayName} ${lead.accountNumber ?? ""} ${(lead.tags ?? []).join(" ")} ${lead.primaryEmail ?? ""} ${typeof lead.billingAddress === "object" && lead.billingAddress ? Object.values(lead.billingAddress).filter(Boolean).join(" ") : ""} ${[lead.serviceAddress, lead.serviceCity, lead.serviceState, lead.serviceZip].filter(Boolean).join(" ")} ${phones.join(" ")} ${phones.map((p) => p.replace(/\D/g, "")).join(" ")} lead`}
+                value={`${lead.displayName} ${lead.accountNumber ?? ""} ${(lead.tags ?? []).join(" ")} ${lead.primaryEmail ?? ""} ${[lead.billingAddress, lead.billingCity, lead.billingZip].filter(Boolean).join(" ")} ${[lead.serviceAddress, lead.serviceCity, lead.serviceState, lead.serviceZip].filter(Boolean).join(" ")} ${phones.join(" ")} ${phones.map((p) => p.replace(/\D/g, "")).join(" ")} lead ${query}`}
                 onSelect={() => go(`/crm/clients/${lead.id}`)}
                 className="flex items-center gap-3"
               >
@@ -210,7 +213,7 @@ function GlobalSearchResults({ onOpenChange }: Pick<GlobalSearchDialogProps, "on
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium">{lead.displayName}</span>
                   <span className="truncate text-xs text-slate-400 dark:text-neutral-500">
-                    {[lead.primaryPhone, lead.primaryEmail, typeof lead.billingAddress === "object" && lead.billingAddress ? (lead.billingAddress as Record<string, string>).city : null].filter(Boolean).join(" · ")}
+                    {[lead.primaryPhone, lead.primaryEmail, lead.billingCity ?? lead.serviceCity].filter(Boolean).join(" · ")}
                   </span>
                 </div>
               </CommandItem>

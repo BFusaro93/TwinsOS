@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
+import { isUuid } from "../../id-param";
 import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { JOB_SELECT, shapeJob } from "../shape";
 import { updateJobSchema } from "../validation";
@@ -9,6 +10,7 @@ import { propagateCrewToVisits } from "@/lib/visits/propagate-crew";
 import { applyJobStatusToVisits } from "@/lib/visits/job-status-visits";
 import { GENERATOR_JOB_COLUMNS, generateVisitsForJobs, type GeneratorJob } from "@/lib/visits/generate";
 import { logger } from "@/lib/logger";
+import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 
 const log = logger.child("api/v1/jobs");
 
@@ -18,6 +20,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "jobs:read", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // A non-uuid id reached Postgres as a cast error and came back a 500.
+  if (!isUuid(id)) return jsonError("Job not found", 404);
 
   const { data, error } = await db
     .from("crm_jobs")
@@ -38,6 +42,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "jobs:write:safe", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // A non-uuid id reached Postgres as a cast error and came back a 500.
+  if (!isUuid(id)) return jsonError("Job not found", 404);
 
   const parsed = updateJobSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
@@ -59,7 +65,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // it so the visits follow, exactly as they do for an edit made in the app.
   const { data: before } = await db
     .from("crm_jobs")
-    .select("job_type, status, crew_id")
+    .select("job_type, status, crew_id, client_id")
     .eq("org_id", auth.orgId)
     .eq("id", id)
     .is("deleted_at", null)
@@ -127,6 +133,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   } catch (e) {
     log.error("visit propagation threw", { jobId: id, error: e instanceof Error ? e.message : String(e) });
+  }
+
+  // The app's job status change fires job_cancelled (useUpdateJobStatus);
+  // without it a job cancelled through the API never reached those
+  // automations or Zapier hooks. Best-effort.
+  if (body.status === "cancelled" && before.status !== "cancelled" && before.client_id) {
+    try {
+      await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: before.client_id as string, triggerType: "job_cancelled" });
+    } catch {
+      // enrollment failure must not fail the update
+    }
   }
 
   return NextResponse.json(shapeJob(data));

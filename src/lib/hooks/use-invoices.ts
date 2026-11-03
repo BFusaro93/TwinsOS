@@ -17,6 +17,7 @@ import {
   findLiveInvoiceForVisit,
   type InvoiceFromJobInput,
 } from "@/lib/invoices/create-from-job";
+import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 
 // ── locked-invoice error handling ───────────────────────────────────────────────
 
@@ -968,7 +969,7 @@ export function useVoidInvoice() {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.id] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
       fireQuickBooksInvoiceUpdate(vars.id);
     },
   });
@@ -1037,11 +1038,13 @@ export function useUpdateInvoiceStatus() {
       // a draft sent without saving would go out at its stale (often $0) total.
       // Re-derive the totals from the saved lines before it leaves draft.
       if (current?.status === "draft" && (status === "sent" || status === "printed")) {
-        // Refreshed server-side first: a role that can print/send but not edit invoices may
-        // not write the totals from its own session (DB guard), which left a printed draft
-        // locked yet still a draft. Best effort; the recalc below then finds nothing to change.
-        await fetch(`/api/crm/invoices/${id}/refresh-draft-totals`, { method: "POST" }).catch(() => undefined);
-        await recalcInvoiceTotalsFromLines(supabase, id);
+        // Refreshed server-side only: a role that can print/send but not edit invoices may
+        // not write the totals from its own session (DB guard), and the client-side recalc's
+        // payment reconcile needs an invoice/payment/credit key — its refusal left a printed
+        // draft locked and numbered yet still a draft. A draft has no payments (refused
+        // above), so re-deriving its totals is all the reconcile would do.
+        const refreshed = await fetch(`/api/crm/invoices/${id}/refresh-draft-totals`, { method: "POST" }).catch(() => null);
+        if (!refreshed?.ok) throw new Error("could not refresh the invoice totals — try again");
         // Likewise only Save Invoice assigned the number, so a draft sent from
         // here went out numberless (and QuickBooks invented its own). The RPC
         // is idempotent. Same timeline entry as useAssignInvoiceNumber.
@@ -1090,7 +1093,7 @@ export function useUpdateInvoiceStatus() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
       if (vars.status === "sent") {
         fireQuickBooksInvoiceSync(vars.id);
       } else {
@@ -1228,7 +1231,7 @@ export function useRecordPayment() {
     onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
       for (const invoiceId of data?.newlyPaidInvoiceIds ?? []) {
@@ -1315,7 +1318,7 @@ export function useUpdatePayment() {
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
       // The edit dialog stays mounted and just toggles `open` rather than
       // remounting, so it relies entirely on this invalidation to pick up
       // the new split — without it, reopening the same payment within the
@@ -1363,7 +1366,7 @@ export function useRefundPayment() {
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId, "activity"] });
     },
   });
@@ -1419,7 +1422,7 @@ export function useUpsertInvoiceLineItem() {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.invoiceId] });
       if (vars.recalc) {
         qc.invalidateQueries({ queryKey: ["crm-invoices"] });
-        qc.invalidateQueries({ queryKey: ["clients"] });
+        invalidateClientBalances(qc);
       }
     },
   });
@@ -1565,7 +1568,7 @@ export function useDeleteInvoiceLineItem() {
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.invoiceId] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
     },
   });
 }
@@ -1647,7 +1650,7 @@ export function useUpdateInvoiceFinancials() {
     onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["crm-invoices", "detail", vars.id] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       if (data?.wasNewlyPaid && data.clientId) {
         fireAutomationTrigger({ triggerType: "invoice_paid", clientId: data.clientId, invoiceId: vars.id });
@@ -1961,7 +1964,7 @@ export function useApplyCreditToInvoice() {
       }
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
     },
   });
 }

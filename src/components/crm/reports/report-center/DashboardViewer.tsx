@@ -30,7 +30,8 @@ import { getReport } from "@/lib/reports/registry";
 import { computeTotals } from "@/lib/reports/engine";
 import { canQueryDataset } from "@/lib/reports/report-permissions";
 import { useIsCrewOnly, usePermissions } from "@/lib/hooks/use-permissions";
-import { defaultFilterValues } from "./ReportFilterBar";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { computePresetRange, defaultFilterValues } from "./ReportFilterBar";
 import { VisualRenderer } from "./VisualRenderer";
 import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
 import type { DashboardPanel, DashboardTab, ReportFieldType, ReportResult } from "@/types/crm-reports";
@@ -43,18 +44,10 @@ const PANEL_SIZE_CLASSES: Record<DashboardPanel["size"], string> = {
   full: "md:col-span-6",
 };
 
-function iso(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
-
-function defaultDateRange(): { from: string; to: string } {
-  const now = new Date();
-  return {
-    from: iso(new Date(now.getFullYear(), now.getMonth(), 1)),
-    to: iso(now),
-  };
+/** This month to date on the org's calendar. */
+function defaultDateRange(timeZone: string): { from: string; to: string } {
+  const { from, to } = computePresetRange("this_month", timeZone);
+  return { from, to };
 }
 
 /** Rows for a panel's export, with a trailing "Totals" row (matching the
@@ -95,10 +88,11 @@ function ReportPanelView({
   params?: Record<string, string>;
 }) {
   const def = getReport(reportKey);
+  const timeZone = useOrgTimeZone();
   const effectiveParams = useMemo(
     // Shared with ReportViewer so an "all_time" default writes range=all here too.
-    () => ({ ...(def ? defaultFilterValues(def.filters) : {}), ...params }),
-    [def, params]
+    () => ({ ...(def ? defaultFilterValues(def.filters, timeZone) : {}), ...params }),
+    [def, params, timeZone]
   );
   const { data, isFetching, error } = useRunReport(reportKey, effectiveParams);
 
@@ -220,7 +214,8 @@ function DashboardVisualPanelView({
 }
 
 function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboardName: string }) {
-  const [dateRange, setDateRange] = useState(defaultDateRange);
+  const orgTimeZone = useOrgTimeZone();
+  const [dateRange, setDateRange] = useState(() => defaultDateRange(orgTimeZone));
   const [repFilter, setRepFilter] = useState("");
   const { data: salesRepOptions = [] } = useReportFilterOptions(tab.useRepFilter ? "salesReps" : undefined);
   const [panelResults, setPanelResults] = useState<Record<string, ReportResult>>({});

@@ -1,20 +1,31 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { adminClient, authenticateZapierRequest, checkZapierRateLimit } from "@/lib/integrations/zapier";
+import { adminClient, authenticateZapierRequest, blankToUndefined, checkZapierRateLimit } from "@/lib/integrations/zapier";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { logger } from "@/lib/logger";
 
+const log = logger.child("zapier-action");
+
+// Every optional field goes through blankToUndefined: Zapier posts "" for an
+// unmapped field, and `email: ""` used to fail as "Invalid email" — every
+// phone-only form lead was rejected.
 const createClientSchema = z.object({
   displayName: z.string().min(1),
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
-  accountType: z.enum(["residential", "commercial"]).optional(),
-  source: z.string().optional(),
-  serviceAddress: z.string().optional(),
-  serviceCity: z.string().optional(),
-  serviceState: z.string().optional(),
-  serviceZip: z.string().optional(),
+  firstName: blankToUndefined(z.string()),
+  lastName: blankToUndefined(z.string()),
+  email: blankToUndefined(z.string().trim().email()),
+  phone: blankToUndefined(z.string()),
+  accountType: blankToUndefined(
+    z
+      .string()
+      .transform((v) => v.trim().toLowerCase())
+      .pipe(z.enum(["residential", "commercial"], { message: "accountType must be residential or commercial" }))
+  ),
+  source: blankToUndefined(z.string()),
+  serviceAddress: blankToUndefined(z.string()),
+  serviceCity: blankToUndefined(z.string()),
+  serviceState: blankToUndefined(z.string()),
+  serviceZip: blankToUndefined(z.string()),
 });
 
 /**
@@ -61,7 +72,7 @@ export async function POST(request: Request) {
 
   if (error || !data) {
     // Don't hand raw database errors (constraint/column names) to the caller.
-    console.error("[zapier action] create failed:", error?.message);
+    log.error("create client failed", { error: error?.message });
     return NextResponse.json({ error: "create failed" }, { status: 500 });
   }
 

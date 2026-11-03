@@ -13,7 +13,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useReportFilterOptions } from "@/lib/hooks/use-report-center";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { ALL_TIME_RANGE_PARAM } from "@/lib/reports/helpers";
+import { shiftYmd, todayInZone, ymd } from "@/lib/time/zone";
 import type { ReportFilterDef } from "@/types/crm-reports";
 
 // ── date range presets ────────────────────────────────────────────────────────
@@ -28,12 +30,6 @@ const PRESET_OPTIONS = [
   { value: "custom", label: "Custom" },
 ];
 
-function iso(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
-
 /** The three params a dateRange filter writes. `range` is `"all"` only for
  *  an explicitly unbounded window (All Time, or Custom with both dates
  *  cleared) — with `from`/`to` empty that's the only signal the server has
@@ -46,25 +42,23 @@ export interface DateRangeParams {
   range: string;
 }
 
-/** Compute the `from`/`to` (YYYY-MM-DD) window for a preset key. */
-export function computePresetRange(preset: string): DateRangeParams {
-  const now = new Date();
-  const to = iso(now);
+/** Compute the `from`/`to` (YYYY-MM-DD) window for a preset key, on the
+ *  ORG's calendar — the server resolves report windows in the org's zone, so
+ *  a viewer in another zone (or near midnight) must get the same "This Month". */
+export function computePresetRange(preset: string, timeZone: string): DateRangeParams {
+  const to = todayInZone(timeZone);
+  const [y, m] = to.split("-").map(Number);
   switch (preset) {
     case "this_month":
-      return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to, range: "" };
+      return { from: ymd(y, m - 1, 1), to, range: "" };
     case "last_month":
-      return {
-        from: iso(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
-        to: iso(new Date(now.getFullYear(), now.getMonth(), 0)),
-        range: "",
-      };
+      return { from: ymd(y, m - 2, 1), to: ymd(y, m - 1, 0), range: "" };
     case "last_30":
-      return { from: iso(new Date(now.getTime() - 30 * 86400000)), to, range: "" };
+      return { from: shiftYmd(to, -30), to, range: "" };
     case "last_90":
-      return { from: iso(new Date(now.getTime() - 90 * 86400000)), to, range: "" };
+      return { from: shiftYmd(to, -90), to, range: "" };
     case "this_year":
-      return { from: iso(new Date(now.getFullYear(), 0, 1)), to, range: "" };
+      return { from: ymd(y, 0, 1), to, range: "" };
     case "all_time":
       return { from: "", to: "", range: ALL_TIME_RANGE_PARAM };
     default:
@@ -84,12 +78,13 @@ function rangeParamFor(from: string, to: string): string {
  *  report page and dashboard embeds so all of them honor an `all_time`
  *  default the same way. */
 export function defaultFilterValues(
-  filters: Pick<ReportFilterDef, "key" | "type" | "defaultValue">[]
+  filters: Pick<ReportFilterDef, "key" | "type" | "defaultValue">[],
+  timeZone: string
 ): Record<string, string> {
   const values: Record<string, string> = {};
   for (const def of filters) {
     if (def.type === "dateRange") {
-      const { from, to, range } = computePresetRange(def.defaultValue ?? "this_month");
+      const { from, to, range } = computePresetRange(def.defaultValue ?? "this_month", timeZone);
       values.from = from;
       values.to = to;
       values.range = range;
@@ -123,11 +118,12 @@ function DateRangeControl({
   onChange: (key: string, value: string) => void;
 }) {
   const [preset, setPreset] = useState<string>(def.defaultValue ?? "this_month");
+  const timeZone = useOrgTimeZone();
 
   const handlePreset = (next: string) => {
     setPreset(next);
     if (next === "custom") return;
-    const { from, to, range } = computePresetRange(next);
+    const { from, to, range } = computePresetRange(next, timeZone);
     onChange("from", from);
     onChange("to", to);
     onChange("range", range);

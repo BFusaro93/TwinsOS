@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 
 export interface MultiChargeAllocation {
   invoiceId: string;
@@ -46,7 +47,7 @@ export function useCreateMultiPaymentIntent() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
     },
   });
 }
@@ -85,7 +86,7 @@ export function useChargeMultiSaved() {
       // See use-autopay-invoices.ts — payments are their own query.
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
+      invalidateClientBalances(qc);
     },
   });
 }

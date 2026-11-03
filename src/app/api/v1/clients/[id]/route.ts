@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
+import { isUuid } from "../../id-param";
 import { jsonError, jsonServerError } from "@/lib/api/route-helpers";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -13,6 +14,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "clients:read", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // A non-uuid id reached Postgres as a cast error and came back a 500.
+  if (!isUuid(id)) return jsonError("Client not found", 404);
 
   const { data, error } = await db
     .from("clients")
@@ -33,6 +36,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const db = adminClient();
   const auth = await authenticateApiRequest(request, "clients:write:safe", db);
   if (!auth.ok) return jsonError(auth.error, auth.status);
+  // A non-uuid id reached Postgres as a cast error and came back a 500.
+  if (!isUuid(id)) return jsonError("Client not found", 404);
 
   const parsed = updateClientSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
@@ -70,13 +75,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // useUpdateClient does (smsOptInJustEnabled). Re-sending smsOptIn: true on
   // an already-opted-in client must NOT refresh the timestamp — that would
   // overwrite the real consent date with today's.
+  //
+  // Also reads the current address so an address edit can drop the stale
+  // geocode (useUpdateClient's addressStale): lat/lng and the verdict
+  // otherwise kept pointing the dispatch map and waiting-list geo at the OLD
+  // location.
+  const ADDRESS_KEYS = [
+    ["billingAddress", "billing_address"], ["billingCity", "billing_city"],
+    ["billingState", "billing_state"], ["billingZip", "billing_zip"],
+    ["serviceAddress", "service_address"], ["serviceCity", "service_city"],
+    ["serviceState", "service_state"], ["serviceZip", "service_zip"],
+  ] as const;
+  const addressTouched = ADDRESS_KEYS.some(([k]) => body[k] !== undefined);
   let previousStatus: string | null = null;
   let previousSmsOptIn = false;
   let phoneChanged = false;
-  if (body.status !== undefined || body.smsOptIn !== undefined || body.primaryPhone !== undefined) {
+  let addressStale = false;
+  if (body.status !== undefined || body.smsOptIn !== undefined || body.primaryPhone !== undefined || addressTouched) {
     const { data: current } = await db
       .from("clients")
-      .select("status, sms_opt_in, primary_phone")
+      .select(
+        "status, sms_opt_in, primary_phone, billing_address, billing_city, billing_state, billing_zip, service_address, service_city, service_state, service_zip"
+      )
       .eq("org_id", auth.orgId)
       .eq("id", id)
       .is("deleted_at", null)
@@ -86,14 +106,32 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     previousSmsOptIn = (current.sms_opt_in as boolean | null) ?? false;
     const lastDigits = (v: unknown) => String(v ?? "").replace(/\D/g, "").slice(-10);
     phoneChanged = body.primaryPhone !== undefined && lastDigits(body.primaryPhone) !== lastDigits(current.primary_phone);
+    const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+    addressStale = ADDRESS_KEYS.some(([k, col]) => body[k] !== undefined && norm(body[k]) !== norm(current[col]));
+  }
+  const statusChanged = body.status !== undefined && previousStatus !== null && previousStatus !== body.status;
+  // 'lost' closes a LEAD (useCloseLeadAsLost); a client who was ever active
+  // is cancelled instead — the lost-leads and cancellation reports depend on
+  // the distinction.
+  if (statusChanged && body.status === "lost" && previousStatus !== "lead") {
+    return jsonError("Only a lead can be closed as lost — use status 'cancelled' for a client", 400);
   }
   const smsOptInJustEnabled = body.smsOptIn === true && !previousSmsOptIn;
-  // lead -> active is a conversion: stamp client_since (the conversion date)
-  // exactly as useConvertLeadToClient does, since reports key off it.
-  const convertingLead = previousStatus === "lead" && body.status === "active";
+  // lead (or lost lead) -> active is a conversion: stamp client_since (the
+  // conversion date) exactly as useUpdateClient / useConvertLeadToClient do,
+  // since reports key off it.
+  const convertingLead = statusChanged && body.status === "active" && (previousStatus === "lead" || previousStatus === "lost");
   const clientSince = convertingLead
     ? todayInZone(await getOrgTimeZone(db, auth.orgId))
     : null;
+  // Closing stamps closed_at (useCancelClient / useCloseLeadAsLost) — the
+  // cancelled-clients and lost-leads reports key on it. Reopening clears the
+  // closure, as useUpdateClient / useActivateClient do.
+  const closing = statusChanged && (body.status === "cancelled" || body.status === "lost");
+  const reopening =
+    statusChanged &&
+    (previousStatus === "cancelled" || previousStatus === "lost") &&
+    (body.status === "active" || body.status === "lead");
 
   const { data, error } = await db
     .from("clients")
@@ -105,6 +143,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.accountType !== undefined && { account_type: body.accountType }),
       ...(body.status !== undefined && { status: body.status }),
       ...(clientSince && { client_since: clientSince }),
+      ...(closing && { closed_at: new Date().toISOString() }),
+      ...(reopening && { cancellation_reason: null, closed_at: null }),
       ...(body.primaryPhone !== undefined && { primary_phone: body.primaryPhone }),
       ...(body.primaryEmail !== undefined && { primary_email: body.primaryEmail }),
       ...(body.billingAddress !== undefined && { billing_address: body.billingAddress }),
@@ -117,6 +157,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.serviceCity !== undefined && { service_city: body.serviceCity }),
       ...(body.serviceState !== undefined && { service_state: body.serviceState }),
       ...(body.serviceZip !== undefined && { service_zip: body.serviceZip }),
+      ...(addressStale && { address_verdict: null, address_verified_at: null, lat: null, lng: null }),
       ...(body.source !== undefined && { source: body.source }),
       ...(body.salesRepId !== undefined && { sales_rep_id: body.salesRepId }),
       ...(body.referredBy !== undefined && { referred_by: body.referredBy }),
@@ -124,7 +165,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ...(body.okToEmail !== undefined && { ok_to_email: body.okToEmail }),
       ...(body.doNotMarket !== undefined && { do_not_market: body.doNotMarket }),
       // Consent was given for the previous number, not a new one, unless the caller sets it explicitly.
-      ...(phoneChanged && body.smsOptIn === undefined && { sms_opt_in: false }),
+      // The old consent stamp goes with it (useUpdateClient does the same).
+      ...(phoneChanged && body.smsOptIn === undefined && { sms_opt_in: false, sms_opt_in_at: null, sms_opt_in_source: null }),
       ...(body.smsOptIn !== undefined && { sms_opt_in: body.smsOptIn }),
       ...(smsOptInJustEnabled && {
         sms_opt_in_at: new Date().toISOString(),
@@ -159,7 +201,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (error) return jsonServerError("PATCH /api/v1/clients/[id]", error);
   if (!data) return jsonError("Client not found", 404);
 
-  if (body.status !== undefined && previousStatus !== null && previousStatus !== body.status) {
+  if (phoneChanged && previousSmsOptIn && body.smsOptIn === undefined) {
+    await db.from("client_activity").insert({
+      org_id: auth.orgId,
+      client_id: id,
+      activity_type: "note",
+      subject: "Text consent cleared: primary phone number changed",
+    });
+  }
+
+  if (statusChanged) {
     await db.from("client_activity").insert({
       org_id: auth.orgId,
       client_id: id,
@@ -172,7 +223,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // status change) but covers the meaningful lifecycle transitions.
     if (previousStatus === "lead" && (body.status === "cancelled" || body.status === "lost")) {
       await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "lead_cancelled" });
-    } else if (previousStatus === "lead" && body.status === "active") {
+    } else if (convertingLead) {
       await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "lead_converted_to_client" });
     } else if (body.status === "cancelled") {
       await fireSimpleTrigger(db, { orgId: auth.orgId, clientId: id, triggerType: "client_cancelled" });

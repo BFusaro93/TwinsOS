@@ -80,12 +80,13 @@ export async function POST(
     .from("estimates")
     .select("id, stage, org_id, client_id, estimate_number, sales_rep_id, valid_until_date, tiers_enabled")
     .eq("id", id)
-    .in("client_id", clientIds)
     .eq("org_id", ctx.orgId)
     .is("deleted_at", null)
-    .single() as { data: { id: string; stage: string; org_id: string; client_id: string; estimate_number: number; sales_rep_id: string | null; valid_until_date: string | null; tiers_enabled: boolean | null } | null };
+    .maybeSingle() as { data: { id: string; stage: string; org_id: string; client_id: string; estimate_number: number; sales_rep_id: string | null; valid_until_date: string | null; tiers_enabled: boolean | null } | null };
 
-  if (!estimate) {
+  // Ownership checked in code, not with .in("client_id", ...): a property
+  // manager's few hundred sub-account ids overflow the URL limit.
+  if (!estimate || !clientIds.includes(estimate.client_id)) {
     return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
   }
   if (estimate.stage !== "sent") {

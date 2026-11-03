@@ -121,6 +121,12 @@ export function SnowGuide() {
           </li>
         </ul>
         <p>
+          The dialog always opens on the storm you&apos;re viewing: Dispatch Date is that
+          storm&apos;s date and Max Trigger Inches its forecast. When you change a filter, any
+          row it newly excludes is unticked, so a highlighted row only goes out if you tick it
+          again yourself.
+        </p>
+        <p>
           Jobs are also excluded automatically if today isn&apos;t one of the days their contract
           authorizes service on. A snow job whose contract has ended (cancelled, expired, inactive,
           deleted or past its end date) no longer appears on this board at all. Everything not excluded is pre-checked; uncheck or check

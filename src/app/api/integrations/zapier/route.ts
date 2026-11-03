@@ -43,5 +43,19 @@ export async function POST() {
     return NextResponse.json({ error: "Failed to generate key" }, { status: 500 });
   }
 
+  // Instant-trigger subscriptions were registered with the OLD key and are
+  // matched by org only, so they kept receiving every event after a
+  // regenerate — including a leaked key's attacker-chosen target URL — and
+  // Zapier's own unsubscribe (sent with the old key) got a 401, leaving them
+  // orphaned. Retire them all: Zaps reconnected with the new key re-subscribe.
+  const { error: hooksError } = await db
+    .from("zapier_webhook_subscriptions")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("org_id", profile.org_id)
+    .is("deleted_at", null);
+  if (hooksError) {
+    logger.child("zapier-key").error("retiring old subscriptions failed", { error: hooksError.message });
+  }
+
   return NextResponse.json({ apiKey });
 }

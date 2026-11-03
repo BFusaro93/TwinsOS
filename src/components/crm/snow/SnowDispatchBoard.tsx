@@ -367,9 +367,35 @@ function AddJobsDialog({
       });
   }, [candidateJobIds, snowJobs, maxTriggerInches, minPriority, date]);
 
-  if (open && !initialized && candidates.length > 0) {
+  // Each opening starts from this storm's own date and forecast, not whatever
+  // the dialog was last left at.
+  const [seeded, setSeeded] = useState(false);
+  if (open && !seeded) {
+    setSeeded(true);
+    setDate(eventDate);
+    setMaxTriggerInches(forecastDepthInches != null ? String(forecastDepthInches) : "");
+  }
+  if (open && seeded && !initialized && candidates.length > 0) {
     setSelectedIds(new Set(candidates.filter((c) => !c.excluded).map((c) => c.job.id)));
     setInitialized(true);
+  }
+
+  // When a filter change newly excludes a ticked row (deeper trigger, lower
+  // priority, unauthorized day), untick it — red rows used to stay ticked and
+  // were dispatched anyway. A row the user re-ticks afterwards stays ticked.
+  const excludedKey = candidates.filter((c) => c.excluded).map((c) => c.job.id).join(",");
+  const [prevExcludedKey, setPrevExcludedKey] = useState(excludedKey);
+  if (excludedKey !== prevExcludedKey) {
+    const before = new Set(prevExcludedKey ? prevExcludedKey.split(",") : []);
+    const newlyExcluded = candidates.filter((c) => c.excluded && !before.has(c.job.id)).map((c) => c.job.id);
+    setPrevExcludedKey(excludedKey);
+    if (newlyExcluded.length > 0 && newlyExcluded.some((id) => selectedIds.has(id))) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of newlyExcluded) next.delete(id);
+        return next;
+      });
+    }
   }
 
   function toggle(id: string) {
@@ -399,13 +425,14 @@ function AddJobsDialog({
       onDone();
       onOpenChange(false);
       setInitialized(false);
+      setSeeded(false);
     } catch {
       toast.error("Failed to add jobs");
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) setInitialized(false); }}>
+    <Dialog open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) { setInitialized(false); setSeeded(false); } }}>
       <DialogContent className="max-w-2xl p-0 gap-0 pt-10 sm:pt-10 max-h-[85vh] flex flex-col [&>button:last-child]:top-3">
         <DialogHeader className="shrink-0 bg-[#4a4a4a] text-white px-5 py-3">
           <DialogTitle className="text-sm font-semibold">Add Jobs to Dispatch</DialogTitle>
@@ -1759,6 +1786,7 @@ export function SnowDispatchBoard() {
       {activeEvent && (
         <>
           <AddJobsDialog
+            key={activeEvent.id}
             open={addJobsOpen}
             onOpenChange={setAddJobsOpen}
             stormEventId={activeEvent.id}

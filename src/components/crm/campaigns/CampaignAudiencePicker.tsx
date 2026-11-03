@@ -26,11 +26,13 @@ export function CampaignAudiencePicker({
 
   // Filtered and paged server-side, same as the Clients page.
   const debouncedSearch = useDebouncedValue(search);
+  // Filter text/number inputs update on every keystroke; debounce them like the search box.
+  const debouncedFilters = useDebouncedValue(filterRows);
   const filters = useMemo<FilterRow[]>(
     () => hideDoNotMarket
-      ? [...filterRows, { id: "hide-dnm", field: "do_not_market", operator: "eq", value: "no" }]
-      : filterRows,
-    [filterRows, hideDoNotMarket],
+      ? [...debouncedFilters, { id: "hide-dnm", field: "do_not_market", operator: "eq", value: "no" }]
+      : debouncedFilters,
+    [debouncedFilters, hideDoNotMarket],
   );
   const { data, isPending: isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useClientsPage({ search: debouncedSearch, filters });
