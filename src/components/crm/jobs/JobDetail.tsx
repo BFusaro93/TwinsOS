@@ -110,6 +110,8 @@ import { usePermissions } from "@/lib/hooks/use-permissions";
 import { WarrantiesPanel } from "@/components/crm/warranties/WarrantiesPanel";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
+import { RenewPackageDialog } from "@/components/crm/jobs/RenewPackageDialog";
+import { useJobRenewalLinks, useSetPackageRenewalSetting } from "@/lib/hooks/use-package-renewal";
 
 
 const STATUS_COLOR: Record<string, string> = {
@@ -177,6 +179,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const { data: jobClient } = useClient(job?.clientId ?? "");
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
   const [sendSmsOpen, setSendSmsOpen] = useState(false);
+  const [renewOpen, setRenewOpen] = useState(false);
+  const { data: renewalLinks } = useJobRenewalLinks(jobId, job?.renewedFromJobId ?? null, job?.jobType === "package");
+  const setRenewalSetting = useSetPackageRenewalSetting();
   const { data: crews = [] } = useCRMCrews();
   const updateJob = useUpdateJob();
   const createVisit = useCreateVisit();
@@ -773,6 +778,20 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   {job.recurrenceRule}
                 </span>
               )}
+              {renewalLinks?.renewedFrom && (
+                <button type="button" className="text-brand-600 hover:underline dark:text-brand-400"
+                  onClick={() => goTo(`/crm/scheduling/jobs/${renewalLinks.renewedFrom!.id}`)}>
+                  Renewal of #{renewalLinks.renewedFrom.jobNumber}
+                </button>
+              )}
+              {renewalLinks?.renewedTo ? (
+                <button type="button" className="text-green-700 hover:underline dark:text-green-400"
+                  onClick={() => goTo(`/crm/scheduling/jobs/${renewalLinks.renewedTo!.id}`)}>
+                  Renewed as #{renewalLinks.renewedTo.jobNumber}
+                </button>
+              ) : job.jobType === "package" && job.packageRenewal === "do_not_renew" ? (
+                <span>Not renewing</span>
+              ) : null}
             </p>
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2 pl-4">
@@ -872,6 +891,30 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   <MessageSquare className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
                   {jobClient?.primaryPhone ? "Send Text" : "Send Text (no number)"}
                 </DropdownMenuItem>
+              )}
+              {job.jobType === "package" && can("job_add") && (
+                <>
+                  <DropdownMenuItem disabled={!!renewalLinks?.renewedTo} onSelect={() => setRenewOpen(true)}>
+                    <RefreshCw className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
+                    {renewalLinks?.renewedTo ? "Renewed for next season" : "Renew for next season…"}
+                  </DropdownMenuItem>
+                  {!renewalLinks?.renewedTo && (
+                    <DropdownMenuItem
+                      onSelect={async () => {
+                        const doNotRenew = job.packageRenewal !== "do_not_renew";
+                        try {
+                          await setRenewalSetting.mutateAsync({ jobId, doNotRenew });
+                          toast.success(doNotRenew ? "Marked as not renewing" : "Will be offered for renewal");
+                        } catch (err) {
+                          toast.error(mutationErrorMessage(err, "Couldn't update the renewal setting"));
+                        }
+                      }}
+                    >
+                      <XCircle className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
+                      {job.packageRenewal === "do_not_renew" ? "Renew as usual" : "Mark as not renewing"}
+                    </DropdownMenuItem>
+                  )}
+                </>
               )}
               <DropdownMenuItem onSelect={() => setTab("audit")}>
                 <History className="mr-2 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />
@@ -2139,6 +2182,14 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           clientName={jobClient.displayName}
           clientPhone={jobClient.primaryPhone}
           smsOptIn={jobClient.smsOptIn ?? false}
+        />
+      )}
+      {job.jobType === "package" && (
+        <RenewPackageDialog
+          jobId={jobId}
+          open={renewOpen}
+          onOpenChange={setRenewOpen}
+          onRenewed={(newJobId) => goTo(`/crm/scheduling/jobs/${newJobId}`)}
         />
       )}
       {confirmDialog}
