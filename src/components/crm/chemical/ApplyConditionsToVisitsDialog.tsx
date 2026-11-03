@@ -85,7 +85,7 @@ export function ApplyConditionsToVisitsDialog({ open, onClose, visitIds, weather
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Conditions for all {visitIds.length} visits — {dateLabel}</DialogTitle>
+          <DialogTitle>Conditions for {visitIds.length === 1 ? "this visit" : `all ${visitIds.length} visits`} — {dateLabel}</DialogTitle>
           <DialogDescription>
             Saved on every chemical record for these visits. Leave a box blank to keep what each visit already has.
           </DialogDescription>
@@ -122,7 +122,7 @@ export function ApplyConditionsToVisitsDialog({ open, onClose, visitIds, weather
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
             <Button size="sm" onClick={() => void submit()} disabled={!hasValue || apply.isPending || visitIds.length === 0}>
-              {apply.isPending ? "Saving…" : `Apply to ${visitIds.length} visits`}
+              {apply.isPending ? "Saving…" : `Apply to ${visitIds.length} visit${visitIds.length === 1 ? "" : "s"}`}
             </Button>
           </div>
         </DialogFooter>
