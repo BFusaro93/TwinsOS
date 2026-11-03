@@ -154,8 +154,11 @@ export interface CRMJob {
   schedule: string | null;
   scheduleDays: string[];
   packageName: string | null;
+  /** Renewal setting: null = renew next season as usual; 'do_not_renew' = client isn't renewing. */
   packageRenewal: string | null;
   packageDiscount: string | null;
+  /** Package renewal: the previous season's job this one was renewed from. */
+  renewedFromJobId: string | null;
   conflictDays: string[];
   inchTrigger: number | null;
   invoiceType: string | null;
@@ -273,6 +276,8 @@ export interface NewClientJobFormValues {
   /** Job-level wording for the auto-invoice line (e.g. a package's invoice description). */
   invoiceDescription?: string | null;
   notesToCrew: string | null;
+  /** Package renewal — last season's job this one renews (crm_jobs.renewed_from_job_id). */
+  renewedFromJobId?: string | null;
   services: NewClientJobServiceValues[];
   products: NewClientJobProductValues[];
 }
@@ -470,4 +475,8 @@ export interface NewClientJobServiceValues {
   sortOrder: number;
   /** Days that must elapse after this service's visit completes before the next package-sequenced service is due, if this row came from a Package. */
   minDays: number | null;
+  /** Carried over by a package renewal; left unset by Add Job (column defaults apply). */
+  isTaxable?: boolean | null;
+  maxVisits?: number | null;
+  treatedArea?: number | null;
 }

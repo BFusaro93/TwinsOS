@@ -138,6 +138,7 @@ export function mapJob(row: any): CRMJob {
     packageName: row.package_name ?? null,
     packageRenewal: row.package_renewal ?? null,
     packageDiscount: row.package_discount ?? null,
+    renewedFromJobId: row.renewed_from_job_id ?? null,
     conflictDays: row.conflict_days ?? [],
     inchTrigger: row.inch_trigger ?? null,
     invoiceType: row.invoice_type ?? null,
@@ -594,6 +595,7 @@ function mapJobFull(row: any): CRMJob {
     packageName: row.package_name ?? null,
     packageRenewal: row.package_renewal ?? null,
     packageDiscount: row.package_discount ?? null,
+    renewedFromJobId: row.renewed_from_job_id ?? null,
     conflictDays: row.conflict_days ?? [],
     inchTrigger: row.inch_trigger ?? null,
     invoiceType: row.invoice_type ?? null,
@@ -1683,6 +1685,7 @@ export function useCreateClientJob() {
           package_id: values.packageId || null,
           package_name: values.packageName || null,
           package_renewal: values.packageRenewal || null,
+          renewed_from_job_id: values.renewedFromJobId ?? null,
           package_discount: values.packageDiscount || null,
           package_total_steps: values.packageTotalSteps ?? null,
           conflict_days: values.conflictDays,
@@ -1763,6 +1766,10 @@ export function useCreateClientJob() {
           included: s.included,
           sort_order: i,
           min_days: s.minDays ?? null,
+          // Only a package renewal sets these; Add Job leaves the column defaults.
+          ...(s.isTaxable != null ? { is_taxable: s.isTaxable } : {}),
+          ...(s.maxVisits != null ? { max_visits: s.maxVisits } : {}),
+          ...(s.treatedArea != null ? { treated_area: s.treatedArea } : {}),
         }));
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: insertedServices, error: svcErr } = await (supabase as any)
