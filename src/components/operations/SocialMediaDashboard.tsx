@@ -816,7 +816,7 @@ export function SocialMediaDashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="week" tick={AXIS_TICK} axisLine={false} tickLine={false} />
                   <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={(v: number) => fmtCompact(v)} width={40} />
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => fmtNum(v)} />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v) => fmtNum(Number(v))} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   {activePlatforms.map((p) => <Bar key={p} dataKey={p} stackId="v" fill={colorOf(p)} />)}
                 </BarChart>
@@ -828,7 +828,7 @@ export function SocialMediaDashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="week" tick={AXIS_TICK} axisLine={false} tickLine={false} />
                   <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={(v: number) => fmtCompact(v)} width={40} />
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => fmtNum(v)} />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v) => fmtNum(Number(v))} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   {activePlatforms.map((p) => <Bar key={p} dataKey={`${p}_pv`} name={p} stackId="pv" fill={colorOf(p)} />)}
                 </BarChart>
@@ -840,7 +840,7 @@ export function SocialMediaDashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="week" tick={AXIS_TICK} axisLine={false} tickLine={false} />
                   <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={32} />
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => `${v}%`} />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v) => `${Number(v)}%`} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Line type="monotone" dataKey="overall_er" name="All platforms" stroke="#60ab45" strokeWidth={2.5} dot={{ r: 3, fill: "#60ab45" }} connectNulls />
                   {activePlatforms.map((p) => (
@@ -856,7 +856,7 @@ export function SocialMediaDashboard() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="week" tick={AXIS_TICK} axisLine={false} tickLine={false} />
                     <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} tickFormatter={(v: number) => fmtCompact(v)} width={40} />
-                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: number) => fmtNum(v)} />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v) => fmtNum(Number(v))} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     {activePlatforms.map((p) => (
                       <Line key={p} type="monotone" dataKey={`${p}_followers`} name={p} stroke={colorOf(p)} strokeWidth={2} dot={{ r: 3 }} connectNulls />

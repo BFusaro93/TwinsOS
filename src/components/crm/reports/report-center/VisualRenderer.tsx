@@ -418,13 +418,13 @@ function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualS
             cx="50%"
             cy="50%"
             outerRadius={90}
-            label={(entry) => entry.__label}
+            label={(entry) => (entry as unknown as { __label: string }).__label}
           >
             {data.map((_, i) => (
               <Cell key={i} fill={SERIES_COLORS[i % SERIES_COLORS.length]} />
             ))}
           </Pie>
-          <Tooltip formatter={(v: number) => formatCellValue(v, valueCol.type)} />
+          <Tooltip formatter={(v) => formatCellValue(Number(v), valueCol.type)} />
           <Legend />
         </PieChart>
       </ResponsiveContainer>
@@ -434,9 +434,9 @@ function ChartVisual({ result, visual }: { result: ReportResult; visual: VisualS
   // Recharts passes the series' display `name` (a label, e.g. "Sum of
   // Balance") as the 2nd formatter arg, not its data key — matching that
   // against column keys always misses. The dataKey lives on the 3rd arg.
-  const tooltipFormatter = (v: number, _name: string, item: { dataKey?: string | number }) => {
+  const tooltipFormatter = (v: unknown, _name: unknown, item: { dataKey?: unknown }) => {
     const c = colFor(result.columns, item?.dataKey !== undefined ? String(item.dataKey) : undefined);
-    return c ? formatCellValue(v, c.type) : v;
+    return c ? formatCellValue(Number(v), c.type) : Number(v);
   };
 
   // All series share one Y axis, so ticks are formatted by the first value

@@ -147,7 +147,7 @@ export function RepairCostReport() {
               tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
             />
             <Tooltip
-              formatter={(value: number) => usd(value)}
+              formatter={(value) => usd(Number(value))}
               contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -184,7 +184,7 @@ export function RepairCostReport() {
                 tickLine={false}
               />
               <Tooltip
-                formatter={(value: number) => usd(value)}
+                formatter={(value) => usd(Number(value))}
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
               />
               <Bar dataKey="spend" fill={COLORS.parts} radius={[0, 4, 4, 0]} />

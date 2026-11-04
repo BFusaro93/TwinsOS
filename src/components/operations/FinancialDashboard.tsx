@@ -680,7 +680,7 @@ function OverviewTab({
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
             <XAxis dataKey="month" tick={{ fontSize: 11 }} />
             <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} width={50} />
-            <Tooltip formatter={(v: number) => `${v.toFixed(1)}%`} />
+            <Tooltip formatter={(v) => `${Number(v).toFixed(1)}%`} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 2" />
             <Line type="monotone" dataKey="Gross Margin %" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} />

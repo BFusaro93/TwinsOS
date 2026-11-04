@@ -163,7 +163,8 @@ export default function PartsSpendReportPage() {
               data={monthlyTrend}
               margin={{ top: 0, right: 4, left: -20, bottom: 0 }}
               onClick={(e) => {
-                const key = e?.activePayload?.[0]?.payload?.key;
+                const idx = Number(e?.activeIndex);
+                const key = Number.isInteger(idx) ? monthlyTrend[idx]?.key : undefined;
                 if (key) setSelectedMonth(key);
               }}
             >
@@ -175,7 +176,7 @@ export default function PartsSpendReportPage() {
                 axisLine={false}
                 tickLine={false}
               />
-              <Tooltip formatter={(v: number) => [formatCurrency(v), "Spend"]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <Tooltip formatter={(v) => [formatCurrency(Number(v)), "Spend"]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
               <Bar dataKey="spend" radius={[4, 4, 0, 0]} cursor="pointer">
                 {monthlyTrend.map((m) => (
                   <Cell key={m.key} fill={m.key === selectedMonth ? "#60ab45" : "#bbf7d0"} />
