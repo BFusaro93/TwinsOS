@@ -41,18 +41,23 @@ export function useChemicalNoticeStatus(visitIds: string[], enabled = true) {
  * is outside the US, or no station answered.
  */
 export async function fetchJobConditions(jobId: string, at?: string): Promise<ConditionsReading | null> {
-  const geo = await fetch("/api/crm/jobs/geocode", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jobIds: [jobId] }),
-  });
-  if (!geo.ok) return null;
-  const point = ((await geo.json().catch(() => ({}))) as { results?: { lat: number; lng: number }[] }).results?.[0];
-  if (!point) return null;
-  const qs = new URLSearchParams({ lat: String(point.lat), lng: String(point.lng), ...(at ? { at } : {}) });
-  const res = await fetch(`/api/crm/weather/conditions?${qs.toString()}`);
-  if (!res.ok) return null;
-  return ((await res.json()) as { reading: ConditionsReading | null }).reading;
+  // A dropped connection is the same answer to the caller as "no weather here": null, never a throw.
+  try {
+    const geo = await fetch("/api/crm/jobs/geocode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobIds: [jobId] }),
+    });
+    if (!geo.ok) return null;
+    const point = ((await geo.json().catch(() => ({}))) as { results?: { lat: number; lng: number }[] }).results?.[0];
+    if (!point) return null;
+    const qs = new URLSearchParams({ lat: String(point.lat), lng: String(point.lng), ...(at ? { at } : {}) });
+    const res = await fetch(`/api/crm/weather/conditions?${qs.toString()}`);
+    if (!res.ok) return null;
+    return ((await res.json()) as { reading: ConditionsReading | null }).reading;
+  } catch {
+    return null;
+  }
 }
 
 export interface ConditionsValues {
