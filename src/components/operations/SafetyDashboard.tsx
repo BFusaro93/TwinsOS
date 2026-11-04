@@ -503,7 +503,7 @@ export function SafetyDashboard() {
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                 <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={32} />
-                <Tooltip formatter={(v: number) => [v, "Score"]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                <Tooltip formatter={(v) => [Number(v), "Score"]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                 <Bar dataKey="score" radius={[0, 4, 4, 0]}>
                   {scoreBarData.map((d, i) => (
                     <Cell key={i} fill={scoreColor(d.score)} />

@@ -304,7 +304,7 @@ export const dashboardPanelSchema = z.object({
    *  back to the report's own default filter values, computed fresh on
    *  every render — so a date-range default like "this month" never goes
    *  stale in a saved dashboard. */
-  reportParams: z.record(z.string()).optional(),
+  reportParams: z.record(z.string(), z.string()).optional(),
 });
 export type DashboardPanel = z.infer<typeof dashboardPanelSchema>;
 

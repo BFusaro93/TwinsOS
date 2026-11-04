@@ -48,7 +48,7 @@ const schema = z.object({
   location: z.string(),
   scheduledDate: z.string().min(1, "Date is required"),
   scheduledTime: z.string().min(1, "Time is required"),
-  durationMinutes: z.coerce.number().int().min(5, "Duration is required"),
+  durationMinutes: z.number({ error: "Duration is required" }).int().min(5, "Duration is required"),
   notes: z.string(),
   estimateId: z.string(),
   ticketId: z.string(),
@@ -347,7 +347,7 @@ export function SalesMeetingDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>Duration (min) *</Label>
-              <Input type="number" step={5} min={5} {...register("durationMinutes")} />
+              <Input type="number" step={5} min={5} {...register("durationMinutes", { valueAsNumber: true })} />
               {errors.durationMinutes && <p className="text-xs text-red-500 dark:text-red-400">{errors.durationMinutes.message}</p>}
             </div>
             <div className="flex flex-col gap-1.5">
