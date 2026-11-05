@@ -70,7 +70,7 @@ export default function DashboardLayout({
             onClick={() => setSidebarOpen(false)}
           />
           {/* Sidebar — overscroll-contain keeps scroll inside the drawer */}
-          <div className="relative z-10 h-full w-[260px] overflow-y-auto overscroll-contain">
+          <div className="relative z-10 h-full w-[16.25rem] overflow-y-auto overscroll-contain">
             <SidebarDrawerProvider>
               <AppSidebar />
             </SidebarDrawerProvider>

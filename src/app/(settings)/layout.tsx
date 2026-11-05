@@ -33,7 +33,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSidebarOpen(false)} />
-          <div className="relative z-10 h-full w-[260px]">
+          <div className="relative z-10 h-full w-[16.25rem]">
             <SidebarDrawerProvider>
               <SettingsSidebar />
             </SidebarDrawerProvider>
