@@ -2,6 +2,7 @@ import { TABLE_STYLE, TD_STYLE, TH_STYLE, sanitizeHtml } from "@/lib/utils/sanit
 import type { BlockType } from "@/types/crm-documents";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { stripHtml } from "@/lib/utils/strip-html";
+import { DEFAULT_TIME_ZONE, shiftYmd, todayInZone } from "@/lib/time/zone";
 
 // ── Merge tag resolution ─────────────────────────────────────────────────────
 // Matches the pattern used by the estimate/invoice send routes so preview and
@@ -92,6 +93,30 @@ export function resolveSubjectMergeTags(template: string, vars: Record<string, s
 const SAMPLE_GRID_HTML =
   '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px"><thead><tr style="text-align:left;border-bottom:2px solid #e2e8f0"><th style="padding:6px 4px">Description</th><th style="padding:6px 4px;text-align:right">Qty</th><th style="padding:6px 4px;text-align:right">Total</th></tr></thead><tbody><tr><td style="padding:6px 4px;border-bottom:1px solid #f1f5f9">Sample service</td><td style="padding:6px 4px;border-bottom:1px solid #f1f5f9;text-align:right">1</td><td style="padding:6px 4px;border-bottom:1px solid #f1f5f9;text-align:right">$1,250.00</td></tr></tbody></table>';
 
+/** "YYYY-MM-DD" -> "November 4, 2026" (a calendar day, never shifted by a zone). */
+function longDay(ymdStr: string): string {
+  return new Date(`${ymdStr}T12:00:00Z`).toLocaleDateString("en-US", {
+    month: "long", day: "numeric", year: "numeric", timeZone: "UTC",
+  });
+}
+
+/**
+ * The date-valued sample tags, computed for `timeZone`. [invoiceduedate] is a
+ * real date (invoice date + 30 days) — it used to be the literal "Net 30",
+ * which made test sends look like the tag resolves to the invoice terms
+ * instead of the due date.
+ */
+function sampleDates(timeZone: string): Record<string, string> {
+  const today = todayInZone(timeZone);
+  return {
+    "[today]": longDay(today),
+    "[estimatedate]": longDay(today),
+    "[invoicedate]": longDay(today),
+    "[invoiceduedate]": longDay(shiftYmd(today, 30)),
+    "[duedate]": longDay(shiftYmd(today, 30)),
+  };
+}
+
 export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   // Client
   "[clientname]": "Jane Homeowner",
@@ -134,11 +159,11 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[companyzip]": "55401",
   "[companyphone]": "(555) 987-6543",
   // System
-  "[today]": new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+  "[today]": "",
   // Estimate
   "[estimatenumber]": "00042",
   "[estimatecode]": "EST-00042",
-  "[estimatedate]": new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+  "[estimatedate]": "",
   "[estimatevaliduntil]": "30 days from send",
   "[estimatesubtotal]": "$1,250.00",
   "[estimatetotal]": "$1,325.00",
@@ -153,8 +178,9 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[estimategrid]": SAMPLE_GRID_HTML,
   // Invoice
   "[invoicenumber]": "00042",
-  "[invoicedate]": new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-  "[invoiceduedate]": "Net 30",
+  "[invoicedate]": "",
+  "[invoiceduedate]": "",
+  "[duedate]": "",
   "[invoicesubtotal]": "$1,250.00",
   "[invoicetax]": "$75.00",
   "[invoicetotal]": "$1,325.00",
@@ -164,7 +190,17 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[invoicegrid]": SAMPLE_GRID_HTML,
 };
 
+// Date tags: overwrite the placeholders above (kept as keys so they stay in
+// KNOWN_MERGE_TAG_KEYS) with real dates in the platform default zone.
+Object.assign(SAMPLE_MERGE_VALUES, sampleDates(DEFAULT_TIME_ZONE));
+
 export const KNOWN_MERGE_TAG_KEYS = new Set(Object.keys(SAMPLE_MERGE_VALUES));
+
+/** SAMPLE_MERGE_VALUES with the date tags read on `timeZone`'s calendar — what
+ *  server-side test sends / PDF previews should use (the org's timezone). */
+export function sampleMergeValuesForZone(timeZone: string): Record<string, string> {
+  return { ...SAMPLE_MERGE_VALUES, ...sampleDates(timeZone) };
+}
 
 // ── Block → HTML rendering (shared by preview + send-test-email) ────────────
 

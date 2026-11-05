@@ -5,6 +5,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Major bumps (stripe, tailwind, zod, recharts...) break the build and need
+    # a deliberate migration, so Dependabot doesn't open PRs for them. Upgrade
+    # majors by hand on a schedule. Minor/patch PRs are unaffected.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       # stripe-js and react-stripe-js pin each other's major via peerDependencies,
       # so they must always be bumped in the same PR.

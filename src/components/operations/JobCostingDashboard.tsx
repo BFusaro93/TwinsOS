@@ -472,10 +472,10 @@ function CalculatorTab({
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value"
-                label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                label={({ name, percent }) => `${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
                 {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
               </Pie>
-              <Tooltip formatter={(v: number) => fmtDollar(v) + "/hr"} />
+              <Tooltip formatter={(v) => fmtDollar(Number(v)) + "/hr"} />
             </PieChart>
           </ResponsiveContainer>
           <div className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1">

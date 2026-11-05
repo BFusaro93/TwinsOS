@@ -267,7 +267,7 @@ export function EquiptDashboard() {
                 tickLine={false}
               />
               <Tooltip
-                formatter={(v: number, name: string) => [formatCurrency(v), name]}
+                formatter={(v, name) => [formatCurrency(Number(v)), name]}
                 contentStyle={{ fontSize: 12, borderRadius: 8 }}
               />
               <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />

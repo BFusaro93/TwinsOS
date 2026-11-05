@@ -1,5 +1,4 @@
-import { zodToJsonSchema } from "zod-to-json-schema";
-import type { ZodTypeAny } from "zod";
+import { z, type ZodType } from "zod";
 import { createClientSchema, updateClientSchema } from "@/app/api/v1/clients/validation";
 import { createWorkOrderSchema, updateWorkOrderSchema } from "@/app/api/v1/work-orders/validation";
 import { createAssetSchema, updateAssetSchema } from "@/app/api/v1/assets/validation";
@@ -32,7 +31,7 @@ interface EndpointDef {
   summary: string;
   scope: string;
   agentTier: ApiScopeTier;
-  requestSchema?: ZodTypeAny;
+  requestSchema?: ZodType;
   hasIdParam?: boolean;
 }
 
@@ -417,7 +416,7 @@ export function buildOpenApiDocument(): Record<string, any> {
         requestBody: {
           required: true,
           content: {
-            "application/json": { schema: zodToJsonSchema(endpoint.requestSchema, { target: "openApi3" }) },
+            "application/json": { schema: z.toJSONSchema(endpoint.requestSchema, { target: "openapi-3.0", io: "input", unrepresentable: "any" }) },
           },
         },
       }),

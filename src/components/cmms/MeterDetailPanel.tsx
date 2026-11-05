@@ -189,8 +189,8 @@ export function MeterDetailPanel({ meter }: MeterDetailPanelProps) {
                   width={60}
                 />
                 <Tooltip
-                  formatter={(value: number) =>
-                    [`${value.toLocaleString()} ${meter.unit}`, meter.name]
+                  formatter={(value) =>
+                    [`${Number(value).toLocaleString()} ${meter.unit}`, meter.name]
                   }
                   labelStyle={{ color: "#475569", fontSize: 12 }}
                   contentStyle={{

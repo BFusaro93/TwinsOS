@@ -294,7 +294,7 @@ function HistoryTab({
                     width={56}
                   />
                   <Tooltip
-                    formatter={(value: number) => [`$${value.toFixed(2)}`, "Unit Cost"]}
+                    formatter={(value) => [`$${Number(value).toFixed(2)}`, "Unit Cost"]}
                     labelStyle={{ color: chartColors.label, fontSize: 12 }}
                     contentStyle={{
                       border: `1px solid ${chartColors.tooltipBorder}`,

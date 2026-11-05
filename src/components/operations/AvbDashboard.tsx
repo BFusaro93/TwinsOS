@@ -740,7 +740,7 @@ function History({ weeks, crewDefs, onEditWeek, onDeleteWeek }: HistoryProps) {
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
             <XAxis dataKey="week" tick={{fontSize:11,fill:"#94a3b8"}} axisLine={false} tickLine={false} />
             <YAxis domain={[0,110]} tick={{fontSize:11,fill:"#94a3b8"}} axisLine={false} tickLine={false} tickFormatter={v=>v+"%"} />
-            <Tooltip formatter={(v:number)=>[v+"%"]} contentStyle={{fontSize:12,borderRadius:8}} />
+            <Tooltip formatter={(v)=>[Number(v)+"%"]} contentStyle={{fontSize:12,borderRadius:8}} />
             <Legend wrapperStyle={{fontSize:11}} />
             {crewDefs.map((cr,i)=><Line key={cr.code} type="monotone" dataKey={cr.code} stroke={CREW_COLORS[i%CREW_COLORS.length]} strokeWidth={2} dot={false} connectNulls />)}
           </LineChart>

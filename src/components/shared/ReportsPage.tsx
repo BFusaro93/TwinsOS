@@ -227,8 +227,8 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
               tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
             />
             <Tooltip
-              formatter={(value: number) =>
-                new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value)
+              formatter={(value) =>
+                new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value))
               }
               contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
             />
@@ -272,8 +272,8 @@ function SpendTab({ purchaseOrders: allPurchaseOrders, isLoading }: { purchaseOr
               tickLine={false}
             />
             <Tooltip
-              formatter={(value: number) =>
-                new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value)
+              formatter={(value) =>
+                new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value))
               }
               contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
             />
@@ -512,7 +512,7 @@ function InventoryTab({ parts, isLoading }: { parts: Part[]; isLoading: boolean 
             />
             <Tooltip
               contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
-              formatter={(value: number) => [value, "Qty on Hand"]}
+              formatter={(value) => [Number(value), "Qty on Hand"]}
             />
             <Bar dataKey="qty" radius={[0, 4, 4, 0]}>
               {partsChartData.map((entry, index) => (

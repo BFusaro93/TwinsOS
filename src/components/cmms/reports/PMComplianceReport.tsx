@@ -172,7 +172,7 @@ export function PMComplianceReport() {
               <YAxis domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
               <Tooltip
                 contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
-                formatter={(value: number, _name, item) => [`${value}% (${item.payload.done} of ${item.payload.due})`, "Compliance"]}
+                formatter={(value, _name, item) => [`${Number(value)}% (${item.payload.done} of ${item.payload.due})`, "Compliance"]}
               />
               <Bar dataKey="compliance" radius={[4, 4, 0, 0]}>
                 {byMonth.map((m) => <Cell key={m.label} fill={barColor(m.compliance)} />)}

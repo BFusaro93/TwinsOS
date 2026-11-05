@@ -30,6 +30,12 @@ The Email Activity page is now "Message Activity" with Email/Text tabs ([page.ts
 
 **Setup step outside this codebase** (same pattern as the Resend webhook): in the Twilio Console, set the Messaging Service's inbound-webhook URL to `<site-url>/api/webhooks/twilio/inbound` (Request URL, HTTP POST) so Twilio actually calls it — nothing currently does without this.
 
+## Backlog — major dependency upgrades (Dependabot no longer proposes these)
+Dependabot is configured to skip major bumps (#430). Each one broke the build when tried on 2026-11-04 (PRs #425, #428, both closed), so do them as deliberate, separately tested upgrades.
+
+- [ ] Stripe 22 → 23 — `payment_method_types` was removed from `PaymentIntentCreateParams` / `SetupIntentCreateParams`. 9 routes to change: autopay `charge` and `charge-multi`, `connect/setup-intent`, `create-intent` and `create-intent-multi`, portal `create-intent` and `connect/setup-intent`, public invoice `create-intent`, public proposal `deposit-intent`. Payment path: test with Stripe test mode on its own, not bundled with other changes.
+- [ ] Tailwind 3 → 4 — `tailwind.config.ts` `darkMode: ["class"]` no longer type-checks; v4 moves config into CSS (`@theme`) and changes the PostCSS plugin. Whole-UI migration: needs a visual pass over light and dark mode (see the dark-mode allowlist rollout) and shadcn/ui compatibility check.
+
 ## Backlog — DB-enforce client_view_credit_card and client_view_notes
 
 `job_cancel` and `client_bulk_edit` are now DB-enforced (migrations 20261202000100 / 200, on PROD + TEST). These two `crm_roles` keys are still UI-only (`PermissionGate` in `ClientDetailPanel.tsx`): any CRM login can read the columns straight from the browser. Real enforcement needs column-level `REVOKE SELECT` on `clients` (same pattern as `crm_employees`, 20260930190000/190200), staged: RPC + code first, REVOKE applied after the deploy.

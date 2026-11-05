@@ -381,7 +381,7 @@ export function CrewBoard() {
   );
 
   const body = (
-    <div className={cn("flex h-full min-h-0 flex-col gap-4", tv && "p-6")}>
+    <div className={cn("flex h-full min-h-0 flex-col gap-4 max-lg:h-auto", tv && "p-6")}>
       {tv ? (
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-4xl font-semibold text-slate-900 dark:text-neutral-100">Crew Board</h1>
@@ -418,7 +418,10 @@ export function CrewBoard() {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 gap-4">
+      {/* Phones and portrait tablets (< lg) stack everything in one column that
+          scrolls down: side by side, the 256px equipment yard left the crews
+          ~50px of a phone screen. lg+ keeps the yard as a left rail. */}
+      <div className="flex min-h-0 gap-4 max-lg:flex-none max-lg:flex-col lg:flex-1 lg:flex-row">
         {/* Equipment yard — everything not on a crew today. Hidden on the TV. */}
         {!tv && (
           <aside
@@ -426,7 +429,7 @@ export function CrewBoard() {
             onDragLeave={() => overKey === "yard" && setOverKey(null)}
             onDrop={(e) => { e.preventDefault(); handleDropOnYard(); }}
             className={cn(
-              "flex w-64 shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm transition",
+              "flex shrink-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm transition max-lg:order-last max-lg:max-h-72 lg:w-64",
               overKey === "yard" && "ring-2 ring-brand-400",
               held?.item.kind === "equipment" && held.item.fromCrewId && "ring-2 ring-brand-300"
             )}
@@ -464,7 +467,7 @@ export function CrewBoard() {
 
         {/* Columns share the width when there are few crews and scroll sideways
             once they would drop below the minimum width. */}
-        <div className="flex min-w-0 flex-1 gap-4 overflow-x-auto pb-2">
+        <div className="flex min-w-0 gap-4 pb-2 max-lg:flex-col max-lg:shrink-0 lg:flex-1 lg:overflow-x-auto">
           {crews.map((crew) => {
             const color = colorByCrew.get(crew.id) ?? "#64748b";
             const fg = textOn(color);
@@ -499,7 +502,8 @@ export function CrewBoard() {
                 onClick={() => { if (held) handleDropOnCrew(crew.id); }}
                 className={cn(
                   "flex flex-1 flex-col overflow-hidden rounded-xl border-2 bg-card shadow-sm transition",
-                  big ? "min-w-[24rem] basis-[24rem]" : "min-w-[18rem] max-w-[34rem] basis-[18rem]",
+                  big ? "lg:min-w-[24rem] lg:basis-[24rem]" : "lg:min-w-[18rem] lg:max-w-[34rem] lg:basis-[18rem]",
+                  "max-lg:flex-none",
                   overKey === key && "scale-[1.01] shadow-lg",
                   held && "cursor-pointer ring-2 ring-brand-300"
                 )}
@@ -621,7 +625,7 @@ export function CrewBoard() {
           {crews.length === 0 && <p className="p-6 text-sm text-muted-foreground">No active crews yet — add them under Team.</p>}
 
           {(jobsByCrew.get("unassigned")?.length ?? 0) > 0 && (
-            <section className={cn("flex flex-1 flex-col overflow-hidden rounded-xl border-2 border-dashed bg-muted/30", big ? "min-w-[24rem] basis-[24rem]" : "min-w-[18rem] max-w-[34rem] basis-[18rem]")}>
+            <section className={cn("flex flex-1 flex-col overflow-hidden rounded-xl border-2 border-dashed bg-muted/30 max-lg:flex-none", big ? "lg:min-w-[24rem] lg:basis-[24rem]" : "lg:min-w-[18rem] lg:max-w-[34rem] lg:basis-[18rem]")}>
               <header className="border-b bg-slate-200 px-4 py-3 dark:bg-neutral-800">
                 <span className={cn("font-bold", big ? "text-3xl" : "text-lg")}>Unassigned jobs</span>
                 <p className="text-xs text-muted-foreground">
