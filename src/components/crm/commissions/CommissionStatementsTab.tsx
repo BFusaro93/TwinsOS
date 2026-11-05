@@ -43,7 +43,13 @@ function StatementDetail({ statement, onClose }: { statement: CommissionStatemen
                 const adj = !!l.sourceEvKey;
                 return (
                   <tr key={l.id} className={adj ? "bg-red-50/40 dark:bg-red-950/10" : undefined}>
-                    <td className="px-3 py-2">{formatDate(l.eventDate)}</td>
+                    <td className="px-3 py-2">
+                      {formatDate(l.eventDate)}
+                      {/* Earned before this statement's period but not claimed by an earlier one. */}
+                      {!adj && l.eventDate && l.eventDate < statement.periodStart && (
+                        <Badge variant="outline" className="ml-2 border-sky-200 bg-sky-50 text-xs font-medium text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-400">Earlier period</Badge>
+                      )}
+                    </td>
                     <td className="px-3 py-2">
                       {l.invoiceId ? (
                         <Link className="hover:underline" href={`/crm/accounting/invoices/${l.invoiceId}`}>#{l.invoiceNumber ?? "—"}</Link>

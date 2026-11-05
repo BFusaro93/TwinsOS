@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyTwilioRequest, parseTwilioForm } from "@/lib/sms/verify-twilio-request";
 import { notifyStaffOfNewTicket, notifyTicketComment } from "@/lib/ticket-notify";
+import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 import { getOrgTwilioAuthToken } from "@/lib/twilio/client";
 import { logger } from "@/lib/logger";
 
@@ -324,6 +325,14 @@ export async function POST(request: Request) {
           assignedToId: null,
           assignedToName: null,
           createdByUserId: null,
+        });
+        // A texted-in ticket is a new ticket like any other: "Ticket was created"
+        // automations run for it. Replies on an open thread (above) don't re-fire.
+        await fireServerTrigger(supabase, {
+          orgId: matched.org_id,
+          clientId: matched.id,
+          ticketId: ticket.id,
+          triggerType: "ticket_created",
         });
       }
     }

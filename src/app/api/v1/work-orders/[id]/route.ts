@@ -8,6 +8,7 @@ import { fireEventAutomations, type AdminClient } from "@/lib/automations/cmms-a
 import { notifyZapierSubscribers } from "@/lib/integrations/zapier";
 import { POLLING_TRIGGERS } from "@/lib/integrations/zapier-triggers";
 import { logger } from "@/lib/logger";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const log = logger.child("api/v1/work-orders");
 
@@ -43,7 +44,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!isUuid(id)) return jsonError("Work order not found", 404);
 
   const parsed = updateWorkOrderSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
+  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
   const body = parsed.data;
 
   if (Object.keys(body).length === 0) return jsonError("No fields to update", 400);

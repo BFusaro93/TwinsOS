@@ -4,6 +4,7 @@ import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-hel
 import { JOB_SELECT, shapeJob } from "./shape";
 import { createJobSchema } from "./validation";
 import { createCrmJob } from "@/lib/integrations/create-crm-job";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 /** GET /api/v1/jobs — list the org's Landscapt jobs. Requires scope "jobs:read". */
 export async function GET(request: Request) {
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
   if (!auth.ok) return jsonError(auth.error, auth.status);
 
   const parsed = createJobSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
+  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
   const body = parsed.data;
 
   const result = await createCrmJob(db, auth.orgId, body, { select: JOB_SELECT, context: "POST /api/v1/jobs" });

@@ -1,19 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { z } from "zod";
+import { BULK_PRINT_MAX } from "@/lib/bulk-print";
 import { renderInvoicesPDF } from "@/lib/invoices/pdf-data";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("invoices bulk pdf");
+
+export const maxDuration = 300;
+
+const BodySchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(BULK_PRINT_MAX) });
 
 // Combines several invoices into one PDF for the Invoices list's "Print
 // Selected" bulk action — same auth/org-scoping shape as the single-invoice
-// route, just taking ?ids=a,b,c instead of a path param. The lock +
-// draft->printed side effect stays in the client (InvoicesList.bulkPrintSelected)
-// since it's a UI-triggered mutation, not something a GET route should do.
-export async function GET(req: NextRequest) {
-  const idsParam = req.nextUrl.searchParams.get("ids") ?? "";
-  const ids = idsParam.split(",").map((s) => s.trim()).filter(Boolean);
-  if (ids.length === 0) {
-    return NextResponse.json({ error: "No invoice ids given" }, { status: 400 });
+// route. Ids come in a POST body (a GET with a few hundred ids in the query
+// string ran past the URL limit). The X-Rendered-Ids header lists the invoices
+// actually in the PDF; the list marks only those printed and locked, since an
+// invoice that failed to load never reached paper.
+export async function POST(req: NextRequest) {
+  const parsed = BodySchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: `Choose between 1 and ${BULK_PRINT_MAX} invoices` }, { status: 400 });
   }
+  const ids = Array.from(new Set(parsed.data.ids));
 
   const cookieStore = await cookies();
 
@@ -33,21 +43,22 @@ export async function GET(req: NextRequest) {
   if (!orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const buffer = await renderInvoicesPDF(supabase, ids, orgId, user.id);
-    if (!buffer) {
+    const rendered = await renderInvoicesPDF(supabase, ids, orgId, user.id);
+    if (!rendered) {
       return NextResponse.json({ error: "None of the selected invoices could be loaded" }, { status: 404 });
     }
 
-    return new NextResponse(buffer as unknown as BodyInit, {
+    return new NextResponse(rendered.buffer as unknown as BodyInit, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="invoices-${ids.length}.pdf"`,
+        "Content-Disposition": `inline; filename="invoices-${rendered.renderedIds.length}.pdf"`,
         "Cache-Control": "private, no-cache",
+        "X-Rendered-Ids": rendered.renderedIds.join(","),
       },
     });
   } catch (err) {
-    console.error("PDF render error:", err);
+    log.error("PDF render error", { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: "Failed to generate PDF" }, { status: 500 });
   }
 }

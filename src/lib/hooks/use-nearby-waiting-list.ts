@@ -39,6 +39,9 @@ function nextDuePackageStep(job: CRMJob, targetDate: string): { service: CRMJobS
   return { service: next, visitId: placeholder.id };
 }
 
+/** Jobs per /api/crm/jobs/geocode request (the endpoint's cap). */
+const GEOCODE_BATCH = 200;
+
 interface GeocodeResult {
   id: string;
   lat: number;
@@ -88,16 +91,25 @@ export function useNearbyWaitingListJobs(radiusMiles = 3, targetDate?: string) {
         return;
       }
 
-      const res = await fetch("/api/crm/jobs/geocode", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobIds: [...scheduledJobIds, ...waitingJobIds] }),
-      });
-      const data = await res.json() as GeocodeResponseBody;
-      if (!res.ok || data.error) {
-        setError(data.error ?? "Failed to geocode jobs");
-        setMatches([]);
-        return;
+      // The geocode endpoint takes at most 200 jobs per request; a large waiting list
+      // got "Too many jobs" every time, so the ids go in batches and the answers merge.
+      const allIds = Array.from(new Set([...scheduledJobIds, ...waitingJobIds]));
+      const data: GeocodeResponseBody = { results: [], unresolved: [], googleError: null };
+      for (let i = 0; i < allIds.length; i += GEOCODE_BATCH) {
+        const res = await fetch("/api/crm/jobs/geocode", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobIds: allIds.slice(i, i + GEOCODE_BATCH) }),
+        });
+        const part = (await res.json().catch(() => ({}))) as GeocodeResponseBody;
+        if (!res.ok || part.error) {
+          setError(part.error ?? "Failed to geocode jobs");
+          setMatches([]);
+          return;
+        }
+        data.results!.push(...(part.results ?? []));
+        data.unresolved!.push(...(part.unresolved ?? []));
+        if (part.googleError) data.googleError = part.googleError;
       }
 
       const coordsById = new Map((data.results ?? []).map((r) => [r.id, { lat: r.lat, lng: r.lng }]));

@@ -8,6 +8,7 @@ import { getPublishedProposal, toProposalDocument, type ProposalContent, type Pr
 import { resolveEstimateDocument } from "@/lib/estimates/resolve-estimate-document";
 import { loadEstimateDocumentMergeVars, resolveDocumentBlocksForPdf } from "@/lib/estimates/estimate-document-render";
 import { embedEstimatePhoto } from "@/lib/estimate-photo-embed";
+import { mapWithConcurrency } from "@/lib/utils/map-with-concurrency";
 
 // Shared by the single-estimate and bulk PDF routes, plus the
 // accepted-estimate notification email (estimate-client-notify.ts) — the
@@ -250,8 +251,10 @@ export async function renderEstimatesPDF(
   estimateIds: string[],
   orgId: string
 ): Promise<Buffer | null> {
+  // A few builds at a time — an unbounded Promise.all over a large selection opened
+  // hundreds of requests at once and ran the route out of time.
   const items = (
-    await Promise.all(estimateIds.map((id) => buildEstimatePDFData(supabase, id, orgId)))
+    await mapWithConcurrency(estimateIds, 5, (id) => buildEstimatePDFData(supabase, id, orgId))
   ).filter((x): x is { estimate: EstimatePDFData; org: OrgPDFData } => x !== null);
   if (items.length === 0) return null;
   try {

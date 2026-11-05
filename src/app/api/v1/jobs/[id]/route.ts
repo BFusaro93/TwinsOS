@@ -11,6 +11,7 @@ import { applyJobStatusToVisits } from "@/lib/visits/job-status-visits";
 import { GENERATOR_JOB_COLUMNS, generateVisitsForJobs, type GeneratorJob } from "@/lib/visits/generate";
 import { logger } from "@/lib/logger";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const log = logger.child("api/v1/jobs");
 
@@ -46,7 +47,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!isUuid(id)) return jsonError("Job not found", 404);
 
   const parsed = updateJobSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
+  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
   const body = parsed.data;
 
   if (Object.keys(body).length === 0) return jsonError("No fields to update", 400);

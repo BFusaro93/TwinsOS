@@ -24,6 +24,7 @@ import { DEFAULT_SUBJECT, DEFAULT_TEMPLATE_BODY } from "./SendEstimateDialog";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import { toast } from "sonner";
+import { BULK_PRINT_MAX, printInBatches } from "@/lib/bulk-print";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { usePermissions } from "@/lib/hooks/use-permissions";
@@ -337,10 +338,15 @@ export function EstimatesList({ clientId }: Props) {
   function bulkPrintSelected() {
     const targets = (estimates ?? []).filter((e) => selectedIds.has(e.id));
     if (targets.length === 0) return;
-    const ids = targets.map((e) => e.id).join(",");
-    const win = window.open(`/api/crm/estimates/bulk-pdf?ids=${ids}`, "_blank");
-    if (win) win.addEventListener("load", () => win.print(), { once: true });
-    toast.info(`Opening ${targets.length} estimate${targets.length !== 1 ? "s" : ""} to print…`);
+    // Batches of BULK_PRINT_MAX in a POST body, one tab each — ids in the URL ran past its limit.
+    const printing = printInBatches("/api/crm/estimates/bulk-pdf", targets.map((e) => e.id));
+    const tabs = Math.ceil(targets.length / BULK_PRINT_MAX);
+    toast.info(
+      `Opening ${targets.length} estimate${targets.length !== 1 ? "s" : ""} to print` + (tabs > 1 ? ` in ${tabs} tabs…` : "…")
+    );
+    void printing.then(({ failedBatches }) => {
+      if (failedBatches > 0) toast.error(`${failedBatches} batch${failedBatches !== 1 ? "es" : ""} of estimates couldn't be printed`);
+    });
   }
 
   const visibleColumns = clientId

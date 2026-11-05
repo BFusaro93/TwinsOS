@@ -7,6 +7,7 @@ import { createEstimateSchema } from "./validation";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 /**
  * GET /api/v1/estimates — list the org's estimates. Requires scope
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
   if (!auth.ok) return jsonError(auth.error, auth.status);
 
   const parsed = createEstimateSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
+  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
   const body = parsed.data;
   if (body.estimateDate && body.validUntilDate && body.validUntilDate < body.estimateDate) {
     return jsonError("validUntilDate can't be before estimateDate", 400);

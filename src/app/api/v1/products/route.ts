@@ -3,6 +3,7 @@ import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { PRODUCT_SELECT, shapeProduct } from "./shape";
 import { createProductSchema } from "./validation";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 /** GET /api/v1/products — list the org's product catalog items. Requires scope "products:read". */
 export async function GET(request: Request) {
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
   if (!auth.ok) return jsonError(auth.error, auth.status);
 
   const parsed = createProductSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
+  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
   const body = parsed.data;
 
   let vendorName = "";

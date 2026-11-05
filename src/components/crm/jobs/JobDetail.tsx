@@ -91,7 +91,8 @@ import {
 } from "lucide-react";
 import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
 import { RichNotes } from "@/components/shared/RichNotes";
-import { composeVisitNote, isBlankRich } from "@/lib/utils/visit-note";
+import { isBlankRich } from "@/lib/utils/visit-note";
+import { propagateVisitNotes, serviceNoteMap } from "@/lib/visits/visit-note-propagation";
 import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { SendClientEmailDialog } from "@/components/crm/SendClientEmailDialog";
@@ -360,23 +361,25 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       // job never reached the already-generated visits, which kept showing the
       // old text (while the crew was made to re-acknowledge a note they couldn't
       // see changed). Carry the edit onto the upcoming, not-yet-started visits
-      // that still hold an unmodified copy of the previous job note; a note
-      // someone wrote on a single visit is left alone.
+      // that still hold an unmodified copy of the previous job note — including the
+      // copies composed with a service's own crew note (job note + service note),
+      // which a plain equality on the old job note never matched. A note someone
+      // wrote on a single visit is left alone.
       if ("notes_to_crew" in edits) {
         const prevNote = job.notesToCrew ?? null;
         const nextNote = typeof edits.notes_to_crew === "string" && edits.notes_to_crew.trim() ? edits.notes_to_crew : null;
-        if (prevNote && prevNote !== nextNote) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error: noteErr } = await (createClient() as any)
-            .from("crm_job_visits")
-            .update({ notes_to_crew: nextNote })
-            .eq("job_id", job.id)
-            .eq("notes_to_crew", prevNote)
-            .gte("scheduled_date", orgToday())
-            .in("status", ["scheduled", "dispatched"])
-            .is("clocked_in_at", null)
-            .is("deleted_at", null);
-          if (noteErr) toast.error("Job saved, but the new crew note couldn't be applied to its upcoming visits — edit them from the Visits tab.");
+        if (prevNote !== nextNote) {
+          const serviceNotes = serviceNoteMap(job.services ?? []);
+          try {
+            await propagateVisitNotes(createClient(), {
+              jobId: job.id,
+              fromDate: orgToday(),
+              prev: { jobNote: prevNote, serviceNotes },
+              next: { jobNote: nextNote, serviceNotes },
+            });
+          } catch {
+            toast.error("Job saved, but the new crew note couldn't be applied to its upcoming visits — edit them from the Visits tab.");
+          }
           await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
         }
       }
@@ -577,25 +580,24 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           internal_note: isBlankRich(svcInternalNote) ? null : svcInternalNote,
         },
       });
-      // Carry a changed service note onto this service's upcoming, not-yet-started
-      // visits that still hold the unmodified composed copy (job note + old service
-      // note). A note someone typed on a single visit is left alone.
+      // Carry a changed service note onto the upcoming, not-yet-started visits that
+      // still hold the unmodified composed copy: this service's visits (job note +
+      // old service note) and whole-job visits (job note + every service's note).
+      // A note someone typed on a single visit is left alone.
       if (job && (prevSvc?.jobNote ?? null) !== nextJobNote) {
-        const prevComposed = composeVisitNote(job.notesToCrew, prevSvc?.jobNote);
-        const nextComposed = composeVisitNote(job.notesToCrew, nextJobNote);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let q = (createClient() as any)
-          .from("crm_job_visits")
-          .update({ notes_to_crew: nextComposed })
-          .eq("job_id", job.id)
-          .eq("job_service_id", editingSvcId)
-          .gte("scheduled_date", orgToday())
-          .in("status", ["scheduled", "dispatched"])
-          .is("clocked_in_at", null)
-          .is("deleted_at", null);
-        q = prevComposed ? q.eq("notes_to_crew", prevComposed) : q.is("notes_to_crew", null);
-        const { error: noteErr } = await q;
-        if (noteErr) toast.error("Service saved, but the new note couldn't be applied to its upcoming visits — edit them from the Visits tab.");
+        const prevNotes = serviceNoteMap(services);
+        const nextNotes = new Map(prevNotes);
+        nextNotes.set(editingSvcId, nextJobNote);
+        try {
+          await propagateVisitNotes(createClient(), {
+            jobId: job.id,
+            fromDate: orgToday(),
+            prev: { jobNote: job.notesToCrew ?? null, serviceNotes: prevNotes },
+            next: { jobNote: job.notesToCrew ?? null, serviceNotes: nextNotes },
+          });
+        } catch {
+          toast.error("Service saved, but the new note couldn't be applied to its upcoming visits — edit them from the Visits tab.");
+        }
         await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
       }
       setEditingSvcId(null);
@@ -660,7 +662,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       const svcLineItems = services.length > 0
         ? services.map((s) => ({
             name: s.serviceName,
-            description: job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service",
+            // Same precedence as auto-invoice and Create Invoice from job: the service's
+            // own description (from the estimate line) first, then the job override.
+            description: (s.invoiceDesc ? stripHtml(s.invoiceDesc) : "") || job.invoiceDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName || "Service",
             qty: s.qty ?? 1,
             rateCents: s.rateCents ?? 0,
             totalCents: lineTotalCents(s.rateCents ?? 0, s.qty ?? 1),
@@ -2131,7 +2135,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             // plain name as a fallback) regardless of this field — this preview shows
             // that default so "blank" doesn't look like nothing is configured.
             const defaultPreview = (job.services ?? [])
-              .map((s) => stripHtml(s.serviceInvoiceDescription || s.serviceName || ""))
+              .map((s) => stripHtml(s.invoiceDesc || s.serviceInvoiceDescription || s.serviceName || ""))
               .filter(Boolean)
               .join(", ");
             return (
@@ -2142,6 +2146,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   {defaultPreview
                     ? `Overrides the description shown on this job's invoices. Leave blank to use each service's default invoice description: "${defaultPreview}".`
                     : "This master description appears on all invoices generated for this job. Leave blank to use the default service name(s)."}
+                  {(job.services ?? []).some((s) => !!stripHtml(s.invoiceDesc || "")) &&
+                    " A service with its own invoice description (set on that service) keeps it."}
                 </p>
                 <Textarea
                   rows={6}

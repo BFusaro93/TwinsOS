@@ -56,6 +56,25 @@ export async function GET(request: Request) {
   }
   if (!expiring?.length) return NextResponse.json({ notified: 0 });
 
+  // A warranty that's already been renewed needs no "reach out about a renewal"
+  // reminder: skip any with a live (not void, not deleted) renewal.
+  const renewed = new Set<string>();
+  const expiringIds = (expiring as { id: string }[]).map((w) => w.id);
+  for (let i = 0; i < expiringIds.length; i += 100) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: renewals, error: renewalsError } = await (supabase as any)
+      .from("crm_warranties")
+      .select("renewed_from_id")
+      .in("renewed_from_id", expiringIds.slice(i, i + 100))
+      .neq("status", "void")
+      .is("deleted_at", null);
+    if (renewalsError) {
+      log.error("could not load warranty renewals", { error: renewalsError });
+      return NextResponse.json({ error: "query failed" }, { status: 500 });
+    }
+    for (const r of (renewals ?? []) as { renewed_from_id: string }[]) renewed.add(r.renewed_from_id);
+  }
+
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
   let notified = 0;
@@ -64,6 +83,7 @@ export async function GET(request: Request) {
   for (const w of expiring as Record<string, unknown>[]) {
     const endDate = w.end_date as string;
     const orgId = w.org_id as string;
+    if (renewed.has(w.id as string)) continue;
     if (await orgCanceled(orgId)) continue; // inactive or demo orgs get no automated reminders
     // A deleted or cancelled client's warranty needs no reminder.
     {

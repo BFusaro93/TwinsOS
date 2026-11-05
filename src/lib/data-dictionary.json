@@ -47,7 +47,12 @@
     "key": "custom-package-renewal",
     "section": "service",
     "name": "Custom Package Renewal Report",
-    "description": "A list of packages with a renewal setting, ready to renew."
+    "description": "Every package job for a season and whether it has been renewed for the next one — renewed, not renewed yet, or marked Don't renew.",
+    "notes": [
+      "Season is the year the package program starts (its window start, else its first step date).",
+      "Renewed = a live package job was created from this one with Renew for next season (job detail, or Renew Packages on the Jobs list).",
+      "Don't renew = the job is marked as not renewing; Renew Packages leaves it unchecked."
+    ]
   },
   {
     "key": "over-under",
@@ -140,9 +145,10 @@
     "key": "sales-commission-export",
     "section": "audits",
     "name": "Sales Commission Export",
-    "description": "Shows finalized invoices by sales rep for commission calculations, excluding sales tax.",
+    "description": "Shows finalized invoices by sales rep for commission calculations: revenue after discounts, excluding sales tax.",
     "notes": [
-      "Rows appear once an invoice is finalized (not draft or void), regardless of payment status. Amounts exclude sales tax."
+      "Rows appear once an invoice is finalized (not draft or void), regardless of payment status. Revenue is after invoice discounts and excludes sales tax — the same figure the Commissions page pays on.",
+      "The sales rep is the one credited when the invoice was issued (from the invoice, job, contract, estimate or client)."
     ],
     "dataset": "rpt_invoices",
     "columns": [
@@ -150,7 +156,7 @@
       "invoice_date",
       "client_name",
       "sales_rep",
-      "subtotal_cents",
+      "revenue_ex_tax_cents",
       "amount_paid_cents",
       "under_contract"
     ]
@@ -239,7 +245,7 @@
     "name": "Planned Chemical Usage Report",
     "description": "Chemical quantities needed for scheduled and dispatched (not-yet-started) visits — use to load the truck before the day's chemical jobs.",
     "notes": [
-      "Includes visits in Scheduled or Dispatched status only; in-progress and completed visits are excluded."
+      "Counts visits that are Scheduled, Dispatched or In Progress; completed, cancelled and skipped visits are excluded. A visit's saved chemical record is used when it has one; otherwise the amount is the product's default Application Rate x the property's Area field (e.g. Turf Sq. Ft.), set under Settings > Chemical Tracking. The product must also be attached to the service (Services > Chemicals), and a package step only counts the product attached to that step's service."
     ]
   },
   {
@@ -701,6 +707,7 @@
     "description": "Work-in-progress schedule for Projects: percent complete by cost-to-cost, earned revenue, and whether each job is over- or under-billed.",
     "notes": [
       "% Complete is cost-to-date ÷ EAC (estimated cost at completion) — not the manual progress field on the project.",
+      "Cost to Date counts purchase orders actually placed (ordered, partly or fully received, after their share of the PO discount, tax and shipping), direct items and subcontract costs. POs still requested or awaiting approval and open requisitions show under Committed (Not Yet Ordered) and don't move % complete. Cost to Date + Committed is the project's total on the Projects list.",
       "Over/(Under) Billed is billed to date minus earned revenue. Positive means billings are ahead of the work (healthy); negative means the work is ahead of billing (you're financing the job).",
       "EAC is seeded from the linked estimate when a job is converted, then re-forecastable on the project — projects with no EAC set show 0% complete."
     ],
@@ -713,6 +720,7 @@
       "eac_cents",
       "estimated_gp_pct",
       "cost_to_date_cents",
+      "committed_cents",
       "pct_complete",
       "earned_revenue_cents",
       "billed_cents",

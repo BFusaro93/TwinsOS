@@ -13,6 +13,8 @@ import { logger } from "@/lib/logger";
 import { allRecipientsBouncedMessage, partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { escapeHtml } from "@/lib/utils/escape-html";
+import { safeHexColor } from "@/lib/utils/safe-color";
 
 const log = logger.child("email-statement");
 
@@ -142,7 +144,9 @@ export async function POST(
   const customizations = (org?.customizations as Record<string, unknown>) ?? {};
   const orgName = (org?.name as string) ?? "Your Service Provider";
   const orgPhone = addr.phone ?? "";
-  const brandColor = (org?.brand_color as string) || "#60ab45";
+  // Org-editable text going into a style attribute — plain hex only.
+  const brandColor = safeHexColor(org?.brand_color as string | null, "#60ab45");
+  const orgNameHtml = escapeHtml(orgName);
 
   const mergeVars = {
     ...buildClientMergeVars(
@@ -172,12 +176,12 @@ export async function POST(
 <body style="font-family:Arial,sans-serif;color:#1e293b;margin:0;padding:0;background:#f8fafc">
 <div style="max-width:600px;margin:24px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1)">
   <div style="background:${brandColor};padding:24px 32px">
-    <h1 style="color:#fff;margin:0;font-size:22px">${orgName}</h1>
+    <h1 style="color:#fff;margin:0;font-size:22px">${orgNameHtml}</h1>
     <p style="color:rgba(255,255,255,.8);margin:4px 0 0;font-size:14px">Account Statement</p>
   </div>
   <div style="padding:28px 32px;font-size:14px;line-height:1.6">${resolvedBodyContent}</div>
   <div style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;text-align:center">
-    <p style="margin:0;font-size:11px;color:#94a3b8">${orgName}</p>
+    <p style="margin:0;font-size:11px;color:#94a3b8">${orgNameHtml}</p>
   </div>
 </div>
 </body>

@@ -403,10 +403,20 @@ async function resolveNewInvoiceTerms(
   clientDefaultTerms: string | null | undefined,
   invoiceDate: string,
   explicitDueDate?: string | null
-): Promise<{ terms: string; due_date: string | null }> {
-  const { data: orgRow } = await supabase.from("organizations").select("default_billing_terms").maybeSingle();
+): Promise<{ terms: string; due_date: string | null; orgTaxRateBps: number }> {
+  // Scoped to the caller's (effective) org: an unscoped maybeSingle() errors as
+  // soon as RLS exposes more than one organizations row (staff impersonation),
+  // and the terms silently fell back to due-on-receipt.
+  const { data: orgId } = await supabase.rpc("my_org_id");
+  const { data: orgRow } = orgId
+    ? await supabase.from("organizations").select("default_billing_terms, tax_rate_percent").eq("id", orgId).maybeSingle()
+    : { data: null };
   const terms = resolveInvoiceTerms(clientDefaultTerms, orgRow?.default_billing_terms);
-  return { terms, due_date: explicitDueDate || computeDueDate(invoiceDate, terms) };
+  return {
+    terms,
+    due_date: explicitDueDate || computeDueDate(invoiceDate, terms),
+    orgTaxRateBps: Math.round(Number(orgRow?.tax_rate_percent ?? 0) * 100),
+  };
 }
 
 // ── create from estimate ──────────────────────────────────────────────────────
@@ -586,10 +596,19 @@ export function useCreateInvoice() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: client } = await (supabase as any)
         .from("clients")
-        .select("default_payment_method, default_terms")
+        .select("default_payment_method, default_terms, default_tax_rate_bps, is_taxable")
         .eq("id", values.clientId)
         .single();
       const newTerms = await resolveNewInvoiceTerms(supabase, client?.default_terms, values.invoiceDate, values.dueDate);
+      // The rate is decided once, here, and stored: a tax-exempt client is never
+      // taxed, else the client's own default, else the company default. The
+      // editor used to apply this chain on every open of a 0% invoice, so an
+      // invoice deliberately set to no tax was re-taxed on its next Save.
+      const taxRateBps = client?.is_taxable === false
+        ? 0
+        : (client?.default_tax_rate_bps ?? 0) > 0
+          ? client.default_tax_rate_bps
+          : newTerms.orgTaxRateBps;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("crm_invoices")
@@ -605,6 +624,7 @@ export function useCreateInvoice() {
           status: "draft",
           invoice_number: null, // number assigned explicitly on save, not on open
           preferred_payment_method: client?.default_payment_method ?? null,
+          tax_rate_bps: taxRateBps,
         })
         .select()
         .single();

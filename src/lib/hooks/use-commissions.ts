@@ -220,9 +220,15 @@ export function useDeleteCommissionAssignment() {
 
 // ── earnings ──────────────────────────────────────────────────────────────────
 
-export function useCommissionLines(from: string, to: string, employeeId?: string) {
+/**
+ * Earning lines for a period. `includeEarlier` also returns lines dated BEFORE `from`
+ * that no statement has claimed yet (a late-entered payment, a deposit applied later, a
+ * draft issued after its period closed) — the next statement for the rep claims those too.
+ */
+export function useCommissionLines(from: string, to: string, employeeId?: string, opts?: { includeEarlier?: boolean }) {
+  const includeEarlier = opts?.includeEarlier ?? false;
   return useQuery<CommissionLine[]>({
-    queryKey: ["commission-lines", from, to, employeeId ?? null],
+    queryKey: ["commission-lines", from, to, employeeId ?? null, includeEarlier],
     queryFn: async () => {
       // Paged: a set-returning RPC is silently capped at PostgREST's 1000 rows,
       // and a rep's quarter of recurring-service invoice lines can pass that —
@@ -237,6 +243,7 @@ export function useCommissionLines(from: string, to: string, employeeId?: string
             p_from: from,
             p_to: to,
             p_employee_id: employeeId ?? null,
+            p_include_earlier: includeEarlier,
           })
           .order("employee_id", { ascending: true })
           .order("ev_key", { ascending: true })

@@ -5,7 +5,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { notifyVisitAssigned, notifyVisitNote } from "@/lib/notifications/visit-notify";
-import { checkPackageMinDaysViolation, overridePackageMinDays, PACKAGE_MIN_DAYS_CODE } from "@/lib/package-visit-recalc";
+import { checkPackageMinDaysViolation, overridePackageMinDays, PACKAGE_MIN_DAYS_CODE, revertPackageMinDaysOverrides } from "@/lib/package-visit-recalc";
 import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { formatMonthDay } from "@/lib/utils";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
@@ -124,6 +124,12 @@ export async function PATCH(
     );
   }
 
+  // The Min Days override commits its date move on its own; if anything after it fails,
+  // the visit is moved back so an error never leaves a half-applied edit.
+  let overrideMovedFrom: string | null = null;
+  const undoOverride = async () => {
+    if (overrideMovedFrom) await revertPackageMinDaysOverrides(supabase, [{ visitId, previousDate: overrideMovedFrom }]);
+  };
   if (patch.scheduled_date && patch.scheduled_date !== prev?.scheduled_date) {
     const violation = await checkPackageMinDaysViolation(supabase, visitId, patch.scheduled_date);
     if (violation) {
@@ -131,6 +137,7 @@ export async function PATCH(
       // Moves just the date past the DB trigger; the plain update below then sees no date change.
       const overrideErr = await overridePackageMinDays(supabase, visitId, patch.scheduled_date);
       if (overrideErr) return NextResponse.json({ error: overrideErr }, { status: 500 });
+      overrideMovedFrom = prev.scheduled_date;
     }
   }
 
@@ -138,7 +145,10 @@ export async function PATCH(
   // the plain update below then sees no change for those two columns.
   if (needsOverride) {
     const res = await overrideInvoicedVisit(supabase, visitId, change);
-    if (res.error) return NextResponse.json({ error: res.error }, { status: res.forbidden ? 403 : 500 });
+    if (res.error) {
+      await undoOverride();
+      return NextResponse.json({ error: res.error }, { status: res.forbidden ? 403 : 500 });
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -160,6 +170,7 @@ export async function PATCH(
     .single();
 
   if (error) {
+    await undoOverride();
     const locked = (error as { hint?: string }).hint === INVOICED_VISIT_LOCKED_CODE;
     return NextResponse.json(
       { error: error.message, ...(locked ? { code: INVOICED_VISIT_LOCKED_CODE } : {}) },

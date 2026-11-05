@@ -169,6 +169,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
     ],
     notes: [
       "% Complete is cost-to-date ÷ EAC (estimated cost at completion) — not the manual progress field on the project.",
+      "Cost to Date counts purchase orders actually placed (ordered, partly or fully received, after their share of the PO discount, tax and shipping), direct items and subcontract costs. POs still requested or awaiting approval and open requisitions show under Committed (Not Yet Ordered) and don't move % complete. Cost to Date + Committed is the project's total on the Projects list.",
       "Over/(Under) Billed is billed to date minus earned revenue. Positive means billings are ahead of the work (healthy); negative means the work is ahead of billing (you're financing the job).",
       "EAC is seeded from the linked estimate when a job is converted, then re-forecastable on the project — projects with no EAC set show 0% complete.",
     ],
@@ -182,6 +183,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
         "eac_cents",
         "estimated_gp_pct",
         "cost_to_date_cents",
+        "committed_cents",
         "pct_complete",
         "earned_revenue_cents",
         "billed_cents",

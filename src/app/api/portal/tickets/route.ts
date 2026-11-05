@@ -10,6 +10,7 @@ import { escapeHtml } from "@/lib/utils/escape-html";
 import { logger } from "@/lib/logger";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
+import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 
 const log = logger.child("portal/tickets");
 
@@ -172,6 +173,16 @@ export async function POST(req: Request) {
     assignedToName: null,
     createdByUserId: null,
     source: "the client portal",
+  });
+
+  // Same "Ticket was created" automation the in-app dialog and Zapier fire —
+  // a portal complaint is exactly what an acknowledgement sequence is for.
+  await fireServerTrigger(supabase, {
+    orgId: ctx.orgId,
+    clientId: ticketClientId,
+    ticketId: ticket.id,
+    triggerType: "ticket_created",
+    matchValues: [category],
   });
 
   // ── Send notification email ─────────────────────────────────────────────────

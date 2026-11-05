@@ -11,6 +11,7 @@ import {
   type LaborCostSource,
   type ServiceTarget,
 } from "@/lib/visit-costing";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const log = logger.child("reports/job-costing");
 
@@ -109,7 +110,7 @@ export async function GET(request: Request) {
     service_id: searchParams.get("service_id"),
   });
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid query" }, { status: 400 });
+    return NextResponse.json({ error: firstIssueMessage(parsed.error, "Invalid query") }, { status: 400 });
   }
   const { from, to, service_id: serviceId } = parsed.data;
 

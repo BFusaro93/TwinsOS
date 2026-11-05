@@ -35,7 +35,12 @@ export function CommissionEarningsTab({ canManage, ownEmployeeId }: { canManage:
     return custom;
   }, [preset, custom, today]);
 
-  const { data: lines = [], isLoading, error } = useCommissionLines(range.from, range.to, employeeId === "all" ? undefined : employeeId);
+  // Earlier unclaimed lines come too: a payment entered after its period's statement (or a
+  // deposit applied later) is paid on the next statement rather than never.
+  const { data: lines = [], isLoading, error } = useCommissionLines(
+    range.from, range.to, employeeId === "all" ? undefined : employeeId, { includeEarlier: true },
+  );
+  const isEarlier = (l: { eventDate: string }) => !!range.from && l.eventDate < range.from;
 
   // Clawbacks/offsets for refunds and voids since the last statement. Not tied to the
   // selected period: the next statement for a rep carries them whatever it covers.
@@ -46,11 +51,17 @@ export function CommissionEarningsTab({ canManage, ownEmployeeId }: { canManage:
   );
 
   const byEmployee = useMemo(() => {
-    const m = new Map<string, { id: string; name: string; basis: number; commission: number; unclaimed: number; unclaimedCommission: number; adjCount: number; adjCommission: number }>();
+    const m = new Map<string, { id: string; name: string; basis: number; commission: number; unclaimed: number; unclaimedCommission: number; earlierCount: number; earlierCommission: number; adjCount: number; adjCommission: number }>();
     for (const l of lines) {
-      const e = m.get(l.employeeId) ?? { id: l.employeeId, name: l.employeeName, basis: 0, commission: 0, unclaimed: 0, unclaimedCommission: 0, adjCount: 0, adjCommission: 0 };
-      e.basis += l.basisCents;
-      e.commission += l.commissionCents;
+      const e = m.get(l.employeeId) ?? { id: l.employeeId, name: l.employeeName, basis: 0, commission: 0, unclaimed: 0, unclaimedCommission: 0, earlierCount: 0, earlierCommission: 0, adjCount: 0, adjCommission: 0 };
+      if (isEarlier(l)) {
+        // Only unclaimed earlier lines are returned: not this period's earnings, but on the next statement.
+        e.earlierCount += 1;
+        e.earlierCommission += l.commissionCents;
+      } else {
+        e.basis += l.basisCents;
+        e.commission += l.commissionCents;
+      }
       if (!l.statementId) { e.unclaimed += 1; e.unclaimedCommission += l.commissionCents; }
       m.set(l.employeeId, e);
     }
@@ -59,16 +70,17 @@ export function CommissionEarningsTab({ canManage, ownEmployeeId }: { canManage:
       const name = employees.find((x) => x.id === a.employeeId);
       const e = m.get(a.employeeId) ?? {
         id: a.employeeId, name: name ? `${name.firstName} ${name.lastName}` : "—",
-        basis: 0, commission: 0, unclaimed: 0, unclaimedCommission: 0, adjCount: 0, adjCommission: 0,
+        basis: 0, commission: 0, unclaimed: 0, unclaimedCommission: 0, earlierCount: 0, earlierCommission: 0, adjCount: 0, adjCommission: 0,
       };
       e.adjCount += 1;
       e.adjCommission += a.commissionCents;
       m.set(a.employeeId, e);
     }
     return [...m.values()];
-  }, [lines, adjustments, employees]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isEarlier only reads range.from
+  }, [lines, adjustments, employees, range.from]);
 
-  async function makeStatement(e: { id: string; name: string; unclaimedCommission: number; adjCount: number; adjCommission: number }) {
+  async function makeStatement(e: { id: string; name: string; unclaimedCommission: number; earlierCount: number; earlierCommission: number; adjCount: number; adjCommission: number }) {
     const net = e.unclaimedCommission + e.adjCommission;
     if (!(await confirm({
       title: `Create statement for ${e.name}?`,
@@ -77,6 +89,11 @@ export function CommissionEarningsTab({ canManage, ownEmployeeId }: { canManage:
           <span className="block">
             Locks {formatCurrency(e.unclaimedCommission)} of unclaimed commission for {formatDate(range.from)} – {formatDate(range.to)}. Lines already on another statement are skipped.
           </span>
+          {e.earlierCount > 0 && (
+            <span className="block">
+              That includes {e.earlierCount} line{e.earlierCount === 1 ? "" : "s"} ({formatCurrency(e.earlierCommission)}) from earlier periods that no statement claimed yet.
+            </span>
+          )}
           {e.adjCount > 0 && (
             <span className="block">
               Also includes {e.adjCount} adjustment line{e.adjCount === 1 ? "" : "s"} totaling {formatCurrency(e.adjCommission)} for refunds/voids since the last statement.
@@ -146,6 +163,11 @@ export function CommissionEarningsTab({ canManage, ownEmployeeId }: { canManage:
             {e.adjCount > 0 && (
               <p className={cn("mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300")}>
                 Includes <span className={cn("font-medium", negativeClass(e.adjCommission))}>{formatCurrency(e.adjCommission)}</span> in adjustments for refunds/voids since the last statement ({e.adjCount} line{e.adjCount === 1 ? "" : "s"}).
+              </p>
+            )}
+            {e.earlierCount > 0 && (
+              <p className="mt-2 rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
+                Plus {formatCurrency(e.earlierCommission)} from earlier periods not yet on a statement ({e.earlierCount} line{e.earlierCount === 1 ? "" : "s"}) — the next statement includes it.
               </p>
             )}
             {(e.unclaimed > 0 || e.adjCount > 0) && (
@@ -218,7 +240,12 @@ export function CommissionEarningsTab({ canManage, ownEmployeeId }: { canManage:
               {lines.map((l) => (
                 <tr key={l.evKey + l.employeeId}>
                   <td className="px-3 py-2">{l.employeeName}</td>
-                  <td className="px-3 py-2">{formatDate(l.eventDate)}</td>
+                  <td className="px-3 py-2">
+                    {formatDate(l.eventDate)}
+                    {isEarlier(l) && (
+                      <Badge variant="outline" className="ml-2 border-sky-200 bg-sky-50 text-xs font-medium text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-400">Earlier period</Badge>
+                    )}
+                  </td>
                   <td className="px-3 py-2"><Link className="hover:underline" href={`/crm/accounting/invoices/${l.invoiceId}`}>#{l.invoiceNumber ?? "—"}</Link></td>
                   <td className="px-3 py-2">{l.clientName ?? "—"}</td>
                   <td className="px-3 py-2">{l.serviceName ?? <span className="text-amber-700 dark:text-amber-400">Unassigned</span>}</td>

@@ -1233,14 +1233,22 @@ function JobDetailSheet({
       // (and carried down onto the job/visit) — stripHtml() it before it
       // reaches an actual generated invoice, or a client-facing invoice
       // literally shows raw markup like "<p>...</p>".
-      const masterDescription = stripHtml(visit.invoiceDescription || job?.invoiceDescription || "") || null;
+      const visitDescription = stripHtml(visit.invoiceDescription || "") || null;
+      const jobDescription = stripHtml(job?.invoiceDescription || "") || null;
       // A visit linked to one service (per-service split / package step)
       // bills only that service — same as the server auto-invoice — or every
       // sibling visit would re-bill the whole job.
       const billedServices = linkedService ? [linkedService] : services;
       const svcLineItems = billedServices.map((s) => ({
         name: s.serviceName,
-        description: masterDescription || stripHtml(s.serviceInvoiceDescription || "") || s.serviceName,
+        // The server auto-invoice's precedence: this visit's override, the service's own
+        // description (from the estimate line), the job override, the catalog default, the name.
+        description:
+          visitDescription
+          || (s.invoiceDesc ? stripHtml(s.invoiceDesc) : null)
+          || jobDescription
+          || stripHtml(s.serviceInvoiceDescription || "")
+          || s.serviceName,
         qty: s.qty ?? 1,
         rateCents: s.rateCents ?? 0,
         totalCents: lineTotalCents(s.rateCents ?? 0, s.qty ?? 1),
@@ -1274,7 +1282,7 @@ function JobDetailSheet({
         jobId: visit.jobId,
         visitId: visit.id,
         clientId: visit.clientId,
-        description: masterDescription ?? serviceName,
+        description: visitDescription ?? jobDescription ?? serviceName,
         invoiceDate: visit.scheduledDate ?? orgToday(),
         lineItems,
       });

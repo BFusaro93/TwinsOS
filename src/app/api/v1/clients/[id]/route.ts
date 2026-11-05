@@ -7,6 +7,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { CLIENT_SELECT, shapeClient } from "../shape";
 import { updateClientSchema } from "../validation";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 /** GET /api/v1/clients/[id] — fetch one client. Requires scope "clients:read". */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -40,7 +41,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!isUuid(id)) return jsonError("Client not found", 404);
 
   const parsed = updateClientSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
+  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
   const body = parsed.data;
 
   if (Object.keys(body).length === 0) return jsonError("No fields to update", 400);

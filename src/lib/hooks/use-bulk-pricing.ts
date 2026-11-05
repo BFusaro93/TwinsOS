@@ -95,20 +95,25 @@ export function useBulkUpdateCatalogPrices() {
 
       for (const [id, patch] of servicePatches) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (supabase as any)
+        const { data, error } = await (supabase as any)
           .from("crm_services")
           .update(patch)
-          .eq("id", id);
+          .eq("id", id)
+          .select("id");
         if (error) throw error;
+        // RLS filters a write the role can't make to 0 rows instead of erroring.
+        if (!data?.length) throw new Error("You do not have permission to change service prices");
       }
 
       for (const row of matrixRows) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (supabase as any)
+        const { data, error } = await (supabase as any)
           .from("crm_service_rate_matrix")
           .update({ rate_cents: row.rateCents })
-          .eq("id", row.id);
+          .eq("id", row.id)
+          .select("id");
         if (error) throw error;
+        if (!data?.length) throw new Error("You do not have permission to change rate matrix prices");
       }
 
       return { serviceCount: servicePatches.size, matrixCount: matrixRows.length };

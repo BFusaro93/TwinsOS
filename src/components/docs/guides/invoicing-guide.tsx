@@ -300,6 +300,9 @@ export function InvoicingGuide() {
             rows on the Invoices list and choosing <strong>Print Selected</strong> combines them
             into a single multi-page PDF in one tab &mdash; it no longer opens a separate print
             popup per invoice (the same change applies to Estimates&apos; own Print Selected).
+            Each PDF holds up to 100 invoices; a larger selection opens one tab per 100. Only the
+            invoices that made it into a PDF are locked and marked Printed &mdash; if one can&apos;t
+            be loaded, a message says how many were left unchanged.
           </li>
         </ul>
       </Section>

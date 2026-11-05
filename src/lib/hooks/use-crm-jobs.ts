@@ -635,6 +635,12 @@ function mapJobFull(row: any): CRMJob {
   };
 }
 
+/** The note from a crm_job_service_office_notes(note) embed (object, or array if PostgREST sends one). */
+function officeNote(embed: unknown): string | null {
+  const row = Array.isArray(embed) ? embed[0] : embed;
+  return (row as { note?: string | null } | null | undefined)?.note ?? null;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapJobServiceFull(s: any): CRMJobService {
   return {
@@ -661,7 +667,9 @@ function mapJobServiceFull(s: any): CRMJobService {
     treatedArea: s.treated_area != null ? Number(s.treated_area) : null,
     jobNote: s.job_note ?? null,
     invoiceDesc: s.invoice_desc ?? null,
-    internalNote: s.internal_note ?? null,
+    // Office-only; lives in crm_job_service_office_notes (crew can't read it). The
+    // column fallback covers a row read before 20261222000300 moved it.
+    internalNote: officeNote(s.crm_job_service_office_notes) ?? s.internal_note ?? null,
     subitems: mapServiceSubitems(s.crm_job_service_subitems),
   };
 }
@@ -998,6 +1006,31 @@ export function useCreateVisit() {
         ]);
         menCount = Number(svcRow?.team_size) || Number(jobRow?.man_count) || 1;
       }
+      // The crew note when the caller didn't give one: the job note plus the visit's
+      // service note (every service's note for a whole-job visit), the way Add Job,
+      // Convert and the visit generator compose it. Waiting List dispatch, Nearby and
+      // Add Visit passed nothing, so per-line crew notes from the estimate never
+      // reached the crew. Left null when there is no service note, so the visit keeps
+      // falling back to the (editable) job note.
+      let notesToCrew = values.notesToCrew;
+      if (notesToCrew === undefined) {
+        const [{ data: noteJob }, { data: noteSvcs }] = await Promise.all([
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any).from('crm_jobs').select('notes_to_crew').eq('id', values.jobId).maybeSingle(),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from('crm_job_services')
+            .select('id, job_note')
+            .eq('job_id', values.jobId)
+            .order('sort_order', { ascending: true }),
+        ]);
+        const svcNotes = ((noteSvcs ?? []) as { id: string; job_note: string | null }[])
+          .filter((s) => !values.jobServiceId || s.id === values.jobServiceId)
+          .map((s) => s.job_note);
+        notesToCrew = svcNotes.some((n) => !isBlankRich(n))
+          ? composeVisitNote(noteJob?.notes_to_crew ?? null, svcNotes)
+          : null;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('crm_job_visits')
@@ -1011,7 +1044,7 @@ export function useCreateVisit() {
           start_time: values.startTime ?? null,
           end_time: values.endTime ?? null,
           priority: values.priority ?? 1,
-          notes_to_crew: values.notesToCrew ?? null,
+          notes_to_crew: notesToCrew ?? null,
           invoice_description: values.invoiceDescription ?? null,
           storm_event_id: values.stormEventId ?? null,
           order_num: values.orderNum ?? null,
@@ -1859,7 +1892,10 @@ export function useCreateClientJob() {
               status: 'scheduled',
               crew_id: values.crewId || null,
               men_count: jobManCount,
-              ...(isBlankRich(values.services[0]?.jobNote) ? {} : { notes_to_crew: composeVisitNote(values.notesToCrew, values.services[0]?.jobNote) }),
+              // The one visit does the whole job: carry every service's crew note.
+              ...(values.services.every((s) => isBlankRich(s.jobNote))
+                ? {}
+                : { notes_to_crew: composeVisitNote(values.notesToCrew, values.services.map((s) => s.jobNote)) }),
             })
             .select('id')
             .single();
@@ -2170,11 +2206,14 @@ export function useDeleteCRMService() {
     mutationFn: async (id: string) => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("crm_services")
         .update({ deleted_at: new Date().toISOString() })
-        .eq("id", id);
+        .eq("id", id)
+        .select("id");
       if (error) throw error;
+      // RLS filters a write the role can't make to 0 rows instead of erroring.
+      if (!data?.length) throw new Error("You do not have permission to delete services");
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-services"] });
@@ -2748,7 +2787,8 @@ export function useCreateJobsFromEstimate() {
           status: "scheduled",
           crew_id: crewId,
           men_count: jobManCount,
-          notes_to_crew: composeVisitNote(notesToCrew, jobServiceId ? noteBySid.get(jobServiceId) : null),
+          // An unlinked visit does the whole job, so it carries every service's crew note.
+          notes_to_crew: composeVisitNote(notesToCrew, jobServiceId ? noteBySid.get(jobServiceId) : Array.from(noteBySid.values())),
           job_service_id: jobServiceId,
           ...(occurrence ? { occurrence_date: scheduledDate } : {}),
         });
@@ -2996,7 +3036,7 @@ export function useJobDetail(id: string) {
           *,
           clients(display_name, billing_address, billing_city, billing_state, billing_zip, primary_phone, client_since),
           crm_crews(name),
-          crm_job_services(*, crm_services(invoice_description), crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at))
+          crm_job_services(*, crm_services(invoice_description), crm_job_service_subitems(id, type, name, qty, sort_order, deleted_at), crm_job_service_office_notes(note))
         `)
         .eq('id', id)
         .is('deleted_at', null)

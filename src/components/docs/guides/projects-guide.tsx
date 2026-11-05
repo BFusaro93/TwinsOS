@@ -392,7 +392,7 @@ export function ProjectsGuide() {
             <strong>Figures stay current.</strong> The project window updates as soon as a change order is approved, without closing and reopening it.
           </li>
           <li>
-            <strong>Drafts don&apos;t count yet.</strong> Project cost leaves out draft purchase orders and requisitions, and Invoiced, Amount Due and Remaining to Bill leave out draft invoices, matching the WIP report.
+            <strong>Drafts don&apos;t count yet.</strong> Project cost leaves out draft purchase orders and requisitions, and Invoiced, Amount Due and Remaining to Bill leave out draft invoices, matching the WIP report. In the WIP report, only POs actually ordered count as cost to date; requested or pending POs and open requisitions show as Committed. A requisition split into POs by vendor is counted once: each line moves to its PO as soon as that PO exists.
           </li>
           <li>
             <strong>Crew material requests.</strong> Materials a crew requests from a project job&apos;s stop are tagged to the project, so they count toward its cost.

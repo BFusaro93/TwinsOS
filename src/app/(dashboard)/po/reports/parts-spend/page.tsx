@@ -163,7 +163,10 @@ export default function PartsSpendReportPage() {
               data={monthlyTrend}
               margin={{ top: 0, right: 4, left: -20, bottom: 0 }}
               onClick={(e) => {
-                const idx = Number(e?.activeIndex);
+                // recharts 3 sends activeIndex null for a click away from any bar;
+                // Number(null) is 0, which selected the first month.
+                if (e?.activeIndex == null) return;
+                const idx = Number(e.activeIndex);
                 const key = Number.isInteger(idx) ? monthlyTrend[idx]?.key : undefined;
                 if (key) setSelectedMonth(key);
               }}

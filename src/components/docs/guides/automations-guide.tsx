@@ -27,7 +27,10 @@ const TRIGGER_GROUPS: [string, string][] = [
     "Job created, Job cancelled, Package created, Package renewed, Visit completed, Visit completed for a specific service, Visit cancelled, Visit dispatched, Visit skipped, Visit date changed, Visit moved to waiting list",
   ],
   ["Tag", "Tag added, Tag removed"],
-  ["Ticket", "Ticket created, Ticket closed, Ticket past due, Ticket reopened"],
+  [
+    "Ticket",
+    "Ticket created (from the New Ticket dialog, the client portal, a texted-in message, a web form, a crew upsell suggestion or Zapier — not from an automation's own Create Ticket step), Ticket closed, Ticket past due, Ticket reopened",
+  ],
 ];
 
 const EVENT_TYPES: [string, string][] = [

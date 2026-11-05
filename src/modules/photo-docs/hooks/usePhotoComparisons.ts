@@ -5,6 +5,7 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import type { PhotoComparison } from "../types/photo.types";
 import { getOriginalUrl, getAnnotatedUrl } from "../lib/photoStorage";
+import { getStorageOrgPrefix } from "@/lib/supabase/storage-org-prefix";
 
 // photo_comparisons table added by the photo-docs migration — not yet in generated types.
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -83,8 +84,8 @@ export function useCreatePhotoComparison(photoJobId: string) {
     mutationFn: async ({ beforePhotoId, afterPhotoId, label }: { beforePhotoId: string; afterPhotoId: string; label?: string | null }) => {
       const db = createClient() as any;
       const { data: { user } } = await db.auth.getUser();
-      const { data: profile } = await db.from("profiles").select("org_id").eq("id", user!.id).single();
-      const orgId = profile?.org_id;
+      // Effective org (my_org_id) so staff impersonating a company write into it.
+      const orgId = await getStorageOrgPrefix(db).catch(() => null);
       if (!orgId) throw new Error("No org_id found");
       const { error } = await db.from("photo_comparisons").insert({
         org_id: orgId,

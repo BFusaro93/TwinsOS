@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { openPendingTab, showInPendingTab } from "@/lib/utils/pending-tab";
 import { useQuery } from "@/lib/hooks/use-query";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { downscaleImage } from "@/lib/utils/downscale-image";
@@ -19,6 +20,7 @@ import {
   selectCarriedOverClockedInVisits,
   effectiveVisitCrewId,
   fetchCallerCrew,
+  isWaitingPackagePlaceholder,
   selectEffectiveCrewVisits,
   type VisitCrewRow,
 } from "@/lib/supabase/crew-id";
@@ -333,6 +335,8 @@ export function useMyCrewVisits(date: string, includeCarryOver = false) {
       // (GET /api/crm/crew/visits already hides them) — except one the crew is
       // clocked into right now, which they still need to clock out of.
       const visible = (row: Record<string, unknown>) => {
+        // Undispatched package steps wait on the Waiting List, as on the board.
+        if (isWaitingPackagePlaceholder(row)) return false;
         const jobStatus = (row.crm_jobs as { status?: string | null } | null)?.status;
         if (jobStatus !== "cancelled" && jobStatus !== "hold") return true;
         return !!row.clocked_in_at && !row.clocked_out_at;
@@ -829,19 +833,22 @@ export function useCrewMemberTimesForDate(fromDate: string, toDate?: string) {
     enabled: !!fromDate,
     queryFn: async () => {
       const { supabase } = await getAuthContext();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q = (supabase as any)
-        .from("crm_crew_member_times")
-        .select("*, crm_crew_members(name, role), crm_job_visits!inner(scheduled_date)")
-        .is("deleted_at", null)
-        .order("created_at");
-      q = (toDate && toDate !== fromDate)
-        ? q.gte("crm_job_visits.scheduled_date", fromDate).lte("crm_job_visits.scheduled_date", toDate)
-        : q.eq("crm_job_visits.scheduled_date", fromDate);
-
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data as Record<string, unknown>[]).map(r => {
+      // One row per member per visit: a busy day (or a date range) passes the
+      // 1,000-row response cap, and a truncated set picked the wrong punch owner
+      // for a stop, so Edit Job Times seeded a second set of punches. Paged.
+      const build = () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const q = (supabase as any)
+          .from("crm_crew_member_times")
+          .select("*, crm_crew_members(name, role), crm_job_visits!inner(scheduled_date)")
+          .is("deleted_at", null)
+          .order("created_at");
+        return (toDate && toDate !== fromDate)
+          ? q.gte("crm_job_visits.scheduled_date", fromDate).lte("crm_job_visits.scheduled_date", toDate)
+          : q.eq("crm_job_visits.scheduled_date", fromDate);
+      };
+      const data = await fetchAllRows<Record<string, unknown>>(build);
+      return data.map(r => {
         const member = r.crm_crew_members as Record<string, unknown> | null;
         return {
           id:            r.id as string,

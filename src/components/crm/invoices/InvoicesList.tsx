@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/dialog";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
+import { BULK_PRINT_MAX, printInBatches } from "@/lib/bulk-print";
 
 /**
  * Why an invoice may not be voided, or null when it may.
@@ -544,23 +545,36 @@ export function InvoicesList({ clientId }: Props) {
   function bulkPrintSelected() {
     const selected = allInvoices.filter((i) => selectedIds.has(i.id));
     if (selected.length === 0) return;
-    const ids = selected.map((i) => i.id).join(",");
-    const win = window.open(`/api/crm/invoices/bulk-pdf?ids=${ids}`, "_blank");
-    if (win) win.addEventListener("load", () => win.print(), { once: true });
-    let reported = false;
-    for (const inv of selected) {
-      const wasDraft = inv.status === "draft";
-      void Promise.all([
-        setLock({ id: inv.id, locked: true }),
-        wasDraft ? updateStatus({ id: inv.id, status: "printed" }) : Promise.resolve(),
-      ]).catch((err: unknown) => {
-        // One toast for the batch, not one per invoice.
-        if (reported) return;
-        reported = true;
-        toast.error(mutationErrorMessage(err, "Some printed invoices could not be marked printed"));
-      });
-    }
-    toast.info(`Opening ${selected.length} invoice${selected.length !== 1 ? "s" : ""} to print…`);
+    // Batches of BULK_PRINT_MAX, one tab each (opened now, inside the click). Only the
+    // invoices the server actually put in a PDF are locked and marked printed — one that
+    // failed to load never reached paper and stays as it was.
+    const printing = printInBatches("/api/crm/invoices/bulk-pdf", selected.map((i) => i.id));
+    const tabs = Math.ceil(selected.length / BULK_PRINT_MAX);
+    toast.info(
+      `Opening ${selected.length} invoice${selected.length !== 1 ? "s" : ""} to print` +
+        (tabs > 1 ? ` in ${tabs} tabs…` : "…")
+    );
+    void printing.then(({ renderedIds, failedBatches }) => {
+      const rendered = new Set(renderedIds);
+      const printed = selected.filter((inv) => rendered.has(inv.id));
+      const skipped = selected.length - printed.length;
+      if (failedBatches > 0 || skipped > 0) {
+        toast.error(`${skipped} selected invoice${skipped !== 1 ? "s" : ""} couldn't be printed and ${skipped !== 1 ? "were" : "was"} left unchanged`);
+      }
+      let reported = false;
+      for (const inv of printed) {
+        const wasDraft = inv.status === "draft";
+        void Promise.all([
+          setLock({ id: inv.id, locked: true }),
+          wasDraft ? updateStatus({ id: inv.id, status: "printed" }) : Promise.resolve(),
+        ]).catch((err: unknown) => {
+          // One toast for the batch, not one per invoice.
+          if (reported) return;
+          reported = true;
+          toast.error(mutationErrorMessage(err, "Some printed invoices could not be marked printed"));
+        });
+      }
+    });
   }
 
   const chargeInvoice = useChargeAutopayInvoice();

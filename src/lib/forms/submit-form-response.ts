@@ -929,6 +929,21 @@ export async function submitFormResponse(
         console.error("[submitFormResponse] tag_added trigger failed:", err instanceof Error ? err.message : err);
       }
     }
+    // A ticket the form filed is a new ticket like one from the New Ticket dialog,
+    // so "Ticket was created" automations (e.g. a complaint acknowledgement) run for it.
+    if (relatedTicketId) {
+      try {
+        enrollmentIds.push(...await fireSimpleTrigger(db, {
+          orgId: form.org_id,
+          clientId: relatedClientId,
+          ticketId: relatedTicketId,
+          triggerType: "ticket_created",
+          matchValues: ticketCategory ? [ticketCategory] : undefined,
+        }));
+      } catch (err) {
+        console.error("[submitFormResponse] ticket_created trigger failed:", err instanceof Error ? err.message : err);
+      }
+    }
   }
   if (createdLeadId) {
     // A web-form lead is a new lead like a manual, imported or Zapier one: "new lead → text

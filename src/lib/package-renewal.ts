@@ -73,6 +73,10 @@ export interface RenewalSourceService {
   is_taxable: boolean | null;
   max_visits: number | null;
   treated_area: number | null;
+  /** Per-service notes carried from the estimate line (#439): crew, invoice, office-only. */
+  job_note?: string | null;
+  invoice_desc?: string | null;
+  internal_note?: string | null;
 }
 
 export interface RenewalSourceProduct {
@@ -359,6 +363,9 @@ export function buildRenewalValues(
       isTaxable: s.is_taxable,
       maxVisits: s.max_visits,
       treatedArea: s.treated_area,
+      jobNote: s.job_note ?? null,
+      invoiceDesc: s.invoice_desc ?? null,
+      internalNote: s.internal_note ?? null,
     }))),
     products: products.map((p) => ({
       productId: p.product_id,

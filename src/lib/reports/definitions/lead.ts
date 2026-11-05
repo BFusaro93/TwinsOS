@@ -468,36 +468,35 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
         return count ?? 0;
       }
 
+      // Paged: a busy week passes the 1,000-row response cap, and summing only the
+      // first page understated both dollar totals and their week-over-week change.
       async function sumPayments(start: string, end: string) {
-        const { data, error } = await supabase
-          .from("crm_payments")
-          .select("amount_cents, refunded_amount_cents")
-          .is("deleted_at", null)
-          // Rule B (helpers.ts): real cash only, net of refunds.
-          .eq("is_credit", false)
-          .neq("method", AR_WRITE_OFF_METHOD)
-          .gte("payment_date", start)
-          .lte("payment_date", end);
-        if (error) throw new Error(error.message);
-        return (
-          (data ?? []) as { amount_cents: number | null; refunded_amount_cents: number | null }[]
-        ).reduce((sum, r) => sum + netPaymentCents(r), 0);
+        const data = await fetchAllRows<{ amount_cents: number | null; refunded_amount_cents: number | null }>(() =>
+          supabase
+            .from("crm_payments")
+            .select("amount_cents, refunded_amount_cents")
+            .is("deleted_at", null)
+            // Rule B (helpers.ts): real cash only, net of refunds.
+            .eq("is_credit", false)
+            .neq("method", AR_WRITE_OFF_METHOD)
+            .gte("payment_date", start)
+            .lte("payment_date", end)
+        );
+        return data.reduce((sum, r) => sum + netPaymentCents(r), 0);
       }
 
       async function sumInvoiced(start: string, end: string) {
-        const { data, error } = await supabase
-          .from("crm_invoices")
-          .select("total_cents")
-          .is("deleted_at", null)
-          .neq("status", "draft")
-          .neq("status", "void")
-          .gte("invoice_date", start)
-          .lte("invoice_date", end);
-        if (error) throw new Error(error.message);
-        return ((data ?? []) as { total_cents: number | null }[]).reduce(
-          (sum, r) => sum + (r.total_cents ?? 0),
-          0
+        const data = await fetchAllRows<{ total_cents: number | null }>(() =>
+          supabase
+            .from("crm_invoices")
+            .select("total_cents")
+            .is("deleted_at", null)
+            .neq("status", "draft")
+            .neq("status", "void")
+            .gte("invoice_date", start)
+            .lte("invoice_date", end)
         );
+        return data.reduce((sum, r) => sum + (r.total_cents ?? 0), 0);
       }
 
       const [

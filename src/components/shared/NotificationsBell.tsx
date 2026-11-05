@@ -223,7 +223,7 @@ export function NotificationsBell() {
         .from("notifications")
         .select("id, type, title, message, entity_id, entity_type, created_at")
         .eq("user_id", currentUser.id)
-        .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_contributor_added", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed"])
+        .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_contributor_added", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed", "approved", "rejected"])
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -399,9 +399,40 @@ export function NotificationsBell() {
       if (n.type === "wo_status_changed" && notifPrefs?.inAppWorkOrderStatusChanged === false) return false;
       if (n.type === "comment_mention" && notifPrefs?.inAppMention === false) return false;
       if (n.type === "injury_reported" && notifPrefs?.inAppInjuryReport === false) return false;
+      if (n.type === "approved" && notifPrefs?.inAppRequisitionApproved === false) return false;
+      if (n.type === "rejected" && notifPrefs?.inAppRequisitionRejected === false) return false;
       return true;
     }).forEach((n) => {
       const id = `db-notif-${n.id}`;
+
+      // Approval outcomes (written by /api/notifications/email for the submitter):
+      // the record they point at depends on entity_type.
+      if (n.type === "approved" || n.type === "rejected") {
+        const entityType: AppNotification["entityType"] =
+          n.entity_type === "requisition" ? "requisition"
+            : n.entity_type === "purchase_order" ? "purchase_order"
+              : n.entity_type === "crm_estimate" ? "estimate"
+                : null;
+        const href = !n.entity_id
+          ? "/po/requisitions"
+          : n.entity_type === "crm_estimate"
+            ? `/crm/estimates/${n.entity_id}`
+            : n.entity_type === "purchase_order"
+              ? `/po/orders?id=${n.entity_id}`
+              : `/po/requisitions?id=${n.entity_id}`;
+        items.push({
+          id,
+          type: n.type,
+          title: n.title ?? (n.type === "approved" ? "Approved" : "Rejected"),
+          body: n.message,
+          href,
+          entityId: n.entity_id,
+          entityType,
+          createdAt: n.created_at,
+          readAt: readIds.has(id) ? new Date().toISOString() : null,
+        });
+        return;
+      }
 
       // payment_disputed is written by the card-dispute webhook against either
       // the invoice or (when the payment had none) the client, so its target

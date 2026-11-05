@@ -20,6 +20,11 @@ export const maxDuration = 300;
  * like any event-based enrollment (e.g. estimate_sent).
  */
 
+/** How far past the no-response point an estimate is still picked up (covers missed runs). */
+const NO_RESPONSE_LOOKBACK_DAYS = 30;
+/** Stop before maxDuration; the remaining triggers run first next time. */
+const RUN_BUDGET_MS = 270_000;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>;
 
@@ -48,9 +53,16 @@ async function handleRun(request: Request) {
     .in("trigger_type", ["estimate_expiring", "estimate_no_response"]);
 
   let enrolled = 0;
+  let stoppedEarly = false;
   const orgCanceled = createOrgOutboundMutedResolver(supabase);
+  // Each matching estimate costs several sequential queries. Start at a different trigger each
+  // day and stop before maxDuration, so a large org can't use up every run and leave the
+  // triggers (and estimates) after it never checked.
+  const startedAt = Date.now();
+  const list = [...(triggers ?? [])].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  const offset = list.length ? Math.floor(startedAt / 86_400_000) % list.length : 0;
 
-  for (const trigger of triggers ?? []) {
+  outer: for (const trigger of [...list.slice(offset), ...list.slice(0, offset)]) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const seq = trigger.crm_automation_sequences as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,8 +102,12 @@ async function handleRun(request: Request) {
       // estimate_no_response
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - days);
-      // Paged: this has no lower bound (every open estimate ever sent), and a single select
-      // was silently cut at 1,000 rows in arbitrary order.
+      // An estimate becomes due once, `days` after it was sent. Looking back only
+      // NO_RESPONSE_LOOKBACK_DAYS past that (room for missed runs) instead of over every
+      // open estimate ever sent: that grew without bound and, with re-entry on, re-enrolled
+      // years-old estimates every day.
+      const floor = new Date(cutoff);
+      floor.setDate(floor.getDate() - NO_RESPONSE_LOOKBACK_DAYS);
       matches = await fetchAllRows<{ id: string; client_id: string }>(() =>
         supabase
           .from("estimates")
@@ -101,10 +117,12 @@ async function handleRun(request: Request) {
           .is("deleted_at", null)
           .not("sent_at", "is", null)
           .lte("sent_at", cutoff.toISOString())
+          .gte("sent_at", floor.toISOString())
           .order("id"));
     }
 
     for (const est of matches) {
+      if (Date.now() - startedAt > RUN_BUDGET_MS) { stoppedEarly = true; break outer; }
       if (!(await triggerConditionsMet(supabase, trigger.id, est.client_id, est.id))) continue;
 
       // A date-gap trigger fires off a fixed anchor (valid_until_date / sent_at)
@@ -130,5 +148,5 @@ async function handleRun(request: Request) {
     }
   }
 
-  return NextResponse.json({ enrolled });
+  return NextResponse.json({ enrolled, stoppedEarly });
 }

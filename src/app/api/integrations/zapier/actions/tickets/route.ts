@@ -4,6 +4,7 @@ import { adminClient, authenticateZapierRequest, blankToUndefined, checkZapierRa
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
 import { logger } from "@/lib/logger";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const log = logger.child("zapier-action");
 
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
 
   const parsed = createTicketSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+    return NextResponse.json({ error: firstIssueMessage(parsed.error, "Invalid input") }, { status: 400 });
   }
   const body = parsed.data;
 

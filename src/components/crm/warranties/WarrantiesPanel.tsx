@@ -69,7 +69,17 @@ export function WarrantiesPanel({ scope, projectComplete }: Props) {
     }
   }
 
+  // A warranty that already has a live (not void) renewal is done; renewing it again
+  // made a second overlapping warranty.
+  const renewedIds = new Set(
+    warranties.filter((r) => r.renewedFromId && r.status !== "void").map((r) => r.renewedFromId as string)
+  );
+
   async function renew(w: CRMWarranty) {
+    if (renewedIds.has(w.id)) {
+      toast.error("This warranty has already been renewed");
+      return;
+    }
     // Renewing before expiry continues from the day after it ends.
     const start = w.endDate && w.endDate >= today() ? shiftYmd(w.endDate, 1) : today();
     if (!(await confirm({
@@ -94,7 +104,9 @@ export function WarrantiesPanel({ scope, projectComplete }: Props) {
       });
       toast.success("Warranty renewed");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not renew warranty");
+      const msg = e instanceof Error ? e.message : "";
+      // crm_warranties_one_live_renewal: another tab or a double-click already renewed it.
+      toast.error(/one_live_renewal|duplicate key/i.test(msg) ? "This warranty has already been renewed" : msg || "Could not renew warranty");
     }
   }
 
@@ -163,7 +175,7 @@ export function WarrantiesPanel({ scope, projectComplete }: Props) {
                     {w.status === "pending" && (
                       <Button size="sm" variant="ghost" title="Start now" onClick={() => startNow(w)}><Play className="h-4 w-4" /></Button>
                     )}
-                    {w.status === "active" && (
+                    {w.status === "active" && !renewedIds.has(w.id) && (
                       <Button size="sm" variant="ghost" title="Renew" onClick={() => renew(w)}><RefreshCw className="h-4 w-4" /></Button>
                     )}
                     <Button size="sm" variant="ghost" title="Edit" onClick={() => { setEditing(w); setDialogOpen(true); }}><Pencil className="h-4 w-4" /></Button>

@@ -67,8 +67,10 @@ const INAPP_PREF_KEY: Record<NotifType, string | null> = {
   wo_assigned:             null,              // in-app is derived client-side for assigned
   wo_status_changed:       "inAppWorkOrderStatusChanged",
   wo_comment:              "inAppWorkOrderComment",
-  approved:                null,
-  rejected:                null,
+  // Settings → Notifications "Requisition approved / rejected" (in-app). They
+  // cover every approval outcome this route reports (requisition, PO, estimate).
+  approved:                "inAppRequisitionApproved",
+  rejected:                "inAppRequisitionRejected",
   new_maintenance_request: null,
 };
 
@@ -313,7 +315,7 @@ export async function POST(request: Request) {
       .filter((id: string) => !directRecipientIds.includes(id));
   }
 
-  // ── Handle in-app notifications (notifications table) for wo_comment ──────
+  // ── Handle in-app notifications (notifications table) ─────────────────────
   const inAppPrefKey = INAPP_PREF_KEY[notifType];
   if (inAppPrefKey) {
     // Collect all in-app recipients: direct + admins with admin WO comment pref
@@ -342,7 +344,14 @@ export async function POST(request: Request) {
         let inAppTitle: string;
         let inAppMessage: string;
 
-        if (notifType === "wo_comment") {
+        if (notifType === "approved" || notifType === "rejected") {
+          const label = entityType === "requisition" ? "Purchase Requisition" : entityType === "crm_estimate" ? "Estimate" : "Purchase Order";
+          const num = String(entity.requisition_number ?? entity.po_number ?? entity.estimate_number ?? "");
+          const verb = notifType === "approved" ? "approved" : "rejected";
+          inAppType    = notifType;
+          inAppTitle   = `${label} ${notifType === "approved" ? "Approved" : "Rejected"}`;
+          inAppMessage = `Your ${label}${num ? ` ${num}` : ""} was ${verb}${decision?.approverName ? ` by ${decision.approverName}` : ""}${notifType === "rejected" && safeExtra.comment ? `: "${safeExtra.comment.slice(0, 80)}${safeExtra.comment.length > 80 ? "…" : ""}"` : ""}`;
+        } else if (notifType === "wo_comment") {
           const commentBody = safeExtra.commentBody ?? "";
           inAppType    = "wo_comment";
           inAppTitle   = "New Comment";

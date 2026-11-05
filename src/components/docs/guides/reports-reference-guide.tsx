@@ -391,7 +391,7 @@ const SECTIONS: ReportSection[] = [
           "% Complete is cost-to-date ÷ EAC (estimated cost at completion) — not the manual progress field on the project.",
           "Over/(Under) Billed is billed to date minus earned revenue. Positive means billings are ahead of the work (healthy); negative means the work is ahead of billing (you're financing the job).",
           "EAC is seeded from the linked estimate when a job is converted, then re-forecastable on the project — projects with no EAC set show 0% complete.",
-          "Cost to Date counts PO and requisition lines assigned to the project, excluding draft and rejected POs and requisitions. Billed to Date counts issued (not draft or void) invoices, before tax.",
+          "Cost to Date counts purchase orders actually placed (ordered, partly or fully received) — each project line after its share of the PO's discount, tax and shipping — plus direct items and subcontract costs. POs still requested or awaiting approval and open requisitions show under Committed (Not Yet Ordered) instead and don't move % complete; Cost to Date + Committed is the project's total on the Projects list. Billed to Date counts issued (not draft or void) invoices, before tax.",
         ],
       },
     ],

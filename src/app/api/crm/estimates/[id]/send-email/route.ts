@@ -24,6 +24,10 @@ import { resolveEstimateDocument } from "@/lib/estimates/resolve-estimate-docume
 import { insertEstimateVersion } from "@/lib/estimates/versions";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { embedEstimatePhoto } from "@/lib/estimate-photo-embed";
+import { buildClientMergeVars } from "@/lib/email/send";
+import { MERGE_CLIENT_COLUMNS, MERGE_PROPERTY_COLUMNS, clientMergeInput, employeeName, orgMergeInput } from "@/lib/email/merge-inputs";
+import { estimateMergeTags } from "@/lib/estimates/estimate-merge-tags";
+import { safeHexColor } from "@/lib/utils/safe-color";
 
 const log = logger.child("send-estimate");
 
@@ -121,7 +125,8 @@ export async function POST(
     .from("estimates")
     .select(`
       *,
-      clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip),
+      clients(${MERGE_CLIENT_COLUMNS}),
+      property:client_properties!estimates_property_id_fkey(${MERGE_PROPERTY_COLUMNS}),
       sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name),
       estimate_line_items(*, ${PRINTED_SUBITEM_SELECT}),
       estimate_milestones(name, amount_cents, sort_order, deleted_at)
@@ -283,26 +288,8 @@ export async function POST(
 
   const proposalUrl = shareToken ? proposalUrlFor(shareToken.token) : null;
 
-  const clientDisplayName = (est.clients?.display_name as string) ?? "";
-  const firstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
-  const lastName = clientDisplayName.split(" ").slice(1).join(" ") ?? "";
-  const salesRep = est.sales_rep as { first_name?: string; last_name?: string } | null;
-  const salesRepName = salesRep ? `${salesRep.first_name ?? ""} ${salesRep.last_name ?? ""}`.trim() || orgName : orgName;
-  const total = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
-    .format((est.total_cents ?? 0) / 100);
-  // created_at is a timestamptz and the Node runtime is UTC on Vercel, so
-  // without an explicit zone an estimate created in the evening is quoted with
-  // tomorrow's date.
-  // estimate_date is the user-editable date shown on the estimate itself, so
-  // [estimatedate] must match it; fall back to created_at for legacy rows.
-  const quoteDate = est.estimate_date
-    ? new Date(`${est.estimate_date as string}T12:00:00`).toLocaleDateString("en-US", {
-        month: "long", day: "numeric", year: "numeric",
-      })
-    : new Date(est.created_at).toLocaleDateString("en-US", {
-        month: "long", day: "numeric", year: "numeric",
-        timeZone: await getOrgTimeZone(supabase, est.org_id as string),
-      });
+  const salesRepName = employeeName(est.sales_rep);
+  const orgTimeZone = await getOrgTimeZone(supabase, est.org_id as string);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lineItems = ((est.estimate_line_items ?? []) as any[])
@@ -362,24 +349,26 @@ export async function POST(
     milestones
   );
 
+  // The full client/property/company vocabulary first (raw — resolveMergeTags
+  // escapes at substitution), then the estimate tags. This route used to build
+  // only 14 tags, so most of what the Documents picker offers ([clientname],
+  // [companyphone], addresses, [salesperson], [estimatevaliduntil]...) went out blank.
   const mergeVars: Record<string, string> = {
-    "[clientfirstname]":    firstName,
-    "[clientlastname]":     lastName,
-    "[clientfullname]":     clientDisplayName,
-    "[companyname]":        orgName,
+    ...buildClientMergeVars(
+      clientMergeInput(est.clients, { property: est.property, salesRepName }),
+      orgMergeInput(org, orgTimeZone),
+      { escape: false },
+    ),
+    ...estimateMergeTags(est, { timeZone: orgTimeZone, salesRepName, orgName }),
     "[estimatelink]":       proposalUrl
-      ? `<a href="${proposalUrl}" style="color:#fff;background:${org?.brand_color ?? "#60ab45"};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`
+      ? `<a href="${proposalUrl}" style="color:#fff;background:${safeHexColor(org?.brand_color as string | null, "#60ab45")};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`
       : "",
     "[estimatelinkurl]":    proposalUrl ?? "",
-    "[estimatenumber]":     String(est.estimate_number).padStart(5, "0"),
-    "[estimatedate]":       quoteDate,
-    "[estimatetotal]":      total,
     "[estimategrid]":       buildEstimateGridHtml(pdfLineItems, toDisplaySettings(est.display_settings)),
     "[installmentcount]":   String(installmentSummary.count),
     "[installmentamount]":  fmtCents(installmentSummary.amountCents),
-    "[salesrepname]":       salesRepName,
-    "[companyphonenumber]": orgPhone,
   };
+  if (!mergeVars["[companyphonenumber]"]) mergeVars["[companyphonenumber]"] = orgPhone;
 
   const resolvedSubject = resolveSubjectMergeTags(body.subject, mergeVars);
   const resolvedBody    = addParagraphSpacing(resolveMergeTags(body.bodyHtml, mergeVars));
@@ -561,7 +550,7 @@ export async function POST(
     org_id: effOrgId,
     estimate_id: estimateId,
     to_email: toEmailsJoined,
-    to_name: clientDisplayName || null,
+    to_name: (est.clients?.display_name as string | null) || null,
     subject: resolvedSubject,
     body_html: resolvedBody,
     resend_id: sent?.id ?? null,

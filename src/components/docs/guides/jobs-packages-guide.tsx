@@ -197,6 +197,18 @@ export function JobsPackagesGuide() {
           typed on one particular visit is left alone.
         </p>
         <p>
+          <strong>Per-service notes.</strong> Each service on a job can carry its own crew note,
+          invoice description and internal note (they come over from the estimate line&apos;s Notes,
+          or are set on the service). A visit for one service shows the job note followed by that
+          service&apos;s note; a single visit that does the whole job shows the job note followed by
+          every service&apos;s note, so a &quot;use black mulch&quot; line note reaches the crew however
+          the job is scheduled (Add Job, Convert, Waiting List dispatch, Nearby or Add Visit). Editing
+          the job note or a service note updates upcoming visits the same way as above. The service&apos;s
+          invoice description is used on that service&apos;s invoice line by every invoice button and
+          by auto-invoicing; the job&apos;s Invoice Description fills in for services without one. The
+          internal note is office-only: crew logins can&apos;t read it, in the app or otherwise.
+        </p>
+        <p>
           <strong>Adding a visit by hand.</strong> On the job&apos;s Visits tab, Add Visit lets you
           pick a crew or choose <strong>Unassigned</strong>, which pins that visit to no crew instead
           of falling back to the job&apos;s crew. The date defaults to your organization&apos;s
@@ -432,7 +444,8 @@ export function JobsPackagesGuide() {
         <p>
           The new job is for the same client and property, with the same package, services, rates,
           quantities, budgets, team size, Min Days and taxable setting, the same crew and sales rep, and
-          the same crew notes, office notes and invoice description. Each service&apos;s crew checklist
+          the same crew notes, office notes and invoice description, including each service&apos;s own
+          crew note, invoice description and internal note. Each service&apos;s crew checklist
           (its sub-items) comes along, and so do planned job materials that were never recorded on a
           visit, and each step visit gets its own pending materials from those sub-items, the same as
           on a new job. By default every step date is last season&apos;s date on <em>this job</em> moved

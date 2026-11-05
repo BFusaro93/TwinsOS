@@ -66,6 +66,9 @@ export interface SavedMethodImportPreview {
   truncated: boolean;
 }
 
+/** Links per import request — the route allows 1,000; smaller batches keep each request well inside its time limit. */
+const IMPORT_BATCH = 500;
+
 export interface SavedMethodImportResult {
   imported: number;
   failed: Array<{ customerId: string; clientId: string; error?: string }>;
@@ -88,14 +91,27 @@ export function useApplySavedMethodImport() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { links: Array<{ customerId: string; clientId: string }>; enableAutopay: boolean }) => {
-      const res = await fetch("/api/crm/payments/connect/import-methods", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(typeof body.error === "string" ? body.error : "Failed to import payment methods");
-      return body as SavedMethodImportResult;
+      // The route caps a request at 1,000 links and each link is a Stripe round trip, so a
+      // large import goes in batches; results are combined so the caller sees one total.
+      const total: SavedMethodImportResult = { imported: 0, failed: [], autopayEnabled: input.enableAutopay };
+      for (let i = 0; i < input.links.length; i += IMPORT_BATCH) {
+        const res = await fetch("/api/crm/payments/connect/import-methods", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ links: input.links.slice(i, i + IMPORT_BATCH), enableAutopay: input.enableAutopay }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          const msg = typeof body.error === "string" ? body.error : "Failed to import payment methods";
+          // Earlier batches are already saved — say so rather than reporting the whole import as failed.
+          throw new Error(total.imported > 0 ? `${msg} (${total.imported} imported before this)` : msg);
+        }
+        const part = body as SavedMethodImportResult;
+        total.imported += part.imported;
+        total.failed.push(...part.failed);
+        total.autopayEnabled = part.autopayEnabled;
+      }
+      return total;
     },
     onSuccess: () => {
       invalidateClientBalances(qc);

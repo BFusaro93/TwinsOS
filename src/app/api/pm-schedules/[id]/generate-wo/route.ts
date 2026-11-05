@@ -32,11 +32,30 @@ async function copyTemplatePartsAndDeduct(
   templateParts: any[]
 ): Promise<string[]> {
   if (templateParts.length === 0) return [];
+  // A template can still point at a part that was deleted since. Copying it put a
+  // line for a part nobody stocks on the WO, with a permanent shortfall (nothing
+  // can be deducted from a deleted part) — leave those out.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const partIds = [...new Set(templateParts.map((tp: any) => tp.part_id).filter(Boolean))] as string[];
+  let liveTemplates = templateParts;
+  if (partIds.length > 0) {
+    const { data: liveParts, error: liveErr } = await adminClient
+      .from("parts")
+      .select("id")
+      .in("id", partIds)
+      .eq("org_id", orgId)
+      .is("deleted_at", null);
+    if (liveErr) throw new Error(`Failed to check the schedule's parts: ${liveErr.message}`);
+    const live = new Set(((liveParts ?? []) as { id: string }[]).map((p) => p.id));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    liveTemplates = templateParts.filter((tp: any) => !tp.part_id || live.has(tp.part_id));
+  }
+  if (liveTemplates.length === 0) return [];
   const { data: inserted, error: insertErr } = await adminClient
     .from("wo_parts")
     .insert(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      templateParts.map((tp: any) => ({
+      liveTemplates.map((tp: any) => ({
         org_id: orgId,
         work_order_id: workOrderId,
         part_id: tp.part_id,

@@ -17,6 +17,7 @@ import {
   templateRenewalDates,
   type RenewalSourceJob,
   type RenewalSourceProduct,
+  type RenewalSourceService,
   type RenewalRateIncrease,
   type TemplateRenewalDates,
 } from "@/lib/package-renewal";
@@ -39,7 +40,8 @@ const SOURCE_COLUMNS = `
   clients(display_name),
   crm_job_services(id, service_id, service_name, start_date, complete_by_date, assigned_to,
     qty, rate_cents, budgeted_hours, budget_method, team_size, days_count, time_start,
-    time_end, included, sort_order, min_days, is_taxable, max_visits, treated_area)
+    time_end, included, sort_order, min_days, is_taxable, max_visits, treated_area,
+    job_note, invoice_desc, crm_job_service_office_notes(note))
 `;
 
 type SourceRow = RenewalSourceJob & {
@@ -142,6 +144,12 @@ export async function loadPackageRenewalPlan(
   if (!src) throw new Error("That job was not found (it may have been deleted).");
   const job = src as SourceRow;
   if (job.job_type !== "package") throw new Error("Only package jobs can be renewed.");
+  // The office-only note lives in crm_job_service_office_notes; carry it as internal_note.
+  for (const svc of (job.crm_job_services ?? []) as (RenewalSourceService & { crm_job_service_office_notes?: unknown })[]) {
+    const embed = svc.crm_job_service_office_notes;
+    const row = Array.isArray(embed) ? embed[0] : embed;
+    svc.internal_note = (row as { note?: string | null } | null | undefined)?.note ?? null;
+  }
 
   const sourceSeason = packageSeasonYear(job);
   const years = renewalYearsAhead(packageProgramSpan(job), today);

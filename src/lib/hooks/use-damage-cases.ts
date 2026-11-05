@@ -124,11 +124,19 @@ export function useCreateDamageCase() {
       let matchedClientId: string | null = null;
       const normalizedName = input.customerName.trim().toLowerCase();
       if (normalizedName) {
+        // Matched in the database: loading every client stopped at the 1,000-row response
+        // cap, so in a large org most real matches were never seen. ilike is a
+        // case-insensitive exact match once its wildcards are escaped; the trim check
+        // below keeps the old "ignore surrounding spaces" rule.
+        const pattern = input.customerName.trim().replace(/[\\%_]/g, (ch) => `\\${ch}`);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: clients } = await (supabase as any)
           .from("clients")
           .select("id, display_name")
-          .is("deleted_at", null);
+          .is("deleted_at", null)
+          .ilike("display_name", pattern)
+          .order("created_at")
+          .limit(5);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const match = (clients ?? []).find((c: any) => c.display_name.trim().toLowerCase() === normalizedName);
         matchedClientId = match?.id ?? null;

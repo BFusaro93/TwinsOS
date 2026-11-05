@@ -128,6 +128,19 @@ export async function selectEffectiveCrewVisits(
 }
 
 /**
+ * A package step whose visit is still the plain 'scheduled' placeholder (created at
+ * signup so the step has a date and crew) is waiting on the Waiting List, not on
+ * anyone's route — the dispatch board hides it (useVisitsForDateRange) until it is
+ * dispatched. The crew app showed it anyway, so crews worked stops the office
+ * couldn't see, order or optimise. Same rule as the board, on a raw visit row with
+ * crm_jobs(job_type) embedded.
+ */
+export function isWaitingPackagePlaceholder(row: Record<string, unknown>): boolean {
+  const jobType = (row.crm_jobs as { job_type?: string | null } | null)?.job_type;
+  return jobType === "package" && !!row.job_service_id && row.status === "scheduled";
+}
+
+/**
  * The order every crew list has always used: priority ASC, then start_time
  * ASC with NULLs last. Re-applied after selectEffectiveCrewVisits' merge.
  */

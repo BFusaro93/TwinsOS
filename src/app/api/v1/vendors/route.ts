@@ -3,6 +3,7 @@ import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { VENDOR_SELECT, shapeVendor } from "./shape";
 import { createVendorSchema } from "./validation";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 /** GET /api/v1/vendors — list the org's vendors. Requires scope "vendors:read". */
 export async function GET(request: Request) {
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
   if (!auth.ok) return jsonError(auth.error, auth.status);
 
   const parsed = createVendorSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
+  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
   const body = parsed.data;
 
   const { data, error } = await db

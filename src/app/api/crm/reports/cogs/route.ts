@@ -11,6 +11,7 @@ import {
   type ServiceTarget,
   type VisitServiceShare,
 } from "@/lib/visit-costing";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const log = logger.child("reports/cogs");
 
@@ -169,7 +170,7 @@ export async function GET(request: Request) {
     to: searchParams.get("to"),
   });
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid query" }, { status: 400 });
+    return NextResponse.json({ error: firstIssueMessage(parsed.error, "Invalid query") }, { status: 400 });
   }
   const { from, to } = parsed.data;
 

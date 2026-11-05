@@ -773,6 +773,9 @@ export function ReportCenterGuide() {
           a schedule, changing its recipients or turning it back on needs Manage Report Center
           <em> and</em> permission to view the report itself (for these, a job-costing report
           permission), because the email goes out without checking the recipient&apos;s role.
+          If a scheduled report matches more rows than the report engine returns at once, the
+          emailed PDF says it is partial (&quot;only the first N of M rows&quot;) and leaves off the
+          totals row, since totals would cover only the rows included.
         </p>
       </Section>
 

@@ -452,18 +452,21 @@ export async function generateVisitsForJobs(
     if (extra > 0) usedVisitsByService.set(s.id, (usedVisitsByService.get(s.id) ?? 0) + extra);
   }
 
-  // package_total_steps caps ALL-TIME live visits — an exact count per job.
+  // package_total_steps caps ALL-TIME live visits. Counted from one paged read per 100
+  // jobs instead of a HEAD count per job — thousands of package jobs meant thousands of
+  // sequential round trips, which ran the cron past its time limit for later orgs.
   const liveCountByJob = new Map<string, number>();
-  for (const j of jobs) {
-    if (j.package_total_steps == null) continue;
-    const { count, error } = await supabase
+  const cappedPackageJobIds = jobs.filter((j) => j.package_total_steps != null).map((j) => j.id);
+  for (const id of cappedPackageJobIds) liveCountByJob.set(id, 0);
+  for (const ids of chunk(cappedPackageJobIds, 100)) {
+    const { rows, error } = await selectAllRows<{ job_id: string }>(() => supabase
       .from("crm_job_visits")
-      .select("id", { count: "exact", head: true })
-      .eq("job_id", j.id)
+      .select("job_id")
+      .in("job_id", ids)
       .eq("crew_group_secondary", false)
-      .is("deleted_at", null);
-    if (error) { result.errors.push((error as { message: string }).message); return result; }
-    liveCountByJob.set(j.id, count ?? 0);
+      .is("deleted_at", null));
+    if (error) { result.errors.push(error); return result; }
+    for (const v of rows) liveCountByJob.set(v.job_id, (liveCountByJob.get(v.job_id) ?? 0) + 1);
   }
 
   // Only the orgs these jobs belong to (the cron calls this once per org; reading every org's

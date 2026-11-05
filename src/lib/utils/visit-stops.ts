@@ -220,6 +220,35 @@ export function pickPunchOwner(
   return best;
 }
 
+/** composeVisitNote's separator between the job note and a service note. */
+const NOTE_SEPARATOR = "<p></p>";
+
+/**
+ * A stop's crew notes, each distinct note once: the job note, then each visit's own
+ * service note, then the property's standing note. Visit notes are composed copies
+ * (job note + service note), so comparing whole strings repeated the job note once
+ * per service, and the property note ("dog loose") only showed when no visit or job
+ * had a note at all.
+ */
+function stopNotesText(visits: CRMJobVisit[]): string | null {
+  const blocks: string[] = [];
+  const add = (note: string | null | undefined) => {
+    if (note && !blocks.includes(note)) blocks.push(note);
+  };
+  for (const v of visits) {
+    const jobNote = v.job?.notesToCrew ?? null;
+    const own = v.notesToCrew ?? null;
+    if (own && jobNote && own.startsWith(jobNote + NOTE_SEPARATOR)) {
+      add(jobNote);
+      add(own.slice(jobNote.length + NOTE_SEPARATOR.length));
+    } else {
+      add(own || jobNote);
+    }
+  }
+  for (const v of visits) add(v.job?.propertyNotesToCrew);
+  return blocks.join("\n") || null;
+}
+
 /** Groups visits into stops, preserving the sort order of each stop's first visit. */
 export function groupVisitsIntoStops(visits: CRMJobVisit[]): Stop[] {
   const byKey = new Map<string, CRMJobVisit[]>();
@@ -267,9 +296,7 @@ export function groupVisitsIntoStops(visits: CRMJobVisit[]): Stop[] {
           ?? null)
         : null,
       pausedAt: stopVisits.find((v) => isRunning(v) && v.pausedAt)?.pausedAt ?? null,
-      // Visit note, else the job's, else the property's standing note — the same fallback the
-      // dispatch board and route sheet use (and the clock-in route's acknowledgment gate).
-      notesToCrew: [...new Set(stopVisits.map((v) => v.notesToCrew || v.job?.notesToCrew || v.job?.propertyNotesToCrew).filter(Boolean))].join("\n") || null,
+      notesToCrew: stopNotesText(stopVisits),
       notesToCrewUpdatedAt: stopVisits
         .map(notesToCrewUpdatedAt)
         .filter((s): s is string => !!s)

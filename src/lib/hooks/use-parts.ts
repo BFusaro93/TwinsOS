@@ -337,7 +337,7 @@ export function useReceivePartCostLayer() {
       // receipts of the same part don't race on a stale JS-side read (see
       // the RPC migration for the corruption this previously caused).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updateErr } = await (supabase.rpc as any)("receive_part_quantity", {
+      const { data: received, error: updateErr } = await (supabase.rpc as any)("receive_part_quantity", {
         p_org_id: current.org_id as string,
         p_part_id: receipt.partId,
         p_quantity: Math.round(receipt.quantity),
@@ -352,6 +352,11 @@ export function useReceivePartCostLayer() {
         p_po_line_item_id: receipt.poLineItemId,
       });
       if (updateErr) throw updateErr;
+      // Work-order usage the receipt settled (20261222000600), so a caller rolling the
+      // receipt back can reopen those shortfalls with setWOPartStock.
+      const settled = ((received as { settled?: { wo_part_id: string; previous_deducted: number }[] } | null)?.settled ?? [])
+        .map((s) => ({ woPartId: s.wo_part_id, previousDeducted: Number(s.previous_deducted) }));
+      return { settled };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["parts"] });

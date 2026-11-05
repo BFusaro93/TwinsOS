@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { dashboardInputSchema } from "@/types/crm-reports";
 import { ensureSystemDashboardsSeeded } from "@/lib/reports/seed-dashboards";
 import { isCrewCaller } from "@/lib/reports/crew-dashboard-access";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 interface DashboardRow {
   id: string;
@@ -102,7 +103,7 @@ export async function POST(request: Request) {
   const parsed = dashboardInputSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid dashboard" },
+      { error: firstIssueMessage(parsed.error, "Invalid dashboard") },
       { status: 400 }
     );
   }

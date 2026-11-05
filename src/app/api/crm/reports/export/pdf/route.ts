@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { ReportExportDocument } from "@/components/crm/reports/pdf/ReportExportDocument";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const groupedSchema = z.object({
   grandTotal: z.array(z.string()),
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
   const parsed = exportRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid export request" },
+      { error: firstIssueMessage(parsed.error, "Invalid export request") },
       { status: 400 }
     );
   }

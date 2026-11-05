@@ -4,6 +4,7 @@ import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-hel
 import { createRequisitionRecord } from "@/lib/requisitions/create-requisition";
 import { REQUISITION_SELECT, shapeRequisition } from "./shape";
 import { createRequisitionSchema } from "./validation";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 /** GET /api/v1/requisitions — list the org's requisitions. Requires scope "requisitions:read". */
 export async function GET(request: Request) {
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
   if (!auth.ok) return jsonError(auth.error, auth.status);
 
   const parsed = createRequisitionSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
+  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
   const body = parsed.data;
 
   // deleted_at IS NULL on every FK check here: a requisition pointing at a

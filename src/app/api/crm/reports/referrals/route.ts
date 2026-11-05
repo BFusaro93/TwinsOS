@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 
 export interface ReferredClientRow {
   id: string;
@@ -38,24 +39,30 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
-    .from("clients")
-    .select(`
-      id,
-      display_name,
-      status,
-      client_since,
-      created_at,
-      balance_outstanding_cents,
-      referred_by_client_id,
-      referrer:referred_by_client_id ( id, display_name, deleted_at )
-    `)
-    .is("deleted_at", null)
-    .not("referred_by_client_id", "is", null)
-    .order("created_at", { ascending: false });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Paged: past 1,000 referred clients a single select was cut off and referrer totals came out low.
+  let data: unknown[];
+  try {
+    data = await fetchAllRows<unknown>(() =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any)
+        .from("clients")
+        .select(`
+          id,
+          display_name,
+          status,
+          client_since,
+          created_at,
+          balance_outstanding_cents,
+          referred_by_client_id,
+          referrer:referred_by_client_id ( id, display_name, deleted_at )
+        `)
+        .is("deleted_at", null)
+        .not("referred_by_client_id", "is", null)
+        .order("created_at", { ascending: false })
+    );
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to load referrals" }, { status: 500 });
+  }
 
   const byReferrer = new Map<string, ReferralReportRow>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
