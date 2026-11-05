@@ -370,7 +370,10 @@ export function CrewAppGuide() {
           <strong>Add a chemical</strong> records a product the office didn&apos;t preload, such as a
           spot treatment or a substitute: choose the product, the amount and the unit, and
           optionally how it was applied and the conditions (inside the confirm card it uses the
-          conditions already entered there). It is saved already confirmed, with the foreman as
+          conditions already entered there). A stop with no chemicals planned shows a small{" "}
+          <strong>Chemicals</strong> card with the same button, as long as the company tracks at least
+          one chemical product, so a crew can still record a treatment the office didn&apos;t plan.
+          It is saved already confirmed, with the foreman as
           applicator, and counts toward the compliance report and stock like any other. When the
           office has filed a label or Safety Data Sheet for the product, <strong>View label</strong>{" "}
           also shows an <strong>Open</strong> button for it.

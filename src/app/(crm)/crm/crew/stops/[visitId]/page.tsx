@@ -212,7 +212,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const chemAddVisitId = chemicals[0]?.visitId ?? stop?.visits[0]?.id;
   const { data: crewDocs = [] } = useCrewReference();
   const docsFor = (productId: string | null) => (productId ? crewDocs.filter((d) => d.productIds.includes(productId)) : []);
-  const { data: chemCatalog } = useCrewChemicalCatalog(unconfirmedChemicals.length > 0 ? chemAddVisitId : undefined);
+  // A stop with nothing preloaded still needs a way to record a chemical the crew decides
+  // to apply; offered only while the stop is open and only if the company tracks chemicals.
+  const stopOpen = stop?.derivedStatus === "in_progress" || stop?.derivedStatus === "scheduled";
+  const noChemicalCards = unconfirmedChemicals.length === 0 && usedChemicals.length === 0;
+  const { data: chemCatalog } = useCrewChemicalCatalog(
+    unconfirmedChemicals.length > 0 || (noChemicalCards && stopOpen) ? chemAddVisitId : undefined
+  );
   // Weather from the National Weather Service fills the conditions once, so the crew only
   // corrects it rather than typing it; "Update" re-applies the reading.
   const { data: chemWeather } = useCrewConditions(unconfirmedChemicals.length > 0 ? chemAddVisitId : undefined);
@@ -849,6 +855,24 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               {/* While chemicals are still unconfirmed the confirm card above carries the add button. */}
               {unconfirmedChemicals.length === 0 && chemAddVisitId && (
                 <AddChemicalForm visitId={chemAddVisitId} disabled={!isActive} />
+              )}
+            </div>
+          </div>
+        )}
+
+        {noChemicalCards && stopOpen && chemAddVisitId && (chemCatalog?.products.length ?? 0) > 0 && (
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800">
+              <h2 className="font-semibold text-slate-800 dark:text-neutral-100 flex items-center gap-2">
+                <FlaskConical className="h-4 w-4" />
+                Chemicals
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">None were planned for this stop. Add any you apply.</p>
+            </div>
+            <div className="p-3">
+              <AddChemicalForm visitId={chemAddVisitId} disabled={!isActive} />
+              {!isActive && (
+                <p className="mt-2 text-center text-xs text-muted-foreground">Start the job first — then add what you applied.</p>
               )}
             </div>
           </div>
