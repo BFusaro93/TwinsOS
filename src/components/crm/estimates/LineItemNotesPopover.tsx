@@ -94,7 +94,7 @@ export function LineItemNotesPopover({ notes, onSave, isChemical = false }: Prop
             </TabsContent>
 
             <TabsContent value="job_note" className="mt-0">
-              <p className="mb-1.5 text-xs text-muted-foreground">Carries to this service's crew note on the job and its visits when converting.</p>
+              <p className="mb-1.5 text-xs text-muted-foreground">Carries to this service&apos;s crew note on the job and its visits when converting.</p>
               <RichTextEditor
                 value={draft.jobNote ?? ""}
                 onChange={(v) => setDraft((d) => ({ ...d, jobNote: isBlankRich(v) ? null : v }))}
@@ -104,7 +104,7 @@ export function LineItemNotesPopover({ notes, onSave, isChemical = false }: Prop
             </TabsContent>
 
             <TabsContent value="invoice_desc" className="mt-0">
-              <p className="mb-1.5 text-xs text-muted-foreground">Carries to this service's invoice line description on the job.</p>
+              <p className="mb-1.5 text-xs text-muted-foreground">Carries to this service&apos;s invoice line description on the job.</p>
               <Textarea
                 rows={6}
                 value={draft.invoiceDesc ?? ""}
@@ -114,7 +114,7 @@ export function LineItemNotesPopover({ notes, onSave, isChemical = false }: Prop
             </TabsContent>
 
             <TabsContent value="line_item" className="mt-0">
-              <p className="mb-1.5 text-xs text-muted-foreground">Internal only — carries to the job service's office note; never shown to the client or crew.</p>
+              <p className="mb-1.5 text-xs text-muted-foreground">Internal only — carries to the job service&apos;s office note; never shown to the client or crew.</p>
               <RichTextEditor
                 value={draft.internalNote ?? ""}
                 onChange={(v) => setDraft((d) => ({ ...d, internalNote: isBlankRich(v) ? null : v }))}
