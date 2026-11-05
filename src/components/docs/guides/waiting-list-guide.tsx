@@ -72,6 +72,10 @@ export function WaitingListGuide() {
             keep resurfacing on this page, one service at a time, all season.
             Until a step is dispatched it appears only here — the Dispatch Board hides a package
             step&apos;s placeholder visit — so a package behaves like a Waiting List job.
+            A step that can&apos;t be dispatched yet says so under its service name: <strong>Too soon —
+            earliest Nov 8</strong> (in amber) when the package&apos;s Min Days spacing after the previous
+            step hasn&apos;t passed — dispatching it earlier would be refused — or <strong>Window opens
+            Dec 1</strong> when its date window hasn&apos;t started.
           </li>
         </ul>
       </Section>

@@ -58,6 +58,7 @@ import { Flame, Tag, Users } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
 import type { CRMJob, CRMJobService } from "@/types/crm-jobs";
+import { packageStepEligibility } from "@/lib/package-step-eligibility";
 import { SearchInput } from "@/components/shared/SearchInput";
 
 function toLocalDateString(date: Date): string {
@@ -65,6 +66,11 @@ function toLocalDateString(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function formatShortDate(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function formatDateRange(start: string | null, end: string | null): string {
@@ -339,6 +345,18 @@ function WaitingJobRow({
     : job.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
   const effectiveCrew = (job.crewId && crewCodeById.get(job.crewId)) || job.crewName;
   const isVisible = (key: string) => visibleKeys.includes(key);
+  const { today: orgToday, toISODate } = useOrgDates();
+  // A package step that can't be dispatched yet: Min Days spacing after the
+  // previous step (enforced, a dispatch would be refused) or its window not open.
+  const eligibility = service && job.jobType === "package" && job.packageStepOrder
+    ? packageStepEligibility({
+        steps: job.packageStepOrder,
+        visits: job.visits ?? [],
+        stepId: service.id,
+        today: orgToday(),
+        toYmd: toISODate,
+      })
+    : null;
 
   return (
     <tr
@@ -364,7 +382,22 @@ function WaitingJobRow({
         </td>
       )}
       {isVisible("service") && (
-        <td className="min-w-[180px] px-4 py-3 text-slate-700 dark:text-neutral-300">{serviceName}</td>
+        <td className="min-w-[180px] px-4 py-3 text-slate-700 dark:text-neutral-300">
+          {serviceName}
+          {eligibility?.spacingEarliest && (
+            <p
+              className="mt-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"
+              title={`Min Days: this step must be at least ${eligibility.minDays} days after step ${eligibility.afterStepNo}. Dispatching earlier is refused.`}
+            >
+              Too soon — earliest {formatShortDate(eligibility.spacingEarliest)}
+            </p>
+          )}
+          {!eligibility?.spacingEarliest && eligibility?.windowOpens && (
+            <p className="mt-0.5 text-[11px] text-slate-400 dark:text-neutral-500" title="This step's date window hasn't opened yet.">
+              Window opens {formatShortDate(eligibility.windowOpens)}
+            </p>
+          )}
+        </td>
       )}
       {isVisible("dateRange") && service && (
         <td className="px-4 py-3">

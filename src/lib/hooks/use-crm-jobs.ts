@@ -187,10 +187,11 @@ export function mapJob(row: any): CRMJob {
             .map((p) => p.job_service_id as string)
         )]
       : undefined,
+    packageStepOrder: row.package_step_order ?? undefined,
     visits: row.crm_job_visits
-      ? (row.crm_job_visits as { id: string; scheduled_date: string; status: string; deleted_at: string | null; job_service_id: string | null; crm_crews: { name: string } | null }[])
+      ? (row.crm_job_visits as { id: string; scheduled_date: string; status: string; deleted_at: string | null; job_service_id: string | null; completed_at?: string | null; crm_crews: { name: string } | null }[])
           .filter((v) => !v.deleted_at)
-          .map((v) => ({ id: v.id, scheduledDate: v.scheduled_date, status: v.status as VisitStatus, crewName: v.crm_crews?.name ?? null, jobServiceId: v.job_service_id ?? null }))
+          .map((v) => ({ id: v.id, scheduledDate: v.scheduled_date, status: v.status as VisitStatus, crewName: v.crm_crews?.name ?? null, jobServiceId: v.job_service_id ?? null, completedAt: v.completed_at ?? null }))
       : undefined,
   };
 }
@@ -331,7 +332,7 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
             sales_rep:crm_employees!crm_jobs_sales_rep_id_fkey(first_name,last_name),
             client_properties(address, city, state, zip, turf_sqft, mulch_bed_sqft, gross_sqft, linear_ft_perimeter, linear_ft_edging, yards_of_mulch, parking_lot_sqft, gate_lock_code, notes_to_crew, crm_property_custom_field_values(field_def_id, value_number, value_text)),
             crm_job_services(*),
-            crm_job_visits(id, deleted_at, job_service_id, status, scheduled_date)
+            crm_job_visits(id, deleted_at, job_service_id, status, scheduled_date, completed_at)
           `)
           .in("job_type", ["waiting_list", "package"])
           // Cancelled and on-hold jobs are not waiting to be dispatched.
@@ -386,6 +387,10 @@ export function useWaitingListJobs(startDate?: string, endDate?: string) {
             .filter((v) => !v.deleted_at && v.status !== "skipped" && v.status !== "cancelled" && v.job_service_id && (row.job_type === "waiting_list" || v.status !== "scheduled"))
             .map((v) => v.job_service_id)
         );
+        // The hint on each remaining step needs the whole program's order, which
+        // the filter below drops (earlier steps are usually done).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (row as any).package_step_order = (row.crm_job_services ?? []).map((s: any) => ({ id: s.id, sortOrder: s.sort_order ?? 0, minDays: s.min_days ?? null, startDate: s.start_date ?? null }));
         row.crm_job_services = (row.crm_job_services ?? []).filter(
           (s) => !dispatchedServiceIds.has(s.id)
         );
