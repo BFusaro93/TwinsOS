@@ -16,11 +16,13 @@ import { EARNED_ON_LABEL, adjustmentServiceLabel, formatRate, negativeClass, qua
 
 type Preset = "this_q" | "last_q" | "this_y" | "custom";
 
-export function CommissionEarningsTab({ canManage }: { canManage: boolean }) {
+export function CommissionEarningsTab({ canManage, ownEmployeeId }: { canManage: boolean; ownEmployeeId?: string }) {
   const { today } = useOrgDates();
   const [preset, setPreset] = useState<Preset>("last_q");
   const [custom, setCustom] = useState<{ from: string; to: string }>({ from: "", to: "" });
-  const [employeeId, setEmployeeId] = useState("all");
+  const [pickedEmployeeId, setEmployeeId] = useState("all");
+  // "My commissions": a rep without org-wide access is pinned to themselves.
+  const employeeId = ownEmployeeId ?? pickedEmployeeId;
   const { data: employees = [] } = useEmployees(false);
   const [confirm, confirmDialog] = useConfirm();
   const createStatement = useCreateCommissionStatement();
@@ -37,7 +39,7 @@ export function CommissionEarningsTab({ canManage }: { canManage: boolean }) {
 
   // Clawbacks/offsets for refunds and voids since the last statement. Not tied to the
   // selected period: the next statement for a rep carries them whatever it covers.
-  const { data: allAdjustments = [] } = useCommissionPendingAdjustments();
+  const { data: allAdjustments = [] } = useCommissionPendingAdjustments(ownEmployeeId);
   const adjustments = useMemo(
     () => (employeeId === "all" ? allAdjustments : allAdjustments.filter((a) => a.employeeId === employeeId)),
     [allAdjustments, employeeId],
@@ -115,13 +117,15 @@ export function CommissionEarningsTab({ canManage }: { canManage: boolean }) {
             <Input type="date" className="w-40" value={custom.to} onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))} />
           </>
         )}
-        <Select value={employeeId} onValueChange={setEmployeeId}>
-          <SelectTrigger className="w-52"><SelectValue placeholder="All reps" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All reps</SelectItem>
-            {employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.firstName} {e.lastName}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        {!ownEmployeeId && (
+          <Select value={employeeId} onValueChange={setEmployeeId}>
+            <SelectTrigger className="w-52"><SelectValue placeholder="All reps" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All reps</SelectItem>
+              {employees.map((e) => <SelectItem key={e.id} value={e.id}>{e.firstName} {e.lastName}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
         {range.from && range.to && <span className="text-sm text-muted-foreground">{formatDate(range.from)} – {formatDate(range.to)}</span>}
       </div>
 
@@ -157,7 +161,7 @@ export function CommissionEarningsTab({ canManage }: { canManage: boolean }) {
         ))}
         {!isLoading && byEmployee.length === 0 && (
           <p className="col-span-full rounded-md border p-6 text-center text-sm text-muted-foreground">
-            No commissionable activity in this period. Reps need a plan assigned (Plans &amp; Assignments) and sales-rep set on their invoices, jobs, contracts or clients.
+            No commissionable activity in this period. Reps need a plan assigned (Settings → Commissions) and sales-rep set on their invoices, jobs, contracts or clients.
           </p>
         )}
       </div>

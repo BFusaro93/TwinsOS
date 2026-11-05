@@ -1277,7 +1277,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Plans and rules",
             detail:
-              "Accounting > Commissions > Plans & Assignments. A plan holds rules; each rule sets a percentage for a service, a service category or all services, for new sales, renewals or both, earned when the payment is collected or when the invoice is issued. The most specific rule wins (service, then category, then all; a sale type beats 'New & renewal').",
+              "Settings > Commissions (also linked from Accounting > Commissions). A plan holds rules; each rule sets a percentage for a service, a service category or all services, for new sales, renewals or both, earned when the payment is collected or when the invoice is issued. The most specific rule wins (service, then category, then all; a sale type beats 'New & renewal').",
           },
           {
             step: "Assigning reps",
@@ -1302,7 +1302,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Not covered",
             detail:
-              "Percentages only (no flat per-job amounts), and annual bonuses tied to company results aren't calculated here. Permissions: Commission View and Commission Manage under Accounting in Settings > Roles; reps can see their own statements.",
+              "Percentages only (no flat per-job amounts), and annual bonuses tied to company results aren't calculated here. Permissions under Commission Access in Settings > Roles: View My Own Commissions (a rep sees only their own earnings and statements), View All Reps', and Manage (statements plus plans, rules and assignments in Settings > Commissions). Plans are visible only to Manage.",
           },
           {
             step: "Full guide",
@@ -2411,6 +2411,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
   {
     label: "Users & Settings",
     items: [
+      {
+        q: "Where did some menu items go — what is the 'More' row in the sidebar?",
+        a: "To keep the Landscapt sidebar short, less-used items sit under a collapsed More row at the bottom of their group: Requisitions, Purchase Orders, Snow Invoicing and Commissions (Accounting), and Services, Schedules, Packages and Documents (Administration). The CRM and Scheduling groups are always fully visible. Click More to expand it; it opens by itself when you are on one of those pages. Commission plans and assignments now live in Settings > Commissions.",
+      },
+      {
+        q: "Everything looks too big (or too small) — how do I change the display size?",
+        a: "Click the sun/moon Appearance button in the top bar and pick a Display size: 80% (compact, the default), 90%, or 100% (normal browser size). It scales the whole app — text, sidebars, dialogs, side panels and the pop-up notices in the bottom right — so you don't need to zoom your browser out. The choice is saved on that browser and applies on the home screen too. It only shows on a desktop or laptop screen with a mouse; phones and tablets always use 100%, and printed pages and PDFs are unaffected. The same menu has the Light / Dark / System theme.",
+      },
       {
         q: "Why does Settings → Clients say my next account number is too low?",
         a: "The next account number can't be set at or below the highest account number already in use, so new clients never collide with existing ones. Leave it as shown, or pick a higher number.",

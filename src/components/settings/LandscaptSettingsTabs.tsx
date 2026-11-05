@@ -112,6 +112,7 @@ import { NotificationsPage } from "@/components/settings/NotificationsPage";
 import { useConnectStatus, useStartConnectOnboarding, useStartConnectOAuth, type ConnectStatus } from "@/lib/hooks/use-crm-card-payments";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { LANDSCAPT_TAB_PERMISSIONS } from "@/lib/permissions/settings-access";
+import { CommissionPlansTab } from "@/components/crm/commissions/CommissionPlansTab";
 import { useConfirm } from "@/components/shared/useConfirm";
 
 // ── AccordionSection ──────────────────────────────────────────────────────────
@@ -2626,6 +2627,7 @@ const TAB_KEYS = [
   "import_export",
   "integrations",
   "client_portal",
+  "commissions",
 ] as const;
 
 type TabKey = (typeof TAB_KEYS)[number];
@@ -2644,6 +2646,7 @@ function tabLabel(tab: TabKey): string {
     case "import_export":     return "Import / Export";
     case "integrations":      return "Integrations";
     case "client_portal":     return "Client Portal";
+    case "commissions":       return "Commissions";
   }
 }
 
@@ -2661,6 +2664,7 @@ function renderTabContent(tab: TabKey) {
     case "import_export":     return <ImportExportTab />;
     case "integrations":      return <IntegrationsTab />;
     case "client_portal":     return <ClientPortalTab />;
+    case "commissions":       return <CommissionPlansTab />;
   }
 }
 
@@ -2683,6 +2687,7 @@ const TAB_PARAM_ALIASES: Record<string, TabKey> = {
   import_export: "import_export", import: "import_export", export: "import_export",
   integrations: "integrations", integration: "integrations",
   client_portal: "client_portal", portal: "client_portal", clientportal: "client_portal",
+  commissions: "commissions", commission: "commissions", commission_plans: "commissions", plans: "commissions",
 };
 
 export function resolveSettingsTabParam(raw: string | null): TabKey | null {

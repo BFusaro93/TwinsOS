@@ -35,7 +35,7 @@ export type LandscaptSettingsAccessKey = (typeof LANDSCAPT_SETTINGS_ACCESS_KEYS)
  *   writing a role is admin-only at the RLS layer regardless of any UI
  *   permission (20260901000004_crm_roles_admin_only_writes.sql).
  */
-export const LANDSCAPT_TAB_PERMISSIONS: Partial<Record<string, LandscaptSettingsAccessKey>> = {
+export const LANDSCAPT_TAB_PERMISSIONS: Partial<Record<string, LandscaptSettingsAccessKey | "commission_manage">> = {
   general: "company_settings",
   crm: "crm_settings",
   estimates: "accounting_settings",
@@ -46,4 +46,6 @@ export const LANDSCAPT_TAB_PERMISSIONS: Partial<Record<string, LandscaptSettings
   import_export: "crm_settings",
   integrations: "crm_settings",
   client_portal: "crm_settings",
+  // Plan setup is compensation data: only people who can manage commissions see it.
+  commissions: "commission_manage",
 };

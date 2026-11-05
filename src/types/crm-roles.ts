@@ -442,7 +442,8 @@ export const PERMISSION_TABS: Record<string, PermissionTab> = {
       commission_access: {
         label: "Commission Access",
         permissions: {
-          commission_view: "View Commission Earnings & Statements",
+          commission_view_own: "View My Own Commissions",
+          commission_view: "View All Reps' Commission Earnings & Statements",
           commission_manage: "Manage Commission Plans & Statements",
         },
       },
