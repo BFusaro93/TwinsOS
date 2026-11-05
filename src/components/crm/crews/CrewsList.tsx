@@ -67,15 +67,21 @@ function SectionBar({ title }: { title: string }) {
 function DayOfWeekSelect({
   value,
   onChange,
+  splitAcrossCrews = false,
 }: {
   value: number[];
   onChange: (v: number[]) => void;
+  /** The person also works other crews on other days, so a count here would
+   *  hide that their week is split. */
+  splitAcrossCrews?: boolean;
 }) {
   const allSelected = ALL_DAYS.every((d) => value.includes(d));
   const label = allSelected
     ? "7 selected"
     : value.length === 0
     ? "None"
+    : splitAcrossCrews
+    ? "Varies"
     : `${value.length} selected`;
 
   return (
@@ -83,7 +89,18 @@ function DayOfWeekSelect({
     // open listbox that arrows and typeahead couldn't move through.
     <Popover>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" className="h-8 w-36 justify-between px-3 text-sm font-normal">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 w-36 justify-between px-3 text-sm font-normal"
+          title={
+            value.length === 0
+              ? "No regular days — only placed day by day from the Dispatch Board's Team Assignment"
+              : allSelected
+              ? undefined
+              : `Works ${[...value].sort((x, y) => x - y).map((d) => DAYS_SHORT[d]).join(", ")} — click to change`
+          }
+        >
           <span>{label}</span>
           <ChevronDown className="h-3.5 w-3.5 opacity-50" />
         </Button>
@@ -247,6 +264,9 @@ function TeamAssignmentsTab({ crew }: { crew: CRMCrew }) {
                     </SelectContent>
                   </Select>
                   <DayOfWeekSelect
+                    splitAcrossCrews={(allCrews ?? []).some(
+                      (c) => c.id !== crew.id && (c.members ?? []).some((x) => x.employeeId === m.employeeId && x.daysOfWeek.length > 0)
+                    )}
                     value={m.daysOfWeek}
                     onChange={(days) => handleChangeDays(m, days)}
                   />

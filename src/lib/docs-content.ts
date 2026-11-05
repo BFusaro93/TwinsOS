@@ -2155,6 +2155,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "On the package header row use the copy buttons (Qty, Rate, B.Hr, Cost, Adj Rate or All). Each copies that value from the first visit to every other visit in the package and recalculates the totals.",
       },
       {
+        q: "When a client signs up for a package, do its jobs go on the Waiting List, or are they dispatched automatically?",
+        a: "They go on the Waiting List and stay there until you dispatch them; nothing is dispatched automatically. Each step of the package shows as its own row on Scheduling > Waiting List with its date window. A step does not appear on the Dispatch Board until it is dispatched: click Dispatch on the step on the Waiting List (or Actions > Dispatch Selected, or Nearby Waiting List on the board), pick the day and crew, and it moves to the Dispatch Board for that day. If a dispatched step doesn't happen (rained out, say), select it on the Dispatch Board and choose Return to Waiting List. Min Days spacing between steps is enforced on every move; a scheduler can override it with Dispatch anyway when a step is dispatched early on purpose.",
+      },
+      {
         q: "How do I renew a package job for next season?",
         a: "Open the package job, click More (…) and choose Renew for next season. The window shows last season and the new season, every step with its new date and rate, and any warnings; click Renew for the new year. It creates a new package job for the same client and property with the same services, rates, budgets, Min Days, crew, sales rep and crew notes, with every step date moved forward one year. Its visits are created the same way as Add Job, it is marked as a Renewal sale for commissions, and Date Sold is today. The old job is left as it was. To renew many at once, use Renew Packages on the Jobs list.",
       },
@@ -2301,6 +2305,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "How do I assign a job straight to one person instead of a crew?",
         a: "Landscapt > Team > Employees > open the person > Edit > User Settings > tick 'Schedule Jobs Directly' and save. That person then appears by name in every crew dropdown (new job, Edit Job, the visit panel and the Dispatch Board) and you assign to them like a crew. Behind the scenes they get their own one-person crew; if their login is linked to the employee and isn't already attached to another crew, it's attached to that crew so they see the jobs in the Crew App. Unticking the box (or deactivating the employee) retires that crew: it stops appearing in dropdowns but past jobs keep their history. A person already on a regular crew can't also be on a second crew's standing roster on the same days, so for them add the personal crew's day through Team Assignment or Edit Crew when they work it.",
+      },
+      {
+        q: "I can't see employees to drag onto a crew on the Dispatch Board. Where are they?",
+        a: "Open Team Assignment on the Dispatch Board. The green column on the left has an 'Unassigned people' list: every active employee who isn't on a crew for the day you're viewing. Drag a person onto a crew (or tap them, then tap the crew) to put them on it for that day only; they return to Unassigned the next day. If the list says 'Everyone is on a crew', every active employee is already on a roster for that weekday: drag them from their crew to another one instead. To add someone to a crew permanently, use Team > Crews > open the crew > Team Assignments > Add Assignment.",
+      },
+      {
+        q: "What is the $/hr box next to an employee on a crew's Team Assignments tab (labor burden rate)?",
+        a: "It's the employee's fully-loaded labor cost per hour on that crew: wages plus payroll taxes, benefits and other overhead you carry for them. It is what the person costs you, never what the customer is charged (customer pricing comes from the job's service lines and rates). You'll find it on Team > Crews > open the crew > Team Assignments, and only if your role has the 'Show Wage Burden' payroll permission. It drives labor cost: clock-out labor on each visit, the Job Cost Summary, Timesheet Detail and Crew Hours Summary reports, and a visit's labor when its hours are edited. If you leave it blank, Landscapt uses the employee's hourly rate (Team > Employees) times your company Labor Burden % (Settings > Overhead Recovery) instead; if neither is set, labor cost shows as $0. Reports that average a crew's rate (marked with a dagger) average these per-person rates across everyone on the crew.",
       },
       {
         q: "Why does an office login show a My Schedule tile on the home screen?",

@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/select";
 import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Plus, ListOrdered, ChevronDown, RotateCcw, Send, X, Mail } from "lucide-react";
+import { Plus, ListOrdered, ChevronDown, RotateCcw, Send, X, Mail, Check } from "lucide-react";
 import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -58,6 +58,8 @@ import { Flame, Tag, Users } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FilterOptionRow } from "@/components/shared/FilterOptionRow";
 import type { CRMJob, CRMJobService } from "@/types/crm-jobs";
+import { packageStepEligibility } from "@/lib/package-step-eligibility";
+import { isPackageMinDaysMessage } from "@/lib/package-visit-recalc";
 import { SearchInput } from "@/components/shared/SearchInput";
 
 function toLocalDateString(date: Date): string {
@@ -65,6 +67,11 @@ function toLocalDateString(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function formatShortDate(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function formatDateRange(start: string | null, end: string | null): string {
@@ -189,8 +196,14 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
     return ids.size === 1 ? [...ids][0] : "";
   });
 
-  async function handleDispatch() {
+  // A single package step dispatched ahead of its Min Days spacing is refused;
+  // the scheduler can confirm and override it (several at once can't — a retry
+  // would re-dispatch the ones that already went through).
+  const [minDaysRefusal, setMinDaysRefusal] = useState<string | null>(null);
+
+  async function handleDispatch(overrideMinDays = false) {
     if (!date) return;
+    setMinDaysRefusal(null);
     try {
       await Promise.all(
         items.map(({ job, service }) => {
@@ -219,6 +232,7 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
                 },
                 jobId: job.id,
                 jobType: job.jobType,
+                overrideMinDays,
               });
             }
             return createVisit.mutateAsync({
@@ -245,7 +259,14 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
       );
     } catch (err) {
       // e.g. a package min-days spacing violation on the moved placeholder.
-      toast.error(err instanceof Error ? err.message : "Dispatch failed");
+      const message = err instanceof Error ? err.message : "Dispatch failed";
+      if (items.length === 1 && isPackageMinDaysMessage(message)) {
+        setMinDaysRefusal(message);
+        return;
+      }
+      toast.error(
+        isPackageMinDaysMessage(message) ? `${message}. Dispatch these steps one at a time to override Min Days.` : message
+      );
       onDone();
       return;
     }
@@ -286,13 +307,27 @@ export function DispatchJobsDialog({ items, onOpenChange, onDone }: DispatchJobs
               </SelectContent>
             </Select>
           </div>
+          {minDaysRefusal && (
+            <div className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-300">
+              <p className="font-medium">{minDaysRefusal}</p>
+              <p className="mt-1">Dispatch it anyway if you know the spacing doesn&apos;t apply (for example the client asked for an early visit).</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2 h-7 border-amber-400 text-xs text-amber-800 dark:text-amber-300"
+                onClick={() => void handleDispatch(true)}
+              >
+                Dispatch anyway
+              </Button>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button size="sm" onClick={handleDispatch} disabled={!date || createVisit.isPending || updateVisit.isPending}>
+          <Button size="sm" onClick={() => void handleDispatch()} disabled={!date || createVisit.isPending || updateVisit.isPending}>
             {createVisit.isPending || updateVisit.isPending ? "Dispatching…" : "Dispatch"}
           </Button>
         </DialogFooter>
@@ -339,6 +374,18 @@ function WaitingJobRow({
     : job.rateCents ?? (serviceTotal > 0 ? serviceTotal : null);
   const effectiveCrew = (job.crewId && crewCodeById.get(job.crewId)) || job.crewName;
   const isVisible = (key: string) => visibleKeys.includes(key);
+  const { today: orgToday, toISODate } = useOrgDates();
+  // A package step that can't be dispatched yet: Min Days spacing after the
+  // previous step (enforced, a dispatch would be refused) or its window not open.
+  const eligibility = service && job.jobType === "package" && job.packageStepOrder
+    ? packageStepEligibility({
+        steps: job.packageStepOrder,
+        visits: job.visits ?? [],
+        stepId: service.id,
+        today: orgToday(),
+        toYmd: toISODate,
+      })
+    : null;
 
   return (
     <tr
@@ -364,7 +411,17 @@ function WaitingJobRow({
         </td>
       )}
       {isVisible("service") && (
-        <td className="min-w-[180px] px-4 py-3 text-slate-700 dark:text-neutral-300">{serviceName}</td>
+        <td className="min-w-[180px] px-4 py-3 text-slate-700 dark:text-neutral-300">
+          {serviceName}
+          {eligibility?.spacingEarliest && (!eligibility.windowOpens || eligibility.spacingEarliest >= eligibility.windowOpens) && (
+            <p
+              className="mt-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"
+              title={`Min Days: this step must be at least ${eligibility.minDays} days after step ${eligibility.afterStepNo}. Dispatching earlier is refused.`}
+            >
+              Too soon — earliest {formatShortDate(eligibility.spacingEarliest)}
+            </p>
+          )}
+        </td>
       )}
       {isVisible("dateRange") && service && (
         <td className="px-4 py-3">
@@ -522,6 +579,10 @@ export function WaitingList() {
   const [crewFilters, setCrewFilters] = useState<string[]>([]);
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [priorityFilters, setPriorityFilters] = useState<string[]>([]);
+  // SA-style view: hide steps/jobs that aren't ready yet (Min Days spacing not
+  // met, or the window hasn't opened).
+  const [readyOnly, setReadyOnly] = useState(false);
+  const { today: orgTodayFn, toISODate: toOrgDate } = useOrgDates();
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [visibleKeys, setVisibleKeys] = usePersistedColumns(
     "waiting_list",
@@ -632,6 +693,8 @@ export function WaitingList() {
     const rows: { key: string; job: CRMJob; service: CRMJobService | null }[] = [];
     for (const job of filtered) {
       const services = job.services ?? [];
+      // A non-package job whose own window hasn't opened isn't ready either.
+      if (readyOnly && job.jobType !== "package" && job.waitingListStart && job.waitingListStart > orgTodayFn()) continue;
       if (job.jobType === "package" && services.length > 0) {
         for (const service of services) {
           // The job-level waiting_list_start/end (used by the server-side date
@@ -640,6 +703,16 @@ export function WaitingList() {
           // show visits whose own date window actually overlaps it.
           if (service.completeByDate && service.completeByDate < startDate) continue;
           if (service.startDate && service.startDate > endDate) continue;
+          if (readyOnly && job.packageStepOrder) {
+            const e = packageStepEligibility({
+              steps: job.packageStepOrder,
+              visits: job.visits ?? [],
+              stepId: service.id,
+              today: orgTodayFn(),
+              toYmd: toOrgDate,
+            });
+            if (e.spacingEarliest || e.windowOpens) continue;
+          }
           rows.push({ key: `${job.id}-${service.id}`, job, service });
         }
       } else if (services.length > 1 || (job.visits ?? []).some((v) => v.jobServiceId)) {
@@ -654,7 +727,7 @@ export function WaitingList() {
       }
     }
     return rows;
-  }, [filtered, startDate, endDate]);
+  }, [filtered, startDate, endDate, readyOnly, orgTodayFn, toOrgDate]);
 
   const allSelected = visitRows.length > 0 && visitRows.every((r) => selectedKeys.has(r.key));
   const someSelected = selectedKeys.size > 0;
@@ -1012,6 +1085,23 @@ export function WaitingList() {
               ))}
             </PopoverContent>
           </Popover>
+
+          {/* Ready to dispatch — hides steps still inside Min Days spacing or before their window, like Service Autopilot's list */}
+          <button
+            type="button"
+            onClick={() => setReadyOnly((v) => !v)}
+            aria-pressed={readyOnly}
+            title="Only show what can be dispatched today: hides package steps still inside their Min Days spacing, and jobs whose date window hasn't started"
+            className={cn(
+              "h-7 flex items-center gap-1.5 rounded border px-2.5 text-[10px] transition-colors",
+              readyOnly
+                ? "bg-brand-500 border-brand-400 text-white"
+                : "bg-[#5a5a5a] border-[#6a6a6a] text-slate-200 hover:text-white"
+            )}
+          >
+            <Check className="h-3 w-3" />
+            Ready to dispatch
+          </button>
         </div>
 
         <ColumnChooser
