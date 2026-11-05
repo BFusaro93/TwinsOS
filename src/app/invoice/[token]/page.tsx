@@ -31,6 +31,8 @@ interface PublicInvoice {
   lineItems: { name: string | null; description: string; qty: number; rateCents: number; totalCents: number; discountCents?: number }[];
   org: { name: string; brandColor: string; logoUrl: string | null };
   photos?: { url: string; caption: string | null }[];
+  /** Org has bank transfer (ACH) turned on. */
+  achAvailable?: boolean;
 }
 
 interface CreateIntentResult {
@@ -98,6 +100,7 @@ export default function PublicInvoicePage() {
   // A failed "start payment" is shown next to the button. It must NOT reuse
   // loadError, which replaces the whole page — the invoice itself loaded fine.
   const [payError, setPayError] = useState<string | null>(null);
+  const [payMethod, setPayMethod] = useState<"card" | "us_bank_account">("card");
 
   const loadInvoice = useCallback(() => {
     return fetch(`/api/public/invoices/${token}`)
@@ -125,7 +128,11 @@ export default function PublicInvoicePage() {
     setCreatingIntent(true);
     setPayError(null);
     try {
-      const res = await fetch(`/api/public/invoices/${token}/create-intent`, { method: "POST" });
+      const res = await fetch(`/api/public/invoices/${token}/create-intent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentMethod: payMethod }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to start payment");
       setIntent(data);
@@ -275,19 +282,38 @@ export default function PublicInvoicePage() {
         ) : canPay ? (
           !payOpen ? (
             <>
-            {payError && <p className="mt-8 text-center text-sm text-red-600">{payError}</p>}
+            {invoice.achAvailable && (
+              <div className="mt-8 grid grid-cols-2 gap-2">
+                {([["card", "Card"], ["us_bank_account", "Bank transfer (ACH)"]] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setPayMethod(value)}
+                    className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                      payMethod === value ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {invoice.achAvailable && payMethod === "us_bank_account" && (
+              <p className="mt-2 text-xs text-slate-500">No card fee. Bank transfers take a few business days to clear; we&apos;ll update your balance when it does.</p>
+            )}
+            {payError && <p className="mt-6 text-center text-sm text-red-600">{payError}</p>}
             <button
               onClick={handleStartPay}
               disabled={creatingIntent}
               className="mt-8 flex w-full items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
             >
               {creatingIntent && <Loader2 className="h-4 w-4 animate-spin" />}
-              Pay Now
+              {payMethod === "us_bank_account" ? "Pay by bank transfer" : "Pay Now"}
             </button>
             </>
           ) : intent ? (
             <div className="mt-8 border-t pt-6">
-              {intent.feeCents > 0 && (
+              {intent.feeCents > 0 && payMethod === "card" && (
                 <p className="mb-3 text-xs text-slate-500">
                   Includes a {cents(intent.feeCents)} card processing fee, which applies to credit cards only (it isn&apos;t charged on debit or prepaid cards).
                 </p>

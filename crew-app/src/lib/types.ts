@@ -123,6 +123,8 @@ export interface CrewVisitsResponse {
   visits: CrewVisit[];
   stops: CrewStop[];
   drive: CrewDriveInfo;
+  /** Org-wide required Before / After photos; absent from older servers. */
+  photoRules?: { requireBefore: boolean; requireAfter: boolean };
 }
 
 // Mirrors GET /api/crm/crew/visits/:id/photos — a confirmed (already-uploaded)

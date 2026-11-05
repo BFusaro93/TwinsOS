@@ -6,6 +6,7 @@ import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib
 import { closeOpenDriveSegment } from "@/lib/crew/drive-time";
 import { openStopPunches, resolvePunchOwnerVisitId } from "@/lib/crew/stop-punches";
 import { startCrewDay } from "@/lib/crew/day-shifts";
+import { missingRequiredPhoto } from "@/lib/crew/required-photos";
 import { createServiceClient } from "@/lib/supabase/server";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -205,6 +206,12 @@ export async function POST(
       );
     }
     return NextResponse.json({ error: "Nothing to clock in for this stop" }, { status: 400 });
+  }
+
+  // Required Before photo (org setting). Enforced server-side as well as in the
+  // apps; a replay of a clock-in that already landed returned above.
+  if (await missingRequiredPhoto(createServiceClient(), { orgId: anchor.org_id, visitIds: stopRows.map((r) => r.id), phase: "before" })) {
+    return NextResponse.json({ error: "Add a Before photo before starting this job.", code: "photo_required", phase: "before" }, { status: 409 });
   }
 
   const now = resolveOccurredAt(parsed.data.occurredAt).toISOString();

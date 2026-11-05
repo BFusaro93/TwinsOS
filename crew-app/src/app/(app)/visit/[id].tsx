@@ -118,7 +118,7 @@ export default function StopDetailScreen() {
   // Today's schedule is the only data source this phase has — there's no
   // single-stop GET route yet, so this screen shares useCrewStops() with
   // home.tsx and looks its stop up by anchorVisitId.
-  const { stops, isLoading, error, refetch } = useCrewStops(TODAY);
+  const { stops, photoRules, isLoading, error, refetch } = useCrewStops(TODAY);
   const {
     itemsForVisit,
     enqueueClockIn,
@@ -189,6 +189,16 @@ export default function StopDetailScreen() {
   const isPauseActionPending = pauseQueueItems.some((i) => i.status === 'pending' || i.status === 'syncing');
 
   const photoQueueItems = queueItems.filter((i) => i.type === 'add_photo');
+  // Required Before / After photos (org setting). A photo counts once it is
+  // either uploaded or still queued on this device — the queue replays in order,
+  // so a queued Before photo lands ahead of the Clock In that waited for it.
+  const hasPhase = (phase: 'Before' | 'After') =>
+    confirmedPhotos.some((p) => (p.caption ?? '').trim().toLowerCase() === phase.toLowerCase()) ||
+    photoQueueItems.some(
+      (i) => ((i.payload as { caption?: string }).caption ?? '').trim().toLowerCase() === phase.toLowerCase()
+    );
+  const needBeforePhoto = photoRules.requireBefore && !hasPhase('Before');
+  const needAfterPhoto = photoRules.requireAfter && !hasPhase('After');
   const materialsQueueItems = queueItems.filter((i) => i.type === 'request_materials');
   const materialUsageQueueItems = queueItems.filter((i) => i.type === 'record_material_usage');
   const noteQueueItems = queueItems.filter((i) => i.type === 'add_note');
@@ -378,14 +388,14 @@ export default function StopDetailScreen() {
     void enqueueResume(stop.anchorVisitId);
   };
 
-  const handleAddPhoto = async (source: 'camera' | 'library') => {
+  const handleAddPhoto = async (source: 'camera' | 'library', phase?: 'Before' | 'After') => {
     if (!stop) return;
     setPhotoError(null);
     setIsCapturing(true);
     try {
       const captured = await captureVisitPhoto(stop.anchorVisitId, source);
       if (!captured) return; // user canceled
-      await enqueueAddPhoto(stop.anchorVisitId, captured.localUri, captured.mimeType, captured.fileName);
+      await enqueueAddPhoto(stop.anchorVisitId, captured.localUri, captured.mimeType, captured.fileName, phase);
     } catch (err) {
       setPhotoError(err instanceof Error ? err.message : 'Failed to add photo');
     } finally {
@@ -772,8 +782,11 @@ export default function StopDetailScreen() {
           label="Clock In"
           variant="solidGreen"
           onPress={handleClockIn}
-          disabled={hasNotes && !acknowledged}
+          disabled={(hasNotes && !acknowledged) || needBeforePhoto}
         />
+      ) : null}
+      {progress === 'not_started' && needBeforePhoto ? (
+        <Text style={styles.gateHint}>Take a Before photo (below) to clock in.</Text>
       ) : null}
 
       {progress === 'on_break' ? (
@@ -783,10 +796,13 @@ export default function StopDetailScreen() {
       ) : null}
 
       {progress === 'clocked_in' || progress === 'on_break' ? (
-        <ActionButton label="Clock Out" variant="solidRed" onPress={handleClockOut} disabled={chemBlocked} />
+        <ActionButton label="Clock Out" variant="solidRed" onPress={handleClockOut} disabled={chemBlocked || needAfterPhoto} />
       ) : null}
       {(progress === 'clocked_in' || progress === 'on_break') && chemBlocked ? (
         <Text style={styles.gateHint}>Confirm the chemicals applied (above) to clock out.</Text>
+      ) : null}
+      {(progress === 'clocked_in' || progress === 'on_break') && needAfterPhoto ? (
+        <Text style={styles.gateHint}>Take an After photo (below) to clock out.</Text>
       ) : null}
 
       {progress === 'skipped' ? (
@@ -801,6 +817,10 @@ export default function StopDetailScreen() {
         isCapturing={isCapturing}
         photoError={photoError}
         onAdd={handleAddPhoto}
+        requireBefore={photoRules.requireBefore}
+        requireAfter={photoRules.requireAfter}
+        hasBefore={hasPhase('Before')}
+        hasAfter={hasPhase('After')}
         onRetry={(itemId) => void retry(itemId)}
         onDiscard={(itemId) =>
           confirmDiscard(itemId, 'This photo will not be uploaded. It stays saved on this device.')
@@ -1478,6 +1498,10 @@ function PhotosSection({
   isCapturing,
   photoError,
   onAdd,
+  requireBefore,
+  requireAfter,
+  hasBefore,
+  hasAfter,
   onRetry,
   onDiscard,
 }: {
@@ -1485,7 +1509,11 @@ function PhotosSection({
   photoQueueItems: ReturnType<typeof useOfflineQueue>['items'];
   isCapturing: boolean;
   photoError: string | null;
-  onAdd: (source: 'camera' | 'library') => void;
+  onAdd: (source: 'camera' | 'library', phase?: 'Before' | 'After') => void;
+  requireBefore: boolean;
+  requireAfter: boolean;
+  hasBefore: boolean;
+  hasAfter: boolean;
   onRetry: (itemId: string) => void;
   onDiscard: (itemId: string) => void;
 }) {
@@ -1500,6 +1528,28 @@ function PhotosSection({
       </View>
 
       <View style={styles.cardBody}>
+        {requireBefore || requireAfter ? (
+          <View style={styles.photoButtonRow}>
+            {requireBefore ? (
+              <Pressable
+                style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+                onPress={() => onAdd('camera', 'Before')}
+                disabled={isCapturing}
+              >
+                <Text style={styles.secondaryButtonText}>{hasBefore ? '✓ Before photo' : 'Before photo (required)'}</Text>
+              </Pressable>
+            ) : null}
+            {requireAfter ? (
+              <Pressable
+                style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+                onPress={() => onAdd('camera', 'After')}
+                disabled={isCapturing}
+              >
+                <Text style={styles.secondaryButtonText}>{hasAfter ? '✓ After photo' : 'After photo (required)'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
         <View style={styles.photoButtonRow}>
           <Pressable
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
