@@ -3310,6 +3310,7 @@ function VisitRow({
   isVisible,
   routeDraft,
   onRouteDraftChange,
+  onRouteDraftBlank,
   serviceCodeById,
   crewCodeById,
   manualRouteMode,
@@ -3346,6 +3347,8 @@ function VisitRow({
   /** Stop number typed in Manual Route mode but not yet applied (undefined = untouched). */
   routeDraft?: string;
   onRouteDraftChange?: (id: string, value: string) => void;
+  /** The box was left empty — drop its draft so the current number shows again. */
+  onRouteDraftBlank?: (id: string) => void;
   manualRouteMode: boolean;
   /** This visit's per-crew-member punch records — used to detect whether the
    * crew was actually on site for the same window (safe to show/edit as one
@@ -3608,7 +3611,7 @@ function VisitRow({
       {/* Drag handle + Order — only interactive in Manual Route mode, so
           clicking into a row's other fields (e.g. Start/End time) can never
           be mistaken by the browser for starting a drag on the row. */}
-      <td className={cn("px-1 py-2 text-center font-mono", manualRouteMode ? "w-[88px]" : "w-10")}>
+      <td className={cn("px-1 py-2 text-center font-mono", manualRouteMode ? "w-[68px]" : "w-10")}>
         <div className="flex items-center justify-center gap-0.5">
           <GripVertical className={cn("h-3 w-3 shrink-0", manualRouteMode ? "text-slate-300 dark:text-neutral-500 cursor-grab active:cursor-grabbing" : "text-slate-200")} />
           {onRouteDraftChange && manualRouteMode ? (
@@ -3624,12 +3627,14 @@ function VisitRow({
               aria-label={`Route number for ${visit.clientName ?? "this stop"}`}
               title="Type this stop's route number, then press Apply Route"
               className={cn(
-                "h-8 w-14 rounded border bg-background px-1 text-center text-sm font-medium tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-brand-400/50 focus:border-brand-400",
+                "h-7 w-11 rounded border bg-background px-1 text-center text-xs font-medium tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-brand-400/50 focus:border-brand-400",
                 routeDraft !== undefined ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30" : "border-border"
               )}
               onClick={(e) => e.stopPropagation()}
               onFocus={(e) => e.currentTarget.select()}
               onChange={(e) => onRouteDraftChange(visit.id, e.target.value.replace(/\D/g, "").slice(0, 3))}
+              // Left blank: forget the draft so the stop's current number shows again.
+              onBlur={() => { if (routeDraft === "") onRouteDraftBlank?.(visit.id); }}
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 e.preventDefault();
@@ -4919,8 +4924,17 @@ export function DispatchBoard() {
 
   function handleRouteDraftChange(id: string, value: string) {
     setRouteDrafts((prev) => {
+      // An emptied box stays a (blank) draft so backspace works; it counts as
+      // "no number" until it is retyped, and is dropped on blur (below).
+      return { ...prev, [id]: value };
+    });
+  }
+
+  function handleRouteDraftBlank(id: string) {
+    setRouteDrafts((prev) => {
+      if (prev[id] !== "") return prev;
       const next = { ...prev };
-      if (value === "") delete next[id]; else next[id] = value;
+      delete next[id];
       return next;
     });
   }
@@ -6271,6 +6285,7 @@ export function DispatchBoard() {
                   isVisible={isVisible}
                   routeDraft={routeDrafts[visit.id]}
                   onRouteDraftChange={handleRouteDraftChange}
+                  onRouteDraftBlank={handleRouteDraftBlank}
                   serviceCodeById={serviceCodeById}
                   crewCodeById={crewCodeById}
                   manualRouteMode={manualRouteMode}
