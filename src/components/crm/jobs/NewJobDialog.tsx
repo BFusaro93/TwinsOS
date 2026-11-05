@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
 import { DecimalInput } from "@/components/shared/DecimalInput";
 import {
   Select,
@@ -119,6 +120,10 @@ interface ServiceRow {
   /** True once the user has typed a date into this row — the header Start
    *  Date then stops re-syncing it. */
   startDateEdited: boolean;
+  /** Per-service notes — crew note for this service's visits, its invoice line wording, and an office-only note. */
+  jobNote?: string;
+  invoiceDesc?: string;
+  internalNote?: string;
 }
 
 const NEW_SERVICE_VALUE = "__new_service__";
@@ -151,6 +156,11 @@ interface Props {
   onCreated?: (jobId: string) => void;
 }
 
+/** The editor emits "<p></p>" when empty — store null instead. */
+function richOrNull(html: string): string | null {
+  return html.replace(/<[^>]*>/g, "").trim() || /<img/i.test(html) ? html : null;
+}
+
 export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, initialJobType, allowTypeChange, onCreated }: Props) {
   const showTypeSelector = allowTypeChange ?? initialJobType == null;
   const createJob = useCreateClientJob();
@@ -177,6 +187,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   // Which of the client's properties this job is for; asked per showPropertyPicker.
   const [propertyId, setPropertyId] = useState<string | null>(null);
   const [notesToCrew, setNotesToCrew] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
+  const [invoiceDescription, setInvoiceDescription] = useState("");
   const [isPending, setIsPending] = useState(false);
 
   const [startDate, setStartDate] = useState(todayStr());
@@ -222,6 +234,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setCrewId(null);
       setPropertyId(null);
       setNotesToCrew("");
+      setInternalNotes("");
+      setInvoiceDescription("");
       setStartDate(today);
       setCompleteByDate("");
       setRecurrenceEnd("");
@@ -710,9 +724,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
         endDateWindow: null,
         recurrenceEnd: jobType === "recurring" ? (recurrenceEnd || null) : null,
         isComplete: jobType === "one_time" ? isComplete : false,
-        notes: null,
-        notesToCrew: notesToCrew || null,
-        invoiceDescription: jobType === "package" ? (selectedPackage?.invoiceDescription ?? null) : null,
+        notes: richOrNull(internalNotes),
+        notesToCrew: richOrNull(notesToCrew),
+        invoiceDescription: invoiceDescription.trim() || (jobType === "package" ? (selectedPackage?.invoiceDescription ?? null) : null),
         services: services.map((s, idx) => ({
           serviceId: s.serviceId || null,
           serviceName: s.serviceName,
@@ -731,6 +745,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
           included: true,
           sortOrder: idx,
           minDays: s.minDays,
+          jobNote: richOrNull(s.jobNote ?? ""),
+          invoiceDesc: s.invoiceDesc?.trim() || null,
+          internalNote: richOrNull(s.internalNote ?? ""),
         })),
         products: productRows
           .filter((p) => p.productId)
@@ -803,7 +820,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 />
               </div>
             )}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="flex flex-col gap-1.5">
                 <Label>Contract</Label>
                 <Select value={contractId ?? "none"} onValueChange={(v) => setContractId(v === "none" ? null : v)}>
@@ -873,7 +890,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             )}
 
             {/* Always show where the crew is going once a client is picked. */}
-            {serviceAddressLine && (
+            {serviceAddressLine && (!showPropertyPicker || resolvedStop?.source === "client_billing") && (
               <p className="-mt-2 text-xs text-slate-600 dark:text-neutral-300">
                 <span className="font-medium">Service address:</span> {serviceAddressLine}
                 {resolvedStop?.source === "client_billing" && (
@@ -1129,9 +1146,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   <span />
                 </div>
                 {services.map((svc, i) => (
+                  <div key={i} className="min-w-[640px] border-b last:border-0 bg-card">
                   <div
-                    key={i}
-                    className="grid min-w-[640px] items-center gap-1.5 border-b last:border-0 bg-card px-3 py-2"
+                    className="grid items-center gap-1.5 px-3 py-2"
                     style={{
                       gridTemplateColumns: showServiceDate
                         ? "1.5fr 1.5fr 1.5fr 0.9fr 0.8fr 0.7fr 1.1fr 28px"
@@ -1183,6 +1200,24 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     <button type="button" onClick={() => removeService(i)} disabled={services.length === 1} className="flex h-6 w-6 items-center justify-center rounded text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-30">
                       <X className="h-3.5 w-3.5" />
                     </button>
+                  </div>
+                  <details className="border-t border-dashed px-3 py-1.5" open={!!(svc.jobNote || svc.invoiceDesc || svc.internalNote)}>
+                    <summary className="cursor-pointer text-xs text-slate-500 dark:text-neutral-400">Service notes &amp; invoice description</summary>
+                    <div className="mt-2 flex flex-col gap-3 pb-1">
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs">Job Note <span className="font-normal text-slate-400 dark:text-neutral-500">(crew sees this on this service&apos;s visits)</span></Label>
+                        <RichTextEditor value={svc.jobNote ?? ""} onChange={(v) => updateService(i, { jobNote: v })} minHeight={64} placeholder="Notes for crew…" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs">Invoice Description <span className="font-normal text-slate-400 dark:text-neutral-500">(this service&apos;s invoice line)</span></Label>
+                        <Textarea value={svc.invoiceDesc ?? ""} onChange={(e) => updateService(i, { invoiceDesc: e.target.value })} rows={2} placeholder="Overrides the service's default invoice description" />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs">Internal Note <span className="font-normal text-slate-400 dark:text-neutral-500">(office only)</span></Label>
+                        <RichTextEditor value={svc.internalNote ?? ""} onChange={(v) => updateService(i, { internalNote: v })} minHeight={64} placeholder="Visible only to office staff…" />
+                      </div>
+                    </div>
+                  </details>
                   </div>
                 ))}
                 </div>
@@ -1255,7 +1290,20 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
             {/* Notes */}
             <div className="flex flex-col gap-1.5">
               <Label>Notes to Crew / Job Notes</Label>
-              <Textarea value={notesToCrew} onChange={(e) => setNotesToCrew(e.target.value)} placeholder="Optional notes visible to the crew…" rows={2} />
+              <RichTextEditor value={notesToCrew} onChange={setNotesToCrew} placeholder="Optional notes visible to the crew…" minHeight={72} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Internal Notes</Label>
+              <RichTextEditor value={internalNotes} onChange={setInternalNotes} placeholder="Visible only to office staff…" minHeight={72} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Invoice Description</Label>
+              <Textarea
+                value={invoiceDescription}
+                onChange={(e) => setInvoiceDescription(e.target.value)}
+                placeholder={jobType === "package" && selectedPackage?.invoiceDescription ? selectedPackage.invoiceDescription : "Optional — overrides the service name on this job's invoices"}
+                rows={2}
+              />
             </div>
           </div>
 

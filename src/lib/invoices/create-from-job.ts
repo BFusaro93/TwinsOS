@@ -352,7 +352,7 @@ export async function buildCompletedJobInvoiceInput(
 ): Promise<InvoiceFromJobInput> {
   const { data: job, error: jobErr } = await supabase
     .from("crm_jobs")
-    .select("id, client_id, scheduled_date, invoice_description, rate_cents, crm_job_services(id, service_name, qty, rate_cents, sort_order, crm_services(invoice_description))")
+    .select("id, client_id, scheduled_date, invoice_description, rate_cents, crm_job_services(id, service_name, qty, rate_cents, sort_order, invoice_desc, crm_services(invoice_description))")
     .eq("id", jobId)
     .single();
   if (jobErr) throw jobErr;
@@ -368,6 +368,7 @@ export async function buildCompletedJobInvoiceInput(
       qty: number | null;
       rate_cents: number | null;
       sort_order: number | null;
+      invoice_desc: string | null;
       crm_services: { invoice_description: string | null } | null;
     }[] | null;
   };
@@ -413,7 +414,7 @@ export async function buildCompletedJobInvoiceInput(
   const svcLineItems: InvoiceFromJobLine[] = services.length > 0
     ? services.map((s) => ({
         name: s.service_name ?? "",
-        description: j.invoice_description || stripHtml(s.crm_services?.invoice_description || "") || s.service_name || "Service",
+        description: (s.invoice_desc ? stripHtml(s.invoice_desc) : "") || j.invoice_description || stripHtml(s.crm_services?.invoice_description || "") || s.service_name || "Service",
         qty: s.qty ?? 1,
         rateCents: s.rate_cents ?? 0,
         totalCents: lineTotalCents(s.rate_cents ?? 0, s.qty ?? 1),

@@ -91,6 +91,7 @@ import {
 } from "lucide-react";
 import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
 import { RichNotes } from "@/components/shared/RichNotes";
+import { composeVisitNote, isBlankRich } from "@/lib/utils/visit-note";
 import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { ChemicalApplicationPanel } from "@/components/crm/chemical/ChemicalApplicationPanel";
 import { SendClientEmailDialog } from "@/components/crm/SendClientEmailDialog";
@@ -222,6 +223,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const [svcRate, setSvcRate] = useState("");
   const [svcBHrs, setSvcBHrs] = useState("");
   const [svcTreatedArea, setSvcTreatedArea] = useState("");
+  const [svcJobNote, setSvcJobNote] = useState("");
+  const [svcInvoiceDesc, setSvcInvoiceDesc] = useState("");
+  const [svcInternalNote, setSvcInternalNote] = useState("");
   const [addingSvc, setAddingSvc] = useState(false);
   const [newSvcId, setNewSvcId] = useState("");
   const [newSvcRate, setNewSvcRate] = useState("");
@@ -545,8 +549,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     }
   }
 
-  function startEditSvc(s: { id: string; qty: number | null; rateCents: number | null; budgetedHours: number | null; treatedArea?: number | null }) {
+  function startEditSvc(s: { id: string; qty: number | null; rateCents: number | null; budgetedHours: number | null; treatedArea?: number | null; jobNote?: string | null; invoiceDesc?: string | null; internalNote?: string | null }) {
     setEditingSvcId(s.id);
+    setSvcJobNote(s.jobNote ?? "");
+    setSvcInvoiceDesc(s.invoiceDesc ?? "");
+    setSvcInternalNote(s.internalNote ?? "");
     setSvcQty(String(s.qty ?? 1));
     setSvcRate(s.rateCents != null ? String(s.rateCents / 100) : "");
     setSvcBHrs(s.budgetedHours != null ? String(s.budgetedHours) : "0");
@@ -556,6 +563,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   async function saveEditSvc() {
     if (!editingSvcId) return;
     try {
+      const prevSvc = services.find((x) => x.id === editingSvcId);
+      const nextJobNote = isBlankRich(svcJobNote) ? null : svcJobNote;
       await updateJobService.mutateAsync({
         id: editingSvcId,
         patch: {
@@ -563,8 +572,32 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
           rate_cents: svcRate ? Math.round(parseFloat(svcRate) * 100) : null,
           budgeted_hours: parseFloat(svcBHrs) || 0,
           treated_area: parseFloat(svcTreatedArea) > 0 ? parseFloat(svcTreatedArea) : null,
+          job_note: nextJobNote,
+          invoice_desc: svcInvoiceDesc.trim() || null,
+          internal_note: isBlankRich(svcInternalNote) ? null : svcInternalNote,
         },
       });
+      // Carry a changed service note onto this service's upcoming, not-yet-started
+      // visits that still hold the unmodified composed copy (job note + old service
+      // note). A note someone typed on a single visit is left alone.
+      if (job && (prevSvc?.jobNote ?? null) !== nextJobNote) {
+        const prevComposed = composeVisitNote(job.notesToCrew, prevSvc?.jobNote);
+        const nextComposed = composeVisitNote(job.notesToCrew, nextJobNote);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q = (createClient() as any)
+          .from("crm_job_visits")
+          .update({ notes_to_crew: nextComposed })
+          .eq("job_id", job.id)
+          .eq("job_service_id", editingSvcId)
+          .gte("scheduled_date", orgToday())
+          .in("status", ["scheduled", "dispatched"])
+          .is("clocked_in_at", null)
+          .is("deleted_at", null);
+        q = prevComposed ? q.eq("notes_to_crew", prevComposed) : q.is("notes_to_crew", null);
+        const { error: noteErr } = await q;
+        if (noteErr) toast.error("Service saved, but the new note couldn't be applied to its upcoming visits — edit them from the Visits tab.");
+        await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+      }
       setEditingSvcId(null);
       toast.success("Service updated");
     } catch (err) {
@@ -1589,6 +1622,34 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                               Treated area: {s.treatedArea.toLocaleString()}
                             </p>
                           ) : null}
+                          {editingSvcId === s.id ? (
+                            <div className="mt-2 flex max-w-xl flex-col gap-3 font-normal">
+                              <div className="flex flex-col gap-1">
+                                <Label className="text-xs">Job Note <span className="text-slate-400 dark:text-neutral-500">(crew, this service&apos;s visits)</span></Label>
+                                <RichTextEditor value={svcJobNote} onChange={setSvcJobNote} minHeight={64} placeholder="Notes for crew…" />
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <Label className="text-xs">Invoice Description <span className="text-slate-400 dark:text-neutral-500">(this service&apos;s invoice line)</span></Label>
+                                <Textarea value={svcInvoiceDesc} onChange={(e) => setSvcInvoiceDesc(e.target.value)} rows={2} className="text-sm" placeholder="Overrides the default invoice description" />
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <Label className="text-xs">Internal Note <span className="text-slate-400 dark:text-neutral-500">(office only)</span></Label>
+                                <RichTextEditor value={svcInternalNote} onChange={setSvcInternalNote} minHeight={64} placeholder="Visible only to office staff…" />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-1 space-y-1 font-normal">
+                              {!isBlankRich(s.jobNote) && (
+                                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500">Job note</p><RichNotes value={s.jobNote ?? ""} /></div>
+                              )}
+                              {s.invoiceDesc && (
+                                <p className="text-xs text-slate-500 dark:text-neutral-400"><span className="font-semibold">Invoice:</span> {s.invoiceDesc}</p>
+                              )}
+                              {!isBlankRich(s.internalNote) && (
+                                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Internal</p><RichNotes value={s.internalNote ?? ""} /></div>
+                              )}
+                            </div>
+                          )}
                           {(s.subitems ?? []).length > 0 && (
                             // What the crew sees under this service on their stop — names and
                             // quantities only; the sub-item dollars are already in the price.

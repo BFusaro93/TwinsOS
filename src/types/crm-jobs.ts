@@ -97,6 +97,12 @@ export interface CRMJobService {
   minDays: number | null;
   /** Area this service treats (sq ft); overrides the property measurement for chemical quantities. */
   treatedArea?: number | null;
+  /** Crew note for this service's visits (from the estimate line's Job Note). */
+  jobNote?: string | null;
+  /** Invoice line description for this service (from the estimate line's Invoice Desc). */
+  invoiceDesc?: string | null;
+  /** Office-only note (from the estimate line's private Line Item note). */
+  internalNote?: string | null;
   /** Products to bring / sub-services to do under this service (copied from the estimate; no prices). */
   subitems?: CRMJobServiceSubitem[];
 }
@@ -479,4 +485,7 @@ export interface NewClientJobServiceValues {
   isTaxable?: boolean | null;
   maxVisits?: number | null;
   treatedArea?: number | null;
+  jobNote?: string | null;
+  invoiceDesc?: string | null;
+  internalNote?: string | null;
 }

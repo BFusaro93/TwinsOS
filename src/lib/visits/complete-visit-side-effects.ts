@@ -120,6 +120,7 @@ type JobServiceRow = {
   qty: number | null;
   rate_cents: number | null;
   is_taxable: boolean | null;
+  invoice_desc?: string | null;
   crm_services: { invoice_description: string | null; is_taxable: boolean | null } | null;
 };
 
@@ -190,7 +191,7 @@ export async function applyVisitCompletionSideEffects(
   // ── 1. Parent-job bookkeeping ─────────────────────────────────────────────
   const { data: jobData } = await supabase
     .from("crm_jobs")
-    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, is_taxable, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms, is_taxable)")
+    .select("id, job_type, last_service_date, contract_id, client_id, estimate_id, invoice_description, rate_cents, po_number, sales_rep_id, crm_job_services(id, service_name, qty, rate_cents, is_taxable, invoice_desc, crm_services(invoice_description, is_taxable)), clients(invoice_frequency, default_tax_rate_bps, default_terms, is_taxable)")
     .eq("id", visit.job_id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -396,12 +397,13 @@ export async function applyVisitCompletionSideEffects(
         const taxRateBps = resolveAutoInvoiceTaxRateBps(estimateTaxRateBps, j.clients?.default_tax_rate_bps, j.clients?.is_taxable);
 
         // Build line items from services; fall back to a single line from job rate_cents.
-        // Description precedence per line: this visit's own override, then the job-level
+        // Description precedence per line: this visit's own override, then this service's own
+        // description (from the estimate line), then the job-level
         // master override (Job > Invoice Desc tab), then the service's own invoice
         // description (set in Services settings), then its plain name.
         const serviceLines: AutoInvoiceLine[] = services.length > 0
           ? services.map((s) => {
-              const description = visitInvoiceDescription || jobInvoiceDescription || stripHtml(s.crm_services?.invoice_description || "") || s.service_name;
+              const description = visitInvoiceDescription || (s.invoice_desc ? stripHtml(s.invoice_desc) : null) || jobInvoiceDescription || stripHtml(s.crm_services?.invoice_description || "") || s.service_name;
               return {
                 name: s.service_name,
                 description,

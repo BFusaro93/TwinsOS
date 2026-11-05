@@ -395,6 +395,8 @@ function LineItemRow({
   takeoff: ClientTakeoff | null;
 }) {
   const [row, setRow] = useState<RowState>(() => item);
+  const { data: catalogServices } = useCRMServices();
+  const isChemicalLine = !!row.serviceId && !!catalogServices?.find((s) => s.id === row.serviceId)?.trackChemicals;
   const [dirty, setDirty] = useState(false);
   // While the Cost box has focus, always show what's actually in row.costCents
   // (even 0) rather than the auto-computed blue display — otherwise the
@@ -925,6 +927,7 @@ function LineItemRow({
             <LineItemNotesPopover
               notes={{ estimateDesc: row.estimateDesc ?? null, jobNote: row.jobNote ?? null, invoiceDesc: row.invoiceDesc ?? null, internalNote: row.internalNote ?? null, treatedArea: row.treatedArea ?? null }}
               onSave={saveNotes}
+              isChemical={isChemicalLine}
             />
             <button
               onClick={() => onDuplicate(row)}

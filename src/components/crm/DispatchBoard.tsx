@@ -5977,6 +5977,11 @@ export function DispatchBoard() {
         </div>
       )}
 
+      {/* Map, count bar and table share one scroller while the map is open, so the
+          whole area under the toolbar scrolls (the table alone only had a sliver
+          of height left). Without the map the table scrolls on its own, which
+          keeps its header sticky. -mt-2 halves the root gap above the count bar. */}
+      <div className={`-mt-2 flex min-h-0 flex-1 flex-col ${mapOpen ? "overflow-y-auto" : ""}`}>
       {mapOpen && (
         boardOrgSettings?.googleMapsApiKey ? (
           <DispatchMap
@@ -6006,7 +6011,7 @@ export function DispatchBoard() {
       )}
 
       {/* Count bar */}
-      <div className="bg-muted border-b px-4 py-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] shrink-0">
+      <div className="bg-muted border-b px-4 py-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] shrink-0">
         <span className="font-semibold text-slate-700 dark:text-neutral-300">
           {isLoading ? "Loading…" : `${filtered.length} Job${filtered.length !== 1 ? "s" : ""} Total`}
         </span>
@@ -6037,39 +6042,39 @@ export function DispatchBoard() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto overscroll-x-contain bg-card max-lg:min-h-[60dvh]">
+      <div className={`overscroll-x-contain bg-card max-lg:min-h-[60dvh] ${mapOpen ? "shrink-0 overflow-x-auto" : "flex-1 overflow-auto"}`}>
         <table className="w-full min-w-[1200px] text-xs">
           <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-muted/40">
             <tr className="border-b text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-neutral-500">
-              <th className="w-8 px-2 py-2.5" onClick={toggleSelectAll}>
+              <th className="w-8 px-2 py-1.5" onClick={toggleSelectAll}>
                 <Checkbox
                   checked={displayVisits.length > 0 && selectedIds.size === displayVisits.length}
                   className="h-3.5 w-3.5 cursor-pointer"
                   onCheckedChange={toggleSelectAll}
                 />
               </th>
-              <th className="w-10 px-1 py-2.5">#</th>
-              <th className="w-8  px-2 py-2.5">St</th>
-              <th className="min-w-[200px] px-2 py-2.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:min-w-[160px] max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
-              {isVisible("service")  && <th className="px-2 py-2.5">Service</th>}
-              {isVisible("date")     && <th className="px-2 py-2.5">Date</th>}
-              {isVisible("city")     && <th className="px-2 py-2.5">City</th>}
-              {isVisible("zip")      && <th className="px-2 py-2.5">Zip</th>}
-              {isVisible("assigned") && <th className="min-w-[90px] px-2 py-2.5">Assigned</th>}
-              {isVisible("last_svc") && <th className="px-2 py-2.5">Last Svc</th>}
-              {isVisible("start")    && <th className="px-2 py-2.5">Start</th>}
-              {isVisible("end")      && <th className="px-2 py-2.5">End</th>}
-              {isVisible("b_hrs")    && <th className="px-2 py-2.5 text-right">B Hrs</th>}
-              {isVisible("actual")   && <th className="px-2 py-2.5 text-right">Actual</th>}
-              {isVisible("variance") && <th className="px-2 py-2.5 text-right">Variance</th>}
-              {isVisible("men")      && <th className="px-2 py-2.5 text-center">Men</th>}
-              {isVisible("qty")      && <th className="px-2 py-2.5 text-right">Qty</th>}
-              {isVisible("rate")     && <th className="px-2 py-2.5 text-right">Rate</th>}
-              {isVisible("amt")      && <th className="px-2 py-2.5 text-right">Amt</th>}
-              {isVisible("icons")    && <th className="px-2 py-2.5">Notes</th>}
-              {EXTRA_COL_DEFS.map((d) => isVisible(d.key) && <th key={d.key} className="px-2 py-2.5 whitespace-nowrap">{d.label}</th>)}
+              <th className="w-10 px-1 py-1.5">#</th>
+              <th className="w-8  px-2 py-1.5">St</th>
+              <th className="min-w-[200px] px-2 py-1.5 max-lg:sticky max-lg:left-0 max-lg:z-20 max-lg:min-w-[160px] max-lg:bg-slate-50 dark:max-lg:bg-muted/40 max-lg:shadow-[1px_0_0_rgb(226_232_240)]">Client</th>
+              {isVisible("service")  && <th className="px-2 py-1.5">Service</th>}
+              {isVisible("date")     && <th className="px-2 py-1.5">Date</th>}
+              {isVisible("city")     && <th className="px-2 py-1.5">City</th>}
+              {isVisible("zip")      && <th className="px-2 py-1.5">Zip</th>}
+              {isVisible("assigned") && <th className="min-w-[90px] px-2 py-1.5">Assigned</th>}
+              {isVisible("last_svc") && <th className="px-2 py-1.5">Last Svc</th>}
+              {isVisible("start")    && <th className="px-2 py-1.5">Start</th>}
+              {isVisible("end")      && <th className="px-2 py-1.5">End</th>}
+              {isVisible("b_hrs")    && <th className="px-2 py-1.5 text-right">B Hrs</th>}
+              {isVisible("actual")   && <th className="px-2 py-1.5 text-right">Actual</th>}
+              {isVisible("variance") && <th className="px-2 py-1.5 text-right">Variance</th>}
+              {isVisible("men")      && <th className="px-2 py-1.5 text-center">Men</th>}
+              {isVisible("qty")      && <th className="px-2 py-1.5 text-right">Qty</th>}
+              {isVisible("rate")     && <th className="px-2 py-1.5 text-right">Rate</th>}
+              {isVisible("amt")      && <th className="px-2 py-1.5 text-right">Amt</th>}
+              {isVisible("icons")    && <th className="px-2 py-1.5">Notes</th>}
+              {EXTRA_COL_DEFS.map((d) => isVisible(d.key) && <th key={d.key} className="px-2 py-1.5 whitespace-nowrap">{d.label}</th>)}
               {customFieldDefs.map((def) => isVisible(customColKey(def.id)) && (
-                <th key={def.id} className="px-2 py-2.5 whitespace-nowrap">{def.name}</th>
+                <th key={def.id} className="px-2 py-1.5 whitespace-nowrap">{def.name}</th>
               ))}
             </tr>
           </thead>
@@ -6132,6 +6137,7 @@ export function DispatchBoard() {
             )}
           </tbody>
         </table>
+      </div>
       </div>
 
       {/* Job detail sheet — looked up fresh by id every render, not the frozen

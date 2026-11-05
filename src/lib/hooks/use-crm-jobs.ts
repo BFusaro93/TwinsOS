@@ -1,5 +1,6 @@
 "use client";
 
+import { isBlankRich, composeVisitNote } from "@/lib/utils/visit-note";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
@@ -653,6 +654,9 @@ function mapJobServiceFull(s: any): CRMJobService {
     serviceInvoiceDescription: s.crm_services?.invoice_description ?? null,
     minDays: s.min_days ?? null,
     treatedArea: s.treated_area != null ? Number(s.treated_area) : null,
+    jobNote: s.job_note ?? null,
+    invoiceDesc: s.invoice_desc ?? null,
+    internalNote: s.internal_note ?? null,
     subitems: mapServiceSubitems(s.crm_job_service_subitems),
   };
 }
@@ -1771,6 +1775,9 @@ export function useCreateClientJob() {
           ...(s.isTaxable != null ? { is_taxable: s.isTaxable } : {}),
           ...(s.maxVisits != null ? { max_visits: s.maxVisits } : {}),
           ...(s.treatedArea != null ? { treated_area: s.treatedArea } : {}),
+          job_note: isBlankRich(s.jobNote) ? null : s.jobNote,
+          invoice_desc: s.invoiceDesc?.trim() || null,
+          internal_note: isBlankRich(s.internalNote) ? null : s.internalNote,
         }));
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: insertedServices, error: svcErr } = await (supabase as any)
@@ -1813,6 +1820,7 @@ export function useCreateClientJob() {
             status: 'scheduled',
             crew_id: values.crewId || null,
             men_count: s.teamSize || jobManCount,
+            ...(composeVisitNote(values.notesToCrew, s.jobNote) ? { notes_to_crew: composeVisitNote(values.notesToCrew, s.jobNote) } : {}),
           }));
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: insertedVisits, error: visitsErr } = await (supabase as any)
@@ -1832,6 +1840,7 @@ export function useCreateClientJob() {
               status: 'scheduled',
               crew_id: values.crewId || null,
               men_count: jobManCount,
+              ...(isBlankRich(values.services[0]?.jobNote) ? {} : { notes_to_crew: composeVisitNote(values.notesToCrew, values.services[0]?.jobNote) }),
             })
             .select('id')
             .single();
@@ -1859,6 +1868,7 @@ export function useCreateClientJob() {
             status: 'scheduled',
             crew_id: values.crewId || null,
             men_count: s.teamSize || jobManCount,
+            ...(composeVisitNote(values.notesToCrew, s.jobNote) ? { notes_to_crew: composeVisitNote(values.notesToCrew, s.jobNote) } : {}),
           }));
         if (visitRows.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2321,6 +2331,10 @@ export function useCreateJobsFromEstimate() {
         estimateLineItemId?: string | null;
         /** Area this service treats (sq ft); overrides the property measurement for chemical quantities. */
         treatedArea?: number | null;
+        /** Estimate line's Job Note / Invoice Desc / private note — carried per service. */
+        jobNote?: string | null;
+        invoiceDesc?: string | null;
+        internalNote?: string | null;
         /** Recurring only: the estimate line's visit count — the service's
          *  rate is priced per visit over exactly this many (max_visits). */
         maxVisits?: number | null;
@@ -2550,6 +2564,9 @@ export function useCreateJobsFromEstimate() {
               is_taxable: s.isTaxable ?? estimateIsTaxed,
               estimate_line_item_id: first ? (s.estimateLineItemId ?? null) : null,
               treated_area: s.treatedArea ?? null,
+              job_note: isBlankRich(s.jobNote) ? null : s.jobNote,
+              invoice_desc: s.invoiceDesc?.trim() || null,
+              internal_note: isBlankRich(s.internalNote) ? null : s.internalNote,
               // Package steps are one visit each (expanded above).
               max_visits: jobType === "recurring" && s.maxVisits && s.maxVisits > 0 ? Math.round(s.maxVisits) : null,
               start_date: dates?.startDate ?? null,
@@ -2668,7 +2685,7 @@ export function useCreateJobsFromEstimate() {
         // One visit per dated step (the package's own windows), linked to its
         // service — mirrors useCreateClientJob's package branch.
         const stepRows = serviceRows
-          .map((row, i) => ({ sid: insertedServiceIds[i], date: row.dates?.startDate ?? null }))
+          .map((row, i) => ({ sid: insertedServiceIds[i], date: row.dates?.startDate ?? null, svNote: row.sv.jobNote ?? null }))
           .filter((x) => x.sid && x.date)
           .map((x) => ({
             job_id: jobId,
@@ -2681,7 +2698,7 @@ export function useCreateJobsFromEstimate() {
             status: "scheduled",
             crew_id: crewId,
             men_count: jobManCount,
-            notes_to_crew: notesToCrew,
+            notes_to_crew: composeVisitNote(notesToCrew, x.svNote),
           }));
         if (stepRows.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2699,6 +2716,8 @@ export function useCreateJobsFromEstimate() {
           }
         }
       } else if (scheduledDate) {
+        const noteBySid = new Map<string, string | null>();
+        insertedServiceIds.forEach((sid, i) => noteBySid.set(sid, serviceRows[i]?.sv.jobNote ?? null));
         const firstVisit = (jobServiceId: string | null, occurrence: boolean) => ({
           job_id: jobId,
           client_id: clientId,
@@ -2706,7 +2725,7 @@ export function useCreateJobsFromEstimate() {
           status: "scheduled",
           crew_id: crewId,
           men_count: jobManCount,
-          notes_to_crew: notesToCrew,
+          notes_to_crew: composeVisitNote(notesToCrew, jobServiceId ? noteBySid.get(jobServiceId) : null),
           job_service_id: jobServiceId,
           ...(occurrence ? { occurrence_date: scheduledDate } : {}),
         });
@@ -3318,7 +3337,7 @@ export function useUpdateJobService() {
   return useMutation({
     mutationFn: async ({ id, patch }: {
       id: string;
-      patch: { qty?: number; rate_cents?: number | null; budgeted_hours?: number; treated_area?: number | null };
+      patch: { qty?: number; rate_cents?: number | null; budgeted_hours?: number; treated_area?: number | null; job_note?: string | null; invoice_desc?: string | null; internal_note?: string | null };
     }) => {
       const supabase = createClient();
       if (typeof patch.budgeted_hours === 'number') patch = { ...patch, budgeted_hours: roundHours(patch.budgeted_hours) };

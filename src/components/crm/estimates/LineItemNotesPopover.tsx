@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
+import { isBlankRich } from "@/lib/utils/visit-note";
 
 export interface LineItemNotes {
   estimateDesc: string | null;
@@ -25,9 +26,13 @@ function hasNotes(notes: LineItemNotes): boolean {
 interface Props {
   notes: LineItemNotes;
   onSave: (notes: LineItemNotes) => void;
+  /** The line's catalog service tracks chemicals — only then is Treated Area meaningful. */
+  isChemical?: boolean;
 }
 
-export function LineItemNotesPopover({ notes, onSave }: Props) {
+export function LineItemNotesPopover({ notes, onSave, isChemical = false }: Props) {
+  // A line that already has a treated area keeps the tab, so saved data stays editable.
+  const showTreatedArea = isChemical || notes.treatedArea != null;
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<LineItemNotes>(notes);
 
@@ -71,9 +76,9 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
               <TabsTrigger value="line_item" className="h-7 rounded-none border-b-2 border-transparent px-2 text-xs data-[state=active]:border-brand-500 data-[state=active]:bg-transparent">
                 Line Item
               </TabsTrigger>
-              <TabsTrigger value="treated_area" className="h-7 rounded-none border-b-2 border-transparent px-2 text-xs data-[state=active]:border-brand-500 data-[state=active]:bg-transparent">
+              {showTreatedArea && <TabsTrigger value="treated_area" className="h-7 rounded-none border-b-2 border-transparent px-2 text-xs data-[state=active]:border-brand-500 data-[state=active]:bg-transparent">
                 Treated Area
-              </TabsTrigger>
+              </TabsTrigger>}
             </TabsList>
           </div>
 
@@ -89,17 +94,17 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
             </TabsContent>
 
             <TabsContent value="job_note" className="mt-0">
-              <p className="mb-1.5 text-xs text-muted-foreground">Carries to Job Notes for field crew when converting to a job.</p>
-              <Textarea
-                rows={6}
+              <p className="mb-1.5 text-xs text-muted-foreground">Carries to this service's crew note on the job and its visits when converting.</p>
+              <RichTextEditor
                 value={draft.jobNote ?? ""}
-                onChange={(e) => setDraft((d) => ({ ...d, jobNote: e.target.value || null }))}
+                onChange={(v) => setDraft((d) => ({ ...d, jobNote: isBlankRich(v) ? null : v }))}
+                minHeight={100}
                 placeholder="Notes for crew…"
               />
             </TabsContent>
 
             <TabsContent value="invoice_desc" className="mt-0">
-              <p className="mb-1.5 text-xs text-muted-foreground">Carries to the invoice line item description.</p>
+              <p className="mb-1.5 text-xs text-muted-foreground">Carries to this service's invoice line description on the job.</p>
               <Textarea
                 rows={6}
                 value={draft.invoiceDesc ?? ""}
@@ -109,11 +114,11 @@ export function LineItemNotesPopover({ notes, onSave }: Props) {
             </TabsContent>
 
             <TabsContent value="line_item" className="mt-0">
-              <p className="mb-1.5 text-xs text-muted-foreground">Internal only — your client will not see this note.</p>
-              <Textarea
-                rows={6}
+              <p className="mb-1.5 text-xs text-muted-foreground">Internal only — carries to the job service's office note; never shown to the client or crew.</p>
+              <RichTextEditor
                 value={draft.internalNote ?? ""}
-                onChange={(e) => setDraft((d) => ({ ...d, internalNote: e.target.value || null }))}
+                onChange={(v) => setDraft((d) => ({ ...d, internalNote: isBlankRich(v) ? null : v }))}
+                minHeight={100}
                 placeholder="Private internal note…"
               />
             </TabsContent>
