@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
+import { billingTermsLabel } from "@/lib/constants";
 import { renderBlocksToHtml, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-template-renderer";
 import { MERGE_TAGS_BY_TYPE } from "@/types/crm-documents";
 import { RichTextEditor, type RichTextEditorHandle } from "@/components/crm/services/RichTextEditor";
@@ -51,6 +52,8 @@ interface Props {
   totalCents: number;
   balanceCents: number;
   dueDate: string | null;
+  /** The invoice's payment terms code (e.g. "net_30"), for the [invoiceterms] preview. */
+  terms?: string | null;
   clientName: string | null;
   clientEmail: string | null;
   /** The PDF template this invoice is already pinned to (crm_invoices.pdf_template_id),
@@ -62,7 +65,7 @@ interface Props {
 }
 
 export function InvoiceEmailDialog({
-  invoiceId, invoiceNumber, totalCents, balanceCents, dueDate, clientName, clientEmail, pinnedPdfTemplateId, open, onClose, onSent,
+  invoiceId, invoiceNumber, totalCents, balanceCents, dueDate, terms, clientName, clientEmail, pinnedPdfTemplateId, open, onClose, onSent,
 }: Props) {
   // Email content (subject/body) templates now live in Documents (doc type
   // "invoice_email") — a richer block-based builder than the old plain
@@ -143,6 +146,7 @@ export function InvoiceEmailDialog({
       .replace(/\[invoicedate\]/gi,     () => escapeHtml(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })))
       .replace(/\[duedate\]/gi,         () => escapeHtml(fmtDate(dueDate)))
       .replace(/\[invoiceduedate\]/gi,  () => escapeHtml(fmtDate(dueDate)))
+      .replace(/\[invoiceterms\]/gi,   () => escapeHtml(billingTermsLabel(terms)))
       .replace(/\[invoicetotal\]/gi,    () => escapeHtml(formatCurrency(totalCents)))
       .replace(/\[balancedue\]/gi,      () => escapeHtml(formatCurrency(balanceCents)))
       .replace(/\[invoicebalance\]/gi,  () => escapeHtml(formatCurrency(balanceCents)))

@@ -76,6 +76,7 @@ export const SMS_EVENT_MERGE_TAGS = [
   { tag: "[invoicetotal]",    label: "Invoice Total" },
   { tag: "[invoicebalance]",  label: "Invoice Balance Due" },
   { tag: "[invoiceduedate]",  label: "Invoice Due Date" },
+  { tag: "[invoiceterms]",    label: "Invoice Terms (e.g. Net 30)" },
   { tag: "[paymentlink]",     label: "Payment Link (URL)" },
   { tag: "[servicename]",     label: "Last Completed Service" },
   { tag: "[servicedate]",     label: "Last Service Date" },
