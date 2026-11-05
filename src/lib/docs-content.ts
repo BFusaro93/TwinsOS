@@ -2155,6 +2155,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "On the package header row use the copy buttons (Qty, Rate, B.Hr, Cost, Adj Rate or All). Each copies that value from the first visit to every other visit in the package and recalculates the totals.",
       },
       {
+        q: "When a client signs up for a package, do its jobs go on the Waiting List, or are they dispatched automatically?",
+        a: "Neither fully. Package visits are never dispatched automatically. When the package job is created, every step gets a placeholder visit in Scheduled status on that step's own date (with the job's crew if one was chosen), so the steps already show on the Dispatch Board on their dates. The same steps also appear on Scheduling > Waiting List, one row per step, until each one is dispatched. A step leaves the Waiting List only once its visit moves past Scheduled: click Dispatch on the Waiting List row (or Actions > Dispatch Selected), change the visit's status to Dispatched on the Dispatch Board, or Dispatch Assigned / print / send the crew's day. Nothing moves a package step to Dispatched on its own, so someone dispatches each step as its date comes up. If a step is rained out, select it on the Dispatch Board and choose Return to Waiting List. Min Days spacing between steps is enforced on every move.",
+      },
+      {
         q: "How do I renew a package job for next season?",
         a: "Open the package job, click More (…) and choose Renew for next season. The window shows last season and the new season, every step with its new date and rate, and any warnings; click Renew for the new year. It creates a new package job for the same client and property with the same services, rates, budgets, Min Days, crew, sales rep and crew notes, with every step date moved forward one year. Its visits are created the same way as Add Job, it is marked as a Renewal sale for commissions, and Date Sold is today. The old job is left as it was. To renew many at once, use Renew Packages on the Jobs list.",
       },
