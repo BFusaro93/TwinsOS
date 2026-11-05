@@ -46,6 +46,7 @@ import { C } from '@/lib/colors';
 import { useCrewStops } from '@/lib/hooks/use-crew-stops';
 import {
   elapsedSince,
+  budgetCountdown,
   formatStopAddress,
   formatStopTimeWindow,
   STATUS_LABEL,
@@ -556,6 +557,17 @@ export default function StopDetailScreen() {
   }
 
   const totalActualHours = stop.visits.reduce((sum, v) => sum + (v.actualHours ?? 0), 0);
+  // Wall-clock budget left on the running job (re-renders with the 30s tick above).
+  const countdown =
+    progress === 'clocked_in' && stop.clockedInAt
+      ? budgetCountdown({
+          budgetedHours: stop.visits
+            .filter((v) => !['skipped', 'cancelled', 'completed'].includes(v.status))
+            .map((v) => v.budgetedHours),
+          clockedInAt: stop.clockedInAt,
+          breakMinutes: stop.breakMinutes,
+        })
+      : null;
   const completionNotes = stop.visits.map((v) => v.completionNotes).find(Boolean) ?? null;
 
   return (
@@ -686,7 +698,7 @@ export default function StopDetailScreen() {
           <View>
             <Text style={styles.amberBannerTitle}>Job Running</Text>
             <Text style={styles.amberBannerSubtitle}>
-              {isClockActionPending ? 'Not yet synced' : 'In progress'}
+              {isClockActionPending ? 'Not yet synced' : (countdown?.label ?? 'In progress')}
             </Text>
           </View>
           <Text style={[styles.bannerTimer, { color: C.amberTextStrong }]}>

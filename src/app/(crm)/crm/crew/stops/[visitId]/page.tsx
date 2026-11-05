@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
 import { visitServices, isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-stops";
+import { budgetCountdown } from "@/lib/crew/budget-countdown";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { openInMaps } from "@/lib/utils/maps";
 import { useConfirm } from "@/components/shared/useConfirm";
@@ -333,6 +334,24 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     stop?.notesToCrewUpdatedAt
   );
   const isActive = stop?.derivedStatus === "in_progress";
+  // Budget left on the running job. The timer component ticks each minute, but
+  // this reads the clock at render, so re-render on the same cadence.
+  const [, setBudgetTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setBudgetTick((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const countdown =
+    stop && isActive && stop.clockedInAt && !stop.pausedAt
+      ? budgetCountdown({
+          budgetedHours: stop.visits
+            .filter((v) => !["skipped", "cancelled", "completed"].includes(v.status))
+            .map((v) => visitServices(v)[0]?.budgetedHours),
+          clockedInAt: stop.clockedInAt,
+          // Written to every live visit in the stop alike, so any one carries it.
+          breakMinutes: Math.max(0, ...stop.visits.map((v) => v.breakMinutes ?? 0)),
+        })
+      : null;
   // Cancelled is terminal too: it used to offer a big Start Job that only got a server error.
   const isComplete = stop?.derivedStatus === "completed" || stop?.derivedStatus === "skipped" || stop?.derivedStatus === "cancelled";
   const isPaused = isActive && !!stop?.pausedAt;
@@ -629,6 +648,12 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Job Running</p>
                 <p className="text-xs text-amber-600 dark:text-amber-400">
                   Started {clock(stop.clockedInAt)}
+                  {countdown && (
+                    <span className={countdown.over ? " font-semibold text-red-600 dark:text-red-400" : ""}>
+                      {" · "}
+                      {countdown.label}
+                    </span>
+                  )}
                 </p>
               </div>
               <div className="text-amber-700 dark:text-amber-400 font-mono font-bold text-lg">
