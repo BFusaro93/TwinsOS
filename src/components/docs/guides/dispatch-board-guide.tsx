@@ -708,6 +708,14 @@ export function DispatchBoardGuide() {
           row on the board. Reordering one crew never renumbers another.
         </p>
         <p>
+          <strong>Typing route numbers.</strong> You can also type a stop&apos;s number straight into the
+          box in the <strong>#</strong> column. Nothing moves while you type &mdash; a banner counts the numbers
+          you&apos;ve entered, and <strong>Apply Route</strong> reorders every crew at once. Numbers are
+          crew-relative, gaps like 10/20/30 are fine, and you only need to number the stops you want to
+          move (typing 1 on one job just puts it first; the rest keep their order). Two stops given the same
+          number keep their current order relative to each other, and clearing a box counts as no number.
+        </p>
+        <p>
           Drag rows in <strong>Manual Route</strong> mode (within one crew &mdash; to move a stop to another
           crew, use Team Assign), or use <strong>Reverse</strong> to flip the
           current order, or <strong>Group Stops</strong> to cluster each crew&apos;s stops by zip area.

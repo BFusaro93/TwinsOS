@@ -19,6 +19,30 @@ import type {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = () => createClient() as any;
 
+/**
+ * The signed-in user's own crm_employees id (via Linked Login), or null when the
+ * login isn't tied to an employee. Drives the "my commissions" view, where a rep
+ * sees only their own earnings and statements.
+ */
+export function useMyCommissionEmployeeId() {
+  return useQuery<string | null>({
+    queryKey: ["commission-my-employee-id"],
+    queryFn: async () => {
+      const supabase = db();
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth?.user) return null;
+      const { data, error } = await supabase
+        .from("crm_employees")
+        .select("id")
+        .eq("user_id", auth.user.id)
+        .is("deleted_at", null)
+        .limit(1);
+      if (error) throw error;
+      return data?.[0]?.id ?? null;
+    },
+  });
+}
+
 // ── plans & rules ─────────────────────────────────────────────────────────────
 
 function scopeRank(r: { serviceId: string | null; category: string | null }) {
