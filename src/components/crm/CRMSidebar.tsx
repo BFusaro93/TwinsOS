@@ -114,8 +114,8 @@ export const CRM_NAV: NavSection[] = [
       { label: "Invoices",        href: "/crm/accounting/invoices",        icon: Receipt, permission: "acct_view_invoice_list" },
       { label: "Payments",        href: "/crm/accounting/payments",        icon: CreditCard, permission: "acct_view_payment_list" },
       { label: "Requisitions",    href: "/crm/accounting/requisitions",    icon: ClipboardList, permission: "requisition_list", more: true },
-      { label: "Purchase Orders", href: "/crm/accounting/purchase-orders", icon: ShoppingCart, more: true },
-      { label: "Contracts",       href: "/crm/accounting/contracts",       icon: FileSignature, permission: "contract_list" },
+      { label: "Purchase Orders", href: "/crm/accounting/purchase-orders", icon: ShoppingCart },
+      { label: "Contracts",       href: "/crm/accounting/contracts",       icon: FileSignature, permission: "contract_list", more: true },
       { label: "Snow Invoicing",  href: "/crm/accounting/snow-invoicing",  icon: FileText, permission: "snow_invoicing_view", more: true },
       { label: "Commissions",     href: "/crm/accounting/commissions",     icon: Percent, anyPermission: ["commission_view", "commission_manage", "commission_view_own"], more: true },
     ],
@@ -142,7 +142,7 @@ export const CRM_NAV: NavSection[] = [
     items: [
       { label: "Reports",         href: "/crm/admin/reports",             icon: BarChart3, permission: "view_report_center" },
       { label: "Services",  href: "/crm/settings/services",    icon: Layers, permission: "service_list", more: true },  // also hosts the Price Adjustments tab
-      { label: "Products",  href: "/crm/settings/products",    icon: BookOpen },
+      { label: "Products",  href: "/crm/settings/products",    icon: BookOpen, more: true },
       { label: "Schedules", href: "/crm/settings/schedules",   icon: CalendarClock, more: true },
       { label: "Packages",  href: "/crm/settings/packages",    icon: Package, permission: "package_list", more: true },
       { label: "Documents", href: "/crm/settings/documents",   icon: FileEdit, permission: "document_template_list", more: true },

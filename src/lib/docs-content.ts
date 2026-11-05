@@ -2413,7 +2413,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
     items: [
       {
         q: "Where did some menu items go — what is the 'More' row in the sidebar?",
-        a: "To keep the Landscapt sidebar short, less-used items sit under a collapsed More row at the bottom of their group: Requisitions, Purchase Orders, Snow Invoicing and Commissions (Accounting), and Services, Schedules, Packages and Documents (Administration). The CRM and Scheduling groups are always fully visible. Click More to expand it; it opens by itself when you are on one of those pages. Commission plans and assignments now live in Settings > Commissions.",
+        a: "To keep the Landscapt sidebar short, less-used items sit under a collapsed More row at the bottom of their group: Requisitions, Contracts, Snow Invoicing and Commissions (Accounting), and Services, Products, Schedules, Packages and Documents (Administration). Invoices, Payments and Purchase Orders stay visible. The CRM and Scheduling groups are always fully visible. Click More to expand it; it opens by itself when you are on one of those pages. Commission plans and assignments now live in Settings > Commissions.",
       },
       {
         q: "Everything looks too big (or too small) — how do I change the display size?",

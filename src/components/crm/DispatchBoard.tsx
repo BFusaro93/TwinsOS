@@ -5302,7 +5302,7 @@ export function DispatchBoard() {
           text-xs (different responsive variant), so without the md:
           override the box renders at 14px text and clips the native
           calendar-picker icon off the right edge at desktop widths. */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 shrink-0">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 shrink-0">
         <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); setDateMode(null); clearPendingOrder(); }} />
 
         <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground ml-1">
@@ -5351,11 +5351,11 @@ export function DispatchBoard() {
         <div className="ml-auto flex max-w-full flex-wrap items-center gap-1.5 max-lg:w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:pb-1 max-lg:[&>*]:shrink-0">
           <div className="flex items-center shrink-0">
             <Button size="sm" variant="outline"
-              className={cn("h-9 max-lg:h-11 rounded-r-none border-r-0 text-sm gap-1 px-2.5", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600 dark:text-brand-400")}
+              className={cn("h-9 max-lg:h-11 rounded-r-none border-r-0 text-xs gap-1 px-2.5", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600 dark:text-brand-400")}
               onClick={handleOptimizeRoute}
               disabled={optimizing}
             >
-              <Route className="h-4 w-4" />
+              <Route className="h-3.5 w-3.5" />
               {optimizing ? "Optimizing…" : optimizedOrder ? "Re-Optimize" : "Optimize Route"}
             </Button>
             {/* Which way round the crew works the route. Nearest-first is the
@@ -5374,11 +5374,11 @@ export function DispatchBoard() {
               </SelectContent>
             </Select>
           </div>
-          <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-sm gap-1 px-2.5"
+          <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-xs gap-1 px-2.5"
             onClick={() => { setNearbyOpen(true); findNearby(allVisits); }}
             title="Nearby Waiting List"
           >
-            <MapPin className="h-4 w-4" />
+            <MapPin className="h-3.5 w-3.5" />
             Nearby Jobs
           </Button>
         </div>
