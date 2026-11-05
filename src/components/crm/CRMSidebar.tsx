@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useSidebarCollapsed, useCurrentUserStore } from "@/stores";
@@ -51,6 +51,7 @@ import {
   ClipboardList,
   CalendarCheck,
   Percent,
+  ChevronRight,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -59,6 +60,10 @@ interface NavItem {
   href: string;
   icon: LucideIcon;
   comingSoon?: boolean;
+  /** Tucked under the section's collapsible "More" row to keep the nav short. */
+  more?: boolean;
+  /** Show when the user has ANY of these keys (in addition to `permission`). */
+  anyPermission?: string[];
   /** Permission key gating this item — hidden entirely when the current
    *  user lacks it (admins always pass, per usePermissions()). */
   permission?: string;
@@ -99,8 +104,8 @@ export const CRM_NAV: NavSection[] = [
       { label: "Jobs",           href: "/crm/scheduling",              icon: Briefcase },
       { label: "Snow Jobs",      href: "/crm/scheduling/snow",         icon: Snowflake, permission: "snow_dispatch_view" },
       { label: "Projects",       href: "/crm/scheduling/projects",     icon: FolderKanban },
-      { label: "Warranties",     href: "/crm/warranties",              icon: ShieldCheck, permission: "warranty_view" },
       { label: "Job Photos",     href: "/crm/scheduling/job-photos",   icon: FileImage },
+      { label: "Warranties",     href: "/crm/warranties",              icon: ShieldCheck, permission: "warranty_view" },
     ],
   },
   {
@@ -108,11 +113,11 @@ export const CRM_NAV: NavSection[] = [
     items: [
       { label: "Invoices",        href: "/crm/accounting/invoices",        icon: Receipt, permission: "acct_view_invoice_list" },
       { label: "Payments",        href: "/crm/accounting/payments",        icon: CreditCard, permission: "acct_view_payment_list" },
-      { label: "Requisitions",    href: "/crm/accounting/requisitions",    icon: ClipboardList, permission: "requisition_list" },
-      { label: "Purchase Orders", href: "/crm/accounting/purchase-orders", icon: ShoppingCart },
+      { label: "Requisitions",    href: "/crm/accounting/requisitions",    icon: ClipboardList, permission: "requisition_list", more: true },
+      { label: "Purchase Orders", href: "/crm/accounting/purchase-orders", icon: ShoppingCart, more: true },
       { label: "Contracts",       href: "/crm/accounting/contracts",       icon: FileSignature, permission: "contract_list" },
-      { label: "Snow Invoicing",  href: "/crm/accounting/snow-invoicing",  icon: FileText, permission: "snow_invoicing_view" },
-      { label: "Commissions",     href: "/crm/accounting/commissions",     icon: Percent, permission: "commission_view" },
+      { label: "Snow Invoicing",  href: "/crm/accounting/snow-invoicing",  icon: FileText, permission: "snow_invoicing_view", more: true },
+      { label: "Commissions",     href: "/crm/accounting/commissions",     icon: Percent, anyPermission: ["commission_view", "commission_manage", "commission_view_own"], more: true },
     ],
   },
   {
@@ -136,11 +141,11 @@ export const CRM_NAV: NavSection[] = [
     label: "Administration",
     items: [
       { label: "Reports",         href: "/crm/admin/reports",             icon: BarChart3, permission: "view_report_center" },
-      { label: "Services",  href: "/crm/settings/services",    icon: Layers, permission: "service_list" },  // also hosts the Price Adjustments tab
+      { label: "Services",  href: "/crm/settings/services",    icon: Layers, permission: "service_list", more: true },  // also hosts the Price Adjustments tab
       { label: "Products",  href: "/crm/settings/products",    icon: BookOpen },
-      { label: "Schedules", href: "/crm/settings/schedules",   icon: CalendarClock },
-      { label: "Packages",  href: "/crm/settings/packages",    icon: Package, permission: "package_list" },
-      { label: "Documents", href: "/crm/settings/documents",   icon: FileEdit, permission: "document_template_list" },
+      { label: "Schedules", href: "/crm/settings/schedules",   icon: CalendarClock, more: true },
+      { label: "Packages",  href: "/crm/settings/packages",    icon: Package, permission: "package_list", more: true },
+      { label: "Documents", href: "/crm/settings/documents",   icon: FileEdit, permission: "document_template_list", more: true },
       { label: "Settings",  href: "/crm/settings",             icon: Settings },
       { label: "Support",   href: "/crm/support",              icon: HelpCircle },
       { label: "Docs",      href: "/crm/docs",                 icon: Library },
@@ -167,6 +172,8 @@ export function CRMSidebar() {
   const { currentUser } = useCurrentUserStore();
   const { can } = usePermissions();
   const { data: myCrew } = useMyCrewInfo();
+  // Which sections have their "More" row expanded (a section holding the current page opens itself).
+  const [openMore, setOpenMore] = useState<Record<string, boolean>>({});
 
   // Several nav items share a path prefix with siblings (e.g. "Settings" at
   // /crm/settings and "Documents" at /crm/settings/documents) — only the
@@ -212,42 +219,68 @@ export function CRMSidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4">
-        {CRM_NAV.map((section) => (
-          <div key={section.label} className="mb-4">
-            {!sidebarCollapsed && (
-              <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                {section.label}
-              </p>
-            )}
-            {section.items.filter((item) => (!item.permission || can(item.permission)) && (!item.linkedCrewOnly || !!myCrew)).map((item) => {
-              const isActive = item.href === activeHref;
-              const Icon = item.icon;
+        {CRM_NAV.map((section) => {
+          const visible = section.items.filter(
+            (item) =>
+              (!item.permission || can(item.permission)) &&
+              (!item.anyPermission || item.anyPermission.some((k) => can(k))) &&
+              (!item.linkedCrewOnly || !!myCrew)
+          );
+          // Icon-only rail has no room for a "More" row, so everything shows.
+          const main = sidebarCollapsed ? visible : visible.filter((i) => !i.more);
+          const tucked = sidebarCollapsed ? [] : visible.filter((i) => i.more);
+          const activeInMore = tucked.some((i) => i.href === activeHref);
+          const moreOpen = openMore[section.label] ?? activeInMore;
+          const renderItem = (item: NavItem) => {
+            const isActive = item.href === activeHref;
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.comingSoon ? "#" : item.href}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-2 text-sm transition-colors",
+                  isActive
+                    ? "border-l-2 border-brand-400 bg-white/5 text-brand-400"
+                    : item.comingSoon
+                    ? "border-l-2 border-transparent text-slate-600 cursor-default"
+                    : "border-l-2 border-transparent text-slate-300 hover:bg-white/5 hover:text-white",
+                  sidebarCollapsed && "justify-center px-0"
+                )}
+                title={sidebarCollapsed ? item.label : undefined}
+                onClick={item.comingSoon ? (e) => e.preventDefault() : undefined}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+              </Link>
+            );
+          };
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.comingSoon ? "#" : item.href}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-2 text-sm transition-colors",
-                    isActive
-                      ? "border-l-2 border-brand-400 bg-white/5 text-brand-400"
-                      : item.comingSoon
-                      ? "border-l-2 border-transparent text-slate-600 cursor-default"
-                      : "border-l-2 border-transparent text-slate-300 hover:bg-white/5 hover:text-white",
-                    sidebarCollapsed && "justify-center px-0"
-                  )}
-                  title={sidebarCollapsed ? item.label : undefined}
-                  onClick={item.comingSoon ? (e) => e.preventDefault() : undefined}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {!sidebarCollapsed && (
-                    <span className="truncate">{item.label}</span>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+          return (
+            <div key={section.label} className="mb-4">
+              {!sidebarCollapsed && (
+                <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                  {section.label}
+                </p>
+              )}
+              {main.map(renderItem)}
+              {tucked.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    aria-expanded={moreOpen}
+                    onClick={() => setOpenMore((m) => ({ ...m, [section.label]: !moreOpen }))}
+                    className="flex w-full items-center gap-3 border-l-2 border-transparent px-4 py-2 text-sm text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+                  >
+                    <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform", moreOpen && "rotate-90")} />
+                    <span className="truncate">{moreOpen ? "Less" : `More (${tucked.length})`}</span>
+                  </button>
+                  {moreOpen && tucked.map(renderItem)}
+                </>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       {/* Back to Home */}

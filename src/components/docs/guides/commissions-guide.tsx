@@ -42,7 +42,9 @@ export function CommissionsGuide() {
 
       <Section id="overview" title="How it fits together">
         <p>
-          Commissions live under <strong>Accounting → Commissions</strong>. A <strong>plan</strong> holds
+          Commissions live under <strong>Accounting → Commissions</strong> (in the Accounting group&apos;s{" "}
+          <strong>More</strong> row). Plans and assignments are set up in{" "}
+          <strong>Settings → Commissions</strong>, kept apart because they are compensation data. A <strong>plan</strong> holds
           rules that set a rate; a rep is <strong>assigned</strong> one or more plans; the{" "}
           <strong>Earnings</strong> tab shows what each rep has earned for a period, calculated live from
           invoices and payments; and a <strong>statement</strong> locks a period for one rep so it can be
@@ -85,7 +87,7 @@ export function CommissionsGuide() {
 
       <Section id="assign" title="Assigning reps">
         <p>
-          Under <strong>Plans &amp; Assignments</strong>, pick an employee, a plan and the date it takes
+          Under <strong>Settings → Commissions</strong> (or the <strong>Manage plans &amp; assignments</strong> link on the Commissions page), pick an employee, a plan and the date it takes
           effect. A rep can hold several plans at once — for instance outside sales plus renewals. Use{" "}
           <strong>End today</strong> when a plan stops; earnings before that date are unaffected.
         </p>
@@ -150,8 +152,12 @@ export function CommissionsGuide() {
         <p>
           Rates are percentages only — there are no flat per-job amounts — and annual bonuses tied to company
           results (for example an NOI target) are not calculated here; track those in your accounting system.
-          Reps can see their own statements; plans, rules and everyone else&apos;s earnings need the Commission
-          permissions in Settings → Roles (<strong>View</strong> and <strong>Manage</strong>).
+          Three permissions under Commission Access in Settings → Roles control who sees what:{" "}
+          <strong>View My Own Commissions</strong> shows a rep a &quot;My Commissions&quot; page with only their own
+          earnings and statements (the Sales / Account Mgr role has it); <strong>View All Reps&apos;</strong> shows
+          everyone&apos;s earnings and statements; <strong>Manage</strong> adds creating and approving statements and
+          the plans, rules and assignments in Settings → Commissions. Plans and rules are visible only to Manage —
+          a rep or a view-only manager can never see another rep&apos;s plan.
         </p>
       </Section>
     </DocsFontScope>
