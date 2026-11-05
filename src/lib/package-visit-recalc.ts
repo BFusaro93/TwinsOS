@@ -211,3 +211,25 @@ export async function checkPackageMinDaysViolation(
   }
   return null;
 }
+
+/** Prefix every Min Days refusal shares (app check and DB trigger), so a client can recognise one and offer an override. */
+export const PACKAGE_MIN_DAYS_CODE = "package_min_days";
+export function isPackageMinDaysMessage(message: string | null | undefined): boolean {
+  return !!message && /must be at least \d+ days after/.test(message);
+}
+
+/**
+ * Scheduler override: moves one package-step visit to `date` ahead of its Min Days
+ * spacing, through crm_override_package_min_days() (the only way past the DB
+ * trigger). Only the date moves; callers apply the rest of their edit normally
+ * afterwards. Returns the error message, or null on success.
+ */
+export async function overridePackageMinDays(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  visitId: string,
+  date: string
+): Promise<string | null> {
+  const { error } = await supabase.rpc("crm_override_package_min_days", { p_visit_id: visitId, p_scheduled_date: date });
+  return error ? error.message : null;
+}

@@ -4,7 +4,7 @@ import { isVisitInProgress, reopenClearsClockStamps, CLEARED_CLOCK_STAMPS, GUARD
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
+import { checkPackageMinDaysViolation, overridePackageMinDays, PACKAGE_MIN_DAYS_CODE } from "@/lib/package-visit-recalc";
 import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { formatMonthDay } from "@/lib/utils";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
@@ -31,6 +31,8 @@ const BulkUpdateSchema = z.object({
   }),
   /** Admin-only: also move / reopen completed visits that are already invoiced. */
   override_invoiced: z.boolean().optional(),
+  /** Move package steps ahead of their Min Days spacing (scheduling permission). */
+  override_min_days: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -52,7 +54,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { updates, override_invoiced: overrideInvoiced } = parsed.data;
+  const { updates, override_invoiced: overrideInvoiced, override_min_days: overrideMinDays } = parsed.data;
   const ids = [...new Set(parsed.data.ids)];
 
   // A dispatch-board drag can reschedule a package-sequenced visit closer to
@@ -159,7 +161,9 @@ export async function POST(request: Request) {
       if (row.scheduled_date === updates.scheduled_date) continue;
       const violation = await checkPackageMinDaysViolation(supabase, row.id, updates.scheduled_date);
       if (violation) {
-        return NextResponse.json({ error: violation }, { status: 409 });
+        if (!overrideMinDays) return NextResponse.json({ error: violation, code: PACKAGE_MIN_DAYS_CODE }, { status: 409 });
+        const overrideErr = await overridePackageMinDays(supabase, row.id, updates.scheduled_date);
+        if (overrideErr) return NextResponse.json({ error: overrideErr }, { status: 500 });
       }
     }
   }

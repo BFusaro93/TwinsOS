@@ -10,7 +10,7 @@ import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import { roundHours, formatMonthDay } from "@/lib/utils";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
-import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
+import { checkPackageMinDaysViolation, overridePackageMinDays } from "@/lib/package-visit-recalc";
 import { logger } from "@/lib/logger";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { TriggerType } from "@/types/crm-automations";
@@ -1365,6 +1365,7 @@ export function useUpdateVisit() {
       updates,
       jobId,
       jobType,
+      overrideMinDays,
     }: {
       id: string;
       updates: Partial<{
@@ -1402,6 +1403,8 @@ export function useUpdateVisit() {
       }>;
       jobId?: string;
       jobType?: string;
+      /** Dispatch a package step ahead of its Min Days spacing (after the scheduler confirmed). */
+      overrideMinDays?: boolean;
     }) => {
       const supabase = createClient();
 
@@ -1456,7 +1459,12 @@ export function useUpdateVisit() {
           // edits), so this is where the guard lives; the API routes run the
           // same check and the DB trigger is the final floor.
           const violation = await checkPackageMinDaysViolation(supabase, id, updates.scheduled_date);
-          if (violation) throw new Error(violation);
+          if (violation) {
+            if (!overrideMinDays) throw new Error(violation);
+            // Moves just the date past the DB trigger; the update below then sees no date change.
+            const overrideErr = await overridePackageMinDays(supabase, id, updates.scheduled_date);
+            if (overrideErr) throw new Error(overrideErr);
+          }
           dateChangeServiceIds = await fetchVisitServiceIds(supabase, before.job_id, before.job_service_id ?? null);
           activityRows.push({
             client_id: before.client_id,
