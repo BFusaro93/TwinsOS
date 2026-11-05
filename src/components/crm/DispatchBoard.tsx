@@ -130,6 +130,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { CRMJob, CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
 import { useCrews, useCrewDailyMembers, useCrewDailyMembersRange, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
 import { memberWorksOn } from "@/lib/crew/roster-days";
+import { isPackageMinDaysMessage } from "@/lib/package-visit-recalc";
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
 import { useCurrentUserStore } from "@/stores/current-user-store";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
@@ -166,16 +167,22 @@ async function postBulkVisitUpdate(
   body: { ids: string[]; updates: Record<string, unknown> },
   opts: { isAdmin: boolean; confirm: ConfirmFn }
 ): Promise<Response | null> {
-  const send = (override: boolean) =>
+  const flags = { invoiced: false, minDays: false };
+  const send = () =>
     fetch("/api/crm/visits/bulk-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(override ? { ...body, override_invoiced: true } : body),
+      body: JSON.stringify({
+        ...body,
+        ...(flags.invoiced ? { override_invoiced: true } : {}),
+        ...(flags.minDays ? { override_min_days: true } : {}),
+      }),
     });
-  let res = await send(false);
-  if (res.status === 409) {
+  let res = await send();
+  // Up to one invoiced-visit override and one Min Days override.
+  for (let attempt = 0; attempt < 2 && res.status === 409; attempt++) {
     const err = await res.clone().json().catch(() => ({})) as { error?: string; code?: string };
-    if (err.code === "invoiced_visit_locked") {
+    if (err.code === "invoiced_visit_locked" && !flags.invoiced) {
       if (!opts.isAdmin) throw new Error(err.error ?? "This visit is completed and already invoiced.");
       const ok = await opts.confirm({
         title: "Change an invoiced visit?",
@@ -184,8 +191,20 @@ async function postBulkVisitUpdate(
         destructive: true,
       });
       if (!ok) return null;
-      res = await send(true);
+      flags.invoiced = true;
+    } else if (err.code === "package_min_days" && !flags.minDays) {
+      // Anyone who can schedule visits may override a package step's spacing.
+      const ok = await opts.confirm({
+        title: "Move ahead of Min Days?",
+        description: `${err.error ?? "This package step is closer to the previous step than its Min Days allows."} Move it anyway if the spacing doesn't apply here (for example the client asked for an early visit).`,
+        confirmLabel: "Move anyway",
+      });
+      if (!ok) return null;
+      flags.minDays = true;
+    } else {
+      break;
     }
+    res = await send();
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { error?: string | object };
@@ -6531,16 +6550,31 @@ export function DispatchBoard() {
                             // move it onto the day and mark it dispatched, exactly
                             // as the Waiting List's dispatch does — never a new
                             // visit. Its crew stays as it is.
-                            await moveNearbyPlaceholder.mutateAsync({
-                              id: m.packageStep.visitId,
-                              updates: {
-                                scheduled_date: selectedDate,
-                                status: "dispatched",
-                                dispatched_at: new Date().toISOString(),
-                              },
-                              jobId: m.jobId,
-                              jobType: "package",
-                            });
+                            const movePlaceholder = (overrideMinDays?: boolean) =>
+                              moveNearbyPlaceholder.mutateAsync({
+                                id: m.packageStep!.visitId,
+                                updates: {
+                                  scheduled_date: selectedDate,
+                                  status: "dispatched",
+                                  dispatched_at: new Date().toISOString(),
+                                },
+                                jobId: m.jobId,
+                                jobType: "package",
+                                overrideMinDays,
+                              });
+                            try {
+                              await movePlaceholder();
+                            } catch (moveErr) {
+                              const msg = moveErr instanceof Error ? moveErr.message : "";
+                              if (!isPackageMinDaysMessage(msg)) throw moveErr;
+                              const ok = await confirm({
+                                title: "Schedule ahead of Min Days?",
+                                description: `${msg}. Schedule it today anyway if the spacing doesn't apply here.`,
+                                confirmLabel: "Schedule anyway",
+                              });
+                              if (!ok) throw moveErr;
+                              await movePlaceholder(true);
+                            }
                           } else if (m.pendingServices.length > 0) {
                             // Split job: one visit per service still waiting,
                             // exactly as the Waiting List dispatches it.

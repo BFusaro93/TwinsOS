@@ -404,7 +404,10 @@ export function JobsPackagesGuide() {
           <em>&quot;Step 2 must be at least 14 days after Step 1 (earliest 5/15)&quot;</em>, and the
           visit stays where it was. Moving an earlier step so that a <em>later</em> step ends up too
           close is blocked the same way, with the message telling you which step to move first. Steps
-          with no Min Days set can be moved freely.
+          with no Min Days set can be moved freely. When the spacing doesn&apos;t apply (the client asked
+          for an early visit, say), the move, the Waiting List dispatch and Nearby Waiting List each
+          ask you to confirm instead — <strong>Move anyway</strong> / <strong>Dispatch anyway</strong> —
+          and then go ahead. Anyone who can schedule visits can confirm.
         </Callout>
         <p>
           The <strong>Package Summary Report</strong> tracks progress per package job by counting{" "}
