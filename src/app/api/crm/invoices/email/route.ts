@@ -8,6 +8,7 @@ import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/component
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { addParagraphSpacing, resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
+import { billingTermsLabel } from "@/lib/constants";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
 import { loadInvoicePhotosForPdf } from "@/lib/invoices/photos";
 import { loadInvoiceChemicalsForPdf } from "@/lib/invoices/chemical-applications";
@@ -345,6 +346,7 @@ export async function POST(req: NextRequest) {
     "[invoicedate]":        fmtDate(inv.invoice_date),
     "[duedate]":            fmtDate(inv.due_date),
     "[invoiceduedate]":     fmtDate(inv.due_date),
+    "[invoiceterms]":       billingTermsLabel(inv.terms as string | null),
     "[invoicesubtotal]":    formatCents((inv.subtotal_cents as number) ?? 0),
     "[invoicetax]":         formatCents((inv.tax_cents as number) ?? 0),
     "[invoicetotal]":       formatCents(inv.total_cents ?? 0),

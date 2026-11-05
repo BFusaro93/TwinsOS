@@ -60,6 +60,7 @@ const MERGE_TAGS = [
   { tag: "[invoicetotal]", label: "Invoice total" },
   { tag: "[invoicebalance]", label: "Invoice balance due" },
   { tag: "[invoiceduedate]", label: "Invoice due date" },
+  { tag: "[invoiceterms]", label: "Invoice terms (e.g. Net 30)" },
   { tag: "[viewinvoiceonline]", label: "Invoice online link (URL)" },
   { tag: "[paymentlink]", label: "Pay Now button" },
   { tag: "[servicename]", label: "Last completed service" },

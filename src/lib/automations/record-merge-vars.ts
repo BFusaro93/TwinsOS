@@ -1,4 +1,5 @@
 import { loadChemicalNoticeData, loadInvoiceTemplateBranding, noticeOrgFromRow, renderChemicalNoticeHtml } from "@/lib/chemical/application-notice";
+import { billingTermsLabel } from "@/lib/constants";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
 
@@ -25,7 +26,7 @@ export async function buildInvoiceExtras(
   if (!params.invoiceId) return {};
   const { data: inv } = await supabase
     .from("crm_invoices")
-    .select("id, invoice_number, invoice_date, due_date, subtotal_cents, tax_cents, total_cents, balance_cents")
+    .select("id, invoice_number, invoice_date, due_date, terms, subtotal_cents, tax_cents, total_cents, balance_cents")
     .eq("id", params.invoiceId)
     .eq("org_id", params.orgId)
     .is("deleted_at", null)
@@ -39,6 +40,7 @@ export async function buildInvoiceExtras(
     "[invoicenumber]": String(inv.invoice_number ?? ""),
     "[invoicedate]": fmtDay(inv.invoice_date as string | null),
     "[invoiceduedate]": due,
+    "[invoiceterms]": billingTermsLabel(inv.terms as string | null),
     "[duedate]": due,
     "[invoicesubtotal]": fmtCents(inv.subtotal_cents as number),
     "[invoicetax]": fmtCents(inv.tax_cents as number),

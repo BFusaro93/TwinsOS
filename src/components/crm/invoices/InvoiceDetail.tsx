@@ -1877,6 +1877,7 @@ export function InvoiceDetail({
         totalCents={invoice.totalCents}
         balanceCents={invoice.balanceCents}
         dueDate={invoice.dueDate}
+        terms={invoice.terms}
         clientName={invoice.clientName ?? null}
         clientEmail={invoice.clientEmail ?? null}
         pinnedPdfTemplateId={invoice.pdfTemplateId ?? null}

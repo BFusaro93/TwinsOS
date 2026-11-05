@@ -177,6 +177,12 @@
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
   html[data-ui-scale="80"] { font-size: 12.8px; }
   html[data-ui-scale="90"] { font-size: 14.4px; }
+
+  /* Toast notifications (sonner) ship their own fixed-px stylesheet, injected
+     at runtime, so neither the root font size nor the px->rem plugin reaches
+     them. Zoom just that fixed layer to match the chosen display size. */
+  html[data-ui-scale="80"] [data-sonner-toaster] { zoom: 0.8; }
+  html[data-ui-scale="90"] [data-sonner-toaster] { zoom: 0.9; }
 }
 @media print {
   html[data-ui-scale] { font-size: 16px; }

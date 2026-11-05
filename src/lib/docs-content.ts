@@ -1960,7 +1960,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Which merge tags can an automation's email or text use?",
-        a: "The client tags, plus invoice tags ([invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [viewinvoiceonline], [paymentlink]) that fill in for automations started by an invoice trigger, and service tags: [servicename] and [servicedate] for the client's last completed service, [nextservicename] and [nextservicedate] for their next scheduled one. [chemicalnotice] adds the compact Notice of Treatment for that last completed visit and is blank when it logged no chemicals. A tag with no value is left blank.",
+        a: "The client tags, plus invoice tags ([invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink]) that fill in for automations started by an invoice trigger, and service tags: [servicename] and [servicedate] for the client's last completed service, [nextservicename] and [nextservicedate] for their next scheduled one. [chemicalnotice] adds the compact Notice of Treatment for that last completed visit and is blank when it logged no chemicals. A tag with no value is left blank.",
       },
       {
         q: "Why didn't a form submission create a ticket?",
