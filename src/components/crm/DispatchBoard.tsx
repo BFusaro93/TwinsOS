@@ -2246,10 +2246,14 @@ function TeamAssignDialog({
   const [pending, setPending] = useState(false);
   const [dragVisitId, setDragVisitId] = useState<string | null>(null);
   const [dragMemberId, setDragMemberId] = useState<string | null>(null);
+  // An employee who has no crew-roster row at all (so no member id yet).
+  const [dragEmployeeId, setDragEmployeeId] = useState<string | null>(null);
+  const { data: allEmployees = [] } = useEmployees(true);
+  const { mutateAsync: addCrewMember } = useAddCrewMember();
   // Tap-to-place fallback for touch. iOS Safari never fires HTML5 drag events,
   // so on a tablet every drag path below is dead — tap an item to pick it up,
   // then tap a crew (or Unassigned) to drop it. Drag still works with a mouse.
-  const [held, setHeld] = useState<{ kind: "visit" | "member"; id: string; label: string } | null>(null);
+  const [held, setHeld] = useState<{ kind: "visit" | "member" | "employee"; id: string; label: string } | null>(null);
 
   useEffect(() => {
     if (!open) setHeld(null);
@@ -2272,21 +2276,85 @@ function TeamAssignDialog({
   const overrideCrewByMember = new Map(dailyOverrides.map((o) => [o.member_id, o.crew_id]));
   const allMembers = richCrews.flatMap((c) => c.members ?? []);
 
+  // Where a roster row works on selectedDate: the same-day placement if there
+  // is one, else its default crew — but only on the weekdays it is scheduled
+  // (days_of_week), matching the crew app and Start Day. null = not on any crew
+  // today (a row scheduled for other days, or a "day-only" placeholder).
+  const placedCrewByMember = new Map<string, string | null>();
+  allMembers.forEach((m) => {
+    const moved = overrideCrewByMember.get(m.id);
+    placedCrewByMember.set(
+      m.id,
+      moved ?? (memberWorksOn(m.daysOfWeek, selectedDate) ? defaultCrewByMember.get(m.id) ?? null : null)
+    );
+  });
+
   const byCrew = (richCrews.length > 0 ? richCrews : crews).map((c) => ({
     crew: c,
     visits: visits.filter((v) => effectiveCrewId(v) === c.id),
-    members: allMembers.filter((m) => (overrideCrewByMember.get(m.id) ?? defaultCrewByMember.get(m.id)) === c.id),
+    members: allMembers.filter((m) => placedCrewByMember.get(m.id) === c.id),
   }));
+
+  // "Unassigned people": active employees on no crew today — either no roster
+  // row at all, or only rows that don't work selectedDate. One entry per person.
+  const placedEmployeeIds = new Set(allMembers.filter((m) => placedCrewByMember.get(m.id)).map((m) => m.employeeId));
+  const poolPeople: { key: string; name: string; memberId: string | null; employeeId: string }[] = [];
+  const seenPoolEmployees = new Set<string>();
+  allEmployees.forEach((e) => {
+    if (placedEmployeeIds.has(e.id) || seenPoolEmployees.has(e.id)) return;
+    seenPoolEmployees.add(e.id);
+    const row = allMembers.find((m) => m.employeeId === e.id);
+    poolPeople.push({ key: e.id, name: `${e.firstName} ${e.lastName}`.trim(), memberId: row?.id ?? null, employeeId: e.id });
+  });
 
   async function moveMember(memberId: string, targetCrewId: string) {
     try {
-      if (defaultCrewByMember.get(memberId) === targetCrewId) {
+      // Clearing the override only puts them back on their default crew if
+      // they actually work that crew today; otherwise place them explicitly.
+      if (defaultCrewByMember.get(memberId) === targetCrewId && placedCrewByMember.get(memberId) !== null) {
         await clearDailyMember({ memberId, workDate: selectedDate });
       } else {
         await setDailyMember({ memberId, crewId: targetCrewId, workDate: selectedDate });
       }
     } catch {
       toast.error("Failed to move member");
+    }
+  }
+
+  /** Put an employee who has no roster row onto a crew for selectedDate only.
+   *  A roster row scheduled for NO weekdays is the placeholder that carries the
+   *  same-day placement (the crew app and Start Day already honour days_of_week,
+   *  and a same-day placement always wins over it), so they work this crew
+   *  today and return to Unassigned tomorrow. */
+  async function placeEmployee(employeeId: string, targetCrewId: string) {
+    const emp = allEmployees.find((e) => e.id === employeeId);
+    if (!emp) return;
+    try {
+      const row = await addCrewMember({
+        crewId: targetCrewId,
+        employeeId,
+        name: `${emp.firstName} ${emp.lastName}`.trim(),
+        daysOfWeek: [],
+      });
+      await setDailyMember({ memberId: row.id, crewId: targetCrewId, workDate: selectedDate });
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to place employee");
+    }
+  }
+
+  /** Move a pool person: a row-less employee gets a placeholder row first. */
+  async function placePerson(p: { memberId: string | null; employeeId: string }, targetCrewId: string) {
+    if (p.memberId) await moveMember(p.memberId, targetCrewId);
+    else await placeEmployee(p.employeeId, targetCrewId);
+  }
+
+  /** Drop the same-day placement. They fall back to their regular roster —
+   *  Unassigned if that doesn't work today. */
+  async function unplaceMember(memberId: string) {
+    try {
+      await clearDailyMember({ memberId, workDate: selectedDate });
+    } catch {
+      toast.error("Failed to unassign");
     }
   }
 
@@ -2337,17 +2405,30 @@ function TeamAssignDialog({
       if (v && effectiveCrewId(v) !== crewId) await reassign(item.id, crewId, v.jobId);
       return;
     }
-    const current = overrideCrewByMember.get(item.id) ?? defaultCrewByMember.get(item.id);
+    if (item.kind === "employee") {
+      await placeEmployee(item.id, crewId);
+      return;
+    }
+    const current = placedCrewByMember.get(item.id);
     if (current !== crewId) await moveMember(item.id, crewId);
   }
 
-  /** Drop the held visit back in the pool. Members always belong to a crew, so
-   *  the pool ignores them. */
+  /** Drop the held item back in the pool. */
   async function placeUnassigned() {
     const item = held;
     setHeld(null);
-    if (item?.kind !== "visit") return;
-    await unassign(visits.find((x) => x.id === item.id));
+    if (item?.kind === "visit") await unassign(visits.find((x) => x.id === item.id));
+    else if (item?.kind === "member") await dropMemberInPool(item.id);
+  }
+
+  /** A person dropped on Unassigned: undo a same-day placement. Someone whose
+   *  regular roster has them on a crew today can't be un-rostered from here. */
+  async function dropMemberInPool(memberId: string) {
+    if (!overrideCrewByMember.has(memberId)) {
+      toast.info("They're on this crew's regular roster — move them to another crew instead.");
+      return;
+    }
+    await unplaceMember(memberId);
   }
 
   async function dispatchAll() {
@@ -2400,6 +2481,8 @@ function TeamAssignDialog({
               Moving <span className="font-semibold">{held.label}</span> —{" "}
               {held.kind === "visit"
                 ? "tap a crew, or Unassigned, to place it."
+                : held.kind === "employee"
+                ? `tap the crew they should work with on ${selectedDate}.`
                 : `tap the crew they should work with on ${selectedDate}.`}
             </p>
             <button
@@ -2411,7 +2494,7 @@ function TeamAssignDialog({
           </div>
         ) : (
           <p className="shrink-0 border-b bg-slate-50 dark:bg-muted/40 px-5 py-1.5 text-[11px] text-slate-400 dark:text-neutral-500">
-            Drag a visit or crew member, or tap one to pick it up and tap where it should go.
+            Drag a visit or person, or tap one to pick it up and tap where it should go.
           </p>
         )}
 
@@ -2419,11 +2502,14 @@ function TeamAssignDialog({
           {/* Unassigned pool — drop target to un-assign */}
           <div
             className={cn(
-              "w-64 shrink-0 border-r bg-green-50 dark:bg-green-950/40 p-4",
-              held?.kind === "visit" && "cursor-pointer ring-2 ring-inset ring-brand-400"
+              "w-64 shrink-0 border-r bg-green-50 dark:bg-green-950/40 p-4 overflow-y-auto",
+              (held?.kind === "visit" || held?.kind === "member") && "cursor-pointer ring-2 ring-inset ring-brand-400"
             )}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={() => { if (dragVisitId) { void unassign(visits.find((v) => v.id === dragVisitId)); setDragVisitId(null); } }}
+            onDrop={() => {
+              if (dragVisitId) { void unassign(visits.find((v) => v.id === dragVisitId)); setDragVisitId(null); }
+              if (dragMemberId) { void dropMemberInPool(dragMemberId); setDragMemberId(null); }
+            }}
             onClick={() => void placeUnassigned()}
           >
             <p className="text-[10px] font-semibold uppercase text-green-700 dark:text-green-400 tracking-wide mb-3">
@@ -2474,6 +2560,47 @@ function TeamAssignDialog({
                 })
               )}
             </div>
+            {/* Unassigned people — employees on no crew today. Drag (or tap, then
+                tap a crew) to put them on a crew for this date only. */}
+            <p className="mt-5 mb-3 text-[10px] font-semibold uppercase text-green-700 dark:text-green-400 tracking-wide">
+              Unassigned people ({poolPeople.length})
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {poolPeople.length === 0 ? (
+                <p className="text-xs text-green-600 dark:text-green-400 italic">
+                  {held?.kind === "member" ? "Tap to send back" : "Everyone is on a crew"}
+                </p>
+              ) : (
+                poolPeople.map((p) => {
+                  const kind = p.memberId ? "member" : "employee";
+                  const heldId = p.memberId ?? p.employeeId;
+                  const isHeld = held?.kind === kind && held.id === heldId;
+                  return (
+                    <div
+                      key={p.key}
+                      draggable
+                      onDragStart={() => {
+                        setHeld(null);
+                        if (p.memberId) setDragMemberId(p.memberId); else setDragEmployeeId(p.employeeId);
+                      }}
+                      onDragEnd={() => { setDragMemberId(null); setDragEmployeeId(null); }}
+                      onClick={(e) => {
+                        if (held) return;
+                        e.stopPropagation();
+                        toggleHold({ kind, id: heldId, label: p.name });
+                      }}
+                      className={cn(
+                        "rounded-full border border-green-300 dark:border-green-800 bg-card px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:text-neutral-300 cursor-grab active:cursor-grabbing select-none",
+                        isHeld && "ring-2 ring-brand-500"
+                      )}
+                      title="Drag, or tap then tap a crew, to put them on that crew for today only"
+                    >
+                      {p.name}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
 
           {/* Crew columns */}
@@ -2497,6 +2624,10 @@ function TeamAssignDialog({
                       void moveMember(dragMemberId, crew.id);
                       setDragMemberId(null);
                     }
+                    if (dragEmployeeId) {
+                      void placeEmployee(dragEmployeeId, crew.id);
+                      setDragEmployeeId(null);
+                    }
                   }}
                   onClick={() => void placeOnCrew(crew.id)}
                 >
@@ -2508,8 +2639,10 @@ function TeamAssignDialog({
                       destination crew; the ↩ sends a loaned member straight home. */}
                   <div className="flex flex-wrap gap-1 mb-2 min-h-[20px]">
                     {members.map((m) => {
-                      const onLoan = defaultCrewByMember.get(m.id) !== crew.id;
-                      const home = defaultCrewByMember.get(m.id);
+                      // Placed by a same-day move (not their regular roster today).
+                      const onLoan = overrideCrewByMember.has(m.id);
+                      const homeWorksToday = memberWorksOn(m.daysOfWeek, selectedDate);
+                      const home = homeWorksToday && defaultCrewByMember.get(m.id) !== crew.id ? defaultCrewByMember.get(m.id) : null;
                       const isHeld = held?.kind === "member" && held.id === m.id;
                       const name = m.employeeName ?? m.employeeId;
                       return (
@@ -2531,17 +2664,17 @@ function TeamAssignDialog({
                             isHeld && "ring-2 ring-brand-500"
                           )}
                           title={onLoan
-                            ? `On loan from their usual crew for ${selectedDate} only — ↩ sends them back`
+                            ? `Here for ${selectedDate} only — ↩ ${home ? "sends them back to their usual crew" : "puts them back in Unassigned"}`
                             : "Drag, or tap then tap another crew, to move them for today only"}
                         >
                           {name}
-                          {onLoan && home && (
+                          {onLoan && (
                             <button
-                              onClick={(e) => { e.stopPropagation(); setHeld(null); void moveMember(m.id, home); }}
+                              onClick={(e) => { e.stopPropagation(); setHeld(null); void unplaceMember(m.id); }}
                               // Negative margins absorb the padding, so the hit
                               // area is finger-sized without growing the chip.
                               className="-my-1.5 -mr-1.5 rounded-full px-1.5 py-1.5 leading-none text-amber-500 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300"
-                              title="Send back to their usual crew"
+                              title={home ? "Send back to their usual crew" : "Back to Unassigned"}
                             >
                               ↩
                             </button>
