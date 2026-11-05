@@ -298,7 +298,9 @@ async function runAction(
       }
       return {
         affected: closed.length,
-        events: [],
+        // Closing as lost is how a lead is cancelled from the Leads page — same trigger
+        // as cancelling a lead from the Clients list (see the cancel case above).
+        events: [{ triggerType: "lead_cancelled", clientIds: closed }],
         activity: [{ subject: `Lead closed as lost${body.reason ? `: ${body.reason}` : ""}`, clientIds: closed }],
       };
     }

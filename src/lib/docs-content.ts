@@ -1959,6 +1959,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Edit the Wait step and turn on 'Then wait until a time of day' (for example, wait 1 day, then continue at 9:00 AM; if that time has already passed it rolls to the next day) and/or 'Weekdays only' (a Saturday or Sunday result moves to Monday at the same time). Both are read on your company clock, including daylight saving.",
       },
       {
+        q: "Does 'Estimate was won' fire when the customer accepts online?",
+        a: "Yes. Estimate was won fires when the customer accepts through the proposal link or the client portal, when someone marks it accepted in the app, and when an open estimate is converted to a job. Estimate was lost fires when the customer declines in the portal or someone marks it lost. Each decision fires once.",
+      },
+      {
+        q: "Can a 'Form was submitted' automation run for just one form?",
+        a: "Yes. In the sequence's rules, pick the form(s) next to the Form was submitted trigger; leave it on All forms to run for every form. Tags a form adds on submit also fire Tag added, and the sequence's first step (an auto-reply, say) goes out right after the submission rather than at the next 15-minute run.",
+      },
+      {
+        q: "What happens to an automation when the client is deleted or the meeting is cancelled?",
+        a: "Deleting a client stops every sequence they're in (the activity log shows Stopped (client deleted)), so no later ticket, alert, field-update or tag step runs for them. A meeting reminder stops if the meeting is cancelled, deleted or rescheduled (Stopped (meeting changed)); a rescheduled meeting gets new reminders for its new time.",
+      },
+      {
         q: "Which merge tags can an automation's email or text use?",
         a: "The client tags, plus invoice tags ([invoicenumber], [invoicetotal], [invoicebalance], [invoiceduedate], [invoiceterms], [viewinvoiceonline], [paymentlink]) that fill in for automations started by an invoice trigger, and service tags: [servicename] and [servicedate] for the client's last completed service, [nextservicename] and [nextservicedate] for their next scheduled one. [chemicalnotice] adds the compact Notice of Treatment for that last completed visit and is blank when it logged no chemicals. A tag with no value is left blank.",
       },
@@ -2004,7 +2016,15 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Why didn't a text message send from an automation?",
-        a: "Your company hasn't finished SMS registration (Settings → Integrations → Your own texting number). Until it is approved, text steps are skipped and the rest of the sequence still runs; the builder shows “SMS setup not complete” on those steps and your admins get one notification.",
+        a: "Usually your company hasn't finished SMS registration (Settings → Integrations → Your own texting number). Until it is approved, text steps are skipped and the rest of the sequence still runs; the builder shows “SMS setup not complete” on those steps and your admins get one notification. A number that replied STOP is also skipped: that number only, so the client's other numbers still get the text.",
+      },
+      {
+        q: "A contact or a billing phone replied STOP. What happens?",
+        a: "That number stops getting texts from your company, from automations and 1:1 texts alike. The client's other numbers keep getting them, and the client stays opted in. Only a STOP from the client's primary phone turns off the client's texting consent. If the same number texts START, it can be texted again; START from the primary phone also turns the client's consent back on.",
+      },
+      {
+        q: "Why didn't an email go to one of a client's addresses?",
+        a: "That address hard-bounced: the mail server said it doesn't exist. A bounced address is skipped on every send (campaigns, automations, invoices, estimates, statements, ticket and chemical emails), but only that address: the client's other addresses still get the email. The client's page shows a red notice listing bounced addresses. Fix the address (a new address is never blocked), or click Clear bounce if the mailbox works again.",
       },
       {
         q: "Why can't I delete an invoice?",
@@ -2164,11 +2184,11 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "How do I renew all of last season's package jobs at once?",
-        a: "On Scheduling, Jobs, click Renew Packages. Pick the season to renew from. Every package job from that season is listed with its renewal state; the ones not yet renewed and not marked Don't renew are ticked. Untick any you want to leave out, optionally set Raise rates by %, and click Renew. Several jobs are renewed at once (one client's jobs in order), the button counts progress, and any that can't be renewed (already renewed, or the client already has that package for the new season) are skipped with the reason shown on its row. Keep the window open until it finishes; the browser warns you if you try to leave mid-run.",
+        a: "On Scheduling, Jobs, click Renew Packages. Pick the season to renew from. Every package job from that season is listed with its renewal state; the ones not yet renewed and not marked Don't renew are ticked, except cancelled jobs and clients who cancelled or were lost (listed but unticked; tick them to renew anyway). Untick any you want to leave out, optionally set Raise rates by %, and click Renew. Several jobs are renewed at once (one client's jobs in order), the button counts progress, and any that can't be renewed (already renewed, or the client already has that package for the new season) are skipped with the reason shown on its row. Keep the window open until it finishes; the browser warns you if you try to leave mid-run.",
       },
       {
         q: "Does renewing a package use last season's dates or the package template's dates?",
-        a: "Last season's job, unless you tick Use the package's current dates. By default each step keeps the date it had on the old job, moved forward one year (Feb 29 becomes Feb 28), so per-client changes carry over. With the box ticked (in the renew window, or Use each package's current dates in Renew Packages), each step's window comes from the package in Settings, Packages, moved to the new season, so it works whether you have already updated the package's dates or not. Either way the renewal keeps the job's own steps and rates: a step the package doesn't have keeps last season's date, and a step the package has but the job doesn't is not added (the window lists both). A package with no step dates keeps last season's dates. Min Days spacing is applied in both cases. Rates are copied as they are unless you fill in Raise rates by % in the renew window. If the old job is from a season that ended more than a year ago, the dates move forward enough years to land on the coming season.",
+        a: "Last season's job, unless you tick Use the package's current dates. By default each step keeps the date it had on the old job, moved forward one year (Feb 29 becomes Feb 28), so per-client changes carry over. With the box ticked (in the renew window, or Use each package's current dates in Renew Packages), each step's window comes from the package in Settings, Packages, moved to the new season, so it works whether you have already updated the package's dates or not. Either way the renewal keeps the job's own steps and rates: a step the package doesn't have keeps last season's date, and a step the package has but the job doesn't is not added (the window lists both). A package with no step dates keeps last season's dates. A step with Visits Included above 1 is spread over its window the same way Add Job spreads it, so each visit gets its own date in order. Min Days spacing is applied in both cases. Rates are copied as they are unless you fill in Raise rates by % in the renew window. The renewal lands on the first season that hasn't started yet, or on one already under way while most of it is still ahead; past its midpoint it goes to next season. Any steps that still land before today are counted in the window and on each Renew Packages row.",
       },
       {
         q: "How do I raise prices when renewing package jobs?",
@@ -2184,7 +2204,11 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What carries over when a package job is renewed, and what doesn't?",
-        a: "Carried over: the client, property, package, services and their rates, quantities, budgets, team size, Min Days and taxable setting, the crew, sales rep, crew notes, office notes, invoice description, payment and invoicing settings, each service's crew checklist (sub-items), and planned job materials that weren't recorded on a visit. Not carried over: visits, completions, invoices, the PO number, and a contract that ends before the new season starts (the window says so; the renewal then bills on its own until you link a renewed contract). Renewing fires the same Job Created and Package Created automations as adding a package job.",
+        a: "Carried over: the client, property, package, services and their rates, quantities, budgets, team size, Min Days and taxable setting, the crew, sales rep, crew notes, office notes, invoice description, payment and invoicing settings, each service's crew checklist (sub-items), and planned job materials that weren't recorded on a visit. Not carried over: visits, completions, invoices, the PO number, and a contract that doesn't cover the whole renewed program, from first step to last (the window says so; the renewal then bills on its own until you link a renewed contract). Each step visit gets its pending materials from the copied sub-items. Renewing fires the Package renewed automation trigger, not Job created or Package created, so renewing clients don't get the new-customer sequence.",
+      },
+      {
+        q: "Which automation fires when a package job is renewed?",
+        a: "Package renewed. Renewing (from the job or Renew Packages) does not fire Job created or Package created, so a renewing client isn't enrolled in sequences meant for new customers. To send a thank-you or reminder to renewing clients, create a sequence with the trigger Package renewed (Job / Visit group); you can limit it to specific packages.",
       },
       {
         q: "How do I see which package jobs have been renewed?",

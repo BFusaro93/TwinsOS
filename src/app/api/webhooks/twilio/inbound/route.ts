@@ -35,10 +35,11 @@ function last10Digits(phone: string): string {
  * POST /api/webhooks/twilio/inbound
  *
  * Twilio calls this when a client texts our number back. Logs every inbound
- * reply to client_activity (matched to a client by phone number, scoped to
- * the org owning the inbound MessagingServiceSid when one is configured —
- * see the comment below) and, as a backstop, applies opt-out/opt-in
- * keywords directly to clients.sms_opt_in.
+ * reply to client_activity (matched to a client by phone number — primary,
+ * the client's phone list, or a contact's — scoped to the org owning the
+ * inbound MessagingServiceSid when one is configured; see below) and, as a
+ * backstop, applies opt-out/opt-in keywords: per number (crm_sms_opt_outs),
+ * and to clients.sms_opt_in when it was the client's primary phone.
  */
 export async function POST(request: Request) {
   const rawBody = await request.text();
@@ -116,14 +117,17 @@ export async function POST(request: Request) {
     candidateOrgIds = ((sharedOrgs ?? []) as { id: string }[]).map((o) => o.id);
   }
 
-  // Matched SQL-side (phone_last10() + expression index on clients) rather
-  // than loading every phone client of every candidate org and comparing in
-  // JS — that select hit PostgREST's 1000-row cap, so on the shared sender a
-  // reply (or STOP) from a client past the cap silently matched nobody. The
-  // RPC keeps the same filters: non-null primary_phone, not soft-deleted
-  // (a deleted client must not claim an inbound text), oldest first.
-  type MatchedClient = { id: string; org_id: string; display_name: string };
-  const { data: clients, error: matchErr } = await supabase.rpc("find_clients_by_phone_last10", {
+  // Matched SQL-side (phone_last10()) rather than loading every phone client
+  // of every candidate org and comparing in JS — that select hit PostgREST's
+  // 1000-row cap, so on the shared sender a reply (or STOP) from a client past
+  // the cap silently matched nobody. Automations also text a client's billing
+  // phone and its contacts, so the match covers the client's phone list and
+  // live contacts' phones too (match_kind says which); it used to look at
+  // primary_phone only, so a contact's STOP matched nobody and was dropped.
+  // Not soft-deleted (a deleted client must not claim an inbound text), oldest first.
+  type MatchedClient = { id: string; org_id: string; display_name: string; match_kind: string };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- RPC is newer than the generated types
+  const { data: clients, error: matchErr } = await (supabase as any).rpc("find_clients_by_any_phone_last10", {
     p_digits: digits,
     p_org_ids: ownerOrgId ? [ownerOrgId] : candidateOrgIds ?? [],
   });
@@ -132,10 +136,11 @@ export async function POST(request: Request) {
     log.error("client phone match failed", { ownerOrgId, error: matchErr.message });
     return NextResponse.json({ error: "Client lookup failed" }, { status: 500 });
   }
-  const allMatches: MatchedClient[] = (clients ?? []).map((c) => ({
+  const allMatches: MatchedClient[] = ((clients ?? []) as MatchedClient[]).map((c) => ({
     id: c.id,
     org_id: c.org_id,
     display_name: c.display_name,
+    match_kind: c.match_kind,
   }));
 
   if (allMatches.length === 0) {
@@ -149,16 +154,17 @@ export async function POST(request: Request) {
     // so there's no way to tell whose customer replied. Don't file the text
     // (timeline row / ticket) on any tenant.
     //
-    // STOP is still honored for every one of those orgs: sendClientSms()
-    // gates purely on clients.sms_opt_in, and each of these orgs sends to
-    // this person from the very sender they just opted out of — leaving the
-    // flag set would let any of them text again. START is deliberately NOT
-    // applied: consent must never be granted to a tenant it wasn't given to.
+    // STOP is still honored for every one of those orgs: each sends to this
+    // person from the very sender they just opted out of, so the number is
+    // opted out in each org (and a matching primary phone loses the client's
+    // consent) — otherwise any of them could text again. START is
+    // deliberately NOT applied: consent must never be granted to a tenant it
+    // wasn't given to.
     if (OPT_OUT_KEYWORDS.has(keyword)) {
-      const { error: optOutErr } = await supabase.from("clients").update({ sms_opt_in: false }).in("id", allMatches.map((c) => c.id));
-      if (optOutErr) {
+      const failed = await applyOptOut(supabase, allMatches, digits, messageSid);
+      if (failed) {
         // 5xx so Twilio retries — a swallowed failure leaves the number textable.
-        log.error("failed to apply multi-org STOP", { error: optOutErr.message });
+        log.error("failed to apply multi-org STOP", { error: failed });
         return NextResponse.json({ error: "Opt-out failed" }, { status: 500 });
       }
     }
@@ -182,11 +188,11 @@ export async function POST(request: Request) {
   // as "already handled" and the opt-out would never land. Idempotent, so
   // re-applying on a genuine duplicate is harmless.
   if (OPT_OUT_KEYWORDS.has(keyword)) {
-    const { error: optOutErr } = await supabase.from("clients").update({ sms_opt_in: false }).eq("org_id", orgId).in("id", matchedIds);
-    if (optOutErr) {
-      // 5xx so Twilio retries — acking 200 here would leave the client textable
+    const failed = await applyOptOut(supabase, orgMatches, digits, messageSid);
+    if (failed) {
+      // 5xx so Twilio retries — acking 200 here would leave the number textable
       // after they said STOP.
-      log.error("failed to apply STOP", { orgId, error: optOutErr.message });
+      log.error("failed to apply STOP", { orgId, error: failed });
       return NextResponse.json({ error: "Opt-out failed" }, { status: 500 });
     }
   }
@@ -228,12 +234,26 @@ export async function POST(request: Request) {
   if (activityErr) log.error("failed to log inbound sms", { error: activityErr.message });
 
   if (OPT_IN_KEYWORDS.has(keyword)) {
-    const { error: optInErr } = await supabase
-      .from("clients")
-      .update({ sms_opt_in: true, sms_opt_in_at: new Date().toISOString(), sms_opt_in_source: "keyword" })
+    // START lifts this number's own opt-out. It grants the CLIENT's consent
+    // only when the client's primary phone sent it — a contact can't opt the
+    // whole client in.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- crm_sms_opt_outs is newer than the generated types
+    const { error: liftErr } = await (supabase as any)
+      .from("crm_sms_opt_outs")
+      .update({ deleted_at: new Date().toISOString() })
       .eq("org_id", orgId)
-      .in("id", matchedIds);
-    if (optInErr) log.error("failed to apply START", { orgId, error: optInErr.message });
+      .eq("phone_last10", digits)
+      .is("deleted_at", null);
+    if (liftErr) log.error("failed to lift number opt-out on START", { orgId, error: liftErr.message });
+    const primaryIds = orgMatches.filter((c) => c.match_kind === "primary").map((c) => c.id);
+    if (primaryIds.length > 0) {
+      const { error: optInErr } = await supabase
+        .from("clients")
+        .update({ sms_opt_in: true, sms_opt_in_at: new Date().toISOString(), sms_opt_in_source: "keyword" })
+        .eq("org_id", orgId)
+        .in("id", primaryIds);
+      if (optInErr) log.error("failed to apply START", { orgId, error: optInErr.message });
+    }
   }
 
   // The ticket goes on one client: the one that already has an open text
@@ -310,4 +330,38 @@ export async function POST(request: Request) {
   }
 
   return new NextResponse(EMPTY_TWIML, { headers: { "Content-Type": "text/xml" } });
+}
+
+/**
+ * A STOP from this number: remember the opt-out against the NUMBER in each
+ * matched org (so texts to a contact's or billing phone stop too), and turn
+ * off the client's own consent where the number is the client's primary phone.
+ * Returns an error message on failure, null on success. Idempotent.
+ */
+async function applyOptOut(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  matches: { id: string; org_id: string; match_kind: string }[],
+  digits: string,
+  messageSid: string,
+): Promise<string | null> {
+  if (/^[0-9]{10}$/.test(digits)) {
+    for (const orgId of [...new Set(matches.map((m) => m.org_id))]) {
+      const first = matches.find((m) => m.org_id === orgId);
+      const { error } = await supabase.from("crm_sms_opt_outs").insert({
+        org_id: orgId,
+        phone_last10: digits,
+        client_id: first?.id ?? null,
+        source_message_sid: messageSid,
+      });
+      // 23505 = this number already has a live opt-out in the org.
+      if (error && error.code !== "23505") return error.message;
+    }
+  }
+  const primaryIds = matches.filter((m) => m.match_kind === "primary").map((m) => m.id);
+  if (primaryIds.length > 0) {
+    const { error } = await supabase.from("clients").update({ sms_opt_in: false }).in("id", primaryIds);
+    if (error) return error.message;
+  }
+  return null;
 }

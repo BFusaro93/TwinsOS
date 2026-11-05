@@ -75,3 +75,34 @@ jobs:
           fi
 
           echo "No new drift detected beyond the documented baseline in supabase/.ci/migration-drift-baseline.json."
+
+      - name: Every org-scoped table enforces read-only mode
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          # A canceled org / expired trial is read-only through RESTRICTIVE
+          # read_only_when_canceled_* policies (20260926190000). New tables don't
+          # get them automatically; re-run the idempotent DO block from
+          # 20261220000600 in a new migration to fix this check.
+          missing=$(psql "$DATABASE_URL" -t -A -c "
+            select c.relname from pg_class c
+              join pg_attribute a on a.attrelid = c.oid and a.attname = 'org_id' and not a.attisdropped
+             where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relrowsecurity
+               and exists (select 1 from pg_policies p where p.schemaname = 'public' and p.tablename = c.relname and p.permissive = 'PERMISSIVE')
+               and c.relname not in ('support_messages', 'support_conversations', 'notifications')
+               and not exists (select 1 from pg_policies p where p.schemaname = 'public' and p.tablename = c.relname and p.policyname = 'read_only_when_canceled_ins')
+             order by 1;" | sed '/^$/d')
+          if [ -n "$missing" ]; then
+            # Migrations reach production after merge, so a PR that brings the
+            # fix (a migration re-stating these policies) passes with a notice.
+            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            if git diff --name-only FETCH_HEAD HEAD -- supabase/migrations | xargs -r grep -l "read_only_when_canceled_ins" >/dev/null 2>&1; then
+              echo "::notice::Production is missing read-only policies on: $(echo $missing) — this PR includes a migration that adds them; apply it to production after merge."
+              exit 0
+            fi
+            echo "::error::These production tables are missing the read-only (canceled/expired) policies — re-run the DO block from supabase/migrations/20261220000600_read_only_policies_backfill_with_check.sql in a new migration:"
+            echo "$missing"
+            exit 1
+          fi
+          echo "All org-scoped tables enforce read-only mode."

@@ -15,6 +15,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { realtimeTopic } from "@/lib/supabase/realtime-topic";
 import { realtimeClientFilter } from "@/lib/portal/client-id-chunks";
 import { describeVisitWindow } from "@/lib/portal/visit-window";
 import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
@@ -128,7 +129,7 @@ export default function PortalDashboard({
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel(`portal-dashboard-visits-${clientIds[0]}`)
+      .channel(realtimeTopic(`portal-dashboard-visits-${clientIds[0]}`))
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "crm_job_visits", filter: realtimeClientFilter(clientKey.split(","), orgId) },

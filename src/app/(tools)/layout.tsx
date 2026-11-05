@@ -6,6 +6,7 @@ import { ToolsSidebar, TOOLS_NAV } from "@/components/shared/ToolsSidebar";
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
+import { TrialLockGate } from "@/components/shared/TrialLockGate";
 import { InternalOnlyGuard } from "@/components/shared/InternalOnlyGuard";
 import { useUIStore, SidebarDrawerProvider } from "@/stores";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
@@ -23,6 +24,7 @@ export default function ToolsLayout({ children }: { children: React.ReactNode })
   }, [pathname, setSidebarOpen]);
 
   return (
+    <TrialLockGate>
     <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-background">
       <RealtimeSync />
       <SettingsLoader />
@@ -49,5 +51,6 @@ export default function ToolsLayout({ children }: { children: React.ReactNode })
         </main>
       </div>
     </div>
+    </TrialLockGate>
   );
 }

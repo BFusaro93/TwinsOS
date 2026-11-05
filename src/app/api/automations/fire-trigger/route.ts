@@ -43,6 +43,7 @@ const ALLOWED_TRIGGER_TYPES: ReadonlySet<TriggerType> = new Set([
   "invoice_created",
   "job_cancelled",
   "package_created",
+  "package_renewed",
   "contract_created",
   "contract_signed",
   "client_referred",
@@ -98,6 +99,22 @@ const VERIFIED_TRIGGERS: Partial<Record<TriggerType, VerifiedTrigger>> = {
   },
 };
 
+/**
+ * Client-level triggers whose premise is the client's own current state. These carry no
+ * record id, so VERIFIED_TRIGGERS can't cover them — but without a check any org member
+ * could send an active customer the "sorry to see you go" sequence.
+ */
+type ClientStateRow = { status: string | null; ok_to_email: boolean | null; sms_opt_in: boolean | null };
+const CLIENT_STATE_TRIGGERS: Partial<Record<TriggerType, { isTrue: (c: ClientStateRow) => boolean; label: string }>> = {
+  client_cancelled: { isTrue: (c) => c.status === "cancelled", label: "the client is not cancelled" },
+  // A lead is cancelled from the Clients list (status cancelled) or closed as lost from the Leads page.
+  lead_cancelled: { isTrue: (c) => c.status === "cancelled" || c.status === "lost", label: "the lead is not cancelled or lost" },
+  lead_converted_to_client: { isTrue: (c) => c.status === "active", label: "the client is not active" },
+  client_reactivated: { isTrue: (c) => c.status === "active", label: "the client is not active" },
+  has_opted_in_emails: { isTrue: (c) => c.ok_to_email === true, label: "the client has not opted in to email" },
+  has_opted_in_sms: { isTrue: (c) => c.sms_opt_in === true, label: "the client has not opted in to texts" },
+};
+
 export async function POST(req: NextRequest) {
   const supabase = await createServerClient();
   const {
@@ -135,9 +152,17 @@ export async function POST(req: NextRequest) {
   // Confirm the client actually belongs to the caller's org before firing —
   // this route runs with the caller's own RLS-scoped session, but org_id is
   // still worth double-checking explicitly rather than trusting the body.
-  const { data: client } = await db.from("clients").select("org_id").eq("id", body.clientId).maybeSingle();
-  if (!client || client.org_id !== orgId) {
+  const { data: client } = await db
+    .from("clients")
+    .select("org_id, status, ok_to_email, sms_opt_in, deleted_at")
+    .eq("id", body.clientId)
+    .maybeSingle();
+  if (!client || client.org_id !== orgId || client.deleted_at) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
+  }
+  const clientState = CLIENT_STATE_TRIGGERS[body.triggerType as TriggerType];
+  if (clientState && !clientState.isTrue(client as ClientStateRow)) {
+    return NextResponse.json({ error: `Cannot fire ${body.triggerType}: ${clientState.label}` }, { status: 409 });
   }
 
   // Same cross-org guard for the estimate/ticket/invoice this event pertains to, if any.
@@ -191,7 +216,7 @@ export async function POST(req: NextRequest) {
     if (body.triggerType === "invoice_created" && !body.invoiceId) {
       return NextResponse.json({ error: "invoiceId is required for invoice_created" }, { status: 400 });
     }
-    if (body.triggerType === "package_created" && matchValues[0]) {
+    if ((body.triggerType === "package_created" || body.triggerType === "package_renewed") && matchValues[0]) {
       const { data: pkg } = await db.from("crm_packages").select("org_id").eq("id", matchValues[0]).maybeSingle();
       if (!pkg || pkg.org_id !== orgId) return NextResponse.json({ error: "Package not found" }, { status: 404 });
     }

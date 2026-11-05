@@ -53,12 +53,22 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rows, error: rowsError } = await (db as any)
     .from("crm_chemical_applications")
-    .select("id, org_id, visit_id, application_start_time, application_end_time, chemical_amount, solution_amount, applicator_employee_id, applicator_license_number")
+    .select("id, org_id, visit_id, application_start_time, application_end_time, chemical_amount, solution_amount, applicator_employee_id, applicator_license_number, confirmed_at")
     .in("id", items.map((i) => i.id))
     .is("deleted_at", null);
   if (rowsError) return NextResponse.json({ error: rowsError.message }, { status: 500 });
   if ((rows ?? []).length !== items.length) {
     return NextResponse.json({ error: "Chemical entry not found" }, { status: 404 });
+  }
+  // A confirmed row is the compliance record of what was applied. The crew records it once;
+  // after that only the office can correct it (Application panel, which the audit trail logs).
+  // Rewriting it here re-stamped the record and re-ran the inventory sync after the Notice of
+  // Treatment had already gone out.
+  if ((rows as { confirmed_at: string | null }[]).some((r) => r.confirmed_at)) {
+    return NextResponse.json(
+      { error: "These chemicals were already confirmed. Ask the office to correct the record." },
+      { status: 409 }
+    );
   }
 
   // Method/target/area ids come from the client and the write below uses the service role, so
@@ -88,10 +98,10 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visits } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, org_id, crew_id, crew_unassigned, clocked_in_at, crm_jobs(crew_id)")
+    .select("id, org_id, status, crew_id, crew_unassigned, clocked_in_at, crm_jobs(crew_id)")
     .in("id", visitIds)
     .is("deleted_at", null);
-  const visitById = new Map<string, { id: string; org_id: string; clocked_in_at: string | null }>(
+  const visitById = new Map<string, { id: string; org_id: string; status: string | null; clocked_in_at: string | null }>(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ((visits ?? []) as any[]).map((v) => [v.id, v])
   );
@@ -103,6 +113,14 @@ export async function POST(request: Request) {
     if (!visit || !(await assertCallerOwnsVisit(supabase, user.id, visit.org_id, visit))) {
       return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
     }
+  }
+
+  // A closed-out visit's records are final for the crew, same rule as adding a chemical.
+  if (visitIds.some((id) => ["completed", "cancelled", "skipped"].includes(visitById.get(id)?.status ?? ""))) {
+    return NextResponse.json(
+      { error: "This visit is already closed out. Ask the office to correct the chemical record." },
+      { status: 409 }
+    );
   }
 
   // A compliance record needs a real application window: confirming before the stop is

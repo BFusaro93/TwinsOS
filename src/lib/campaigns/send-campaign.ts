@@ -150,11 +150,12 @@ export async function sendCampaignEmails(
     // do_not_market unsubscribe flag. Service/transactional emails (invoices,
     // estimates) are sent by their own routes and don't apply this filter.
     .eq("ok_to_email", true)
-    // A hard bounce is tracked separately from the marketing opt-out now (see
-    // 20260919010000_client_email_bounce_suppression.sql). The Resend webhook
-    // used to fold bounces into do_not_market, so this filter caught them for
-    // free; it no longer does, and a campaign must never re-send to an address
-    // that already bounced.
+    // A hard bounce is tracked separately from the marketing opt-out (see
+    // 20260919010000). Campaigns only mail primary_email, and
+    // email_bounced_at is derived to mean exactly "the primary has a live
+    // bounce" (20261220000500_email_address_bounces.sql), so this filter drops
+    // dead primaries while a bounced billing email or contact no longer hides
+    // the client from the campaign.
     .is("email_bounced_at", null)
     .not("primary_email", "is", null);
 

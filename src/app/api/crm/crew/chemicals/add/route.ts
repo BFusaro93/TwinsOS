@@ -16,6 +16,20 @@ const Body = z.object({
   productId: z.string().uuid(),
   chemicalAmount: z.number().positive().max(1_000_000),
   unitOfMeasureId: z.string().uuid(),
+  /** How it was applied; the product's default method is used when this is left out. */
+  applicationMethodId: z.string().uuid().nullable().optional(),
+  targetIds: z.array(z.string().uuid()).max(30).optional(),
+  areasTreatedIds: z.array(z.string().uuid()).max(30).optional(),
+  /** Conditions at the stop, same shape the confirm route takes. A crew-added row is saved
+   *  already confirmed, so this is the only chance to record them on it. */
+  conditions: z
+    .object({
+      temperature: z.number().min(-60).max(150).optional(),
+      windSpeed: z.number().min(0).max(200).optional(),
+      windDirection: z.string().trim().max(8).optional(),
+      phLevel: z.number().min(0).max(14).optional(),
+    })
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -24,7 +38,7 @@ export async function POST(request: Request) {
 
   const parsed = Body.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  const { visitId, productId, chemicalAmount, unitOfMeasureId } = parsed.data;
+  const { visitId, productId, chemicalAmount, unitOfMeasureId, applicationMethodId, targetIds, areasTreatedIds, conditions } = parsed.data;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit } = await (supabase as any)
@@ -65,6 +79,22 @@ export async function POST(request: Request) {
     .is("deleted_at", null)
     .maybeSingle();
   if (!unit) return NextResponse.json({ error: "Unknown unit." }, { status: 400 });
+
+  // Method/target/area ids come from the client and the insert uses the service role, so each
+  // must be a live lookup item of the visit's company (same check as confirming).
+  const lookupIds = [...new Set([applicationMethodId ?? null, ...(targetIds ?? []), ...(areasTreatedIds ?? [])].filter((v): v is string => !!v))];
+  if (lookupIds.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: found } = await (db as any)
+      .from("crm_chemical_lookup_items")
+      .select("id")
+      .in("id", lookupIds)
+      .eq("org_id", visit.org_id)
+      .is("deleted_at", null);
+    if ((found ?? []).length !== lookupIds.length) {
+      return NextResponse.json({ error: "Unknown method, target or area" }, { status: 400 });
+    }
+  }
 
   // Applicator of record: the crew's foreman (crew logins are shared), license as of now.
   let applicatorEmployeeId: string | null = null;
@@ -114,7 +144,13 @@ export async function POST(request: Request) {
       used: true,
       chemical_amount: chemicalAmount,
       unit_of_measure_id: unitOfMeasureId,
-      application_method_id: rate?.application_method_id ?? null,
+      application_method_id: applicationMethodId !== undefined ? applicationMethodId : rate?.application_method_id ?? null,
+      ...(targetIds !== undefined ? { target_ids: targetIds } : {}),
+      ...(areasTreatedIds !== undefined ? { areas_treated_ids: areasTreatedIds } : {}),
+      ...(conditions?.temperature !== undefined ? { temperature: conditions.temperature } : {}),
+      ...(conditions?.windSpeed !== undefined ? { wind_speed: conditions.windSpeed } : {}),
+      ...(conditions?.windDirection ? { wind_direction: conditions.windDirection } : {}),
+      ...(conditions?.phLevel !== undefined ? { ph_level: conditions.phLevel } : {}),
       epa_number_snapshot: product.epa_registration_number ?? null,
       re_entry_interval_snapshot: product.re_entry_interval ?? null,
       restricted_product_snapshot: product.restricted_product ?? false,

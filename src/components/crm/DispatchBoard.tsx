@@ -133,7 +133,7 @@ import { isPackageMinDaysMessage } from "@/lib/package-visit-recalc";
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
 import { useCurrentUserStore } from "@/stores/current-user-store";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
-import { groupVisitsIntoStops } from "@/lib/utils/visit-stops";
+import { groupVisitsIntoStops, pickPunchOwner } from "@/lib/utils/visit-stops";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { lineTotalCents } from "@/lib/invoices/auto-invoice-tax";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -1016,9 +1016,15 @@ function JobDetailSheet({
     // (and moves every sibling's times together) instead of nulling only this
     // one. Guarded on an actual change inside, so a blur with no edit doesn't
     // wipe a real measured value.
-    const patch: StopTimePatch = field === "start_time"
-      ? { startTime: value || null, clockedInAt: clockIso }
-      : { endTime: value || null, clockedOutAt: clockIso };
+    const patch = orderClockPair(
+      field === "start_time"
+        ? { startTime: value || null, clockedInAt: clockIso }
+        : { endTime: value || null, clockedOutAt: clockIso },
+      visit,
+      newStart,
+      newEnd,
+      orgTz
+    );
     try {
       await applyStopTimePatch({
         visit,
@@ -2802,6 +2808,33 @@ function dateAndTimeToIso(date: string, time: string, timeZone: string, dayOffse
   return d ? d.toISOString() : null;
 }
 
+/**
+ * A Start or End correction rewrites one clock stamp and leaves the other as
+ * it was, so editing Start past an existing same-day End (or fixing End on a
+ * visit worked on a different day than it was scheduled) used to store a
+ * clock-out BEFORE the clock-in — Actual Hours then came out as days. When
+ * the resulting pair isn't a 0–24h span, re-derive the clock-out from End on
+ * the clock-in's own day (next day when End is before Start, i.e. overnight).
+ */
+function orderClockPair(
+  patch: StopTimePatch,
+  visit: CRMJobVisit,
+  start: string,
+  end: string,
+  timeZone: string
+): StopTimePatch {
+  const inIso = "clockedInAt" in patch ? patch.clockedInAt : visit.clockedInAt;
+  const outIso = "clockedOutAt" in patch ? patch.clockedOutAt : visit.clockedOutAt;
+  if (!inIso || !outIso || !end) return patch;
+  const spanMs = new Date(outIso).getTime() - new Date(inIso).getTime();
+  if (spanMs > 0 && spanMs <= 24 * 60 * 60 * 1000) return patch;
+  const inDate = isoToDateAndTime(inIso, visit.scheduledDate, timeZone).date;
+  const endHm = end.slice(0, 5);
+  const overnight = !!start && endHm <= start.slice(0, 5);
+  const fixedOut = dateAndTimeToIso(inDate, endHm, timeZone, overnight ? 1 : 0);
+  return fixedOut ? { ...patch, clockedOutAt: fixedOut } : patch;
+}
+
 // Native <input type="time"> always yields zero-padded 24h "HH:MM". End
 // BEFORE Start is a legitimate overnight shift (snow/storm visits cross
 // midnight — computeActualHours and Edit Job Times both treat it as the next
@@ -3492,9 +3525,15 @@ function VisitRow({
     const clockIso = value
       ? dateAndTimeToIso(visit.scheduledDate, value, orgTz, field === "end_time" && newStart && value < newStart ? 1 : 0)
       : null;
-    const patch: StopTimePatch = field === "start_time"
-      ? { startTime: value || null, clockedInAt: clockIso }
-      : { endTime: value || null, clockedOutAt: clockIso };
+    const patch = orderClockPair(
+      field === "start_time"
+        ? { startTime: value || null, clockedInAt: clockIso }
+        : { endTime: value || null, clockedOutAt: clockIso },
+      visit,
+      newStart,
+      newEnd,
+      orgTz
+    );
     // A genuine change to Start/End means whatever actual_hours was measured
     // before (e.g. the stop clock-out flow's men-multiplied figure) no longer
     // reflects reality — applyStopTimePatch re-allocates the stop's hours
@@ -4348,13 +4387,23 @@ export function DispatchBoard() {
   // sibling row seed a brand-new set of member-time rows under the wrong
   // visit id instead of reusing the shared ones. Resolve every visit to its
   // stop's anchor id first so reads and writes agree on one place per stop.
+  // The punches decide, when the stop has any: the derived anchor can differ
+  // from the visit that owned the stop at Start Job, and seeding Edit Job Times
+  // on it created a second set of punches that the Timesheet counted twice.
   const anchorVisitIdByVisitId = useMemo(() => {
+    const punchesByVisit = new Map<string, { visit_id: string; clocked_out_at: string | null }[]>();
+    for (const t of allMemberTimes) {
+      const arr = punchesByVisit.get(t.visitId);
+      const row = { visit_id: t.visitId, clocked_out_at: t.clockedOutAt };
+      if (arr) arr.push(row); else punchesByVisit.set(t.visitId, [row]);
+    }
     const m = new Map<string, string>();
     for (const stop of groupVisitsIntoStops(allVisits)) {
-      for (const v of stop.visits) m.set(v.id, stop.anchorVisitId);
+      const owner = pickPunchOwner(stop.visits.flatMap((v) => punchesByVisit.get(v.id) ?? []), stop.anchorVisitId);
+      for (const v of stop.visits) m.set(v.id, owner);
     }
     return m;
-  }, [allVisits]);
+  }, [allVisits, allMemberTimes]);
   const memberTimesByAnchorId = useMemo(() => {
     const m = new Map<string, CrewMemberTime[]>();
     for (const t of allMemberTimes) {

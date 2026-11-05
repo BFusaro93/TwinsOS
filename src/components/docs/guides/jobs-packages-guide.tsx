@@ -434,31 +434,38 @@ export function JobsPackagesGuide() {
           quantities, budgets, team size, Min Days and taxable setting, the same crew and sales rep, and
           the same crew notes, office notes and invoice description. Each service&apos;s crew checklist
           (its sub-items) comes along, and so do planned job materials that were never recorded on a
-          visit. By default every step date is last season&apos;s date on <em>this job</em> moved
+          visit, and each step visit gets its own pending materials from those sub-items, the same as
+          on a new job. By default every step date is last season&apos;s date on <em>this job</em> moved
           forward one year (Feb 29 becomes Feb 28), so anything you changed for this client carries
           over. Tick <strong>Use the package&apos;s current dates</strong> (or <strong>Use each
           package&apos;s current dates</strong> in Renew Packages) to take each step&apos;s window from
           Settings → Packages instead, moved to the new season — it doesn&apos;t matter whether
-          you&apos;ve updated the package&apos;s dates for the new year yet. The job&apos;s own steps and
+          you&apos;ve updated the package&apos;s dates for the new year yet. A step with Visits Included
+          above 1 is spread over its window the same way Add Job spreads it, so each of its visits gets
+          its own date in order. The job&apos;s own steps and
           rates are kept either way: a step the package doesn&apos;t have keeps last season&apos;s date,
           a step the package has but the job doesn&apos;t is not added (the window lists both), and a
           package with no step dates keeps last season&apos;s dates. Min Days spacing is applied in
           both cases. Visits are then created exactly as Add Job creates them for a package, one per
           dated step. The new job&apos;s Sale Type is <strong>Renewal</strong> (for commissions), its
-          Date Sold is today, and it fires the same Job Created and Package Created automations as a
-          new package job. Last season&apos;s job is not changed.
+          Date Sold is today, and it fires the <strong>Package renewed</strong> automation trigger —
+          not Job created or Package created, so a renewing client doesn&apos;t get your new-customer
+          sequence. Build a sequence on Package renewed (optionally for specific packages) for a
+          thank-you-for-renewing message. Last season&apos;s job is not changed.
         </p>
         <Callout>
-          <strong>Renewing a client who skipped a season.</strong> If the old job&apos;s season ended
-          more than a year ago, the dates move forward as many years as it takes to land on the coming
-          season, not on one that is already over. If some steps still land before today (renewing
-          mid-season), the window warns you so you can move them on the new job.
+          <strong>Which season it renews into.</strong> Dates move forward as many years as it takes to
+          land on a season that hasn&apos;t started yet. A season already under way is used only while
+          most of it is still ahead (a late sign-up in spring renews into this season); once it is past
+          its midpoint, the renewal goes to next season instead. If some steps still land before today,
+          the window (and each Renew Packages row) says how many, so you can move them on the new job.
         </Callout>
         <p>
           <strong>Renewing many at once.</strong> On the Jobs list, click <strong>Renew
           Packages</strong>. Pick the season to renew from and every package job from that season is
           listed with its renewal state. The ones not yet renewed, and not marked Don&apos;t renew, are
-          ticked. Untick any you want to leave out and click <strong>Renew</strong>. Several are renewed
+          ticked — except cancelled jobs and clients who cancelled or were lost, which are listed but
+          left unticked (tick them by hand to renew anyway). Untick any you want to leave out and click <strong>Renew</strong>. Several are renewed
           at once (one client&apos;s jobs in order), the button counts progress, and each row shows the
           new job or why it was skipped. Keep the window open until it finishes — the browser warns you
           if you try to leave mid-run.
@@ -472,7 +479,9 @@ export function JobsPackagesGuide() {
         </p>
         <p>
           <strong>Contracts.</strong> A renewal stays linked to last season&apos;s contract only if that
-          contract is still active and runs into the new season. Otherwise the window says so and the
+          contract is still active and covers the whole renewed program, from its first step to its
+          last — a contract-linked package is billed inside the contract and gets no invoices of its
+          own, so a contract ending mid-season would leave the later steps billed nowhere. Otherwise the window says so and the
           renewal is not linked, which means it bills on its own on the client&apos;s invoice frequency
           — link the renewed contract on the new job if it should bill under one.
         </p>

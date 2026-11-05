@@ -49,6 +49,8 @@ const ACTION_LABELS: Record<string, string> = {
   tags_skipped: "Tags update skipped",
   stopped_send_failed: "Stopped (send kept failing)",
   stopped_sequence_inactive: "Stopped (automation off)",
+  stopped_client_deleted: "Stopped (client deleted)",
+  stopped_meeting_changed: "Stopped (meeting changed)",
   meeting_scheduled_at: "Meeting scheduled",
 };
 
@@ -80,6 +82,8 @@ const ACTION_COLORS: Record<string, string> = {
   tags_send_failed: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
   stopped_send_failed: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
   stopped_sequence_inactive: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  stopped_client_deleted: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+  stopped_meeting_changed: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
   alert_skipped: "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
   ticket_skipped: "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",
   update_skipped: "bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 border-orange-200 dark:border-orange-800",

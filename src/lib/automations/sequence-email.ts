@@ -4,6 +4,7 @@ import { plainTextToHtml } from "@/lib/utils/plain-text-to-html";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { buildCanSpamFooter, orgEmailFrom } from "@/lib/email/send";
 import { getOrgReplyTo, isUsableReplyTo } from "@/lib/email/reply-to";
+import { partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { buildInvoiceExtras, buildServiceExtras } from "./record-merge-vars";
@@ -40,7 +41,7 @@ interface ResolvedEmailContent {
  * other category (general, marketing, follow_up, unset/unknown) is treated as
  * marketing and respects do_not_market — the conservative default, since
  * existing steps were all created as "general" and always honored it.
- * email_bounced_at (dead address) and ok_to_email=false block every category.
+ * A hard-bounced address (crm_email_bounces) and ok_to_email=false block every category.
  */
 const SERVICE_EMAIL_CATEGORIES: ReadonlySet<string> = new Set(["transactional", "reminder"]);
 export function isMarketingEmailCategory(category: string | null | undefined): boolean {
@@ -81,12 +82,6 @@ export async function resolveEmailStepContent(
   // category; transactional notices (invoice/estimate/receipt emails) go
   // through their own routes and are unaffected.
   if (client.ok_to_email === false) return { error: "client is marked not OK to email (ok_to_email)" };
-  // Separate from the opt-out: the address itself hard-bounced. The Resend
-  // webhook used to record that as do_not_market, so the check above caught it
-  // implicitly; it now lands in its own column and has to be checked here too,
-  // or automations would resume mailing dead addresses.
-  // See 20260919010000_client_email_bounce_suppression.sql.
-  if (client.email_bounced_at) return { error: "client's email address has hard-bounced (email_bounced_at)" };
 
   // An email step saved with no subject and no body (e.g. a step dropped in and
   // never filled out) would send a blank "(no subject)" email to every client
@@ -126,6 +121,15 @@ export async function resolveEmailStepContent(
   }
 
   if (toByKey.size === 0) return { error: "no resolvable recipient email for the selected 'to' options" };
+
+  // Separate from the opt-out: an address that hard-bounced is dropped, but
+  // only that address — the client's other recipients (primary, billing,
+  // contacts) still get the step. See 20261220000500_email_address_bounces.sql.
+  const { bounced } = await partitionBouncedRecipients(params.orgId, Array.from(toByKey.values()));
+  for (const address of bounced) toByKey.delete(address.toLowerCase());
+  if (toByKey.size === 0) {
+    return { error: `every recipient address has hard-bounced (${bounced.join(", ")})` };
+  }
 
   const { data: orgRow } = await supabase
     .from("organizations")

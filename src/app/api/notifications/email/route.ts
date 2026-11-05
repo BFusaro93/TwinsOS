@@ -163,6 +163,10 @@ export async function POST(request: Request) {
 
   // Sanitized copy of caller-supplied text: only used where noted below.
   const safeExtra: { commentBody?: string; comment?: string; newStatus?: string } = {};
+  // approved/rejected: the recorded decision this email reports — its approver
+  // is named in the email (not whoever called the route), and its
+  // last_notified_at is stamped so the outcome is emailed once.
+  let decision: { id: string; approverName: string | null } | null = null;
 
   if (notifType === "approved" || notifType === "rejected") {
     // Requisition/PO track approval in `status`; estimates in `approval_status`.
@@ -170,18 +174,32 @@ export async function POST(request: Request) {
     if (approvalState !== notifType) {
       return NextResponse.json({ success: true, sent: 0, reason: "entity is not in that state" });
     }
-    if (notifType === "rejected") {
-      // The rejection reason comes from the approver's recorded decision.
-      const { data: lastRejected } = await adminClient
-        .from("approval_requests")
-        .select("comment")
-        .eq("entity_id", entityId)
-        .eq("org_id", callerProfile.org_id)
-        .eq("status", "rejected")
-        .order("decided_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (lastRejected?.comment) safeExtra.comment = String(lastRejected.comment).slice(0, 1000);
+    // The latest recorded decision of this kind. Any org member could call this
+    // route, so the email used to say "approved by <caller>" and could be
+    // re-sent at will.
+    const { data: lastDecision } = await adminClient
+      .from("approval_requests")
+      .select("id, approver_name, comment, decided_at, last_notified_at")
+      .eq("entity_id", entityId)
+      .eq("org_id", callerProfile.org_id)
+      .eq("status", notifType)
+      .eq("archived", false)
+      .order("decided_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!lastDecision?.decided_at) {
+      return NextResponse.json({ success: true, sent: 0, reason: "no recorded decision" });
+    }
+    if (
+      lastDecision.last_notified_at &&
+      new Date(lastDecision.last_notified_at).getTime() >= new Date(lastDecision.decided_at).getTime()
+    ) {
+      return NextResponse.json({ success: true, sent: 0, reason: "already notified" });
+    }
+    decision = { id: lastDecision.id, approverName: lastDecision.approver_name };
+    // The rejection reason comes from the approver's recorded decision.
+    if (notifType === "rejected" && lastDecision.comment) {
+      safeExtra.comment = String(lastDecision.comment).slice(0, 1000);
     }
   } else if (notifType === "wo_status_changed") {
     // The status in the message must be the WO's real current status.
@@ -392,6 +410,7 @@ export async function POST(request: Request) {
 
   const resend = new Resend(resendKey);
   const callerName = escapeHtml(callerProfile.name ?? "A team member");
+  const deciderName = escapeHtml(decision?.approverName ?? callerProfile.name ?? "an approver");
 
   function buildEmail(recipientName: string | null, isAdminBroadcast: boolean): { subject: string; html: string } {
     const hi = `Hi ${escapeHtml(recipientName ?? "there")},`;
@@ -474,7 +493,7 @@ export async function POST(request: Request) {
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
           <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">${entityLabel} ${isApproved ? "Approved" : "Rejected"}</h2>
           <p style="margin:0 0 4px;color:#475569">${hi}</p>
-          <p style="margin:0 0 ${reason ? "8px" : "24px"};color:#475569">Your ${entityLabel} <strong>${num}</strong> has been <strong style="color:${color}">${verb}</strong> by ${callerName}.</p>
+          <p style="margin:0 0 ${reason ? "8px" : "24px"};color:#475569">Your ${entityLabel} <strong>${num}</strong> has been <strong style="color:${color}">${verb}</strong> by ${deciderName}.</p>
           ${!isApproved && reason ? `<blockquote style="margin:0 0 24px;padding:12px 16px;background:#f8fafc;border-left:4px solid #e2e8f0;border-radius:4px;color:#374151;font-style:italic">${reason}</blockquote>` : ""}
           <a href="${link}" style="display:inline-block;padding:12px 24px;background:${color};color:#fff;text-decoration:none;border-radius:6px;font-weight:600">View ${entityLabel}</a>
         </div>`,
@@ -506,6 +525,13 @@ export async function POST(request: Request) {
     const { subject, html } = buildEmail((profile as { name?: string | null }).name ?? null, isAdminBroadcast);
     const result = await sendEmailRetryingRateLimit(resend, { from: FROM, to: profile.email as string, subject, html });
     if (!result.error) sent++;
+  }
+
+  if (decision && sent > 0) {
+    await adminClient
+      .from("approval_requests")
+      .update({ last_notified_at: new Date().toISOString() })
+      .eq("id", decision.id);
   }
 
   return NextResponse.json({ success: true, sent });

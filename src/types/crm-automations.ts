@@ -40,6 +40,7 @@ export type TriggerType =
   | 'job_cancelled'
   | 'job_created'
   | 'package_created'
+  | 'package_renewed'
   | 'visit_date_changed'
   | 'visit_moved_to_waiting_list'
   | 'visit_cancelled'

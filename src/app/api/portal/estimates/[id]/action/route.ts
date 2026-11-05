@@ -9,6 +9,7 @@ import { recordAcceptedVersion } from "@/lib/estimates/versions";
 import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
 import { logger } from "@/lib/logger";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
+import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 
 const log = logger.child("portal-estimate-action");
 
@@ -343,6 +344,17 @@ export async function POST(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await recordAcceptedVersion(supabase as any, id, signatureName!.trim(), "client_portal");
   }
+
+  // A customer's portal decision is the same event as the office changing the stage
+  // (use-estimates), which used to be the only place these triggers fired. The
+  // stage update above matched exactly one row, so this fires once per decision.
+  await fireServerTrigger(supabase, {
+    orgId: estimate.org_id,
+    clientId: estimate.client_id,
+    estimateId: estimate.id,
+    triggerType: action === "accept" ? "estimate_won" : "estimate_lost",
+    matchValues: estimate.sales_rep_id ? [estimate.sales_rep_id] : undefined,
+  });
 
   return NextResponse.json({ success: true, status: patch.stage });
 }

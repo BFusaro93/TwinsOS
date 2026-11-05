@@ -229,9 +229,10 @@ export function InvoicingGuide() {
             <strong>Where invoice emails go.</strong> If the client has a <strong>Billing
             Email</strong> (Client &gt; Edit &gt; Billing), invoices and account statements go there;
             with none, they go to the primary email. The send dialog pre-fills that address and you
-            can still type a different one. If the client&apos;s email has hard-bounced, sending to
-            the saved address is refused (&quot;Client&apos;s email address has hard-bounced. Update
-            it, or send to a different address.&quot;); typing a corrected address sends normally.
+            can still type a different one. An address that has hard-bounced is left off (CCs
+            too) and the invoice goes to the remaining addresses; if every address has bounced,
+            the send is refused and names the address. Typing a corrected address sends normally,
+            and Clear bounce on the client lifts a bounce once the mailbox works again.
           </li>
           <li>
             <strong>Emailing locks the invoice.</strong> An invoice is locked the moment it is

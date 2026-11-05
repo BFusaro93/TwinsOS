@@ -11,7 +11,24 @@ type AnySupabase = any;
  */
 
 /** A still-open shift from the previous work date this young is treated as a shift that crossed midnight. */
-const CARRY_OVER_SHIFT_MS = 12 * 3_600_000;
+export const CARRY_OVER_SHIFT_MS = 12 * 3_600_000;
+
+/**
+ * Whether an open shift is still the member's current one at `atMs`. Today's
+ * shift is, up to MAX_AUTO_CLOSE_SHIFT_MS. One from the previous work date only
+ * within CARRY_OVER_SHIFT_MS — storm work that crossed midnight. Past that it
+ * is a shift somebody forgot to end (a 3pm start still open at 6:30am): End
+ * Day the next morning used to close it then and pay ~15 hours. Leave it open
+ * for payroll to flag instead.
+ */
+export function isCurrentOpenShift(
+  shift: { work_date: string; started_at: string },
+  workDate: string,
+  atMs: number
+): boolean {
+  const age = atMs - new Date(shift.started_at).getTime();
+  return shift.work_date === workDate ? age < MAX_AUTO_CLOSE_SHIFT_MS : age < CARRY_OVER_SHIFT_MS;
+}
 
 /**
  * Opens a shift for every working member (roster minus absent) who doesn't
@@ -112,13 +129,14 @@ export async function closeMemberOpenShift(
   p: { orgId: string; crewMemberId: string; workDate: string; at: string }
 ): Promise<boolean> {
   const atMs = new Date(p.at).getTime();
-  const { data: openRows } = await supabase.from("crm_crew_day_shifts").select("id, started_at")
+  const { data: openRows } = await supabase.from("crm_crew_day_shifts").select("id, work_date, started_at")
     .eq("crew_member_id", p.crewMemberId).eq("org_id", p.orgId)
     .gte("work_date", openShiftLookbackDate(p.workDate)).lte("work_date", p.workDate)
     .gt("started_at", new Date(atMs - MAX_AUTO_CLOSE_SHIFT_MS).toISOString())
     .is("deleted_at", null).is("ended_at", null)
-    .order("started_at", { ascending: false }).limit(1);
-  const open = ((openRows ?? []) as { id: string; started_at: string }[])[0];
+    .order("started_at", { ascending: false });
+  const open = ((openRows ?? []) as { id: string; work_date: string; started_at: string }[])
+    .find((s) => isCurrentOpenShift(s, p.workDate, atMs));
   if (!open) return false;
   const end = new Date(open.started_at).getTime() > atMs ? open.started_at : p.at;
   const { error } = await supabase.from("crm_crew_day_shifts").update({ ended_at: end }).eq("id", open.id).is("ended_at", null);
@@ -147,7 +165,7 @@ export async function endCrewDay(
   if (memberIds.length === 0) return 0;
   const { data: open } = await supabase
     .from("crm_crew_day_shifts")
-    .select("id, started_at")
+    .select("id, work_date, started_at")
     .eq("org_id", p.orgId)
     .gte("work_date", openShiftLookbackDate(p.workDate))
     .lte("work_date", p.workDate)
@@ -157,7 +175,7 @@ export async function endCrewDay(
     .in("crew_member_id", memberIds);
   const atMs = new Date(p.at).getTime();
   let closed = 0;
-  for (const s of (open ?? []) as { id: string; started_at: string }[]) {
+  for (const s of ((open ?? []) as { id: string; work_date: string; started_at: string }[]).filter((r) => isCurrentOpenShift(r, p.workDate, atMs))) {
     // Never end before the start (clock skew / an offline-queued tap).
     const end = new Date(s.started_at).getTime() > atMs ? s.started_at : p.at;
     const { error } = await supabase.from("crm_crew_day_shifts").update({ ended_at: end }).eq("id", s.id).is("ended_at", null);

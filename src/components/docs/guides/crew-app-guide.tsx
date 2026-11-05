@@ -249,12 +249,17 @@ export function CrewAppGuide() {
           </li>
           <li>
             <strong>Working past midnight.</strong> A shift that started the evening before and is
-            still running (storm work) stays one shift: after midnight the card still shows the day
-            running with an <strong>End Day</strong> button, a second Start Day isn&apos;t offered,
-            and the first job after midnight doesn&apos;t open an overlapping shift. End Day closes
-            it once. A shift that has been left open for more than 16 hours is treated as
-            forgotten: End Day doesn&apos;t close it at an absurd length, it stays open and the
-            Payroll report flags it for the office to correct. If you export Payroll while some
+            still running (storm work) stays one shift: after midnight the card reads{" "}
+            <strong>Day started yesterday</strong> with an <strong>End Day</strong> button, a second
+            Start Day isn&apos;t offered, and the first job after midnight doesn&apos;t open an
+            overlapping shift. End Day closes it once. Until 6am, yesterday&apos;s unfinished stops
+            also stay on the list, marked <strong>From yesterday</strong>, so a route that runs
+            past midnight can be finished. A shift from the day before that started more than 12
+            hours ago (a 3pm start nobody ended) is treated as forgotten, as is any shift open more
+            than 16 hours: End Day doesn&apos;t close it at an absurd length, it stays open and the
+            Payroll report flags it for the office to correct. Someone who left before midnight and
+            comes back after it rejoins the shift they left, so the time away is only taken off
+            once. If you export Payroll while some
             days are still open or have no shift, Landscapt warns that hours are understated or missing
             and asks you to confirm — fix those days first for accurate pay.
           </li>
@@ -363,10 +368,19 @@ export function CrewAppGuide() {
           property (tap <strong>Update</strong> to refresh it) and can be corrected; if no reading is
           available they are typed as before. They&apos;re optional and are saved on every chemical confirmed in that tap.{" "}
           <strong>Add a chemical</strong> records a product the office didn&apos;t preload, such as a
-          spot treatment or a substitute: choose the product, the amount and the unit. It is saved
-          already confirmed, with the foreman as applicator, and counts toward the compliance report
-          and stock like any other. When the office has filed a label or Safety Data Sheet for the
-          product, <strong>View label</strong> also shows an <strong>Open</strong> button for it.
+          spot treatment or a substitute: choose the product, the amount and the unit, and
+          optionally how it was applied and the conditions (inside the confirm card it uses the
+          conditions already entered there). It is saved already confirmed, with the foreman as
+          applicator, and counts toward the compliance report and stock like any other. When the
+          office has filed a label or Safety Data Sheet for the product, <strong>View label</strong>{" "}
+          also shows an <strong>Open</strong> button for it.
+        </p>
+        <p>
+          <strong>Confirmed records are final for the crew.</strong> Once a chemical is confirmed,
+          or once its visit is completed, skipped or cancelled, the crew can no longer change it: the
+          confirmation is the record of what was applied and may already be on a Notice of
+          Treatment. If something was entered wrong, the office corrects it from the visit&apos;s
+          Chemical Applications panel, and the change is kept in the record&apos;s audit trail.
         </p>
         <p>
           <strong>Reference.</strong> The <strong>Reference</strong> button on the crew home screen

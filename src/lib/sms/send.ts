@@ -2,6 +2,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { orgHasAddon } from "@/lib/stripe/addon-access";
 import { monthStartInZone } from "@/lib/time/zone";
 import { toE164Us } from "@/lib/utils/phone";
+import { findOptedOutNumbers } from "@/lib/sms/opt-outs";
 
 /** The org whose Twilio account/campaign the TWILIO_* env fallback belongs to. */
 export const SHARED_TWILIO_ORG_ID = "619de9bb-f8f8-46cf-983c-9faf54f6a7d0";
@@ -54,6 +55,17 @@ export async function sendClientSms(
       .eq("id", params.clientId)
       .single();
     if (!client?.sms_opt_in) return { ok: false, reason: "client has not opted in to SMS", permanent: true };
+  }
+
+  // A number that texted STOP is opted out on its own — a contact's or
+  // billing phone, not just the client's primary (crm_sms_opt_outs). Texting it
+  // would only fail at Twilio's opt-out list anyway (error 21610).
+  try {
+    if ((await findOptedOutNumbers(params.orgId, [params.toPhone])).size > 0) {
+      return { ok: false, reason: "this number replied STOP", permanent: true };
+    }
+  } catch {
+    return { ok: false, reason: "couldn't check SMS opt-outs" };
   }
 
   // Every org can override its Account SID / Messaging Service SID — set

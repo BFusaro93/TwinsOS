@@ -40,10 +40,12 @@ const STATUS_CONFIG: Record<VisitStatus, { label: string; color: string; icon: R
   skipped:     { label: "Skipped",      color: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400", icon: <XCircle className="h-3 w-3" /> },
 };
 
-function StopCard({ stop, partners, onClick }: { stop: Stop; partners: string[]; onClick: () => void }) {
+function StopCard({ stop, partners, onClick, today }: { stop: Stop; partners: string[]; onClick: () => void; today: string }) {
   const cfg = STATUS_CONFIG[stop.derivedStatus];
   const services = stop.visits.flatMap(visitServiceNames).join(", ");
   const startTime = stop.visits.find((v) => v.startTime)?.startTime;
+  // Kept on the list after midnight (unfinished storm/late route, or still clocked in).
+  const fromEarlierDay = stop.visits.some((v) => v.scheduledDate < today);
 
   return (
     <div
@@ -60,6 +62,11 @@ function StopCard({ stop, partners, onClick }: { stop: Stop; partners: string[];
             {stop.visits.length > 1 && (
               <span className="shrink-0 inline-flex items-center rounded-full bg-muted text-muted-foreground text-[10px] font-medium px-1.5 py-0.5">
                 {stop.visits.length} services
+              </span>
+            )}
+            {fromEarlierDay && (
+              <span className="shrink-0 inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-[10px] font-medium px-1.5 py-0.5">
+                From yesterday
               </span>
             )}
           </div>
@@ -153,6 +160,11 @@ export default function CrewSchedulePage() {
   const dayStartedAt = dayStarts[0] ?? null;
   const dayOpen = dayMembers.some(m => m.startedAt && !m.endedAt);
   const dayEnded = !!dayStartedAt && !dayOpen;
+  // A shift carried over from the previous date (storm work past midnight):
+  // say so, so the leader doesn't take it for a shift started this morning.
+  const dayFromYesterday = !!crewDay?.workDate && dayMembers.some(
+    (m) => m.startedAt && !m.endedAt && !!m.shiftWorkDate && m.shiftWorkDate < crewDay.workDate
+  );
 
   return (
     <div className="flex flex-col min-h-dvh">
@@ -249,7 +261,7 @@ export default function CrewSchedulePage() {
         ) : dayOpen ? (
           <div className="bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-green-800 dark:text-green-300">Day started {clock(dayStartedAt)}</p>
+              <p className="text-sm font-medium text-green-800 dark:text-green-300">Day started {dayFromYesterday ? "yesterday " : ""}{clock(dayStartedAt)}</p>
               <p className="text-xs text-green-700 dark:text-green-400">
                 {dayMembers.filter(m => m.startedAt && !m.endedAt).length} on the clock
               </p>
@@ -399,6 +411,7 @@ export default function CrewSchedulePage() {
             <div className="flex-1 pb-1">
               <StopCard
                 stop={stop}
+                today={today}
                 partners={[...new Set(stop.visits.flatMap((v) => partnerCrews?.get(v.id) ?? []))]}
                 onClick={() => router.push(`/crm/crew/stops/${stop.anchorVisitId}`)}
               />

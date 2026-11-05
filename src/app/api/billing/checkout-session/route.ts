@@ -5,6 +5,7 @@ import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
 import { getPlanForPriceId, getPriceIdForPlan, isBillablePlan } from "@/lib/stripe/plans";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { logger } from "@/lib/logger";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 const log = logger.child("billing checkout-session");
 
@@ -30,6 +31,10 @@ export async function POST(request: Request) {
   if (profile.role !== "admin") {
     return NextResponse.json({ error: "Only admins can manage billing" }, { status: 403 });
   }
+  // Billing acts on profiles.org_id (the HOME org). While staff impersonate,
+  // RLS hides that org and the route answered "Organization not found".
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "managing billing");
+  if (impersonating) return impersonating;
 
   const body = await request.json().catch(() => null);
   const parsed = CheckoutSessionSchema.safeParse(body);

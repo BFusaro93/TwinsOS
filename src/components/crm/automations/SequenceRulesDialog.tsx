@@ -35,6 +35,7 @@ import { useOrgList } from "@/lib/hooks/use-org-lists";
 import { useClientSourceOptions } from "@/lib/hooks/use-client-sources";
 import { useOrgTags } from "@/lib/hooks/use-clients";
 import { usePackages } from "@/lib/hooks/use-packages";
+import { useForms } from "@/lib/hooks/use-crm-forms";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { PAYMENT_METHOD_OPTIONS } from "@/components/crm/ClientDetailPanel";
 import { availableRecordKinds } from "@/lib/automations/condition-applicability";
@@ -57,7 +58,7 @@ const SERVICE_TRIGGER_TYPES = new Set<TriggerType>(["service_visit_completed"]);
 // inline multi-select checkbox picker next to the trigger type — mirrors the
 // reference app's "N selected" pickers for Visit Completed / Source Updated /
 // Ticket Closed. Stored in trigger.config.filter_values (empty = "any").
-type FilterKind = "service" | "source" | "category" | "job_type" | "package" | "tag" | "sales_rep" | "case_type" | "payment_method";
+type FilterKind = "service" | "source" | "category" | "job_type" | "package" | "tag" | "sales_rep" | "case_type" | "payment_method" | "form";
 const MULTI_FILTER_TRIGGER_TYPES: Partial<Record<TriggerType, FilterKind>> = {
   visit_completed: "service",
   visit_cancelled: "service",
@@ -70,6 +71,7 @@ const MULTI_FILTER_TRIGGER_TYPES: Partial<Record<TriggerType, FilterKind>> = {
   ticket_reopened: "category",
   job_created: "job_type",
   package_created: "package",
+  package_renewed: "package",
   tag_added: "tag",
   tag_removed: "tag",
   estimate_created: "sales_rep",
@@ -78,6 +80,10 @@ const MULTI_FILTER_TRIGGER_TYPES: Partial<Record<TriggerType, FilterKind>> = {
   estimate_lost: "sales_rep",
   damage_case_created: "case_type",
   payment_method_updated: "payment_method",
+  // Which form was submitted — without it a "Form was submitted" automation ran for
+  // every form, and the only workaround ("has completed form X") also matched clients
+  // who had submitted X at any time in the past.
+  form_submitted: "form",
 };
 
 const JOB_TYPE_OPTIONS = [
@@ -104,6 +110,7 @@ const FILTER_PLACEHOLDER: Record<FilterKind, string> = {
   sales_rep: "All reps",
   case_type: "All types",
   payment_method: "All payment types",
+  form: "All forms",
 };
 
 // ── Trigger groups ─────────────────────────────────────────────────────────────
@@ -170,6 +177,7 @@ const TRIGGER_GROUPS: { label: string; items: { value: TriggerType; label: strin
       { value: "job_created", label: "Job was created" },
       { value: "job_cancelled", label: "Job was cancelled" },
       { value: "package_created", label: "Package was created" },
+      { value: "package_renewed", label: "Package renewed" },
       { value: "visit_completed", label: "Visit was completed" },
       { value: "service_visit_completed", label: "Visit completed for service" },
       { value: "visit_cancelled", label: "Visit was cancelled" },
@@ -246,6 +254,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
   const { data: ticketCategories } = useOrgList("ticket_categories");
   const orgTags = useOrgTags();
   const { data: packages } = usePackages();
+  const { data: forms } = useForms();
   const { data: employees } = useSelectableEmployees();
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
 
@@ -259,6 +268,7 @@ export function SequenceRulesDialog({ open, onOpenChange, sequenceId, automation
     sales_rep: salesReps.map((e) => ({ value: e.id, label: `${e.firstName} ${e.lastName}` })),
     case_type: CASE_TYPE_OPTIONS,
     payment_method: PAYMENT_METHOD_OPTIONS,
+    form: (forms ?? []).map((f) => ({ value: f.id, label: f.name })),
   };
 
   const [name, setName] = useState("");

@@ -1,23 +1,45 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient, getAuthUser } from "@/lib/supabase/client";
+import { realtimeTopic } from "@/lib/supabase/realtime-topic";
 
-const LS_KEY = "notif_read_ids";
+/** Per user: alert ids come from the record (req-approval-<id>), so they're
+ *  the same for everyone in the org, and a shared office PC used to hand one
+ *  user's "mark all read" to the next person who signed in. */
+const LS_KEY_PREFIX = "notif_read_ids";
 const LS_PRUNE_KEY = "notif_pruned_at";
 
-/** Read the cached set from localStorage (fast, avoids flicker on initial render). */
-function readLocalCache(): Set<string> {
-  if (typeof window === "undefined") return new Set();
+function lsKey(userId: string): string {
+  return `${LS_KEY_PREFIX}:${userId}`;
+}
+
+/** Sign-out: drop every user's cached read state (and the old shared key). */
+export function clearNotificationReadCache(): void {
   try {
-    const stored = localStorage.getItem(LS_KEY);
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && (key === LS_KEY_PREFIX || key.startsWith(`${LS_KEY_PREFIX}:`))) localStorage.removeItem(key);
+    }
+    localStorage.removeItem(LS_PRUNE_KEY);
+  } catch {
+    // storage unavailable — non-fatal
+  }
+}
+
+/** Read the cached set from localStorage (fast, avoids flicker on initial render). */
+function readLocalCache(userId: string): Set<string> {
+  if (typeof window === "undefined" || !userId) return new Set();
+  try {
+    const stored = localStorage.getItem(lsKey(userId));
     return stored ? new Set<string>(JSON.parse(stored) as string[]) : new Set();
   } catch {
     return new Set();
   }
 }
 
-function writeLocalCache(ids: Set<string>) {
+function writeLocalCache(userId: string, ids: Set<string>) {
+  if (!userId) return;
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify([...ids]));
+    localStorage.setItem(lsKey(userId), JSON.stringify([...ids]));
   } catch {
     // storage quota exceeded — non-fatal
   }
@@ -32,18 +54,32 @@ function writeLocalCache(ids: Set<string>) {
  *   them in — DB wins so reads from other devices appear.
  * - All new marks go to both localStorage (immediate UI) and Supabase (sync).
  */
-export function useNotificationReads(activeNotifIds: string[]) {
-  const [readIds, setReadIdsState] = useState<Set<string>>(readLocalCache);
+export function useNotificationReads(activeNotifIds: string[], cacheUserId: string) {
+  const [readIds, setReadIdsState] = useState<Set<string>>(() => readLocalCache(cacheUserId));
   const [dbLoaded, setDbLoaded] = useState(false);
   // Cache the authenticated user ID so we can include it in upserts (required by generated types)
   const userIdRef = useRef<string | null>(null);
+  const cacheUserIdRef = useRef(cacheUserId);
+  cacheUserIdRef.current = cacheUserId;
+
+  // The signed-in user changed (or loaded after first render): swap to their cache.
+  useEffect(() => {
+    try {
+      localStorage.removeItem(LS_KEY_PREFIX); // pre-per-user shared cache
+    } catch {
+      // storage unavailable — non-fatal
+    }
+    setReadIdsState(readLocalCache(cacheUserId));
+  }, [cacheUserId]);
 
   // On mount: get user ID, fetch DB rows, and merge into local state.
   // Also set the prune timestamp if it has never been set — this prevents
   // the prune from running immediately on a new device (e.g. phone) and
   // deleting the DB reads we just fetched before they can be applied.
   useEffect(() => {
+    if (!cacheUserId) return;
     let cancelled = false;
+    setDbLoaded(false);
 
     // Prevent first-ever-device prune from running right away
     if (!localStorage.getItem(LS_PRUNE_KEY)) {
@@ -70,7 +106,7 @@ export function useNotificationReads(activeNotifIds: string[]) {
         setReadIdsState((prev) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const merged = new Set([...prev, ...reads.map((r: any) => r.notif_id as string)]);
-          writeLocalCache(merged);
+          writeLocalCache(cacheUserIdRef.current, merged);
           return merged;
         });
       }
@@ -81,7 +117,7 @@ export function useNotificationReads(activeNotifIds: string[]) {
 
     // Realtime: pick up reads made on other devices immediately
     const channel = supabase
-      .channel("notification_reads_sync")
+      .channel(realtimeTopic("notification_reads_sync"))
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notification_reads" },
@@ -90,7 +126,7 @@ export function useNotificationReads(activeNotifIds: string[]) {
           setReadIdsState((prev) => {
             if (prev.has(notifId)) return prev;
             const next = new Set([...prev, notifId]);
-            writeLocalCache(next);
+            writeLocalCache(cacheUserIdRef.current, next);
             return next;
           });
         }
@@ -101,7 +137,7 @@ export function useNotificationReads(activeNotifIds: string[]) {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [cacheUserId]);
 
   // Prune stale IDs monthly to keep localStorage + DB clean.
   // IMPORTANT: wait for both dbLoaded AND activeNotifIds to be populated.
@@ -121,7 +157,7 @@ export function useNotificationReads(activeNotifIds: string[]) {
     // Prune local state to only active IDs
     setReadIdsState((prev) => {
       const pruned = new Set([...prev].filter((id) => activeSet.has(id)));
-      writeLocalCache(pruned);
+      writeLocalCache(cacheUserIdRef.current, pruned);
       return pruned;
     });
 
@@ -142,7 +178,7 @@ export function useNotificationReads(activeNotifIds: string[]) {
     setReadIdsState((prev) => {
       if (prev.has(notifId)) return prev;
       const next = new Set([...prev, notifId]);
-      writeLocalCache(next);
+      writeLocalCache(cacheUserIdRef.current, next);
 
       const userId = userIdRef.current;
       if (userId) {
@@ -162,7 +198,7 @@ export function useNotificationReads(activeNotifIds: string[]) {
     if (notifIds.length === 0) return;
     setReadIdsState((prev) => {
       const next = new Set([...prev, ...notifIds]);
-      writeLocalCache(next);
+      writeLocalCache(cacheUserIdRef.current, next);
 
       const userId = userIdRef.current;
       if (userId) {

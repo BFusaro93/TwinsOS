@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useChemicalSettings } from "@/lib/hooks/use-chemical-tracking";
 import { fetchJobConditions, useApplyConditionsToVisits } from "@/lib/hooks/use-chemical-wizard";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { zoneWallClockToInstant } from "@/lib/time/zone";
 
 interface Props {
   open: boolean;
@@ -17,11 +19,16 @@ interface Props {
   /** A job whose location stands in for the day's weather ("Fill from weather"). */
   weatherJobId: string | undefined;
   dateLabel: string;
+  /** The day being closed out, YYYY-MM-DD in the company's time zone. */
+  date: string;
+  /** When the work started (earliest clock-in of these visits), if anyone clocked in. */
+  startedAt?: string | null;
 }
 
 /** One set of conditions (temperature, wind, pH) for every chemical visit in the list, instead
  *  of the same figures typed into each. Blank fields are left as they are on each visit. */
-export function ApplyConditionsToVisitsDialog({ open, onClose, visitIds, weatherJobId, dateLabel }: Props) {
+export function ApplyConditionsToVisitsDialog({ open, onClose, visitIds, weatherJobId, dateLabel, date, startedAt }: Props) {
+  const timeZone = useOrgTimeZone();
   const { data: settings } = useChemicalSettings();
   const apply = useApplyConditionsToVisits();
   const showWeather = settings?.conditionsDisplay === "weather" || settings?.conditionsDisplay === "both";
@@ -45,16 +52,22 @@ export function ApplyConditionsToVisitsDialog({ open, onClose, visitIds, weather
     if (!weatherJobId) return;
     setLooking(true);
     try {
-      const reading = await fetchJobConditions(weatherJobId);
+      // The weather on the day being closed out — usually yesterday or earlier — not right now:
+      // when the crew started, or midday when no one clocked in.
+      const at = startedAt ?? zoneWallClockToInstant(date, "12:00", timeZone)?.toISOString();
+      const result = await fetchJobConditions(weatherJobId, at);
+      if (!result.ok) {
+        toast.error("Couldn't reach the weather service. Check your connection and try again.");
+        return;
+      }
+      const reading = result.reading;
       if (!reading) {
-        toast.error("No weather is available for this location right now.");
+        toast.error("No weather is available for this location on that day.");
         return;
       }
       if (reading.temperatureF != null) setTemperature(String(reading.temperatureF));
       if (reading.windMph != null) setWindSpeed(String(reading.windMph));
       if (reading.windDirection) setWindDirection(reading.windDirection);
-    } catch {
-      toast.error("Couldn't reach the weather service. Check your connection and try again.");
     } finally {
       setLooking(false);
     }
@@ -87,7 +100,7 @@ export function ApplyConditionsToVisitsDialog({ open, onClose, visitIds, weather
         <DialogHeader>
           <DialogTitle>Conditions for {visitIds.length === 1 ? "this visit" : `all ${visitIds.length} visits`} — {dateLabel}</DialogTitle>
           <DialogDescription>
-            Saved on every chemical record for these visits. Leave a box blank to keep what each visit already has.
+            Saved on every chemical record that was applied on these visits. Leave a box blank to keep what each visit already has.
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3">

@@ -52,7 +52,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing svix headers" }, { status: 400 });
   }
 
-  let event: { type: string; data: { email_id?: string; created_at?: string; bounce?: { type?: string } } };
+  let event: {
+    type: string;
+    data: {
+      email_id?: string;
+      created_at?: string;
+      to?: string[] | string;
+      cc?: string[] | string;
+      bcc?: string[] | string;
+      bounce?: { type?: string; message?: string };
+    };
+  };
   try {
     const wh = new Webhook(secret);
     event = wh.verify(payload, {
@@ -75,7 +85,7 @@ export async function POST(request: Request) {
   // campaigns and kept hurting the sending domain's reputation. Treat it as a
   // marketing opt-out: do_not_market stops campaigns/automation marketing mail,
   // while service mail (invoices, estimates) still goes — a genuine bounce is
-  // the only thing that blocks those (email_bounced_at). Needs the Resend
+  // the only thing that blocks those (crm_email_bounces). Needs the Resend
   // webhook to be subscribed to email.complained.
   if (event.type === "email.complained") {
     const supabase = createServiceClient();
@@ -122,14 +132,12 @@ export async function POST(request: Request) {
 
   // Only set on first occurrence — a recipient opening/clicking an email
   // multiple times shouldn't keep moving the recorded timestamp forward.
-  const { data: updated, error } = await supabase
+  const { error } = await supabase
     .from("client_activity")
     // `as never`: postgrest rejects excess properties on a dynamically-built patch.
     .update({ [column]: event.data.created_at ?? new Date().toISOString() } as never)
     .eq("resend_message_id", messageId)
-    .is(column, null)
-    .select("client_id")
-    .maybeSingle();
+    .is(column, null);
   if (error) {
     console.error(`[resend webhook] failed to update ${column}:`, error);
     // 5xx so Svix retries — for a bounce this is the only thing that suppresses
@@ -144,39 +152,79 @@ export async function POST(request: Request) {
   // with a DELIVERABILITY FACT — staff saw "skipped (Do Not Market)" for
   // clients who had never opted out of anything, and there was no safe way to
   // let a service notice reach a genuine opt-out without also resurrecting
-  // dead addresses. email_bounced_at keeps the two separate: every sender
-  // excludes a bounced address (marketing or transactional), while
-  // do_not_market now means only what its name says.
-  // See 20260919010000_client_email_bounce_suppression.sql.
+  // dead addresses. Bounces are kept apart from it: every sender excludes a
+  // bounced address (marketing or transactional), while do_not_market now
+  // means only what its name says. See 20260919010000 and, for per-address
+  // bounces, 20261220000500_email_address_bounces.sql.
   // Only a hard bounce means the address is dead — a Transient one (mailbox
   // full, server down) must not permanently block every future send.
   const isSoftBounce = event.data.bounce?.type?.toLowerCase() === "transient";
   if (event.type === "email.bounced" && !isSoftBounce) {
-    // Resolve the client from the message id itself, NOT from the first-write
-    // update above: that one only matches while bounced_at is still null, so a
-    // delivery that stamped bounced_at but died before suppressing the client
-    // would make every Svix retry skip suppression forever.
-    const clientId =
-      updated?.client_id ??
-      (
-        await supabase
-          .from("client_activity")
-          .select("client_id")
-          .eq("resend_message_id", messageId)
-          .maybeSingle()
-      ).data?.client_id;
-    if (clientId) {
-      const { error: suppressErr } = await supabase
-        .from("clients")
-        .update({ email_bounced_at: event.data.created_at ?? new Date().toISOString() })
-        .eq("id", clientId)
-        .is("email_bounced_at", null);
-      if (suppressErr) {
-        console.error("[resend webhook] failed to suppress bounced client:", suppressErr);
-        return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+    // Resolve the message from its id itself, NOT from the first-write update
+    // above: that one only matches while bounced_at is still null, so a
+    // delivery that stamped bounced_at but died before suppressing would make
+    // every Svix retry skip suppression forever.
+    const { data: activity, error: activityErr } = await supabase
+      .from("client_activity")
+      .select("client_id, org_id, sent_to")
+      .eq("resend_message_id", messageId)
+      .maybeSingle();
+    if (activityErr) {
+      console.error("[resend webhook] bounce lookup failed:", activityErr);
+      return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+    }
+    if (activity?.org_id) {
+      // Suppress the ADDRESS that bounced, not the whole client: one dead
+      // billing email or CC used to block every send to the client's good
+      // primary too. See 20261220000500_email_address_bounces.sql.
+      const addresses = bouncedRecipients(event.data, activity.sent_to as string | null);
+      for (const email of addresses) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- crm_email_bounces is newer than the generated types
+        const { error: insertErr } = await (supabase as any).from("crm_email_bounces").insert({
+          org_id: activity.org_id,
+          email,
+          client_id: activity.client_id ?? null,
+          bounced_at: event.data.created_at ?? new Date().toISOString(),
+          source_message_id: messageId,
+          bounce_message: event.data.bounce?.message?.slice(0, 1000) ?? null,
+        });
+        // 23505 = this address already has a live bounce (a Svix retry, or it
+        // bounced before) — already suppressed, nothing to do.
+        if (insertErr && insertErr.code !== "23505") {
+          console.error("[resend webhook] failed to record bounced address:", insertErr);
+          return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
+        }
       }
     }
   }
 
   return NextResponse.json({ received: true });
+}
+
+/**
+ * Which recipients of a hard-bounced message to suppress. Resend reports the
+ * whole message's recipients, not the failing one, so: a single recipient is
+ * the one that bounced; otherwise the recipients the bounce message names
+ * (mail servers quote the rejected address); otherwise — can't tell — all of
+ * them, and the office can clear the good ones on the client page.
+ */
+function bouncedRecipients(
+  data: { to?: string[] | string; cc?: string[] | string; bcc?: string[] | string; bounce?: { message?: string } },
+  sentTo: string | null,
+): string[] {
+  const list = (v: string[] | string | undefined) => (Array.isArray(v) ? v : typeof v === "string" ? v.split(/[,;]/) : []);
+  const fromEvent = [...list(data.to), ...list(data.cc), ...list(data.bcc)];
+  const raw = fromEvent.length > 0 ? fromEvent : list(sentTo ?? undefined);
+  // "Name <a@b.com>" → a@b.com
+  const recipients = Array.from(
+    new Set(
+      raw
+        .map((r) => (r.match(/<([^>]+)>/)?.[1] ?? r).trim().toLowerCase())
+        .filter((r) => r.includes("@")),
+    ),
+  );
+  if (recipients.length <= 1) return recipients;
+  const message = (data.bounce?.message ?? "").toLowerCase();
+  const named = recipients.filter((r) => message.includes(r));
+  return named.length > 0 ? named : recipients;
 }

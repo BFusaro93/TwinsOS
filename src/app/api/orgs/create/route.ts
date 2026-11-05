@@ -10,6 +10,8 @@ const log = logger.child("orgs-create");
 const MAX_COMPANY_NAME = 120;
 
 const TRIAL_DAYS = 30;
+/** How long a member-less org from a failed signup can be picked up again by a retry. */
+const PENDING_ORG_REUSE_MS = 24 * 60 * 60 * 1000;
 
 /**
  * POST /api/orgs/create
@@ -81,7 +83,36 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle();
     if (existingProfile) {
-      return NextResponse.json({ error: "An account with this email already exists. Sign in instead." }, { status: 409 });
+      return NextResponse.json(
+        { error: "An account with this email already exists. Sign in instead — if you never confirmed it, the sign-in page can resend the confirmation email." },
+        { status: 409 }
+      );
+    }
+
+    // A signup that failed after this route ran (weak password, auth email rate
+    // limit, a closed tab) left an org with nobody in it. Retrying used to make
+    // another one each time — and email support about each. Reuse a recent
+    // org created for this address that still has no members.
+    const since = new Date(Date.now() - PENDING_ORG_REUSE_MS).toISOString();
+    const { data: pendingOrgs } = await adminClient
+      .from("organizations")
+      .select("id")
+      .eq("customizations->>reply_to_email", replyTo)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(5);
+    for (const pending of pendingOrgs ?? []) {
+      const { count } = await adminClient
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", pending.id);
+      if ((count ?? 0) > 0) continue;
+      const { error: reuseErr } = await adminClient
+        .from("organizations")
+        .update({ name: companyName, pending_plan: pendingPlan, ...(timezone ? { timezone } : {}) })
+        .eq("id", pending.id);
+      if (reuseErr) break;
+      return NextResponse.json({ orgId: pending.id }, { status: 200 });
     }
   }
 

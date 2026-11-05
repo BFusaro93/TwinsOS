@@ -8,6 +8,7 @@ import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapPackageService } from "@/lib/hooks/use-packages";
+import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
 import {
   buildRenewalValues,
   packageProgramSpan,
@@ -143,7 +144,7 @@ export async function loadPackageRenewalPlan(
   if (job.job_type !== "package") throw new Error("Only package jobs can be renewed.");
 
   const sourceSeason = packageSeasonYear(job);
-  const years = renewalYearsAhead(packageProgramSpan(job).end, today);
+  const years = renewalYearsAhead(packageProgramSpan(job), today);
   const targetSeason = sourceSeason == null ? null : sourceSeason + years;
 
   const template = targetSeason == null
@@ -178,7 +179,7 @@ export async function loadPackageRenewalPlan(
     job.contract_id
       ? supabase
           .from("crm_contracts")
-          .select("id, title, status, end_date, deleted_at")
+          .select("id, title, status, start_date, end_date, deleted_at")
           .eq("id", job.contract_id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
@@ -206,20 +207,32 @@ export async function loadPackageRenewalPlan(
   const firstDate = values0.waitingListStart
     ?? values0.services.map((s) => s.startDate).filter((d): d is string => !!d).sort()[0]
     ?? null;
+  const stepDates0 = values0.services
+    .flatMap((s) => [s.startDate, s.completeByDate])
+    .filter((d): d is string => !!d)
+    .sort();
+  const lastDate0 = values0.waitingListEnd ?? stepDates0[stepDates0.length - 1] ?? firstDate;
 
+  // A contract-linked package bills inside the contract price and never gets its
+  // own invoices, so the renewal keeps the contract only when it covers the whole
+  // renewed program — one ending mid-season left the later steps billed nowhere.
   let keepContract = false;
   let contractNote: string | null = null;
-  const contract = contractRes.data as { title: string | null; status: string; end_date: string | null; deleted_at: string | null } | null;
+  const contract = contractRes.data as {
+    title: string | null; status: string; start_date: string | null; end_date: string | null; deleted_at: string | null;
+  } | null;
   if (job.contract_id) {
-    keepContract = !!contract
-      && !contract.deleted_at
-      && !["expired", "cancelled"].includes(contract.status)
-      && (!contract.end_date || !firstDate || contract.end_date >= firstDate);
+    const active = !!contract && !contract.deleted_at && !["expired", "cancelled"].includes(contract.status);
+    const coversEnd = !contract?.end_date || !lastDate0 || contract.end_date >= lastDate0;
+    const coversStart = !contract?.start_date || !firstDate || contract.start_date <= firstDate;
+    keepContract = active && coversEnd && coversStart;
     if (!keepContract) {
       const name = contract?.title ? `"${contract.title}"` : "its contract";
-      contractNote = contract?.end_date
-        ? `Last season was billed under ${name}, which ends ${contract.end_date}. The renewal won't be linked to it, so it bills on its own — link a renewed contract on the new job if it should bill under one.`
-        : `Last season was billed under ${name}, which is no longer active. The renewal won't be linked to it, so it bills on its own.`;
+      contractNote = !active
+        ? `Last season was billed under ${name}, which is no longer active. The renewal won't be linked to it, so it bills on its own.`
+        : !coversEnd
+          ? `Last season was billed under ${name}, which ends ${contract?.end_date} — before the renewed program's last step (${lastDate0}). The renewal won't be linked to it, so it bills on its own — link a renewed contract on the new job if it should bill under one.`
+          : `Last season was billed under ${name}, which starts ${contract?.start_date} — after the renewed program begins (${firstDate}). The renewal won't be linked to it, so it bills on its own — link the contract on the new job if it should bill under it.`;
     }
   }
 
@@ -263,7 +276,16 @@ export function usePackageRenewalPlan(jobId: string | null, useTemplateDates = f
 
 export class PackageRenewalRefused extends Error {}
 
-/** Copies each service's crew sub-items (products to bring / sub-services) onto the renewed job. */
+/**
+ * Copies each service's crew sub-items (products to bring / sub-services) onto
+ * the renewed job, then gives every step visit its pending per-visit product
+ * rows. Those rows normally come from the crm_job_visits AFTER INSERT trigger
+ * (crm_visit_subitem_product_rows), but the renewal's visits are inserted by
+ * useCreateClientJob before the sub-items exist, so the trigger found none and
+ * the renewed season was missing from Materials Needed, the crew's materials
+ * list and inventory depletion. Same rows the trigger writes: lead visits only
+ * (a crew-group secondary shares the lead's), product sub-items with a product.
+ */
 async function copyServiceSubitems(supabase: AnyClient, plan: PackageRenewalPlan, newJobId: string) {
   const { data: oldServices, error: oldErr } = await supabase
     .from("crm_job_services")
@@ -305,8 +327,50 @@ async function copyServiceSubitems(supabase: AnyClient, plan: PackageRenewalPlan
       sort_order: r.sort_order ?? 0,
     }));
   if (rows.length === 0) return;
-  const { error } = await supabase.from("crm_job_service_subitems").insert(rows);
+  const { data: inserted, error } = await supabase
+    .from("crm_job_service_subitems")
+    .insert(rows)
+    .select("id, job_service_id, type, product_id, name, qty");
   if (error) throw error;
+
+  const products = ((inserted ?? []) as { id: string; job_service_id: string; type: string; product_id: string | null; name: string; qty: number }[])
+    .filter((s) => s.type === "product" && s.product_id);
+  if (products.length === 0) return;
+
+  const { data: visits, error: visitErr } = await supabase
+    .from("crm_job_visits")
+    .select("id, job_service_id, crew_group_secondary")
+    .eq("job_id", newJobId)
+    .is("deleted_at", null)
+    .not("job_service_id", "is", null);
+  if (visitErr) throw visitErr;
+  const { data: existing, error: existingErr } = await supabase
+    .from("crm_job_products")
+    .select("visit_id, job_service_subitem_id")
+    .eq("job_id", newJobId)
+    .not("visit_id", "is", null);
+  if (existingErr) throw existingErr;
+  const have = new Set(((existing ?? []) as { visit_id: string; job_service_subitem_id: string | null }[])
+    .map((p) => `${p.visit_id}:${p.job_service_subitem_id}`));
+
+  const productRows = ((visits ?? []) as { id: string; job_service_id: string; crew_group_secondary: boolean | null }[])
+    .filter((v) => !v.crew_group_secondary)
+    .flatMap((v) => products
+      .filter((s) => s.job_service_id === v.job_service_id && !have.has(`${v.id}:${s.id}`))
+      .map((s) => ({
+        job_id: newJobId,
+        job_service_id: s.job_service_id,
+        product_id: s.product_id,
+        product_name: s.name,
+        qty: s.qty,
+        unit_price_cents: 0,
+        status: "pending",
+        job_service_subitem_id: s.id,
+        visit_id: v.id,
+      })));
+  if (productRows.length === 0) return;
+  const { error: prodErr } = await supabase.from("crm_job_products").insert(productRows);
+  if (prodErr) throw prodErr;
 }
 
 /**
@@ -350,13 +414,34 @@ export function useRenewPackageJob() {
         }
         throw err;
       }
-      // Sub-items are a crew checklist (no money); a failure here leaves a usable job.
-      await copyServiceSubitems(supabase, plan, created.id).catch(() => {});
-      return { newJobId: created.id, targetSeason: plan.targetSeason, dateSource: plan.dateSource };
+      // The job is usable without its crew sub-items and materials, so a failure
+      // here doesn't undo the renewal — but it is reported, not swallowed.
+      let warning: string | null = null;
+      try {
+        await copyServiceSubitems(supabase, plan, created.id);
+      } catch (err) {
+        warning = `Renewed, but the crew sub-items and materials list couldn't be copied (${(err as Error)?.message || "unknown error"}) — add them on the new job's services.`;
+      }
+      // Renewals fire "Package renewed" instead of Job created / Package created
+      // (useCreateClientJob skips those for a renewal), so a renewed client
+      // doesn't get the new-customer sequence.
+      fireAutomationTrigger({
+        triggerType: "package_renewed",
+        clientId: plan.values.clientId,
+        matchValues: plan.values.packageId ? [plan.values.packageId] : undefined,
+      });
+      return {
+        newJobId: created.id,
+        targetSeason: plan.targetSeason,
+        dateSource: plan.dateSource,
+        pastStepCount: plan.pastStepCount,
+        warning,
+      };
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["package-renewal"] });
       qc.invalidateQueries({ queryKey: ["crm-jobs"] });
+      qc.invalidateQueries({ queryKey: ["crm-job-products", res.newJobId] });
     },
   });
 }
@@ -387,6 +472,8 @@ export interface PackageRenewalCandidate {
   clientName: string;
   packageName: string | null;
   status: string;
+  /** clients.status — a cancelled or lost client isn't pre-selected for renewal. */
+  clientStatus: string | null;
   season: number | null;
   totalCents: number;
   doNotRenew: boolean;
@@ -404,13 +491,13 @@ export function usePackageRenewalCandidates(enabled = true) {
         id: string; client_id: string; job_number: number; status: string; package_name: string | null;
         package_renewal: string | null; renewed_from_job_id: string | null; total_cents: number | null;
         waiting_list_start: string | null; waiting_list_end: string | null;
-        clients: { display_name: string | null } | null;
+        clients: { display_name: string | null; status: string | null } | null;
         crm_job_services: { start_date: string | null; complete_by_date: string | null }[] | null;
       };
       const rows = await fetchAllRows<Row>(() =>
         (supabase as AnyClient)
           .from("crm_jobs")
-          .select("id, client_id, job_number, status, package_name, package_renewal, renewed_from_job_id, total_cents, waiting_list_start, waiting_list_end, clients(display_name), crm_job_services(start_date, complete_by_date)")
+          .select("id, client_id, job_number, status, package_name, package_renewal, renewed_from_job_id, total_cents, waiting_list_start, waiting_list_end, clients(display_name, status), crm_job_services(start_date, complete_by_date)")
           .eq("job_type", "package")
           .is("deleted_at", null)
       );
@@ -426,6 +513,7 @@ export function usePackageRenewalCandidates(enabled = true) {
           clientName: r.clients?.display_name ?? "",
           packageName: r.package_name,
           status: r.status,
+          clientStatus: r.clients?.status ?? null,
           season: packageSeasonYear(r),
           totalCents: r.total_cents ?? 0,
           doNotRenew: r.package_renewal === "do_not_renew",

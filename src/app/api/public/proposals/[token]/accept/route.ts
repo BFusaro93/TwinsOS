@@ -11,6 +11,7 @@ import { notifyStaffOfDepositExcess } from "@/lib/estimate-deposit-excess-notify
 import { recordAcceptedVersion } from "@/lib/estimates/versions";
 import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
 import { sendConfiguredAcceptanceConfirmation } from "@/lib/estimates/accept-confirmation";
+import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 
 const log = logger.child("proposal-accept");
 
@@ -454,6 +455,15 @@ export async function POST(
       ref_id: shareToken.estimate_id,
       ref_table: "estimates",
       occurred_at: now,
+    });
+    // Accepting online is the same event as marking the estimate accepted in the app
+    // (use-estimates' stage change), which is the only place this used to fire.
+    await fireServerTrigger(supabase, {
+      orgId: est.org_id as string,
+      clientId: est.client_id as string,
+      estimateId: shareToken.estimate_id,
+      triggerType: "estimate_won",
+      matchValues: est.sales_rep_id ? [est.sales_rep_id as string] : undefined,
     });
   }
 

@@ -1,6 +1,6 @@
 import type { BudgetMethod, NewClientJobFormValues, NewClientJobServiceValues } from "@/types/crm-jobs";
 import type { CRMPackageService } from "@/types/crm-packages";
-import { planPackageLineSteps } from "@/lib/package-schedule";
+import { computePackageVisitSchedule, expandPackageStepVisits } from "@/lib/package-schedule";
 import { adjustCents, type RoundingRule } from "@/lib/pricing/adjust";
 
 /**
@@ -149,17 +149,31 @@ export function packageSeasonYear(job: Parameters<typeof packageProgramSpan>[0])
   return start ? parseInt(start.slice(0, 4), 10) : null;
 }
 
+/** The day halfway between two "YYYY-MM-DD" dates (rounded down). */
+function midpointYmd(start: string, end: string): string {
+  const s = new Date(`${start}T00:00:00Z`).getTime();
+  const e = new Date(`${end}T00:00:00Z`).getTime();
+  return addDaysYmd(start, Math.floor((e - s) / 86_400_000 / 2));
+}
+
 /**
- * How many years forward the renewal goes: one, unless the job is from a
- * season that's long gone — then far enough that the renewed program hasn't
- * already ended (renewing a client who skipped a year lands on the coming
- * season, not on one that's over).
+ * How many years forward the renewal goes: the first season that hasn't
+ * started yet, or one already under way while most of it is still ahead
+ * (a late sign-up renews into the current season). A season that is past its
+ * midpoint, or over, is skipped — renewing a client who skipped a year in
+ * November lands on next spring, not on a program that's nearly done.
  */
-export function renewalYearsAhead(programEnd: string | null, today: string): number {
-  if (!programEnd) return 1;
-  let years = 1;
-  while (years < 50 && shiftYmdYears(programEnd, years) < today) years++;
-  return years;
+export function renewalYearsAhead(span: { start: string | null; end: string | null }, today: string): number {
+  const start = span.start ?? span.end;
+  const end = span.end ?? span.start;
+  if (!start || !end) return 1;
+  for (let years = 1; years < 50; years++) {
+    const s = shiftYmdYears(start, years);
+    const e = shiftYmdYears(end, years);
+    if (s >= today) return years;
+    if (e >= today && today <= midpointYmd(s, e)) return years;
+  }
+  return 50;
 }
 
 export interface RenewalStepDates {
@@ -179,13 +193,21 @@ export interface TemplateRenewalDates {
   missingSteps: string[];
 }
 
+function localYmd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /**
  * The package template's step windows for the renewed season, matched onto
- * the job's steps the same way estimate convert does (planPackageLineSteps:
- * service id, then name, in order; Min Days spacing applied). The template's
- * dates move by whole years so its first date lands in `targetSeason` — a
- * template still showing last year's dates and one already updated for the
- * new season both work. Null when the template has no dated steps.
+ * the job's steps: service id, then name, in order. A step with Visits
+ * Included N is N rows on the job (Add Job and estimate convert expand it with
+ * expandPackageStepVisits), so the template is expanded the same way first —
+ * matched one template step per job row, visits 2..N got no template date and
+ * fell back to last season's, landing before visit 1. Min Days spacing comes
+ * from computePackageVisitSchedule. The template's dates move by whole years
+ * so its first date lands in `targetSeason` — a template still showing last
+ * year's dates and one already updated for the new season both work. Null
+ * when the template has no dated steps.
  */
 export function templateRenewalDates(
   templateServices: CRMPackageService[],
@@ -197,37 +219,42 @@ export function templateRenewalDates(
   if (!firstTemplateDate) return null;
   const years = targetSeason - parseInt(firstTemplateDate.slice(0, 4), 10);
 
-  const ordered = [...jobServices].sort((a, b) => a.sort_order - b.sort_order);
-  const plan = planPackageLineSteps(
-    named,
-    ordered.map((s) => ({ id: s.id, serviceId: s.service_id, serviceName: s.service_name })),
+  // One slot per template visit, in program order.
+  const slots = computePackageVisitSchedule(named).flatMap((v) =>
+    expandPackageStepVisits(
+      v.scheduledDate ? localYmd(v.scheduledDate) : null,
+      v.service.endDate,
+      v.service.minDays ?? null,
+      v.service.visitsIncluded,
+    ).map((d) => ({ serviceId: v.service.serviceId, serviceName: v.service.serviceName, ...d })),
   );
-  const byLine = new Map(plan.steps.map((st) => [st.lineId, st]));
+
+  const norm = (n: string) => n.trim().toLowerCase();
+  const unused = [...slots];
+  const ordered = [...jobServices].sort((a, b) => a.sort_order - b.sort_order);
   const steps = ordered.map((s): RenewalStepDates | null => {
-    const st = byLine.get(s.id);
-    if (!st?.startDate) return null;
+    let i = unused.findIndex((t) => !!s.service_id && t.serviceId === s.service_id);
+    if (i === -1) i = unused.findIndex((t) => norm(t.serviceName) === norm(s.service_name));
+    if (i === -1) return null;
+    const hit = unused.splice(i, 1)[0];
+    if (!hit.startDate) return null;
     return {
-      startDate: shiftYmdYears(st.startDate, years),
-      completeByDate: shiftOrNull(st.completeByDate, years),
-      minDays: st.minDays,
+      startDate: shiftYmdYears(hit.startDate, years),
+      completeByDate: shiftOrNull(hit.completeByDate, years),
+      minDays: hit.minDays,
     };
   });
 
-  // Template steps left over after matching = steps the job doesn't have.
-  const norm = (n: string) => n.trim().toLowerCase();
-  const leftover = [...named].sort((a, b) => a.sortOrder - b.sortOrder);
-  for (const s of ordered) {
-    let i = leftover.findIndex((t) => !!s.service_id && t.serviceId === s.service_id);
-    if (i === -1) i = leftover.findIndex((t) => norm(t.serviceName) === norm(s.service_name));
-    if (i !== -1) leftover.splice(i, 1);
-  }
+  const starts = steps.map((s) => s?.startDate).filter((d): d is string => !!d).sort();
+  const ends = steps.map((s) => s?.completeByDate ?? s?.startDate).filter((d): d is string => !!d).sort();
 
   return {
     steps,
-    windowStart: shiftOrNull(plan.windowStart, years),
-    windowEnd: shiftOrNull(plan.windowEnd, years),
+    windowStart: starts[0] ?? null,
+    windowEnd: ends[ends.length - 1] ?? null,
     unmatchedSteps: ordered.filter((_s, i) => !steps[i]).map((s) => s.service_name),
-    missingSteps: leftover.map((t) => t.serviceName),
+    // Template visits left over after matching = steps the job doesn't have.
+    missingSteps: [...new Set(unused.map((t) => t.serviceName))],
   };
 }
 

@@ -1,3 +1,5 @@
+import { hourInZone, shiftYmd } from "@/lib/time/zone";
+
 /**
  * Crew-login lookup shared by the server routes (via route-auth.ts) and the
  * browser crew hooks (use-crew-app.ts). Lives in its own module because
@@ -156,9 +158,10 @@ export async function selectCarriedOverClockedInVisits(
   crewId: string,
   beforeDate: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  filter: (q: any) => any = (q) => q
+  filter: (q: any) => any = (q) => q,
+  opts: { now?: Date; timeZone?: string } = {}
 ): Promise<{ data: Record<string, unknown>[]; error: { message: string } | null }> {
-  return selectEffectiveCrewVisits(supabase, select, crewId, (q) =>
+  const clockedIn = await selectEffectiveCrewVisits(supabase, select, crewId, (q) =>
     filter(q)
       .is("deleted_at", null)
       .lt("scheduled_date", beforeDate)
@@ -166,7 +169,27 @@ export async function selectCarriedOverClockedInVisits(
       .is("clocked_out_at", null)
       .not("status", "in", "(completed,cancelled,skipped)")
   );
+  // Before LATE_NIGHT_CARRY_OVER_END_HOUR (org time), yesterday's unfinished
+  // stops stay too, started or not: a storm or late route that runs past
+  // midnight lost every stop it hadn't reached yet, with no way for the crew
+  // to get back to them. Callers mark these "from yesterday".
+  if (clockedIn.error || !opts.timeZone || hourInZone(opts.now ?? new Date(), opts.timeZone) >= LATE_NIGHT_CARRY_OVER_END_HOUR) {
+    return clockedIn;
+  }
+  const yesterday = await selectEffectiveCrewVisits(supabase, select, crewId, (q) =>
+    filter(q)
+      .is("deleted_at", null)
+      .eq("scheduled_date", shiftYmd(beforeDate, -1))
+      .is("clocked_out_at", null)
+      .not("status", "in", "(completed,cancelled,skipped)")
+  );
+  if (yesterday.error) return clockedIn;
+  const seen = new Set(clockedIn.data.map((r) => r.id as string));
+  return { data: [...clockedIn.data, ...yesterday.data.filter((r) => !seen.has(r.id as string))], error: null };
 }
+
+/** Org-local hour (0-23) until which yesterday's unfinished stops stay on the crew's list. */
+export const LATE_NIGHT_CARRY_OVER_END_HOUR = 6;
 
 /** `${dayOfWeek}:${jobId}` → remembered position; see fetchRememberedRouteOrder(). */
 export type CrewRouteOrder = Map<string, number>;

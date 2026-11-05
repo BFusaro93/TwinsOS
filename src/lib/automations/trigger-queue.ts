@@ -27,6 +27,9 @@ export const INLINE_TRIGGER_LIMIT = 50;
 
 /** Gives up on a queued event after this many failed attempts. */
 const MAX_ATTEMPTS = 5;
+/** How long a claimed row is reserved for the run that claimed it. A run that dies
+ *  mid-row frees it for the next run once this passes. */
+const CLAIM_LEASE_MS = 5 * 60 * 1000;
 
 /**
  * Fires (or queues) the automation events a bulk client action produced. The
@@ -123,6 +126,8 @@ export async function drainTriggerQueue(
       .select("id, org_id, client_id, trigger_type, match_values, attempts")
       .is("processed_at", null)
       .lt("attempts", MAX_ATTEMPTS)
+      // Rows another run holds right now are left to it.
+      .or(`claimed_until.is.null,claimed_until.lt.${new Date().toISOString()}`)
       .order("created_at", { ascending: true })
       .limit(Math.min(1000, 200 + seen.size));
     if (opts.orgId) q = q.eq("org_id", opts.orgId);
@@ -137,6 +142,17 @@ export async function drainTriggerQueue(
     for (const row of rows) {
       if (Date.now() - startedAt >= opts.budgetMs) break;
       seen.add(row.id);
+      // Claim before firing: of two concurrent runs (the cron and a member running the
+      // processor by hand) only the one whose conditional update matches fires the row.
+      const claimNow = new Date();
+      const { data: claimed, error: claimErr } = await admin
+        .from("crm_automation_trigger_queue")
+        .update({ claimed_until: new Date(claimNow.getTime() + CLAIM_LEASE_MS).toISOString() })
+        .eq("id", row.id)
+        .is("processed_at", null)
+        .or(`claimed_until.is.null,claimed_until.lt.${claimNow.toISOString()}`)
+        .select("id");
+      if (claimErr || !claimed || claimed.length === 0) continue;
       const cacheKey = `${row.org_id}:${row.trigger_type}`;
       try {
         let triggers = triggerCache.get(cacheKey);
@@ -161,6 +177,8 @@ export async function drainTriggerQueue(
           .update({
             attempts: row.attempts + 1,
             last_error: err instanceof Error ? err.message : String(err),
+            // Released for the next run's retry.
+            claimed_until: null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", row.id);

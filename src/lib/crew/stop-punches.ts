@@ -1,7 +1,92 @@
 import { memberWorksOn } from "@/lib/crew/roster-days";
+import { effectiveVisitCrewId } from "@/lib/supabase/crew-id";
+import { stopKeyForVisit, pickPunchOwner } from "@/lib/utils/visit-stops";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = any;
+
+/**
+ * Which of a stop's visits holds its crew punches. Punches are written against
+ * whichever visit was the stop's anchor at Start Job; the anchor is re-derived
+ * from the visits on every request, so it can change while the job runs (an
+ * office edit to a sibling's route order, or an anchor rule change on deploy).
+ * Reading or writing punches on the newly derived anchor then orphaned the
+ * real ones and seeded a duplicate set. The punches themselves are the source
+ * of truth: the visit with open punches wins, then the one with the most
+ * punches, then `fallbackId` (the derived anchor) when none has any.
+ */
+export async function resolvePunchOwnerVisitId(
+  supabase: AnySupabase,
+  stopVisitIds: string[],
+  fallbackId: string
+): Promise<string> {
+  const ids = [...new Set([fallbackId, ...stopVisitIds])];
+  if (ids.length <= 1) return fallbackId;
+  try {
+    const { data } = await supabase
+      .from("crm_crew_member_times")
+      .select("visit_id, clocked_out_at")
+      .in("visit_id", ids)
+      .is("deleted_at", null);
+    return pickPunchOwner((data ?? []) as { visit_id: string; clocked_out_at: string | null }[], fallbackId);
+  } catch {
+    return fallbackId;
+  }
+}
+
+const STOP_VISIT_SELECT =
+  "id, org_id, client_id, scheduled_date, crew_id, crew_unassigned, crm_jobs(crew_id, property_id, service_address, service_city)";
+
+interface StopVisitRow {
+  id: string;
+  client_id: string | null;
+  scheduled_date: string;
+  crew_id: string | null;
+  crew_unassigned: boolean | null;
+  crm_jobs: { crew_id: string | null; property_id: string | null; service_address: string | null; service_city: string | null } | null;
+}
+
+/**
+ * The punch-owning visit of the stop `visitId` belongs to (see
+ * resolvePunchOwnerVisitId), for routes that are handed a single visit id —
+ * member times, paid breaks. Siblings are derived here from the same stop key
+ * the clock-in route uses, never from the request. Returns `visitId` itself
+ * when the stop has no punches yet or the lookup fails.
+ */
+export async function stopPunchOwnerVisitId(supabase: AnySupabase, visitId: string): Promise<string> {
+  try {
+    const { data: visit } = await supabase
+      .from("crm_job_visits")
+      .select(STOP_VISIT_SELECT)
+      .eq("id", visitId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!visit) return visitId;
+    const row = visit as StopVisitRow;
+    const query = supabase.from("crm_job_visits").select(STOP_VISIT_SELECT);
+    const { data: candidates } = await (row.client_id ? query.eq("client_id", row.client_id) : query.is("client_id", null))
+      .eq("scheduled_date", row.scheduled_date)
+      .is("deleted_at", null);
+    const key = stopKeyForVisit(toStopKey(row));
+    const siblingIds = ((candidates ?? []) as StopVisitRow[])
+      .filter((r) => stopKeyForVisit(toStopKey(r)) === key && effectiveVisitCrewId(r) === effectiveVisitCrewId(row))
+      .map((r) => r.id);
+    return resolvePunchOwnerVisitId(supabase, siblingIds, visitId);
+  } catch {
+    return visitId;
+  }
+}
+
+function toStopKey(row: StopVisitRow) {
+  return {
+    clientId: row.client_id ?? "",
+    scheduledDate: row.scheduled_date,
+    crewId: effectiveVisitCrewId(row),
+    job: row.crm_jobs
+      ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
+      : undefined,
+  };
+}
 
 /**
  * Crew members working with `crewId` on `workDate`, minus anyone the leader

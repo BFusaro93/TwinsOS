@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { realtimeTopic } from "@/lib/supabase/realtime-topic";
 
 // ── Mutation guard ────────────────────────────────────────────────────────────
 // Mutations that write to DB trigger Realtime events mid-flight, which start
@@ -28,7 +29,7 @@ export function useTableRealtime(table: string, queryKey: QueryKey) {
     const supabase = createClient();
 
     const channel = supabase
-      .channel(`realtime:${table}`)
+      .channel(realtimeTopic(`realtime:${table}`))
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table },

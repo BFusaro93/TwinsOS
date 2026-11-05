@@ -34,7 +34,9 @@ import { RenewalRateIncreaseFields, parseRenewalRateIncrease } from "@/component
  *  "already has this package for that season" check sees the client's earlier renewals. */
 const CONCURRENCY = 4;
 
-type RowResult = { ok: true; newJobId: string; usedJobDates: boolean } | { ok: false; message: string };
+type RowResult =
+  | { ok: true; newJobId: string; usedJobDates: boolean; pastStepCount: number; warning: string | null }
+  | { ok: false; message: string };
 
 /** Season whose package jobs are shown first: this year from July on, last year before. */
 function defaultSeason(today: string, seasons: number[]): number | null {
@@ -46,6 +48,11 @@ function defaultSeason(today: string, seasons: number[]): number | null {
 
 function renewable(c: PackageRenewalCandidate): boolean {
   return !c.renewedTo && !c.doNotRenew;
+}
+
+/** A cancelled job, or a client who cancelled / was lost, can still be ticked by hand but isn't pre-selected. */
+function inactive(c: PackageRenewalCandidate): boolean {
+  return c.status === "cancelled" || c.clientStatus === "cancelled" || c.clientStatus === "lost";
 }
 
 /** Bulk "Renew for next season" over one season's package jobs. */
@@ -86,7 +93,7 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
   // Picking a season (or the list arriving) selects everything that still needs renewing.
   const rowsLoaded = rows.length > 0;
   useEffect(() => {
-    setSelected(new Set(rows.filter(renewable).map((r) => r.id)));
+    setSelected(new Set(rows.filter((r) => renewable(r) && !inactive(r)).map((r) => r.id)));
     // Only on season change / first load — a refetch mid-session keeps the user's picks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [season, rowsLoaded]);
@@ -112,7 +119,13 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
         const res = await renew.mutateAsync({ jobId: id, useTemplateDates, rateIncrease: rateIncrease ?? null });
         setResults((prev) => ({
           ...prev,
-          [id]: { ok: true, newJobId: res.newJobId, usedJobDates: useTemplateDates && res.dateSource === "job" },
+          [id]: {
+            ok: true,
+            newJobId: res.newJobId,
+            usedJobDates: useTemplateDates && res.dateSource === "job",
+            pastStepCount: res.pastStepCount,
+            warning: res.warning,
+          },
         }));
         ok++;
       } catch (err) {
@@ -161,7 +174,8 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
           <DialogDescription>
             Pick last season, check the package jobs to renew, and each one gets a new job for the following
             season — same client, property, services, rates and crew, with step dates moved forward a year.
-            Jobs already renewed or marked &ldquo;Don&rsquo;t renew&rdquo; are left unchecked.
+            Jobs already renewed or marked &ldquo;Don&rsquo;t renew&rdquo;, cancelled jobs, and clients who cancelled
+            or were lost are left unchecked.
           </DialogDescription>
         </DialogHeader>
 
@@ -247,13 +261,24 @@ export function RenewPackagesDialog({ open, onOpenChange }: { open: boolean; onO
                       <td className="px-2 py-1.5">
                         <Link className="text-brand-600 hover:underline dark:text-brand-400" href={`/crm/scheduling/jobs/${r.id}`}>#{r.jobNumber}</Link>
                         {r.status === "cancelled" && <span className="ml-1 text-slate-400">(cancelled)</span>}
+                        {r.status !== "cancelled" && (r.clientStatus === "cancelled" || r.clientStatus === "lost") && (
+                          <span className="ml-1 text-slate-400">(client {r.clientStatus})</span>
+                        )}
                       </td>
                       <td className="px-2 py-1.5 text-right tabular-nums">{formatCurrency(r.totalCents)}</td>
                       <td className={cn("px-2 py-1.5", result && !result.ok && "text-red-600 dark:text-red-400")}>
                         {result?.ok ? (
-                          <Link className="text-green-700 hover:underline dark:text-green-400" href={`/crm/scheduling/jobs/${result.newJobId}`}>
-                            {result.usedJobDates ? "Renewed (package has no dates — used last season's)" : "Renewed — open"}
-                          </Link>
+                          <>
+                            <Link className="text-green-700 hover:underline dark:text-green-400" href={`/crm/scheduling/jobs/${result.newJobId}`}>
+                              {result.usedJobDates ? "Renewed (package has no dates — used last season's)" : "Renewed — open"}
+                            </Link>
+                            {result.pastStepCount > 0 && (
+                              <span className="block text-amber-700 dark:text-amber-400">
+                                {result.pastStepCount} step{result.pastStepCount === 1 ? "" : "s"} before today — move them on the new job
+                              </span>
+                            )}
+                            {result.warning && <span className="block text-amber-700 dark:text-amber-400">{result.warning}</span>}
+                          </>
                         ) : result ? (
                           result.message
                         ) : r.renewedTo ? (

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CalendarDays, CheckCircle2, Loader2, Wrench, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { realtimeTopic } from "@/lib/supabase/realtime-topic";
 import { formatVisitWindow } from "@/lib/portal/visit-window";
 import { realtimeClientFilter } from "@/lib/portal/client-id-chunks";
 import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
@@ -62,7 +63,7 @@ export default function PortalServicesPage({ upcoming: initialUpcoming, complete
     const supabase = createClient();
 
     const channel = supabase
-      .channel(`portal-visits-${clientIds[0]}`)
+      .channel(realtimeTopic(`portal-visits-${clientIds[0]}`))
       .on(
         "postgres_changes",
         {

@@ -160,9 +160,9 @@ export function NotificationsBell() {
       notifPrefs?.inAppNewMaintenanceRequest !== false &&
       (currentUser.role === "admin" || currentUser.role === "manager"),
   };
-  const requisitionsQ = usePendingRequisitionAlerts(on.requisitions);
-  const purchaseOrdersQ = usePendingPOAlerts(on.purchaseOrders);
-  const estimatesQ = usePendingEstimateAlerts(on.estimates);
+  const requisitionsQ = usePendingRequisitionAlerts(on.requisitions, currentUser.id);
+  const purchaseOrdersQ = usePendingPOAlerts(on.purchaseOrders, currentUser.id);
+  const estimatesQ = usePendingEstimateAlerts(on.estimates, currentUser.id);
   const workOrdersQ = useWorkOrderAlerts({
     userId: currentUser.id,
     todayIso,
@@ -189,8 +189,8 @@ export function NotificationsBell() {
     [on.woOverdue, workOrders, todayIso]
   );
   const assignedWorkOrders = useMemo(
-    () => (on.woAssigned ? workOrders.filter((wo) => wo.assignedToIds.includes(currentUser.id)) : []),
-    [on.woAssigned, workOrders, currentUser.id]
+    () => (on.woAssigned ? workOrders.filter((wo) => wo.assignedToMe) : []),
+    [on.woAssigned, workOrders]
   );
 
   // Every enabled alert query has returned at least once. Until then the reads
@@ -250,7 +250,8 @@ export function NotificationsBell() {
         ...maintenanceRequests.map((mr) => `maint-req-${mr.id}`),
         ...dbNotifications.map((n) => `db-notif-${n.id}`),
       ];
-    }, [alertsLoaded, requisitions, purchaseOrders, estimates, overdueWorkOrders, assignedWorkOrders, parts, pmSchedules, maintenanceRequests, dbNotifications])
+    }, [alertsLoaded, requisitions, purchaseOrders, estimates, overdueWorkOrders, assignedWorkOrders, parts, pmSchedules, maintenanceRequests, dbNotifications]),
+    currentUser.id
   );
 
   // Derive notifications from live data

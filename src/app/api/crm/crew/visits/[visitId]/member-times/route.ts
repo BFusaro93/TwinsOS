@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recomputeStopLabor } from "@/lib/crew/visit-labor";
+import { stopPunchOwnerVisitId } from "@/lib/crew/stop-punches";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 
@@ -107,6 +108,21 @@ async function authorizeVisit(
   const isCrew = profile.role === "crew";
   if (isCrew && !(await assertCallerOwnsVisit(supabase, userId, visit.org_id, visit))) {
     return { response: NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 }) };
+  }
+  // Punches belong to the stop, held on whichever of its visits owned them at
+  // Start Job. If the caller's derived anchor is a different sibling, read and
+  // write the owner's punches rather than seeding a second set. The owner
+  // shares the stop key — and so the effective crew — of the visit just
+  // authorized.
+  const ownerId = await stopPunchOwnerVisitId(supabase, visit.id);
+  if (ownerId !== visit.id) {
+    const { data: owner } = await db
+      .from("crm_job_visits")
+      .select(VISIT_SELECT)
+      .eq("id", ownerId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (owner) return { visit: owner as VisitRow, isCrew };
   }
   return { visit: visit as VisitRow, isCrew };
 }

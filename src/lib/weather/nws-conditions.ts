@@ -2,7 +2,7 @@
 // direction), from the same National Weather Service the dispatch board's weather chip uses
 // (api.weather.gov — free, no key, US only). The chip shows the FORECAST; a compliance record
 // wants what it was actually like, so this reads the nearest station's observation, and falls
-// back to the forecast's current period when no station has a recent reading.
+// back to the hourly forecast's current hour when no station has a recent reading.
 
 const NWS = "https://api.weather.gov";
 const HEADERS = { "User-Agent": "Landscapt (support@landscapt.com)", Accept: "application/geo+json" };
@@ -75,7 +75,7 @@ export async function fetchConditions(lat: number, lng: number, at?: string): Pr
   const isPast = when < Date.now() - 20 * 60 * 1000;
   if (isPast && Date.now() - when > HISTORY_MS) return null;
 
-  const point = await getJson<{ properties?: { observationStations?: string; forecast?: string } }>(
+  const point = await getJson<{ properties?: { observationStations?: string; forecastHourly?: string } }>(
     `${NWS}/points/${lat.toFixed(4)},${lng.toFixed(4)}`
   );
   const stationsUrl = point?.properties?.observationStations;
@@ -103,12 +103,15 @@ export async function fetchConditions(lat: number, lng: number, at?: string): Pr
     }
   }
 
-  // No recent station reading: the forecast's current period is the best available for "now".
-  if (!isPast && point?.properties?.forecast) {
+  // No recent station reading: the hourly forecast's current hour is the best available for "now".
+  // (The 12-hour forecast's temperature is the period's high or low, not what it is right now, so
+  // it skewed the temperature saved on the application record.)
+  if (!isPast && point?.properties?.forecastHourly) {
     const forecast = await getJson<{
-      properties?: { periods?: { startTime: string; temperature: number; temperatureUnit: string; windSpeed: string; windDirection: string; shortForecast: string }[] };
-    }>(point.properties.forecast);
-    const p = forecast?.properties?.periods?.[0];
+      properties?: { periods?: { startTime: string; endTime: string; temperature: number; temperatureUnit: string; windSpeed: string; windDirection: string; shortForecast: string }[] };
+    }>(point.properties.forecastHourly);
+    const periods = forecast?.properties?.periods ?? [];
+    const p = periods.find((x) => new Date(x.startTime).getTime() <= when && when < new Date(x.endTime).getTime()) ?? periods[0];
     if (p) {
       const speeds = (p.windSpeed.match(/\d+/g) ?? []).map(Number);
       return {
