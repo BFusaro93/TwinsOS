@@ -551,3 +551,45 @@ export async function fetchReferenceDocumentUrl(id: string): Promise<string> {
   const body = (await authedFetch(`/api/crm/crew/reference/${encodeURIComponent(id)}/url`)) as { url: string };
   return body.url;
 }
+
+/** One person's closed punch on a stop, as GET /api/crm/crew/visits/:id/member-times returns it (raw rows). */
+export interface MemberTimeRow {
+  crewMemberId: string;
+  name: string;
+  clockedInAt: string | null;
+  clockedOutAt: string | null;
+}
+
+export async function fetchMemberTimes(visitId: string): Promise<MemberTimeRow[]> {
+  const rows = (await authedFetch(`/api/crm/crew/visits/${visitId}/member-times`)) as {
+    crew_member_id: string;
+    clocked_in_at: string | null;
+    clocked_out_at: string | null;
+    crm_crew_members: { name?: string | null } | { name?: string | null }[] | null;
+  }[];
+  return rows.map((r) => {
+    const member = Array.isArray(r.crm_crew_members) ? r.crm_crew_members[0] : r.crm_crew_members;
+    return {
+      crewMemberId: r.crew_member_id,
+      name: member?.name ?? 'Crew member',
+      clockedInAt: r.clocked_in_at,
+      clockedOutAt: r.clocked_out_at,
+    };
+  });
+}
+
+/**
+ * Corrects one person's punch on a stop. Online-only like the day routes: the
+ * route validates the new times against the visit and refuses once invoiced.
+ */
+export async function saveMemberTime(
+  visitId: string,
+  crewMemberId: string,
+  clockedInAt: string,
+  clockedOutAt: string
+): Promise<unknown> {
+  return authedFetch(`/api/crm/crew/visits/${visitId}/member-times`, {
+    method: 'POST',
+    body: JSON.stringify({ crewMemberId, clockedInAt, clockedOutAt }),
+  });
+}

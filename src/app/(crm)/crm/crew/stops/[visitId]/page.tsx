@@ -61,6 +61,7 @@ import { formatCurrency } from "@/lib/utils";
 import { visitServices, isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-stops";
 import { budgetCountdown } from "@/lib/crew/budget-countdown";
 import { isPhaseCaption, phaseCaption } from "@/lib/crew/required-photos";
+import { TimeSummaryDialog } from "@/components/crm/crew/TimeSummaryDialog";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { openInMaps } from "@/lib/utils/maps";
 import { useConfirm } from "@/components/shared/useConfirm";
@@ -317,6 +318,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const [upsellServiceId, setUpsellServiceId] = useState("");
   const [upsellNote, setUpsellNote]       = useState("");
   const [upsellPhoto, setUpsellPhoto]     = useState<File | null>(null);
+  const [timeSummaryOpen, setTimeSummaryOpen] = useState(false);
   const [skipReason, setSkipReason]   = useState("");
   const [skipTargetId, setSkipTargetId] = useState<string | null>(null);
   const [clockOutNotes, setClockOutNotes] = useState("");
@@ -396,7 +398,8 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       return; // surfaced by the mutation's onError; stay on the stop
     }
     setClockOutOpen(false);
-    router.push("/crm/crew");
+    // Time summary first (SA's post-completion review); it navigates on close.
+    setTimeSummaryOpen(true);
   }
 
   async function handleSkip() {
@@ -1418,6 +1421,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TimeSummaryDialog
+        open={timeSummaryOpen}
+        visitId={anchorVisitId}
+        onClose={() => {
+          setTimeSummaryOpen(false);
+          router.push("/crm/crew");
+        }}
+      />
 
       {/* Skip dialog — targets one service row at a time */}
       <Dialog open={!!skipTargetId} onOpenChange={(open) => !open && setSkipTargetId(null)}>

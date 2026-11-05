@@ -27,6 +27,7 @@ import {
   type ConditionsDraft,
 } from '@/components/chemical-crew';
 import { SyncStatusChip } from '@/components/sync-status-chip';
+import { TimeSummaryModal } from '@/components/time-summary';
 import { ThemedText } from '@/components/themed-text';
 import {
   confirmChemicals,
@@ -158,6 +159,7 @@ export default function StopDetailScreen() {
   const [noteText, setNoteText] = useState('');
   const [skipTargetId, setSkipTargetId] = useState<string | null>(null);
   const [skipReasonText, setSkipReasonText] = useState('');
+  const [timeSummaryOpen, setTimeSummaryOpen] = useState(false);
   const [, forceTick] = useState(0);
 
   const serverStop = useMemo(() => stops.find((s) => s.anchorVisitId === id), [stops, id]);
@@ -726,9 +728,17 @@ export default function StopDetailScreen() {
           {completionNotes ? <Text style={styles.greenBoxSubtitle}>{completionNotes}</Text> : null}
           {isClockActionPending ? (
             <Text style={styles.greenBoxSubtitle}>Not yet synced — will confirm once back online.</Text>
-          ) : null}
+          ) : (
+            <Pressable
+              style={({ pressed }) => [styles.secondaryButton, { marginTop: 10 }, pressed && styles.secondaryButtonPressed]}
+              onPress={() => setTimeSummaryOpen(true)}
+            >
+              <Text style={styles.secondaryButtonText}>Review crew times</Text>
+            </Pressable>
+          )}
         </View>
       ) : null}
+      <TimeSummaryModal visible={timeSummaryOpen} visitId={stop.anchorVisitId} onClose={() => setTimeSummaryOpen(false)} />
 
       {failedClockItem ? (
         <ConflictBox
