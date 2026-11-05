@@ -27,12 +27,9 @@ function todayLocalString(): string {
 interface Props {
   selectedDate: string; // YYYY-MM-DD
   onDateChange: (date: string) => void;
-  /** Slim variant for dense screens: no card chrome, shorter day buttons, and
-   *  no date input (the caller already has its own date field). */
-  compact?: boolean;
 }
 
-export function WeekStrip({ selectedDate, onDateChange, compact = false }: Props) {
+export function WeekStrip({ selectedDate, onDateChange }: Props) {
   const selected = new Date(selectedDate + "T12:00:00"); // noon avoids DST edge
   const weekStart = startOfWeek(selected);
   const today = todayLocalString();
@@ -60,7 +57,7 @@ export function WeekStrip({ selectedDate, onDateChange, compact = false }: Props
   }
 
   return (
-    <div className={cn("flex max-w-full flex-wrap items-center gap-x-3 gap-y-2", compact ? "gap-x-2" : "rounded-lg border bg-card px-3 py-2 shadow-sm")}>
+    <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-card px-3 py-2 shadow-sm">
       {/* Prev / days / next stay on one line; on a phone the day buttons
           shrink to fit instead of pushing the strip wider than the screen. */}
       <div className="flex min-w-0 max-w-full items-center gap-3 max-sm:gap-1">
@@ -85,8 +82,7 @@ export function WeekStrip({ selectedDate, onDateChange, compact = false }: Props
               key={i}
               onClick={() => onDateChange(ds)}
               className={cn(
-                compact ? "flex h-8 w-8 min-w-0 shrink flex-col" : "flex h-10 w-10 min-w-0 shrink flex-col",
-                "items-center justify-center rounded-md text-xs font-medium transition-colors",
+                "flex h-10 w-10 min-w-0 shrink flex-col items-center justify-center rounded-md text-xs font-medium transition-colors",
                 isSelected
                   ? "bg-brand-500 text-white"
                   : isToday
@@ -113,21 +109,21 @@ export function WeekStrip({ selectedDate, onDateChange, compact = false }: Props
       </div>
 
       {/* Date display */}
-      {!compact && <div className="ml-2 flex items-center gap-2 border-l pl-3 max-sm:ml-0 max-sm:border-l-0 max-sm:pl-0">
+      <div className="ml-2 flex items-center gap-2 border-l pl-3 max-sm:ml-0 max-sm:border-l-0 max-sm:pl-0">
         <input
           type="date"
           value={selectedDate}
           onChange={(e) => e.target.value && onDateChange(e.target.value)}
           className="rounded border border-border bg-slate-50 dark:bg-muted/40 px-2 py-1 text-xs text-slate-700 dark:text-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-400"
         />
-      </div>}
+      </div>
 
       {/* Today shortcut */}
       {selectedDate !== today && (
         <Button
           variant="outline"
           size="sm"
-          className={cn("h-7 text-xs", !compact && "ml-auto")}
+          className="ml-auto h-7 text-xs"
           onClick={() => onDateChange(today)}
         >
           Today

@@ -87,7 +87,6 @@ import {
   GripVertical,
   ListChecks,
   ChevronDown,
-  ChevronUp,
   ArrowUpDown,
   Download,
   Phone,
@@ -3435,8 +3434,7 @@ function VisitRow({
     <>
     <tr
       className={cn(
-        // lg+: tighter cell padding so more stops fit on a laptop screen.
-        "group border-b border-slate-100 dark:border-neutral-800 text-xs cursor-pointer transition-colors lg:[&>td]:py-1",
+        "group border-b border-slate-100 dark:border-neutral-800 text-xs cursor-pointer transition-colors",
         isDragOver ? "bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700" : selected ? "bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40" : "bg-card hover:bg-slate-50 dark:hover:bg-muted/40"
       )}
       onClick={() => onOpen(visit)}
@@ -4094,22 +4092,6 @@ export function DispatchBoard() {
   const [bulkChemNoticeOpen, setBulkChemNoticeOpen] = useState(false);
   const [bulkTagOpen,     setBulkTagOpen]     = useState(false);
   const [legendOpen,      setLegendOpen]      = useState(false);
-  // Hides the filter bar and action bar so the route table gets the screen — a
-  // per-viewer convenience, so it lives in localStorage (and must tolerate it
-  // being unavailable).
-  const [filtersCollapsed, setFiltersCollapsedState] = useState(false);
-  useEffect(() => {
-    try {
-      if (window.localStorage.getItem("dispatch-filters-collapsed") === "1") setFiltersCollapsedState(true);
-    } catch { /* storage blocked — stay expanded */ }
-  }, []);
-  function toggleFiltersCollapsed() {
-    setFiltersCollapsedState((prev) => {
-      const next = !prev;
-      try { window.localStorage.setItem("dispatch-filters-collapsed", next ? "1" : "0"); } catch { /* ignore */ }
-      return next;
-    });
-  }
   const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
   const [colFilterValue,  setColFilterValue]  = useState("");
   // Service filter is multi-select (unlike the other Select-a-Filter text
@@ -5081,7 +5063,7 @@ export function DispatchBoard() {
     urlRouter.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
   const viewToggle = (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex items-center gap-1.5">
       <div className="flex items-center rounded-md border bg-card p-0.5">
         <Button
           size="sm"
@@ -5126,11 +5108,14 @@ export function DispatchBoard() {
   }
 
   return (
-    // Tight vertical rhythm: this screen is a long route table, and the header
-    // above it (title, week strip, filter bar, action bar, count bar) used to
-    // take ~360px, leaving a laptop screen room for only a handful of rows.
-    <div className="flex h-full flex-col gap-1.5">
+    <div className="flex h-full flex-col gap-4">
       {confirmDialog}
+      {/* Page header */}
+      <PageHeader
+        title="Dispatch Board"
+        description="Schedule and dispatch daily job visits"
+        action={viewToggle}
+      />
 
       {/* Week strip + date range + actions. Wraps rather than scrolling: this
           row is ~1600px wide, so on a tablet the right-hand controls were half
@@ -5143,14 +5128,8 @@ export function DispatchBoard() {
           text-xs (different responsive variant), so without the md:
           override the box renders at 14px text and clips the native
           calendar-picker icon off the right edge at desktop widths. */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-4 shrink-0">
-        {/* Title + List/Calendar/Crew Board switch share this row with the date
-            controls instead of getting a header block of their own. */}
-        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 mr-1">
-          <h1 className="text-base font-semibold text-slate-900 dark:text-neutral-100 whitespace-nowrap">Dispatch Board</h1>
-          {viewToggle}
-        </div>
-        <WeekStrip compact selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); setDateMode(null); clearPendingOrder(); }} />
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 shrink-0">
+        <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); setDateMode(null); clearPendingOrder(); }} />
 
         <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground ml-1">
           <span className="font-medium">From</span>
@@ -5268,10 +5247,9 @@ export function DispatchBoard() {
         </div>
       )}
 
-      {!filtersCollapsed && (<>
       {/* Select a Filter bar — ABOVE dark bar. Wraps on a narrow screen so the
           action buttons drop to their own line instead of running off it. */}
-      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5 border-b bg-card px-4 py-1 shrink-0">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 border-b bg-card px-4 py-2 shrink-0">
         <span className="shrink-0 text-xs text-muted-foreground font-medium mr-1">Select a Filter:</span>
         <div className="flex flex-wrap items-center gap-1">
           {(["client","service","date","city","zip","crew"] as const).map((key) => {
@@ -5493,7 +5471,7 @@ export function DispatchBoard() {
       {/* Wraps below xl. At desktop widths this bar already fits by letting the
           search box shrink, so keep it on one line there rather than wrapping
           Columns onto a second row. */}
-      <div className="bg-[#4a4a4a] px-4 py-1 flex flex-wrap xl:flex-nowrap items-center gap-x-3 gap-y-1.5 shrink-0">
+      <div className="bg-[#4a4a4a] px-4 py-2 flex flex-wrap xl:flex-nowrap items-center gap-x-3 gap-y-2 shrink-0">
         {/* Refresh — far left */}
         <button
           onClick={() => { void refetch(); qc.invalidateQueries({ queryKey: ['crm-job-visits'] }); }}
@@ -5964,8 +5942,6 @@ export function DispatchBoard() {
         </div>
       </div>
 
-      </>)}
-
       <LoadListDialog open={loadListOpen} onOpenChange={setLoadListOpen} date={selectedDate} />
 
       {/* Stats overlay panel */}
@@ -6030,20 +6006,7 @@ export function DispatchBoard() {
       )}
 
       {/* Count bar */}
-      <div className="bg-muted border-b px-4 py-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] shrink-0">
-        <button
-          type="button"
-          onClick={toggleFiltersCollapsed}
-          aria-expanded={!filtersCollapsed}
-          title={filtersCollapsed ? "Show the filter and action bars" : "Hide the filter and action bars to fit more jobs on screen"}
-          className="flex items-center gap-1 rounded px-1.5 py-0.5 max-lg:py-2 font-medium text-slate-600 dark:text-neutral-400 hover:bg-background"
-        >
-          {filtersCollapsed ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
-          {filtersCollapsed ? "Show filters" : "Hide filters"}
-          {filtersCollapsed && (statusFilter !== "all" || crewFilters.length > 0 || tagFilters.length > 0 || priorityFilters.length > 0 || serviceFilters.length > 0 || search !== "" || (colFilterKey && colFilterValue)) && (
-            <span className="ml-1 rounded-full bg-brand-100 dark:bg-brand-900/40 px-1.5 text-[10px] font-semibold text-brand-700 dark:text-brand-400">active</span>
-          )}
-        </button>
+      <div className="bg-muted border-b px-4 py-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] shrink-0">
         <span className="font-semibold text-slate-700 dark:text-neutral-300">
           {isLoading ? "Loading…" : `${filtered.length} Job${filtered.length !== 1 ? "s" : ""} Total`}
         </span>
