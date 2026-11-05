@@ -7,12 +7,13 @@ import {
   renderBlocksToHtml,
   resolveMergeTags,
   resolveSubjectMergeTags,
-  SAMPLE_MERGE_VALUES,
+  sampleMergeValuesForZone,
 } from "@/lib/utils/document-template-renderer";
 import { DocumentTemplatePdf } from "@/components/crm/documents/pdf/DocumentTemplatePdf";
 import { sanitizeImageBlocks } from "@/lib/documents/sanitize-image-blocks";
 import type { BlockType } from "@/types/crm-documents";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 
 export async function POST(
@@ -62,7 +63,7 @@ export async function POST(
     .single();
 
   const mergeVars: Record<string, string> = {
-    ...SAMPLE_MERGE_VALUES,
+    ...sampleMergeValuesForZone(await getOrgTimeZone(supabase, profile.org_id)),
     ...(org?.name ? { "[companyname]": org.name } : {}),
   };
 

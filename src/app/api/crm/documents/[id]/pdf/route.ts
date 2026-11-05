@@ -3,9 +3,10 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { DocumentTemplatePdf } from "@/components/crm/documents/pdf/DocumentTemplatePdf";
-import { resolveMergeTags, SAMPLE_MERGE_VALUES } from "@/lib/utils/document-template-renderer";
+import { resolveMergeTags, sampleMergeValuesForZone } from "@/lib/utils/document-template-renderer";
 import { sanitizeImageBlocks } from "@/lib/documents/sanitize-image-blocks";
 import type { BlockType } from "@/types/crm-documents";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 interface PdfBlockInput {
@@ -35,12 +36,12 @@ async function loadOrgAndTemplate(supabase: Awaited<ReturnType<typeof createClie
   }
 
   const { data: org } = await sb.from("organizations").select("name").eq("id", profile.org_id).single();
-  return { template, orgName: org?.name as string | undefined } as const;
+  return { template, orgName: org?.name as string | undefined, timeZone: await getOrgTimeZone(sb, profile.org_id) } as const;
 }
 
-function resolveBlocks(blocks: PdfBlockInput[], orgName: string | undefined) {
+function resolveBlocks(blocks: PdfBlockInput[], orgName: string | undefined, timeZone: string) {
   const mergeVars: Record<string, string> = {
-    ...SAMPLE_MERGE_VALUES,
+    ...sampleMergeValuesForZone(timeZone),
     ...(orgName ? { "[companyname]": orgName } : {}),
   };
   return blocks.map((b) => ({
@@ -49,8 +50,8 @@ function resolveBlocks(blocks: PdfBlockInput[], orgName: string | undefined) {
   }));
 }
 
-async function renderPdf(templateName: string, blocks: PdfBlockInput[], orgName: string | undefined) {
-  const resolved = await sanitizeImageBlocks(resolveBlocks(blocks, orgName));
+async function renderPdf(templateName: string, blocks: PdfBlockInput[], orgName: string | undefined, timeZone: string) {
+  const resolved = await sanitizeImageBlocks(resolveBlocks(blocks, orgName, timeZone));
   const buffer = await renderToBuffer(
     createElement(DocumentTemplatePdf, { blocks: resolved, title: templateName })
   );
@@ -86,7 +87,7 @@ export async function GET(
     settings: b.settings,
   }));
 
-  return renderPdf(result.template.name, input, result.orgName);
+  return renderPdf(result.template.name, input, result.orgName, result.timeZone);
 }
 
 // POST renders an in-progress (possibly unsaved) draft from the editor.
@@ -104,5 +105,5 @@ export async function POST(
     return NextResponse.json({ error: "Nothing to render — add at least one block" }, { status: 400 });
   }
 
-  return renderPdf(result.template.name, body.blocks, result.orgName);
+  return renderPdf(result.template.name, body.blocks, result.orgName, result.timeZone);
 }

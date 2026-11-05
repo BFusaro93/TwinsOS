@@ -29,7 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { GlobalSearchDialog } from "@/components/shared/GlobalSearchDialog";
 import { NotificationsBell } from "@/components/shared/NotificationsBell";
 import { EditProfileDialog } from "@/components/shared/EditProfileDialog";
-import { ThemeToggle } from "@/components/shared/ThemeToggle";
+import { AppearanceMenu } from "@/components/shared/AppearanceMenu";
 import { HelpMenu } from "@/components/shared/HelpMenu";
 import { ImpersonationBanner } from "@/components/shared/ImpersonationBanner";
 import { SupportChatWidget } from "@/components/shared/SupportChatWidget";
@@ -363,7 +363,7 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
 
       <HelpMenu />
 
-      <ThemeToggle />
+      <AppearanceMenu />
 
       {/* Notifications — hidden for crew users (they only need photo access, not CMMS/PO alerts) */}
       {currentUser.role !== "crew" && <NotificationsBell />}
