@@ -2156,7 +2156,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "When a client signs up for a package, do its jobs go on the Waiting List, or are they dispatched automatically?",
-        a: "They go on the Waiting List and stay there until you dispatch them; nothing is dispatched automatically. Each step of the package shows as its own row on Scheduling > Waiting List with its date window. A step does not appear on the Dispatch Board until it is dispatched: click Dispatch on the step on the Waiting List (or Actions > Dispatch Selected, or Nearby Waiting List on the board), pick the day and crew, and it moves to the Dispatch Board for that day. If a dispatched step doesn't happen (rained out, say), select it on the Dispatch Board and choose Return to Waiting List. Min Days spacing between steps is enforced on every move.",
+        a: "They go on the Waiting List and stay there until you dispatch them; nothing is dispatched automatically. Each step of the package shows as its own row on Scheduling > Waiting List with its date window. A step does not appear on the Dispatch Board until it is dispatched: click Dispatch on the step on the Waiting List (or Actions > Dispatch Selected, or Nearby Waiting List on the board), pick the day and crew, and it moves to the Dispatch Board for that day. If a dispatched step doesn't happen (rained out, say), select it on the Dispatch Board and choose Return to Waiting List. Min Days spacing between steps is enforced on every move; a scheduler can override it with Dispatch anyway when a step is dispatched early on purpose.",
       },
       {
         q: "How do I renew a package job for next season?",

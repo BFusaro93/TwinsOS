@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/select";
 import { NewJobDialog } from "@/components/crm/jobs/NewJobDialog";
 import { formatCurrency, cn } from "@/lib/utils";
-import { Plus, ListOrdered, ChevronDown, RotateCcw, Send, X, Mail } from "lucide-react";
+import { Plus, ListOrdered, ChevronDown, RotateCcw, Send, X, Mail, Check } from "lucide-react";
 import { BulkEmailClientsDialog } from "@/components/crm/BulkEmailClientsDialog";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/shared/EmptyState";
