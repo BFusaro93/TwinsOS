@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { CrewSyncBanner } from "@/components/crm/crew/CrewSyncBanner";
+import { CrewLocaleProvider } from "@/lib/crew-i18n";
 
 // Crew app uses its own stripped-down layout — no sidebar, mobile-first shell.
 // The full CRM layout wrapping still applies (auth, realtime), but this nested
@@ -7,8 +8,10 @@ import { CrewSyncBanner } from "@/components/crm/crew/CrewSyncBanner";
 export default function CrewAppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh bg-slate-50 dark:bg-background flex flex-col max-w-lg mx-auto">
-      <CrewSyncBanner />
-      {children}
+      <CrewLocaleProvider>
+        <CrewSyncBanner />
+        {children}
+      </CrewLocaleProvider>
     </div>
   );
 }

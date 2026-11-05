@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/crew-i18n";
 import { useEffect, useState } from "react";
 import { useMutationState } from "@tanstack/react-query";
 import { CloudOff } from "lucide-react";
@@ -35,8 +36,8 @@ export function CrewSyncBanner() {
     >
       <CloudOff className="h-4 w-4 shrink-0" />
       {paused > 0
-        ? `No signal — ${paused} action${paused !== 1 ? "s" : ""} saved on this phone, will send when signal returns. Keep this page open.`
-        : "No signal — you can keep working; actions will send when signal returns. Keep this page open."}
+        ? paused === 1 ? t("No signal — 1 action saved on this phone, will send when signal returns. Keep this page open.") : t("No signal — {n} actions saved on this phone, will send when signal returns. Keep this page open.", { n: paused })
+        : t("No signal — you can keep working; actions will send when signal returns. Keep this page open.")}
     </div>
   );
 }
