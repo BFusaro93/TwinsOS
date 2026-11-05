@@ -5062,8 +5062,10 @@ export function DispatchBoard() {
     const qs = params.toString();
     urlRouter.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
-  const viewToggle = (
-    <div className="flex items-center gap-1.5">
+  // `extra` slots a button between the List/Calendar switch and Crew Board —
+  // the list view puts Team Assign there so it doesn't wrap the toolbar below.
+  const renderViewToggle = (extra?: React.ReactNode) => (
+    <div className="flex flex-wrap items-center gap-1.5">
       <div className="flex items-center rounded-md border bg-card p-0.5">
         <Button
           size="sm"
@@ -5082,6 +5084,7 @@ export function DispatchBoard() {
           <CalendarRange className="h-3.5 w-3.5" /> Calendar
         </Button>
       </div>
+      {extra}
       <Button asChild size="sm" variant="outline" className="h-9 gap-1 px-2.5 text-xs">
         <Link href={`/crm/scheduling/crew-board?date=${selectedDate}`}>
           <LayoutDashboard className="h-3.5 w-3.5" /> Crew Board
@@ -5089,6 +5092,7 @@ export function DispatchBoard() {
       </Button>
     </div>
   );
+  const viewToggle = renderViewToggle();
 
   if (boardView === "calendar") {
     return (
@@ -5114,7 +5118,11 @@ export function DispatchBoard() {
       <PageHeader
         title="Dispatch Board"
         description="Schedule and dispatch daily job visits"
-        action={viewToggle}
+        action={renderViewToggle(
+          <Button size="sm" variant="outline" className="h-9 gap-1 px-2.5 text-xs" onClick={() => setTeamAssignOpen(true)}>
+            <Users className="h-3.5 w-3.5" /> Team Assign
+          </Button>
+        )}
       />
 
       {/* Week strip + date range + actions. Wraps rather than scrolling: this
@@ -5175,12 +5183,6 @@ export function DispatchBoard() {
         </div>
 
         <div className="ml-auto flex max-w-full flex-wrap items-center gap-1.5 max-lg:w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:pb-1 max-lg:[&>*]:shrink-0">
-          <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-sm gap-1 px-2.5"
-            onClick={() => setTeamAssignOpen(true)}
-          >
-            <Users className="h-4 w-4" />
-            Team Assign
-          </Button>
           <div className="flex items-center shrink-0">
             <Button size="sm" variant="outline"
               className={cn("h-9 max-lg:h-11 rounded-r-none border-r-0 text-sm gap-1 px-2.5", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600 dark:text-brand-400")}

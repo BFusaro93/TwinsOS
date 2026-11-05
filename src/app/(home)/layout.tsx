@@ -1,3 +1,4 @@
+import { DisplaySizeApplier } from "@/components/shared/DisplaySizeApplier";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { FeedbackButton } from "@/components/shared/FeedbackButton";
 import { AskAIButton } from "@/components/shared/AskAIButton";
@@ -11,6 +12,7 @@ export default function HomeLayout({
   return (
     <div className="min-h-dvh bg-slate-50 dark:bg-background">
       <SettingsLoader />
+      <DisplaySizeApplier />
       {children}
       <AskAIButton />
       <FeedbackButton />

@@ -848,19 +848,18 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
   return (
     <>
       <Sheet open={!!ticket} onOpenChange={(open) => { if (!open) { setEditing(false); onClose(); } }}>
-        {/* Wider sheet so the header buttons don't wrap */}
         <SheetContent className="w-full sm:max-w-[620px] md:w-[620px] flex flex-col gap-0 p-0 overflow-hidden">
 
-          {/* Header — title left, actions right, pr-10 clears the Sheet X button */}
-          <div className="flex items-center justify-between border-b px-5 py-3 pr-10 shrink-0">
-            <div className="min-w-0 mr-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-muted-foreground">#{ticket.ticketNumber}</span>
-                <span className="text-slate-300 dark:text-neutral-500">·</span>
-                <span className="text-sm font-semibold text-slate-900 dark:text-neutral-100 truncate">{ticket.subject ?? "(no subject)"}</span>
-              </div>
+          {/* Header — two rows: the title gets the full width (wrapping if it is
+              long) and the status + actions sit under it, so neither is cramped.
+              pr-10 on the title row clears the Sheet X button. */}
+          <div className="flex flex-col gap-2.5 border-b px-5 py-3 shrink-0">
+            <div className="flex items-start gap-2 pr-10">
+              <span className="shrink-0 text-sm font-semibold text-muted-foreground">#{ticket.ticketNumber}</span>
+              <span className="shrink-0 text-slate-300 dark:text-neutral-500">·</span>
+              <span className="min-w-0 break-words text-sm font-semibold leading-snug text-slate-900 dark:text-neutral-100">{ticket.subject ?? "(no subject)"}</span>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex flex-wrap items-center gap-1.5">
               <StatusBadge
                 variant={TICKET_STATUS_VARIANT[ticket.status] as Parameters<typeof StatusBadge>[0]["variant"]}
                 label={TICKET_STATUS_LABEL[ticket.status]}
