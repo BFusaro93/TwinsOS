@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CreditCard, Download, CheckCircle2, Clock, AlertCircle, FileText } from "lucide-react";
-import { PayInvoiceDialog } from "@/components/portal/PayInvoiceDialog";
+import { PayInvoiceDialog, type PayDialogTarget } from "@/components/portal/PayInvoiceDialog";
 import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 
 function fmt(cents: number) {
@@ -27,6 +27,7 @@ function isOutstanding(inv: Invoice) {
 
 interface Invoice {
   id: string;
+  client_id: string;
   invoice_number: number;
   total_cents: number;
   balance_cents: number;
@@ -36,6 +37,26 @@ interface Invoice {
   created_at: string;
   /** Set when the invoice is on one of the login's sub-accounts. */
   accountName?: string | null;
+}
+
+export interface PortalPayment {
+  id: string;
+  date: string;
+  method: string;
+  amountCents: number;
+  refundedCents: number;
+  unusedCents: number;
+  isCredit: boolean;
+  isPrepayment: boolean;
+  accountName: string | null;
+  /** The invoices this payment was applied to, so a customer can match a charge to what it paid. */
+  applied: { invoiceId: string; invoiceNumber: number | null; amountCents: number }[];
+}
+
+interface PortalAccountOption {
+  id: string;
+  displayName: string;
+  isSelf: boolean;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -49,13 +70,65 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.
   void:    { label: "Void",     color: "bg-slate-100 text-slate-400 border-slate-200",      icon: <Clock className="h-3.5 w-3.5" /> },
 };
 
-export default function PortalBillingPage({ invoices, today }: { invoices: Invoice[]; today: string }) {
+export default function PortalBillingPage({
+  invoices,
+  today,
+  payments,
+  accounts,
+}: {
+  invoices: Invoice[];
+  today: string;
+  payments: PortalPayment[];
+  accounts: PortalAccountOption[];
+}) {
   const router = useRouter();
-  const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<PayDialogTarget | null>(null);
   const open = invoices.filter(isOutstanding);
   const closed = invoices.filter((i) => !isOutstanding(i));
   const totalBalance = open.reduce((sum, i) => sum + i.balance_cents, 0);
-  const payingInvoice = invoices.find((i) => i.id === payingInvoiceId) ?? null;
+  const multiAccount = accounts.length > 1;
+
+  // Everything outstanding starts checked (SA's default), so the common case —
+  // pay what I owe — is one click. A payment settles against ONE account, so
+  // when sub-accounts exist the selection only ever spans a single account.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
+    const first = invoices.filter(isOutstanding)[0];
+    return new Set(invoices.filter((i) => isOutstanding(i) && i.client_id === first?.client_id).map((i) => i.id));
+  });
+  // A paid invoice drops out of "open" after the refresh; keep the selection honest.
+  useEffect(() => {
+    setSelectedIds((cur) => {
+      const openIds = new Set(open.map((i) => i.id));
+      const next = new Set([...cur].filter((id) => openIds.has(id)));
+      return next.size === cur.size ? cur : next;
+    });
+  }, [open]);
+
+  const selected = useMemo(() => open.filter((i) => selectedIds.has(i.id)), [open, selectedIds]);
+  const selectedTotal = selected.reduce((sum, i) => sum + i.balance_cents, 0);
+  const allSelected = open.length > 0 && selected.length === open.filter((i) => i.client_id === (selected[0] ?? open[0]).client_id).length;
+
+  function toggle(inv: Invoice) {
+    setSelectedIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(inv.id)) {
+        next.delete(inv.id);
+        return next;
+      }
+      const other = open.find((i) => next.has(i.id));
+      // Different account than what's already checked → start a new selection.
+      if (other && other.client_id !== inv.client_id) next.clear();
+      next.add(inv.id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    const anchor = selected[0] ?? open[0];
+    if (!anchor) return;
+    const group = open.filter((i) => i.client_id === anchor.client_id);
+    setSelectedIds(allSelected ? new Set() : new Set(group.map((i) => i.id)));
+  }
 
   function handlePaid() {
     router.refresh();
@@ -68,33 +141,27 @@ export default function PortalBillingPage({ invoices, today }: { invoices: Invoi
 
       {/* Balance summary + payment method */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className={`bg-white rounded-xl border p-5 ${totalBalance > 0 ? "border-slate-200" : "border-slate-200"}`}>
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
           <p className="text-sm font-medium text-slate-600 mb-1">Balance Due</p>
           <p className={`text-3xl font-bold ${totalBalance > 0 ? "text-slate-900" : "text-slate-400"}`}>
             {fmt(totalBalance)}
           </p>
           <div className="mt-4">
-            {open.length === 1 ? (
-              <button
-                onClick={() => setPayingInvoiceId(open[0].id)}
-                className="w-full h-10 rounded-lg bg-brand-500 text-white text-sm font-medium flex items-center justify-center gap-2"
-              >
-                <CreditCard className="h-4 w-4" />
-                Pay Now
-              </button>
-            ) : (
-              <button
-                disabled
-                title={open.length > 1 ? "Pay individual invoices below" : "No balance due"}
-                className="w-full h-10 rounded-lg bg-brand-500 text-white text-sm font-medium opacity-50 cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <CreditCard className="h-4 w-4" />
-                Pay Now
-              </button>
-            )}
-            {open.length > 1 && (
-              <p className="text-center text-xs text-slate-400 mt-2">Pay individual invoices below</p>
-            )}
+            <button
+              disabled={selected.length === 0}
+              onClick={() => setDialog({ kind: "invoices", invoiceIds: selected.map((i) => i.id), balanceCents: selectedTotal })}
+              title={open.length === 0 ? "No balance due" : selected.length === 0 ? "Check the invoices you want to pay" : undefined}
+              className="w-full h-10 rounded-lg bg-brand-500 text-white text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CreditCard className="h-4 w-4" />
+              {selected.length > 0 ? `Pay ${fmt(selectedTotal)}${selected.length > 1 ? ` (${selected.length} invoices)` : ""}` : "Pay Now"}
+            </button>
+            <button
+              onClick={() => setDialog({ kind: "prepayment" })}
+              className="mt-2 w-full text-center text-xs font-medium text-brand-600 hover:underline"
+            >
+              Make a prepayment
+            </button>
           </div>
         </div>
 
@@ -116,10 +183,37 @@ export default function PortalBillingPage({ invoices, today }: { invoices: Invoi
       {/* Open invoices */}
       {open.length > 0 && (
         <section>
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Outstanding</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Outstanding</h2>
+            <button onClick={toggleAll} className="text-xs font-medium text-brand-600 hover:underline">
+              {allSelected ? "Deselect all" : "Select all unpaid"}
+            </button>
+          </div>
+          {multiAccount && (
+            <p className="mb-2 text-xs text-slate-400">Invoices from different accounts are paid separately.</p>
+          )}
           <ul className="flex flex-col gap-2">
             {open.map((inv) => (
-              <InvoiceRow key={inv.id} invoice={inv} today={today} onPay={() => setPayingInvoiceId(inv.id)} />
+              <InvoiceRow
+                key={inv.id}
+                invoice={inv}
+                today={today}
+                onPay={() => setDialog({ kind: "invoices", invoiceIds: [inv.id], balanceCents: inv.balance_cents })}
+                checked={selectedIds.has(inv.id)}
+                onToggle={() => toggle(inv)}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Payments & credits */}
+      {payments.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Payments &amp; Credits</h2>
+          <ul className="flex flex-col gap-2">
+            {payments.map((p) => (
+              <PaymentRow key={p.id} payment={p} />
             ))}
           </ul>
         </section>
@@ -143,12 +237,13 @@ export default function PortalBillingPage({ invoices, today }: { invoices: Invoi
         </div>
       )}
 
-      {payingInvoice && (
+      {dialog && (
         <PayInvoiceDialog
-          invoiceId={payingInvoice.id}
-          balanceCents={payingInvoice.balance_cents}
-          open={payingInvoiceId != null}
-          onClose={() => setPayingInvoiceId(null)}
+          // A fresh mount per target so the prepayment nonce and form reset each time.
+          key={dialog.kind === "invoices" ? dialog.invoiceIds.join(",") : "prepayment"}
+          target={dialog}
+          open
+          onClose={() => setDialog(null)}
           onPaid={handlePaid}
         />
       )}
@@ -156,7 +251,64 @@ export default function PortalBillingPage({ invoices, today }: { invoices: Invoi
   );
 }
 
-function InvoiceRow({ invoice: inv, today, onPay }: { invoice: Invoice; today: string; onPay?: () => void }) {
+function fmtMethod(method: string) {
+  return method.replace("Credit Card- ", "Card · ").replace("ACH/E-Check", "Bank transfer");
+}
+
+function PaymentRow({ payment: p }: { payment: PortalPayment }) {
+  const label = p.isCredit ? "Credit" : p.isPrepayment ? "Prepayment" : "Payment";
+  const net = p.amountCents - p.refundedCents;
+  return (
+    <li className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-800">
+            {label}
+            <span className="ml-2 text-xs font-normal text-slate-500">{fmtMethod(p.method)}</span>
+          </p>
+          <SubAccountLabel name={p.accountName} />
+          <p className="text-xs text-slate-500 mt-0.5">Paid {fmtDate(p.date)}</p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-sm font-semibold text-slate-900">{fmt(p.amountCents)}</p>
+          {p.refundedCents > 0 && <p className="text-xs text-slate-400">Refunded {fmt(p.refundedCents)}</p>}
+        </div>
+      </div>
+      <p className="mt-1.5 text-xs text-slate-500">
+        {p.applied.length > 0 ? (
+          <>
+            Applied to {p.applied.map((a) => (a.invoiceNumber != null ? `Invoice #${a.invoiceNumber}` : "an invoice")).join(", ")}
+            {p.applied.length > 1 && (
+              <span className="text-slate-400">
+                {" "}
+                ({p.applied.map((a) => `${a.invoiceNumber != null ? `#${a.invoiceNumber}` : "—"} ${fmt(a.amountCents)}`).join(" · ")})
+              </span>
+            )}
+            {p.unusedCents > 0 && net > 0 && <span className="text-slate-400"> · {fmt(Math.min(p.unusedCents, net))} still available as credit</span>}
+          </>
+        ) : p.unusedCents > 0 ? (
+          <>Held as credit on your account · {fmt(p.unusedCents)} available for your next invoice</>
+        ) : (
+          <>Not applied to an invoice</>
+        )}
+      </p>
+    </li>
+  );
+}
+
+function InvoiceRow({
+  invoice: inv,
+  today,
+  onPay,
+  checked,
+  onToggle,
+}: {
+  invoice: Invoice;
+  today: string;
+  onPay?: () => void;
+  checked?: boolean;
+  onToggle?: () => void;
+}) {
   const outstanding = isOutstanding(inv);
   // No due date means it can't be past due — `new Date(null)` is the 1970
   // epoch, which used to flag every undated invoice "Past due Dec 31, 1969".
@@ -182,6 +334,15 @@ function InvoiceRow({ invoice: inv, today, onPay }: { invoice: Invoice; today: s
 
   return (
     <li className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3">
+      {onToggle && (
+        <input
+          type="checkbox"
+          checked={!!checked}
+          onChange={onToggle}
+          aria-label={`Select invoice #${inv.invoice_number} to pay`}
+          className="h-4 w-4 shrink-0 rounded border-slate-300 accent-brand-500"
+        />
+      )}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-slate-800">Invoice #{inv.invoice_number}</p>
         <SubAccountLabel name={inv.accountName} />

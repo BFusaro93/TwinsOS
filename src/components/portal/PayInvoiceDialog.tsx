@@ -56,15 +56,21 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
   );
 }
 
+/** What the dialog is collecting: payment of one or more invoices, or a prepayment. */
+export type PayDialogTarget =
+  | { kind: "invoices"; invoiceIds: string[]; balanceCents: number }
+  | { kind: "prepayment"; accountId?: string };
+
+const PREPAY_MIN_CENTS = 100;
+const PREPAY_MAX_CENTS = 2_500_000;
+
 export function PayInvoiceDialog({
-  invoiceId,
-  balanceCents,
+  target,
   open,
   onClose,
   onPaid,
 }: {
-  invoiceId: string;
-  balanceCents: number;
+  target: PayDialogTarget;
   open: boolean;
   onClose: () => void;
   onPaid: () => void;
@@ -73,8 +79,15 @@ export function PayInvoiceDialog({
   const [intent, setIntent] = useState<CreatePaymentIntentResult | null>(null);
   const [succeeded, setSucceeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [prepayInput, setPrepayInput] = useState("");
+  // One per opened dialog so a second prepayment of the same amount is a new charge (see the route).
+  const [nonce] = useState(() => crypto.randomUUID());
   const createIntent = useCreatePortalPaymentIntent();
   const stripeJs = intent ? getScopedStripeJs(intent.connectedAccountId, intent.livemode) : null;
+  const isPrepay = target.kind === "prepayment";
+  const invoiceCount = target.kind === "invoices" ? target.invoiceIds.length : 0;
+  const prepayCents = Math.round(Number.parseFloat(prepayInput.replace(/[^0-9.]/g, "")) * 100);
+  const prepayValid = Number.isFinite(prepayCents) && prepayCents >= PREPAY_MIN_CENTS && prepayCents <= PREPAY_MAX_CENTS;
 
   if (!open) return null;
 
@@ -83,13 +96,18 @@ export function PayInvoiceDialog({
     setIntent(null);
     setSucceeded(false);
     setError(null);
+    setPrepayInput("");
     onClose();
   }
 
   async function start() {
     setError(null);
     try {
-      const result = await createIntent.mutateAsync({ invoiceId, paymentMethod });
+      const result = await createIntent.mutateAsync(
+        target.kind === "prepayment"
+          ? { prepaymentCents: prepayCents, nonce, accountId: target.accountId, paymentMethod }
+          : { invoiceIds: target.invoiceIds, paymentMethod }
+      );
       setIntent(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start payment");
@@ -107,7 +125,7 @@ export function PayInvoiceDialog({
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
             <CreditCard className="h-4 w-4 text-brand-500" />
-            Pay Invoice
+            {isPrepay ? "Make a Prepayment" : invoiceCount > 1 ? `Pay ${invoiceCount} Invoices` : "Pay Invoice"}
           </h3>
           <button onClick={handleClose} className="text-slate-400 hover:text-slate-600">
             <X className="h-4 w-4" />
@@ -118,7 +136,11 @@ export function PayInvoiceDialog({
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <Check className="h-8 w-8 text-green-500" />
             <p className="text-sm font-medium text-slate-900">Payment submitted</p>
-            <p className="text-xs text-slate-500">Your balance will update in a few seconds.</p>
+            <p className="text-xs text-slate-500">
+              {isPrepay
+                ? "Your prepayment will appear on your account in a few seconds. It is held as credit and is applied to your next invoice — it doesn't change any invoice you already have."
+                : "Your balance will update in a few seconds."}
+            </p>
             <button onClick={handleClose} className="mt-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white">
               Done
             </button>
@@ -128,10 +150,27 @@ export function PayInvoiceDialog({
             <p className="py-4 text-sm text-slate-500">Online payments aren&apos;t available yet.</p>
           ) : (
             <div className="flex flex-col gap-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Amount Due</span>
-                <span className="font-semibold tabular-nums">{fmt(balanceCents)}</span>
-              </div>
+              {target.kind === "invoices" ? (
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Amount Due{invoiceCount > 1 ? ` (${invoiceCount} invoices)` : ""}</span>
+                  <span className="font-semibold tabular-nums">{fmt(target.balanceCents)}</span>
+                </div>
+              ) : (
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-slate-500">Amount to prepay</span>
+                  <div className="flex items-center rounded-md border border-slate-200 px-3 focus-within:ring-2 focus-within:ring-brand-500">
+                    <span className="text-slate-400">$</span>
+                    <input
+                      inputMode="decimal"
+                      value={prepayInput}
+                      onChange={(e) => setPrepayInput(e.target.value)}
+                      placeholder="0.00"
+                      className="h-9 flex-1 bg-transparent px-2 text-sm tabular-nums outline-none"
+                    />
+                  </div>
+                  <span className="text-xs text-slate-400">Held as credit on your account and applied to your next invoice.</span>
+                </label>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -159,7 +198,7 @@ export function PayInvoiceDialog({
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button
                 onClick={start}
-                disabled={createIntent.isPending}
+                disabled={createIntent.isPending || (isPrepay && !prepayValid)}
                 className="w-full h-10 rounded-lg bg-brand-500 text-white text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {createIntent.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -171,7 +210,7 @@ export function PayInvoiceDialog({
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-500">Amount Due</span>
+                <span className="text-slate-500">{isPrepay ? "Prepayment" : "Amount Due"}</span>
                 <span className="tabular-nums">{fmt(intent.balanceCents)}</span>
               </div>
               {intent.feeCents > 0 && (
