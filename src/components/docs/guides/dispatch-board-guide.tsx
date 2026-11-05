@@ -198,6 +198,15 @@ export function DispatchBoardGuide() {
           many stops that crew has for the day.
         </p>
         <p>
+          The green column on the left also lists <strong>Unassigned people</strong>: active employees
+          who aren&apos;t on any crew for the day you&apos;re viewing (they have no crew roster, or their
+          roster doesn&apos;t include that weekday). Drag one onto a crew &mdash; or tap the person, then
+          tap the crew &mdash; to put them on it <em>for that day only</em>. They go back to Unassigned
+          afterwards. The &#8617; on their chip puts them back in Unassigned, and dropping a chip on the
+          Unassigned column does the same. Someone already on a crew&apos;s regular roster that day is moved
+          crew-to-crew instead, not unassigned.
+        </p>
+        <p>
           There are two ways to move a visit, and they do the same thing:
         </p>
         <ul className="list-disc space-y-1 pl-5">

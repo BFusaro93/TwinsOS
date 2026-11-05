@@ -129,6 +129,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { CRMJob, CRMJobVisit, VisitStatus, JobComment, CrewMemberTime } from "@/types/crm-jobs";
 import { useCrews, useCrewDailyMembers, useCrewDailyMembersRange, useSetCrewDailyMember, useClearCrewDailyMember, useEmployees, useAddCrewMember } from "@/lib/hooks/use-employees";
 import { memberWorksOn } from "@/lib/crew/roster-days";
+import { isPackageMinDaysMessage } from "@/lib/package-visit-recalc";
 import { useCRMServices, useCreateVisit } from "@/lib/hooks/use-crm-jobs";
 import { useCurrentUserStore } from "@/stores/current-user-store";
 import { useNearbyWaitingListJobs } from "@/lib/hooks/use-nearby-waiting-list";
@@ -165,16 +166,22 @@ async function postBulkVisitUpdate(
   body: { ids: string[]; updates: Record<string, unknown> },
   opts: { isAdmin: boolean; confirm: ConfirmFn }
 ): Promise<Response | null> {
-  const send = (override: boolean) =>
+  const flags = { invoiced: false, minDays: false };
+  const send = () =>
     fetch("/api/crm/visits/bulk-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(override ? { ...body, override_invoiced: true } : body),
+      body: JSON.stringify({
+        ...body,
+        ...(flags.invoiced ? { override_invoiced: true } : {}),
+        ...(flags.minDays ? { override_min_days: true } : {}),
+      }),
     });
-  let res = await send(false);
-  if (res.status === 409) {
+  let res = await send();
+  // Up to one invoiced-visit override and one Min Days override.
+  for (let attempt = 0; attempt < 2 && res.status === 409; attempt++) {
     const err = await res.clone().json().catch(() => ({})) as { error?: string; code?: string };
-    if (err.code === "invoiced_visit_locked") {
+    if (err.code === "invoiced_visit_locked" && !flags.invoiced) {
       if (!opts.isAdmin) throw new Error(err.error ?? "This visit is completed and already invoiced.");
       const ok = await opts.confirm({
         title: "Change an invoiced visit?",
@@ -183,8 +190,20 @@ async function postBulkVisitUpdate(
         destructive: true,
       });
       if (!ok) return null;
-      res = await send(true);
+      flags.invoiced = true;
+    } else if (err.code === "package_min_days" && !flags.minDays) {
+      // Anyone who can schedule visits may override a package step's spacing.
+      const ok = await opts.confirm({
+        title: "Move ahead of Min Days?",
+        description: `${err.error ?? "This package step is closer to the previous step than its Min Days allows."} Move it anyway if the spacing doesn't apply here (for example the client asked for an early visit).`,
+        confirmLabel: "Move anyway",
+      });
+      if (!ok) return null;
+      flags.minDays = true;
+    } else {
+      break;
     }
+    res = await send();
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { error?: string | object };
@@ -2247,10 +2266,14 @@ function TeamAssignDialog({
   const [pending, setPending] = useState(false);
   const [dragVisitId, setDragVisitId] = useState<string | null>(null);
   const [dragMemberId, setDragMemberId] = useState<string | null>(null);
+  // An employee who has no crew-roster row at all (so no member id yet).
+  const [dragEmployeeId, setDragEmployeeId] = useState<string | null>(null);
+  const { data: allEmployees = [] } = useEmployees(true);
+  const { mutateAsync: addCrewMember } = useAddCrewMember();
   // Tap-to-place fallback for touch. iOS Safari never fires HTML5 drag events,
   // so on a tablet every drag path below is dead — tap an item to pick it up,
   // then tap a crew (or Unassigned) to drop it. Drag still works with a mouse.
-  const [held, setHeld] = useState<{ kind: "visit" | "member"; id: string; label: string } | null>(null);
+  const [held, setHeld] = useState<{ kind: "visit" | "member" | "employee"; id: string; label: string } | null>(null);
 
   useEffect(() => {
     if (!open) setHeld(null);
@@ -2273,21 +2296,85 @@ function TeamAssignDialog({
   const overrideCrewByMember = new Map(dailyOverrides.map((o) => [o.member_id, o.crew_id]));
   const allMembers = richCrews.flatMap((c) => c.members ?? []);
 
+  // Where a roster row works on selectedDate: the same-day placement if there
+  // is one, else its default crew — but only on the weekdays it is scheduled
+  // (days_of_week), matching the crew app and Start Day. null = not on any crew
+  // today (a row scheduled for other days, or a "day-only" placeholder).
+  const placedCrewByMember = new Map<string, string | null>();
+  allMembers.forEach((m) => {
+    const moved = overrideCrewByMember.get(m.id);
+    placedCrewByMember.set(
+      m.id,
+      moved ?? (memberWorksOn(m.daysOfWeek, selectedDate) ? defaultCrewByMember.get(m.id) ?? null : null)
+    );
+  });
+
   const byCrew = (richCrews.length > 0 ? richCrews : crews).map((c) => ({
     crew: c,
     visits: visits.filter((v) => effectiveCrewId(v) === c.id),
-    members: allMembers.filter((m) => (overrideCrewByMember.get(m.id) ?? defaultCrewByMember.get(m.id)) === c.id),
+    members: allMembers.filter((m) => placedCrewByMember.get(m.id) === c.id),
   }));
+
+  // "Unassigned people": active employees on no crew today — either no roster
+  // row at all, or only rows that don't work selectedDate. One entry per person.
+  const placedEmployeeIds = new Set(allMembers.filter((m) => placedCrewByMember.get(m.id)).map((m) => m.employeeId));
+  const poolPeople: { key: string; name: string; memberId: string | null; employeeId: string }[] = [];
+  const seenPoolEmployees = new Set<string>();
+  allEmployees.forEach((e) => {
+    if (placedEmployeeIds.has(e.id) || seenPoolEmployees.has(e.id)) return;
+    seenPoolEmployees.add(e.id);
+    const row = allMembers.find((m) => m.employeeId === e.id);
+    poolPeople.push({ key: e.id, name: `${e.firstName} ${e.lastName}`.trim(), memberId: row?.id ?? null, employeeId: e.id });
+  });
 
   async function moveMember(memberId: string, targetCrewId: string) {
     try {
-      if (defaultCrewByMember.get(memberId) === targetCrewId) {
+      // Clearing the override only puts them back on their default crew if
+      // they actually work that crew today; otherwise place them explicitly.
+      if (defaultCrewByMember.get(memberId) === targetCrewId && placedCrewByMember.get(memberId) !== null) {
         await clearDailyMember({ memberId, workDate: selectedDate });
       } else {
         await setDailyMember({ memberId, crewId: targetCrewId, workDate: selectedDate });
       }
     } catch {
       toast.error("Failed to move member");
+    }
+  }
+
+  /** Put an employee who has no roster row onto a crew for selectedDate only.
+   *  A roster row scheduled for NO weekdays is the placeholder that carries the
+   *  same-day placement (the crew app and Start Day already honour days_of_week,
+   *  and a same-day placement always wins over it), so they work this crew
+   *  today and return to Unassigned tomorrow. */
+  async function placeEmployee(employeeId: string, targetCrewId: string) {
+    const emp = allEmployees.find((e) => e.id === employeeId);
+    if (!emp) return;
+    try {
+      const row = await addCrewMember({
+        crewId: targetCrewId,
+        employeeId,
+        name: `${emp.firstName} ${emp.lastName}`.trim(),
+        daysOfWeek: [],
+      });
+      await setDailyMember({ memberId: row.id, crewId: targetCrewId, workDate: selectedDate });
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to place employee");
+    }
+  }
+
+  /** Move a pool person: a row-less employee gets a placeholder row first. */
+  async function placePerson(p: { memberId: string | null; employeeId: string }, targetCrewId: string) {
+    if (p.memberId) await moveMember(p.memberId, targetCrewId);
+    else await placeEmployee(p.employeeId, targetCrewId);
+  }
+
+  /** Drop the same-day placement. They fall back to their regular roster —
+   *  Unassigned if that doesn't work today. */
+  async function unplaceMember(memberId: string) {
+    try {
+      await clearDailyMember({ memberId, workDate: selectedDate });
+    } catch {
+      toast.error("Failed to unassign");
     }
   }
 
@@ -2338,17 +2425,30 @@ function TeamAssignDialog({
       if (v && effectiveCrewId(v) !== crewId) await reassign(item.id, crewId, v.jobId);
       return;
     }
-    const current = overrideCrewByMember.get(item.id) ?? defaultCrewByMember.get(item.id);
+    if (item.kind === "employee") {
+      await placeEmployee(item.id, crewId);
+      return;
+    }
+    const current = placedCrewByMember.get(item.id);
     if (current !== crewId) await moveMember(item.id, crewId);
   }
 
-  /** Drop the held visit back in the pool. Members always belong to a crew, so
-   *  the pool ignores them. */
+  /** Drop the held item back in the pool. */
   async function placeUnassigned() {
     const item = held;
     setHeld(null);
-    if (item?.kind !== "visit") return;
-    await unassign(visits.find((x) => x.id === item.id));
+    if (item?.kind === "visit") await unassign(visits.find((x) => x.id === item.id));
+    else if (item?.kind === "member") await dropMemberInPool(item.id);
+  }
+
+  /** A person dropped on Unassigned: undo a same-day placement. Someone whose
+   *  regular roster has them on a crew today can't be un-rostered from here. */
+  async function dropMemberInPool(memberId: string) {
+    if (!overrideCrewByMember.has(memberId)) {
+      toast.info("They're on this crew's regular roster — move them to another crew instead.");
+      return;
+    }
+    await unplaceMember(memberId);
   }
 
   async function dispatchAll() {
@@ -2401,6 +2501,8 @@ function TeamAssignDialog({
               Moving <span className="font-semibold">{held.label}</span> —{" "}
               {held.kind === "visit"
                 ? "tap a crew, or Unassigned, to place it."
+                : held.kind === "employee"
+                ? `tap the crew they should work with on ${selectedDate}.`
                 : `tap the crew they should work with on ${selectedDate}.`}
             </p>
             <button
@@ -2412,7 +2514,7 @@ function TeamAssignDialog({
           </div>
         ) : (
           <p className="shrink-0 border-b bg-slate-50 dark:bg-muted/40 px-5 py-1.5 text-[11px] text-slate-400 dark:text-neutral-500">
-            Drag a visit or crew member, or tap one to pick it up and tap where it should go.
+            Drag a visit or person, or tap one to pick it up and tap where it should go.
           </p>
         )}
 
@@ -2423,11 +2525,14 @@ function TeamAssignDialog({
           {/* Unassigned pool — drop target to un-assign */}
           <div
             className={cn(
-              "shrink-0 border-b bg-green-50 dark:bg-green-950/40 p-4 max-lg:max-h-52 max-lg:overflow-y-auto lg:w-64 lg:border-b-0 lg:border-r",
-              held?.kind === "visit" && "cursor-pointer ring-2 ring-inset ring-brand-400"
+              "shrink-0 border-b bg-green-50 dark:bg-green-950/40 p-4 max-lg:max-h-52 max-lg:overflow-y-auto lg:w-64 lg:overflow-y-auto lg:border-b-0 lg:border-r",
+              (held?.kind === "visit" || held?.kind === "member") && "cursor-pointer ring-2 ring-inset ring-brand-400"
             )}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={() => { if (dragVisitId) { void unassign(visits.find((v) => v.id === dragVisitId)); setDragVisitId(null); } }}
+            onDrop={() => {
+              if (dragVisitId) { void unassign(visits.find((v) => v.id === dragVisitId)); setDragVisitId(null); }
+              if (dragMemberId) { void dropMemberInPool(dragMemberId); setDragMemberId(null); }
+            }}
             onClick={() => void placeUnassigned()}
           >
             <p className="text-[10px] font-semibold uppercase text-green-700 dark:text-green-400 tracking-wide mb-3">
@@ -2478,6 +2583,47 @@ function TeamAssignDialog({
                 })
               )}
             </div>
+            {/* Unassigned people — employees on no crew today. Drag (or tap, then
+                tap a crew) to put them on a crew for this date only. */}
+            <p className="mt-5 mb-3 text-[10px] font-semibold uppercase text-green-700 dark:text-green-400 tracking-wide">
+              Unassigned people ({poolPeople.length})
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {poolPeople.length === 0 ? (
+                <p className="text-xs text-green-600 dark:text-green-400 italic">
+                  {held?.kind === "member" ? "Tap to send back" : "Everyone is on a crew"}
+                </p>
+              ) : (
+                poolPeople.map((p) => {
+                  const kind = p.memberId ? "member" : "employee";
+                  const heldId = p.memberId ?? p.employeeId;
+                  const isHeld = held?.kind === kind && held.id === heldId;
+                  return (
+                    <div
+                      key={p.key}
+                      draggable
+                      onDragStart={() => {
+                        setHeld(null);
+                        if (p.memberId) setDragMemberId(p.memberId); else setDragEmployeeId(p.employeeId);
+                      }}
+                      onDragEnd={() => { setDragMemberId(null); setDragEmployeeId(null); }}
+                      onClick={(e) => {
+                        if (held) return;
+                        e.stopPropagation();
+                        toggleHold({ kind, id: heldId, label: p.name });
+                      }}
+                      className={cn(
+                        "rounded-full border border-green-300 dark:border-green-800 bg-card px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:text-neutral-300 cursor-grab active:cursor-grabbing select-none",
+                        isHeld && "ring-2 ring-brand-500"
+                      )}
+                      title="Drag, or tap then tap a crew, to put them on that crew for today only"
+                    >
+                      {p.name}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
 
           {/* Crew columns */}
@@ -2501,6 +2647,10 @@ function TeamAssignDialog({
                       void moveMember(dragMemberId, crew.id);
                       setDragMemberId(null);
                     }
+                    if (dragEmployeeId) {
+                      void placeEmployee(dragEmployeeId, crew.id);
+                      setDragEmployeeId(null);
+                    }
                   }}
                   onClick={() => void placeOnCrew(crew.id)}
                 >
@@ -2512,8 +2662,10 @@ function TeamAssignDialog({
                       destination crew; the ↩ sends a loaned member straight home. */}
                   <div className="flex flex-wrap gap-1 mb-2 min-h-[20px]">
                     {members.map((m) => {
-                      const onLoan = defaultCrewByMember.get(m.id) !== crew.id;
-                      const home = defaultCrewByMember.get(m.id);
+                      // Placed by a same-day move (not their regular roster today).
+                      const onLoan = overrideCrewByMember.has(m.id);
+                      const homeWorksToday = memberWorksOn(m.daysOfWeek, selectedDate);
+                      const home = homeWorksToday && defaultCrewByMember.get(m.id) !== crew.id ? defaultCrewByMember.get(m.id) : null;
                       const isHeld = held?.kind === "member" && held.id === m.id;
                       const name = m.employeeName ?? m.employeeId;
                       return (
@@ -2535,17 +2687,17 @@ function TeamAssignDialog({
                             isHeld && "ring-2 ring-brand-500"
                           )}
                           title={onLoan
-                            ? `On loan from their usual crew for ${selectedDate} only — ↩ sends them back`
+                            ? `Here for ${selectedDate} only — ↩ ${home ? "sends them back to their usual crew" : "puts them back in Unassigned"}`
                             : "Drag, or tap then tap another crew, to move them for today only"}
                         >
                           {name}
-                          {onLoan && home && (
+                          {onLoan && (
                             <button
-                              onClick={(e) => { e.stopPropagation(); setHeld(null); void moveMember(m.id, home); }}
+                              onClick={(e) => { e.stopPropagation(); setHeld(null); void unplaceMember(m.id); }}
                               // Negative margins absorb the padding, so the hit
                               // area is finger-sized without growing the chip.
                               className="-my-1.5 -mr-1.5 rounded-full px-1.5 py-1.5 leading-none text-amber-500 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300"
-                              title="Send back to their usual crew"
+                              title={home ? "Send back to their usual crew" : "Back to Unassigned"}
                             >
                               ↩
                             </button>
@@ -3158,6 +3310,7 @@ function VisitRow({
   isVisible,
   routeDraft,
   onRouteDraftChange,
+  onRouteDraftBlank,
   serviceCodeById,
   crewCodeById,
   manualRouteMode,
@@ -3194,6 +3347,8 @@ function VisitRow({
   /** Stop number typed in Manual Route mode but not yet applied (undefined = untouched). */
   routeDraft?: string;
   onRouteDraftChange?: (id: string, value: string) => void;
+  /** The box was left empty — drop its draft so the current number shows again. */
+  onRouteDraftBlank?: (id: string) => void;
   manualRouteMode: boolean;
   /** This visit's per-crew-member punch records — used to detect whether the
    * crew was actually on site for the same window (safe to show/edit as one
@@ -3456,7 +3611,7 @@ function VisitRow({
       {/* Drag handle + Order — only interactive in Manual Route mode, so
           clicking into a row's other fields (e.g. Start/End time) can never
           be mistaken by the browser for starting a drag on the row. */}
-      <td className={cn("px-1 py-2 text-center font-mono", manualRouteMode ? "w-[88px]" : "w-10")}>
+      <td className={cn("px-1 py-2 text-center font-mono", manualRouteMode ? "w-[68px]" : "w-10")}>
         <div className="flex items-center justify-center gap-0.5">
           <GripVertical className={cn("h-3 w-3 shrink-0", manualRouteMode ? "text-slate-300 dark:text-neutral-500 cursor-grab active:cursor-grabbing" : "text-slate-200")} />
           {onRouteDraftChange && manualRouteMode ? (
@@ -3472,12 +3627,14 @@ function VisitRow({
               aria-label={`Route number for ${visit.clientName ?? "this stop"}`}
               title="Type this stop's route number, then press Apply Route"
               className={cn(
-                "h-8 w-14 rounded border bg-background px-1 text-center text-sm font-medium tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-brand-400/50 focus:border-brand-400",
+                "h-7 w-11 rounded border bg-background px-1 text-center text-xs font-medium tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-brand-400/50 focus:border-brand-400",
                 routeDraft !== undefined ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30" : "border-border"
               )}
               onClick={(e) => e.stopPropagation()}
               onFocus={(e) => e.currentTarget.select()}
               onChange={(e) => onRouteDraftChange(visit.id, e.target.value.replace(/\D/g, "").slice(0, 3))}
+              // Left blank: forget the draft so the stop's current number shows again.
+              onBlur={() => { if (routeDraft === "") onRouteDraftBlank?.(visit.id); }}
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 e.preventDefault();
@@ -4767,8 +4924,17 @@ export function DispatchBoard() {
 
   function handleRouteDraftChange(id: string, value: string) {
     setRouteDrafts((prev) => {
+      // An emptied box stays a (blank) draft so backspace works; it counts as
+      // "no number" until it is retyped, and is dropped on blur (below).
+      return { ...prev, [id]: value };
+    });
+  }
+
+  function handleRouteDraftBlank(id: string) {
+    setRouteDrafts((prev) => {
+      if (prev[id] !== "") return prev;
       const next = { ...prev };
-      if (value === "") delete next[id]; else next[id] = value;
+      delete next[id];
       return next;
     });
   }
@@ -5062,8 +5228,10 @@ export function DispatchBoard() {
     const qs = params.toString();
     urlRouter.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
-  const viewToggle = (
-    <div className="flex items-center gap-1.5">
+  // `extra` slots a button between the List/Calendar switch and Crew Board —
+  // the list view puts Team Assign there so it doesn't wrap the toolbar below.
+  const renderViewToggle = (extra?: React.ReactNode) => (
+    <div className="flex flex-wrap items-center gap-1.5">
       <div className="flex items-center rounded-md border bg-card p-0.5">
         <Button
           size="sm"
@@ -5082,6 +5250,7 @@ export function DispatchBoard() {
           <CalendarRange className="h-3.5 w-3.5" /> Calendar
         </Button>
       </div>
+      {extra}
       <Button asChild size="sm" variant="outline" className="h-9 gap-1 px-2.5 text-xs">
         <Link href={`/crm/scheduling/crew-board?date=${selectedDate}`}>
           <LayoutDashboard className="h-3.5 w-3.5" /> Crew Board
@@ -5089,6 +5258,7 @@ export function DispatchBoard() {
       </Button>
     </div>
   );
+  const viewToggle = renderViewToggle();
 
   if (boardView === "calendar") {
     return (
@@ -5114,7 +5284,11 @@ export function DispatchBoard() {
       <PageHeader
         title="Dispatch Board"
         description="Schedule and dispatch daily job visits"
-        action={viewToggle}
+        action={renderViewToggle(
+          <Button size="sm" variant="outline" className="h-9 gap-1 px-2.5 text-xs" onClick={() => setTeamAssignOpen(true)}>
+            <Users className="h-3.5 w-3.5" /> Team Assign
+          </Button>
+        )}
       />
 
       {/* Week strip + date range + actions. Wraps rather than scrolling: this
@@ -5175,12 +5349,6 @@ export function DispatchBoard() {
         </div>
 
         <div className="ml-auto flex max-w-full flex-wrap items-center gap-1.5 max-lg:w-full max-lg:flex-nowrap max-lg:overflow-x-auto max-lg:overscroll-x-contain max-lg:pb-1 max-lg:[&>*]:shrink-0">
-          <Button size="sm" variant="outline" className="h-9 max-lg:h-11 text-sm gap-1 px-2.5"
-            onClick={() => setTeamAssignOpen(true)}
-          >
-            <Users className="h-4 w-4" />
-            Team Assign
-          </Button>
           <div className="flex items-center shrink-0">
             <Button size="sm" variant="outline"
               className={cn("h-9 max-lg:h-11 rounded-r-none border-r-0 text-sm gap-1 px-2.5", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600 dark:text-brand-400")}
@@ -6122,6 +6290,7 @@ export function DispatchBoard() {
                   isVisible={isVisible}
                   routeDraft={routeDrafts[visit.id]}
                   onRouteDraftChange={handleRouteDraftChange}
+                  onRouteDraftBlank={handleRouteDraftBlank}
                   serviceCodeById={serviceCodeById}
                   crewCodeById={crewCodeById}
                   manualRouteMode={manualRouteMode}
@@ -6367,16 +6536,31 @@ export function DispatchBoard() {
                             // move it onto the day and mark it dispatched, exactly
                             // as the Waiting List's dispatch does — never a new
                             // visit. Its crew stays as it is.
-                            await moveNearbyPlaceholder.mutateAsync({
-                              id: m.packageStep.visitId,
-                              updates: {
-                                scheduled_date: selectedDate,
-                                status: "dispatched",
-                                dispatched_at: new Date().toISOString(),
-                              },
-                              jobId: m.jobId,
-                              jobType: "package",
-                            });
+                            const movePlaceholder = (overrideMinDays?: boolean) =>
+                              moveNearbyPlaceholder.mutateAsync({
+                                id: m.packageStep!.visitId,
+                                updates: {
+                                  scheduled_date: selectedDate,
+                                  status: "dispatched",
+                                  dispatched_at: new Date().toISOString(),
+                                },
+                                jobId: m.jobId,
+                                jobType: "package",
+                                overrideMinDays,
+                              });
+                            try {
+                              await movePlaceholder();
+                            } catch (moveErr) {
+                              const msg = moveErr instanceof Error ? moveErr.message : "";
+                              if (!isPackageMinDaysMessage(msg)) throw moveErr;
+                              const ok = await confirm({
+                                title: "Schedule ahead of Min Days?",
+                                description: `${msg}. Schedule it today anyway if the spacing doesn't apply here.`,
+                                confirmLabel: "Schedule anyway",
+                              });
+                              if (!ok) throw moveErr;
+                              await movePlaceholder(true);
+                            }
                           } else if (m.pendingServices.length > 0) {
                             // Split job: one visit per service still waiting,
                             // exactly as the Waiting List dispatches it.

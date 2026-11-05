@@ -28,9 +28,57 @@ export function isBreakUnpaid(breakPaid: boolean | null | undefined, orgBreaksUn
 }
 
 /**
+ * Fully-loaded labor $/hr (cents) per crew member: the member's own
+ * labor_burden_cents_per_hour when set (> 0), else the linked employee's
+ * hourly_rate_cents × (1 + the org's labor_burden_bps/10000) — the same
+ * fallback rpt_job_visits and the crew-average reports use. 0 when neither is
+ * configured. Without it a crew whose burden field was never filled in costed
+ * every punch at $0 while the reports (which did fall back) showed a rate.
+ * The employee rate and org burden are read with the service client: pay
+ * columns aren't SELECT-able by the crew/authenticated roles that call this.
+ */
+export async function memberLaborRatesCents(
+  supabase: AnySupabase,
+  memberIds: string[],
+  orgId: string | null | undefined
+): Promise<Map<string, number>> {
+  const rates = new Map<string, number>();
+  if (memberIds.length === 0) return rates;
+  const { data: members } = await supabase
+    .from("crm_crew_members")
+    .select("id, employee_id, labor_burden_cents_per_hour")
+    .in("id", memberIds);
+  const rows = (members ?? []) as { id: string; employee_id: string | null; labor_burden_cents_per_hour: number | null }[];
+  const needFallback = rows.filter((m) => !(Number(m.labor_burden_cents_per_hour ?? 0) > 0) && m.employee_id);
+  const hourlyByEmployee = new Map<string, number>();
+  let burdenBps = 0;
+  if (needFallback.length > 0) {
+    const admin = createServiceClient();
+    const [{ data: emps }, { data: overhead }] = await Promise.all([
+      admin.from("crm_employees").select("id, hourly_rate_cents").in("id", needFallback.map((m) => m.employee_id as string)),
+      orgId
+        ? admin.from("crm_overhead_settings").select("labor_burden_bps").eq("org_id", orgId).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    for (const e of (emps ?? []) as { id: string; hourly_rate_cents: number | null }[]) {
+      hourlyByEmployee.set(e.id, Number(e.hourly_rate_cents ?? 0));
+    }
+    burdenBps = Number((overhead as { labor_burden_bps: number | null } | null)?.labor_burden_bps ?? 0);
+  }
+  for (const m of rows) {
+    const own = Number(m.labor_burden_cents_per_hour ?? 0);
+    rates.set(
+      m.id,
+      own > 0 ? own : Math.round((hourlyByEmployee.get(m.employee_id ?? "") ?? 0) * (1 + burdenBps / 10000))
+    );
+  }
+  return rates;
+}
+
+/**
  * Burdened labor cost (cents) of the CLOSED crew-member punches recorded
  * against `visitId`: Σ hours (net of break + lunch) × the member's
- * labor_burden_cents_per_hour. Shared by the visit and stop clock-out routes
+ * labor rate (memberLaborRatesCents: burden field, else hourly rate × org burden). Shared by the visit and stop clock-out routes
  * and by recomputeStopLabor() so the three can't drift.
  *
  * Punches are only ever recorded against a stop's anchor visit (the crew
@@ -71,14 +119,7 @@ export async function sumPunchLaborCents(supabase: AnySupabase, visitId: string)
     : 0;
 
   const memberIds = [...new Set(punches.map((p) => p.crew_member_id))];
-  const { data: members } = await supabase
-    .from("crm_crew_members")
-    .select("id, labor_burden_cents_per_hour")
-    .in("id", memberIds);
-  const rateById = new Map<string, number>(
-    ((members ?? []) as { id: string; labor_burden_cents_per_hour: number | null }[])
-      .map((m) => [m.id, Number(m.labor_burden_cents_per_hour ?? 0)])
-  );
+  const rateById = await memberLaborRatesCents(supabase, memberIds, visitRow?.org_id as string | undefined);
 
   let total = 0;
   for (const p of punches) {

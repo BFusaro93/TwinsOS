@@ -11,6 +11,8 @@ import { SearchInput } from "@/components/shared/SearchInput";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn, formatHours } from "@/lib/utils";
 import { useUpdateVisit, useVisitsForDate } from "@/lib/hooks/use-crm-jobs";
+import { useConfirm } from "@/components/shared/useConfirm";
+import { isPackageMinDaysMessage } from "@/lib/package-visit-recalc";
 import { useCrews } from "@/lib/hooks/use-employees";
 import type { CRMJobVisit } from "@/types/crm-jobs";
 import { visitBudgetState } from "./budget-progress";
@@ -147,6 +149,7 @@ export function DispatchCalendar({
   useEffect(() => { setHeld(null); }, [from]);
   const { data: crews = [] } = useCrews(true);
   const updateVisit = useUpdateVisit();
+  const [confirm, confirmDialog] = useConfirm();
 
   const rows: Row[] = useMemo(() => {
     const crewRows = crews.map((c, i) => ({
@@ -233,19 +236,43 @@ export function DispatchCalendar({
           : v
       )
     );
-    updateVisit.mutate(
-      {
-        id: visit.id,
-        jobId: visit.jobId,
-        updates: { scheduled_date: date, crew_id: toUnassigned ? null : crewId, crew_unassigned: toUnassigned },
-      },
-      {
-        onError: (err) => {
-          qc.setQueryData(key, previous);
-          toast.error(err instanceof Error && err.message ? err.message : "Couldn't move that visit");
+    const commit = (overrideMinDays: boolean) =>
+      updateVisit.mutate(
+        {
+          id: visit.id,
+          jobId: visit.jobId,
+          updates: { scheduled_date: date, crew_id: toUnassigned ? null : crewId, crew_unassigned: toUnassigned },
+          overrideMinDays,
         },
-      }
-    );
+        {
+          onError: (err) => {
+            qc.setQueryData(key, previous);
+            const message = err instanceof Error ? err.message : "";
+            // A package step dropped closer to the previous step than Min Days
+            // allows: offer to do it anyway, then redo the move.
+            if (!overrideMinDays && isPackageMinDaysMessage(message)) {
+              void confirm({
+                title: "Move ahead of Min Days?",
+                description: `${message}. Move it anyway if the spacing doesn't apply here (for example the client asked for an early visit).`,
+                confirmLabel: "Move anyway",
+              }).then((ok) => {
+                if (!ok) return;
+                qc.setQueryData<CRMJobVisit[]>(key, (old) =>
+                  (old ?? []).map((v) =>
+                    v.id === visit.id
+                      ? { ...v, scheduledDate: date, crewId: toUnassigned ? null : crewId, crewUnassigned: toUnassigned }
+                      : v
+                  )
+                );
+                commit(true);
+              });
+              return;
+            }
+            toast.error(message || "Couldn't move that visit");
+          },
+        }
+      );
+    commit(false);
   }
 
   const today = toISODate(new Date());
@@ -259,6 +286,7 @@ export function DispatchCalendar({
       ref={rootRef}
       className={cn("flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4", fullscreen && "bg-background p-4")}
     >
+      {confirmDialog}
       <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
         <Labeled label="Crews">
           <MultiSelectDropdown

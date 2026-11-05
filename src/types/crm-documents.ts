@@ -161,6 +161,7 @@ const INVOICE_TAGS: MergeTag[] = [
   { tag: "[invoicenumber]",       label: "Invoice Number",           group: "Invoice" },
   { tag: "[invoicedate]",         label: "Invoice Date",             group: "Invoice" },
   { tag: "[invoiceduedate]",      label: "Invoice Due Date",         group: "Invoice" },
+  { tag: "[invoiceterms]",        label: "Invoice Terms (e.g. Net 30)", group: "Invoice" },
   { tag: "[invoicesubtotal]",     label: "Invoice Subtotal",         group: "Invoice" },
   { tag: "[invoicetax]",          label: "Invoice Tax",              group: "Invoice" },
   { tag: "[invoicetotal]",        label: "Invoice Total",            group: "Invoice" },

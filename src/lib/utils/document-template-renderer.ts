@@ -180,6 +180,7 @@ export const SAMPLE_MERGE_VALUES: Record<string, string> = {
   "[invoicenumber]": "00042",
   "[invoicedate]": "",
   "[invoiceduedate]": "",
+  "[invoiceterms]": "Net 30",
   "[duedate]": "",
   "[invoicesubtotal]": "$1,250.00",
   "[invoicetax]": "$75.00",

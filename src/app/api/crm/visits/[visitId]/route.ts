@@ -5,7 +5,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { notifyVisitAssigned, notifyVisitNote } from "@/lib/notifications/visit-notify";
-import { checkPackageMinDaysViolation } from "@/lib/package-visit-recalc";
+import { checkPackageMinDaysViolation, overridePackageMinDays, PACKAGE_MIN_DAYS_CODE } from "@/lib/package-visit-recalc";
 import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { formatMonthDay } from "@/lib/utils";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
@@ -29,6 +29,8 @@ const PatchSchema = z.object({
   skip_reason: z.string().max(500).nullable().optional(),
   /** Admin-only: move / reopen a completed visit that is already invoiced. */
   override_invoiced: z.boolean().optional(),
+  /** Dispatch a package step ahead of its Min Days spacing (scheduling permission). */
+  override_min_days: z.boolean().optional(),
 });
 
 export async function PATCH(
@@ -71,7 +73,7 @@ export async function PATCH(
     .maybeSingle();
   const prev = before as { client_id: string; job_id: string; scheduled_date: string; status: string; crew_id: string | null; clocked_in_at: string | null; clocked_out_at: string | null } | null;
   if (!prev) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
-  const { override_invoiced: overrideInvoiced, ...patch } = parsed.data;
+  const { override_invoiced: overrideInvoiced, override_min_days: overrideMinDays, ...patch } = parsed.data;
 
   // Completed + invoiced visits are locked against moves and status changes
   // (the DB trigger is the floor; this answers with a clear message first).
@@ -125,7 +127,10 @@ export async function PATCH(
   if (patch.scheduled_date && patch.scheduled_date !== prev?.scheduled_date) {
     const violation = await checkPackageMinDaysViolation(supabase, visitId, patch.scheduled_date);
     if (violation) {
-      return NextResponse.json({ error: violation }, { status: 409 });
+      if (!overrideMinDays) return NextResponse.json({ error: violation, code: PACKAGE_MIN_DAYS_CODE }, { status: 409 });
+      // Moves just the date past the DB trigger; the plain update below then sees no date change.
+      const overrideErr = await overridePackageMinDays(supabase, visitId, patch.scheduled_date);
+      if (overrideErr) return NextResponse.json({ error: overrideErr }, { status: 500 });
     }
   }
 

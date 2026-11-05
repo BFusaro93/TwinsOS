@@ -213,7 +213,9 @@ export interface CRMJob {
   propertyCustomFieldValues?: { fieldDefId: string; valueNumber: number | null; valueText: string | null }[];
   services?: CRMJobService[];
   /** Populated only by useJobsList — the job's actual scheduled/generated visit occurrences. */
-  visits?: { id: string; scheduledDate: string; status: VisitStatus; crewName: string | null; jobServiceId: string | null }[];
+  visits?: { id: string; scheduledDate: string; status: VisitStatus; crewName: string | null; jobServiceId: string | null; completedAt?: string | null }[];
+  /** Waiting List only: every step of a package job (id + order + spacing), including steps already dispatched. */
+  packageStepOrder?: { id: string; sortOrder: number; minDays: number | null; startDate: string | null }[];
   /**
    * job_service_id of every crm_job_services row on this job that has at
    * least one active (not soft-deleted, not "not_used") product linked to

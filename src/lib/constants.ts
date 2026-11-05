@@ -196,6 +196,12 @@ export const DAMAGE_CASE_TYPE_LABELS: Record<string, string> = {
 
 // ─── Billing / Payment Terms ──────────────────────────────────────────────────
 
+/** "net_30" -> "Net 30" (empty when the invoice has no terms). Used by the
+ *  [invoiceterms] merge tag, which is separate from the due DATE tag. */
+export function billingTermsLabel(terms: string | null | undefined): string {
+  return BILLING_TERMS_OPTIONS.find((o) => o.value === terms)?.label ?? "";
+}
+
 export const BILLING_TERMS_OPTIONS = [
   { value: "due_on_receipt", label: "Due on Receipt" },
   { value: "net_10", label: "Net 10" },
