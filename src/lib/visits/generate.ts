@@ -36,6 +36,8 @@ import {
  * max_visits usage, overbilling the client.
  */
 
+import { composeVisitNote } from "@/lib/utils/visit-note";
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
 
@@ -72,6 +74,8 @@ interface GeneratorService {
   max_visits?: number | null;
   /** Crew size for this service; null = fall back to the job-level man_count. */
   team_size?: number | null;
+  /** Per-service crew note, appended to the job note on this service's visits. */
+  job_note?: string | null;
 }
 
 interface ExistingVisit {
@@ -137,7 +141,7 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
   const menCount = Math.max(1, Number(job.man_count ?? 1) || 1);
   // A service-linked visit takes its own service's team size (as estimate
   // conversion does) so a 1-man service on a 3-man-max job isn't tripled.
-  const base = (date: string, occurrence: string, serviceId: string | null, teamSize?: number | null): VisitInsert => ({
+  const base = (date: string, occurrence: string, serviceId: string | null, teamSize?: number | null, serviceNote?: string | null): VisitInsert => ({
     ...(orgId ? { org_id: orgId } : {}),
     job_id: job.id,
     client_id: job.client_id,
@@ -147,7 +151,7 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
     job_service_id: serviceId,
     men_count: teamSize && teamSize > 0 ? Math.round(teamSize) : menCount,
     priority: job.priority ?? 1,
-    notes_to_crew: job.notes_to_crew ?? null,
+    notes_to_crew: composeVisitNote(job.notes_to_crew, serviceNote),
   });
 
   const identity = new Set<string>();
@@ -201,7 +205,7 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
       if (claimedServices.has(s.id) || identity.has(keyOf(s.id, s.start_date))) continue;
       if (unlinkedHolds(s.start_date)) continue;
       if (!hasBudget(s.id)) continue;
-      out.push(base(s.start_date, s.start_date, s.id, s.team_size));
+      out.push(base(s.start_date, s.start_date, s.id, s.team_size, s.job_note));
       claimedServices.add(s.id);
       spend(s.id);
     }
@@ -246,7 +250,7 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
       if (identity.has(key) || liveKeys.has(key)) continue;
       if (!hasBudget(s.id)) continue;
       if (cap != null && liveCount + out.length >= cap) break outer;
-      out.push(base(date, date, s.id, s.team_size));
+      out.push(base(date, date, s.id, s.team_size, s.job_note));
       identity.add(key);
       spend(s.id);
       if (out.length >= maxVisits) break outer;
@@ -380,7 +384,7 @@ export async function generateVisitsForJobs(
   for (const ids of chunk(jobs.map((j) => j.id), 100)) {
     const { rows, error } = await selectAllRows<GeneratorService>(() => supabase
       .from("crm_job_services")
-      .select("id, job_id, included, start_recurring, start_date, sort_order, max_visits, team_size")
+      .select("id, job_id, included, start_recurring, start_date, sort_order, max_visits, team_size, job_note")
       .in("job_id", ids));
     if (error) { result.errors.push(error); return result; }
     services.push(...rows);

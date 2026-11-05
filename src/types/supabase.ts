@@ -6363,6 +6363,9 @@ export type Database = {
       crm_job_services: {
         Row: {
           treated_area: number | null
+          job_note: string | null
+          invoice_desc: string | null
+          internal_note: string | null
           assigned_to: string | null
           budget_method: string
           budgeted_hours: number
@@ -6390,6 +6393,9 @@ export type Database = {
         }
         Insert: {
           treated_area?: number | null
+          job_note?: string | null
+          invoice_desc?: string | null
+          internal_note?: string | null
           assigned_to?: string | null
           budget_method?: string
           budgeted_hours?: number
@@ -6417,6 +6423,9 @@ export type Database = {
         }
         Update: {
           treated_area?: number | null
+          job_note?: string | null
+          invoice_desc?: string | null
+          internal_note?: string | null
           assigned_to?: string | null
           budget_method?: string
           budgeted_hours?: number

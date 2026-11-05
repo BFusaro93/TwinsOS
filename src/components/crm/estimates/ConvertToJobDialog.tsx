@@ -1,5 +1,7 @@
 "use client";
 
+import { RichTextEditor } from "@/components/crm/services/RichTextEditor";
+import { isBlankRich } from "@/lib/utils/visit-note";
 import { useEffect, useState } from "react";
 import {
   Dialog,
@@ -232,9 +234,8 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
    *  dispatch board's MEN column). */
   const [manCount,      setManCount]      = useState(1);
   const [schedule,      setSchedule]      = useState("");
-  const [notesToCrew,   setNotesToCrew]   = useState(() =>
-    lineItems.map((li) => li.jobNote).filter(Boolean).join("\n").trim()
-  );
+  // Job-wide note only: each line's Job Note now goes to its own job service.
+  const [notesToCrew,   setNotesToCrew]   = useState("");
   const [projectId,     setProjectId]     = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   /** Sales rep for the job — inherits the estimate's rep, overridable here (E-15). */
@@ -458,7 +459,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         crewId: crewId || null,
         manCount,
         schedule: effectiveJobType === "recurring" ? schedule : null,
-        notesToCrew: notesToCrew || null,
+        notesToCrew: isBlankRich(notesToCrew) ? null : notesToCrew,
         projectId: effectiveJobType === "project" ? projectId : null,
         eacHintCents,
         salesRepId,
@@ -484,6 +485,9 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
             budgetMethod:  li.budgetMethod,
             estimateLineItemId: li.id,
             treatedArea:   li.treatedArea ?? null,
+            jobNote:       li.jobNote ?? null,
+            invoiceDesc:   li.invoiceDesc ?? null,
+            internalNote:  li.internalNote ?? null,
             maxVisits:     perVisit(li) ? Math.max(1, li.visits || 1) : null,
           };
         }),
@@ -843,12 +847,11 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
 
           <div className="flex flex-col gap-1 col-span-2">
             <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Notes to Crew / Job Notes</Label>
-            <Textarea
+            <RichTextEditor
               value={notesToCrew}
-              onChange={(e) => setNotesToCrew(e.target.value)}
-              rows={2}
-              className="text-sm resize-none"
-              placeholder="Instructions, access codes, etc."
+              onChange={setNotesToCrew}
+              minHeight={72}
+              placeholder="Instructions, access codes, etc. (each line's Job Note carries to its own service)"
             />
           </div>
         </div>
