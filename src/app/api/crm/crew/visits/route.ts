@@ -64,7 +64,8 @@ export async function GET(request: Request) {
   // Which day the crew's schedule opens on is the ORG's day. A crew phone set
   // to another timezone (or a UTC server) must not show a different route than
   // the office dispatched.
-  const orgToday = todayInZone(await getMyTimeZone(supabase));
+  const orgTimeZone = await getMyTimeZone(supabase);
+  const orgToday = todayInZone(orgTimeZone);
   const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : orgToday;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -131,8 +132,10 @@ export async function GET(request: Request) {
   // they vanished at midnight. Only when viewing today.
   let carriedOver: Record<string, unknown>[] = [];
   if (date === orgToday) {
+    // Before 6am org time this also keeps yesterday's unfinished stops (a
+    // storm route running past midnight); see selectCarriedOverClockedInVisits.
     const carried = await selectCarriedOverClockedInVisits(
-      supabase, visitSelect, crew.id, date, (q) => q.eq("org_id", orgId)
+      supabase, visitSelect, crew.id, date, (q) => q.eq("org_id", orgId), { timeZone: orgTimeZone }
     );
     if (!carried.error) carriedOver = carried.data;
   }

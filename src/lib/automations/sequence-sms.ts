@@ -1,4 +1,5 @@
 import { sendClientSms } from "@/lib/sms/send";
+import { findOptedOutNumbers, phoneLast10 } from "@/lib/sms/opt-outs";
 import { KNOWN_MERGE_TAG_KEYS } from "@/lib/utils/document-template-renderer";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { buildInvoiceExtras, buildServiceExtras } from "./record-merge-vars";
@@ -57,11 +58,11 @@ export async function resolveSmsStepContent(
   const client = loaded?.client;
 
   if (!client) return { error: "client not found" };
-  // Consent is modelled at the CLIENT level only (clients.sms_opt_in — contacts
-  // have no SMS-consent column), and sendClientSms re-checks it at the actual
-  // send. So every recipient number below (billing phone, contacts) is texted
-  // only under the client's own opt-in; there is no per-contact consent to
-  // consult. If per-contact consent is ever added, filter it here.
+  // Consent to be texted is modelled at the CLIENT level (clients.sms_opt_in —
+  // contacts have no SMS-consent column), and sendClientSms re-checks it at the
+  // actual send. So every recipient number below (billing phone, contacts) is
+  // texted under the client's own opt-in — unless that number itself replied
+  // STOP, which is remembered per number (crm_sms_opt_outs, filtered below).
   if (!client.sms_opt_in) return { error: "client has not opted in to SMS" };
 
   const toSelection = params.toSelection?.length ? params.toSelection : ["client_primary_phone"];
@@ -98,6 +99,14 @@ export async function resolveSmsStepContent(
       ? "client has no primary_phone"
       : "no resolvable phone number for the selected 'send to' options" };
   }
+  // A number that texted STOP (crm_sms_opt_outs) is dropped; the client's other
+  // numbers still get the step. sendClientSms re-checks at the actual send.
+  const optedOut = await findOptedOutNumbers(params.orgId, Array.from(phonesByKey.values()));
+  for (const [key, phone] of phonesByKey) {
+    const last10 = phoneLast10(phone);
+    if (last10 && optedOut.has(last10)) phonesByKey.delete(key);
+  }
+  if (phonesByKey.size === 0) return { error: "every recipient number has replied STOP" };
 
   let meetingDate = "";
   let meetingTime = "";

@@ -8,6 +8,7 @@ import { logger } from "@/lib/logger";
 import { notifySupportInboxOfAskAI } from "@/lib/staff-notify";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -112,7 +113,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Org not found" }, { status: 403 });
   }
 
-  const orgId: string = profile.org_id;
+  // The org the caller acts on: while staff impersonate, my_org_id() is the
+  // impersonated org, and try_increment_ai_chat_usage (and RLS on the org
+  // lookup below) checks against it — the home org made every question 500.
+  const orgId: string = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   const userId = user.id;
 
   let body: { question?: string; history?: ChatTurn[] };

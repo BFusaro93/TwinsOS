@@ -10,6 +10,7 @@ import { buildAccountStatementData } from "@/lib/invoices/account-statement-data
 import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError, buildClientMergeVars, resolveMergeTags } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
+import { allRecipientsBouncedMessage, partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 
@@ -80,7 +81,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: client, error: clientErr } = await (supabase as any)
     .from("clients")
-    .select("org_id, display_name, primary_email, billing_email, email_bounced_at, billing_address, billing_city, billing_state, billing_zip")
+    .select("org_id, display_name, primary_email, billing_email, billing_address, billing_city, billing_state, billing_zip")
     .eq("id", clientId)
     .is("deleted_at", null)
     .single();
@@ -89,29 +90,28 @@ export async function POST(
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
   }
 
-  const toEmails = (body.to && body.to.length > 0)
+  const requestedEmails = (body.to && body.to.length > 0)
     ? body.to.map((e) => e.trim())
     : (() => {
       // Statements are billing mail: a Billing Email, when set, wins over the primary.
       const stored = ((client.billing_email as string | null)?.trim() || (client.primary_email as string | null)) ?? null;
       return stored ? [stored] : [];
     })();
-  if (toEmails.length === 0) {
+  if (requestedEmails.length === 0) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
   }
 
-  // A hard bounce means the stored address doesn't accept mail; re-sending
-  // damages sending-domain reputation, so it is blocked for transactional mail
-  // too (see the Resend webhook that sets email_bounced_at). An explicit `to`
-  // override is how staff send to a corrected address, so it is not blocked.
-  // The dialog always posts `to` pre-filled with the stored address, so only a genuinely
-  // different address counts as the override.
-  const storedEmails = new Set(
-    [client.primary_email as string | null, client.billing_email as string | null].filter((e): e is string => !!e).map((e) => e.trim().toLowerCase())
+  // A hard bounce means that address doesn't accept mail; re-sending damages
+  // sending-domain reputation, so it is dropped for transactional mail too.
+  // Bounces are per address (20261220000500_email_address_bounces.sql): a dead
+  // billing email or CC no longer blocks the statement going to a good one,
+  // and a typed corrected address simply isn't on the bounce list.
+  const { deliverable: toEmails, bounced: bouncedEmails } = await partitionBouncedRecipients(
+    client.org_id as string,
+    requestedEmails,
   );
-  const toIsStored = !(body.to && body.to.length > 0) || body.to.some((e) => storedEmails.has(e.trim().toLowerCase()));
-  if (toIsStored && client.email_bounced_at) {
-    return NextResponse.json({ error: "Client's email address has hard-bounced. Update it, or send to a different address." }, { status: 422 });
+  if (toEmails.length === 0) {
+    return NextResponse.json({ error: allRecipientsBouncedMessage(bouncedEmails) }, { status: 422 });
   }
 
   const today = await todayISO(supabase);
@@ -262,5 +262,5 @@ export async function POST(
     created_by: user.id,
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, bouncedSkipped: bouncedEmails });
 }

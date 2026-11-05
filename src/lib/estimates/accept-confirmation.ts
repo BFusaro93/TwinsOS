@@ -8,6 +8,7 @@ import type { RenderableBlock } from "@/lib/utils/document-template-renderer";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { proposalUrlFor } from "@/lib/estimates/share-token";
 import { getConfirmationSettings } from "@/lib/estimates/confirmation-settings";
+import { findBouncedAddresses } from "@/lib/email/bounced-addresses";
 import { resolveEstimateDocument } from "@/lib/estimates/resolve-estimate-document";
 import { logger } from "@/lib/logger";
 
@@ -37,7 +38,7 @@ export async function sendConfiguredAcceptanceConfirmation(
       .from("estimates")
       .select(
         "org_id, client_id, estimate_number, estimate_date, created_at, valid_until_date, notes, subtotal_cents, total_cents, " +
-        "clients(display_name, first_name, last_name, primary_email, billing_email, email_bounced_at, account_number)",
+        "clients(display_name, first_name, last_name, primary_email, billing_email, account_number)",
       )
       .eq("id", args.estimateId)
       .single();
@@ -98,17 +99,23 @@ export async function sendConfiguredAcceptanceConfirmation(
     const client = est.clients as {
       display_name: string | null; first_name: string | null; last_name: string | null;
       primary_email: string | null; billing_email: string | null;
-      email_bounced_at: string | null; account_number: string | null;
+      account_number: string | null;
     } | null;
 
     // billing_email is the default, falling back to the primary address.
     const recipient = settings.recipient === "billing_email"
       ? (client?.billing_email?.trim() || client?.primary_email?.trim() || null)
       : (client?.primary_email?.trim() || null);
-    // A hard bounce means the stored address is dead; it blocks every send.
-    // do_not_market is a marketing preference only and is deliberately ignored
-    // for this transactional email.
-    if (!recipient || client?.email_bounced_at) return "failed";
+    // A hard-bounced address is dead; it blocks every send. Checked for the
+    // address actually used (billing or primary) — bounces are per address
+    // (20261220000500_email_address_bounces.sql). do_not_market is a marketing
+    // preference only and is deliberately ignored for this transactional email.
+    if (!recipient) return "failed";
+    try {
+      if ((await findBouncedAddresses(est.org_id as string, [recipient])).size > 0) return "failed";
+    } catch {
+      return "failed";
+    }
 
     const addr = (org.address as Record<string, string>) ?? {};
     const orgName = (org.name as string | null) ?? "Your Service Provider";

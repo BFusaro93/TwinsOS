@@ -4,7 +4,7 @@ import { z } from "zod";
 import { stopKeyForVisit, isNotesAcknowledgmentCurrent, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { closeOpenDriveSegment } from "@/lib/crew/drive-time";
-import { openStopPunches } from "@/lib/crew/stop-punches";
+import { openStopPunches, resolvePunchOwnerVisitId } from "@/lib/crew/stop-punches";
 import { startCrewDay } from "@/lib/crew/day-shifts";
 import { createServiceClient } from "@/lib/supabase/server";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
@@ -265,10 +265,13 @@ export async function POST(
   }
 
   // The leader's one tap clocks in the whole crew: punch every working
-  // member (roster minus anyone marked absent) at the same instant.
+  // member (roster minus anyone marked absent) at the same instant. A stop
+  // re-started after a pause already has punches on one of its visits — keep
+  // them together there rather than opening a second set on today's anchor.
+  const punchVisitId = await resolvePunchOwnerVisitId(supabase, stopRows.map((r) => r.id), anchor.id);
   const { rosterEmpty } = await openStopPunches(
     supabase,
-    { id: anchor.id, orgId: anchor.org_id, crewId: effectiveVisitCrewId(anchor), scheduledDate: anchor.scheduled_date },
+    { id: punchVisitId, orgId: anchor.org_id, crewId: effectiveVisitCrewId(anchor), scheduledDate: anchor.scheduled_date },
     now
   );
 

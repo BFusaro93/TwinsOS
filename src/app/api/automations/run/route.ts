@@ -124,7 +124,14 @@ export async function POST(request: Request) {
   return handleRun(request);
 }
 
+/** Work this run may start, measured from the start of the request: maxDuration is 300s,
+ *  and a step already being sent (provider call, then its sent-marker write) needs headroom
+ *  to finish before the platform kills the function. */
+const RUN_BUDGET_MS = 240_000;
+
 async function handleRun(request: Request) {
+  const requestStartedAt = Date.now();
+  const remainingMs = () => RUN_BUDGET_MS - (Date.now() - requestStartedAt);
   const adminClient = createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -581,9 +588,14 @@ async function handleRun(request: Request) {
   // firing them in the request. Drained before the processor below so the
   // enrollments they create send their due steps in this same run.
   let queuedTriggers = { processed: 0, failed: 0 };
-  const queueStartedAt = Date.now();
   try {
-    queuedTriggers = await drainTriggerQueue(adminClient, { budgetMs: 60_000, orgId: callerOrgId });
+    // Both budgets come out of the request's own clock: the poll sweep above isn't
+    // bounded, so a long sweep used to leave the processor below a fresh 60s+ that ran
+    // past maxDuration and could be killed between a send and its sent marker.
+    const queueBudgetMs = Math.min(60_000, remainingMs());
+    if (queueBudgetMs > 0) {
+      queuedTriggers = await drainTriggerQueue(adminClient, { budgetMs: queueBudgetMs, orgId: callerOrgId });
+    }
   } catch (queueErr) {
     log.error("trigger queue drain failed", { error: queueErr instanceof Error ? queueErr.message : String(queueErr) });
   }
@@ -600,8 +612,8 @@ async function handleRun(request: Request) {
     // semantics are unchanged. Rows already seen this run (e.g. skipped but
     // still due) are not re-processed; the loop ends when a batch brings
     // nothing new.
-    // Shares the function's time limit with the queue drain above.
-    const POLL_BUDGET_MS = Math.max(60_000, 240_000 - (Date.now() - queueStartedAt));
+    // Whatever is left of the request's budget after the sweep and the queue drain.
+    const POLL_BUDGET_MS = Math.max(0, remainingMs());
     const BATCH_SIZE = 50;
     const startedAt = Date.now();
     const seenEnrollmentIds = new Set<string>();

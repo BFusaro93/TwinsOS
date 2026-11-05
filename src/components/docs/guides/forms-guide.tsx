@@ -329,7 +329,9 @@ export function FormsGuide() {
             <GuideLink href="/settings/support/automations-guide" className="text-[#60ab45] hover:underline">
               the Automations guide
             </GuideLink>{" "}
-            for what you can chain off of it.
+            for what you can chain off of it. A Form submitted trigger can be limited to this form,
+            tags the form adds fire Tag added, and the sequence&apos;s first step (an auto-reply, say)
+            goes out within seconds of the submission.
           </li>
         </ol>
         <p>What happens next depends on the Account Management setting on that form:</p>

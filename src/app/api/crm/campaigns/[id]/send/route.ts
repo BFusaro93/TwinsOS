@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { sendCampaignEmails } from "@/lib/campaigns/send-campaign";
+import { assertOrgWritable } from "@/lib/org-writable";
+import { createOrgOutboundMutedResolver } from "@/lib/orgs/org-canceled";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 // A large campaign can take longer than the platform's default route
 // timeout to send every recipient; extend the ceiling so more campaigns
@@ -24,6 +27,9 @@ export async function POST(
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Staff impersonating an org send that org's campaign; profile.org_id is their own
+  // org, which made the campaign "not found" while impersonating.
+  const orgId: string = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // Bulk-emailing every recipient is gated in the UI by campaign_send; the
   // server must enforce it too or any CRM user can POST here directly.
@@ -45,17 +51,27 @@ export async function POST(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ) as any;
+
+  // Same gates as the scheduled-campaigns cron and 1:1 sends: the emails go out through
+  // Resend before any DB write, so read-only RLS never stops a canceled / expired-trial
+  // org, and demo orgs are muted for every automated or bulk send.
+  const notWritable = await assertOrgWritable(db, orgId);
+  if (notWritable) return notWritable;
+  if (await createOrgOutboundMutedResolver(db)(orgId)) {
+    return NextResponse.json({ error: "Outbound email is turned off for this organization" }, { status: 403 });
+  }
+
   const { data: campaign } = await db
     .from("crm_campaigns")
     .select("*")
     .eq("id", campaignId)
-    .eq("org_id", profile.org_id)
+    .eq("org_id", orgId)
     .is("deleted_at", null)
     .single();
 
   if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
 
-  const result = await sendCampaignEmails(db, campaign, profile.org_id, user.id);
+  const result = await sendCampaignEmails(db, campaign, orgId, user.id);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 422 });
 
   return NextResponse.json({ totalRecipients: result.totalRecipients, delivered: result.delivered, failed: result.failed });

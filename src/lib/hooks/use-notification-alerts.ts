@@ -13,6 +13,36 @@ import { useQuery } from "@/lib/hooks/use-query";
 
 const ALERTS = "notification-alerts";
 
+/**
+ * Entities of one type whose ACTIVE approval step (the lowest pending "order"
+ * in the live chain) includes `userId` as an approver — the only records the
+ * bell may call "needs your approval". The whole pending list used to alert
+ * every user, the submitter and viewers included.
+ */
+async function fetchMyActiveApprovalIds(
+  supabase: ReturnType<typeof createClient>,
+  entityType: "requisition" | "purchase_order" | "crm_estimate",
+  userId: string
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("approval_requests")
+    .select("entity_id, order, approver_id")
+    .eq("entity_type", entityType)
+    .eq("status", "pending")
+    .eq("archived", false);
+  if (error) throw error;
+  const minOrder = new Map<string, number>();
+  for (const r of data) {
+    const cur = minOrder.get(r.entity_id);
+    if (cur === undefined || r.order < cur) minOrder.set(r.entity_id, r.order);
+  }
+  const mine = new Set<string>();
+  for (const r of data) {
+    if (r.approver_id === userId && r.order === minOrder.get(r.entity_id)) mine.add(r.entity_id);
+  }
+  return [...mine];
+}
+
 export interface RequisitionAlertRow {
   id: string;
   requisitionNumber: string;
@@ -20,14 +50,17 @@ export interface RequisitionAlertRow {
   updatedAt: string;
 }
 
-export function usePendingRequisitionAlerts(enabled: boolean) {
+export function usePendingRequisitionAlerts(enabled: boolean, userId: string) {
   return useQuery({
-    queryKey: ["requisitions", ALERTS],
+    queryKey: ["requisitions", ALERTS, userId],
     queryFn: async (): Promise<RequisitionAlertRow[]> => {
       const supabase = createClient();
+      const ids = await fetchMyActiveApprovalIds(supabase, "requisition", userId);
+      if (ids.length === 0) return [];
       const { data, error } = await supabase
         .from("requisitions")
         .select("id, requisition_number, title, updated_at")
+        .in("id", ids)
         .eq("status", "pending_approval")
         .is("deleted_at", null);
       if (error) throw error;
@@ -38,7 +71,7 @@ export function usePendingRequisitionAlerts(enabled: boolean) {
         updatedAt: r.updated_at,
       }));
     },
-    enabled,
+    enabled: enabled && !!userId,
   });
 }
 
@@ -49,14 +82,17 @@ export interface POAlertRow {
   updatedAt: string;
 }
 
-export function usePendingPOAlerts(enabled: boolean) {
+export function usePendingPOAlerts(enabled: boolean, userId: string) {
   return useQuery({
-    queryKey: ["purchase-orders", ALERTS],
+    queryKey: ["purchase-orders", ALERTS, userId],
     queryFn: async (): Promise<POAlertRow[]> => {
       const supabase = createClient();
+      const ids = await fetchMyActiveApprovalIds(supabase, "purchase_order", userId);
+      if (ids.length === 0) return [];
       const { data, error } = await supabase
         .from("purchase_orders")
         .select("id, po_number, vendor_name, updated_at")
+        .in("id", ids)
         .eq("status", "pending")
         .is("deleted_at", null);
       if (error) throw error;
@@ -67,7 +103,7 @@ export function usePendingPOAlerts(enabled: boolean) {
         updatedAt: po.updated_at,
       }));
     },
-    enabled,
+    enabled: enabled && !!userId,
   });
 }
 
@@ -78,14 +114,17 @@ export interface EstimateAlertRow {
   updatedAt: string;
 }
 
-export function usePendingEstimateAlerts(enabled: boolean) {
+export function usePendingEstimateAlerts(enabled: boolean, userId: string) {
   return useQuery({
-    queryKey: ["estimates", ALERTS],
+    queryKey: ["estimates", ALERTS, userId],
     queryFn: async (): Promise<EstimateAlertRow[]> => {
       const supabase = createClient();
+      const ids = await fetchMyActiveApprovalIds(supabase, "crm_estimate", userId);
+      if (ids.length === 0) return [];
       const { data, error } = await supabase
         .from("estimates")
         .select("id, estimate_number, description, updated_at")
+        .in("id", ids)
         .eq("approval_status", "pending")
         .is("deleted_at", null);
       if (error) throw error;
@@ -96,7 +135,7 @@ export function usePendingEstimateAlerts(enabled: boolean) {
         updatedAt: e.updated_at,
       }));
     },
-    enabled,
+    enabled: enabled && !!userId,
   });
 }
 
@@ -106,13 +145,18 @@ export interface WorkOrderAlertRow {
   title: string;
   assetName: string | null;
   dueDate: string | null;
-  assignedToIds: string[];
+  /** Assigned to the current user (via their crm_employees row). */
+  assignedToMe: boolean;
   updatedAt: string;
 }
 
 /**
  * Open work orders that are overdue (due before `todayIso`) and/or assigned to
  * `userId` — one request for both alerts; the bell splits them back out.
+ *
+ * work_orders.assigned_to_ids holds crm_employees ids (the WO picker uses
+ * useSelectableEmployees), not profile ids, so the user's employee rows are
+ * looked up first. The profile id stays in the match for a few legacy rows.
  */
 export function useWorkOrderAlerts({
   userId,
@@ -125,15 +169,27 @@ export function useWorkOrderAlerts({
   overdue: boolean;
   assigned: boolean;
 }) {
-  const filters = [
-    overdue && `due_date.lt.${todayIso}`,
-    // assigned_to_ids is jsonb, so containment takes a JSON array, not {…}.
-    assigned && userId && `assigned_to_ids.cs.${JSON.stringify([userId])}`,
-  ].filter(Boolean);
   return useQuery({
     queryKey: ["work-orders", ALERTS, { userId, todayIso, overdue, assigned }],
     queryFn: async (): Promise<WorkOrderAlertRow[]> => {
       const supabase = createClient();
+      let myAssigneeIds: string[] = [];
+      if (assigned && userId) {
+        // An Equipt-only login may not be able to read crm_employees; then only
+        // the legacy profile-id match applies.
+        const { data: employees } = await supabase
+          .from("crm_employees")
+          .select("id")
+          .eq("user_id", userId)
+          .is("deleted_at", null);
+        myAssigneeIds = [userId, ...(employees ?? []).map((e) => e.id)];
+      }
+      const filters = [
+        overdue && `due_date.lt.${todayIso}`,
+        // assigned_to_ids is jsonb, so containment takes a JSON array, not {…}.
+        ...myAssigneeIds.map((id) => `assigned_to_ids.cs.${JSON.stringify([id])}`),
+      ].filter(Boolean);
+      if (filters.length === 0) return [];
       const { data, error } = await supabase
         .from("work_orders")
         .select("id, work_order_number, title, asset_name, due_date, assigned_to_ids, updated_at")
@@ -141,17 +197,21 @@ export function useWorkOrderAlerts({
         .is("deleted_at", null)
         .or(filters.join(","));
       if (error) throw error;
-      return data.map((wo) => ({
-        id: wo.id,
-        workOrderNumber: wo.work_order_number,
-        title: wo.title,
-        assetName: wo.asset_name,
-        dueDate: wo.due_date,
-        assignedToIds: Array.isArray(wo.assigned_to_ids) ? (wo.assigned_to_ids as string[]) : [],
-        updatedAt: wo.updated_at,
-      }));
+      const mine = new Set(myAssigneeIds);
+      return data.map((wo) => {
+        const assignedToIds = Array.isArray(wo.assigned_to_ids) ? (wo.assigned_to_ids as string[]) : [];
+        return {
+          id: wo.id,
+          workOrderNumber: wo.work_order_number,
+          title: wo.title,
+          assetName: wo.asset_name,
+          dueDate: wo.due_date,
+          assignedToMe: assignedToIds.some((id) => mine.has(id)),
+          updatedAt: wo.updated_at,
+        };
+      });
     },
-    enabled: filters.length > 0,
+    enabled: overdue || (assigned && !!userId),
   });
 }
 

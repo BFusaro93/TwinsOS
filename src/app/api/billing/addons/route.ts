@@ -6,6 +6,7 @@ import { isAddonKey, getPriceIdForAddon, addonAppliesToModules } from "@/lib/str
 import { planIncludesAddon, getModulesForPlan, type BundledAddonKey } from "@/lib/stripe/plans";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { removePurchasedBundledAddons } from "@/lib/stripe/bundled-addon-reconcile";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 const ToggleAddonSchema = z.object({
   addon: z.string().refine(isAddonKey, { message: "Unknown addon" }),
@@ -30,6 +31,10 @@ export async function POST(request: Request) {
   if (profile.role !== "admin") {
     return NextResponse.json({ error: "Only admins can manage billing" }, { status: 403 });
   }
+  // Billing acts on profiles.org_id (the HOME org). While staff impersonate,
+  // RLS hides that org and the route answered "Organization not found".
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "managing billing");
+  if (impersonating) return impersonating;
 
   const body = await request.json().catch(() => null);
   const parsed = ToggleAddonSchema.safeParse(body);

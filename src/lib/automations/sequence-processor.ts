@@ -45,6 +45,23 @@ const MAX_SEND_ATTEMPTS = 5;
 /** First retry delay; doubles each attempt (15m, 30m, 1h, 2h). */
 const SEND_RETRY_BASE_MS = 15 * 60 * 1000;
 
+/** "HH:MM" when the step has a valid, non-zero-width "Send Between" window — the time it
+ *  opens each day — else null. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function emailWindowStartHhmm(config: Record<string, any>): string | null {
+  const parse = (v: unknown): number | null => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(typeof v === "string" ? v.trim() : "");
+    if (!m) return null;
+    const h = Number(m[1]);
+    const min = Number(m[2]);
+    return h <= 23 && min <= 59 ? h * 60 + min : null;
+  };
+  const start = parse(config.between_start);
+  const end = parse(config.between_end);
+  if (start === null || end === null || start === end) return null;
+  return `${String(Math.floor(start / 60)).padStart(2, "0")}:${String(start % 60).padStart(2, "0")}`;
+}
+
 /**
  * When an email step has a "Send Between" window and `now` (on the org's
  * clock) is outside it, the instant the window next opens; null when the step
@@ -106,7 +123,15 @@ export async function emailSendDeferral(
     const weekdayName = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: tz }).format(now);
     const day = weekdayName === "Sun" ? 0 : weekdayName === "Sat" ? 6 : 1; // 0 = Sun, 6 = Sat
     if (day === 0 || day === 6) {
-      return { fireAt: new Date(now.getTime() + (day === 0 ? 1 : 2) * 86400000), reason: "deferred to next weekday (send_weekdays_only)" };
+      // Monday at the window's opening time (or this clock time with no window).
+      // Same clock time +1/+2 days used to land Saturday-evening mail after Monday's
+      // window had closed, so the window check then pushed it on to Tuesday.
+      const daysAhead = day === 0 ? 1 : 2;
+      const wall = instantToZoneWallClock(now, tz);
+      const hhmm = emailWindowStartHhmm(config) ?? wall.time.slice(0, 5);
+      const fireAt = zoneWallClockToInstant(shiftYmd(wall.date, daysAhead), hhmm, tz)
+        ?? new Date(now.getTime() + daysAhead * 86400000);
+      return { fireAt, reason: "deferred to next weekday (send_weekdays_only)" };
     }
   }
   // "Send Between" window (Email event dialog, default 08:00–18:00): defer to
@@ -365,6 +390,39 @@ export async function processDueEnrollment(
   return runClaimedStep(adminClient, enrollment);
 }
 
+/**
+ * Why a meeting-scoped enrollment no longer applies, or null when it still does: the
+ * meeting is gone, no longer scheduled, or scheduled for a different time than the one
+ * this enrollment was created for (logged as "meeting_scheduled_at" at enrollment).
+ * An enrollment with no logged time (pre-dating that log) is only checked for status.
+ */
+async function meetingNoLongerMatches(
+  adminClient: AnyClient,
+  enrollmentId: string,
+  meetingId: string
+): Promise<string | null> {
+  const { data: meeting } = await adminClient
+    .from("crm_sales_meetings")
+    .select("status, scheduled_at, deleted_at")
+    .eq("id", meetingId)
+    .maybeSingle();
+  if (!meeting || meeting.deleted_at) return "meeting was deleted";
+  if (meeting.status !== "scheduled") return `meeting is ${meeting.status}`;
+  const { data: logRow } = await adminClient
+    .from("crm_sequence_execution_log")
+    .select("detail")
+    .eq("enrollment_id", enrollmentId)
+    .eq("action", "meeting_scheduled_at")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (logRow?.detail && meeting.scheduled_at
+      && new Date(logRow.detail as string).getTime() !== new Date(meeting.scheduled_at as string).getTime()) {
+    return "meeting was rescheduled";
+  }
+  return null;
+}
+
 async function runClaimedStep(
   adminClient: AnyClient,
   enrollment: DueEnrollmentRow
@@ -410,6 +468,48 @@ async function runClaimedStep(
       action: "stopped_sequence_inactive", detail: "sequence or automation was disabled/deleted",
     });
     return { fired: { enrollmentId: enrollId, action: "stopped (sequence/automation inactive)" } };
+  }
+
+  // A deleted client's sequence must end, not just skip its messages: the email/SMS
+  // loaders refuse a deleted client (a permanent failure that advances the sequence),
+  // so the ticket/alert/update/tag steps after it used to run against the deleted
+  // record and notify staff about it.
+  if (client_id) {
+    const { data: clientRow } = await adminClient
+      .from("clients")
+      .select("deleted_at")
+      .eq("id", client_id)
+      .maybeSingle();
+    if (!clientRow || clientRow.deleted_at) {
+      await adminClient
+        .from("crm_sequence_enrollments")
+        .update({ stopped_at: nowIso, updated_at: nowIso })
+        .eq("id", enrollId);
+      await logSequenceExecution(adminClient, {
+        orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+        action: "stopped_client_deleted", detail: "client was deleted",
+      });
+      return { fired: { enrollmentId: enrollId, action: "stopped (client deleted)" } };
+    }
+  }
+
+  // A meeting reminder is about one scheduled time. If the meeting was cancelled,
+  // deleted, completed or moved, the reminders still queued for it are wrong — stop
+  // them; the 5-minute sales-meeting cron re-enrolls a moved meeting for its new time
+  // (meetingRescheduledSinceEnrollment).
+  if (meeting_id) {
+    const meetingStop = await meetingNoLongerMatches(adminClient, enrollId, meeting_id);
+    if (meetingStop) {
+      await adminClient
+        .from("crm_sequence_enrollments")
+        .update({ stopped_at: nowIso, updated_at: nowIso })
+        .eq("id", enrollId);
+      await logSequenceExecution(adminClient, {
+        orgId, enrollmentId: enrollId, sequenceId: sequence_id, clientId: client_id,
+        action: "stopped_meeting_changed", detail: meetingStop,
+      });
+      return { fired: { enrollmentId: enrollId, action: `stopped (${meetingStop})` } };
+    }
   }
 
   // Positions aren't guaranteed contiguous: deleting or deactivating a step
@@ -682,6 +782,11 @@ async function runClaimedStep(
     if ("error" in built) {
       return handleSendFailure(adminClient, failureCtx, built.error, true);
     }
+    // An empty message (blank step, or one whose only merge tags resolved to nothing) is
+    // refused by Twilio; that used to count as a transient failure and retry five times.
+    if (!built.bodyText.trim()) {
+      return handleSendFailure(adminClient, failureCtx, "text message is empty", true);
+    }
 
     // TCPA quiet hours: no marketing/automated texts before 8am or from 9pm in the
     // org's local time (see nextSmsSendTime). The step is pushed to the next 8am
@@ -787,9 +892,21 @@ async function runClaimedStep(
   }
 
   if (currentEvent.event_type === "alert") {
-    const recipientIds: string[] = Array.isArray(eventConfig.recipient_user_ids)
-      ? eventConfig.recipient_user_ids
+    const configuredIds: string[] = Array.isArray(eventConfig.recipient_user_ids)
+      ? eventConfig.recipient_user_ids.filter((v: unknown): v is string => typeof v === "string")
       : [];
+    // Step config is free JSON written by org staff: only this org's active users get the
+    // alert (an id from another org would otherwise land in that user's bell).
+    let recipientIds: string[] = [];
+    if (configuredIds.length > 0) {
+      const { data: members } = await adminClient
+        .from("profiles")
+        .select("id")
+        .eq("org_id", orgId)
+        .neq("status", "inactive")
+        .in("id", configuredIds);
+      recipientIds = ((members ?? []) as { id: string }[]).map((m) => m.id);
+    }
     // Step-failure handling mirrors the email/SMS steps: returning "skipped"
     // without rescheduling left the enrollment re-claimed every lease period
     // forever (and the client's active slot occupied). A misconfigured step is
@@ -800,7 +917,11 @@ async function runClaimedStep(
       eventType: "alert", events: events ?? [], position: next_event_position, nowIso,
     };
     if (recipientIds.length === 0) {
-      return handleSendFailure(adminClient, stepFailure, "no recipient_user_ids configured", true);
+      return handleSendFailure(
+        adminClient, stepFailure,
+        configuredIds.length === 0 ? "no recipient_user_ids configured" : "no configured recipient is an active user in this org",
+        true
+      );
     }
 
     const message = await resolveClientPlainText(adminClient, {
@@ -853,16 +974,25 @@ async function runClaimedStep(
     const ticketDescription = await resolveClientPlainText(adminClient, {
       orgId, clientId: client_id ?? null, template: (eventConfig.description as string) || "",
     });
-    const assignToId = (eventConfig.assign_to as string) || null;
+    const configuredAssignee = (eventConfig.assign_to as string) || null;
 
+    // Only an employee of this org can be the assignee; anything else (another org's
+    // employee id, a deleted employee) leaves the ticket unassigned, which notifies
+    // the org's New Ticket recipients instead.
+    let assignToId: string | null = null;
     let assignedToName: string | null = null;
-    if (assignToId) {
+    if (configuredAssignee) {
       const { data: assignee } = await adminClient
         .from("crm_employees")
-        .select("first_name, last_name")
-        .eq("id", assignToId)
-        .single();
-      assignedToName = assignee ? `${assignee.first_name} ${assignee.last_name}`.trim() : null;
+        .select("id, first_name, last_name")
+        .eq("id", configuredAssignee)
+        .eq("org_id", orgId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (assignee) {
+        assignToId = assignee.id as string;
+        assignedToName = `${assignee.first_name} ${assignee.last_name}`.trim();
+      }
     }
 
     const { data: ticket, error: ticketErr } = await adminClient

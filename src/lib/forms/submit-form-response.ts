@@ -3,6 +3,8 @@ import { Resend } from "resend";
 import { resolveMergeTags, EMAIL_FROM } from "@/lib/email/send";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
+import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
+import { createServiceClient } from "@/lib/supabase/server";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { EMAIL_REGEX, computeVisitedPages, ruleConditionMatches, type PageWalkRule } from "@/lib/forms/form-logic";
 
@@ -780,6 +782,9 @@ export async function submitFormResponse(
   const tagsOnSubmit = form.settings?.tagsOnSubmit as { add?: string[]; remove?: string[] } | undefined;
   const tagsToAdd = [...new Set([...(tagsOnSubmit?.add ?? []), ...ruleTags.add])];
   const tagsToRemove = [...new Set([...(tagsOnSubmit?.remove ?? []), ...ruleTags.remove])];
+  // Tags this submission actually added (not ones the client already had) — they fire
+  // "Tag added" below, the same as adding a tag by hand.
+  let newlyAddedTags: string[] = [];
   if (relatedClientId && (tagsToAdd.length > 0 || tagsToRemove.length > 0)) {
     if (tagsToAdd.length > 0) {
       const tagInserts = tagsToAdd.map((tag: string) => ({
@@ -787,7 +792,12 @@ export async function submitFormResponse(
         client_id: relatedClientId,
         tag,
       }));
-      await db.from("client_tags").upsert(tagInserts, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true });
+      // ignoreDuplicates = ON CONFLICT DO NOTHING, so the returned rows are only the new ones.
+      const { data: insertedTags } = await db
+        .from("client_tags")
+        .upsert(tagInserts, { onConflict: "org_id,client_id,tag", ignoreDuplicates: true })
+        .select("tag");
+      newlyAddedTags = ((insertedTags ?? []) as { tag: string }[]).map((t) => t.tag);
     }
     if (tagsToRemove.length > 0) {
       for (const tag of tagsToRemove) {
@@ -896,22 +906,49 @@ export async function submitFormResponse(
     return { ok: false, error: insertError.message };
   }
 
+  // Enrollments from this submission. Their first due step (e.g. a speed-to-lead reply)
+  // is sent right after, instead of waiting up to 15 minutes for the cron.
+  const enrollmentIds: string[] = [];
   if (relatedClientId) {
     // Best-effort: the response row is already saved, so a throw here must
     // not 500 the request (the visitor would retry and duplicate the row).
     try {
-      await fireSimpleTrigger(db, { orgId: form.org_id, clientId: relatedClientId, triggerType: "form_submitted" });
+      // The form's id lets a "Form was submitted" automation be limited to specific forms.
+      enrollmentIds.push(...await fireSimpleTrigger(db, {
+        orgId: form.org_id, clientId: relatedClientId, triggerType: "form_submitted", matchValues: [form.id],
+      }));
     } catch (err) {
       console.error("[submitFormResponse] form_submitted trigger failed:", err instanceof Error ? err.message : err);
+    }
+    for (const tag of newlyAddedTags) {
+      try {
+        enrollmentIds.push(...await fireSimpleTrigger(db, {
+          orgId: form.org_id, clientId: relatedClientId, triggerType: "tag_added", matchValues: [tag],
+        }));
+      } catch (err) {
+        console.error("[submitFormResponse] tag_added trigger failed:", err instanceof Error ? err.message : err);
+      }
     }
   }
   if (createdLeadId) {
     // A web-form lead is a new lead like a manual, imported or Zapier one: "new lead → text
     // the rep" automations key on lead_created, which form leads never fired.
     try {
-      await fireSimpleTrigger(db, { orgId: form.org_id, clientId: createdLeadId, triggerType: "lead_created" });
+      enrollmentIds.push(...await fireSimpleTrigger(db, { orgId: form.org_id, clientId: createdLeadId, triggerType: "lead_created" }));
     } catch (err) {
       console.error("[submitFormResponse] lead_created trigger failed:", err instanceof Error ? err.message : err);
+    }
+  }
+  if (enrollmentIds.length > 0) {
+    // Service role: the processor writes tables a staff test-submit session doesn't
+    // cover. Only enrollments this submission just created (for form.org_id) are run.
+    const admin = createServiceClient();
+    for (const enrollmentId of enrollmentIds) {
+      try {
+        await processEnrollmentImmediately(admin, enrollmentId);
+      } catch (err) {
+        console.error("[submitFormResponse] immediate processing failed:", err instanceof Error ? err.message : err);
+      }
     }
   }
 

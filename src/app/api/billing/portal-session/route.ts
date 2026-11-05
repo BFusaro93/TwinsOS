@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getStripe, isStripeConfigured } from "@/lib/stripe/server";
+import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 
 export async function POST(request: Request) {
   if (!isStripeConfigured()) {
@@ -20,6 +21,10 @@ export async function POST(request: Request) {
   if (profile.role !== "admin") {
     return NextResponse.json({ error: "Only admins can manage billing" }, { status: 403 });
   }
+  // Billing acts on profiles.org_id (the HOME org). While staff impersonate,
+  // RLS hides that org and the route answered "Organization not found".
+  const impersonating = await rejectIfImpersonating(supabase, user.id, "managing billing");
+  if (impersonating) return impersonating;
 
   const { data: org } = await supabase
     .from("organizations")

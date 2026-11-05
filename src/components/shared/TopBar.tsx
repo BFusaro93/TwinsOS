@@ -38,6 +38,7 @@ import { useUsers } from "@/lib/hooks/use-users";
 import { useSyncCurrentUser } from "@/lib/hooks/use-current-user";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
+import { clearNotificationReadCache } from "@/lib/hooks/use-notification-reads";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -438,6 +439,7 @@ export function TopBar({ sidebarToggle = true }: { sidebarToggle?: boolean } = {
             onSelect={async () => {
               const supabase = createClient();
               await supabase.auth.signOut();
+              clearNotificationReadCache();
               router.push("/login");
             }}
           >

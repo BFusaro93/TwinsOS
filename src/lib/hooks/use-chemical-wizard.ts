@@ -35,28 +35,35 @@ export function useChemicalNoticeStatus(visitIds: string[], enabled = true) {
   });
 }
 
+/** What a weather lookup came back with. `reading: null` = no weather for that place and time
+ *  (not located, outside the US, no station answered); `unreachable` = the request itself failed
+ *  (offline, or the weather service is down), which the user should retry rather than type over. */
+export type JobConditionsResult =
+  | { ok: true; reading: ConditionsReading | null }
+  | { ok: false; reason: "unreachable" };
+
 /**
  * Temperature and wind at a job's location from the National Weather Service (the same service as
- * the dispatch board's weather chip), at `at` (ISO) or now. Null when the job can't be located,
- * is outside the US, or no station answered.
+ * the dispatch board's weather chip), at `at` (ISO) or now. Never throws.
  */
-export async function fetchJobConditions(jobId: string, at?: string): Promise<ConditionsReading | null> {
-  // A dropped connection is the same answer to the caller as "no weather here": null, never a throw.
+export async function fetchJobConditions(jobId: string, at?: string): Promise<JobConditionsResult> {
   try {
     const geo = await fetch("/api/crm/jobs/geocode", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jobIds: [jobId] }),
     });
-    if (!geo.ok) return null;
+    // The geocode route answers 422 for an address it can't place: that is "no weather here".
+    if (!geo.ok) return geo.status >= 500 ? { ok: false, reason: "unreachable" } : { ok: true, reading: null };
     const point = ((await geo.json().catch(() => ({}))) as { results?: { lat: number; lng: number }[] }).results?.[0];
-    if (!point) return null;
+    if (!point) return { ok: true, reading: null };
     const qs = new URLSearchParams({ lat: String(point.lat), lng: String(point.lng), ...(at ? { at } : {}) });
     const res = await fetch(`/api/crm/weather/conditions?${qs.toString()}`);
-    if (!res.ok) return null;
-    return ((await res.json()) as { reading: ConditionsReading | null }).reading;
+    if (!res.ok) return { ok: false, reason: "unreachable" };
+    return { ok: true, reading: ((await res.json()) as { reading: ConditionsReading | null }).reading };
   } catch {
-    return null;
+    // fetch rejects on a dropped or blocked connection.
+    return { ok: false, reason: "unreachable" };
   }
 }
 
@@ -67,7 +74,8 @@ export interface ConditionsValues {
   phLevel: number | null;
 }
 
-/** Writes the same conditions onto every chemical record of the given visits. */
+/** Writes the same conditions onto every chemical record of the given visits that was actually
+ *  applied — a "Not used" row has no conditions to record. */
 export function useApplyConditionsToVisits() {
   const qc = useQueryClient();
   return useMutation({
@@ -86,6 +94,7 @@ export function useApplyConditionsToVisits() {
           .from("crm_chemical_applications")
           .update(patch as never)
           .in("visit_id", visitIds.slice(i, i + CHUNK))
+          .eq("used", true)
           .is("deleted_at", null)
           .select("id");
         if (error) throw error;

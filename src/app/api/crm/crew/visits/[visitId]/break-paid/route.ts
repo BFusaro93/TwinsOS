@@ -3,6 +3,7 @@ import { z } from "zod";
 import { stopKeyForVisit, type StopKeyInput } from "@/lib/utils/visit-stops";
 import { getRouteAuth, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { recomputeStopLabor } from "@/lib/crew/visit-labor";
+import { resolvePunchOwnerVisitId } from "@/lib/crew/stop-punches";
 
 /**
  * Office override for whether a stop's crew pause time is paid
@@ -94,6 +95,7 @@ export async function PATCH(
 
   // recomputeStopLabor locates the closed siblings itself and no-ops when
   // nothing in the stop has been clocked out yet.
-  await recomputeStopLabor(supabase, anchor.id);
+  // Punches live on whichever stop visit owned them at Start Job.
+  await recomputeStopLabor(supabase, await resolvePunchOwnerVisitId(supabase, [...ids], anchor.id));
   return NextResponse.json({ visitIds: [...ids], breakPaid: parsed.data.breakPaid });
 }

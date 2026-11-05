@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/client";
 import { mapWOPart, mapWOLaborEntry, mapWOVendorCharge } from "@/lib/supabase/mappers";
 import type { WOPart, WOLaborEntry, WOVendorCharge } from "@/types/cmms";
 import { setWOPartStock } from "@/lib/inventory/part-stock";
-import { notifyPartStockShort } from "@/lib/part-shortfall-notify";
 
 /**
  * Returns the authenticated user's org_id. Used to cross-check that a
@@ -44,7 +43,11 @@ async function syncWOPartStock(
       `Only ${res.oldQty ?? 0} in stock — ${shortBy} short. Quantity on hand set to 0 instead of going negative.`
     );
     // Best-effort: a failed notification must not fail the WO save.
-    await notifyPartStockShort(supabase, { woPartId, shortBy }).catch(() => {});
+    await fetch("/api/parts/shortfall-notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ woPartId, shortBy }),
+    }).catch(() => {});
   }
 }
 

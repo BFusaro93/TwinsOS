@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { getStorageOrgPrefix } from "@/lib/supabase/storage-org-prefix";
+import { openPendingTab, showInPendingTab } from "@/lib/utils/pending-tab";
 import type { ReferenceCategory, ReferenceDocument } from "@/types/crm-reference";
 
 const BUCKET = "reference-library";
@@ -133,10 +134,17 @@ export function useDeleteReferenceDocument() {
   });
 }
 
-/** Opens a document in a new tab through a short-lived signed link. */
+/** Opens a document in a new tab through a short-lived signed link. The tab opens before the
+ *  link is signed so iPad Safari doesn't block it (see utils/pending-tab). */
 export async function openReferenceDocument(storagePath: string): Promise<void> {
-  const supabase = createClient();
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 300);
-  if (error) throw error;
-  window.open(data.signedUrl, "_blank", "noopener");
+  const tab = openPendingTab();
+  try {
+    const supabase = createClient();
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 300);
+    if (error) throw error;
+    showInPendingTab(tab, data.signedUrl);
+  } catch (err) {
+    tab?.close();
+    throw err;
+  }
 }

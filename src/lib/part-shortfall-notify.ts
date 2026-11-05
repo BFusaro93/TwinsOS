@@ -4,13 +4,15 @@
  * stock clamps at 0 and the shortfall settles on the next receipt.
  *
  * Recipients: org admins, managers and purchasers (never the person who did
- * it, never deactivated users). Runs from the client under the actor's own
- * session — notifications allows same-org inserts.
+ * it, never deactivated users). Server-only: called by
+ * /api/parts/shortfall-notify with the service client. Users can't insert
+ * notifications under their own session (RLS lets them read their own only),
+ * so the old browser-side insert for other users was always refused.
  */
 export async function notifyPartStockShort(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
-  params: { woPartId: string; shortBy: number }
+  params: { woPartId: string; shortBy: number; actorId: string }
 ): Promise<void> {
   const { data: line } = await supabase
     .from("wo_parts")
@@ -24,7 +26,6 @@ export async function notifyPartStockShort(
     .select("work_order_number")
     .eq("id", line.work_order_id)
     .maybeSingle();
-  const { data: { user } } = await supabase.auth.getUser();
 
   const { data: recipients } = await supabase
     .from("profiles")
@@ -33,7 +34,7 @@ export async function notifyPartStockShort(
     .neq("status", "inactive")
     .in("role", ["admin", "manager", "purchaser"]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ids = (recipients ?? []).map((p: any) => p.id as string).filter((id: string) => id !== user?.id);
+  const ids = (recipients ?? []).map((p: any) => p.id as string).filter((id: string) => id !== params.actorId);
   if (!ids.length) return;
 
   const woLabel = wo?.work_order_number ?? "a work order";

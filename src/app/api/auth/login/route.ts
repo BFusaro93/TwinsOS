@@ -48,6 +48,14 @@ export async function POST(request: Request) {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
+    // The login page offers to resend the confirmation email for this one —
+    // before, a founder whose confirmation got lost had no way forward.
+    if (error.code === "email_not_confirmed") {
+      return NextResponse.json(
+        { error: "This email address hasn't been confirmed yet.", code: "email_not_confirmed" },
+        { status: 401 }
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 401 });
   }
 

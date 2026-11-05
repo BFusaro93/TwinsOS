@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { realtimeTopic } from "@/lib/supabase/realtime-topic";
 
 export type ConversationStatus = "open" | "in_progress" | "resolved";
 
@@ -263,7 +264,7 @@ export function useSupportMessagesRealtime(orgId: string | null | undefined) {
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel(`support-messages:${orgId ?? "all"}`)
+      .channel(realtimeTopic(`support-messages:${orgId ?? "all"}`))
       .on(
         "postgres_changes",
         {

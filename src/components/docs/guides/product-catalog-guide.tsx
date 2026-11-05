@@ -230,11 +230,13 @@ export function ProductCatalogGuide() {
           <strong>Save &amp; Close</strong> save the same way. Each visit shows whether its Notice of
           Treatment email has been sent, and <strong>Send notices</strong> shows how many of the day&apos;s
           visits have gone out. <strong>Conditions</strong> records one temperature, wind and pH for
-          every visit in the list at once, and <strong>Fill from weather</strong> there (and on each
-          visit&apos;s own Conditions box) pulls the temperature and wind from the National Weather
-          Service &mdash; the same service as the board&apos;s weather chip &mdash; using the reading
-          nearest the time the chemicals went on, when that is within the last week. You can edit
-          the figures before saving.
+          every chemical actually applied on the day&apos;s visits at once (a chemical marked Not used
+          is left alone), and <strong>Fill from weather</strong> there (and on each visit&apos;s own
+          Conditions box) pulls the temperature and wind from the National Weather Service &mdash; the
+          same service as the board&apos;s weather chip &mdash; for the day being closed out: the
+          reading nearest when the crew started (or midday, if nobody clocked in), when that is within
+          the last week. You can edit the figures before saving. If the weather service can&apos;t be
+          reached it says so, so you can try again rather than type the figures in.
         </p>
         <p>
           <strong>Sending many notices at once.</strong> In the Chemical Tracking wizard click{" "}

@@ -136,12 +136,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, sent: 0, reason: "recently notified" });
   }
 
-  // 4. Fetch approver emails from profiles
-  const approverIds = [...new Set(activeRequests.map((r) => r.approver_id))];
+  // 4. Fetch approver emails from profiles. Never email the person who just
+  // submitted (they can be in the approver pool, or be the fallback admin in a
+  // one-admin org) and never a deactivated login.
+  const approverIds = [...new Set(activeRequests.map((r) => r.approver_id))].filter(
+    (id): id is string => !!id && id !== user.id
+  );
+  if (approverIds.length === 0) {
+    return NextResponse.json({ success: true, sent: 0, reason: "no other approver" });
+  }
   const { data: profiles } = await adminClient
     .from("profiles")
     .select("id, email, name, notification_prefs")
-    .in("id", approverIds);
+    .in("id", approverIds)
+    .neq("status", "inactive");
 
   const emailMap = new Map<string, string>();
   for (const p of profiles ?? []) {

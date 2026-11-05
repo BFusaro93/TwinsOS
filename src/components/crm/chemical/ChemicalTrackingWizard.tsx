@@ -178,6 +178,8 @@ export function ChemicalTrackingWizard({ open, onOpenChange, date, visits }: Pro
         visitIds={chemicalVisits.map((v) => v.id)}
         weatherJobId={chemicalVisits[0]?.jobId}
         dateLabel={date}
+        date={date}
+        startedAt={chemicalVisits.map((v) => v.clockedInAt).filter((t): t is string => !!t).sort()[0] ?? null}
       />
       <BulkSendChemicalNoticesDialog
         open={bulkSendOpen}

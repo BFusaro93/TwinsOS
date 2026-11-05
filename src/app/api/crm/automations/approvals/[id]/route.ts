@@ -5,6 +5,7 @@ import { emailSendDeferral } from "@/lib/automations/sequence-processor";
 import { sendResolvedSequenceSms, nextSmsSendTime } from "@/lib/automations/sequence-sms";
 import { instantToZoneWallClock } from "@/lib/time/zone";
 import { logSequenceExecution } from "@/lib/automations/sequence-enrollment";
+import { partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
 
 /**
  * POST /api/crm/automations/approvals/[id] — approve or reject a pending
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (approval.client_id) {
     const { data: recipient } = await db
       .from("clients")
-      .select("do_not_market, ok_to_email, email_bounced_at, deleted_at")
+      .select("do_not_market, ok_to_email, deleted_at")
       .eq("id", approval.client_id)
       .maybeSingle();
     // A client deleted while the step sat in the queue (removed at their
@@ -132,14 +133,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         { status: 409 }
       );
     }
-    // do_not_market only blocks marketing-category steps; a bounced address or
-    // ok_to_email=false blocks every category (same rule as the processor).
-    if (approval.channel !== "sms" && ((marketingEmail && recipient.do_not_market) || recipient.ok_to_email === false || recipient.email_bounced_at)) {
+    // do_not_market only blocks marketing-category steps; ok_to_email=false
+    // blocks every category (same rule as the processor).
+    if (approval.channel !== "sms" && ((marketingEmail && recipient.do_not_market) || recipient.ok_to_email === false)) {
       return NextResponse.json(
-        { error: "Client has opted out of email or their address has bounced — reject this step instead" },
+        { error: "Client has opted out of email — reject this step instead" },
         { status: 409 }
       );
     }
+  }
+  // An address that hard-bounced while the step sat in the queue is dropped;
+  // the step still goes to the client's other recipients.
+  let approvedToEmails: string[] = [];
+  if (approval.channel !== "sms") {
+    const queued = String(approval.to_email ?? "").split(",").map((e: string) => e.trim()).filter(Boolean);
+    const { deliverable, bounced } = await partitionBouncedRecipients(approval.org_id, queued);
+    if (deliverable.length === 0) {
+      return NextResponse.json(
+        { error: `${bounced.join(", ") || "The recipient address"} has hard-bounced — reject this step instead` },
+        { status: 409 }
+      );
+    }
+    approvedToEmails = deliverable;
   }
 
   // Claim the decision BEFORE sending so two people clicking Approve (or a
@@ -229,7 +244,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           orgId: approval.org_id,
           clientId: approval.client_id ?? null,
           estimateId: approval.estimate_id,
-          toEmails: approval.to_email.split(",").map((e: string) => e.trim()).filter(Boolean),
+          toEmails: approvedToEmails,
           toName: approval.to_name,
           subject: approval.subject,
           bodyHtml: approval.body_html,

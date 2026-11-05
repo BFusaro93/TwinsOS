@@ -11,6 +11,7 @@ import {
 } from "@/lib/email/send";
 import { resolveReplyTo, type ReplyToMode } from "@/lib/email/reply-to";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { allRecipientsBouncedMessage } from "@/lib/email/bounced-addresses";
 
 export async function POST(
   req: Request,
@@ -113,9 +114,11 @@ export async function POST(
   // re-sending damages sending-domain reputation. This is what makes the
   // "service" override safe to offer. Gating this on isBulk would have let the
   // 1:1 dialog (which sends no `bulk` flag) keep mailing dead addresses.
+  // (email_bounced_at is derived: the primary address — the only one this
+  // route mails — has a live bounce. See 20261220000500_email_address_bounces.sql.)
   if (client.email_bounced_at) {
     return NextResponse.json(
-      { error: "Client's email address has hard-bounced" },
+      { error: allRecipientsBouncedMessage([client.primary_email]) },
       { status: 422 }
     );
   }

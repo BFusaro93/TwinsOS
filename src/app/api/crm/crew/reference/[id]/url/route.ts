@@ -23,6 +23,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .is("deleted_at", null)
     .maybeSingle();
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  // The link is signed with the service role, so the path must sit in this company's own folder:
+  // storage_path is written by the office client, and a row pointing into another company's
+  // folder would otherwise hand out that company's file.
+  if (typeof doc.storage_path !== "string" || !doc.storage_path.startsWith(`${profile.org_id}/`)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const { data: signed, error } = await db.storage.from("reference-library").createSignedUrl(doc.storage_path, 300);
   if (error || !signed) return NextResponse.json({ error: "Couldn't open the document" }, { status: 500 });

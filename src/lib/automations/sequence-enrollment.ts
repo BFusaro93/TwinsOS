@@ -923,6 +923,16 @@ export async function fireSimpleTrigger(
 ): Promise<string[]> {
   const enrolledIds: string[] = [];
 
+  // A deleted client is never enrolled (nor reported to Zapier): a queued bulk event or a
+  // late fire can arrive after the delete, and its sequence would run against the
+  // deleted record. Unknown / other-org ids are skipped the same way.
+  const { data: clientRow } = await supabase
+    .from("clients")
+    .select("org_id, deleted_at")
+    .eq("id", params.clientId)
+    .maybeSingle();
+  if (!clientRow || clientRow.deleted_at || clientRow.org_id !== params.orgId) return enrolledIds;
+
   const triggers = preloadedTriggers ?? await fetchOrgTriggers(supabase, params.orgId, params.triggerType);
 
   for (const trigger of (triggers ?? []) as {

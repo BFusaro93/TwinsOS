@@ -32,14 +32,14 @@ import {
   useUploadVisitPhoto,
   useFieldUpsellServices,
   useSubmitFieldUpsell,
-  useJobProducts,
+  useStopJobProducts,
   useUseJobProductMaterials,
   useVisitSubitemChecks,
   useToggleSubitemCheck,
   useCrewProductSearch,
-  useVisitRequisitions,
+  useStopRequisitions,
   useRequestMaterials,
-  type JobProductMaterial,
+  type StopJobProductMaterial,
   type CrewPickerProduct,
   type VisitRequisitionStatus,
 } from "@/lib/hooks/use-crew-app";
@@ -88,10 +88,10 @@ function PlannedMaterialRow({
   onMarkUsedNoInvoice,
   isSaving,
 }: {
-  material: JobProductMaterial;
-  onMarkUsed: (material: JobProductMaterial, usedQty: number) => void;
-  onMarkNotUsed: (material: JobProductMaterial) => void;
-  onMarkUsedNoInvoice: (material: JobProductMaterial, usedQty: number) => void;
+  material: StopJobProductMaterial;
+  onMarkUsed: (material: StopJobProductMaterial, usedQty: number) => void;
+  onMarkNotUsed: (material: StopJobProductMaterial) => void;
+  onMarkUsedNoInvoice: (material: StopJobProductMaterial, usedQty: number) => void;
   isSaving: boolean;
 }) {
   const [qtyText, setQtyText] = useState(String(material.plannedQty));
@@ -269,15 +269,33 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const acknowledge   = useAcknowledgeNotes();
   const addNote       = useAddCrewNote();
   const uploadPhoto   = useUploadVisitPhoto();
+  // Photos taken with no signal stay queued (paused) until it returns; counting
+  // them instead of reading uploadPhoto.isPending keeps Add Photo usable for
+  // the next shot instead of locking it behind the first one.
+  const [photosUploading, setPhotosUploading] = useState(0);
   const { data: upsellServices = [] } = useFieldUpsellServices();
   const submitUpsell  = useSubmitFieldUpsell();
-  const { data: jobProducts = [] } = useJobProducts(anchorVisitId);
+  // Every visit of the stop, not just the anchor: a stop can combine services
+  // (each with its own materials) or whole jobs (Mowing + a one-off Mulch job).
+  const { data: jobProducts = [] } = useStopJobProducts(stopVisitIds);
   const useMaterials  = useUseJobProductMaterials();
   const { data: subitemChecks } = useVisitSubitemChecks((stop?.visits ?? []).map((sv) => sv.id));
   const toggleSubitem = useToggleSubitemCheck();
   const [confirm, confirmDialog] = useConfirm();
-  const { data: requisitions = [] } = useVisitRequisitions(anchorVisitId);
+  const { data: requisitions = [] } = useStopRequisitions(stopVisitIds);
   const requestMaterials = useRequestMaterials();
+  // A requisition is filed against one job (its cost lands there). When the stop
+  // spans several jobs the crew picks which; one visit per job stands for it.
+  const requestJobChoices = (() => {
+    const byJob = new Map<string, { visitId: string; label: string[] }>();
+    for (const sv of stop?.visits ?? []) {
+      const entry = byJob.get(sv.jobId) ?? { visitId: sv.id, label: [] };
+      entry.label.push(...visitServices(sv).map((x) => x.serviceName).filter(Boolean));
+      byJob.set(sv.jobId, entry);
+    }
+    return [...byJob.values()].map((e) => ({ visitId: e.visitId, label: [...new Set(e.label)].join(", ") || "This job" }));
+  })();
+  const [requestVisitId, setRequestVisitId] = useState<string | null>(null);
 
   const [requestOpen, setRequestOpen]       = useState(false);
   const [productQuery, setProductQuery]     = useState("");
@@ -415,6 +433,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     setPickedProduct(null);
     setRequestQty("1");
     setRequestNote("");
+    setRequestVisitId(null);
   }
 
   async function handleSendRequest() {
@@ -427,7 +446,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     }
     try {
       await requestMaterials.mutateAsync({
-        visitId: anchorVisitId,
+        visitId: requestVisitId ?? requestJobChoices[0]?.visitId ?? anchorVisitId,
         productItemId: pickedProduct.id,
         quantity,
         note: requestNote.trim() || undefined,
@@ -439,15 +458,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     }
   }
 
-  async function handleMarkUsed(material: JobProductMaterial, usedQty: number) {
+  async function handleMarkUsed(material: StopJobProductMaterial, usedQty: number) {
     try {
-      await useMaterials.mutateAsync({ visitId: anchorVisitId, jobProductId: material.id, usage: { usedQty } });
+      await useMaterials.mutateAsync({ visitId: material.visitId, jobProductId: material.id, usage: { usedQty } });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't record materials used");
     }
   }
 
-  async function handleMarkUsedNoInvoice(material: JobProductMaterial, usedQty: number) {
+  async function handleMarkUsedNoInvoice(material: StopJobProductMaterial, usedQty: number) {
     const confirmed = await confirm({
       title: `${material.productName} will come out of inventory but won't be added to the client's invoice. Continue?`,
       confirmLabel: "Continue",
@@ -456,7 +475,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     if (!confirmed) return;
     try {
       await useMaterials.mutateAsync({
-        visitId: anchorVisitId,
+        visitId: material.visitId,
         jobProductId: material.id,
         usage: { usedQty, noInvoice: true },
       });
@@ -465,7 +484,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     }
   }
 
-  async function handleMarkNotUsed(material: JobProductMaterial) {
+  async function handleMarkNotUsed(material: StopJobProductMaterial) {
     const confirmed = await confirm({
       title: `${material.productName} won't be counted as used on this job. Continue?`,
       confirmLabel: "Continue",
@@ -473,7 +492,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     });
     if (!confirmed) return;
     try {
-      await useMaterials.mutateAsync({ visitId: anchorVisitId, jobProductId: material.id, usage: { notUsed: true } });
+      await useMaterials.mutateAsync({ visitId: material.visitId, jobProductId: material.id, usage: { notUsed: true } });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't record materials used");
     }
@@ -482,18 +501,20 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const input = e.target;
+    // Reset now, not after the upload: with no signal the upload waits, and
+    // until the input is cleared picking the next (or the same) photo fires no
+    // change event.
+    e.target.value = "";
+    setPhotosUploading((n) => n + 1);
     try {
-      const result = await uploadPhoto.mutateAsync({ visitId: anchorVisitId, file });
+      const result = await uploadPhoto.mutateAsync({ visitId: anchorVisitId, file, clientId: crypto.randomUUID() });
       if (result?.signedUrl) {
         setPhotoUrls(prev => ({ ...prev, [result.id]: result.signedUrl }));
       }
     } catch {
-      // The mutation's onError already toasted. Falling through resets the
-      // input: otherwise re-picking the same photo after a failed upload fires
-      // no change event and the retry silently does nothing.
+      // The mutation's onError already toasted.
     } finally {
-      input.value = "";
+      setPhotosUploading((n) => Math.max(0, n - 1));
     }
   }
 
@@ -761,7 +782,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 reading={chemWeather?.reading}
                 onUseReading={() => chemWeather?.reading && setChemConditions((prev) => conditionsFromReading(chemWeather.reading!, prev))}
               />
-              {chemAddVisitId && <AddChemicalForm visitId={chemAddVisitId} disabled={!isActive} />}
+              {chemAddVisitId && <AddChemicalForm visitId={chemAddVisitId} disabled={!isActive} sharedConditions={chemConditions} />}
               <Button
                 className="w-full h-12 text-base font-bold bg-emerald-600 hover:bg-emerald-700"
                 onClick={handleConfirmChemicals}
@@ -965,14 +986,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 capture="environment"
                 className="sr-only"
                 onChange={handlePhotoCapture}
-                disabled={uploadPhoto.isPending}
               />
               <span className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 font-medium">
-                {uploadPhoto.isPending
+                {photosUploading > 0
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <Camera className="h-4 w-4" />
                 }
-                Add Photo
+                {photosUploading > 1 ? `Add Photo (${photosUploading} uploading)` : "Add Photo"}
               </span>
             </label>
           </div>
@@ -1132,6 +1152,28 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </DialogHeader>
           {pickedProduct ? (
             <div className="flex flex-col gap-3">
+              {requestJobChoices.length > 1 && (
+                <div>
+                  <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">For which job?</p>
+                  <div className="flex flex-col gap-1.5">
+                    {requestJobChoices.map((c) => {
+                      const picked = (requestVisitId ?? requestJobChoices[0].visitId) === c.visitId;
+                      return (
+                        <button
+                          key={c.visitId}
+                          type="button"
+                          onClick={() => setRequestVisitId(c.visitId)}
+                          className={`rounded-lg border px-3 py-2.5 text-left text-sm ${picked
+                            ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 font-medium"
+                            : "border-border active:bg-slate-50 dark:active:bg-muted/40"}`}
+                        >
+                          {c.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div>
                 <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">Quantity</p>
                 <Input

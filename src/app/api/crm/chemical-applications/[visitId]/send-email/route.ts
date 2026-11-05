@@ -81,9 +81,9 @@ export async function POST(
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
   }
   // A hard bounce means the address doesn't accept mail; re-sending damages
-  // sending-domain reputation (see the Resend webhook that sets
-  // email_bounced_at). This route always uses the client's stored address, so
-  // there is no corrected-address path to exempt.
+  // sending-domain reputation. This route only mails the primary address, and
+  // email_bounced_at is derived to mean exactly "the primary has a live
+  // bounce" (20261220000500_email_address_bounces.sql).
   if (visit.clients?.email_bounced_at) {
     return NextResponse.json({ error: "Client's email address has hard-bounced. Update it, or send to a different address." }, { status: 422 });
   }

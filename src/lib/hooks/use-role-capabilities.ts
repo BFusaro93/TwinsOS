@@ -1,6 +1,7 @@
 "use client";
 
 import { useCurrentUserStore } from "@/stores/current-user-store";
+import { useTrialStatus } from "@/lib/hooks/use-trial-status";
 
 /**
  * What the current app role (profiles.role) may do in the UI. Mirrors the
@@ -55,7 +56,7 @@ export interface RoleCapabilities {
   isViewer: boolean;
   isRequestor: boolean;
   isPurchaser: boolean;
-  /** viewer: every write control hidden. */
+  /** viewer, or a read-only org (canceled subscription): every write control hidden. */
   isReadOnly: boolean;
   /** General Equipt writes (assets, parts, products, vendors, PM schedules,
    * POs, receiving, meters, imports, …). False for viewer + requestor. */
@@ -91,8 +92,12 @@ export function useRoleCapabilities(): RoleCapabilities {
   const isViewer = role === "viewer";
   const isRequestor = role === "requestor";
   const isPurchaser = role === "purchaser";
+  // A canceled org keeps read access until its window ends; the database's
+  // read_only_when_canceled_* policies refuse every write, so hide them all.
+  const { isReadOnly: orgReadOnly } = useTrialStatus();
+  const noWrites = isViewer || orgReadOnly;
 
-  const canWriteEquipt = !isViewer && !isRequestor;
+  const canWriteEquipt = !noWrites && !isRequestor;
   const canEditWorkOrders = canWriteEquipt && !isPurchaser;
 
   const isOwn = (record: OwnedRecord | null | undefined): boolean => {
@@ -105,29 +110,29 @@ export function useRoleCapabilities(): RoleCapabilities {
     isViewer,
     isRequestor,
     isPurchaser,
-    isReadOnly: isViewer,
+    isReadOnly: noWrites,
     canWriteEquipt,
     canEditWorkOrders,
     canCreatePO: canWriteEquipt,
     canReceive: canWriteEquipt,
     canManageInventory: canWriteEquipt,
-    canCreateRequisition: !isViewer,
+    canCreateRequisition: !noWrites,
     canSubmitForApproval: canWriteEquipt,
-    canCreateMaintenanceRequest: !isViewer,
+    canCreateMaintenanceRequest: !noWrites,
     canTriageMaintenanceRequests: canEditWorkOrders,
     isOwn,
     canEditRequisition: (req) => {
       if (canWriteEquipt) return true;
-      if (!isRequestor || !req) return false;
+      if (!isRequestor || noWrites || !req) return false;
       return isOwn(req) && req.status === "draft";
     },
     canEditMaintenanceRequest: (req) => {
       if (canWriteEquipt) return true;
-      return isRequestor && isOwn(req);
+      return isRequestor && !noWrites && isOwn(req);
     },
     canComment: (record) => {
       if (canWriteEquipt) return true;
-      return isRequestor && isOwn(record);
+      return isRequestor && !noWrites && isOwn(record);
     },
   };
 }

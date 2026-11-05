@@ -9,7 +9,7 @@ import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib
 import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
 import { sumPunchLaborCents, sumPunchManHours, recomputeStopLabor } from "@/lib/crew/visit-labor";
-import { closeStopPunches } from "@/lib/crew/stop-punches";
+import { closeStopPunches, resolvePunchOwnerVisitId } from "@/lib/crew/stop-punches";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
@@ -156,6 +156,12 @@ export async function POST(
     )
   );
 
+  // The visit actually holding the crew's punches. Normally the anchor, but if
+  // the stop's anchor changed after Start Job, reading the new one found no
+  // punches (hours fell back to the span estimate, labor to 0) and left the
+  // real punches open forever.
+  const punchVisitId = await resolvePunchOwnerVisitId(supabase, stopRows.map((r) => r.id), anchor.id);
+
   // Already-completed siblings (e.g. an office user closed one out manually)
   // are excluded from both the split and the update — their own value stands.
   // Keyed on status as well as clocked_out_at: the office "Mark Complete"
@@ -173,10 +179,10 @@ export async function POST(
       // in (Mark Complete never closes punches). The crew's Clock Out is then the
       // only thing that will, or those punches stay open on the Timesheet forever.
       // No-op when there are none (a true replay).
-      await closeStopPunches(supabase, anchor.id, anchor.clocked_out_at ?? new Date().toISOString());
+      await closeStopPunches(supabase, punchVisitId, anchor.clocked_out_at ?? new Date().toISOString());
       // ...and file the hours those punches represent (Job Costing showed 0 hours
       // for a stop the office completed while the crew was still punched in).
-      await recomputeStopLabor(supabase, anchor.id).catch((err: unknown) => {
+      await recomputeStopLabor(supabase, punchVisitId).catch((err: unknown) => {
         log.error("recomputeStopLabor after late clock-out failed", { visitId: anchor.id, error: err instanceof Error ? err.message : String(err) });
       });
       return NextResponse.json({ visitIds: stopRows.map((r) => r.id), visits: stopRows, alreadyClockedOut: true });
@@ -193,6 +199,7 @@ export async function POST(
   const earliestClockIn = openRows.map((r) => r.clocked_in_at).filter(Boolean).sort()[0] ?? null;
   const now = resolveOccurredAt(rawOccurredAt, { notBefore: earliestClockIn }).toISOString();
   const anchorIsOpen = openRows.some((r) => r.id === anchor.id);
+  const punchVisitIsOpen = openRows.some((r) => r.id === punchVisitId);
   const startedAt = openRows.map((r) => r.clocked_in_at).filter(Boolean).sort()[0]
     ?? (anchorIsOpen ? anchor.clocked_in_at : null)
     ?? null;
@@ -308,7 +315,11 @@ export async function POST(
   // completed later than its static schedule assumed. Non-fatal.
   for (const row of transitionedRows) {
     try {
-      await recalcNextPackageVisitDate(supabase, row.job_service_id,
+      // Service client: crew RLS only returns this crew's own visits, so a next
+      // step pinned to another crew (or crew_unassigned) was invisible and the
+      // Min Days push-out silently didn't happen. job_service_id comes from a
+      // visit whose ownership was proven above.
+      await recalcNextPackageVisitDate(createServiceClient(), row.job_service_id,
         isoInZone(new Date(now), await getOrgTimeZone(supabase, row.org_id as string)));
     } catch (err) {
       log.error("package min_days recalc failed", { visitId: row.id, error: err instanceof Error ? err.message : String(err) });
@@ -317,7 +328,7 @@ export async function POST(
 
   // Stop Job also clocks the whole crew out; this must land before the labor
   // total below is summed from the punches.
-  await closeStopPunches(supabase, anchor.id, now);
+  await closeStopPunches(supabase, punchVisitId, now);
 
   // Hours follow the ACTUAL punches when they exist: span × men_count above is
   // only a guess at how many people were on site, and a member who arrived
@@ -332,9 +343,9 @@ export async function POST(
   // The write goes through the same UPDATE OF actual_hours path as above, so
   // the job-level actual_hours rollup trigger fires again.
   let punchAllocation: Map<string, number> | null = null;
-  if (anchorIsOpen) {
+  if (punchVisitIsOpen) {
     try {
-      const punchHours = await sumPunchManHours(supabase, anchor.id);
+      const punchHours = await sumPunchManHours(supabase, punchVisitId);
       if (punchHours != null) {
         const openIdsSet = new Set(openIds);
         const earlierRowIds = stopRows.filter((r) => !openIdsSet.has(r.id)).map((r) => r.id);
@@ -376,7 +387,7 @@ export async function POST(
   // the hours split, so per-service job costing isn't skewed the same way
   // hours would have been.
   try {
-    const punchTotalCents = await sumPunchLaborCents(supabase, anchor.id);
+    const punchTotalCents = await sumPunchLaborCents(supabase, punchVisitId);
 
     // Siblings that were closed EARLIER already carry a share of the anchor's
     // punches. Allocating the full total again across the rows closing now

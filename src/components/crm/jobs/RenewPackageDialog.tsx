@@ -67,7 +67,8 @@ export function RenewPackageDialog({
   async function handleRenew() {
     try {
       const res = await renew.mutateAsync({ jobId, allowSameSeason, useTemplateDates, rateIncrease: rateIncrease ?? null });
-      toast.success(`Renewed for ${res.targetSeason ?? "next season"}`);
+      if (res.warning) toast.warning(res.warning);
+      else toast.success(`Renewed for ${res.targetSeason ?? "next season"}`);
       onOpenChange(false);
       onRenewed?.(res.newJobId);
     } catch (err) {

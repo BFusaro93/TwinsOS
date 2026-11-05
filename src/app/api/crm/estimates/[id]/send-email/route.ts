@@ -16,6 +16,7 @@ import { buildEstimateGridHtml } from "@/lib/estimates/estimate-grid-html";
 import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
+import { allRecipientsBouncedMessage, partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
 import { loadLiveProposalContent, withProposalDocument } from "@/lib/estimates/proposal-content";
@@ -120,7 +121,7 @@ export async function POST(
     .from("estimates")
     .select(`
       *,
-      clients(display_name, primary_email, email_bounced_at, billing_address, billing_city, billing_state, billing_zip),
+      clients(display_name, primary_email, billing_address, billing_city, billing_state, billing_zip),
       sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name),
       estimate_line_items(*, ${PRINTED_SUBITEM_SELECT}),
       estimate_milestones(name, amount_cents, sort_order, deleted_at)
@@ -178,18 +179,27 @@ export async function POST(
   // already decided or billed.
   const opensForAcceptance = ["draft", "quote", "sent"].includes(est.stage as string);
 
-  const toEmails = (body.to && body.to.length > 0)
+  const requestedEmails = (body.to && body.to.length > 0)
     ? body.to.map((e) => e.trim())
     : (est.clients?.primary_email ? [est.clients.primary_email as string] : []);
-  if (toEmails.length === 0) {
+  if (requestedEmails.length === 0) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
   }
-  // A hard bounce means the stored address doesn't accept mail; re-sending
-  // damages sending-domain reputation, so it is blocked for transactional mail
-  // too (see the Resend webhook that sets email_bounced_at). An explicit `to`
-  // override is how staff send to a corrected address, so it is not blocked.
-  if (!(body.to && body.to.length > 0) && est.clients?.email_bounced_at) {
-    return NextResponse.json({ error: "Client's email address has hard-bounced. Update it, or send to a different address." }, { status: 422 });
+  // A hard bounce means that address doesn't accept mail; re-sending damages
+  // sending-domain reputation, so it is dropped for transactional mail too.
+  // Bounces are per address (20261220000500_email_address_bounces.sql): the
+  // dialog always posts its pre-filled recipients as `to`, so the old
+  // "only when no `to` was given" check never caught a bounced address, while
+  // a bounce on one address blocked every other one. A typed corrected address
+  // simply isn't on the list.
+  const { deliverable: toEmails, bounced: bouncedTo } = await partitionBouncedRecipients(est.org_id as string, requestedEmails);
+  const { deliverable: ccEmails, bounced: bouncedCc } = await partitionBouncedRecipients(
+    est.org_id as string,
+    (body.ccEmails ?? []).map((e) => e.trim()),
+  );
+  const bouncedEmails = [...bouncedTo, ...bouncedCc];
+  if (toEmails.length === 0) {
+    return NextResponse.json({ error: allRecipientsBouncedMessage(bouncedTo) }, { status: 422 });
   }
   const toEmailsJoined = toEmails.join(", ");
 
@@ -471,7 +481,7 @@ export async function POST(
     subject: resolvedSubject,
     html: resolvedBody,
     ...(replyTo ? { replyTo } : {}),
-    ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails.map((e) => e.trim()) } : {}),
+    ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
     ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
   });
 
@@ -556,7 +566,7 @@ export async function POST(
     body_html: resolvedBody,
     resend_id: sent?.id ?? null,
     email_type: "estimate",
-    cc_emails: body.ccEmails ?? [],
+    cc_emails: ccEmails,
   });
 
   // Move estimate to "sent" — sent_at is set only on the first send, as the
@@ -611,5 +621,5 @@ export async function POST(
     }
   }
 
-  return NextResponse.json({ ok: true, proposalUrl });
+  return NextResponse.json({ ok: true, proposalUrl, bouncedSkipped: bouncedEmails });
 }

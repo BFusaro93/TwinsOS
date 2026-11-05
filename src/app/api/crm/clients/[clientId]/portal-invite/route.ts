@@ -7,6 +7,7 @@ import { getOrgReplyTo } from "@/lib/email/reply-to";
 import { orgEmailFrom } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { findBouncedAddresses } from "@/lib/email/bounced-addresses";
 
 export async function POST(
   req: Request,
@@ -52,7 +53,7 @@ export async function POST(
 
   const { data: client } = await supabase
     .from("clients")
-    .select("id, display_name, email_bounced_at")
+    .select("id, display_name")
     .eq("id", clientId)
     .eq("org_id", effOrgId)
     .is("deleted_at", null)
@@ -61,10 +62,12 @@ export async function POST(
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
   // A hard-bounced address is dead — an invite to it can't arrive, and sending
-  // anyway only hurts the sending domain's reputation.
-  if (client.email_bounced_at) {
+  // anyway only hurts the sending domain's reputation. Checked for the address
+  // the invite actually goes to: a bounce on the client's primary used to block
+  // an invite typed to a different, good address.
+  if ((await findBouncedAddresses(effOrgId, [email])).size > 0) {
     return NextResponse.json(
-      { error: "This client's email address has bounced, so an invite can't be delivered. Update the client's email address first, then send the invite again." },
+      { error: "This email address has bounced, so an invite can't be delivered. Use a different address, or clear the bounce on the client if the mailbox works again." },
       { status: 409 }
     );
   }

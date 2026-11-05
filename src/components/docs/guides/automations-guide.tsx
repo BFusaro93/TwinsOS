@@ -24,7 +24,7 @@ const TRIGGER_GROUPS: [string, string][] = [
   ["Invoice", "Invoice created, Invoice sent, Invoice past due, Invoice paid"],
   [
     "Job / Visit",
-    "Job created, Job cancelled, Package created, Visit completed, Visit completed for a specific service, Visit cancelled, Visit dispatched, Visit skipped, Visit date changed, Visit moved to waiting list",
+    "Job created, Job cancelled, Package created, Package renewed, Visit completed, Visit completed for a specific service, Visit cancelled, Visit dispatched, Visit skipped, Visit date changed, Visit moved to waiting list",
   ],
   ["Tag", "Tag added, Tag removed"],
   ["Ticket", "Ticket created, Ticket closed, Ticket past due, Ticket reopened"],
@@ -151,7 +151,18 @@ export function AutomationsGuide() {
           <GuideLink href="/settings/support/forms-guide" className="text-[#60ab45] hover:underline">
             Forms guide
           </GuideLink>{" "}
-          for how forms are built and published; this page doesn&apos;t re-cover that.
+          for how forms are built and published; this page doesn&apos;t re-cover that. The trigger
+          can be limited to specific forms (&quot;All forms&quot; by default), so a Snow Quote
+          follow-up runs only for the Snow Quote form. Tags a form adds on submit fire{" "}
+          <strong>Tag added</strong>, and the first step of a form or new-lead sequence goes out right
+          away instead of waiting for the next 15-minute run.
+        </p>
+        <p>
+          <strong>Customer decisions count.</strong> <strong>Estimate was won</strong> fires when the
+          customer accepts through the proposal link or the client portal, and when an open estimate is
+          converted to a job; <strong>Estimate was lost</strong> fires when they decline in the portal.
+          <strong> Lead cancelled</strong> fires both when a lead is cancelled from the Clients list and
+          when it is closed as lost from the Leads page.
         </p>
         <p>
           <strong>Bulk edits fire triggers too.</strong> Adding or removing a tag on many clients at
@@ -340,8 +351,8 @@ export function AutomationsGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Send Mon&ndash;Fri only</strong> — skips weekends; if the event would otherwise fire
-            on a Saturday or Sunday, it waits until the next weekday. This applies to approved emails
-            too.
+            on a Saturday or Sunday, it goes out on Monday when its Send Between window opens (8:00 AM
+            by default). This applies to approved emails too.
           </li>
           <li>
             <strong>Send Between</strong> — a start and end time window (defaults to 8:00 AM&ndash;6:00
@@ -438,12 +449,15 @@ export function AutomationsGuide() {
           <strong>What if someone marks one of our emails as spam?</strong> The client is
           automatically marked Do Not Market and a note is added to their Activity timeline, so
           campaigns and marketing automations stop reaching them. Invoices, estimates and other
-          service emails still send &mdash; only a bounced (dead) address blocks those.
+          service emails still send &mdash; only a bounced (dead) address blocks those, and only
+          that address: the client&apos;s other addresses keep getting email.
         </p>
         <p>
           <strong>I approved an automation email and it was refused. Why?</strong> The client&apos;s
-          status is re-checked at the moment you approve. If they unsubscribed or their email address
-          bounced while the step was waiting, the approval is blocked — reject the step instead.
+          status is re-checked at the moment you approve. If they unsubscribed while the step was
+          waiting, the approval is blocked — reject the step instead. A recipient address that
+          bounced in the meantime is dropped and the email goes to the others; if every recipient
+          bounced, the approval is blocked.
         </p>
         <p>
           <strong>I approved a queued step and was told the automation was stopped.</strong> Turning an
@@ -486,10 +500,22 @@ export function AutomationsGuide() {
             <strong>Short meeting reminders.</strong> “Meeting is coming up” triggers are checked every 5 minutes, so a 5- or 10-minute lead time fires on time.
           </li>
           <li>
+            <strong>Cancelled or moved meetings.</strong> If a meeting is cancelled, deleted or rescheduled, the reminders still waiting for it stop (shown as “Stopped (meeting changed)” in the activity log). A rescheduled meeting gets fresh reminders for its new time.
+          </li>
+          <li>
+            <strong>Deleted clients.</strong> Deleting a client stops every sequence they are in, including ticket, alert, field-update and tag steps (“Stopped (client deleted)”), and a deleted client is never enrolled again.
+          </li>
+          <li>
+            <strong>Client-status triggers check the client.</strong> Client cancelled, Lead cancelled, Lead converted, Client reactivated and the opt-in triggers only fire when the client is actually in that state, so a cancellation email can&apos;t be sent to an active customer.
+          </li>
+          <li>
+            <strong>Alert and ticket steps stay in your company.</strong> An alert only reaches active users in your organization, and a ticket step&apos;s assignee must be one of your employees (otherwise the ticket is created unassigned and your New Ticket recipients are told). A text step with an empty message is skipped instead of retried.
+          </li>
+          <li>
             <strong>Web-form leads.</strong> A lead created by a public web form fires <strong>Lead created</strong> as well as Form submitted, so lead automations pick it up.
           </li>
           <li>
-            <strong>Scheduling a campaign.</strong> Saving a campaign with a Schedule Send date keeps it as a draft. Use <strong>Mark Scheduled</strong> on the campaign row to arm it; scheduled campaigns go out at the top of the hour. Scheduling or sending needs Send/Launch Campaign.
+            <strong>Scheduling a campaign.</strong> Saving a campaign with a Schedule Send date keeps it as a draft. Use <strong>Mark Scheduled</strong> on the campaign row to arm it; scheduled campaigns go out at the top of the hour. Scheduling or sending needs Send/Launch Campaign. <strong>Send Now</strong> follows the same rules as a scheduled send: it is refused for a company whose subscription is canceled or whose trial has ended, and for demo companies.
           </li>
           <li>
             <strong>Approvals.</strong> Held messages can be approved or rejected by admins, managers, and anyone with Create/Modify Automation.

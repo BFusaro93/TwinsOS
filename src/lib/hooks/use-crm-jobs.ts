@@ -1963,6 +1963,10 @@ export function useCreateClientJob() {
       if (values.products.length > 0) {
         qc.invalidateQueries({ queryKey: ['crm-job-products', (data as { id: string }).id] });
       }
+      // A package renewal fires "Package renewed" itself (useRenewPackageJob) —
+      // not Job created / Package created, which would send a renewing client the
+      // new-customer sequence.
+      if (values.renewedFromJobId) return;
       fireAutomationTrigger({ triggerType: 'job_created', clientId: values.clientId, matchValues: [values.jobType] });
       if (values.jobType === 'package') {
         fireAutomationTrigger({
@@ -2859,7 +2863,7 @@ export function useCreateJobsFromEstimate() {
       // online / via the portal is converted from the header button, and a
       // no-op re-save would still land a spurious stage entry in the audit trail).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      const { data: acceptedRows } = await (supabase as any)
         .from("estimates")
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update({ stage: "accepted" } as any)
@@ -2867,7 +2871,12 @@ export function useCreateJobsFromEstimate() {
         // Only an open proposal is "forced" accepted by converting it. A lost
         // estimate must be reopened deliberately (and a draft sent) rather
         // than silently flipped here; accepted/invoiced are already past it.
-        .not("stage", "in", "(accepted,lost,draft,invoiced)");
+        .not("stage", "in", "(accepted,lost,draft,invoiced)")
+        .select("id, sales_rep_id");
+      // Only a conversion that actually moved the stage is a new "won" — one accepted
+      // online already fired estimate_won from the proposal/portal route.
+      const wonRow = (acceptedRows as { sales_rep_id: string | null }[] | null)?.[0];
+      const estimateWon = wonRow ? { salesRepId: wonRow.sales_rep_id } : null;
 
       // Seed the linked project's contract price from the accepted estimate —
       // only while it is still unset, so a PM's figure is never clobbered.
@@ -2937,7 +2946,7 @@ export function useCreateJobsFromEstimate() {
           .is("deleted_at", null);
       }
 
-      return { jobId, clientId, jobType, projectId, estimateId, materialsFailed, packageId: packageId ?? null };
+      return { jobId, clientId, jobType, projectId, estimateId, materialsFailed, packageId: packageId ?? null, estimateWon };
     },
     onSuccess: (data) => {
       if (data.materialsFailed) {
@@ -2959,6 +2968,14 @@ export function useCreateJobsFromEstimate() {
           triggerType: "package_created",
           clientId: data.clientId,
           matchValues: data.packageId ? [data.packageId] : undefined,
+        });
+      }
+      if (data.estimateWon) {
+        fireAutomationTrigger({
+          triggerType: "estimate_won",
+          clientId: data.clientId,
+          estimateId: data.estimateId,
+          matchValues: data.estimateWon.salesRepId ? [data.estimateWon.salesRepId] : undefined,
         });
       }
     },

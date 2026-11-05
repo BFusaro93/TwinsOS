@@ -113,6 +113,7 @@ import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMPayment, CRMInvoice, CRMContract, InvoiceStatus } from "@/types/crm-invoices";
 import type { Estimate } from "@/types/crm-estimates";
 import { toast } from "sonner";
+import { EmailBouncesNotice } from "@/components/crm/clients/EmailBouncesNotice";
 import { useRequiredFields } from "@/lib/hooks/use-required-fields";
 import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import {
@@ -3638,6 +3639,12 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                 )}
               </div>
             </div>
+
+            <EmailBouncesNotice
+              clientId={clientId}
+              addresses={[client.primaryEmail, client.billingEmail]}
+              canClear={can(isLead ? "lead_allow_edit" : "client_allow_edit")}
+            />
 
             {/* Spacer pushes tags + source to the bottom of the left column */}
             <div className="flex-1" />

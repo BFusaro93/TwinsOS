@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   openCrewReference,
   useAddCrewChemical,
   useCrewChemicalCatalog,
+  useCrewConditions,
   type ChemicalConditionsInput,
   type ConditionsReading,
   type CrewChemicalCatalog,
@@ -143,13 +144,32 @@ export function ChemicalConditionsFields({
   );
 }
 
-/** Record a chemical the office didn't preload — an extra spot treatment, a substitute product. */
-export function AddChemicalForm({ visitId, disabled }: { visitId: string; disabled?: boolean }) {
+/** Record a chemical the office didn't preload — an extra spot treatment, a substitute product.
+ *  It is saved already confirmed, so how it was applied and the conditions go in with it. Inside
+ *  the confirm card the crew has already filled the stop's conditions: pass them as
+ *  `sharedConditions` and the form uses those instead of showing its own fields. */
+export function AddChemicalForm({
+  visitId, disabled, sharedConditions,
+}: {
+  visitId: string;
+  disabled?: boolean;
+  sharedConditions?: ConditionsDraft;
+}) {
   const [open, setOpen] = useState(false);
   const [productId, setProductId] = useState("");
   const [unitId, setUnitId] = useState("");
   const [amount, setAmount] = useState("");
+  const [apply, setApply] = useState<ChemApplyEdit | undefined>(undefined);
+  const [ownConditions, setOwnConditions] = useState<ConditionsDraft>(EMPTY_CONDITIONS);
   const { data: catalog } = useCrewChemicalCatalog(open ? visitId : undefined);
+  const { data: weather } = useCrewConditions(open && !sharedConditions ? visitId : undefined);
+  const weatherFilled = useRef(false);
+  useEffect(() => {
+    if (weather?.reading && !weatherFilled.current) {
+      weatherFilled.current = true;
+      setOwnConditions((prev) => conditionsFromReading(weather.reading!, prev));
+    }
+  }, [weather]);
   const add = useAddCrewChemical();
 
   function pickProduct(id: string) {
@@ -163,10 +183,20 @@ export function AddChemicalForm({ visitId, disabled }: { visitId: string; disabl
     if (!productId) return toast.error("Choose the product");
     if (!unitId) return toast.error("Choose a unit");
     if (!Number.isFinite(n) || n <= 0) return toast.error("Enter how much was used");
-    await add.mutateAsync({ visitId, productId, chemicalAmount: n, unitOfMeasureId: unitId });
+    await add.mutateAsync({
+      visitId,
+      productId,
+      chemicalAmount: n,
+      unitOfMeasureId: unitId,
+      ...(apply?.methodId !== undefined ? { applicationMethodId: apply.methodId } : {}),
+      ...(apply?.targetIds !== undefined ? { targetIds: apply.targetIds } : {}),
+      ...(apply?.areasTreatedIds !== undefined ? { areasTreatedIds: apply.areasTreatedIds } : {}),
+      conditions: conditionsPayload(sharedConditions ?? ownConditions),
+    });
     toast.success("Chemical added");
     setProductId("");
     setAmount("");
+    setApply(undefined);
     setOpen(false);
   }
 
@@ -208,6 +238,21 @@ export function AddChemicalForm({ visitId, disabled }: { visitId: string; disabl
               </SelectContent>
             </Select>
           </div>
+          <ChemicalApplyFields
+            chemical={{ applicationMethodId: null, targetIds: [], areasTreatedIds: [] }}
+            catalog={catalog}
+            edit={apply}
+            onChange={setApply}
+          />
+          {!sharedConditions && (
+            <ChemicalConditionsFields
+              display={catalog.conditionsDisplay}
+              value={ownConditions}
+              onChange={setOwnConditions}
+              reading={weather?.reading}
+              onUseReading={() => weather?.reading && setOwnConditions((prev) => conditionsFromReading(weather.reading!, prev))}
+            />
+          )}
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="h-11 flex-1" onClick={() => setOpen(false)}>Cancel</Button>
             <Button type="button" className="h-11 flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={submit} disabled={add.isPending}>

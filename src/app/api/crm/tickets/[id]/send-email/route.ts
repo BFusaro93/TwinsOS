@@ -11,6 +11,7 @@ import {
 import { resolveReplyTo } from "@/lib/email/reply-to";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { logger } from "@/lib/logger";
+import { allRecipientsBouncedMessage, findBouncedAddresses } from "@/lib/email/bounced-addresses";
 
 const log = logger.child("ticket-send-email");
 
@@ -26,8 +27,8 @@ const bodySchema = z.object({
  *
  * Emails the ticket's client from the ticket detail sheet. This is a SERVICE
  * email (a reply about their own ticket): do_not_market is not consulted and
- * no unsubscribe footer is added, but a hard bounce (email_bounced_at) blocks
- * it unless staff type a different, corrected address.
+ * no unsubscribe footer is added, but a hard-bounced recipient address
+ * (crm_email_bounces) blocks it — typing a different, corrected address works.
  *
  * The sent email is logged as a client_activity row (type 'email') linked to
  * the ticket via ref_table/ref_id, so the Resend webhook's delivered/bounced
@@ -96,7 +97,7 @@ export async function POST(
       service_address, service_city, service_state, service_zip,
       turf_sqft, gross_sqft, mulch_bed_sqft, yards_of_mulch,
       linear_ft_perimeter, linear_ft_edging, gate_lock_code, notes_to_crew,
-      referred_by, email_bounced_at,
+      referred_by,
       sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name),
       referring_client:referred_by_client_id(display_name)
     `)
@@ -111,14 +112,10 @@ export async function POST(
   if (!recipient) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
   }
-  // A hard bounce blocks the stored address; typing a different address is how
-  // staff send to a corrected one.
-  const usingStoredAddress = !override || override.toLowerCase() === String(client.primary_email ?? "").toLowerCase();
-  if (usingStoredAddress && client.email_bounced_at) {
-    return NextResponse.json(
-      { error: "Client's email address has hard-bounced. Update it, or send to a different address." },
-      { status: 422 }
-    );
+  // A hard-bounced address is blocked whichever way it got here (stored or
+  // typed); a different, corrected address isn't on the bounce list.
+  if ((await findBouncedAddresses(orgId, [recipient])).size > 0) {
+    return NextResponse.json({ error: allRecipientsBouncedMessage([recipient]) }, { status: 422 });
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

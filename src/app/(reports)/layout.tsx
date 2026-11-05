@@ -6,6 +6,7 @@ import { ReportsSidebar, DASHBOARDS_NAV, dashboardRouteGate, useDashboardPermiss
 import { TopBar } from "@/components/shared/TopBar";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
 import { SettingsLoader } from "@/components/shared/SettingsLoader";
+import { TrialLockGate } from "@/components/shared/TrialLockGate";
 import { InternalOnlyGuard } from "@/components/shared/InternalOnlyGuard";
 import { FeatureGuard } from "@/components/shared/FeatureGuard";
 import { useUIStore, useCurrentUserStore, SidebarDrawerProvider } from "@/stores";
@@ -92,6 +93,7 @@ export default function ReportsLayout({
   }, [pathname, setSidebarOpen]);
 
   return (
+    <TrialLockGate>
     <div className="flex h-dvh overflow-hidden bg-slate-50 dark:bg-background">
       <RealtimeSync />
       <SettingsLoader />
@@ -135,5 +137,6 @@ export default function ReportsLayout({
         </main>
       </div>
     </div>
+    </TrialLockGate>
   );
 }

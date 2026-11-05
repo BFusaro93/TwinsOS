@@ -40,6 +40,15 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Signed up but never clicked the confirmation link (lost, expired, spam).
+  const [unconfirmed, setUnconfirmed] = useState(false);
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+
+  async function resendConfirmation() {
+    setResendState("sending");
+    const { error: resendError } = await createClient().auth.resend({ type: "signup", email: email.trim() });
+    setResendState(resendError ? "failed" : "sent");
+  }
 
   // An emailed deep link can land here even though the browser holds a valid
   // session (e.g. the server-side check ran against an access token that had
@@ -67,9 +76,11 @@ function LoginForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setUnconfirmed(false);
+    setResendState("idle");
 
     let res: Response;
-    let data: { error?: string };
+    let data: { error?: string; code?: string };
     try {
       res = await fetch("/api/auth/login", {
         method: "POST",
@@ -88,6 +99,7 @@ function LoginForm() {
 
     if (!res.ok) {
       setError(data.error ?? "Something went wrong. Please try again.");
+      setUnconfirmed(data.code === "email_not_confirmed");
       setLoading(false);
       return;
     }
@@ -141,6 +153,27 @@ function LoginForm() {
             <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
               {error}
             </p>
+          )}
+
+          {unconfirmed && (
+            <div className="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              {resendState === "sent" ? (
+                <>We sent a new confirmation link to {email.trim()}. Open it, then sign in.</>
+              ) : (
+                <>
+                  Check your inbox (and spam) for the confirmation link, or{" "}
+                  <button
+                    type="button"
+                    onClick={resendConfirmation}
+                    disabled={resendState === "sending" || !email.trim()}
+                    className="font-medium text-brand-600 hover:underline disabled:opacity-60"
+                  >
+                    {resendState === "sending" ? "sending…" : "send it again"}
+                  </button>
+                  .{resendState === "failed" && " That didn't go through — wait a minute and try again."}
+                </>
+              )}
+            </div>
           )}
 
           <Button

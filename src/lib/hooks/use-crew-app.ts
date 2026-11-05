@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { openPendingTab, showInPendingTab } from "@/lib/utils/pending-tab";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +11,7 @@ import type { CRMJob, CRMJobVisit, VisitPhoto, CrewMemberTime } from "@/types/cr
 import { mapServiceSubitems } from "@/lib/utils/job-service-subitems";
 import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { instantToZoneWallClock } from "@/lib/time/zone";
 import {
   crewVisitComparator,
@@ -313,7 +315,11 @@ export function useMyCrewVisits(date: string, includeCarryOver = false) {
       // can clock out after org-midnight.
       let carried: Record<string, unknown>[] = [];
       if (includeCarryOver) {
-        const res = await selectCarriedOverClockedInVisits(supabase, select, membership.crew_id, date);
+        // Before 6am org time yesterday's unfinished stops stay too (storm and
+        // late routes past midnight) — see selectCarriedOverClockedInVisits.
+        const res = await selectCarriedOverClockedInVisits(
+          supabase, select, membership.crew_id, date, undefined, { timeZone: await getMyTimeZone(supabase) }
+        );
         if (!res.error) {
           const todayIds = new Set(data.map((r) => r.id as string));
           carried = res.data.filter((r) => !todayIds.has(r.id as string));
@@ -679,7 +685,16 @@ export function useCrewChemicalCatalog(visitId: string | undefined) {
 export function useAddCrewChemical() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { visitId: string; productId: string; chemicalAmount: number; unitOfMeasureId: string }) => {
+    mutationFn: async (input: {
+      visitId: string;
+      productId: string;
+      chemicalAmount: number;
+      unitOfMeasureId: string;
+      applicationMethodId?: string | null;
+      targetIds?: string[];
+      areasTreatedIds?: string[];
+      conditions?: ChemicalConditionsInput;
+    }) => {
       const res = await fetch("/api/crm/crew/chemicals/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -748,6 +763,56 @@ export function useJobProducts(visitId: string) {
       const res = await fetch(`/api/crm/crew/visits/${visitId}/job-products`);
       if (!res.ok) throw new Error(await res.text());
       return res.json();
+    },
+  });
+}
+
+/** A material on a stop, tagged with the stop visit whose job it belongs to (the use-materials target). */
+export interface StopJobProductMaterial extends JobProductMaterial {
+  visitId: string;
+}
+
+/**
+ * Materials for every visit of a stop. A stop can span services of one job
+ * (each with its own per-visit sub-item rows) or several jobs (a Mowing job
+ * plus a one-off Mulch job); reading only the anchor visit's job hid the
+ * rest, so they were never marked used, never left inventory, and the
+ * pending ones were invoiced at the planned quantity. Rows shared by visits
+ * of the same job come back once, owned by the first visit that returned them.
+ */
+export function useStopJobProducts(visitIds: string[]) {
+  const ids = [...new Set(visitIds)].sort();
+  return useQuery<StopJobProductMaterial[]>({
+    queryKey: ["crew-app-job-products", "stop", ids],
+    enabled: ids.length > 0,
+    queryFn: async () => {
+      const lists = await Promise.all(ids.map(async (visitId) => {
+        const res = await fetch(`/api/crm/crew/visits/${visitId}/job-products`);
+        if (!res.ok) throw new Error(await res.text());
+        return ((await res.json()) as JobProductMaterial[]).map((m) => ({ ...m, visitId }));
+      }));
+      const seen = new Set<string>();
+      return lists.flat().filter((m) => (seen.has(m.id) ? false : (seen.add(m.id), true)));
+    },
+  });
+}
+
+/** Requisitions filed from any visit of a stop, newest first, each once. */
+export function useStopRequisitions(visitIds: string[]) {
+  const ids = [...new Set(visitIds)].sort();
+  return useQuery<VisitRequisition[]>({
+    queryKey: ["crew-app-requisitions", "stop", ids],
+    enabled: ids.length > 0,
+    queryFn: async () => {
+      const lists = await Promise.all(ids.map(async (visitId) => {
+        const res = await fetch(`/api/crm/crew/visits/${visitId}/requisitions`);
+        if (!res.ok) throw new Error(await res.text());
+        return (await res.json()) as VisitRequisition[];
+      }));
+      const seen = new Set<string>();
+      return lists.flat()
+        .filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)))
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
     },
   });
 }
@@ -1310,6 +1375,7 @@ export function useRequestMaterials() {
     },
     onSuccess: (_data, { visitId }) => {
       qc.invalidateQueries({ queryKey: ["crew-app-requisitions", visitId] });
+      qc.invalidateQueries({ queryKey: ["crew-app-requisitions", "stop"] });
     },
   });
 }
@@ -1363,6 +1429,7 @@ export function useUseJobProductMaterials() {
     // leaving the crew staring at controls that can never succeed.
     onSettled: (_data, _err, { visitId }) => {
       qc.invalidateQueries({ queryKey: ["crew-app-job-products", visitId] });
+      qc.invalidateQueries({ queryKey: ["crew-app-job-products", "stop"] });
     },
   });
 }
@@ -1370,12 +1437,16 @@ export function useUseJobProductMaterials() {
 export function useUploadVisitPhoto() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ visitId, file, caption }: { visitId: string; file: File; caption?: string }) => {
+    mutationFn: async ({ visitId, file, caption, clientId }: { visitId: string; file: File; caption?: string; clientId?: string }) => {
       const form = new FormData();
       // Vercel rejects request bodies over ~4.5MB (413, HTML body), and a phone
       // photo is routinely 3-8MB — downscale first, like the invoice photos do.
       form.append("file", await downscaleImage(file));
       if (caption) form.append("caption", caption);
+      // Stable per photo (it's in the mutation's variables, so an offline retry
+      // resends the same one): the route then upserts one storage object and
+      // one row instead of a duplicate photo when a response was lost.
+      if (clientId) form.append("clientId", clientId);
       const res = await fetch(`/api/crm/crew/visits/${visitId}/photos`, {
         method: "POST",
         body: form,
@@ -1431,6 +1502,8 @@ export interface CrewDayMember {
   absent: boolean;
   startedAt: string | null;
   endedAt: string | null;
+  /** Work date of the shift shown — the previous day's for one that crossed midnight. */
+  shiftWorkDate?: string | null;
 }
 
 export function useCrewDay() {
@@ -1673,10 +1746,17 @@ export function useCrewReference() {
   });
 }
 
-/** Opens a document in a new tab through a short-lived signed link. */
+/** Opens a document in a new tab through a short-lived signed link. The tab is opened before
+ *  the link is fetched so iPhone/iPad Safari doesn't block it (see utils/pending-tab). */
 export async function openCrewReference(id: string): Promise<void> {
-  const res = await fetch(`/api/crm/crew/reference/${id}/url`);
-  if (!res.ok) throw new Error("Couldn't open the document");
-  const { url } = (await res.json()) as { url: string };
-  window.open(url, "_blank", "noopener");
+  const tab = openPendingTab();
+  try {
+    const res = await fetch(`/api/crm/crew/reference/${id}/url`);
+    if (!res.ok) throw new Error("Couldn't open the document");
+    const { url } = (await res.json()) as { url: string };
+    showInPendingTab(tab, url);
+  } catch (err) {
+    tab?.close();
+    throw err;
+  }
 }

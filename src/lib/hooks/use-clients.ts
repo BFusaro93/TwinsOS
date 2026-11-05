@@ -1407,7 +1407,7 @@ export function useUpdateClient() {
       const phoneChanged = updates.primaryPhone !== undefined && before
         && (updates.primaryPhone ?? "").replace(/\D/g, "").slice(-10) !== (before.primary_phone ?? "").replace(/\D/g, "").slice(-10);
 
-      const { error } = await supabase
+      const { data: updatedRows, error } = await supabase
         .from("clients")
         .update({
           display_name: updates.displayName,
@@ -1488,11 +1488,18 @@ export function useUpdateClient() {
           sms_opt_in_at: smsOptInJustEnabled ? new Date().toISOString() : phoneChanged && updates.smsOptIn === undefined ? null : undefined,
           sms_opt_in_source: smsOptInJustEnabled ? "manual" : phoneChanged && updates.smsOptIn === undefined ? null : undefined,
         })
-        .eq("id", id);
+        .eq("id", id)
+        .select("id");
+      if (error) throw error;
+      // RLS UPDATE policies filter rows instead of erroring (a read-only org,
+      // or a row the user can't write), so an "update" can change nothing and
+      // still return no error. Report it like the 42501 it really is.
+      if (!updatedRows?.length) {
+        throw { code: "42501", message: "This client couldn't be saved." };
+      }
       if (phoneChanged && before?.sms_opt_in && updates.smsOptIn === undefined) {
         await logClientActivity(supabase, id, "Text consent cleared: primary phone number changed");
       }
-      if (error) throw error;
 
       // Keep the client's own-address property (is_master) in step with the client-level
       // takeoffs, so an estimate that picks that property reads the same numbers. Only keys
@@ -2415,6 +2422,9 @@ export function useCloseLeadAsLost() {
     },
     onSuccess: (_d, { clientId }) => {
       invalidateClientRecord(qc, clientId);
+      // Closing as lost is how a lead is cancelled from the Leads page, so it fires the
+      // same "Lead cancelled" trigger as cancelling a lead from the Clients list.
+      fireAutomationTrigger({ triggerType: "lead_cancelled", clientId });
     },
   });
 }

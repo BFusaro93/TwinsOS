@@ -20,6 +20,7 @@ import { replyToFromCustomizations } from "@/lib/email/reply-to";
 import { orgEmailFrom, mapSendError, buildClientMergeVars } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { logger } from "@/lib/logger";
+import { allRecipientsBouncedMessage, partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("email-invoice");
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
     .select(`
       *,
       clients(
-        display_name, first_name, last_name, primary_email, billing_email, email_bounced_at, phones, account_number,
+        display_name, first_name, last_name, primary_email, billing_email, phones, account_number,
         invoice_delivery, balance_outstanding_cents, referred_by, referred_by_client_id,
         billing_address, billing_city, billing_state, billing_zip,
         service_address, service_city, service_state, service_zip,
@@ -174,7 +175,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const toEmails = (body.to && body.to.length > 0)
+  const requestedEmails = (body.to && body.to.length > 0)
     ? body.to.map((e) => e.trim())
     : (() => {
       // The client form promises "If blank, invoices will be sent to the primary
@@ -182,33 +183,19 @@ export async function POST(req: NextRequest) {
       const stored = ((inv.clients?.billing_email as string | null)?.trim() || (inv.clients?.primary_email as string | null)) ?? null;
       return stored ? [stored] : [];
     })();
-  if (toEmails.length === 0) {
+  if (requestedEmails.length === 0) {
     return NextResponse.json({ error: "Client has no email address on file" }, { status: 422 });
   }
-  // A hard bounce means the stored address doesn't accept mail; re-sending
-  // damages sending-domain reputation, so it is blocked for transactional mail
-  // too (see the Resend webhook that sets email_bounced_at). An explicit `to`
-  // override is how staff send to a corrected address, so it is not blocked.
-  // The send dialog always submits its pre-filled recipients as `to`, so "no
-  // `to` given" alone never matched and the guard below never ran for a
-  // single-invoice send: staff could keep emailing a dead address. Sending to
-  // exactly the stored (bounced) address counts as using it; only a different
-  // address is the "corrected address" override.
-  // Both stored addresses count: the default recipient is the Billing Email
-  // when one is set, so a pre-filled `to` carrying it is the stored address too.
-  const storedEmails = new Set(
-    [inv.clients?.billing_email, inv.clients?.primary_email]
-      .map((v) => ((v as string | null) ?? "").trim().toLowerCase())
-      .filter((v) => v !== "")
-  );
-  const usingStoredInvoiceEmail =
-    !(body.to && body.to.length > 0) ||
-    (storedEmails.size > 0 && body.to.every((e) => storedEmails.has(e.trim().toLowerCase())));
-  if (usingStoredInvoiceEmail && inv.clients?.email_bounced_at) {
-    return NextResponse.json(
-      { error: "Client's email address has hard-bounced. Update it, or send to a different address." },
-      { status: 422 }
-    );
+  // A hard bounce means that address doesn't accept mail; re-sending damages
+  // sending-domain reputation, so it is dropped for transactional mail too.
+  // Bounces are per address (20261220000500_email_address_bounces.sql): a
+  // typo'd billing email or a bad CC no longer blocks the invoice reaching the
+  // client's good addresses, and a typed corrected address isn't on the list.
+  const { deliverable: toEmails, bounced: bouncedTo } = await partitionBouncedRecipients(inv.org_id, requestedEmails);
+  const { deliverable: ccEmails, bounced: bouncedCc } = await partitionBouncedRecipients(inv.org_id, body.ccEmails ?? []);
+  const bouncedEmails = [...bouncedTo, ...bouncedCc];
+  if (toEmails.length === 0) {
+    return NextResponse.json({ error: allRecipientsBouncedMessage(bouncedTo) }, { status: 422 });
   }
 
   // Load org + brand color
@@ -501,7 +488,7 @@ export async function POST(req: NextRequest) {
     subject: resolvedSubject,
     html,
     ...(replyTo ? { replyTo } : {}),
-    ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails } : {}),
+    ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
     ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
   });
 
@@ -573,5 +560,5 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, bouncedSkipped: bouncedEmails });
 }

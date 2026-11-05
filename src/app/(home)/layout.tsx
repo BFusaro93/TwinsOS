@@ -3,6 +3,7 @@ import { SettingsLoader } from "@/components/shared/SettingsLoader";
 import { FeedbackButton } from "@/components/shared/FeedbackButton";
 import { AskAIButton } from "@/components/shared/AskAIButton";
 import { SupportChatWidget } from "@/components/shared/SupportChatWidget";
+import { TrialLockGate } from "@/components/shared/TrialLockGate";
 
 export default function HomeLayout({
   children,
@@ -13,7 +14,7 @@ export default function HomeLayout({
     <div className="min-h-dvh bg-slate-50 dark:bg-background">
       <SettingsLoader />
       <DisplaySizeApplier />
-      {children}
+      <TrialLockGate>{children}</TrialLockGate>
       <AskAIButton />
       <FeedbackButton />
       <SupportChatWidget />

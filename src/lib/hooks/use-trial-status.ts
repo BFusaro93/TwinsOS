@@ -4,6 +4,8 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { fetchCurrentProfile } from "@/lib/hooks/use-current-profile";
+import { useEffect } from "react";
+import { setOrgReadOnlyForErrors } from "@/lib/utils/mutation-error";
 
 export interface TrialStatus {
   isTrial: boolean;
@@ -40,6 +42,15 @@ async function fetchTrialStatus(queryClient: QueryClient) {
 }
 
 export function useTrialStatus(): TrialStatus & { isLoading: boolean } {
+  const status = useTrialStatusInner();
+  const readOnly = status.isReadOnly || status.isExpired;
+  useEffect(() => {
+    setOrgReadOnlyForErrors(readOnly);
+  }, [readOnly]);
+  return status;
+}
+
+function useTrialStatusInner(): TrialStatus & { isLoading: boolean } {
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["org-trial-status"],

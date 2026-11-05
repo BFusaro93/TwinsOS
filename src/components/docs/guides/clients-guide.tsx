@@ -564,7 +564,7 @@ export function ClientsGuide() {
             <strong>The timeline records more.</strong> Cancelling, closing as lost and reactivating (with the reason), adding or changing contacts and properties, removing tags, and uploading or deleting files all leave an entry on the client&apos;s activity timeline.
           </li>
           <li>
-            <strong>Statements to a bounced address.</strong> An account statement won&apos;t be emailed to an address that has hard-bounced. Enter a different address in the dialog to send it.
+            <strong>Bounced email addresses.</strong> When an address hard-bounces, a red notice on the client lists it. That address is skipped on every send (statements, invoices, estimates, campaigns, automations), but only that address: a bad billing email or CC no longer blocks email to the client&apos;s good primary. A corrected address is never blocked. Click <strong>Clear bounce</strong> (needs permission to edit the client) if the mailbox works again.
           </li>
           <li>
             <strong>New Client.</strong> If Settings → Required Fields requires a source, New Client asks for it. A service address checked with the address suggestion is saved with its verified location.

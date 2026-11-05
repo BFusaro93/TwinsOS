@@ -150,17 +150,17 @@ export function stopKeyForVisit(visit: StopKeyInput): string {
 /**
  * Deterministic so the anchor (whose id becomes the stop's route param and
  * the clock-in/out target) doesn't shuffle between renders or across a
- * server request that re-derives the same stop.
+ * server request that re-derives the same stop. Start time is deliberately
+ * not a key: Start Job stamps the same start_time on every sibling, which
+ * re-picked the anchor mid-job and moved the stop off the visit holding the
+ * crew's punches. Routes that touch punches also resolve the punch-owning
+ * visit from the punches themselves (resolvePunchOwnerVisitId).
  */
 export function pickAnchorVisit(visits: CRMJobVisit[]): CRMJobVisit {
   return [...visits].sort((a, b) => {
     const orderA = a.orderNum ?? Number.POSITIVE_INFINITY;
     const orderB = b.orderNum ?? Number.POSITIVE_INFINITY;
     if (orderA !== orderB) return orderA - orderB;
-
-    const startA = a.startTime ?? "99:99";
-    const startB = b.startTime ?? "99:99";
-    if (startA !== startB) return startA < startB ? -1 : 1;
 
     const sortA = visitServices(a)[0]?.sortOrder ?? Number.POSITIVE_INFINITY;
     const sortB = visitServices(b)[0]?.sortOrder ?? Number.POSITIVE_INFINITY;
@@ -188,6 +188,36 @@ function derivedStopStatus(visits: CRMJobVisit[]): VisitStatus {
     .map((v) => v.status)
     .sort((a, b) => STATUS_PROGRESS_ORDER.indexOf(a) - STATUS_PROGRESS_ORDER.indexOf(b))[0]
     ?? visits[0].status;
+}
+
+/**
+ * Which of a stop's visits holds its crew punches: the one with open punches,
+ * then the one with the most, else `fallbackId` (the derived anchor). Pure —
+ * resolvePunchOwnerVisitId (lib/crew/stop-punches) runs it server-side; the
+ * Dispatch Board runs it over the punches it already has loaded.
+ */
+export function pickPunchOwner(
+  punches: { visit_id: string; clocked_out_at: string | null }[],
+  fallbackId: string
+): string {
+  const tally = new Map<string, { open: number; total: number }>();
+  for (const p of punches) {
+    const t = tally.get(p.visit_id) ?? { open: 0, total: 0 };
+    t.total += 1;
+    if (!p.clocked_out_at) t.open += 1;
+    tally.set(p.visit_id, t);
+  }
+  if (tally.size === 0) return fallbackId;
+  const fallback = tally.get(fallbackId);
+  let best = fallbackId;
+  let bestScore = fallback ?? { open: -1, total: -1 };
+  for (const [id, score] of [...tally.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    if (score.open > bestScore.open || (score.open === bestScore.open && score.total > bestScore.total)) {
+      best = id;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 /** Groups visits into stops, preserving the sort order of each stop's first visit. */
