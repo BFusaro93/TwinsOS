@@ -46,7 +46,7 @@ import { toast } from "sonner";
 import { ServiceDialog } from "@/components/crm/services/ServiceDialog";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { JobType, BudgetMethod, CRMService } from "@/types/crm-jobs";
-import { resolveStopAddress } from "@/lib/utils/stop-address";
+import { formatStopAddress, resolveStopAddress } from "@/lib/utils/stop-address";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -599,6 +599,30 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     (clientProperties ?? []).length >= 2 ||
     ((clientProperties ?? []).length === 1 &&
       (!(clientProperties ?? [])[0].isMaster || clientOwnAddressMissing));
+  // The address the crew will actually be sent to, spelled out so the picker
+  // (and the line under it) never just says "Client's main address".
+  const clientRow = effectiveClient
+    ? {
+        service_address: effectiveClient.serviceAddress,
+        service_city: effectiveClient.serviceCity,
+        service_state: effectiveClient.serviceState,
+        service_zip: effectiveClient.serviceZip,
+        billing_address: effectiveClient.billingAddress,
+        billing_city: effectiveClient.billingCity,
+        billing_state: effectiveClient.billingState,
+        billing_zip: effectiveClient.billingZip,
+      }
+    : null;
+  const clientMainAddressLine = formatStopAddress(resolveStopAddress({ client: clientRow })?.parts);
+  const resolvedStop = effectiveClient
+    ? resolveStopAddress({
+        property: selectedProperty
+          ? { address: selectedProperty.address, city: selectedProperty.city, state: selectedProperty.state, zip: selectedProperty.zip }
+          : null,
+        client: clientRow,
+      })
+    : null;
+  const serviceAddressLine = formatStopAddress(resolvedStop?.parts);
   const { data: clientProjects } = useClientProjects(effectiveClientId, effectiveClientName);
   const brandColor = orgSettings?.brandColor ?? "#1e1e1e";
 
@@ -763,21 +787,23 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
               </div>
             )}
 
-            {/* Client + Contract */}
-            <div className="grid grid-cols-5 gap-3">
-              {!defaultClientId ? (
-                <div className="flex flex-col gap-1.5">
-                  <Label>Client *</Label>
-                  {/* Leads and lost leads can't have jobs — convert the lead first.
-                      (crm_jobs also enforces this with a DB trigger.) */}
-                  <ClientCombobox
-                    excludeStatuses={["inactive", "cancelled", "lead", "lost"]}
-                    value={selectedClientId}
-                    onValueChange={(id) => setSelectedClientId(id)}
-                    noneLabel="Select client…"
-                  />
-                </div>
-              ) : <div />}
+            {/* Client gets its own full-width row: sharing a 5-column grid with the
+                other fields left it ~100px wide, truncating names to a few
+                characters and letting jobs get added for the wrong client. */}
+            {!defaultClientId && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Client *</Label>
+                {/* Leads and lost leads can't have jobs — convert the lead first.
+                    (crm_jobs also enforces this with a DB trigger.) */}
+                <ClientCombobox
+                  excludeStatuses={["inactive", "cancelled", "lead", "lost"]}
+                  value={selectedClientId}
+                  onValueChange={(id) => setSelectedClientId(id)}
+                  noneLabel="Select client…"
+                />
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
               <div className="flex flex-col gap-1.5">
                 <Label>Contract</Label>
                 <Select value={contractId ?? "none"} onValueChange={(v) => setContractId(v === "none" ? null : v)}>
@@ -830,10 +856,12 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 <Select value={effectivePropertyId ?? "client"} onValueChange={(v) => setPropertyId(v === "client" ? null : v)}>
                   <SelectTrigger><SelectValue placeholder="Client's main address" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="client">Client&apos;s main address</SelectItem>
+                    <SelectItem value="client">
+                      {clientMainAddressLine ? `Client's main address — ${clientMainAddressLine}` : "Client's main address (none on file)"}
+                    </SelectItem>
                     {(clientProperties ?? []).map((pr) => (
                       <SelectItem key={pr.id} value={pr.id}>
-                        {[pr.name, pr.address].filter(Boolean).join(" — ") || "Property"}
+                        {[pr.name, formatStopAddress({ address: pr.address, city: pr.city, state: pr.state, zip: pr.zip })].filter(Boolean).join(" — ") || "Property"}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -842,6 +870,16 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   The crew is sent here, and the property&apos;s gate code and notes show on the job.
                 </p>
               </div>
+            )}
+
+            {/* Always show where the crew is going once a client is picked. */}
+            {serviceAddressLine && (
+              <p className="-mt-2 text-xs text-slate-600 dark:text-neutral-300">
+                <span className="font-medium">Service address:</span> {serviceAddressLine}
+                {resolvedStop?.source === "client_billing" && (
+                  <span className="text-slate-400 dark:text-neutral-500"> (client&apos;s billing address — no service address on file)</span>
+                )}
+              </p>
             )}
 
             {clientHasNoAddress && (

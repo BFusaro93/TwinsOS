@@ -87,6 +87,7 @@ import {
   GripVertical,
   ListChecks,
   ChevronDown,
+  ChevronUp,
   ArrowUpDown,
   Download,
   Phone,
@@ -1936,6 +1937,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Plus, Trash2 } from "lucide-react";
 import { useCrewMemberTimes, useCrewMemberTimesForDate, useUpsertCrewMemberTime, useDeleteCrewMemberTime, useSetVisitBreakPaid } from "@/lib/hooks/use-crew-app";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
+import { applyRouteNumbers } from "@/lib/dispatch/apply-route-numbers";
 import { useCrewRouteOrder, useSaveRouteOrder, routeOrderKey, weekdayOfDate } from "@/lib/hooks/use-route-order";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { DispatchCalendar } from "@/components/crm/dispatch/DispatchCalendar";
@@ -2415,11 +2417,14 @@ function TeamAssignDialog({
           </p>
         )}
 
-        <div className="flex flex-1 overflow-hidden">
+        {/* Below lg the pool and every crew stack in one column that scrolls
+            down, so a phone never has to scroll sideways to reach a crew; lg+
+            keeps the side-by-side columns. */}
+        <div className="flex flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
           {/* Unassigned pool — drop target to un-assign */}
           <div
             className={cn(
-              "w-64 shrink-0 border-r bg-green-50 dark:bg-green-950/40 p-4",
+              "shrink-0 border-b bg-green-50 dark:bg-green-950/40 p-4 max-lg:max-h-52 max-lg:overflow-y-auto lg:w-64 lg:border-b-0 lg:border-r",
               held?.kind === "visit" && "cursor-pointer ring-2 ring-inset ring-brand-400"
             )}
             onDragOver={(e) => e.preventDefault()}
@@ -2477,13 +2482,13 @@ function TeamAssignDialog({
           </div>
 
           {/* Crew columns */}
-          <div className="flex-1 overflow-x-auto">
-            <div className="flex h-full min-w-max">
+          <div className="max-lg:shrink-0 lg:flex-1 lg:overflow-x-auto">
+            <div className="flex max-lg:flex-col lg:h-full lg:min-w-max">
               {byCrew.map(({ crew, visits: crewVisits, members }) => (
                 <div
                   key={crew.id}
                   className={cn(
-                    "w-64 shrink-0 border-r p-4",
+                    "shrink-0 border-b p-4 lg:w-64 lg:border-b-0 lg:border-r",
                     held && "cursor-pointer ring-2 ring-inset ring-brand-400"
                   )}
                   onDragOver={(e) => e.preventDefault()}
@@ -2524,7 +2529,7 @@ function TeamAssignDialog({
                             toggleHold({ kind: "member", id: m.id, label: name });
                           }}
                           className={cn(
-                            "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium cursor-grab active:cursor-grabbing select-none",
+                            "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium cursor-grab active:cursor-grabbing select-none touch:min-h-9 touch:px-3 touch:text-xs",
                             onLoan
                               ? "bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400"
                               : "bg-brand-100 dark:bg-brand-900/40 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-400",
@@ -2603,7 +2608,7 @@ function TeamAssignDialog({
           </div>
         </div>
 
-        <div className="flex items-center justify-between shrink-0 border-t bg-card px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 shrink-0 border-t bg-card px-5 py-3">
           <p className="text-xs text-muted-foreground">
             {visits.filter((v) => effectiveCrewId(v)).length} of {visits.length} visits assigned
           </p>
@@ -3152,7 +3157,8 @@ function VisitRow({
   onDragEnd,
   isDragOver,
   isVisible,
-  onReorder,
+  routeDraft,
+  onRouteDraftChange,
   serviceCodeById,
   crewCodeById,
   manualRouteMode,
@@ -3186,7 +3192,9 @@ function VisitRow({
   isVisible: (col: string) => boolean;
   serviceCodeById: Map<string, string>;
   crewCodeById: Map<string, string>;
-  onReorder?: (id: string, newIndex: number) => void;
+  /** Stop number typed in Manual Route mode but not yet applied (undefined = untouched). */
+  routeDraft?: string;
+  onRouteDraftChange?: (id: string, value: string) => void;
   manualRouteMode: boolean;
   /** This visit's per-crew-member punch records — used to detect whether the
    * crew was actually on site for the same window (safe to show/edit as one
@@ -3427,7 +3435,8 @@ function VisitRow({
     <>
     <tr
       className={cn(
-        "group border-b border-slate-100 dark:border-neutral-800 text-xs cursor-pointer transition-colors",
+        // lg+: tighter cell padding so more stops fit on a laptop screen.
+        "group border-b border-slate-100 dark:border-neutral-800 text-xs cursor-pointer transition-colors lg:[&>td]:py-1",
         isDragOver ? "bg-brand-50 dark:bg-brand-900/30 border-brand-300 dark:border-brand-700" : selected ? "bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40" : "bg-card hover:bg-slate-50 dark:hover:bg-muted/40"
       )}
       onClick={() => onOpen(visit)}
@@ -3449,27 +3458,34 @@ function VisitRow({
       {/* Drag handle + Order — only interactive in Manual Route mode, so
           clicking into a row's other fields (e.g. Start/End time) can never
           be mistaken by the browser for starting a drag on the row. */}
-      <td className="w-10 px-1 py-2 text-center font-mono">
+      <td className={cn("px-1 py-2 text-center font-mono", manualRouteMode ? "w-[88px]" : "w-10")}>
         <div className="flex items-center justify-center gap-0.5">
           <GripVertical className={cn("h-3 w-3 shrink-0", manualRouteMode ? "text-slate-300 dark:text-neutral-500 cursor-grab active:cursor-grabbing" : "text-slate-200")} />
-          {onReorder && manualRouteMode ? (
+          {onRouteDraftChange && manualRouteMode ? (
+            // Typing only records a draft — nothing reorders until the toolbar's
+            // Apply Route button is pressed, so numbers can be entered on every
+            // job first. Enter hops to the next stop's box instead of applying.
             <input
-              type="number"
-              defaultValue={orderNum}
-              key={orderNum}
-              min={1}
-              className="w-7 text-center text-[10px] text-slate-600 dark:text-neutral-400 bg-transparent border border-border rounded focus:outline-none focus:border-brand-400"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              data-route-input=""
+              value={routeDraft ?? String(orderNum)}
+              aria-label={`Route number for ${visit.clientName ?? "this stop"}`}
+              title="Type this stop's route number, then press Apply Route"
+              className={cn(
+                "h-8 w-14 rounded border bg-background px-1 text-center text-sm font-medium tabular-nums text-foreground focus:outline-none focus:ring-2 focus:ring-brand-400/50 focus:border-brand-400",
+                routeDraft !== undefined ? "border-brand-400 bg-brand-50 dark:bg-brand-900/30" : "border-border"
+              )}
               onClick={(e) => e.stopPropagation()}
+              onFocus={(e) => e.currentTarget.select()}
+              onChange={(e) => onRouteDraftChange(visit.id, e.target.value.replace(/\D/g, "").slice(0, 3))}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  const val = parseInt((e.target as HTMLInputElement).value, 10);
-                  if (!isNaN(val)) onReorder(visit.id, val - 1);
-                  (e.target as HTMLInputElement).blur();
-                }
-              }}
-              onBlur={(e) => {
-                const val = parseInt(e.target.value, 10);
-                if (!isNaN(val)) onReorder(visit.id, val - 1);
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                const inputs = Array.from(document.querySelectorAll<HTMLInputElement>("input[data-route-input]"));
+                const at = inputs.indexOf(e.currentTarget);
+                inputs[at + 1]?.focus();
               }}
             />
           ) : (
@@ -4078,6 +4094,22 @@ export function DispatchBoard() {
   const [bulkChemNoticeOpen, setBulkChemNoticeOpen] = useState(false);
   const [bulkTagOpen,     setBulkTagOpen]     = useState(false);
   const [legendOpen,      setLegendOpen]      = useState(false);
+  // Hides the filter bar and action bar so the route table gets the screen — a
+  // per-viewer convenience, so it lives in localStorage (and must tolerate it
+  // being unavailable).
+  const [filtersCollapsed, setFiltersCollapsedState] = useState(false);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("dispatch-filters-collapsed") === "1") setFiltersCollapsedState(true);
+    } catch { /* storage blocked — stay expanded */ }
+  }, []);
+  function toggleFiltersCollapsed() {
+    setFiltersCollapsedState((prev) => {
+      const next = !prev;
+      try { window.localStorage.setItem("dispatch-filters-collapsed", next ? "1" : "0"); } catch { /* ignore */ }
+      return next;
+    });
+  }
   const [colFilterKey,    setColFilterKey]    = useState<string | null>(null);
   const [colFilterValue,  setColFilterValue]  = useState("");
   // Service filter is multi-select (unlike the other Select-a-Filter text
@@ -4087,6 +4119,8 @@ export function DispatchBoard() {
   const [dragOverId,      setDragOverId]      = useState<string | null>(null);
   const crossCrewHintShown = useRef(false);
   const [manualOrder,     setManualOrder]     = useState<string[] | null>(null);
+  // Stop numbers typed in Manual Route mode, keyed by visit id, not yet applied.
+  const [routeDrafts,      setRouteDrafts]     = useState<Record<string, string>>({});
   // Off by default — rows are only draggable/reorderable once explicitly turned
   // on. Without this gate, every row is a native `draggable` element, so
   // clicking into a Start/End time input to position the cursor can itself
@@ -4457,6 +4491,7 @@ export function DispatchBoard() {
   function clearPendingOrder() {
     clearOptimization();
     setManualOrder(null);
+    setRouteDrafts({});
   }
 
   function isVisible(col: string) { return visibleKeys.includes(col); }
@@ -4748,22 +4783,34 @@ export function DispatchBoard() {
     }
   }
 
-  function handleReorder(id: string, crewRelativeNewIndex: number) {
+  function handleRouteDraftChange(id: string, value: string) {
+    setRouteDrafts((prev) => {
+      const next = { ...prev };
+      if (value === "") delete next[id]; else next[id] = value;
+      return next;
+    });
+  }
+
+  /** Valid typed numbers (>= 1) among the drafts, by visit id. */
+  const draftNumbers = new Map<string, number>();
+  for (const [id, raw] of Object.entries(routeDrafts)) {
+    const n = parseInt(raw, 10);
+    if (Number.isFinite(n) && n >= 1 && visitById.has(id)) draftNumbers.set(id, n);
+  }
+
+  /** Reorder every crew's stops by the numbers typed so far, in one go. */
+  function handleApplyRouteNumbers() {
+    if (draftNumbers.size === 0) return;
     const cur = manualOrder ?? displayVisits.map((v) => v.id);
-    const crewKey = crewKeyOf(id);
-    const crewIds = cur.filter((vid) => crewKeyOf(vid) === crewKey);
-    const from = crewIds.indexOf(id);
-    if (from === -1) return;
-    const clamped = Math.max(0, Math.min(crewRelativeNewIndex, crewIds.length - 1));
-    const reordered = [...crewIds];
-    reordered.splice(from, 1);
-    reordered.splice(clamped, 0, id);
-    // Splice the reordered crew subsequence back in place — every other
-    // crew's ids keep their exact existing positions.
-    let ptr = 0;
-    const next = cur.map((vid) => (crewKeyOf(vid) === crewKey ? reordered[ptr++] : vid));
-    setManualOrder(next);
+    const { order, crewsWithDuplicates } = applyRouteNumbers(cur, crewKeyOf, draftNumbers);
+    setManualOrder(order);
+    setRouteDrafts({});
     if (optimizedOrder) { setOptimizedOrder(null); setDriveTimeMap(new Map()); setTotalDriveMins(null); }
+    if (crewsWithDuplicates.length > 0) {
+      toast.warning("Route applied. Two stops on a crew shared a number, so they kept their previous order — check the numbering, then Save Order.");
+    } else {
+      toast.success("Route applied — press Save Order to keep it.");
+    }
   }
 
   async function handleSaveOrder() {
@@ -4808,6 +4855,7 @@ export function DispatchBoard() {
       return;
     }
     setManualOrder(null);
+    setRouteDrafts({});
     // An optimized-but-not-dragged order is saved via this same button (see
     // the banner below) — clear it too so the stale "Route optimized"
     // banner/highlight don't linger once the order is actually persisted.
@@ -5033,7 +5081,7 @@ export function DispatchBoard() {
     urlRouter.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
   const viewToggle = (
-    <div className="flex items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       <div className="flex items-center rounded-md border bg-card p-0.5">
         <Button
           size="sm"
@@ -5078,14 +5126,11 @@ export function DispatchBoard() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    // Tight vertical rhythm: this screen is a long route table, and the header
+    // above it (title, week strip, filter bar, action bar, count bar) used to
+    // take ~360px, leaving a laptop screen room for only a handful of rows.
+    <div className="flex h-full flex-col gap-1.5">
       {confirmDialog}
-      {/* Page header */}
-      <PageHeader
-        title="Dispatch Board"
-        description="Schedule and dispatch daily job visits"
-        action={viewToggle}
-      />
 
       {/* Week strip + date range + actions. Wraps rather than scrolling: this
           row is ~1600px wide, so on a tablet the right-hand controls were half
@@ -5098,8 +5143,14 @@ export function DispatchBoard() {
           text-xs (different responsive variant), so without the md:
           override the box renders at 14px text and clips the native
           calendar-picker icon off the right edge at desktop widths. */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-4 shrink-0">
-        <WeekStrip selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); setDateMode(null); clearPendingOrder(); }} />
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-4 shrink-0">
+        {/* Title + List/Calendar/Crew Board switch share this row with the date
+            controls instead of getting a header block of their own. */}
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 mr-1">
+          <h1 className="text-base font-semibold text-slate-900 dark:text-neutral-100 whitespace-nowrap">Dispatch Board</h1>
+          {viewToggle}
+        </div>
+        <WeekStrip compact selectedDate={selectedDate} onDateChange={(d) => { setSelectedDate(d); setDateMode(null); clearPendingOrder(); }} />
 
         <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground ml-1">
           <span className="font-medium">From</span>
@@ -5188,18 +5239,27 @@ export function DispatchBoard() {
 
       {/* Save/Clear Order — its own full-width row so it's never pushed off
           screen by the toolbar above. */}
-      {(optimizedOrder || manualOrder) && (
-        <div className="flex items-center justify-between gap-3 border-y border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-4 py-2 shrink-0">
+      {(optimizedOrder || manualOrder || draftNumbers.size > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-y border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-900/30 px-4 py-2 shrink-0">
           <p className="text-xs font-medium text-brand-700 dark:text-brand-400">
-            {manualOrder ? "Order changed — not yet saved." : "Route optimized — not yet saved."}
+            {draftNumbers.size > 0
+              ? `${draftNumbers.size} route ${draftNumbers.size === 1 ? "number" : "numbers"} entered — press Apply Route to reorder the stops.`
+              : manualOrder ? "Order changed — not yet saved." : "Route optimized — not yet saved."}
           </p>
           <div className="flex items-center gap-2">
-            <Button size="sm" className="h-7 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleSaveOrder}>
-              Save Order
-            </Button>
+            {draftNumbers.size > 0 ? (
+              <Button size="sm" className="h-7 max-lg:h-10 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleApplyRouteNumbers}>
+                <Route className="h-3.5 w-3.5" />
+                Apply Route
+              </Button>
+            ) : (
+              <Button size="sm" className="h-7 max-lg:h-10 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleSaveOrder}>
+                Save Order
+              </Button>
+            )}
             <Button size="sm" variant="outline"
-              className="h-7 gap-1.5 px-3 text-xs text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
-              onClick={() => { clearOptimization(); setManualOrder(null); }}
+              className="h-7 max-lg:h-10 gap-1.5 px-3 text-xs text-red-500 dark:text-red-400 border-red-200 dark:border-red-800"
+              onClick={() => { clearOptimization(); setManualOrder(null); setRouteDrafts({}); }}
             >
               <XIcon className="h-3.5 w-3.5" />
               Clear Order
@@ -5208,9 +5268,10 @@ export function DispatchBoard() {
         </div>
       )}
 
+      {!filtersCollapsed && (<>
       {/* Select a Filter bar — ABOVE dark bar. Wraps on a narrow screen so the
           action buttons drop to their own line instead of running off it. */}
-      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2 border-b bg-card px-4 py-2 shrink-0">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5 border-b bg-card px-4 py-1 shrink-0">
         <span className="shrink-0 text-xs text-muted-foreground font-medium mr-1">Select a Filter:</span>
         <div className="flex flex-wrap items-center gap-1">
           {(["client","service","date","city","zip","crew"] as const).map((key) => {
@@ -5403,8 +5464,8 @@ export function DispatchBoard() {
           <Button
             size="sm" variant="outline"
             className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", manualRouteMode && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
-            onClick={() => setManualRouteMode((m) => !m)}
-            title="Enable drag-and-drop and manual # editing to reorder stops"
+            onClick={() => { setManualRouteMode((m) => !m); setRouteDrafts({}); }}
+            title="Enable drag-and-drop and manual # entry — type a number on each stop, then press Apply Route"
           >
             <GripVertical className="h-3.5 w-3.5" />
             Manual Route
@@ -5432,7 +5493,7 @@ export function DispatchBoard() {
       {/* Wraps below xl. At desktop widths this bar already fits by letting the
           search box shrink, so keep it on one line there rather than wrapping
           Columns onto a second row. */}
-      <div className="bg-[#4a4a4a] px-4 py-2 flex flex-wrap xl:flex-nowrap items-center gap-x-3 gap-y-2 shrink-0">
+      <div className="bg-[#4a4a4a] px-4 py-1 flex flex-wrap xl:flex-nowrap items-center gap-x-3 gap-y-1.5 shrink-0">
         {/* Refresh — far left */}
         <button
           onClick={() => { void refetch(); qc.invalidateQueries({ queryKey: ['crm-job-visits'] }); }}
@@ -5903,6 +5964,8 @@ export function DispatchBoard() {
         </div>
       </div>
 
+      </>)}
+
       <LoadListDialog open={loadListOpen} onOpenChange={setLoadListOpen} date={selectedDate} />
 
       {/* Stats overlay panel */}
@@ -5967,7 +6030,20 @@ export function DispatchBoard() {
       )}
 
       {/* Count bar */}
-      <div className="bg-muted border-b px-4 py-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] shrink-0">
+      <div className="bg-muted border-b px-4 py-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] shrink-0">
+        <button
+          type="button"
+          onClick={toggleFiltersCollapsed}
+          aria-expanded={!filtersCollapsed}
+          title={filtersCollapsed ? "Show the filter and action bars" : "Hide the filter and action bars to fit more jobs on screen"}
+          className="flex items-center gap-1 rounded px-1.5 py-0.5 max-lg:py-2 font-medium text-slate-600 dark:text-neutral-400 hover:bg-background"
+        >
+          {filtersCollapsed ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+          {filtersCollapsed ? "Show filters" : "Hide filters"}
+          {filtersCollapsed && (statusFilter !== "all" || crewFilters.length > 0 || tagFilters.length > 0 || priorityFilters.length > 0 || serviceFilters.length > 0 || search !== "" || (colFilterKey && colFilterValue)) && (
+            <span className="ml-1 rounded-full bg-brand-100 dark:bg-brand-900/40 px-1.5 text-[10px] font-semibold text-brand-700 dark:text-brand-400">active</span>
+          )}
+        </button>
         <span className="font-semibold text-slate-700 dark:text-neutral-300">
           {isLoading ? "Loading…" : `${filtered.length} Job${filtered.length !== 1 ? "s" : ""} Total`}
         </span>
@@ -6076,7 +6152,8 @@ export function DispatchBoard() {
                   onDragEnd={handleDragEnd}
                   isDragOver={dragOverId === visit.id}
                   isVisible={isVisible}
-                  onReorder={handleReorder}
+                  routeDraft={routeDrafts[visit.id]}
+                  onRouteDraftChange={handleRouteDraftChange}
                   serviceCodeById={serviceCodeById}
                   crewCodeById={crewCodeById}
                   manualRouteMode={manualRouteMode}

@@ -168,6 +168,20 @@
   touch-action: manipulation;
 }
 
+/* App display size (see use-display-size.ts). <html data-ui-scale> is only set by
+   the signed-in shells. Shrinking the root font size scales every rem-based
+   Tailwind size, i.e. the whole UI, the way browser zoom would — but without
+   CSS `zoom`'s side effects on popovers, drag-and-drop and viewport heights.
+   Desktop with a mouse only; media queries aren't affected (they use the
+   browser's own 16px), and print always renders at 100%. */
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  html[data-ui-scale="80"] { font-size: 12.8px; }
+  html[data-ui-scale="90"] { font-size: 14.4px; }
+}
+@media print {
+  html[data-ui-scale] { font-size: 16px; }
+}
+
 /* iOS Safari zooms the page whenever a focused field computes below 16px
    (our compact toolbars use text-xs/text-sm everywhere). Force 16px on phones
    and touch tablets. This sits outside @layer on purpose: unlayered rules beat
