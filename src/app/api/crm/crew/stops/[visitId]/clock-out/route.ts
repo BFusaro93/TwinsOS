@@ -1,4 +1,5 @@
 import { chemicalGateMessage, isChemicalGateError } from "@/lib/crew/chemical-gate";
+import { missingRequiredPhoto } from "@/lib/crew/required-photos";
 import { NextResponse } from "next/server";
 import { resolveOccurredAt } from "@/lib/crew/occurred-at";
 import { z } from "zod";
@@ -188,6 +189,14 @@ export async function POST(
       return NextResponse.json({ visitIds: stopRows.map((r) => r.id), visits: stopRows, alreadyClockedOut: true });
     }
     return NextResponse.json({ error: "Nothing to clock out for this stop" }, { status: 400 });
+  }
+
+  // Required After photo (org setting). Enforced here and not only in the
+  // crew apps, for the same reason as the chemical gate below: a replayed or
+  // stale request must not walk past it. Only a real clock-out gets here —
+  // a replay of one that landed returned above.
+  if (await missingRequiredPhoto(createServiceClient(), { orgId: anchor.org_id, visitIds: stopRows.map((r) => r.id), phase: "after" })) {
+    return NextResponse.json({ error: "Add an After photo before finishing this job.", code: "photo_required", phase: "after" }, { status: 409 });
   }
 
   // Duration is measured from the OPEN visits' own clock-in. The anchor can

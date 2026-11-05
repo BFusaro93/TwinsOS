@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Ticket, Plus, Loader2, CheckCircle2, Clock, AlertCircle, XCircle, ChevronDown } from "lucide-react";
+import { useRef, useState } from "react";
+import { Ticket, Plus, Loader2, CheckCircle2, Clock, AlertCircle, XCircle, ChevronDown, Paperclip, X } from "lucide-react";
 import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 
 function fmtDate(iso: string) {
@@ -44,6 +44,9 @@ interface Props {
 
 const DEFAULT_CATEGORIES = ["General", "Billing", "Service Issue", "Other"];
 
+/** Matches the server cap in /api/portal/tickets/[id]/attachments. */
+const MAX_PHOTOS = 5;
+
 function NewTicketDialog({
   categories,
   accounts,
@@ -60,6 +63,15 @@ function NewTicketDialog({
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  function addPhotos(list: FileList | null) {
+    if (!list) return;
+    const images = Array.from(list).filter((f) => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
+    setPhotos((cur) => [...cur, ...images].slice(0, MAX_PHOTOS));
+    if (fileInput.current) fileInput.current.value = "";
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,11 +85,25 @@ function NewTicketDialog({
       body: JSON.stringify({ subject, category, body, clientId: accountId || undefined }),
     });
     const data = await res.json();
-    setSubmitting(false);
 
     if (!res.ok) {
+      setSubmitting(false);
       setError(data.error ?? "Failed to submit ticket");
       return;
+    }
+
+    // The ticket exists now, so a photo that won't upload is reported but never
+    // blocks it — the customer shouldn't resubmit (and double-file) over a photo.
+    let failedPhotos = 0;
+    for (const photo of photos) {
+      const fd = new FormData();
+      fd.append("file", photo);
+      const up = await fetch(`/api/portal/tickets/${data.ticket.id}/attachments`, { method: "POST", body: fd }).catch(() => null);
+      if (!up?.ok) failedPhotos += 1;
+    }
+    setSubmitting(false);
+    if (failedPhotos > 0) {
+      window.alert(`Your ticket was sent, but ${failedPhotos} photo${failedPhotos === 1 ? "" : "s"} couldn't be uploaded. Reply to our email or call us to send ${failedPhotos === 1 ? "it" : "them"}.`);
     }
 
     onCreated({
@@ -94,6 +120,7 @@ function NewTicketDialog({
 
     setSubject("");
     setBody("");
+    setPhotos([]);
     setCategory(categories[0] ?? "");
     setOpen(false);
   }
@@ -180,6 +207,35 @@ function NewTicketDialog({
               rows={4}
               className="rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500 resize-none"
             />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-slate-700">
+              Photos <span className="text-slate-400 font-normal">(optional, up to {MAX_PHOTOS})</span>
+            </label>
+            <input ref={fileInput} type="file" accept="image/*" multiple className="hidden" onChange={(e) => addPhotos(e.target.files)} />
+            {photos.length > 0 && (
+              <ul className="flex flex-wrap gap-2">
+                {photos.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 pl-2.5 pr-1 py-0.5 text-xs text-slate-600">
+                    <span className="max-w-[10rem] truncate">{f.name}</span>
+                    <button type="button" onClick={() => setPhotos((cur) => cur.filter((_, j) => j !== i))} className="rounded-full p-0.5 hover:bg-slate-200" aria-label={`Remove ${f.name}`}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {photos.length < MAX_PHOTOS && (
+              <button
+                type="button"
+                onClick={() => fileInput.current?.click()}
+                className="flex w-fit items-center gap-1.5 rounded-md border border-dashed border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+                Add photo
+              </button>
+            )}
           </div>
 
           {error && (

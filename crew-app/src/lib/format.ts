@@ -120,3 +120,28 @@ export function formatStopTimeWindow(stop: Pick<CrewStop, 'visits'>): string {
 export function stopServiceNames(stop: Pick<CrewStop, 'visits'>): string {
   return stop.visits.map((v) => v.serviceName).filter(Boolean).join(', ');
 }
+
+/**
+ * Time left against a stop's budgeted hours (SA's Team app counts down from the
+ * budget). Budgeted hours are per crew member and a crew works side by side, so
+ * the budget is the sum of the stop's live services' hours as wall-clock time;
+ * break time already taken doesn't count. null when nothing is budgeted.
+ * Mirrors src/lib/crew/budget-countdown.ts on the web.
+ */
+export function budgetCountdown(args: {
+  budgetedHours: (number | null | undefined)[];
+  clockedInAt: string;
+  breakMinutes?: number | null;
+  now?: Date;
+}): { remainingMinutes: number; over: boolean; label: string } | null {
+  const budgetMinutes = Math.round(args.budgetedHours.reduce<number>((sum, h) => sum + (h ?? 0), 0) * 60);
+  if (budgetMinutes <= 0) return null;
+  const now = args.now ?? new Date();
+  const workedMs = now.getTime() - new Date(args.clockedInAt).getTime() - (args.breakMinutes ?? 0) * 60000;
+  const remainingMinutes = budgetMinutes - Math.floor(Math.max(0, workedMs) / 60000);
+  const abs = Math.abs(remainingMinutes);
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  const text = h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
+  return { remainingMinutes, over: remainingMinutes < 0, label: remainingMinutes < 0 ? `${text} over budget` : `${text} left` };
+}

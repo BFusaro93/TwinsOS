@@ -59,6 +59,9 @@ import {
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
 import { visitServices, isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-stops";
+import { budgetCountdown } from "@/lib/crew/budget-countdown";
+import { isPhaseCaption, phaseCaption } from "@/lib/crew/required-photos";
+import { TimeSummaryDialog } from "@/components/crm/crew/TimeSummaryDialog";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { openInMaps } from "@/lib/utils/maps";
 import { useConfirm } from "@/components/shared/useConfirm";
@@ -315,6 +318,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const [upsellServiceId, setUpsellServiceId] = useState("");
   const [upsellNote, setUpsellNote]       = useState("");
   const [upsellPhoto, setUpsellPhoto]     = useState<File | null>(null);
+  const [timeSummaryOpen, setTimeSummaryOpen] = useState(false);
   const [skipReason, setSkipReason]   = useState("");
   const [skipTargetId, setSkipTargetId] = useState<string | null>(null);
   const [clockOutNotes, setClockOutNotes] = useState("");
@@ -333,6 +337,24 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     stop?.notesToCrewUpdatedAt
   );
   const isActive = stop?.derivedStatus === "in_progress";
+  // Budget left on the running job. The timer component ticks each minute, but
+  // this reads the clock at render, so re-render on the same cadence.
+  const [, setBudgetTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setBudgetTick((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const countdown =
+    stop && isActive && stop.clockedInAt && !stop.pausedAt
+      ? budgetCountdown({
+          budgetedHours: stop.visits
+            .filter((v) => !["skipped", "cancelled", "completed"].includes(v.status))
+            .map((v) => visitServices(v)[0]?.budgetedHours),
+          clockedInAt: stop.clockedInAt,
+          // Written to every live visit in the stop alike, so any one carries it.
+          breakMinutes: Math.max(0, ...stop.visits.map((v) => v.breakMinutes ?? 0)),
+        })
+      : null;
   // Cancelled is terminal too: it used to offer a big Start Job that only got a server error.
   const isComplete = stop?.derivedStatus === "completed" || stop?.derivedStatus === "skipped" || stop?.derivedStatus === "cancelled";
   const isPaused = isActive && !!stop?.pausedAt;
@@ -376,7 +398,8 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       return; // surfaced by the mutation's onError; stay on the stop
     }
     setClockOutOpen(false);
-    router.push("/crm/crew");
+    // Time summary first (SA's post-completion review); it navigates on close.
+    setTimeSummaryOpen(true);
   }
 
   async function handleSkip() {
@@ -504,7 +527,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     }
   }
 
-  async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>) {
+  // Before / After photos the crew has taken this session — counted alongside
+  // the confirmed ones so a photo still uploading (no signal) unblocks the buttons.
+  const [phasesAdded, setPhasesAdded] = useState<Set<"before" | "after">>(new Set());
+  const hasPhase = (phase: "before" | "after") =>
+    phasesAdded.has(phase) || photos.some((p) => isPhaseCaption(p.caption, phase));
+  const needBeforePhoto = (orgSettings?.crewRequireBeforePhoto ?? false) && !hasPhase("before");
+  const needAfterPhoto = (orgSettings?.crewRequireAfterPhoto ?? false) && !hasPhase("after");
+
+  async function handlePhotoCapture(e: React.ChangeEvent<HTMLInputElement>, phase?: "before" | "after") {
     const file = e.target.files?.[0];
     if (!file) return;
     // Reset now, not after the upload: with no signal the upload waits, and
@@ -513,7 +544,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     e.target.value = "";
     setPhotosUploading((n) => n + 1);
     try {
-      const result = await uploadPhoto.mutateAsync({ visitId: anchorVisitId, file, clientId: crypto.randomUUID() });
+      const result = await uploadPhoto.mutateAsync({
+        visitId: anchorVisitId,
+        file,
+        clientId: crypto.randomUUID(),
+        ...(phase ? { caption: phaseCaption(phase) } : {}),
+      });
+      if (phase) setPhasesAdded((cur) => new Set(cur).add(phase));
       if (result?.signedUrl) {
         setPhotoUrls(prev => ({ ...prev, [result.id]: result.signedUrl }));
       }
@@ -629,6 +666,12 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Job Running</p>
                 <p className="text-xs text-amber-600 dark:text-amber-400">
                   Started {clock(stop.clockedInAt)}
+                  {countdown && (
+                    <span className={countdown.over ? " font-semibold text-red-600 dark:text-red-400" : ""}>
+                      {" · "}
+                      {countdown.label}
+                    </span>
+                  )}
                 </p>
               </div>
               <div className="text-amber-700 dark:text-amber-400 font-mono font-bold text-lg">
@@ -934,13 +977,16 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 <Button
                   className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 gap-2"
                   onClick={handleClockIn}
-                  disabled={stopClockIn.isPending || (hasNotes && !acknowledged)}
+                  disabled={stopClockIn.isPending || (hasNotes && !acknowledged) || needBeforePhoto}
                 >
                   {stopClockIn.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
                   Start Job
                 </Button>
                 {hasNotes && !acknowledged && (
                   <p className="text-center text-xs text-amber-700 dark:text-amber-400">Read the job notes and tap &ldquo;I&apos;ve read the notes&rdquo; to start.</p>
+                )}
+                {needBeforePhoto && (
+                  <p className="text-center text-xs text-amber-700 dark:text-amber-400">Take a Before photo (in Photos, below) to start.</p>
                 )}
               </>
             ) : (
@@ -968,7 +1014,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 <Button
                   className="w-full h-14 text-base font-bold bg-red-600 hover:bg-red-700 gap-2"
                   onClick={() => setClockOutOpen(true)}
-                  disabled={chemBlocked}
+                  disabled={chemBlocked || needAfterPhoto}
                 >
                   <StopIcon className="h-5 w-5" />
                   Stop Job
@@ -976,6 +1022,11 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 {chemBlocked && (
                   <p className="text-center text-xs text-amber-700 dark:text-amber-400">
                     Confirm the chemicals applied (above) to stop this job.
+                  </p>
+                )}
+                {needAfterPhoto && (
+                  <p className="text-center text-xs text-amber-700 dark:text-amber-400">
+                    Take an After photo (in Photos, below) to stop this job.
                   </p>
                 )}
               </>
@@ -1020,6 +1071,36 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               </span>
             </label>
           </div>
+          {((orgSettings?.crewRequireBeforePhoto ?? false) || (orgSettings?.crewRequireAfterPhoto ?? false)) && (
+            <div className="flex flex-wrap gap-2 border-b border-slate-100 dark:border-neutral-800 px-4 py-3">
+              {([
+                ["before", "Before", orgSettings?.crewRequireBeforePhoto],
+                ["after", "After", orgSettings?.crewRequireAfterPhoto],
+              ] as const)
+                .filter(([, , required]) => required)
+                .map(([phase, label]) => (
+                  <label key={phase} className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="sr-only"
+                      onChange={(e) => handlePhotoCapture(e, phase)}
+                    />
+                    <span
+                      className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium ${
+                        hasPhase(phase)
+                          ? "border-green-300 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950/40 dark:text-green-400"
+                          : "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                      }`}
+                    >
+                      <Camera className="h-4 w-4" />
+                      {hasPhase(phase) ? `${label} photo added` : `${label} photo (required)`}
+                    </span>
+                  </label>
+                ))}
+            </div>
+          )}
           {photos.length === 0 ? (
             <p className="px-4 py-4 text-sm text-slate-400 dark:text-neutral-500 text-center">No photos yet</p>
           ) : (
@@ -1340,6 +1421,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TimeSummaryDialog
+        open={timeSummaryOpen}
+        visitId={anchorVisitId}
+        onClose={() => {
+          setTimeSummaryOpen(false);
+          router.push("/crm/crew");
+        }}
+      />
 
       {/* Skip dialog — targets one service row at a time */}
       <Dialog open={!!skipTargetId} onOpenChange={(open) => !open && setSkipTargetId(null)}>

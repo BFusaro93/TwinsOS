@@ -4,10 +4,18 @@ import { fetchCrewVisits } from '@/lib/api';
 import { subscribeScheduleRefresh } from '@/lib/hooks/schedule-refresh';
 import type { CrewDriveInfo, CrewStop } from '@/lib/types';
 
+export interface PhotoRules {
+  requireBefore: boolean;
+  requireAfter: boolean;
+}
+const NO_RULES: PhotoRules = { requireBefore: false, requireAfter: false };
+
 interface UseCrewStopsResult {
   stops: CrewStop[];
   crewName: string | null;
   drive: CrewDriveInfo;
+  /** Org-wide required Before / After photos. */
+  photoRules: PhotoRules;
   isLoading: boolean;
   isRefetching: boolean;
   error: string | null;
@@ -29,6 +37,7 @@ export function useCrewStops(date: string): UseCrewStopsResult {
   const [stops, setStops] = useState<CrewStop[]>([]);
   const [crewName, setCrewName] = useState<string | null>(null);
   const [drive, setDrive] = useState<CrewDriveInfo>(EMPTY_DRIVE);
+  const [photoRules, setPhotoRules] = useState<PhotoRules>(NO_RULES);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +51,7 @@ export function useCrewStops(date: string): UseCrewStopsResult {
       setStops(data.stops);
       setCrewName(data.crewName);
       setDrive(data.drive ?? EMPTY_DRIVE);
+      setPhotoRules(data.photoRules ?? NO_RULES);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load schedule');
     } finally {
@@ -59,5 +69,5 @@ export function useCrewStops(date: string): UseCrewStopsResult {
   // A push (new assignment, dispatcher note) asks every mounted schedule to refresh.
   useEffect(() => subscribeScheduleRefresh(() => void load(false)), [load]);
 
-  return { stops, crewName, drive, isLoading, isRefetching, error, refetch };
+  return { stops, crewName, drive, photoRules, isLoading, isRefetching, error, refetch };
 }
