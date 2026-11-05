@@ -928,6 +928,12 @@ export function useVisitsForDate(fromDate: string, toDate?: string) {
       const terminalVisitStatuses = new Set(['completed', 'skipped', 'cancelled']);
       return visits.filter((v) => {
         if (v.job?.jobType === 'snow') return false;
+        // A package step whose visit is still the plain 'scheduled' placeholder
+        // (created at signup so the step has a date and crew) is waiting to be
+        // dispatched: it lives on the Waiting List, like a waiting_list job, and
+        // joins the board only once dispatched (Waiting List Dispatch, Nearby, or
+        // a status change). Returning it to the Waiting List puts it back here.
+        if (v.job?.jobType === 'package' && v.jobServiceId && v.status === 'scheduled') return false;
         const parentDone = v.job?.status === 'cancelled' || v.job?.status === 'completed' || v.job?.status === 'hold';
         if (parentDone && !terminalVisitStatuses.has(v.status)) return false;
         return true;

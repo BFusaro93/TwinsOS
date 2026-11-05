@@ -70,6 +70,8 @@ export function WaitingListGuide() {
             placeholder state doesn&apos;t count as &quot;handled&quot; — only a visit that has moved
             past it (actually dispatched, worked, or resolved) gets filtered out. So a package can
             keep resurfacing on this page, one service at a time, all season.
+            Until a step is dispatched it appears only here — the Dispatch Board hides a package
+            step&apos;s placeholder visit — so a package behaves like a Waiting List job.
           </li>
         </ul>
       </Section>

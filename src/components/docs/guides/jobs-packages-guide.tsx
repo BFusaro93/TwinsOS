@@ -383,6 +383,12 @@ export function JobsPackagesGuide() {
         <p>
           Until a package job&apos;s recurring dates are actually set, it behaves like a Waiting List
           job — no fixed date, only a range — and surfaces on the Waiting List page the same way.
+          Each step also has a placeholder visit (created at signup so the step has a date and crew),
+          but a step that hasn&apos;t been dispatched yet is <em>only</em> on the Waiting List — it
+          doesn&apos;t show on the Dispatch Board, Crew Board or calendar. Nothing dispatches a package
+          step automatically: click <strong>Dispatch</strong> on the step on the Waiting List (or use
+          Nearby Waiting List on the board), and it moves to the Dispatch Board on the day and crew you
+          choose.
           A dispatched step that didn&apos;t happen (rained out, say) can go back: select it on the
           Dispatch Board and choose <strong>Return to Waiting List</strong>. Its visit becomes the
           step&apos;s undispatched placeholder again and the step is listed on the Waiting List,
