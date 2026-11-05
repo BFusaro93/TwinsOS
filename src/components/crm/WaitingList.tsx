@@ -384,7 +384,7 @@ function WaitingJobRow({
       {isVisible("service") && (
         <td className="min-w-[180px] px-4 py-3 text-slate-700 dark:text-neutral-300">
           {serviceName}
-          {eligibility?.spacingEarliest && (
+          {eligibility?.spacingEarliest && (!eligibility.windowOpens || eligibility.spacingEarliest >= eligibility.windowOpens) && (
             <p
               className="mt-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"
               title={`Min Days: this step must be at least ${eligibility.minDays} days after step ${eligibility.afterStepNo}. Dispatching earlier is refused.`}
@@ -392,7 +392,7 @@ function WaitingJobRow({
               Too soon — earliest {formatShortDate(eligibility.spacingEarliest)}
             </p>
           )}
-          {!eligibility?.spacingEarliest && eligibility?.windowOpens && (
+          {eligibility?.windowOpens && (!eligibility.spacingEarliest || eligibility.windowOpens > eligibility.spacingEarliest) && (
             <p className="mt-0.5 text-[11px] text-slate-400 dark:text-neutral-500" title="This step's date window hasn't opened yet.">
               Window opens {formatShortDate(eligibility.windowOpens)}
             </p>
