@@ -13,6 +13,7 @@ import {
   recordEstimateDepositFailure,
   syncEstimateDepositWithPayment,
 } from "@/lib/stripe/record-estimate-deposit";
+import { recordClientPrepaymentCharge } from "@/lib/stripe/record-client-prepayment";
 import { clearPendingCharge, markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { decodeAllocations } from "@/lib/stripe/crm-payments";
 import { settleSurchargeAuthorization } from "@/lib/stripe/surcharge-capture";
@@ -317,7 +318,10 @@ export async function POST(request: Request) {
           // recorded as unapplied account credit rather than against a
           // balance. This webhook is its only writer.
           ? await recordEstimateDepositCharge({ db, paymentIntent, connectedAccountId: event.account })
-          : source === "crm_invoice_multi"
+          : source === "crm_client_prepayment"
+            // Portal "Make a Prepayment": same unapplied-credit recording, no estimate.
+            ? await recordClientPrepaymentCharge({ db, paymentIntent, connectedAccountId: event.account })
+            : source === "crm_invoice_multi"
             ? await applyCrmInvoiceMultiPayment(db, supabase, event)
             : await applyCrmInvoicePayment(db, supabase, event);
       if (result === "error") {

@@ -6,6 +6,8 @@ import { applyCreditBeforeCharge } from "@/lib/stripe/apply-credit-first";
 import { createClient } from "@supabase/supabase-js";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { computeProcessingFee } from "@/lib/stripe/crm-payments";
+import { achEnabledForAccount } from "@/lib/stripe/connect";
+import { z } from "zod";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
 import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
@@ -21,6 +23,8 @@ const log = logger.child("public invoice create-intent");
 
 // Stripe rejects charges under 50 cents.
 const STRIPE_MIN_CHARGE_CENTS = 50;
+
+const BodySchema = z.object({ paymentMethod: z.enum(["card", "us_bank_account"]).default("card") });
 
 const serviceClient = () =>
   createClient(
@@ -44,6 +48,14 @@ export async function POST(
   if (!allowed) {
     return NextResponse.json({ error: "Too many attempts. Please wait a few minutes and try again." }, { status: 429 });
   }
+
+  // Body is optional (older cached pages POST nothing) and defaults to card.
+  const parsedBody = BodySchema.safeParse(await req.json().catch(() => ({})));
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: "Invalid payment method" }, { status: 400 });
+  }
+  const { paymentMethod } = parsedBody.data;
+  const isAch = paymentMethod === "us_bank_account";
 
   const supabase = serviceClient();
 
@@ -87,7 +99,7 @@ export async function POST(
   const { data: org } = await supabase
     .from("organizations")
     .select(
-      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode"
+      "cc_processing_fee_enabled, cc_processing_fee_bps, cc_processing_fee_threshold_cents, customizations, stripe_connect_account_id, stripe_connect_charges_enabled, stripe_connect_livemode, ach_payments_enabled"
     )
     .eq("id", invoice.org_id)
     .single();
@@ -102,6 +114,9 @@ export async function POST(
   const stripe = getStripeForOrg(org.stripe_connect_livemode);
 
   try {
+  if (isAch && (!org.ach_payments_enabled || !(await achEnabledForAccount(stripe, org.stripe_connect_account_id)))) {
+    return NextResponse.json({ error: "Bank transfer isn't available — please pay by card." }, { status: 400 });
+  }
   // Always attach the client's Stripe customer so the intent is visible to
   // the duplicate-charge lookup, then refuse if a payment for this invoice is
   // already in flight (e.g. an ACH debit from the portal still settling).
@@ -118,7 +133,7 @@ export async function POST(
     db: supabase,
     invoiceIds: [invoice.id],
     customerId,
-    isAch: false,
+    isAch,
   });
   if (refusal) return NextResponse.json({ error: refusal.body.error, code: refusal.body.code }, { status: refusal.status });
 
@@ -135,16 +150,19 @@ export async function POST(
     return NextResponse.json({ error: "Your account credit has paid this invoice in full — no card payment needed. Refresh the page to see it." }, { status: 409 });
   }
 
-  const { feeCents, totalChargeCents } = computeProcessingFee(
-    {
-      ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
-      ccProcessingFeeBps: org.cc_processing_fee_bps,
-      ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
-      ccProcessingFeeMode: (org.customizations as Record<string, unknown> | null)?.cc_processing_fee_mode as string | undefined,
-    },
-    invoice.balance_cents,
-    false
-  );
+  // The processing fee is card-only: bank transfer is the fee-free alternative.
+  const { feeCents, totalChargeCents } = isAch
+    ? { feeCents: 0, totalChargeCents: invoice.balance_cents }
+    : computeProcessingFee(
+        {
+          ccProcessingFeeEnabled: org.cc_processing_fee_enabled,
+          ccProcessingFeeBps: org.cc_processing_fee_bps,
+          ccProcessingFeeThresholdCents: org.cc_processing_fee_threshold_cents,
+          ccProcessingFeeMode: (org.customizations as Record<string, unknown> | null)?.cc_processing_fee_mode as string | undefined,
+        },
+        invoice.balance_cents,
+        false
+      );
 
   if (totalChargeCents < STRIPE_MIN_CHARGE_CENTS) {
     return NextResponse.json(
@@ -161,8 +179,8 @@ export async function POST(
     {
       amount: totalChargeCents,
       currency: "usd",
-      payment_method_types: ["card"],
-      ...surchargeIntentParams(feeCents, true),
+      payment_method_types: [paymentMethod],
+      ...surchargeIntentParams(feeCents, !isAch),
       ...(customerId ? { customer: customerId } : {}),
       metadata: {
         source: "crm_invoice",
@@ -171,12 +189,12 @@ export async function POST(
         client_id: invoice.client_id,
         balance_cents: String(invoice.balance_cents),
         fee_cents: String(feeCents),
-        ...surchargeIntentMetadata(feeCents, true),
+        ...surchargeIntentMetadata(feeCents, !isAch),
       },
     },
     {
       stripeAccount: org.stripe_connect_account_id,
-      idempotencyKey: chargeIdempotencyKey(["crm_invoice_public", invoice.id, totalChargeCents]),
+      idempotencyKey: chargeIdempotencyKey(["crm_invoice_public", invoice.id, totalChargeCents, paymentMethod]),
     }
   );
 

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth } from "@/lib/supabase/route-auth";
+import { createServiceClient } from "@/lib/supabase/server";
+import { photoRulesFromCustomizations } from "@/lib/crew/required-photos";
 import {
   crewVisitComparator,
   effectiveVisitCrewId,
@@ -363,6 +365,10 @@ export async function GET(request: Request) {
   const openSegment = segments.find((s) => !s.endedAt) ?? null;
   const totalMinutes = segments.reduce((sum, s) => sum + (s.minutes ?? 0), 0);
 
+  // Org-wide required Before/After photos, so the app can prompt for them (the
+  // clock-in / clock-out routes enforce them regardless).
+  const { data: orgRow } = await createServiceClient().from("organizations").select("customizations").eq("id", orgId).maybeSingle();
+
   return NextResponse.json({
     date,
     crewId: crew.id as string,
@@ -370,5 +376,6 @@ export async function GET(request: Request) {
     visits,
     stops,
     drive: { openSegment, totalMinutes },
+    photoRules: photoRulesFromCustomizations(orgRow?.customizations),
   });
 }

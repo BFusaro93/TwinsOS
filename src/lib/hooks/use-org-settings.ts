@@ -35,6 +35,9 @@ export interface OrgSettingsData {
   ccProcessingFeeMode: "flat" | "cover_fee";
   achPaymentsEnabled: boolean;
   crewHidePricing: boolean;
+  /** Crew must add a Before photo before starting / an After photo before stopping a job. */
+  crewRequireBeforePhoto: boolean;
+  crewRequireAfterPhoto: boolean;
   /** IANA name. The org's operating clock — what "today" and "this service
    *  day" mean for every user, regardless of where they're sitting. */
   timezone: string;
@@ -48,6 +51,8 @@ export interface UpdateOrgSettingsInput {
   costMethod?: CostMethod;
   portalEnabled?: boolean;
   customizations?: Record<string, unknown>;
+  crewRequireBeforePhoto?: boolean;
+  crewRequireAfterPhoto?: boolean;
   googleMapsApiKey?: string | null;
   replyToEmail?: string | null;
   accountNumberPrefix?: string;
@@ -98,6 +103,8 @@ function mapOrgSettings(row: Record<string, unknown>): OrgSettingsData {
     ccProcessingFeeMode: ((row.customizations as Record<string, unknown>)?.cc_processing_fee_mode === "cover_fee" ? "cover_fee" : "flat"),
     achPaymentsEnabled: typeof row.ach_payments_enabled === "boolean" ? row.ach_payments_enabled : false,
     crewHidePricing: typeof row.crew_hide_pricing === "boolean" ? row.crew_hide_pricing : false,
+    crewRequireBeforePhoto: (row.customizations as Record<string, unknown>)?.crew_require_before_photo === true,
+    crewRequireAfterPhoto: (row.customizations as Record<string, unknown>)?.crew_require_after_photo === true,
     // coerce, don't trust: an org row predating the column reads back null,
     // and the whole point of this value is that nothing downstream has to
     // second-guess it.
@@ -179,6 +186,14 @@ export function useUpdateOrgSettings() {
             reply_to_email: input.replyToEmail?.trim() || null,
           },
         };
+      }
+
+      // Required crew photos live in customizations too.
+      if (input.crewRequireBeforePhoto !== undefined) {
+        input = { ...input, customizations: { ...(input.customizations ?? {}), crew_require_before_photo: input.crewRequireBeforePhoto } };
+      }
+      if (input.crewRequireAfterPhoto !== undefined) {
+        input = { ...input, customizations: { ...(input.customizations ?? {}), crew_require_after_photo: input.crewRequireAfterPhoto } };
       }
 
       // Surcharge mode lives in customizations too (no column to migrate).

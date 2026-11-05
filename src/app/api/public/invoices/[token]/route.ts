@@ -66,7 +66,7 @@ export async function GET(
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("name, brand_color, address, customizations")
+    .select("name, brand_color, address, customizations, ach_payments_enabled")
     .eq("id", shareToken.org_id)
     .single();
 
@@ -120,6 +120,8 @@ export async function GET(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     clientName: (inv.clients as any)?.display_name ?? null,
     lineItems,
+    // Whether the pay page offers bank transfer (the intent route re-checks Stripe).
+    achAvailable: org?.ach_payments_enabled === true,
     org: {
       name: org?.name ?? "",
       brandColor: (org?.brand_color as string) ?? "#60ab45",

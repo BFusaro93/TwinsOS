@@ -803,17 +803,53 @@ function CrewAppSection() {
     }
   }
 
+  async function togglePhoto(key: "crewRequireBeforePhoto" | "crewRequireAfterPhoto", next: boolean) {
+    setSaving(true);
+    try {
+      await updateOrg({ [key]: next });
+      toast.success("Crew photo requirement updated");
+    } catch {
+      toast.error("Failed to update setting");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <div className="flex items-center gap-2 p-4">
-      <Checkbox
-        id="crew-hide-pricing"
-        checked={orgSettings?.crewHidePricing ?? false}
-        disabled={saving}
-        onCheckedChange={(v) => toggleHidePricing(v === true)}
-      />
-      <Label htmlFor="crew-hide-pricing" className="font-normal">
-        Hide service pricing from the crew app
-      </Label>
+    <div className="flex flex-col gap-3 p-4">
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="crew-hide-pricing"
+          checked={orgSettings?.crewHidePricing ?? false}
+          disabled={saving}
+          onCheckedChange={(v) => toggleHidePricing(v === true)}
+        />
+        <Label htmlFor="crew-hide-pricing" className="font-normal">
+          Hide service pricing from the crew app
+        </Label>
+      </div>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="crew-require-before"
+          checked={orgSettings?.crewRequireBeforePhoto ?? false}
+          disabled={saving}
+          onCheckedChange={(v) => togglePhoto("crewRequireBeforePhoto", v === true)}
+        />
+        <Label htmlFor="crew-require-before" className="font-normal">
+          Require a Before photo to start a job
+        </Label>
+      </div>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="crew-require-after"
+          checked={orgSettings?.crewRequireAfterPhoto ?? false}
+          disabled={saving}
+          onCheckedChange={(v) => togglePhoto("crewRequireAfterPhoto", v === true)}
+        />
+        <Label htmlFor="crew-require-after" className="font-normal">
+          Require an After photo to stop a job
+        </Label>
+      </div>
     </div>
   );
 }
