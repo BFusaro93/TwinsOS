@@ -73,7 +73,9 @@ with (security_invoker = on) as
     i.total_cents - i.tax_cents AS revenue_ex_tax_cents,
     -- Appended by the Report Center SA-parity work (20261224000600), already live on
     -- PROD/TEST before this migration: kept as the last column so CREATE OR REPLACE works.
-    i.client_id
+    i.client_id,
+    -- org_id appended last by the Report Center work (20261226000300), already live.
+    i.org_id
    FROM crm_invoices i
      LEFT JOIN clients c ON c.id = i.client_id
      LEFT JOIN crm_employees sr ON sr.id = i.sales_rep_id
@@ -117,7 +119,8 @@ with (security_invoker = on) as
         CASE
             WHEN ns.net_sum > 0 THEN round((i.total_cents - i.tax_cents)::numeric * GREATEST(li.total_cents - li.discount_cents, 0)::numeric / ns.net_sum)::bigint
             ELSE 0::bigint
-        END AS revenue_ex_tax_cents
+        END AS revenue_ex_tax_cents,
+    li.org_id
    FROM crm_invoice_line_items li
      JOIN crm_invoices i ON i.id = li.invoice_id AND i.deleted_at IS NULL
      LEFT JOIN clients c ON c.id = i.client_id
@@ -222,7 +225,9 @@ with (security_invoker = on) as
     p.original_contract_price AS original_contract_cents,
     COALESCE(co.approved_change_cents, 0::bigint) AS approved_changes_cents,
     COALESCE(co.change_order_count, 0::bigint) AS change_order_count,
-    cost.committed_cents
+    cost.committed_cents,
+    -- org_id appended last by the Report Center work (20261226000300), already live.
+    p.org_id
    FROM projects p
      LEFT JOIN clients cl ON cl.id = p.client_id
      LEFT JOIN LATERAL ( SELECT COALESCE(sum(a.line_cents) FILTER (WHERE a.placed), 0::numeric) AS po_cents,
