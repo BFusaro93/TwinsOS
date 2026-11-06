@@ -289,7 +289,7 @@ export function TicketsGuide() {
           <li><strong>Comments &amp; Messages</strong> — two sections. <em>Internal comments</em> (staff only) use the shared <code>CommentsSection</code> (<code>recordType=&quot;ticket&quot;</code>). <em>Messages with the client</em> is the conversation the client sees in their portal: their replies (with photos) and yours. A staff reply emails the client; a client reply reopens a closed ticket and notifies the assignee. The ticket must have <em>Show in client portal</em> on.</li>
           <li><strong>Files</strong> — attachments via the shared <code>AttachmentsSection</code>.</li>
           <li><strong>Contributors</strong> — additional staff CC&apos;d on the ticket as participants, distinct from the single assignee. They get a notification when added and on every new comment (never for their own actions). Managed by <code>use-ticket-contributors.ts</code>.</li>
-          <li><strong>Audit Trail</strong> — the shared <code>AuditTrailTab</code> change history.</li>
+          <li><strong>Audit Trail</strong> — the shared <code>AuditTrailTab</code> change history: edits to the ticket itself (status, assignee, priority, client link, portal visibility, delete/restore) plus one-line events for the conversation — an internal comment added, edited or deleted, a client message received or sent, and an email sent (with the recipient). The message text itself is never copied here; read it on the Comments &amp; Messages and Emails tabs.</li>
         </ul>
         <p>
           Near the top of the Details tab, a <strong>Show in client portal</strong> switch controls
@@ -302,7 +302,7 @@ export function TicketsGuide() {
           The ticket opens in a wide side panel. Under the subject, the status pill sits on the left
           and the <strong>PDF</strong>, <strong>Email</strong>, <strong>Edit</strong> and delete
           (trash) buttons sit together on the right edge. The tab bar (Details, Comments &amp;
-          History, Emails, Files, Contributors, Audit Trail) is sized to fit the panel without
+          Messages, Emails, Files, Contributors, Audit Trail) is sized to fit the panel without
           scrolling sideways on a normal desktop screen. <strong>PDF</strong> opens a print-formatted view in a new
           window — all ticket fields are HTML-escaped before being written into that window, since
           subject/body/names can originate from an unsanitized public form submission.
