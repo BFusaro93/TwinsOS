@@ -18,10 +18,15 @@ create table if not exists public.crm_ticket_messages (
   author_name      text not null default '',
   -- Set for staff messages (the profile that wrote it); null for client messages.
   author_user_id   uuid references auth.users(id),
-  body             text not null check (char_length(btrim(body)) between 1 and 5000),
+  body             text not null default '' check (char_length(btrim(body)) <= 5000),
+  -- Storage paths (bucket "attachments") of photos sent with the message. Each
+  -- is also filed as a normal ticket attachment so staff see it on the Files tab.
+  photo_paths      text[] not null default '{}',
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now(),
-  deleted_at       timestamptz
+  deleted_at       timestamptz,
+  -- A message needs words or a photo.
+  constraint crm_ticket_messages_has_content check (char_length(btrim(body)) >= 1 or cardinality(photo_paths) > 0)
 );
 
 create index if not exists idx_crm_ticket_messages_ticket

@@ -8,6 +8,7 @@ export interface TicketMessage {
   authorType: "client" | "staff";
   authorName: string;
   body: string;
+  photos?: { url: string; name: string }[];
   createdAt: string;
 }
 

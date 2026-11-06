@@ -5,6 +5,7 @@ import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { logger } from "@/lib/logger";
 import { orgEmailFrom, escapeHtml, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { Resend } from "resend";
+import { photosForMessage, signPhotoPaths } from "@/lib/ticket-message-photos";
 
 const log = logger.child("crm/tickets/messages");
 
@@ -41,13 +42,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if ("error" in auth) return auth.error;
   const { data, error } = await (auth.supabase as any)
     .from("crm_ticket_messages")
-    .select("id, author_type, author_name, body, created_at")
+    .select("id, author_type, author_name, body, photo_paths, created_at")
     .eq("ticket_id", auth.ticket.id)
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const signed = await signPhotoPaths(createServiceClient(), ((data ?? []) as any[]).flatMap((r) => r.photo_paths ?? []));
   return NextResponse.json(
-    ((data ?? []) as any[]).map((r) => ({ id: r.id, authorType: r.author_type, authorName: r.author_name, body: r.body, createdAt: r.created_at }))
+    ((data ?? []) as any[]).map((r) => ({
+      id: r.id,
+      authorType: r.author_type,
+      authorName: r.author_name,
+      body: r.body,
+      photos: photosForMessage(r.photo_paths, signed),
+      createdAt: r.created_at,
+    }))
   );
 }
 

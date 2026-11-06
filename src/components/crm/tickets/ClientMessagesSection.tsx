@@ -10,9 +10,9 @@ import { useTicketMessages, useReplyToTicketClient } from "@/lib/hooks/use-ticke
 
 /**
  * The conversation the CLIENT sees in their portal: their replies and ours.
- * Distinct from Comments & History, which stays internal.
+ * Sits below the internal comments on the ticket Comments tab.
  */
-export function ClientMessagesTab({ ticketId, visibleToClient }: { ticketId: string; visibleToClient: boolean }) {
+export function ClientMessagesSection({ ticketId, visibleToClient }: { ticketId: string; visibleToClient: boolean }) {
   const { data: messages = [], isLoading, error } = useTicketMessages(ticketId);
   const reply = useReplyToTicketClient(ticketId);
   const [draft, setDraft] = useState("");
@@ -30,9 +30,9 @@ export function ClientMessagesTab({ ticketId, visibleToClient }: { ticketId: str
   }
 
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <div className="flex flex-col gap-4">
       <p className="text-xs text-muted-foreground">
-        Messages here are visible to the client in their portal, and they are emailed when you reply. Use Comments &amp; History for internal notes.
+        Visible to the client in their portal. They are emailed when you reply.
       </p>
 
       {isLoading ? (
@@ -50,7 +50,17 @@ export function ClientMessagesTab({ ticketId, visibleToClient }: { ticketId: str
                 m.authorType === "client" ? "mr-auto rounded-tl-sm bg-slate-100 dark:bg-muted" : "ml-auto rounded-tr-sm bg-brand-50 dark:bg-brand-900/30"
               }`}
             >
-              <p className="whitespace-pre-wrap text-sm">{m.body}</p>
+              {m.body && <p className="whitespace-pre-wrap text-sm">{m.body}</p>}
+              {m.photos && m.photos.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {m.photos.map((p) => (
+                    <a key={p.url} href={p.url} target="_blank" rel="noopener noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.url} alt={p.name} loading="lazy" className="h-20 w-20 rounded-md border object-cover" />
+                    </a>
+                  ))}
+                </div>
+              )}
               <p className="mt-1 text-[10px] text-muted-foreground">
                 {m.authorType === "client" ? `${m.authorName} (client)` : m.authorName} · {formatDateTime(m.createdAt)}
               </p>

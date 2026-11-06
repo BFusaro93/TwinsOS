@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Send, X } from "lucide-react";
+import { Loader2, Paperclip, Send, X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 
@@ -10,6 +10,7 @@ interface Message {
   authorType: "client" | "staff";
   authorName: string;
   body: string;
+  photos?: { url: string; name: string }[];
   createdAt: string;
 }
 
@@ -19,6 +20,21 @@ interface ThreadResponse {
 }
 
 const MAX_CHARS = 2000;
+const MAX_PHOTOS = 5;
+
+function MessagePhotos({ photos }: { photos?: { url: string; name: string }[] }) {
+  if (!photos?.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {photos.map((p) => (
+        <a key={p.url} href={p.url} target="_blank" rel="noopener noreferrer">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={p.url} alt={p.name} loading="lazy" className="h-20 w-20 rounded-md border object-cover" />
+        </a>
+      ))}
+    </div>
+  );
+}
 
 function fmtWhen(iso: string) {
   return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -42,6 +58,8 @@ export function PortalTicketThread({
   const qc = useQueryClient();
   const key = ["portal-ticket-thread", ticket.id];
   const [draft, setDraft] = useState("");
+  const [photos, setPhotos] = useState<File[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -58,18 +76,18 @@ export function PortalTicketThread({
   });
 
   const send = useMutation({
-    mutationFn: async (body: string) => {
-      const res = await fetch(`/api/portal/tickets/${ticket.id}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body }),
-      });
+    mutationFn: async ({ body, files }: { body: string; files: File[] }) => {
+      const form = new FormData();
+      form.append("body", body);
+      for (const f of files) form.append("files", f);
+      const res = await fetch(`/api/portal/tickets/${ticket.id}/messages`, { method: "POST", body: form });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(typeof json.error === "string" ? json.error : "Couldn't send your message");
       return json as { reopened: boolean; message: Message };
     },
     onSuccess: (r) => {
       setDraft("");
+      setPhotos([]);
       setError(null);
       qc.setQueryData<ThreadResponse>(key, (cur) => ({
         status: r.reopened ? "open" : (cur?.status ?? ticket.status),
@@ -117,12 +135,14 @@ export function PortalTicketThread({
           {messages.map((m) =>
             m.authorType === "client" ? (
               <div key={m.id} className="ml-auto max-w-[85%] rounded-xl rounded-tr-sm bg-brand-50 px-3 py-2">
-                <p className="whitespace-pre-wrap text-sm text-slate-800">{m.body}</p>
+                {m.body && <p className="whitespace-pre-wrap text-sm text-slate-800">{m.body}</p>}
+                <MessagePhotos photos={m.photos} />
                 <p className="mt-1 text-[10px] text-slate-400">You · {fmtWhen(m.createdAt)}</p>
               </div>
             ) : (
               <div key={m.id} className="mr-auto max-w-[85%] rounded-xl rounded-tl-sm bg-slate-100 px-3 py-2">
-                <p className="whitespace-pre-wrap text-sm text-slate-800">{m.body}</p>
+                {m.body && <p className="whitespace-pre-wrap text-sm text-slate-800">{m.body}</p>}
+                <MessagePhotos photos={m.photos} />
                 <p className="mt-1 text-[10px] text-slate-400">
                   {m.authorName || "Our team"} · {fmtWhen(m.createdAt)}
                 </p>
@@ -136,7 +156,7 @@ export function PortalTicketThread({
           className="border-t px-5 py-3"
           onSubmit={(e) => {
             e.preventDefault();
-            if (draft.trim()) send.mutate(draft.trim());
+            if (draft.trim() || photos.length) send.mutate({ body: draft.trim(), files: photos });
           }}
         >
           {status === "closed" && (
@@ -149,14 +169,46 @@ export function PortalTicketThread({
             placeholder="Write a message…"
             className="w-full resize-none rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-500"
           />
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const picked = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
+              setPhotos((cur) => [...cur, ...picked].slice(0, MAX_PHOTOS));
+              if (fileInput.current) fileInput.current.value = "";
+            }}
+          />
+          {photos.length > 0 && (
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {photos.map((f, i) => (
+                <li key={`${f.name}-${i}`} className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 pl-2.5 pr-1 py-0.5 text-xs text-slate-600">
+                  <span className="max-w-[9rem] truncate">{f.name}</span>
+                  <button type="button" onClick={() => setPhotos((cur) => cur.filter((_, j) => j !== i))} className="rounded-full p-0.5 hover:bg-slate-200" aria-label={`Remove ${f.name}`}>
+                    <X className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
           <div className="mt-2 flex items-center justify-between">
-            <span className="text-[10px] text-slate-400">
-              {draft.length}/{MAX_CHARS}
-            </span>
+            <div className="flex items-center gap-3">
+              {photos.length < MAX_PHOTOS && (
+                <button type="button" onClick={() => fileInput.current?.click()} className="flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-800">
+                  <Paperclip className="h-3.5 w-3.5" />
+                  Add photo
+                </button>
+              )}
+              <span className="text-[10px] text-slate-400">
+                {draft.length}/{MAX_CHARS}
+              </span>
+            </div>
             <button
               type="submit"
-              disabled={send.isPending || !draft.trim()}
+              disabled={send.isPending || (!draft.trim() && photos.length === 0)}
               className="flex h-9 items-center gap-2 rounded-md bg-brand-500 px-4 text-sm font-medium text-white transition hover:bg-brand-600 disabled:opacity-50"
             >
               {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

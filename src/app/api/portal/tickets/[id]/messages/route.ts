@@ -5,11 +5,12 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { notifyTicketComment } from "@/lib/ticket-notify";
 import { logger } from "@/lib/logger";
+import { MAX_REPLY_PHOTOS, photosForMessage, signPhotoPaths, storeReplyPhotos } from "@/lib/ticket-message-photos";
 
 const log = logger.child("portal/tickets/messages");
 
 const MAX_MESSAGE_CHARS = 2000;
-const PostBody = z.object({ body: z.string().trim().min(1).max(MAX_MESSAGE_CHARS) });
+const PostBody = z.object({ body: z.string().trim().max(MAX_MESSAGE_CHARS) });
 
 /* The crm_ticket_messages table isn't in the generated Supabase types yet. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -46,7 +47,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const { data: rows, error } = await (service as any)
     .from("crm_ticket_messages")
-    .select("id, author_type, author_name, body, created_at")
+    .select("id, author_type, author_name, body, photo_paths, created_at")
     .eq("ticket_id", ticket.id)
     .eq("org_id", ctx.orgId)
     .is("deleted_at", null)
@@ -56,6 +57,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     log.error("failed to load ticket messages", { ticketId: ticket.id, error: error.message });
     return NextResponse.json({ error: "Couldn't load the conversation" }, { status: 500 });
   }
+  const signed = await signPhotoPaths(service, ((rows ?? []) as any[]).flatMap((r) => r.photo_paths ?? []));
   return NextResponse.json({
     status: ticket.status,
     messages: ((rows ?? []) as any[]).map((r) => ({
@@ -63,6 +65,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       authorType: r.author_type,
       authorName: r.author_name,
       body: r.body,
+      photos: photosForMessage(r.photo_paths, signed),
       createdAt: r.created_at,
     })),
   });
@@ -79,13 +82,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Too many messages. Please wait a few minutes and try again." }, { status: 429 });
   }
 
-  const parsed = PostBody.safeParse(await req.json().catch(() => null));
+  // Multipart: `body` (text) and up to MAX_REPLY_PHOTOS `files`.
+  const form = await req.formData().catch(() => null);
+  const parsed = PostBody.safeParse({ body: typeof form?.get("body") === "string" ? form!.get("body") : "" });
+  const files = (form?.getAll("files") ?? []).filter((f): f is File => f instanceof File && f.size > 0);
   if (!parsed.success) {
-    return NextResponse.json({ error: `Write a message of up to ${MAX_MESSAGE_CHARS} characters.` }, { status: 400 });
+    return NextResponse.json({ error: `Messages can be up to ${MAX_MESSAGE_CHARS} characters.` }, { status: 400 });
+  }
+  if (!parsed.data.body && files.length === 0) {
+    return NextResponse.json({ error: "Write a message or add a photo." }, { status: 400 });
+  }
+  if (files.length > MAX_REPLY_PHOTOS) {
+    return NextResponse.json({ error: `You can attach up to ${MAX_REPLY_PHOTOS} photos.` }, { status: 400 });
   }
 
   const { data: client } = await service.from("clients").select("display_name").eq("id", ticket.client_id!).maybeSingle();
   const authorName = client?.display_name ?? "Customer";
+
+  let photoPaths: string[] = [];
+  if (files.length > 0) {
+    const stored = await storeReplyPhotos(service, {
+      orgId: ctx.orgId,
+      ticketId: ticket.id,
+      files,
+      uploadedByName: `${authorName} (portal)`,
+    });
+    if ("error" in stored) return NextResponse.json({ error: stored.error }, { status: 400 });
+    photoPaths = stored.paths;
+  }
 
   const { data: inserted, error } = await (service as any)
     .from("crm_ticket_messages")
@@ -95,8 +119,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       author_type: "client",
       author_name: authorName,
       body: parsed.data.body,
+      photo_paths: photoPaths,
     })
-    .select("id, author_type, author_name, body, created_at")
+    .select("id, author_type, author_name, body, photo_paths, created_at")
     .single();
   if (error || !inserted) {
     log.error("failed to save ticket message", { ticketId: ticket.id, error: error?.message });
@@ -126,12 +151,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       assignedToName: ticket.assigned_to,
       commenterName: authorName,
       commenterId: null,
-      commentBody: parsed.data.body,
+      commentBody: parsed.data.body || (photoPaths.length === 1 ? "(sent a photo)" : `(sent ${photoPaths.length} photos)`),
     });
   } catch (err) {
     log.error("ticket reply notification failed", { ticketId: ticket.id, error: err instanceof Error ? err.message : String(err) });
   }
 
+  const signed = await signPhotoPaths(service, photoPaths);
   return NextResponse.json({
     reopened: ticket.status === "closed",
     message: {
@@ -139,6 +165,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       authorType: inserted.author_type,
       authorName: inserted.author_name,
       body: inserted.body,
+      photos: photosForMessage(inserted.photo_paths, signed),
       createdAt: inserted.created_at,
     },
   });

@@ -32,7 +32,7 @@ import {
   useRemoveTicketContributor,
 } from "@/lib/hooks/use-ticket-contributors";
 import { CommentsSection } from "@/components/shared/CommentsSection";
-import { ClientMessagesTab } from "@/components/crm/tickets/ClientMessagesTab";
+import { ClientMessagesSection } from "@/components/crm/tickets/ClientMessagesSection";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -821,13 +821,22 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
     },
     {
       value: "comments",
-      label: "Comments & History",
-      content: <div className="p-6"><CommentsSection recordType="ticket" recordId={ticket.id} /></div>,
-    },
-    {
-      value: "client-messages",
-      label: "Client Messages",
-      content: <ClientMessagesTab ticketId={ticket.id} visibleToClient={!!ticket.visibleToClient} />,
+      label: "Comments",
+      content: (
+        <div className="flex flex-col gap-6 p-6">
+          <section className="flex flex-col gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Internal comments</h3>
+              <p className="text-xs text-muted-foreground">Staff only — the client never sees these.</p>
+            </div>
+            <CommentsSection recordType="ticket" recordId={ticket.id} />
+          </section>
+          <section className="flex flex-col gap-3 border-t border-border pt-6">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Messages with the client</h3>
+            <ClientMessagesSection ticketId={ticket.id} visibleToClient={!!ticket.visibleToClient} />
+          </section>
+        </div>
+      ),
     },
     {
       value: "emails",
