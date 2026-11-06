@@ -863,7 +863,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
   return (
     <>
       <Sheet open={!!ticket} onOpenChange={(open) => { if (!open) { setEditing(false); onClose(); } }}>
-        <SheetContent className="w-full sm:max-w-[780px] md:w-[780px] flex flex-col gap-0 p-0 overflow-hidden">
+        <SheetContent className="w-full sm:max-w-[700px] md:w-[700px] flex flex-col gap-0 p-0 overflow-hidden">
 
           {/* Header — two rows: the title gets the full width (wrapping if it is
               long) and the status + actions sit under it, so neither is cramped.
