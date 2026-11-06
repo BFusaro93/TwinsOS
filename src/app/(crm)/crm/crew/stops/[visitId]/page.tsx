@@ -62,12 +62,15 @@ import { visitServices, isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-s
 import { budgetCountdown } from "@/lib/crew/budget-countdown";
 import { isPhaseCaption, phaseCaption } from "@/lib/crew/required-photos";
 import { TimeSummaryDialog } from "@/components/crm/crew/TimeSummaryDialog";
+import { TranslateNote } from "@/components/crm/crew/TranslateNote";
+import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { openInMaps } from "@/lib/utils/maps";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { useCurrentUserStore } from "@/stores";
 import { toast } from "sonner";
+import { t } from "@/lib/crew-i18n";
 
 const REQUISITION_STATUS_STYLE: Record<VisitRequisitionStatus, { label: string; className: string }> = {
   draft: { label: "Submitted", className: "bg-amber-100 text-amber-700" },
@@ -113,7 +116,7 @@ function PlannedMaterialRow({
       <div className="px-4 py-3 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm text-slate-700 dark:text-neutral-300 truncate">{material.productName}</p>
-          <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">Called for: {material.plannedQty}</p>
+          <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">{t("Called for: {q}", { q: material.plannedQty })}</p>
         </div>
         <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${resolved.className}`}>
           {resolved.label}
@@ -126,7 +129,7 @@ function PlannedMaterialRow({
     <div className="px-4 py-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-slate-700 dark:text-neutral-300">{material.productName}</p>
-        <p className="text-xs text-slate-400 dark:text-neutral-500">Called for: {material.plannedQty}</p>
+        <p className="text-xs text-slate-400 dark:text-neutral-500">{t("Called for: {q}", { q: material.plannedQty })}</p>
       </div>
       <div className="flex items-center gap-2">
         <Input
@@ -145,21 +148,21 @@ function PlannedMaterialRow({
           disabled={!isValid || isSaving}
           onClick={() => onMarkUsed(material, parsedQty)}
         >
-          Mark Used
+          {t("Mark Used")}
         </Button>
         <button
           className="min-h-11 px-2 text-xs text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-neutral-300 disabled:opacity-50"
           disabled={!isValid || isSaving}
           onClick={() => onMarkUsedNoInvoice(material, parsedQty)}
         >
-          Used — don&apos;t bill
+          {t("Used — don't bill")}
         </button>
         <button
           className="min-h-11 px-2 text-xs text-slate-500 dark:text-neutral-400 hover:text-slate-700 dark:hover:text-neutral-300 disabled:opacity-50"
           disabled={isSaving}
           onClick={() => onMarkNotUsed(material)}
         >
-          Not Used
+          {t("Not Used")}
         </button>
       </div>
     </div>
@@ -265,7 +268,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       });
     }
     await confirmChemicals.mutateAsync({ items, conditions: conditionsPayload(chemConditions) });
-    toast.success("Chemicals confirmed");
+    toast.success(t("Chemicals confirmed"));
   }
   const { data: orgSettings } = useOrgSettings();
   const hidePricing = orgSettings?.crewHidePricing ?? false;
@@ -302,7 +305,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       entry.label.push(...visitServices(sv).map((x) => x.serviceName).filter(Boolean));
       byJob.set(sv.jobId, entry);
     }
-    return [...byJob.values()].map((e) => ({ visitId: e.visitId, label: [...new Set(e.label)].join(", ") || "This job" }));
+    return [...byJob.values()].map((e) => ({ visitId: e.visitId, label: [...new Set(e.label)].join(", ") || t("This job") }));
   })();
   const [requestVisitId, setRequestVisitId] = useState<string | null>(null);
 
@@ -444,15 +447,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       // went through, since a crew can't tell from here.
       toast.success(
         res.photoAttached || !upsellPhoto
-          ? `Sent to the office — ticket #${res.ticketNumber}.`
-          : `Sent to the office — ticket #${res.ticketNumber}, but the photo didn't upload.`
+          ? t("Sent to the office — ticket #{n}.", { n: res.ticketNumber })
+          : t("Sent to the office — ticket #{n}, but the photo didn't upload.", { n: res.ticketNumber })
       );
       setUpsellOpen(false);
       setUpsellServiceId("");
       setUpsellNote("");
       setUpsellPhoto(null);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't send the suggestion");
+      toast.error(err instanceof Error ? err.message : t("Couldn't send the suggestion"));
     }
   }
 
@@ -470,7 +473,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     // Fractional materials (half a yard of mulch) are fine — 2 decimals, as the route requires.
     const quantity = Math.round((Number(requestQty.replace(",", ".")) || 0) * 100) / 100;
     if (quantity <= 0) {
-      toast.error("Enter a quantity greater than zero");
+      toast.error(t("Enter a quantity greater than zero"));
       return;
     }
     try {
@@ -480,10 +483,10 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         quantity,
         note: requestNote.trim() || undefined,
       });
-      toast.success("Request sent to the office");
+      toast.success(t("Request sent to the office"));
       closeRequest();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't send the request");
+      toast.error(err instanceof Error ? err.message : t("Couldn't send the request"));
     }
   }
 
@@ -491,13 +494,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     try {
       await useMaterials.mutateAsync({ visitId: material.visitId, jobProductId: material.id, usage: { usedQty } });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't record materials used");
+      toast.error(err instanceof Error ? err.message : t("Couldn't record materials used"));
     }
   }
 
   async function handleMarkUsedNoInvoice(material: StopJobProductMaterial, usedQty: number) {
     const confirmed = await confirm({
-      title: `${material.productName} will come out of inventory but won't be added to the client's invoice. Continue?`,
+      title: t("{name} will come out of inventory but won't be added to the client's invoice. Continue?", { name: material.productName }),
       confirmLabel: "Continue",
       destructive: true,
     });
@@ -509,13 +512,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         usage: { usedQty, noInvoice: true },
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't record materials used");
+      toast.error(err instanceof Error ? err.message : t("Couldn't record materials used"));
     }
   }
 
   async function handleMarkNotUsed(material: StopJobProductMaterial) {
     const confirmed = await confirm({
-      title: `${material.productName} won't be counted as used on this job. Continue?`,
+      title: t("{name} won't be counted as used on this job. Continue?", { name: material.productName }),
       confirmLabel: "Continue",
       destructive: true,
     });
@@ -523,7 +526,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
     try {
       await useMaterials.mutateAsync({ visitId: material.visitId, jobProductId: material.id, usage: { notUsed: true } });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't record materials used");
+      toast.error(err instanceof Error ? err.message : t("Couldn't record materials used"));
     }
   }
 
@@ -576,11 +579,11 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       <div className="flex flex-col items-center justify-center h-dvh gap-3 px-6 text-center">
         <AlertTriangle className="h-8 w-8 text-amber-500" />
         <p className="font-medium text-slate-700 dark:text-neutral-300">{signedOut ? "You're signed out" : "Couldn't load this job"}</p>
-        <p className="text-sm text-muted-foreground">{signedOut ? "Sign in again to keep working." : "Check your signal, then try again."}</p>
+        <p className="text-sm text-muted-foreground">{signedOut ? t("Sign in again to keep working.") : t("Check your signal, then try again.")}</p>
         {signedOut ? (
-          <Button className="min-h-11" onClick={() => router.push("/login")}>Sign in</Button>
+          <Button className="min-h-11" onClick={() => router.push("/login")}>{t("Sign in")}</Button>
         ) : (
-          <Button variant="outline" className="min-h-11" onClick={() => void refetchStop()}>Try again</Button>
+          <Button variant="outline" className="min-h-11" onClick={() => void refetchStop()}>{t("Try again")}</Button>
         )}
       </div>
     );
@@ -589,8 +592,8 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   if (!stop || !anchor) {
     return (
       <div className="flex flex-col items-center justify-center h-dvh gap-3">
-        <p className="text-muted-foreground">This job isn&apos;t on your crew&apos;s schedule</p>
-        <Button variant="outline" className="min-h-11" onClick={() => router.push("/crm/crew")}>Back</Button>
+        <p className="text-muted-foreground">{t("This job isn't on your crew's schedule")}</p>
+        <Button variant="outline" className="min-h-11" onClick={() => router.push("/crm/crew")}>{t("Back")}</Button>
       </div>
     );
   }
@@ -602,7 +605,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         <div className="flex items-start gap-2">
           <button
             onClick={() => router.push("/crm/crew")}
-            aria-label="Back to today's jobs"
+            aria-label={t("Back to today's jobs")}
             className="flex h-11 w-11 shrink-0 items-center justify-center -ml-2 text-muted-foreground"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -633,7 +636,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           {stop.clientPhone && (
             <a
               href={`tel:${stop.clientPhone}`}
-              aria-label="Call the client"
+              aria-label={t("Call the client")}
               className="flex h-11 w-11 shrink-0 items-center justify-center text-muted-foreground"
             >
               <Phone className="h-5 w-5" />
@@ -650,7 +653,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               <div>
                 <p className="text-sm font-medium text-blue-800 dark:text-blue-300 flex items-center gap-1.5">
                   <Coffee className="h-3.5 w-3.5" />
-                  On Break
+                  {t("On Break")}
                 </p>
                 <p className="text-xs text-blue-600 dark:text-blue-400">
                   Since {clock(stop.pausedAt)}
@@ -663,7 +666,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           ) : (
             <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Job Running</p>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">{t("Job Running")}</p>
                 <p className="text-xs text-amber-600 dark:text-amber-400">
                   Started {clock(stop.clockedInAt)}
                   {countdown && (
@@ -690,7 +693,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           </div>
           <div className="divide-y divide-slate-100 dark:divide-neutral-800">
             {stop.visits.length === 0 && (
-              <p className="px-4 py-3 text-sm text-slate-400 dark:text-neutral-500">No services listed</p>
+              <p className="px-4 py-3 text-sm text-slate-400 dark:text-neutral-500">{t("No services listed")}</p>
             )}
             {stop.visits.map(v => {
               const svc = visitServices(v)[0];
@@ -723,7 +726,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                                   disabled={toggleSubitem.isPending || rowTerminal}
                                   onClick={() => toggleSubitem.mutate({ visitId: v.id, subitemId: si.id, checked: !done })}
                                   aria-pressed={done}
-                                  aria-label={`${done ? "Untick" : "Tick off"} ${si.name}`}
+                                  aria-label={done ? t("Untick {name}", { name: si.name }) : t("Tick off {name}", { name: si.name })}
                                   className="-my-3 -ml-3 flex h-11 w-11 shrink-0 items-center justify-center disabled:opacity-60"
                                 >
                                   {done
@@ -748,7 +751,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                       <p className="text-sm text-slate-400 dark:text-neutral-500">{formatCurrency(svc.rateCents)}</p>
                     )}
                     {v.status === "skipped" ? (
-                      <span className="text-xs text-orange-600 dark:text-orange-400 font-medium">Skipped</span>
+                      <span className="text-xs text-orange-600 dark:text-orange-400 font-medium">{t("Skipped")}</span>
                     ) : v.status === "completed" ? (
                       <CheckCircle2 className="h-4 w-4 text-green-500 dark:text-green-400" />
                     ) : !rowTerminal ? (
@@ -757,7 +760,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                         onClick={() => setSkipTargetId(v.id)}
                       >
                         <SkipForward className="h-3 w-3" />
-                        Skip
+                        {t("Skip")}
                       </button>
                     ) : null}
                   </div>
@@ -772,12 +775,12 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             <div className="px-4 py-3 border-b border-amber-100 dark:border-amber-900">
               <h2 className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-2">
                 <FlaskConical className="h-4 w-4" />
-                Confirm chemicals applied
+                {t("Confirm chemicals applied")}
               </h2>
               <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
                 {chemBlocked
-                  ? "Enter how much was actually used (or mark it Not used) before you can stop this job."
-                  : "Enter how much was actually used, or mark it Not used."}
+                  ? t("Enter how much was actually used (or mark it Not used) before you can stop this job.")
+                  : t("Enter how much was actually used, or mark it Not used.")}
               </p>
             </div>
             <div className="p-3 space-y-2">
@@ -787,13 +790,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   <div key={c.id} className="rounded-lg bg-card border border-border px-3 py-2">
                     <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{c.productName ?? "Chemical"}</p>
                     {c.chemicalAmount != null ? (
-                      <p className="text-xs text-muted-foreground">Planned: {c.chemicalAmount} {c.unitName ?? ""}</p>
+                      <p className="text-xs text-muted-foreground">{t("Planned: {a}", { a: `${c.chemicalAmount} ${c.unitName ?? ""}`.trim() })}</p>
                     ) : (
                       // The office's estimate is rate x the property's area, so no planned amount means
                       // no area (or rate) was on file. Say so rather than leave a blank box.
                       <p className="flex items-start gap-1 text-xs text-amber-700 dark:text-amber-400">
                         <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                        No amount was planned (no property area or application rate on file). Measure what you apply and enter it.
+                        {t("No amount was planned (no property area or application rate on file). Measure what you apply and enter it.")}
                       </p>
                     )}
                     <ChemicalLabel chemical={c} documents={docsFor(c.productId)} />
@@ -807,7 +810,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                         value={e.notUsed ? "" : e.amount}
                         disabled={e.notUsed}
                         onChange={(ev) => setChemEdits((prev) => ({ ...prev, [c.id]: { ...e, amount: ev.target.value } }))}
-                        placeholder="Amount used"
+                        placeholder={t("Amount used")}
                         className="h-11 w-32 text-base"
                       />
                       <span className="text-sm text-muted-foreground">{c.unitName ?? ""}</span>
@@ -818,7 +821,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                           onChange={(ev) => setChemEdits((prev) => ({ ...prev, [c.id]: { ...e, notUsed: ev.target.checked } }))}
                           className="h-5 w-5"
                         />
-                        Not used
+                        {t("Not used")}
                       </label>
                     </div>
                   </div>
@@ -842,7 +845,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               {/* The application record needs a start time: confirming at the yard before
                   Start Job wrote an end time with no start. */}
               {!isActive && (
-                <p className="text-center text-xs text-amber-800 dark:text-amber-300">Start the job first — then confirm what was applied.</p>
+                <p className="text-center text-xs text-amber-800 dark:text-amber-300">{t("Start the job first — then confirm what was applied.")}</p>
               )}
             </div>
           </div>
@@ -857,7 +860,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800">
               <h2 className="font-semibold text-slate-800 dark:text-neutral-100 flex items-center gap-2">
                 <FlaskConical className="h-4 w-4" />
-                Chemical Mix
+                {t("Chemical Mix")}
               </h2>
             </div>
             <div className="p-3 space-y-2">
@@ -908,14 +911,14 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800">
               <h2 className="font-semibold text-slate-800 dark:text-neutral-100 flex items-center gap-2">
                 <FlaskConical className="h-4 w-4" />
-                Chemicals
+                {t("Chemicals")}
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">None were planned for this stop. Add any you apply.</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("None were planned for this stop. Add any you apply.")}</p>
             </div>
             <div className="p-3">
               <AddChemicalForm visitId={chemAddVisitId} disabled={!isActive} />
               {!isActive && (
-                <p className="mt-2 text-center text-xs text-muted-foreground">Start the job first — then add what you applied.</p>
+                <p className="mt-2 text-center text-xs text-muted-foreground">{t("Start the job first — then add what you applied.")}</p>
               )}
             </div>
           </div>
@@ -928,9 +931,10 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               <AlertTriangle className={`h-4 w-4 mt-0.5 shrink-0 ${acknowledged ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`} />
               <div className="flex-1">
                 <p className={`text-sm font-medium ${acknowledged ? "text-green-800 dark:text-green-300" : "text-amber-800 dark:text-amber-300"}`}>
-                  Job Notes
+                  {t("Job Notes")}
                 </p>
                 <RichNotes value={stop.notesToCrew ?? ""} className="text-sm mt-1 text-slate-700 dark:text-neutral-300" />
+                <TranslateNote text={notesToPlainText(stop.notesToCrew)} />
               </div>
             </div>
             {!acknowledged && (
@@ -953,7 +957,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             {!acknowledged && anchor.acknowledgedNotesAt && (
               <div className="px-4 pb-3">
                 <p className="text-xs text-amber-700 dark:text-amber-400">
-                  The office changed these notes after you read them — read them again.
+                  {t("The office changed these notes after you read them — read them again.")}
                 </p>
               </div>
             )}
@@ -980,13 +984,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   disabled={stopClockIn.isPending || (hasNotes && !acknowledged) || needBeforePhoto}
                 >
                   {stopClockIn.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
-                  Start Job
+                  {t("Start Job")}
                 </Button>
                 {hasNotes && !acknowledged && (
-                  <p className="text-center text-xs text-amber-700 dark:text-amber-400">Read the job notes and tap &ldquo;I&apos;ve read the notes&rdquo; to start.</p>
+                  <p className="text-center text-xs text-amber-700 dark:text-amber-400">{t("Read the job notes and tap “I've read the notes” to start.")}</p>
                 )}
                 {needBeforePhoto && (
-                  <p className="text-center text-xs text-amber-700 dark:text-amber-400">Take a Before photo (in Photos, below) to start.</p>
+                  <p className="text-center text-xs text-amber-700 dark:text-amber-400">{t("Take a Before photo (in Photos, below) to start.")}</p>
                 )}
               </>
             ) : (
@@ -998,7 +1002,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                     disabled={stopResume.isPending}
                   >
                     {stopResume.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
-                    Resume Job
+                    {t("Resume Job")}
                   </Button>
                 ) : (
                   <Button
@@ -1008,7 +1012,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                     disabled={stopPause.isPending}
                   >
                     {stopPause.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Coffee className="h-5 w-5" />}
-                    Take a Break
+                    {t("Take a Break")}
                   </Button>
                 )}
                 <Button
@@ -1017,16 +1021,16 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   disabled={chemBlocked || needAfterPhoto}
                 >
                   <StopIcon className="h-5 w-5" />
-                  Stop Job
+                  {t("Stop Job")}
                 </Button>
                 {chemBlocked && (
                   <p className="text-center text-xs text-amber-700 dark:text-amber-400">
-                    Confirm the chemicals applied (above) to stop this job.
+                    {t("Confirm the chemicals applied (above) to stop this job.")}
                   </p>
                 )}
                 {needAfterPhoto && (
                   <p className="text-center text-xs text-amber-700 dark:text-amber-400">
-                    Take an After photo (in Photos, below) to stop this job.
+                    {t("Take an After photo (in Photos, below) to stop this job.")}
                   </p>
                 )}
               </>
@@ -1037,7 +1041,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         {isComplete && (
           <div className="bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 text-center">
             <p className="font-medium text-green-800 dark:text-green-300">
-              {stop.derivedStatus === "skipped" ? "Job Skipped" : stop.derivedStatus === "cancelled" ? "Job Cancelled by the office" : "Job Complete"}
+              {stop.derivedStatus === "skipped" ? t("Job Skipped") : stop.derivedStatus === "cancelled" ? t("Job Cancelled by the office") : t("Job Complete")}
             </p>
             {stop.clockedInAt && stop.clockedOutAt && (
               <p className="text-xs text-green-600 dark:text-green-400 mt-1">
@@ -1067,7 +1071,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <Camera className="h-4 w-4" />
                 }
-                {photosUploading > 1 ? `Add Photo (${photosUploading} uploading)` : "Add Photo"}
+                {photosUploading > 1 ? t("Add Photo ({n} uploading)", { n: photosUploading }) : t("Add Photo")}
               </span>
             </label>
           </div>
@@ -1078,7 +1082,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 ["after", "After", orgSettings?.crewRequireAfterPhoto],
               ] as const)
                 .filter(([, , required]) => required)
-                .map(([phase, label]) => (
+                .map(([phase]) => (
                   <label key={phase} className="cursor-pointer">
                     <input
                       type="file"
@@ -1095,14 +1099,14 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                       }`}
                     >
                       <Camera className="h-4 w-4" />
-                      {hasPhase(phase) ? `${label} photo added` : `${label} photo (required)`}
+                      {hasPhase(phase) ? t(phase === "before" ? "Before photo added" : "After photo added") : t(phase === "before" ? "Before photo (required)" : "After photo (required)")}
                     </span>
                   </label>
                 ))}
             </div>
           )}
           {photos.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-slate-400 dark:text-neutral-500 text-center">No photos yet</p>
+            <p className="px-4 py-4 text-sm text-slate-400 dark:text-neutral-500 text-center">{t("No photos yet")}</p>
           ) : (
             <div className="grid grid-cols-3 gap-1 p-2">
               {photos.map(photo => (
@@ -1111,7 +1115,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={photoUrls[photo.id] ?? photo.signedUrl ?? ""}
-                      alt={photo.caption ?? "Visit photo"}
+                      alt={photo.caption ?? t("Visit photo")}
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -1133,7 +1137,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
             <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800">
               <h2 className="font-semibold text-slate-800 dark:text-neutral-100 flex items-center gap-2">
                 <ClipboardList className="h-4 w-4" />
-                Materials called for
+                {t("Materials called for")}
               </h2>
             </div>
             <div className="divide-y divide-slate-100 dark:divide-neutral-800">
@@ -1153,16 +1157,16 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
 
         {/* Materials requests — an ad-hoc ask for something NOT already called
             for on the job. Becomes a draft requisition the office prices and
-            approves. Mirrors crew-app's "Materials requests" card. */}
+            approves. Mirrors crew-app's t("Materials requests") card. */}
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800 flex items-center justify-between gap-2">
-            <h2 className="font-semibold text-slate-800 dark:text-neutral-100">Materials requests</h2>
+            <h2 className="font-semibold text-slate-800 dark:text-neutral-100">{t("Materials requests")}</h2>
             <Button size="sm" variant="outline" onClick={() => setRequestOpen(true)}>
-              Request Materials
+              {t("Request Materials")}
             </Button>
           </div>
           {requisitions.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-slate-400 dark:text-neutral-500 text-center">No materials requested for this job.</p>
+            <p className="px-4 py-4 text-sm text-slate-400 dark:text-neutral-500 text-center">{t("No materials requested for this job.")}</p>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-neutral-800">
               {requisitions.map((r) => (
@@ -1189,10 +1193,10 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           >
             <span className="flex items-center gap-2 font-semibold text-emerald-800 dark:text-emerald-300">
               <Sparkles className="h-4 w-4" />
-              Suggest work
+              {t("Suggest work")}
             </span>
             <span className="mt-0.5 block text-xs text-emerald-700 dark:text-emerald-400">
-              Spotted something this property needs? Send it to the office.
+              {t("Spotted something this property needs? Send it to the office.")}
             </span>
           </button>
         )}
@@ -1202,9 +1206,9 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800">
             <h2 className="font-semibold text-slate-800 dark:text-neutral-100 flex items-center gap-2">
               <MessageSquare className="h-4 w-4" />
-              Notes to Office
+              {t("Notes to Office")}
             </h2>
-            <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">Visible on the dispatch board</p>
+            <p className="text-xs text-slate-400 dark:text-neutral-500 mt-0.5">{t("Visible on the dispatch board")}</p>
           </div>
           {anchor.jobComments && anchor.jobComments.length > 0 && (
             <div className="px-4 py-3 border-b border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40">
@@ -1231,7 +1235,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
           )}
           <div className="p-3 flex gap-2">
             <Textarea
-              placeholder="Write a note..."
+              placeholder={t("Write a note...")}
               value={noteText}
               onChange={e => setNoteText(e.target.value)}
               className="flex-1 min-h-[80px] resize-none text-sm"
@@ -1253,13 +1257,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       <Dialog open={requestOpen} onOpenChange={(open) => (open ? setRequestOpen(true) : closeRequest())}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{pickedProduct ? pickedProduct.name : "Request materials"}</DialogTitle>
+            <DialogTitle>{pickedProduct ? pickedProduct.name : t("Request materials")}</DialogTitle>
           </DialogHeader>
           {pickedProduct ? (
             <div className="flex flex-col gap-3">
               {requestJobChoices.length > 1 && (
                 <div>
-                  <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">For which job?</p>
+                  <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">{t("For which job?")}</p>
                   <div className="flex flex-col gap-1.5">
                     {requestJobChoices.map((c) => {
                       const picked = (requestVisitId ?? requestJobChoices[0].visitId) === c.visitId;
@@ -1280,7 +1284,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 </div>
               )}
               <div>
-                <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">Quantity</p>
+                <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">{t("Quantity")}</p>
                 <Input
                   type="number"
                   inputMode="decimal"
@@ -1292,18 +1296,18 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 />
               </div>
               <div>
-                <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">Note (optional)</p>
+                <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">{t("Note (optional)")}</p>
                 <Textarea
                   value={requestNote}
                   onChange={(e) => setRequestNote(e.target.value)}
-                  placeholder="Anything the office should know?"
+                  placeholder={t("Anything the office should know?")}
                   className="min-h-[72px] resize-none text-sm"
                 />
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setPickedProduct(null)}>Back</Button>
+                <Button variant="outline" onClick={() => setPickedProduct(null)}>{t("Back")}</Button>
                 <Button onClick={handleSendRequest} disabled={requestMaterials.isPending}>
-                  {requestMaterials.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send to office"}
+                  {requestMaterials.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : t("Send to office")}
                 </Button>
               </DialogFooter>
             </div>
@@ -1312,15 +1316,15 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
               <Input
                 value={productQuery}
                 onChange={(e) => setProductQuery(e.target.value)}
-                placeholder="Search materials…"
+                placeholder={t("Search materials…")}
                 autoFocus
               />
               <div className="max-h-72 overflow-y-auto flex flex-col gap-1.5">
                 {searchingProducts && productResults.length === 0 && (
-                  <p className="text-sm text-slate-400 text-center py-4">Searching…</p>
+                  <p className="text-sm text-slate-400 text-center py-4">{t("Searching…")}</p>
                 )}
                 {!searchingProducts && productResults.length === 0 && (
-                  <p className="text-sm text-slate-400 text-center py-4">No materials found.</p>
+                  <p className="text-sm text-slate-400 text-center py-4">{t("No materials found.")}</p>
                 )}
                 {productResults.map((p) => (
                   <button
@@ -1343,11 +1347,11 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       <Dialog open={upsellOpen} onOpenChange={setUpsellOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Suggest work</DialogTitle>
+            <DialogTitle>{t("Suggest work")}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div>
-              <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">What does it need?</p>
+              <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">{t("What does it need?")}</p>
               <div className="flex flex-col gap-1.5">
                 {upsellServices.map((svc) => {
                   const picked = upsellServiceId === svc.id;
@@ -1375,10 +1379,10 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
 
             <div>
               <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-neutral-300">
-                Anything the office should know?
+                {t("Anything the office should know?")}
               </p>
               <Textarea
-                placeholder="e.g. front beds are thin, client mentioned it too"
+                placeholder={t("e.g. front beds are thin, client mentioned it too")}
                 value={upsellNote}
                 onChange={(e) => setUpsellNote(e.target.value)}
                 className="min-h-[80px] resize-none text-sm"
@@ -1396,26 +1400,26 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 />
                 <Camera className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                  {upsellPhoto ? "Photo attached — tap to replace" : "Add a photo"}
+                  {upsellPhoto ? t("Photo attached — tap to replace") : "Add a photo"}
                 </span>
               </label>
               <p className="mt-1 text-xs text-slate-400 dark:text-neutral-500">
-                A photo usually saves the office a trip out to quote it.
+                {t("A photo usually saves the office a trip out to quote it.")}
               </p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setUpsellOpen(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button
               onClick={handleSubmitUpsell}
               disabled={!upsellServiceId || submitUpsell.isPending}
             >
               {submitUpsell.isPending ? (
-                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Sending…</>
+                <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> {t("Sending…")}</>
               ) : (
-                "Send to office"
+                t("Send to office")
               )}
             </Button>
           </DialogFooter>
@@ -1435,18 +1439,18 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       <Dialog open={!!skipTargetId} onOpenChange={(open) => !open && setSkipTargetId(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Skip this service?</DialogTitle>
+            <DialogTitle>{t("Skip this service?")}</DialogTitle>
           </DialogHeader>
           <div className="py-2">
             <Textarea
-              placeholder="Reason for skipping (required)"
+              placeholder={t("Reason for skipping (required)")}
               value={skipReason}
               onChange={e => setSkipReason(e.target.value)}
               className="min-h-[100px]"
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSkipTargetId(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setSkipTargetId(null)}>{t("Cancel")}</Button>
             <Button
               variant="destructive"
               onClick={handleSkip}
@@ -1462,22 +1466,22 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       <Dialog open={clockOutOpen} onOpenChange={setClockOutOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Stop Job</DialogTitle>
+            <DialogTitle>{t("Stop Job")}</DialogTitle>
           </DialogHeader>
           <div className="py-2 space-y-2">
-            <p className="text-sm text-slate-600 dark:text-neutral-400">Add any completion notes before finishing.</p>
+            <p className="text-sm text-slate-600 dark:text-neutral-400">{t("Add any completion notes before finishing.")}</p>
             <p className="text-xs text-slate-500 dark:text-neutral-500">
-              Completion notes can appear on the client&apos;s invoice, so keep them professional and client-friendly.
+              {t("Completion notes can appear on the client's invoice, so keep them professional and client-friendly.")}
             </p>
             <Textarea
-              placeholder="Completion notes (optional)"
+              placeholder={t("Completion notes (optional)")}
               value={clockOutNotes}
               onChange={e => setClockOutNotes(e.target.value)}
               className="min-h-[100px]"
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setClockOutOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setClockOutOpen(false)}>{t("Cancel")}</Button>
             <Button
               className="bg-green-600 hover:bg-green-700"
               onClick={handleClockOut}

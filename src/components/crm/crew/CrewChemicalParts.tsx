@@ -18,6 +18,7 @@ import {
   type CrewChemicalCatalog,
   type VisitChemicalApplication,
 } from "@/lib/hooks/use-crew-app";
+import { t } from "@/lib/crew-i18n";
 
 /** The product label's directions, one tap away, plus the label / SDS documents the office filed
  *  for this product in the Reference Library. Renders nothing when there is nothing to show. */
@@ -38,13 +39,13 @@ export function ChemicalLabel({
         className="flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 min-h-8"
       >
         {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        {open ? "Hide label" : "View label"}
+        {open ? t("Hide label") : t("View label")}
       </button>
       {open && (
         <div className="mt-1 space-y-1 rounded-md bg-card border border-border px-3 py-2 text-xs text-slate-700 dark:text-neutral-300">
-          {restricted && <p className="font-semibold text-red-700 dark:text-red-400">Restricted-use product</p>}
-          {epaNumber && <p><span className="text-muted-foreground">EPA #</span> {epaNumber}</p>}
-          {reEntryInterval && <p><span className="text-muted-foreground">Re-entry interval</span> {reEntryInterval}</p>}
+          {restricted && <p className="font-semibold text-red-700 dark:text-red-400">{t("Restricted-use product")}</p>}
+          {epaNumber && <p><span className="text-muted-foreground">{t("EPA #")}</span> {epaNumber}</p>}
+          {reEntryInterval && <p><span className="text-muted-foreground">{t("Re-entry interval")}</span> {reEntryInterval}</p>}
           {labelInstructions && <p className="whitespace-pre-wrap">{labelInstructions}</p>}
           {documents.map((d) => (
             <Button
@@ -52,7 +53,7 @@ export function ChemicalLabel({
               type="button"
               variant="outline"
               className="h-10 w-full justify-start gap-2 text-xs"
-              onClick={() => openCrewReference(d.id).catch(() => toast.error("Couldn't open the document — check your connection."))}
+              onClick={() => openCrewReference(d.id).catch(() => toast.error(t("Couldn't open the document — check your connection.")))}
             >
               Open {d.title}
             </Button>
@@ -131,13 +132,13 @@ export function ChemicalConditionsFields({
         <p className="mt-0.5 text-xs text-muted-foreground">
           National Weather Service{reading.source === "forecast" ? " forecast" : ""}, {new Date(reading.observedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
           {reading.description ? ` · ${reading.description}` : ""}.{" "}
-          {onUseReading && <button type="button" onClick={onUseReading} className="font-medium text-emerald-700 dark:text-emerald-400 underline">Update</button>}
+          {onUseReading && <button type="button" onClick={onUseReading} className="font-medium text-emerald-700 dark:text-emerald-400 underline">{t("Update")}</button>}
         </p>
       )}
       <div className="mt-2 grid grid-cols-3 gap-2">
         {showWeather && field("temperature", "Temp °F", "decimal", "72")}
-        {showWeather && field("windSpeed", "Wind mph", "decimal", "5")}
-        {showWeather && field("windDirection", "Wind from", "text", "NW")}
+        {showWeather && field("windSpeed", t("Wind mph"), "decimal", "5")}
+        {showWeather && field("windDirection", t("Wind from"), "text", "NW")}
         {showPh && field("phLevel", "pH", "decimal", "7.0")}
       </div>
     </div>
@@ -180,9 +181,9 @@ export function AddChemicalForm({
 
   async function submit() {
     const n = parseFloat(amount);
-    if (!productId) return toast.error("Choose the product");
-    if (!unitId) return toast.error("Choose a unit");
-    if (!Number.isFinite(n) || n <= 0) return toast.error("Enter how much was used");
+    if (!productId) return toast.error(t("Choose the product"));
+    if (!unitId) return toast.error(t("Choose a unit"));
+    if (!Number.isFinite(n) || n <= 0) return toast.error(t("Enter how much was used"));
     await add.mutateAsync({
       visitId,
       productId,
@@ -193,7 +194,7 @@ export function AddChemicalForm({
       ...(apply?.areasTreatedIds !== undefined ? { areasTreatedIds: apply.areasTreatedIds } : {}),
       conditions: conditionsPayload(sharedConditions ?? ownConditions),
     });
-    toast.success("Chemical added");
+    toast.success(t("Chemical added"));
     setProductId("");
     setAmount("");
     setApply(undefined);
@@ -203,19 +204,19 @@ export function AddChemicalForm({
   if (!open) {
     return (
       <Button type="button" variant="outline" className="w-full h-11 gap-2" disabled={disabled} onClick={() => setOpen(true)}>
-        <Plus className="h-4 w-4" /> Add a chemical
+        <Plus className="h-4 w-4" /> {t("Add a chemical")}
       </Button>
     );
   }
   return (
     <div className="rounded-lg bg-card border border-border px-3 py-3 space-y-2">
-      <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">Add a chemical you applied</p>
+      <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{t("Add a chemical you applied")}</p>
       {!catalog ? (
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       ) : (
         <>
           <Select value={productId} onValueChange={pickProduct}>
-            <SelectTrigger className="h-11 text-base"><SelectValue placeholder="Product" /></SelectTrigger>
+            <SelectTrigger className="h-11 text-base"><SelectValue placeholder={t("Product")} /></SelectTrigger>
             <SelectContent>
               {catalog.products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
             </SelectContent>
@@ -228,11 +229,11 @@ export function AddChemicalForm({
               step="any"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              placeholder="Amount used"
+              placeholder={t("Amount used")}
               className="h-11 w-36 text-base"
             />
             <Select value={unitId} onValueChange={setUnitId}>
-              <SelectTrigger className="h-11 flex-1 text-base"><SelectValue placeholder="Unit" /></SelectTrigger>
+              <SelectTrigger className="h-11 flex-1 text-base"><SelectValue placeholder={t("Unit")} /></SelectTrigger>
               <SelectContent>
                 {catalog.units.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
               </SelectContent>
@@ -254,7 +255,7 @@ export function AddChemicalForm({
             />
           )}
           <div className="flex gap-2">
-            <Button type="button" variant="outline" className="h-11 flex-1" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="button" variant="outline" className="h-11 flex-1" onClick={() => setOpen(false)}>{t("Cancel")}</Button>
             <Button type="button" className="h-11 flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={submit} disabled={add.isPending}>
               {add.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save chemical"}
             </Button>
@@ -340,23 +341,23 @@ export function ChemicalApplyFields({
         className="flex items-center gap-1 text-xs font-medium text-slate-600 dark:text-neutral-400 min-h-8"
       >
         {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        {open ? "Hide how applied" : summary ? `How applied: ${summary}` : "How applied (method, target, area)"}
+        {open ? t("Hide how applied") : summary ? t("How applied: {s}", { s: summary }) : t("How applied (method, target, area)")}
       </button>
       {open && (
         <div className="mt-1 space-y-2 rounded-md bg-card border border-border px-3 py-2">
           {catalog.methods.length > 0 && (
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Method</p>
+              <p className="text-xs text-muted-foreground mb-1">{t("Method")}</p>
               <Select value={methodId ?? ""} onValueChange={(v) => onChange({ ...edit, methodId: v })}>
-                <SelectTrigger className="h-11 text-base"><SelectValue placeholder="Method" /></SelectTrigger>
+                <SelectTrigger className="h-11 text-base"><SelectValue placeholder={t("Method")} /></SelectTrigger>
                 <SelectContent>
                   {catalog.methods.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
           )}
-          <ChipGroup label="Target" options={catalog.targets} selected={targetIds} onToggle={(id) => onChange({ ...edit, targetIds: toggle(targetIds, id) })} />
-          <ChipGroup label="Area treated" options={catalog.areasTreated} selected={areaIds} onToggle={(id) => onChange({ ...edit, areasTreatedIds: toggle(areaIds, id) })} />
+          <ChipGroup label={t("Target")} options={catalog.targets} selected={targetIds} onToggle={(id) => onChange({ ...edit, targetIds: toggle(targetIds, id) })} />
+          <ChipGroup label={t("Area treated")} options={catalog.areasTreated} selected={areaIds} onToggle={(id) => onChange({ ...edit, areasTreatedIds: toggle(areaIds, id) })} />
         </div>
       )}
     </div>

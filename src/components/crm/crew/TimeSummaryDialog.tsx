@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useCrewMemberTimes, useUpsertCrewMemberTime } from "@/lib/hooks/use-crew-app";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { instantToZoneWallClock, zoneWallClockToInstant } from "@/lib/time/zone";
+import { t } from "@/lib/crew-i18n";
 
 interface RowDraft {
   crewMemberId: string;
@@ -61,13 +62,13 @@ export function TimeSummaryDialog({
     if (!open) return;
     setDrafts(
       times
-        .filter((t) => t.clockedInAt && t.clockedOutAt)
-        .map((t) => {
-          const i = instantToZoneWallClock(new Date(t.clockedInAt!), tz);
-          const o = instantToZoneWallClock(new Date(t.clockedOutAt!), tz);
+        .filter((row) => row.clockedInAt && row.clockedOutAt)
+        .map((row) => {
+          const i = instantToZoneWallClock(new Date(row.clockedInAt!), tz);
+          const o = instantToZoneWallClock(new Date(row.clockedOutAt!), tz);
           return {
-            crewMemberId: t.crewMemberId,
-            name: t.memberName ?? "Crew member",
+            crewMemberId: row.crewMemberId,
+            name: row.memberName ?? t("Crew member"),
             inDate: i.date,
             outDate: o.date,
             inTime: i.time,
@@ -107,7 +108,7 @@ export function TimeSummaryDialog({
       }
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save the times");
+      setError(err instanceof Error ? err.message : t("Couldn't save the times"));
     } finally {
       setSaving(false);
     }
@@ -117,18 +118,18 @@ export function TimeSummaryDialog({
     <Dialog open={open} onOpenChange={(o) => !o && !saving && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Time summary</DialogTitle>
+          <DialogTitle>{t("Time summary")}</DialogTitle>
         </DialogHeader>
         {isLoading ? (
           <div className="flex justify-center py-6">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : drafts.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No individual times were recorded for this job.</p>
+          <p className="text-sm text-muted-foreground">{t("No individual times were recorded for this job.")}</p>
         ) : (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Check each person&apos;s start and finish. Change one if someone arrived late or left early.
+              {t("Check each person's start and finish. Change one if someone arrived late or left early.")}
             </p>
             {drafts.map((d, idx) => {
               const mins = minutesBetween(d.inDate, d.inTime, d.outDate, d.outTime, tz);
@@ -140,11 +141,11 @@ export function TimeSummaryDialog({
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <label className="text-xs text-muted-foreground">
-                      Started
+                      {t("Started")}
                       <Input type="time" value={d.inTime} onChange={(e) => patch(idx, { inTime: e.target.value })} className="mt-0.5 h-11" />
                     </label>
                     <label className="text-xs text-muted-foreground">
-                      Finished
+                      {t("Finished")}
                       <Input type="time" value={d.outTime} onChange={(e) => patch(idx, { outTime: e.target.value })} className="mt-0.5 h-11" />
                     </label>
                   </div>
@@ -152,10 +153,10 @@ export function TimeSummaryDialog({
               );
             })}
             <div className="flex justify-between border-t pt-2 text-sm">
-              <span className="text-muted-foreground">Total crew time</span>
+              <span className="text-muted-foreground">{t("Total crew time")}</span>
               <span className="font-semibold">{fmtMinutes(totalMinutes)}</span>
             </div>
-            {invalid && <p className="text-xs text-red-600">A finish time must be after its start.</p>}
+            {invalid && <p className="text-xs text-red-600">{t("A finish time must be after its start.")}</p>}
             {error && <p className="text-xs text-red-600">{error}</p>}
           </div>
         )}

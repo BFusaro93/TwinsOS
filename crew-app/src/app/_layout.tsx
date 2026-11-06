@@ -2,10 +2,12 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { AuthProvider } from '@/lib/auth-context';
+import { LocaleProvider } from '@/lib/i18n';
 import { OfflineQueueProvider } from '@/lib/offline/queue-context';
 
 export default function RootLayout() {
   return (
+    <LocaleProvider>
     <AuthProvider>
       {/* Above (app) so the queue/sync engine is alive for the whole
           authenticated session, not just while a particular screen is
@@ -20,5 +22,6 @@ export default function RootLayout() {
         </Stack>
       </OfflineQueueProvider>
     </AuthProvider>
+    </LocaleProvider>
   );
 }

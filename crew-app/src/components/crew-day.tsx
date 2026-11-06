@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Tex
 import { fetchCrewDay, postCrewDay, setMemberAbsent } from '@/lib/api';
 import { C } from '@/lib/colors';
 import type { CrewDay, CrewDayAction } from '@/lib/types';
+import { t } from '@/lib/i18n';
 
 // The crew's paid day (shop to shop) and per-member attendance — the native
 // counterpart of the web crew home's Start Day / End Day banner and Edit Crew
@@ -28,7 +29,7 @@ export function useCrewDay() {
       setError(null);
     } catch (err) {
       // Not a crew login (403) or offline — the banner just stays hidden/stale.
-      setError(err instanceof Error ? err.message : 'Couldn\'t load the crew day');
+      setError(err instanceof Error ? err.message : t('Couldn\'t load the crew day'));
     }
   }, []);
 
@@ -45,9 +46,8 @@ export function useCrewDay() {
         await refresh();
         return true;
       } catch (err) {
-        Alert.alert(
-          "That didn't go through",
-          err instanceof Error && err.message ? err.message : 'Check your connection and try again.'
+        Alert.alert(t('That didn\'t go through'),
+          err instanceof Error && err.message ? err.message : t('Check your connection and try again.')
         );
         return false;
       } finally {
@@ -96,9 +96,9 @@ export function CrewDayBanner({
   const endDay = () => {
     const go = () => void act('end_day');
     if (anyJobActive) {
-      Alert.alert('A job is still in progress', 'End the day anyway?', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'End Day', style: 'destructive', onPress: go },
+      Alert.alert(t('A job is still in progress'), t('End the day anyway?'), [
+        { text: t('Cancel'), style: 'cancel' },
+        { text: t('End Day'), style: 'destructive', onPress: go },
       ]);
     } else {
       go();
@@ -120,29 +120,29 @@ export function CrewDayBanner({
           {busyKey === 'start_day:' ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text style={styles.startDayText}>Start Day</Text>
+            <Text style={styles.startDayText}>{t('Start Day')}</Text>
           )}
         </Pressable>
       ) : dayOpen ? (
         <View style={styles.dayBanner}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.dayBannerTitle}>Day started {formatClock(startedAt)}</Text>
-            <Text style={styles.dayBannerSubtitle}>{onClock.length} on the clock</Text>
+            <Text style={styles.dayBannerTitle}>{t('Day started {time}', { time: formatClock(startedAt) })}</Text>
+            <Text style={styles.dayBannerSubtitle}>{t('{n} on the clock', { n: onClock.length })}</Text>
           </View>
           <Pressable
             style={({ pressed }) => [styles.endDay, pressed && styles.pressed, busyKey === 'end_day:' && styles.disabled]}
             disabled={busyKey === 'end_day:'}
             onPress={endDay}
           >
-            <Text style={styles.endDayText}>End Day</Text>
+            <Text style={styles.endDayText}>{t('End Day')}</Text>
           </Pressable>
         </View>
       ) : dayEnded ? (
-        <Text style={styles.dayEnded}>Day ended — everyone is clocked out.</Text>
+        <Text style={styles.dayEnded}>{t('Day ended — everyone is clocked out.')}</Text>
       ) : null}
 
       <Pressable onPress={onEditCrew} hitSlop={8} style={styles.editCrewLink}>
-        <Text style={styles.editCrewLinkText}>Edit crew</Text>
+        <Text style={styles.editCrewLinkText}>{t('Edit crew')}</Text>
       </Pressable>
     </View>
   );
@@ -172,9 +172,9 @@ export function EditCrewModal({
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetContent}>
         <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>Edit crew</Text>
+          <Text style={styles.sheetTitle}>{t('Edit crew')}</Text>
           <Pressable onPress={onClose} hitSlop={12}>
-            <Text style={styles.doneLink}>Done</Text>
+            <Text style={styles.doneLink}>{t('Done')}</Text>
           </Pressable>
         </View>
 
@@ -193,7 +193,7 @@ export function EditCrewModal({
                     {m.endedAt ? ` · Out: ${formatClock(m.endedAt)}` : ''}
                   </Text>
                 ) : null}
-                {m.absent && !m.startedAt ? <Text style={styles.memberMeta}>Not working today</Text> : null}
+                {m.absent && !m.startedAt ? <Text style={styles.memberMeta}>{t('Not working today')}</Text> : null}
               </View>
 
               {busy ? (
@@ -203,20 +203,20 @@ export function EditCrewModal({
                   style={[styles.memberButton, styles.memberButtonOut]}
                   onPress={() => void act('member_out', { crewMemberId: m.id, visitId })}
                 >
-                  <Text style={styles.memberButtonOutText}>Left for the day</Text>
+                  <Text style={styles.memberButtonOutText}>{t('Left for the day')}</Text>
                 </Pressable>
               ) : (
                 <View style={styles.memberActions}>
                   {!done && !m.absent ? (
                     <Pressable onPress={() => void absent(m.id, true, visitId)} hitSlop={8}>
-                      <Text style={styles.memberLink}>Not working</Text>
+                      <Text style={styles.memberLink}>{t('Not working')}</Text>
                     </Pressable>
                   ) : null}
                   <Pressable
                     style={[styles.memberButton, styles.memberButtonIn]}
                     onPress={() => void act('member_in', { crewMemberId: m.id, visitId })}
                   >
-                    <Text style={styles.memberButtonInText}>{done ? 'Back' : 'Clock In'}</Text>
+                    <Text style={styles.memberButtonInText}>{done ? t('Back') : t('Clock In')}</Text>
                   </Pressable>
                 </View>
               )}
@@ -228,7 +228,7 @@ export function EditCrewModal({
           <View style={styles.addBlock}>
             <Pressable onPress={() => setShowAvailable((v) => !v)}>
               <Text style={styles.addTitle}>
-                {showAvailable ? 'Hide' : 'Add someone to my crew today'}
+                {showAvailable ? 'Hide' : t('Add someone to my crew today')}
               </Text>
             </Pressable>
             {showAvailable
@@ -244,7 +244,7 @@ export function EditCrewModal({
                           style={[styles.memberButton, styles.memberButtonIn]}
                           onPress={() => void act('add_member', { crewMemberId: a.id, visitId })}
                         >
-                          <Text style={styles.memberButtonInText}>Add</Text>
+                          <Text style={styles.memberButtonInText}>{t('Add')}</Text>
                         </Pressable>
                       )}
                     </View>
@@ -255,7 +255,7 @@ export function EditCrewModal({
         ) : null}
 
         <Text style={styles.footnote}>
-          Start Day clocks in everyone working. Use this for anyone who arrives late, is out today, or leaves early.
+          {t('Start Day clocks in everyone working. Use this for anyone who arrives late, is out today, or leaves early.')}
         </Text>
       </ScrollView>
     </Modal>

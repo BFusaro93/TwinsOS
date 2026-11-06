@@ -16,6 +16,7 @@ import { formatTimeOfDay } from "@/lib/utils";
 import { openInMaps } from "@/lib/utils/maps";
 import type { Stop } from "@/lib/utils/visit-stops";
 import type { VisitStatus } from "@/types/crm-jobs";
+import { t, CrewLanguageToggle, crewDateLocale } from "@/lib/crew-i18n";
 
 function DriveElapsed({ start }: { start: string }) {
   const [, forceUpdate] = useState(0);
@@ -66,7 +67,7 @@ function StopCard({ stop, partners, onClick, today }: { stop: Stop; partners: st
             )}
             {fromEarlierDay && (
               <span className="shrink-0 inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-[10px] font-medium px-1.5 py-0.5">
-                From yesterday
+                {t("From yesterday")}
               </span>
             )}
           </div>
@@ -106,9 +107,9 @@ function StopCard({ stop, partners, onClick, today }: { stop: Stop; partners: st
           </span>
           {stop.clockedInAt && !stop.clockedOutAt && (
             stop.pausedAt ? (
-              <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">On Break</span>
+              <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">{t("On Break")}</span>
             ) : (
-              <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">Running</span>
+              <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">{t("Running")}</span>
             )
           )}
           <ChevronRight className="h-4 w-4 text-slate-300 dark:text-neutral-500 mt-1" />
@@ -178,21 +179,22 @@ export default function CrewSchedulePage() {
             <Button variant="outline" size="sm" className="gap-1.5" asChild>
               <Link href="/home">
                 <Home className="h-4 w-4" />
-                Home
+                {t("Home")}
               </Link>
             </Button>
             <Button variant="outline" size="sm" className="gap-1.5" asChild>
               <Link href="/crm/crew/reference">
                 <BookOpen className="h-4 w-4" />
-                Reference
+                {t("Reference")}
               </Link>
             </Button>
+            <CrewLanguageToggle />
           </div>
           {currentUserLoaded && (
             <div className="flex min-w-0 items-center gap-2 rounded-lg bg-brand-50 dark:bg-brand-900/30 px-3 py-1.5 text-right">
               <UserCircle2 className="h-5 w-5 shrink-0 text-brand-600 dark:text-brand-400" />
               <div className="min-w-0 leading-tight">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-brand-600/70 dark:text-brand-400/70">Signed in as</p>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-brand-600/70 dark:text-brand-400/70">{t("Signed in as")}</p>
                 <p className="break-words text-sm font-bold text-brand-800 dark:text-brand-300">{currentUser.name}</p>
               </div>
             </div>
@@ -202,10 +204,10 @@ export default function CrewSchedulePage() {
         <div className="flex items-center justify-between mt-1">
           <div>
             <p className="text-xs text-slate-400 dark:text-neutral-500 uppercase tracking-wide font-medium">
-              {format(parseISO(today), "EEEE, MMMM d")}
+              {format(parseISO(today), "EEEE, MMMM d", { locale: crewDateLocale() })}
             </p>
             <h1 className="text-lg font-bold text-slate-900 dark:text-neutral-100">
-              {crewInfo?.crewName ?? "My Schedule"}
+              {crewInfo?.crewName ?? t("My Schedule")}
             </h1>
           </div>
           {/* The dialog only exists for a linked crew; the button did nothing otherwise. */}
@@ -216,7 +218,7 @@ export default function CrewSchedulePage() {
               onClick={() => setEditCrewOpen(true)}
             >
               <Users className="h-4 w-4" />
-              Edit Crew
+              {t("Edit Crew")}
             </Button>
           )}
         </div>
@@ -225,7 +227,7 @@ export default function CrewSchedulePage() {
         {total > 0 && (
           <div className="mt-3">
             <div className="flex justify-between text-xs text-muted-foreground mb-1">
-              <span>{resolved} of {total} done{resolved > completed ? ` (${resolved - completed} skipped)` : ""}</span>
+              <span>{t("{done} of {total} done", { done: resolved, total })}{resolved > completed ? ` ${t("({n} skipped)", { n: resolved - completed })}` : ""}</span>
               <span>{Math.round((resolved / total) * 100)}%</span>
             </div>
             <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -249,19 +251,19 @@ export default function CrewSchedulePage() {
               disabled={dayAction.isPending || !crewDayLoaded || dayMembers.length === 0}
             >
               {dayAction.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sun className="h-5 w-5" />}
-              Start Day
+              {t("Start Day")}
             </Button>
             {/* Only once the roster has actually loaded — it flashed on every load before. */}
             {crewDayLoaded && dayMembers.length === 0 && (
               <p className="mt-2 text-center text-xs text-amber-700 dark:text-amber-400">
-                No one is on your crew today. Tap Edit Crew to add the people working, or ask the office to add them under Team → Crews.
+                {t("No one is on your crew today. Tap Edit Crew to add the people working, or ask the office to add them under Team → Crews.")}
               </p>
             )}
           </>
         ) : dayOpen ? (
           <div className="bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-green-800 dark:text-green-300">Day started {dayFromYesterday ? "yesterday " : ""}{clock(dayStartedAt)}</p>
+              <p className="text-sm font-medium text-green-800 dark:text-green-300">{dayFromYesterday ? t("Day started yesterday {time}", { time: clock(dayStartedAt) }) : t("Day started {time}", { time: clock(dayStartedAt) })}</p>
               <p className="text-xs text-green-700 dark:text-green-400">
                 {dayMembers.filter(m => m.startedAt && !m.endedAt).length} on the clock
               </p>
@@ -271,18 +273,18 @@ export default function CrewSchedulePage() {
               variant="outline"
               className="gap-1.5 border-red-300 dark:border-red-800 text-red-600 dark:text-red-400"
               onClick={() => {
-                if (anyJobActive && !window.confirm("A job is still in progress. End the day anyway?")) return;
+                if (anyJobActive && !window.confirm(t("A job is still in progress. End the day anyway?"))) return;
                 dayAction.mutate({ action: "end_day" });
               }}
               disabled={dayAction.isPending}
             >
               {dayAction.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Moon className="h-4 w-4" />}
-              End Day
+              {t("End Day")}
             </Button>
           </div>
         ) : (
           <p className="text-xs text-center text-slate-400 dark:text-neutral-500">
-            {dayEnded && "Day ended — everyone is clocked out."}
+            {dayEnded && t("Day ended — everyone is clocked out.")}
           </p>
         )}
       </div>
@@ -295,7 +297,7 @@ export default function CrewSchedulePage() {
             <div>
               <p className="text-sm font-medium text-blue-800 dark:text-blue-300 flex items-center gap-1.5">
                 <Car className="h-3.5 w-3.5" />
-                Driving
+                {t("Driving")}
               </p>
               <p className="text-xs text-blue-600 dark:text-blue-400">
                 Since {clock(drive.openSegment.startedAt)}
@@ -312,7 +314,7 @@ export default function CrewSchedulePage() {
                 disabled={endDrive.isPending}
               >
                 {endDrive.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}
-                Arrived
+                {t("Arrived")}
               </Button>
             </div>
           </div>
@@ -326,13 +328,13 @@ export default function CrewSchedulePage() {
               disabled={startDrive.isPending || anyJobActive}
             >
               {startDrive.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Car className="h-4 w-4" />}
-              Start Drive
+              {t("Start Drive")}
             </Button>
             {/* A title tooltip never shows on a phone — say it. */}
             {anyJobActive ? (
-              <p className="text-xs text-slate-500 dark:text-neutral-400 text-right">Stop the active job to start drive time</p>
+              <p className="text-xs text-slate-500 dark:text-neutral-400 text-right">{t("Stop the active job to start drive time")}</p>
             ) : !!drive?.totalMinutes && (
-              <p className="text-xs text-slate-400 dark:text-neutral-500">Drive today: {drive.totalMinutes}m</p>
+              <p className="text-xs text-slate-400 dark:text-neutral-500">{t("Drive today: {m}m", { m: drive.totalMinutes })}</p>
             )}
           </div>
         )}
@@ -353,15 +355,15 @@ export default function CrewSchedulePage() {
             <AlertCircle className="h-10 w-10 text-amber-500 mb-3" />
             {/not authenticated|jwt|session|401/i.test(stopsErr instanceof Error ? stopsErr.message : String(stopsErr ?? "")) ? (
               <>
-                <p className="font-medium text-slate-700 dark:text-neutral-300">You&apos;re signed out</p>
-                <p className="text-sm text-slate-500 dark:text-neutral-400 mt-1">Sign in again to see today&apos;s jobs.</p>
-                <Button className="mt-4 min-h-11" asChild><Link href="/login">Sign in</Link></Button>
+                <p className="font-medium text-slate-700 dark:text-neutral-300">{t("You're signed out")}</p>
+                <p className="text-sm text-slate-500 dark:text-neutral-400 mt-1">{t("Sign in again to see today's jobs.")}</p>
+                <Button className="mt-4 min-h-11" asChild><Link href="/login">{t("Sign in")}</Link></Button>
               </>
             ) : (
               <>
-                <p className="font-medium text-slate-700 dark:text-neutral-300">Couldn&apos;t load today&apos;s jobs</p>
-                <p className="text-sm text-slate-500 dark:text-neutral-400 mt-1">Check your signal, then try again. Your jobs are still scheduled.</p>
-                <Button variant="outline" className="mt-4 min-h-11" onClick={() => void refetchStops()}>Try again</Button>
+                <p className="font-medium text-slate-700 dark:text-neutral-300">{t("Couldn't load today's jobs")}</p>
+                <p className="text-sm text-slate-500 dark:text-neutral-400 mt-1">{t("Check your signal, then try again. Your jobs are still scheduled.")}</p>
+                <Button variant="outline" className="mt-4 min-h-11" onClick={() => void refetchStops()}>{t("Try again")}</Button>
               </>
             )}
           </div>
@@ -369,8 +371,8 @@ export default function CrewSchedulePage() {
 
         {allDone && (
           <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/40 px-4 py-3 text-center">
-            <p className="font-medium text-green-800 dark:text-green-300">All stops done for today</p>
-            {dayOpen && <p className="text-sm text-green-700 dark:text-green-400 mt-0.5">Tap End Day when the crew is back at the shop.</p>}
+            <p className="font-medium text-green-800 dark:text-green-300">{t("All stops done for today")}</p>
+            {dayOpen && <p className="text-sm text-green-700 dark:text-green-400 mt-0.5">{t("Tap End Day when the crew is back at the shop.")}</p>}
           </div>
         )}
 
@@ -379,15 +381,15 @@ export default function CrewSchedulePage() {
             <CheckCircle2 className="h-12 w-12 text-slate-300 dark:text-neutral-500 mb-3" />
             {crewInfo === null ? (
               <>
-                <p className="font-medium text-slate-600 dark:text-neutral-400">Your login isn&apos;t linked to a crew</p>
+                <p className="font-medium text-slate-600 dark:text-neutral-400">{t("Your login isn't linked to a crew")}</p>
                 <p className="text-sm text-slate-400 dark:text-neutral-500 mt-1">
-                  Jobs can&apos;t show up here until the office links this login to a crew (Team → Crews → Linked Login).
+                  {t("Jobs can't show up here until the office links this login to a crew (Team → Crews → Linked Login).")}
                 </p>
               </>
             ) : (
               <>
-                <p className="font-medium text-slate-600 dark:text-neutral-400">No jobs scheduled today</p>
-                <p className="text-sm text-slate-400 dark:text-neutral-500 mt-1">Check back later or contact the office.</p>
+                <p className="font-medium text-slate-600 dark:text-neutral-400">{t("No jobs scheduled today")}</p>
+                <p className="text-sm text-slate-400 dark:text-neutral-500 mt-1">{t("Check back later or contact the office.")}</p>
               </>
             )}
           </div>
@@ -424,23 +426,23 @@ export default function CrewSchedulePage() {
           <div className="mt-4 p-3 bg-card rounded-xl border border-border flex justify-around text-center">
             <div>
               <p className="text-xl font-bold text-slate-900 dark:text-neutral-100">{total}</p>
-              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="text-xs text-muted-foreground">{t("Total")}</p>
             </div>
             <div>
               <p className="text-xl font-bold text-green-600 dark:text-green-400">{completed}</p>
-              <p className="text-xs text-muted-foreground">Done</p>
+              <p className="text-xs text-muted-foreground">{t("Done")}</p>
             </div>
             <div>
               <p className="text-xl font-bold text-amber-600 dark:text-amber-400">
                 {stops.filter(s => s.derivedStatus === "in_progress").length}
               </p>
-              <p className="text-xs text-muted-foreground">Active</p>
+              <p className="text-xs text-muted-foreground">{t("Active")}</p>
             </div>
             <div>
               <p className="text-xl font-bold text-slate-400 dark:text-neutral-500">
                 {stops.filter(s => s.derivedStatus === "scheduled" || s.derivedStatus === "dispatched").length}
               </p>
-              <p className="text-xs text-muted-foreground">Remaining</p>
+              <p className="text-xs text-muted-foreground">{t("Remaining")}</p>
             </div>
           </div>
         )}

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { openCrewReference, useCrewReference } from "@/lib/hooks/use-crew-app";
 import { REFERENCE_CATEGORIES, referenceCategoryLabel, type ReferenceCategory } from "@/types/crm-reference";
+import { t, crewIntlLocale } from "@/lib/crew-i18n";
 
 /** The crew's Reference Library: labels, Safety Data Sheets, SOPs and training. */
 export default function CrewReferencePage() {
@@ -29,7 +30,7 @@ export default function CrewReferencePage() {
     try {
       await openCrewReference(id);
     } catch {
-      toast.error("Couldn't open the document — check your connection.");
+      toast.error(t("Couldn't open the document — check your connection."));
     } finally {
       setOpening(null);
     }
@@ -40,13 +41,13 @@ export default function CrewReferencePage() {
       <div className="bg-card border-b border-border px-4 pt-[env(safe-area-inset-top)] pb-3 sticky top-0 z-10">
         <div className="flex items-center gap-3 py-2">
           <Button variant="outline" size="sm" className="gap-1.5 min-h-11" asChild>
-            <Link href="/crm/crew"><ArrowLeft className="h-4 w-4" /> Back</Link>
+            <Link href="/crm/crew"><ArrowLeft className="h-4 w-4" /> {t("Back")}</Link>
           </Button>
-          <h1 className="text-lg font-bold text-slate-900 dark:text-neutral-100">Reference</h1>
+          <h1 className="text-lg font-bold text-slate-900 dark:text-neutral-100">{t("Reference")}</h1>
         </div>
         <Input
           className="h-11 text-base"
-          placeholder="Search labels, SDS, procedures…"
+          placeholder={t("Search labels, SDS, procedures…")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -71,7 +72,7 @@ export default function CrewReferencePage() {
           <Loader2 className="mx-auto mt-8 h-6 w-6 animate-spin text-muted-foreground" />
         ) : rows.length === 0 ? (
           <p className="mt-8 text-center text-sm text-muted-foreground">
-            {docs.length === 0 ? "Your office hasn't added any documents yet." : "Nothing matches."}
+            {docs.length === 0 ? t("Your office hasn't added any documents yet.") : t("Nothing matches.")}
           </p>
         ) : (
           rows.map((d) => (
@@ -86,7 +87,7 @@ export default function CrewReferencePage() {
                 <span className="block text-sm font-semibold text-slate-800 dark:text-neutral-100">{d.title}</span>
                 <span className="block text-xs text-muted-foreground">
                   {referenceCategoryLabel(d.category)}
-                  {d.revisionDate ? ` · revised ${new Date(`${d.revisionDate}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}
+                  {d.revisionDate ? ` · ${t("revised")} ${new Date(`${d.revisionDate}T00:00:00`).toLocaleDateString(crewIntlLocale(), { month: "short", day: "numeric", year: "numeric" })}` : ""}
                 </span>
                 {d.description && <span className="mt-0.5 block text-xs text-muted-foreground">{d.description}</span>}
               </span>

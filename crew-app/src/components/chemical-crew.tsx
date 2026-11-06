@@ -11,6 +11,7 @@ import type {
   ConditionsReading,
   VisitChemicalApplication,
 } from '@/lib/types';
+import { t } from '@/lib/i18n';
 
 // The crew-side chemical pieces beyond "enter the amount": the product label, how it
 // was applied, conditions, and adding a product the office didn't preload. Mirrors
@@ -47,13 +48,13 @@ export function ChemicalLabel({
   return (
     <View>
       <Pressable onPress={() => setOpen((v) => !v)} hitSlop={8} style={styles.linkRow}>
-        <Text style={styles.linkText}>{open ? 'Hide label' : 'View label'}</Text>
+        <Text style={styles.linkText}>{open ? t('Hide label') : t('View label')}</Text>
       </Pressable>
       {open ? (
         <View style={styles.panel}>
-          {restricted ? <Text style={styles.restricted}>Restricted-use product</Text> : null}
-          {epaNumber ? <Text style={styles.panelText}>EPA # {epaNumber}</Text> : null}
-          {reEntryInterval ? <Text style={styles.panelText}>Re-entry interval: {reEntryInterval}</Text> : null}
+          {restricted ? <Text style={styles.restricted}>{t('Restricted-use product')}</Text> : null}
+          {epaNumber ? <Text style={styles.panelText}>{t('EPA # {n}', { n: epaNumber })}</Text> : null}
+          {reEntryInterval ? <Text style={styles.panelText}>{t('Re-entry interval: {v}', { v: reEntryInterval })}</Text> : null}
           {labelInstructions ? <Text style={styles.panelText}>{labelInstructions}</Text> : null}
           {documents.map((d) => (
             <Pressable
@@ -61,11 +62,11 @@ export function ChemicalLabel({
               style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
               onPress={() =>
                 void openReferenceDocument(d.id).then((ok) =>
-                  setDocError(ok ? null : "Couldn't open the document — check your connection.")
+                  setDocError(ok ? null : t('Couldn\'t open the document — check your connection.'))
                 )
               }
             >
-              <Text style={styles.addButtonText}>Open {d.title}</Text>
+              <Text style={styles.addButtonText}>{t('Open {title}', { title: d.title })}</Text>
             </Pressable>
           ))}
           {docError ? <Text style={styles.error}>{docError}</Text> : null}
@@ -140,24 +141,24 @@ export function ChemicalApplyFields({
   return (
     <View>
       <Pressable onPress={() => setOpen((v) => !v)} hitSlop={8} style={styles.linkRow}>
-        <Text style={styles.linkText}>{open ? 'Hide how applied' : 'How applied (method, target, area)'}</Text>
+        <Text style={styles.linkText}>{open ? t('Hide how applied') : t('How applied (method, target, area)')}</Text>
       </Pressable>
       {open ? (
         <View style={styles.panel}>
           <Chips
-            label="Method"
+            label={t('Method')}
             options={catalog.methods}
             selected={methodId ? [methodId] : []}
             onToggle={(id) => onChange({ ...edit, methodId: methodId === id ? null : id })}
           />
           <Chips
-            label="Target"
+            label={t('Target')}
             options={catalog.targets}
             selected={targetIds}
             onToggle={(id) => onChange({ ...edit, targetIds: toggle(targetIds, id) })}
           />
           <Chips
-            label="Area treated"
+            label={t('Area treated')}
             options={catalog.areasTreated}
             selected={areaIds}
             onToggle={(id) => onChange({ ...edit, areasTreatedIds: toggle(areaIds, id) })}
@@ -235,7 +236,7 @@ export function ChemicalConditionsFields({
   );
   return (
     <View style={styles.panel}>
-      <Text style={styles.panelTitle}>Conditions (optional)</Text>
+      <Text style={styles.panelTitle}>{t('Conditions (optional)')}</Text>
       {showWeather && reading ? (
         <Text style={styles.chipLabel}>
           National Weather Service{reading.source === 'forecast' ? ' forecast' : ''},{' '}
@@ -243,15 +244,15 @@ export function ChemicalConditionsFields({
           {reading.description ? ` · ${reading.description}` : ''}.{' '}
           {onUseReading ? (
             <Text style={styles.linkText} onPress={onUseReading}>
-              Update
+              {t('Update')}
             </Text>
           ) : null}
         </Text>
       ) : null}
       <View style={styles.condRow}>
         {showWeather ? field('temperature', 'Temp °F', true, '72') : null}
-        {showWeather ? field('windSpeed', 'Wind mph', true, '5') : null}
-        {showWeather ? field('windDirection', 'Wind from', false, 'NW') : null}
+        {showWeather ? field('windSpeed', t('Wind mph'), true, '5') : null}
+        {showWeather ? field('windDirection', t('Wind from'), false, 'NW') : null}
         {showPh ? field('phLevel', 'pH', true, '7.0') : null}
       </View>
     </View>
@@ -287,9 +288,9 @@ export function AddChemicalForm({
 
   async function submit() {
     const n = parseFloat(amount);
-    if (!productId) return setError('Choose the product.');
+    if (!productId) return setError(t('Choose the product.'));
     if (!unitId) return setError('Choose a unit.');
-    if (!Number.isFinite(n) || n <= 0) return setError('Enter how much was used.');
+    if (!Number.isFinite(n) || n <= 0) return setError(t('Enter how much was used.'));
     setError(null);
     setBusy(true);
     try {
@@ -299,7 +300,7 @@ export function AddChemicalForm({
       setOpen(false);
       onAdded();
     } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : "Couldn't add the chemical — check your connection.");
+      setError(err instanceof Error && err.message ? err.message : t('Couldn\'t add the chemical — check your connection.'));
     } finally {
       setBusy(false);
     }
@@ -318,38 +319,38 @@ export function AddChemicalForm({
   }
   return (
     <View style={styles.panel}>
-      <Text style={styles.panelTitle}>Add a chemical you applied</Text>
+      <Text style={styles.panelTitle}>{t('Add a chemical you applied')}</Text>
       <Chips
-        label="Product"
+        label={t('Product')}
         options={catalog.products}
         selected={productId ? [productId] : []}
         onToggle={pickProduct}
       />
       <View style={styles.condRow}>
         <View style={styles.condField}>
-          <Text style={styles.chipLabel}>Amount used</Text>
+          <Text style={styles.chipLabel}>{t('Amount used')}</Text>
           <TextInput
             style={styles.input}
             keyboardType="decimal-pad"
             value={amount}
             onChangeText={setAmount}
-            placeholder="0"
+            placeholder={t('0')}
             placeholderTextColor={C.textFaint}
           />
         </View>
       </View>
-      <Chips label="Unit" options={catalog.units} selected={unitId ? [unitId] : []} onToggle={setUnitId} />
+      <Chips label={t('Unit')} options={catalog.units} selected={unitId ? [unitId] : []} onToggle={setUnitId} />
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.buttonRow}>
         <Pressable onPress={() => setOpen(false)} style={styles.cancelButton}>
-          <Text style={styles.linkText}>Cancel</Text>
+          <Text style={styles.linkText}>{t('Cancel')}</Text>
         </Pressable>
         <Pressable
           disabled={busy}
           onPress={() => void submit()}
           style={({ pressed }) => [styles.saveButton, busy && styles.disabled, pressed && styles.pressed]}
         >
-          {busy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.saveButtonText}>Save chemical</Text>}
+          {busy ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.saveButtonText}>{t('Save chemical')}</Text>}
         </Pressable>
       </View>
     </View>

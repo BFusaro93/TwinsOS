@@ -28,6 +28,7 @@ import {
 } from '@/components/chemical-crew';
 import { SyncStatusChip } from '@/components/sync-status-chip';
 import { TimeSummaryModal } from '@/components/time-summary';
+import { TranslateNote } from '@/components/translate-note';
 import { ThemedText } from '@/components/themed-text';
 import {
   confirmChemicals,
@@ -79,6 +80,7 @@ import type {
   VisitPhoto,
   VisitRequisition,
 } from '@/lib/types';
+import { t } from '@/lib/i18n';
 
 const REQUISITION_STATUS_LABEL: Record<VisitRequisition['status'], string> = {
   draft: 'Submitted',
@@ -399,7 +401,7 @@ export default function StopDetailScreen() {
       if (!captured) return; // user canceled
       await enqueueAddPhoto(stop.anchorVisitId, captured.localUri, captured.mimeType, captured.fileName, phase);
     } catch (err) {
-      setPhotoError(err instanceof Error ? err.message : 'Failed to add photo');
+      setPhotoError(err instanceof Error ? err.message : t('Failed to add photo'));
     } finally {
       setIsCapturing(false);
     }
@@ -418,7 +420,7 @@ export default function StopDetailScreen() {
       }
       const amount = parseFloat(e.amount);
       if (!Number.isFinite(amount) || amount <= 0) {
-        setChemError(`Enter how much ${c.productName ?? 'chemical'} was used, or mark it Not used.`);
+        setChemError(t('Enter how much {name} was used, or mark it Not used.', { name: c.productName ?? t('chemical') }));
         return;
       }
       // Only what the crew actually changed is sent; the rest stays as the office planned it.
@@ -446,7 +448,7 @@ export default function StopDetailScreen() {
       setChemError(
         err instanceof Error && err.message
           ? err.message
-          : "Couldn't confirm chemicals — check your connection and try again."
+          : t('Couldn\'t confirm chemicals — check your connection and try again.')
       );
     } finally {
       setIsConfirmingChemicals(false);
@@ -479,13 +481,12 @@ export default function StopDetailScreen() {
   // invoice. Confirmed because it writes off real revenue.
   const handleMarkUsedNoInvoice = (material: JobProductMaterial, usedQty: number) => {
     if (!stop) return;
-    Alert.alert(
-      "Used — don't bill?",
-      `${material.productName} will come out of inventory but won't be added to the client's invoice.`,
+    Alert.alert(t('Used — don\'t bill?'),
+      t('{name} will come out of inventory but won\'t be added to the client\'s invoice.', { name: material.productName }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('Cancel'), style: 'cancel' },
         {
-          text: "Don't bill",
+          text: t("Don't bill"),
           style: 'destructive',
           onPress: () =>
             void enqueueRecordMaterialUsage(stop.anchorVisitId, material.id, material.productName, {
@@ -499,10 +500,10 @@ export default function StopDetailScreen() {
 
   const handleMarkNotUsed = (material: JobProductMaterial) => {
     if (!stop) return;
-    Alert.alert('Mark as not used?', `${material.productName} won't be counted as used on this job.`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('Mark as not used?'), `${material.productName} won't be counted as used on this job.`, [
+      { text: t('Cancel'), style: 'cancel' },
       {
-        text: 'Not Used',
+        text: t('Not Used'),
         style: 'destructive',
         onPress: () =>
           void enqueueRecordMaterialUsage(stop.anchorVisitId, material.id, material.productName, {
@@ -532,9 +533,9 @@ export default function StopDetailScreen() {
   };
 
   const confirmDiscard = (queueItemId: string, description: string) => {
-    Alert.alert('Discard this?', description, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Discard', style: 'destructive', onPress: () => void discard(queueItemId) },
+    Alert.alert(t('Discard this?'), description, [
+      { text: t('Cancel'), style: 'cancel' },
+      { text: t('Discard'), style: 'destructive', onPress: () => void discard(queueItemId) },
     ]);
   };
 
@@ -551,7 +552,7 @@ export default function StopDetailScreen() {
       <View style={[styles.centered, styles.screenBg]}>
         <Text style={styles.errorText}>{error}</Text>
         <Pressable style={styles.retryButton} onPress={() => void refetch()}>
-          <Text style={styles.retryButtonText}>Try again</Text>
+          <Text style={styles.retryButtonText}>{t('Try again')}</Text>
         </Pressable>
       </View>
     );
@@ -561,9 +562,9 @@ export default function StopDetailScreen() {
     return (
       <View style={[styles.centered, styles.screenBg]}>
         <ThemedText type="subtitle" style={styles.emptyTitle}>
-          Job not found
+          {t('Job not found')}
         </ThemedText>
-        <Text style={styles.emptyBody}>This job isn&apos;t in today&apos;s schedule anymore.</Text>
+        <Text style={styles.emptyBody}>{t('This job isn\'t in today\'s schedule anymore.')}</Text>
       </View>
     );
   }
@@ -590,27 +591,27 @@ export default function StopDetailScreen() {
 
       <View style={styles.card}>
         <View style={styles.headerRow}>
-          <Text style={styles.clientName}>{stop.clientName ?? 'Unknown client'}</Text>
+          <Text style={styles.clientName}>{stop.clientName ?? t('Unknown client')}</Text>
           <View style={[styles.statusPill, { backgroundColor: STOP_PROGRESS_COLOR[progress!] }]}>
-            <Text style={styles.statusPillText}>{STOP_PROGRESS_LABEL[progress!]}</Text>
+            <Text style={styles.statusPillText}>{t(STOP_PROGRESS_LABEL[progress!])}</Text>
           </View>
         </View>
 
         <View style={styles.infoStack}>
           {stop.partnerCrews && stop.partnerCrews.length > 0 ? (
-            <InfoRow label="Shared stop" value={`With ${stop.partnerCrews.join(', ')}`} />
+            <InfoRow label={t('Shared stop')} value={`With ${stop.partnerCrews.join(', ')}`} />
           ) : null}
-          <InfoRow label="Time window" value={formatStopTimeWindow(stop)} />
+          <InfoRow label={t('Time window')} value={formatStopTimeWindow(stop)} />
           {formatStopAddress(stop) ? (
             <InfoRow
-              label="Address"
+              label={t('Address')}
               value={formatStopAddress(stop)!}
               onPress={() => void openInMaps(formatStopAddress(stop)!)}
             />
           ) : null}
           {stop.clientPhone ? (
             <InfoRow
-              label="Phone"
+              label={t('Phone')}
               value={stop.clientPhone}
               onPress={() => void Linking.openURL(`tel:${stop.clientPhone!.replace(/[^\d+]/g, '')}`)}
             />
@@ -620,13 +621,14 @@ export default function StopDetailScreen() {
 
       {hasNotes ? (
         <View style={[styles.amberBox, acknowledged && styles.greenAckBox]}>
-          <Text style={[styles.amberBoxTitle, acknowledged && styles.greenAckTitle]}>Job Notes</Text>
+          <Text style={[styles.amberBoxTitle, acknowledged && styles.greenAckTitle]}>{t('Job Notes')}</Text>
           <Text style={styles.amberBoxText}>{notesToPlainText(stop.notesToCrew)}</Text>
+          <TranslateNote text={notesToPlainText(stop.notesToCrew)} />
           {!acknowledged ? (
             <>
               {notesChangedSinceAck ? (
                 <Text style={styles.ackStaleText}>
-                  The office changed these notes after you read them — read them again.
+                  {t('The office changed these notes after you read them — read them again.')}
                 </Text>
               ) : null}
               <Pressable
@@ -635,13 +637,15 @@ export default function StopDetailScreen() {
                 disabled={!!ackQueueItem}
               >
                 <Text style={styles.ackButtonText}>
-                  {ackQueueItem ? 'Saving…' : "I've read the notes"}
+                  {ackQueueItem ? 'Saving…' : t('I\'ve read the notes')}
                 </Text>
               </Pressable>
             </>
           ) : (
             <Text style={styles.ackConfirmedText}>
-              Acknowledged{anchor?.acknowledgedNotesAt ? ` ${new Date(anchor.acknowledgedNotesAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}
+              {anchor?.acknowledgedNotesAt
+                ? t('Acknowledged {time}', { time: new Date(anchor.acknowledgedNotesAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) })
+                : t('Acknowledged')}
             </Text>
           )}
         </View>
@@ -660,7 +664,7 @@ export default function StopDetailScreen() {
         }}
         onConfirmSkip={handleSkip}
         onRetrySkip={(itemId) => void retry(itemId)}
-        onDiscardSkip={(itemId) => confirmDiscard(itemId, 'This skip will not be recorded.')}
+        onDiscardSkip={(itemId) => confirmDiscard(itemId, t('This skip will not be recorded.'))}
       />
 
       {unconfirmedChemicals.length > 0 ? (
@@ -698,9 +702,9 @@ export default function StopDetailScreen() {
       {progress === 'on_break' && stop.pausedAt ? (
         <View style={styles.blueBanner}>
           <View>
-            <Text style={styles.blueBannerTitle}>On Break</Text>
+            <Text style={styles.blueBannerTitle}>{t('On Break')}</Text>
             <Text style={styles.blueBannerSubtitle}>
-              {isPauseActionPending ? 'Not yet synced' : 'On break'}
+              {isPauseActionPending ? t('Not yet synced') : t('On break')}
             </Text>
           </View>
           <Text style={styles.bannerTimer}>{elapsedSince(stop.pausedAt)}</Text>
@@ -708,9 +712,9 @@ export default function StopDetailScreen() {
       ) : progress === 'clocked_in' && stop.clockedInAt ? (
         <View style={styles.amberBanner}>
           <View>
-            <Text style={styles.amberBannerTitle}>Job Running</Text>
+            <Text style={styles.amberBannerTitle}>{t('Job Running')}</Text>
             <Text style={styles.amberBannerSubtitle}>
-              {isClockActionPending ? 'Not yet synced' : (countdown?.label ?? 'In progress')}
+              {isClockActionPending ? t('Not yet synced') : (countdown?.label ?? t('In progress'))}
             </Text>
           </View>
           <Text style={[styles.bannerTimer, { color: C.amberTextStrong }]}>
@@ -721,19 +725,19 @@ export default function StopDetailScreen() {
 
       {progress === 'completed' ? (
         <View style={styles.greenBox}>
-          <Text style={styles.greenBoxTitle}>Job Complete</Text>
+          <Text style={styles.greenBoxTitle}>{t('Job Complete')}</Text>
           {totalActualHours > 0 ? (
-            <Text style={styles.greenBoxSubtitle}>Actual hours: {totalActualHours.toFixed(2)}</Text>
+            <Text style={styles.greenBoxSubtitle}>{t('Actual hours: {h}', { h: totalActualHours.toFixed(2) })}</Text>
           ) : null}
           {completionNotes ? <Text style={styles.greenBoxSubtitle}>{completionNotes}</Text> : null}
           {isClockActionPending ? (
-            <Text style={styles.greenBoxSubtitle}>Not yet synced — will confirm once back online.</Text>
+            <Text style={styles.greenBoxSubtitle}>{t('Not yet synced — will confirm once back online.')}</Text>
           ) : (
             <Pressable
               style={({ pressed }) => [styles.secondaryButton, { marginTop: 10 }, pressed && styles.secondaryButtonPressed]}
               onPress={() => setTimeSummaryOpen(true)}
             >
-              <Text style={styles.secondaryButtonText}>Review crew times</Text>
+              <Text style={styles.secondaryButtonText}>{t('Review crew times')}</Text>
             </Pressable>
           )}
         </View>
@@ -742,12 +746,12 @@ export default function StopDetailScreen() {
 
       {failedClockItem ? (
         <ConflictBox
-          message={failedClockItem.lastError ?? 'This action failed to sync.'}
+          message={failedClockItem.lastError ?? t('This action failed to sync.')}
           onRetry={() => void retry(failedClockItem.id)}
           onDiscard={() =>
             confirmDiscard(
               failedClockItem.id,
-              'This will drop the unsynced action. Pull to refresh afterwards to see the current state.'
+              t('This will drop the unsynced action. Pull to refresh afterwards to see the current state.')
             )
           }
         />
@@ -755,10 +759,10 @@ export default function StopDetailScreen() {
 
       {failedPauseItem ? (
         <ConflictBox
-          message={failedPauseItem.lastError ?? "This didn't sync."}
+          message={failedPauseItem.lastError ?? t('This didn\'t sync.')}
           onRetry={() => void retry(failedPauseItem.id)}
           onDiscard={() =>
-            confirmDiscard(failedPauseItem.id, 'This will drop the unsynced break action.')
+            confirmDiscard(failedPauseItem.id, t('This will drop the unsynced break action.'))
           }
         />
       ) : null}
@@ -768,10 +772,10 @@ export default function StopDetailScreen() {
           stayed disabled, and there was no Retry anywhere on the screen. */}
       {failedAckItem ? (
         <ConflictBox
-          message={failedAckItem.lastError ?? "Your note acknowledgment didn't sync — tap Retry to send it again."}
+          message={failedAckItem.lastError ?? t('Your note acknowledgment didn\'t sync — tap Retry to send it again.')}
           onRetry={() => void retry(failedAckItem.id)}
           onDiscard={() =>
-            confirmDiscard(failedAckItem.id, "This will drop the unsynced acknowledgment — you'll need to read the notes again.")
+            confirmDiscard(failedAckItem.id, t('This will drop the unsynced acknowledgment — you\'ll need to read the notes again.'))
           }
         />
       ) : null}
@@ -779,7 +783,7 @@ export default function StopDetailScreen() {
       {progress === 'clocked_in' || progress === 'on_break' ? (
         <TextInput
           style={styles.notesInput}
-          placeholder="Completion notes (optional)"
+          placeholder={t('Completion notes (optional)')}
           placeholderTextColor="#94a3b8"
           value={notes}
           onChangeText={setNotes}
@@ -789,35 +793,35 @@ export default function StopDetailScreen() {
 
       {progress === 'not_started' ? (
         <ActionButton
-          label="Clock In"
+          label={t('Clock In')}
           variant="solidGreen"
           onPress={handleClockIn}
           disabled={(hasNotes && !acknowledged) || needBeforePhoto}
         />
       ) : null}
       {progress === 'not_started' && needBeforePhoto ? (
-        <Text style={styles.gateHint}>Take a Before photo (below) to clock in.</Text>
+        <Text style={styles.gateHint}>{t('Take a Before photo (below) to clock in.')}</Text>
       ) : null}
 
       {progress === 'on_break' ? (
-        <ActionButton label="Resume Job" variant="solidGreen" onPress={handleResume} />
+        <ActionButton label={t('Resume Job')} variant="solidGreen" onPress={handleResume} />
       ) : progress === 'clocked_in' ? (
-        <ActionButton label="Take a Break" variant="outlineBlue" onPress={handlePause} />
+        <ActionButton label={t('Take a Break')} variant="outlineBlue" onPress={handlePause} />
       ) : null}
 
       {progress === 'clocked_in' || progress === 'on_break' ? (
-        <ActionButton label="Clock Out" variant="solidRed" onPress={handleClockOut} disabled={chemBlocked || needAfterPhoto} />
+        <ActionButton label={t('Clock Out')} variant="solidRed" onPress={handleClockOut} disabled={chemBlocked || needAfterPhoto} />
       ) : null}
       {(progress === 'clocked_in' || progress === 'on_break') && chemBlocked ? (
-        <Text style={styles.gateHint}>Confirm the chemicals applied (above) to clock out.</Text>
+        <Text style={styles.gateHint}>{t('Confirm the chemicals applied (above) to clock out.')}</Text>
       ) : null}
       {(progress === 'clocked_in' || progress === 'on_break') && needAfterPhoto ? (
-        <Text style={styles.gateHint}>Take an After photo (below) to clock out.</Text>
+        <Text style={styles.gateHint}>{t('Take an After photo (below) to clock out.')}</Text>
       ) : null}
 
       {progress === 'skipped' ? (
         <View style={styles.card}>
-          <Text style={styles.doneText}>This job was skipped or cancelled.</Text>
+          <Text style={styles.doneText}>{t('This job was skipped or cancelled.')}</Text>
         </View>
       ) : null}
 
@@ -833,7 +837,7 @@ export default function StopDetailScreen() {
         hasAfter={hasPhase('After')}
         onRetry={(itemId) => void retry(itemId)}
         onDiscard={(itemId) =>
-          confirmDiscard(itemId, 'This photo will not be uploaded. It stays saved on this device.')
+          confirmDiscard(itemId, t('This photo will not be uploaded. It stays saved on this device.'))
         }
       />
 
@@ -844,7 +848,7 @@ export default function StopDetailScreen() {
         onMarkUsedNoInvoice={handleMarkUsedNoInvoice}
         onMarkNotUsed={handleMarkNotUsed}
         onRetry={(itemId) => void retry(itemId)}
-        onDiscard={(itemId) => confirmDiscard(itemId, "This won't be recorded as used.")}
+        onDiscard={(itemId) => confirmDiscard(itemId, t('This won\'t be recorded as used.'))}
       />
 
       {upsellServices.length > 0 ? (
@@ -852,7 +856,7 @@ export default function StopDetailScreen() {
           queueItems={suggestQueueItems}
           onOpen={() => setSuggestOpen(true)}
           onRetry={(itemId) => void retry(itemId)}
-          onDiscard={(itemId) => confirmDiscard(itemId, "This suggestion won't be sent to the office.")}
+          onDiscard={(itemId) => confirmDiscard(itemId, t('This suggestion won\'t be sent to the office.'))}
         />
       ) : null}
 
@@ -870,7 +874,7 @@ export default function StopDetailScreen() {
         onRequest={handleRequestMaterials}
         onRetry={(itemId) => void retry(itemId)}
         onDiscard={(itemId) =>
-          confirmDiscard(itemId, 'This materials request will not be submitted.')
+          confirmDiscard(itemId, t('This materials request will not be submitted.'))
         }
       />
 
@@ -881,7 +885,7 @@ export default function StopDetailScreen() {
         onSend={handleSendNote}
         noteQueueItems={noteQueueItems}
         onRetry={(itemId) => void retry(itemId)}
-        onDiscard={(itemId) => confirmDiscard(itemId, 'This note will not be sent to the office.')}
+        onDiscard={(itemId) => confirmDiscard(itemId, t('This note will not be sent to the office.'))}
       />
     </ScrollView>
   );
@@ -892,7 +896,7 @@ function openInMaps(address: string): Promise<void> {
   const encoded = encodeURIComponent(address);
   const url = Platform.OS === 'ios' ? `https://maps.apple.com/?q=${encoded}` : `geo:0,0?q=${encoded}`;
   return Linking.openURL(url).catch(() => {
-    Alert.alert("Couldn't open Maps", address);
+    Alert.alert(t('Couldn\'t open Maps'), address);
   });
 }
 
@@ -915,7 +919,7 @@ function InfoRow({ label, value, onPress }: { label: string; value: string; onPr
 /**
  * Preloaded chemicals are only the PLANNED amount until the crew says what was
  * actually used — mirrors the web stop page's "Confirm chemicals applied" card.
- * Each row is an amount (prefilled with the plan) or "Not used". Online-only:
+ * Each row is an amount (prefilled with the plan) or t('Not used'). Online-only:
  * it has to reach the server before Stop Job, which the server refuses until
  * every preloaded row is confirmed (in crew_required mode).
  */
@@ -959,11 +963,11 @@ function ConfirmChemicalsCard({
   return (
     <View style={styles.card}>
       <View style={styles.cardHeaderRow}>
-        <Text style={styles.cardHeaderTitle}>Confirm chemicals applied</Text>
+        <Text style={styles.cardHeaderTitle}>{t('Confirm chemicals applied')}</Text>
         <Text style={styles.serviceRowSubtitle}>
           {blocking
-            ? 'Required before you can clock out.'
-            : 'Enter what was actually used, or mark it Not used.'}
+            ? t('Required before you can clock out.')
+            : t('Enter what was actually used, or mark it Not used.')}
         </Text>
       </View>
       <View style={styles.cardBody}>
@@ -980,8 +984,7 @@ function ConfirmChemicalsCard({
                 // The office's estimate is rate x the property's area, so no planned amount means
                 // no area (or rate) was on file. Say so rather than leave a blank box.
                 <Text style={styles.errorText}>
-                  No amount was planned (no property area or application rate on file). Measure what you
-                  apply and enter it.
+                  {t('No amount was planned (no property area or application rate on file). Measure what you apply and enter it.')}
                 </Text>
               )}
               <ChemicalLabel
@@ -1001,7 +1004,7 @@ function ConfirmChemicalsCard({
                   editable={!e.notUsed}
                   value={e.amount}
                   onChangeText={(amount) => onChange(c.id, { ...e, amount })}
-                  placeholder="0"
+                  placeholder={t('0')}
                   placeholderTextColor="#94a3b8"
                 />
                 <Text style={styles.chemicalAmountText}>{c.unitName ?? ''}</Text>
@@ -1011,7 +1014,7 @@ function ConfirmChemicalsCard({
                   style={[styles.notUsedToggle, e.notUsed && styles.notUsedToggleOn]}
                 >
                   <Text style={[styles.linkText, e.notUsed && styles.notUsedToggleTextOn]}>
-                    {e.notUsed ? '✓ Not used' : 'Not used'}
+                    {e.notUsed ? t('✓ Not used') : t('Not used')}
                   </Text>
                 </Pressable>
               </View>
@@ -1042,7 +1045,7 @@ function ConfirmChemicalsCard({
           {isConfirming ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text style={styles.actionButtonText}>Confirm chemicals</Text>
+            <Text style={styles.actionButtonText}>{t('Confirm chemicals')}</Text>
           )}
         </Pressable>
       </View>
@@ -1071,8 +1074,8 @@ function SuggestWorkCard({
   return (
     <View style={styles.suggestCard}>
       <Pressable onPress={onOpen} style={({ pressed }) => [pressed && styles.actionButtonPressed]}>
-        <Text style={styles.suggestTitle}>Suggest work</Text>
-        <Text style={styles.suggestBody}>Spotted something this property needs? Send it to the office.</Text>
+        <Text style={styles.suggestTitle}>{t('Suggest work')}</Text>
+        <Text style={styles.suggestBody}>{t('Spotted something this property needs? Send it to the office.')}</Text>
       </Pressable>
       {queueItems.map((item) => {
         const payload = item.payload as SuggestWorkPayload;
@@ -1088,10 +1091,10 @@ function SuggestWorkCard({
             {item.status === 'failed' ? (
               <View style={styles.materialsFailedActions}>
                 <Pressable onPress={() => onRetry(item.id)}>
-                  <Text style={styles.linkText}>Retry</Text>
+                  <Text style={styles.linkText}>{t('Retry')}</Text>
                 </Pressable>
                 <Pressable onPress={() => onDiscard(item.id)}>
-                  <Text style={styles.linkText}>Discard</Text>
+                  <Text style={styles.linkText}>{t('Discard')}</Text>
                 </Pressable>
               </View>
             ) : (
@@ -1144,7 +1147,7 @@ function SuggestWorkModal({
       const captured = await captureVisitPhoto(anchorVisitId, source);
       if (captured) setPhoto(captured);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add photo');
+      setError(err instanceof Error ? err.message : t('Failed to add photo'));
     }
   };
 
@@ -1156,7 +1159,7 @@ function SuggestWorkModal({
       await onSubmit(service, note, photo);
       reset();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save the suggestion");
+      setError(err instanceof Error ? err.message : t('Couldn\'t save the suggestion'));
     } finally {
       setIsSending(false);
     }
@@ -1173,9 +1176,9 @@ function SuggestWorkModal({
       }}
     >
       <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.suggestModalTitle}>Suggest work</Text>
+        <Text style={styles.suggestModalTitle}>{t('Suggest work')}</Text>
 
-        <Text style={styles.infoLabel}>What does it need?</Text>
+        <Text style={styles.infoLabel}>{t('What does it need?')}</Text>
         {services.map((s) => {
           const picked = s.id === serviceId;
           return (
@@ -1190,29 +1193,29 @@ function SuggestWorkModal({
           );
         })}
 
-        <Text style={styles.infoLabel}>Anything the office should know?</Text>
+        <Text style={styles.infoLabel}>{t('Anything the office should know?')}</Text>
         <TextInput
           style={styles.notesInput}
-          placeholder="e.g. front beds are thin, client mentioned it too"
+          placeholder={t('e.g. front beds are thin, client mentioned it too')}
           placeholderTextColor="#94a3b8"
           value={note}
           onChangeText={setNote}
           multiline
         />
 
-        <Text style={styles.infoLabel}>Photo (a photo usually saves the office a trip)</Text>
+        <Text style={styles.infoLabel}>{t('Photo (a photo usually saves the office a trip)')}</Text>
         <View style={styles.photoButtonRow}>
           <Pressable
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
             onPress={() => void attachPhoto('camera')}
           >
-            <Text style={styles.secondaryButtonText}>{photo ? 'Retake photo' : 'Take photo'}</Text>
+            <Text style={styles.secondaryButtonText}>{photo ? t('Retake photo') : t('Take photo')}</Text>
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
             onPress={() => void attachPhoto('library')}
           >
-            <Text style={styles.secondaryButtonText}>Choose from library</Text>
+            <Text style={styles.secondaryButtonText}>{t('Choose from library')}</Text>
           </Pressable>
         </View>
         {photo ? <Image source={{ uri: photo.localUri }} style={styles.photoImage} /> : null}
@@ -1229,7 +1232,7 @@ function SuggestWorkModal({
           disabled={!serviceId || isSending}
           onPress={() => void send()}
         >
-          <Text style={styles.actionButtonText}>Send to office</Text>
+          <Text style={styles.actionButtonText}>{t('Send to office')}</Text>
         </Pressable>
         <Pressable
           onPress={() => {
@@ -1238,7 +1241,7 @@ function SuggestWorkModal({
           }}
           style={styles.suggestCancel}
         >
-          <Text style={styles.linkText}>Cancel</Text>
+          <Text style={styles.linkText}>{t('Cancel')}</Text>
         </Pressable>
       </ScrollView>
     </Modal>
@@ -1295,10 +1298,10 @@ function ConflictBox({
       <Text style={styles.conflictText}>{message}</Text>
       <View style={styles.conflictActions}>
         <Pressable style={styles.conflictButton} onPress={onRetry}>
-          <Text style={styles.conflictButtonText}>Retry</Text>
+          <Text style={styles.conflictButtonText}>{t('Retry')}</Text>
         </Pressable>
         <Pressable style={[styles.conflictButton, styles.conflictButtonSecondary]} onPress={onDiscard}>
-          <Text style={styles.conflictButtonText}>Discard</Text>
+          <Text style={styles.conflictButtonText}>{t('Discard')}</Text>
         </Pressable>
       </View>
     </View>
@@ -1345,7 +1348,7 @@ function ServicesSection({
         </Text>
       </View>
       {visits.length === 0 ? (
-        <Text style={styles.mutedRowText}>No services listed</Text>
+        <Text style={styles.mutedRowText}>{t('No services listed')}</Text>
       ) : (
         visits.map((v, index) => {
           const rowTerminal = v.status === 'completed' || v.status === 'cancelled' || v.status === 'skipped';
@@ -1362,37 +1365,37 @@ function ServicesSection({
                 <View style={{ flex: 1 }}>
                   <Text style={styles.serviceRowTitle}>{v.serviceName ?? 'Service'}</Text>
                   {v.budgetedHours != null ? (
-                    <Text style={styles.serviceRowSubtitle}>Budgeted: {v.budgetedHours}h</Text>
+                    <Text style={styles.serviceRowSubtitle}>{t('Budgeted: {h}h', { h: v.budgetedHours })}</Text>
                   ) : null}
                 </View>
                 {activeSkipItem ? (
                   <Text style={styles.serviceStatus}>
-                    {activeSkipItem.status === 'syncing' ? 'Skipping…' : 'Skip queued'}
+                    {activeSkipItem.status === 'syncing' ? 'Skipping…' : t('Skip queued')}
                   </Text>
                 ) : failedSkipItem ? null : v.status === 'skipped' ? (
-                  <Text style={[styles.serviceStatus, styles.serviceStatusSkipped]}>Skipped</Text>
+                  <Text style={[styles.serviceStatus, styles.serviceStatusSkipped]}>{t('Skipped')}</Text>
                 ) : v.status === 'completed' ? (
-                  <Text style={[styles.serviceStatus, styles.serviceStatusDone]}>{STATUS_LABEL[v.status]}</Text>
+                  <Text style={[styles.serviceStatus, styles.serviceStatusDone]}>{t(STATUS_LABEL[v.status])}</Text>
                 ) : !rowTerminal && !isSkipTarget ? (
                   <Pressable onPress={() => onStartSkip(v.id)} hitSlop={8}>
-                    <Text style={styles.linkText}>Skip</Text>
+                    <Text style={styles.linkText}>{t('Skip')}</Text>
                   </Pressable>
                 ) : !rowTerminal ? null : (
-                  <Text style={styles.serviceStatus}>{STATUS_LABEL[v.status]}</Text>
+                  <Text style={styles.serviceStatus}>{t(STATUS_LABEL[v.status])}</Text>
                 )}
               </View>
 
               {failedSkipItem ? (
                 <View style={styles.skipFailedRow}>
                   <Text style={[styles.errorText, styles.materialsErrorText]}>
-                    {failedSkipItem.lastError ?? "This skip didn't sync."}
+                    {failedSkipItem.lastError ?? t('This skip didn\'t sync.')}
                   </Text>
                   <View style={styles.materialsFailedActions}>
                     <Pressable onPress={() => onRetrySkip(failedSkipItem.id)}>
-                      <Text style={styles.linkText}>Retry</Text>
+                      <Text style={styles.linkText}>{t('Retry')}</Text>
                     </Pressable>
                     <Pressable onPress={() => onDiscardSkip(failedSkipItem.id)}>
-                      <Text style={styles.linkText}>Discard</Text>
+                      <Text style={styles.linkText}>{t('Discard')}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -1402,7 +1405,7 @@ function ServicesSection({
                 <View style={styles.skipForm}>
                   <TextInput
                     style={styles.skipReasonInput}
-                    placeholder="Reason for skipping (required)"
+                    placeholder={t('Reason for skipping (required)')}
                     placeholderTextColor="#94a3b8"
                     value={skipReasonText}
                     onChangeText={onSkipReasonChange}
@@ -1410,7 +1413,7 @@ function ServicesSection({
                   />
                   <View style={styles.skipFormActions}>
                     <Pressable onPress={onCancelSkip} hitSlop={8}>
-                      <Text style={styles.linkText}>Cancel</Text>
+                      <Text style={styles.linkText}>{t('Cancel')}</Text>
                     </Pressable>
                     <Pressable
                       style={({ pressed }) => [
@@ -1421,7 +1424,7 @@ function ServicesSection({
                       disabled={!skipReasonText.trim()}
                       onPress={onConfirmSkip}
                     >
-                      <Text style={styles.skipConfirmButtonText}>Confirm Skip</Text>
+                      <Text style={styles.skipConfirmButtonText}>{t('Confirm Skip')}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -1465,7 +1468,7 @@ function ChemicalsSection({
   return (
     <View style={styles.card}>
       <View style={styles.cardHeaderRow}>
-        <Text style={styles.cardHeaderTitle}>Chemical Mix</Text>
+        <Text style={styles.cardHeaderTitle}>{t('Chemical Mix')}</Text>
       </View>
       <View style={styles.cardBody}>
         {used.map((a) => (
@@ -1546,7 +1549,7 @@ function PhotosSection({
                 onPress={() => onAdd('camera', 'Before')}
                 disabled={isCapturing}
               >
-                <Text style={styles.secondaryButtonText}>{hasBefore ? '✓ Before photo' : 'Before photo (required)'}</Text>
+                <Text style={styles.secondaryButtonText}>{hasBefore ? t('✓ Before photo') : t('Before photo (required)')}</Text>
               </Pressable>
             ) : null}
             {requireAfter ? (
@@ -1555,7 +1558,7 @@ function PhotosSection({
                 onPress={() => onAdd('camera', 'After')}
                 disabled={isCapturing}
               >
-                <Text style={styles.secondaryButtonText}>{hasAfter ? '✓ After photo' : 'After photo (required)'}</Text>
+                <Text style={styles.secondaryButtonText}>{hasAfter ? t('✓ After photo') : t('After photo (required)')}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -1566,14 +1569,14 @@ function PhotosSection({
             onPress={() => onAdd('camera')}
             disabled={isCapturing}
           >
-            <Text style={styles.secondaryButtonText}>Take Photo</Text>
+            <Text style={styles.secondaryButtonText}>{t('Take Photo')}</Text>
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
             onPress={() => onAdd('library')}
             disabled={isCapturing}
           >
-            <Text style={styles.secondaryButtonText}>Choose from Library</Text>
+            <Text style={styles.secondaryButtonText}>{t('Choose from Library')}</Text>
           </Pressable>
           {isCapturing ? <ActivityIndicator size="small" /> : null}
         </View>
@@ -1581,7 +1584,7 @@ function PhotosSection({
         {photoError ? <Text style={styles.errorText}>{photoError}</Text> : null}
 
         {confirmedPhotos.length === 0 && photoQueueItems.length === 0 ? (
-          <Text style={styles.mutedCentered}>No photos yet</Text>
+          <Text style={styles.mutedCentered}>{t('No photos yet')}</Text>
         ) : (
           <View style={styles.photoGrid}>
             {confirmedPhotos.map((photo) => (
@@ -1612,10 +1615,10 @@ function PhotosSection({
                   {item.status === 'failed' ? (
                     <View style={styles.photoFailedActions}>
                       <Pressable onPress={() => onRetry(item.id)}>
-                        <Text style={styles.linkText}>Retry</Text>
+                        <Text style={styles.linkText}>{t('Retry')}</Text>
                       </Pressable>
                       <Pressable onPress={() => onDiscard(item.id)}>
-                        <Text style={styles.linkText}>Discard</Text>
+                        <Text style={styles.linkText}>{t('Discard')}</Text>
                       </Pressable>
                     </View>
                   ) : null}
@@ -1666,7 +1669,7 @@ function PlannedMaterialsSection({
   return (
     <View style={styles.card}>
       <View style={styles.cardHeaderRow}>
-        <Text style={styles.cardHeaderTitle}>Materials called for</Text>
+        <Text style={styles.cardHeaderTitle}>{t('Materials called for')}</Text>
       </View>
       <View style={styles.materialsList}>
         {materials.map((material, index) => {
@@ -1718,7 +1721,7 @@ function PendingMaterialRow({
     <>
       <View style={styles.plannedMaterialHeader}>
         <Text style={styles.materialsItemName}>{material.productName}</Text>
-        <Text style={styles.plannedQtyText}>Called for: {material.plannedQty}</Text>
+        <Text style={styles.plannedQtyText}>{t('Called for: {q}', { q: material.plannedQty })}</Text>
       </View>
       <View style={styles.plannedMaterialActionsRow}>
         <TextInput
@@ -1736,10 +1739,10 @@ function PendingMaterialRow({
           disabled={!isValid}
           onPress={() => onMarkUsed(material, parsedQty)}
         >
-          <Text style={styles.markUsedButtonText}>Mark Used</Text>
+          <Text style={styles.markUsedButtonText}>{t('Mark Used')}</Text>
         </Pressable>
         <Pressable onPress={() => onMarkNotUsed(material)} hitSlop={8}>
-          <Text style={styles.linkText}>Not Used</Text>
+          <Text style={styles.linkText}>{t('Not Used')}</Text>
         </Pressable>
       </View>
       {/* Secondary on purpose: the default (Mark Used) must stay billable. */}
@@ -1749,7 +1752,7 @@ function PendingMaterialRow({
         hitSlop={8}
       >
         <Text style={[styles.linkText, styles.noBillLink, !isValid && styles.linkTextDisabled]}>
-          Used — don&apos;t bill
+          {t('Used — don\'t bill')}
         </Text>
       </Pressable>
     </>
@@ -1769,25 +1772,25 @@ function QueuedMaterialRow({
 }) {
   const payload = item.payload as RecordMaterialUsagePayload;
   const summary = payload.notUsed
-    ? 'Not used'
+    ? t('Not used')
     : payload.noInvoice
-      ? `Used: ${payload.usedQty} (not billed)`
-      : `Used: ${payload.usedQty}`;
+      ? t('Used: {q} (not billed)', { q: payload.usedQty ?? '' })
+      : t('Used: {q}', { q: payload.usedQty ?? '' });
   return (
     <View style={{ flex: 1 }}>
       <View style={styles.plannedMaterialHeader}>
         <Text style={styles.materialsItemName}>{material.productName}</Text>
-        <Text style={styles.plannedQtyText}>Called for: {material.plannedQty}</Text>
+        <Text style={styles.plannedQtyText}>{t('Called for: {q}', { q: material.plannedQty })}</Text>
       </View>
       <View style={styles.queuedMaterialFooter}>
         <Text style={styles.plannedQtyText}>{summary}</Text>
         {item.status === 'failed' ? (
           <View style={styles.materialsFailedActions}>
             <Pressable onPress={() => onRetry(item.id)}>
-              <Text style={styles.linkText}>Retry</Text>
+              <Text style={styles.linkText}>{t('Retry')}</Text>
             </Pressable>
             <Pressable onPress={() => onDiscard(item.id)}>
-              <Text style={styles.linkText}>Discard</Text>
+              <Text style={styles.linkText}>{t('Discard')}</Text>
             </Pressable>
           </View>
         ) : (
@@ -1809,15 +1812,15 @@ function ResolvedMaterialRow({ material }: { material: JobProductMaterial }) {
   const color = material.status === 'not_used' ? C.amberTextStrong : C.green;
   const label =
     material.status === 'not_used'
-      ? 'Not used'
+      ? t('Not used')
       : material.status === 'used_no_invoice'
-        ? `Used: ${material.qty} (not billed)`
-        : `Used: ${material.qty}`;
+        ? t('Used: {q} (not billed)', { q: material.qty ?? '' })
+        : t('Used: {q}', { q: material.qty ?? '' });
   return (
     <View style={styles.plannedMaterialHeader}>
       <View>
         <Text style={styles.materialsItemName}>{material.productName}</Text>
-        <Text style={styles.plannedQtyText}>Called for: {material.plannedQty}</Text>
+        <Text style={styles.plannedQtyText}>{t('Called for: {q}', { q: material.plannedQty })}</Text>
       </View>
       <View style={[styles.materialsStatusPill, { backgroundColor: color }]}>
         <Text style={styles.materialsStatusPillText}>{label}</Text>
@@ -1853,18 +1856,18 @@ function MaterialsSection({
   return (
     <View style={styles.card}>
       <View style={[styles.cardHeaderRow, styles.materialsHeaderRow]}>
-        <Text style={styles.cardHeaderTitle}>Materials requests</Text>
+        <Text style={styles.cardHeaderTitle}>{t('Materials requests')}</Text>
         <Pressable
           style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
           onPress={onRequest}
         >
-          <Text style={styles.secondaryButtonText}>Request Materials</Text>
+          <Text style={styles.secondaryButtonText}>{t('Request Materials')}</Text>
         </Pressable>
       </View>
 
       <View style={styles.cardBody}>
         {requisitions.length === 0 && materialsQueueItems.length === 0 ? (
-          <Text style={styles.mutedRowText}>No materials requested for this job.</Text>
+          <Text style={styles.mutedRowText}>{t('No materials requested for this job.')}</Text>
         ) : (
           <View style={styles.materialsList}>
             {materialsQueueItems.map((item) => {
@@ -1882,10 +1885,10 @@ function MaterialsSection({
                   {item.status === 'failed' ? (
                     <View style={styles.materialsFailedActions}>
                       <Pressable onPress={() => onRetry(item.id)}>
-                        <Text style={styles.linkText}>Retry</Text>
+                        <Text style={styles.linkText}>{t('Retry')}</Text>
                       </Pressable>
                       <Pressable onPress={() => onDiscard(item.id)}>
-                        <Text style={styles.linkText}>Discard</Text>
+                        <Text style={styles.linkText}>{t('Discard')}</Text>
                       </Pressable>
                     </View>
                   ) : (
@@ -1908,7 +1911,7 @@ function MaterialsSection({
                 <View
                   style={[styles.materialsStatusPill, { backgroundColor: REQUISITION_STATUS_COLOR[req.status] }]}
                 >
-                  <Text style={styles.materialsStatusPillText}>{REQUISITION_STATUS_LABEL[req.status]}</Text>
+                  <Text style={styles.materialsStatusPillText}>{t(REQUISITION_STATUS_LABEL[req.status])}</Text>
                 </View>
               </View>
             ))}
@@ -1934,7 +1937,7 @@ function formatJobComments(jobComments: unknown): string[] {
 }
 
 /**
- * "Notes to Office" — a crew-authored note thread visible to dispatchers on
+ * t('Notes to Office') — a crew-authored note thread visible to dispatchers on
  * the web board (POST .../notes), mirroring the web stop page's card of the
  * same name. Existing comments come from the anchor visit's jobComments
  * (refreshed on the next fetchCrewVisits() poll); a note that hasn't synced
@@ -1961,8 +1964,8 @@ function NotesToOfficeSection({
   return (
     <View style={styles.card}>
       <View style={styles.cardHeaderRow}>
-        <Text style={styles.cardHeaderTitle}>Notes to Office</Text>
-        <Text style={styles.serviceRowSubtitle}>Visible on the dispatch board</Text>
+        <Text style={styles.cardHeaderTitle}>{t('Notes to Office')}</Text>
+        <Text style={styles.serviceRowSubtitle}>{t('Visible on the dispatch board')}</Text>
       </View>
       <View style={styles.cardBody}>
         {comments.length > 0 ? (
@@ -1988,10 +1991,10 @@ function NotesToOfficeSection({
               {item.status === 'failed' ? (
                 <View style={styles.materialsFailedActions}>
                   <Pressable onPress={() => onRetry(item.id)}>
-                    <Text style={styles.linkText}>Retry</Text>
+                    <Text style={styles.linkText}>{t('Retry')}</Text>
                   </Pressable>
                   <Pressable onPress={() => onDiscard(item.id)}>
-                    <Text style={styles.linkText}>Discard</Text>
+                    <Text style={styles.linkText}>{t('Discard')}</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -2008,7 +2011,7 @@ function NotesToOfficeSection({
         <View style={styles.noteComposeRow}>
           <TextInput
             style={styles.noteInput}
-            placeholder="Write a note..."
+            placeholder={t('Write a note...')}
             placeholderTextColor="#94a3b8"
             value={noteText}
             onChangeText={onNoteTextChange}
@@ -2023,7 +2026,7 @@ function NotesToOfficeSection({
             disabled={!noteText.trim()}
             onPress={onSend}
           >
-            <Text style={styles.markUsedButtonText}>Send</Text>
+            <Text style={styles.markUsedButtonText}>{t('Send')}</Text>
           </Pressable>
         </View>
       </View>

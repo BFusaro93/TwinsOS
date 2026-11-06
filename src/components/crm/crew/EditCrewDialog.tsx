@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCrewDay, useCrewDayAction, useSetCrewMemberAbsent } from "@/lib/hooks/use-crew-app";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
+import { t } from "@/lib/crew-i18n";
 
 interface CrewInfo {
   crewId: string;
@@ -78,7 +79,7 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
         <div className="space-y-2 mt-2">
           {dayLoaded && members.length === 0 && available.length === 0 && (
             <p className="rounded-lg bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
-              Nobody is on this crew yet. Ask the office to add the people who work on it under Team → Crews.
+              {t("Nobody is on this crew yet. Ask the office to add the people who work on it under Team → Crews.")}
             </p>
           )}
           {members.map(member => {
@@ -105,7 +106,7 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
                     </p>
                   )}
                   {member.absent && !member.startedAt && (
-                    <p className="text-xs text-muted-foreground mt-0.5">Not working today</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t("Not working today")}</p>
                   )}
                 </div>
 
@@ -119,7 +120,7 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
                       disabled={isLoading}
                     >
                       {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <LogOut className="h-3 w-3" />}
-                      Left for the day
+                      {t("Left for the day")}
                     </Button>
                   ) : (
                     <>
@@ -131,7 +132,7 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
                           onClick={() => run(member.id, () => setAbsent.mutateAsync({ crewMemberId: member.id, absent: true }))}
                           disabled={isLoading}
                         >
-                          Not working
+                          {t("Not working")}
                         </Button>
                       )}
                       <Button
@@ -156,7 +157,7 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
           <div className="mt-3 flex items-center gap-2 border-t border-border pt-3">
             <Select value={addId} onValueChange={setAddId}>
               <SelectTrigger className="h-9 flex-1">
-                <SelectValue placeholder="Add someone to my crew today" />
+                <SelectValue placeholder={t("Add someone to my crew today")} />
               </SelectTrigger>
               <SelectContent>
                 {available.map(a => (
@@ -174,13 +175,13 @@ export function EditCrewDialog({ open, onOpenChange, crewInfo, visitId }: EditCr
               })}
             >
               {loadingId === addId ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserPlus className="h-3 w-3" />}
-              Add
+              {t("Add")}
             </Button>
           </div>
         )}
 
         <p className="text-xs text-slate-400 dark:text-neutral-500 text-center mt-2">
-          Start Day clocks in everyone working. Use this for anyone who arrives late, is out today, or leaves early.
+          {t("Start Day clocks in everyone working. Use this for anyone who arrives late, is out today, or leaves early.")}
         </p>
       </DialogContent>
     </Dialog>
