@@ -994,6 +994,46 @@
     "description": "Trends average invoiced revenue per client, year over year."
   },
   {
+    "key": "credit-report",
+    "section": "financial",
+    "name": "Credit Report",
+    "description": "Lists account credits issued in a date range — the client, reference, memo, amount, what has been applied to invoices, and any unapplied balance still on account."
+  },
+  {
+    "key": "invoiced-products",
+    "section": "revenue",
+    "name": "Invoiced Products Report",
+    "description": "Shows invoices that billed one or more products to the client — invoice date and number, product, quantity, price per unit, total, and the invoice's sales rep.",
+    "notes": [
+      "Product lines only — lines billed from a product on a job (the product's catalog entry). Service lines and Other Charges are not listed.",
+      "Excludes line items on draft and void invoices.",
+      "Total is quantity × price per unit, before any line-level discount. Sales Rep is the rep on the invoice."
+    ],
+    "dataset": "rpt_invoice_line_items",
+    "columns": [
+      "invoice_date",
+      "invoice_number",
+      "client_name",
+      "product_name",
+      "qty",
+      "rate_cents",
+      "total_cents",
+      "sales_rep"
+    ]
+  },
+  {
+    "key": "won-estimates-service-products",
+    "section": "estimates",
+    "name": "Won Estimates Service Products Report",
+    "description": "Shows the products attached to services on accepted and invoiced estimates — estimate value, service, product, quantity, price, and total."
+  },
+  {
+    "key": "resource-time-utilization",
+    "section": "job_hours",
+    "name": "Resource Time Utilization",
+    "description": "Breaks down each crew member's day into time on services, drive time, shop/other paid time and unpaid breaks — hours, share of the total, and labor cost for each."
+  },
+  {
     "key": "upcoming-jobs-no-contract",
     "section": "schedule_lists",
     "name": "Upcoming Jobs - No Contract",

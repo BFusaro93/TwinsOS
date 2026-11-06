@@ -12,14 +12,14 @@ import { GuideLink } from "@/components/docs/GuideLink";
 const SECTIONS: [string, number, string][] = [
   ["Service Reports", 14, "Visits Report, Backlog Services, Client Count by Service, Client Services Report, Package Summary Report, Skipped Visits Report, Daily Load List"],
   ["Client", 11, "Client Balance, Client Contact List, Client Referral, New Clients Report, Terminations Report, Cancellation Count Report"],
-  ["Revenue", 10, "Invoice Audit Summary, Payment Audit Summary, Revenue by Postal Code, Revenue by Service Summary, Daily Production, Sales Activity Summary"],
+  ["Revenue", 11, "Invoice Audit Summary, Payment Audit Summary, Invoiced Products Report, Revenue by Postal Code, Revenue by Service Summary, Daily Production, Sales Activity Summary"],
   ["Schedule Lists", 8, "Employee Directory, Vendor Contact List, Inventory Product List, Call Ahead Required, Service Price List"],
   ["Job Costing", 8, "Job Costing Report, Cost of Goods Sold Report, Job Cost Summary, Service Profitability Summary, Production Rate Accuracy, WIP Report"],
-  ["Financial", 6, "Invoiced Income by Client, Invoices with Balances, Pre-Payments, Profit / Loss (Accrual), Profit / Loss (Cash), Sales Tax Report"],
+  ["Financial", 7, "Credit Report, Invoiced Income by Client, Invoices with Balances, Pre-Payments, Profit / Loss (Accrual), Profit / Loss (Cash), Sales Tax Report"],
   ["Audits", 9, "Client Timeline Report, Lead Timeline Report, Income Not Invoiced, Visits — Client Has Balance Due, Unapplied Payments, Sales Commission Export, Audit Log, Security & Access Audit, Change Activity by User"],
   ["Lead", 5, "New Leads Report, Lead Aging Summary, Closed Leads Summary, Company Scorecard, Sales Summary by Source"],
-  ["Estimates", 4, "Estimates by Stage, Accepted Estimates by Service, Accepted Estimates — Estimated vs Invoiced Value"],
-  ["Job Hours", 3, "Job Hours Summary, Crew Hours Summary, Timesheet Detail"],
+  ["Estimates", 5, "Estimates by Stage, Accepted Estimates by Service, Won Estimates Service Products Report, Accepted Estimates — Estimated vs Invoiced Value"],
+  ["Job Hours", 4, "Job Hours Summary, Crew Hours Summary, Timesheet Detail, Resource Time Utilization"],
   ["Receivables", 2, "A/R Aging Report, A/R Aging Snapshot"],
   ["Forms", 1, "Forms Summary"],
 ];
@@ -314,6 +314,36 @@ export function ReportCenterGuide() {
             &quot;Collected&quot; number should filter Is Cash = true and sum Net Amount.
           </li>
         </ul>
+        <p>Beyond plain columns, the builder supports:</p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Joins</strong> — on the Data card, tick <em>Client data</em> (invoices,
+            payments, jobs, estimates, contracts) or the parent invoice / estimate (line items) to
+            add that record&apos;s columns, shown as &quot;Client: …&quot;. Joined columns repeat on
+            every row, so they&apos;re never added into totals. Using a join also requires access to
+            the joined dataset.
+          </li>
+          <li>
+            <strong>Client custom fields</strong> — every custom field defined in Settings appears
+            as a &quot;Custom: …&quot; column on clients, invoices, payments, jobs, estimates and
+            contracts, and can be filtered, grouped and aggregated like any column.
+          </li>
+          <li>
+            <strong>Formulas</strong> — a calculated column can combine two columns, a column and a
+            fixed number (e.g. × 100), or an earlier formula, and can be sorted on.
+          </li>
+          <li>
+            <strong>Multi-level sort</strong> — sort by up to four columns (&quot;then by&quot;).
+          </li>
+        </ul>
+        <p>
+          Every report table also has a menu on each column header: <strong>sort</strong>,{" "}
+          <strong>filter</strong>, <strong>format</strong> (alignment, number, currency, percent,
+          timespan, true/false, color spectrum, bar gauges), <strong>merge duplicate cells</strong>{" "}
+          and <strong>hide column</strong>. These change only what&apos;s on screen — exports and the
+          saved report stay as run — and <em>Reset view</em> undoes them. Filters apply to the rows
+          already loaded, and the totals row follows them.
+        </p>
         <p>
           Saving or running a custom analysis requires the <strong>View Report Center</strong>{" "}
           permission, and some datasets additionally require a report permission — see{" "}
@@ -771,18 +801,34 @@ export function ReportCenterGuide() {
         <p>
           <strong>Scheduled delivery.</strong> Reports flagged as schedulable — currently the five
           fixed-window <em>Actual v. Budgeted Hours</em> reports (Today, Yesterday, Week to Date,
-          Last Week, Month to Date) — show a <strong>Schedule</strong> button in the viewer. It
-          sets up daily email delivery of that report as a PDF: enter one or more recipient
-          addresses and pick a <strong>Send time</strong> (an hour of the day, Eastern). An hourly
-          job delivers each schedule on the <strong>first run at or after its scheduled hour</strong>{" "}
-          — so a 7 AM schedule goes out on the 7 AM run, or the 8 AM run if the 7 AM one fired late
-          — and never twice in the same day. Times inside the PDF are formatted in Eastern. Creating
-          a schedule, changing its recipients or turning it back on needs Manage Report Center
-          <em> and</em> permission to view the report itself (for these, a job-costing report
-          permission), because the email goes out without checking the recipient&apos;s role.
-          If a scheduled report matches more rows than the report engine returns at once, the
-          emailed PDF says it is partial (&quot;only the first N of M rows&quot;) and leaves off the
-          totals row, since totals would cover only the rows included.
+          Last Week, Month to Date) — show a <strong>Schedule</strong> button in the viewer, and
+          the <strong>Scheduled</strong> tab lists every schedule. A schedule emails the report to
+          one or more recipients <strong>once</strong>, <strong>daily</strong>,{" "}
+          <strong>weekly</strong> (on the days you tick) or <strong>monthly</strong> (a day of the
+          month, or e.g. the last Friday), between an optional start and end date, as a{" "}
+          <strong>PDF</strong> or an <strong>Excel</strong> file, with an optional custom{" "}
+          <strong>subject</strong> and <strong>message</strong>. The send time is an hour of the
+          day on your company&apos;s clock. An hourly job delivers each schedule on the{" "}
+          <strong>first run at or after its scheduled hour</strong> — so a 7 AM schedule goes out
+          on the 7 AM run, or the 8 AM run if the 7 AM one fired late — and never twice in the same
+          day. Creating a schedule, changing its recipients or turning it back on needs Manage
+          Report Center <em>and</em> permission to view the report itself, because the email goes
+          out without checking the recipient&apos;s role. If a scheduled report matches more rows
+          than the report engine returns at once, the emailed file says it is partial
+          (&quot;only the first N of M rows&quot;) and leaves off the totals row.
+        </p>
+        <p>
+          <strong>Scheduling a saved custom analysis.</strong> In <em>My Reports</em>, choose{" "}
+          <strong>Schedule…</strong> on a saved analysis (or pick it in <em>New Schedule</em>).
+          Analyses on any dataset can be scheduled, except ones that use joined datasets. Because a saved analysis stores fixed dates, you can add a{" "}
+          <strong>date window</strong>: pick a date column and a rolling range — Yesterday, Last 7
+          or 30 days (through yesterday), Month to date, This month, Last month, Year to date, This
+          year or Last year — and the range is recalculated on your company&apos;s calendar every
+          time it sends. Each send uses the analysis as it is saved <em>at that moment</em>, and
+          checks that the person who created the schedule still has Report Center access and
+          permission for the dataset; if not, or if the analysis was deleted, nothing is sent and
+          the schedule shows the reason in its last-run column (a deleted analysis pauses its
+          schedules).
         </p>
       </Section>
 

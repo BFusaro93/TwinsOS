@@ -1,17 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
+import type {
+  CreateReportScheduleInput,
+  ReportScheduleRow,
+  UpdateReportScheduleInput,
+} from "@/types/report-schedules";
 
-export interface ReportSchedule {
-  id: string;
-  report_key: string;
-  recipients: string[];
-  enabled: boolean;
-  hour_local: number;
-  last_run_at: string | null;
-  last_run_status: string | null;
-  last_run_error: string | null;
-  created_at: string;
-}
+export type ReportSchedule = ReportScheduleRow;
+
+const QUERY_KEY = ["report-schedules"] as const;
 
 async function readError(res: Response): Promise<string> {
   try {
@@ -22,22 +19,23 @@ async function readError(res: Response): Promise<string> {
   }
 }
 
-export function useReportSchedules() {
+export function useReportSchedules(options: { enabled?: boolean } = {}) {
   return useQuery<ReportSchedule[]>({
-    queryKey: ["report-schedules"],
+    queryKey: QUERY_KEY,
     queryFn: async () => {
       const res = await fetch("/api/crm/report-schedules");
       if (!res.ok) throw new Error(await readError(res));
       const body = (await res.json()) as { schedules: ReportSchedule[] };
       return body.schedules;
     },
+    enabled: options.enabled ?? true,
   });
 }
 
 export function useCreateReportSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { reportKey: string; recipients: string[]; hourLocal?: number }) => {
+    mutationFn: async (input: CreateReportScheduleInput) => {
       const res = await fetch("/api/crm/report-schedules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -48,23 +46,17 @@ export function useCreateReportSchedule() {
       return body.schedule;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["report-schedules"] });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     },
   });
 }
 
+/** PATCH a schedule. A pause/resume (`enabled` only) flips the row in the
+ *  cache optimistically and rolls back on error. */
 export function useUpdateReportSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      id,
-      ...patch
-    }: {
-      id: string;
-      recipients?: string[];
-      enabled?: boolean;
-      hourLocal?: number;
-    }) => {
+    mutationFn: async ({ id, ...patch }: UpdateReportScheduleInput & { id: string }) => {
       const res = await fetch(`/api/crm/report-schedules/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -74,8 +66,20 @@ export function useUpdateReportSchedule() {
       const body = (await res.json()) as { schedule: ReportSchedule };
       return body.schedule;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["report-schedules"] });
+    onMutate: async ({ id, enabled }) => {
+      if (enabled === undefined) return { previous: undefined };
+      await queryClient.cancelQueries({ queryKey: QUERY_KEY });
+      const previous = queryClient.getQueryData<ReportSchedule[]>(QUERY_KEY);
+      queryClient.setQueryData<ReportSchedule[]>(QUERY_KEY, (rows) =>
+        rows?.map((row) => (row.id === id ? { ...row, enabled } : row))
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(QUERY_KEY, context.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     },
   });
 }
@@ -88,7 +92,7 @@ export function useDeleteReportSchedule() {
       if (!res.ok) throw new Error(await readError(res));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["report-schedules"] });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     },
   });
 }

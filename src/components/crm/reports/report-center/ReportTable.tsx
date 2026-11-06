@@ -1,11 +1,20 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { computeTotals } from "@/lib/reports/engine";
 import { TOTALS_LABEL, totalsLabelIndex } from "@/lib/reports/export-rows";
+import {
+  EMPTY_VIEW,
+  applyRowView,
+  formatWithView,
+  isViewActive,
+  numericRange,
+  type TableViewState,
+} from "@/lib/reports/table-view";
+import { ColumnHeaderMenu } from "./ColumnHeaderMenu";
 import { FORMAT_COLORS } from "@/types/crm-reports";
 import type { FormatRule, ReportColumnDef, ReportFieldType, ReportResult, ReportResultRow } from "@/types/crm-reports";
 
@@ -199,6 +208,15 @@ function Pager({
   );
 }
 
+/** Text alignment for a column: the header menu's pick, else numbers right / text left. */
+function alignClass(col: ReportColumnDef, view: TableViewState): string {
+  const a = view.formats[col.key]?.align;
+  if (a === "left") return "text-left";
+  if (a === "center") return "text-center";
+  if (a === "right") return "text-right";
+  return NUMERIC_TYPES.includes(col.type) ? "text-right" : "text-left";
+}
+
 export function ReportTable({
   result,
   formatRules,
@@ -209,21 +227,51 @@ export function ReportTable({
   colorSpectrumColumns?: string[];
 }) {
   const [page, setPage] = useState(0);
+  // Header-menu view (sort / filter / hide / format / merge). Display-only:
+  // exports and the saved report stay as run. Reset whenever a new result loads.
+  const [view, setView] = useState<TableViewState>(EMPTY_VIEW);
 
   useEffect(() => {
     setPage(0);
+    setView(EMPTY_VIEW);
   }, [result]);
+  useEffect(() => {
+    setPage(0);
+  }, [view]);
 
-  const spectrumRanges = useMemo(
-    () => computeSpectrumRanges(result.rows, colorSpectrumColumns),
-    [result.rows, colorSpectrumColumns]
+  const subtotalMode = !!result.groupSubtotals;
+  const viewRows = useMemo(
+    () => applyRowView(result.rows, result.columns, view, !subtotalMode),
+    [result.rows, result.columns, view, subtotalMode]
   );
+  const filtered = Object.keys(view.filters).length > 0;
 
-  const pageCount = Math.max(1, Math.ceil(result.rows.length / PAGE_SIZE));
+  const spectrumColumnKeys = useMemo(
+    () => [
+      ...(colorSpectrumColumns ?? []),
+      ...Object.entries(view.formats).filter(([, f]) => f.spectrum).map(([key]) => key),
+    ],
+    [colorSpectrumColumns, view.formats]
+  );
+  const spectrumRanges = useMemo(
+    () => computeSpectrumRanges(viewRows, spectrumColumnKeys),
+    [viewRows, spectrumColumnKeys]
+  );
+  const barRanges = useMemo(() => {
+    const out: Record<string, { min: number; max: number }> = {};
+    for (const [key, f] of Object.entries(view.formats)) {
+      if (!f.bars) continue;
+      const r = numericRange(viewRows, key);
+      if (r) out[key] = r;
+    }
+    return out;
+  }, [viewRows, view.formats]);
+
+  const pageCount = Math.max(1, Math.ceil(viewRows.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
   const pageStart = safePage * PAGE_SIZE;
-  const pagedRows = result.rows.slice(pageStart, pageStart + PAGE_SIZE);
-  const showPager = result.rows.length > PAGE_SIZE;
+  const pagedRows = viewRows.slice(pageStart, pageStart + PAGE_SIZE);
+  const showPager = viewRows.length > PAGE_SIZE;
 
   // A sectionColumn (e.g. "crew_name" on the AvB reports) stays a real
   // column — its own header cell — but only ever holds a value on the
@@ -231,14 +279,26 @@ export function ReportTable({
   // blank so the group's label isn't repeated on every row. CSV export
   // still uses result.columns/rows directly, so it's untouched there.
   const sectionKey = result.sectionColumn;
-  const displayColumns = result.columns;
+  const hiddenKeys = new Set(view.hidden);
+  const displayColumns = useMemo(
+    () => result.columns.filter((c) => !hiddenKeys.has(c.key) || c.key === sectionKey),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [result.columns, view.hidden, sectionKey]
+  );
 
   const groupSubtotals = useMemo(
     () =>
       sectionKey && result.groupSubtotals
-        ? computeGroupSubtotals(result.rows, sectionKey, displayColumns)
+        ? computeGroupSubtotals(viewRows, sectionKey, displayColumns)
         : null,
-    [result.rows, result.groupSubtotals, sectionKey, displayColumns]
+    [viewRows, result.groupSubtotals, sectionKey, displayColumns]
+  );
+
+  // Totals follow the filter: with a column filter on, the footer sums only
+  // the rows still showing.
+  const shownTotals = useMemo(
+    () => (filtered ? computeTotals(displayColumns, viewRows) : result.totals),
+    [filtered, displayColumns, viewRows, result.totals]
   );
 
   // Where the "Totals" label goes in the footer: the first non-totalable
@@ -252,6 +312,38 @@ export function ReportTable({
   return (
     <div className="flex flex-col gap-2">
       <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+        {isViewActive(view) && (
+          <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground print:hidden">
+            <span>
+              {filtered
+                ? `Showing ${viewRows.length.toLocaleString()} of ${result.rows.length.toLocaleString()} rows. `
+                : ""}
+              {view.hidden.length > 0 ? `${view.hidden.length} column${view.hidden.length === 1 ? "" : "s"} hidden. ` : ""}
+              Table view only — exports use the full report.
+            </span>
+            <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={() => setView(EMPTY_VIEW)}>
+              <RotateCcw className="h-3 w-3" />
+              Reset view
+            </Button>
+          </div>
+        )}
+        {view.hidden.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b px-3 py-1.5 text-xs print:hidden">
+            <span className="text-muted-foreground">Hidden:</span>
+            {result.columns
+              .filter((c) => hiddenKeys.has(c.key))
+              .map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  className="rounded border px-1.5 py-0.5 hover:bg-muted"
+                  onClick={() => setView({ ...view, hidden: view.hidden.filter((k) => k !== c.key) })}
+                >
+                  {c.label} ✕
+                </button>
+              ))}
+          </div>
+        )}
         {truncated && (
           <div
             role="status"
@@ -271,14 +363,14 @@ export function ReportTable({
           <Pager
             page={safePage}
             pageCount={pageCount}
-            rowCount={result.rowCount}
-            totalCount={result.totalCount}
+            rowCount={filtered ? viewRows.length : result.rowCount}
+            totalCount={filtered ? undefined : result.totalCount}
             onPageChange={setPage}
           />
         )}
-        {result.rows.length === 0 ? (
+        {viewRows.length === 0 ? (
           <div className="flex items-center justify-center py-16 text-sm text-slate-400 dark:text-neutral-500">
-            No rows for the selected filters.
+            {result.rows.length > 0 ? "No rows match the column filters." : "No rows for the selected filters."}
           </div>
         ) : (
           <div className="overflow-x-auto print:overflow-visible">
@@ -290,12 +382,14 @@ export function ReportTable({
                       key={col.key}
                       className={cn(
                         "px-3 py-2.5 whitespace-nowrap print:whitespace-normal print:px-1 print:py-1",
-                        NUMERIC_TYPES.includes(col.type)
-                          ? "text-right"
-                          : "text-left"
+                        alignClass(col, view)
                       )}
                     >
-                      {col.label}
+                      {col.key === sectionKey ? (
+                        col.label
+                      ) : (
+                        <ColumnHeaderMenu col={col} view={view} canSort={!subtotalMode} onChange={setView} />
+                      )}
                     </th>
                   ))}
                 </tr>
@@ -304,19 +398,19 @@ export function ReportTable({
                   the legacy SA layout) instead of trailing it in a <tfoot> —
                   ordinary grouped/ungrouped reports keep the trailing <tfoot>
                   below unchanged. */}
-              {result.totals && result.groupSubtotals && (
+              {shownTotals && result.groupSubtotals && (
                 <tbody>
                   <tr className="border-b bg-slate-200 dark:bg-neutral-700 font-semibold text-slate-800 dark:text-neutral-100">
                     {displayColumns.map((col) => {
-                      const total = result.totals?.[col.key];
+                      const total = shownTotals?.[col.key];
                       const hasTotal = col.totalable && total !== undefined && total !== null;
                       return (
                         <td
                           key={col.key}
                           className={cn(
                             "px-3 py-2.5",
-                            NUMERIC_TYPES.includes(col.type) &&
-                              "text-right tabular-nums"
+                            alignClass(col, view),
+                            NUMERIC_TYPES.includes(col.type) && "tabular-nums"
                           )}
                         >
                           {col.key === sectionKey
@@ -337,7 +431,7 @@ export function ReportTable({
                   // started on the previous page is recognized as continuing
                   // (its header re-renders at the top of this page, labelled
                   // "(continued)") rather than looking like a fresh group.
-                  const prevRow = sectionKey ? result.rows[pageStart + i - 1] : undefined;
+                  const prevRow = sectionKey ? viewRows[pageStart + i - 1] : undefined;
                   const prevSection = prevRow ? String(prevRow[sectionKey!] ?? "") : null;
                   const isGroupStart = section !== null && section !== prevSection;
                   const isContinued = section !== null && i === 0 && !isGroupStart;
@@ -362,7 +456,8 @@ export function ReportTable({
                                 key={col.key}
                                 className={cn(
                                   "px-3 py-1.5",
-                                  NUMERIC_TYPES.includes(col.type) && "text-right tabular-nums"
+                                  alignClass(col, view),
+                                  NUMERIC_TYPES.includes(col.type) && "tabular-nums"
                                 )}
                               >
                                 {col.key === sectionKey
@@ -386,22 +481,49 @@ export function ReportTable({
                             spectrumRange && typeof cellValue === "number"
                               ? spectrumColorFor(cellValue, spectrumRange)
                               : null;
+                          const colFmt = view.formats[col.key];
+                          const barRange = barRanges[col.key];
+                          const barPct =
+                            colFmt?.bars && barRange && typeof cellValue === "number"
+                              ? barRange.max === barRange.min
+                                ? 100
+                                : ((cellValue - barRange.min) / (barRange.max - barRange.min)) * 100
+                              : null;
                           const style = ruleMatch
                             ? { backgroundColor: ruleMatch.bg, color: ruleMatch.text, fontWeight: 600 }
                             : spectrumMatch
                               ? { backgroundColor: spectrumMatch.bg, color: spectrumMatch.text }
-                              : undefined;
+                              : barPct !== null
+                                ? {
+                                    backgroundImage: `linear-gradient(90deg, hsl(217 70% 80% / 0.9) ${barPct}%, transparent ${barPct}%)`,
+                                  }
+                                : undefined;
+                          // Merge Duplicate Cells: a value equal to the row above shows once.
+                          const prev = viewRows[pageStart + i - 1];
+                          const repeated =
+                            view.merged.includes(col.key) &&
+                            i > 0 &&
+                            prev !== undefined &&
+                            prev[col.key] === cellValue &&
+                            !(cellValue === null || cellValue === undefined);
+                          const text =
+                            col.key === sectionKey
+                              ? ""
+                              : repeated
+                                ? ""
+                                : (formatWithView(cellValue, col, colFmt?.number) ??
+                                  formatCellValue(cellValue, col.type));
                           return (
                             <td
                               key={col.key}
                               className={cn(
                                 "px-3 py-2 text-slate-700 dark:text-neutral-300 print:px-1 print:py-1",
-                                NUMERIC_TYPES.includes(col.type) &&
-                                  "text-right tabular-nums"
+                                alignClass(col, view),
+                                NUMERIC_TYPES.includes(col.type) && "tabular-nums"
                               )}
                               style={style}
                             >
-                              {col.key === sectionKey ? "" : formatCellValue(row[col.key], col.type)}
+                              {text}
                             </td>
                           );
                         })}
@@ -410,11 +532,11 @@ export function ReportTable({
                   );
                 })}
               </tbody>
-              {result.totals && !result.groupSubtotals && (
+              {shownTotals && !result.groupSubtotals && (
                 <tfoot>
                   <tr className="border-t bg-slate-50 dark:bg-muted/40 font-medium text-slate-800 dark:text-neutral-100">
                     {displayColumns.map((col, i) => {
-                      const total = result.totals?.[col.key];
+                      const total = shownTotals?.[col.key];
                       const hasTotal = col.totalable && total !== undefined && total !== null;
                       const formatted = hasTotal ? formatCellValue(total, col.type) : "";
                       return (
@@ -422,8 +544,8 @@ export function ReportTable({
                           key={col.key}
                           className={cn(
                             "px-3 py-2.5",
-                            NUMERIC_TYPES.includes(col.type) &&
-                              "text-right tabular-nums"
+                            alignClass(col, view),
+                            NUMERIC_TYPES.includes(col.type) && "tabular-nums"
                           )}
                         >
                           {i === totalsLabelIdx
@@ -444,8 +566,8 @@ export function ReportTable({
           <Pager
             page={safePage}
             pageCount={pageCount}
-            rowCount={result.rowCount}
-            totalCount={result.totalCount}
+            rowCount={filtered ? viewRows.length : result.rowCount}
+            totalCount={filtered ? undefined : result.totalCount}
             onPageChange={setPage}
           />
         )}

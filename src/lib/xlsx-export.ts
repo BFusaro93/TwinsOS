@@ -1,6 +1,6 @@
 /**
- * Excel (.xlsx) export utilities — client-side only, mirrors the pattern in
- * lib/csv.ts. Uses @e965/xlsx (a maintained SheetJS fork without the
+ * Excel (.xlsx) export utilities — mirrors the pattern in lib/csv.ts.
+ * downloadXLSX is browser-only; xlsxBuffer is safe on the server. Uses @e965/xlsx (a maintained SheetJS fork without the
  * prototype-pollution/ReDoS advisories the upstream `xlsx` npm package has).
  */
 import * as XLSX from "@e965/xlsx";
@@ -24,6 +24,16 @@ function sanitizeSheetName(name: string): string {
  *  Excel-invalid characters, truncated to 31 chars (Excel's hard limit), and
  *  de-duplicated if that causes a collision. */
 export function downloadXLSX(filename: string, sheets: XLSXSheet[]): void {
+  XLSX.writeFile(buildWorkbook(sheets), filename);
+}
+
+/** The same workbook as downloadXLSX, as bytes — for server-side callers
+ *  (the scheduled-report cron attaches it to an email). */
+export function xlsxBuffer(sheets: XLSXSheet[]): Buffer {
+  return XLSX.write(buildWorkbook(sheets), { type: "buffer", bookType: "xlsx" }) as Buffer;
+}
+
+function buildWorkbook(sheets: XLSXSheet[]): XLSX.WorkBook {
   const wb = XLSX.utils.book_new();
   // Excel sheet names are unique case-INsensitively ("Revenue" and
   // "revenue" collide), so the collision check has to compare lowercased.
@@ -41,5 +51,5 @@ export function downloadXLSX(filename: string, sheets: XLSXSheet[]): void {
     const ws = XLSX.utils.aoa_to_sheet([sheet.headers, ...sheet.rows]);
     XLSX.utils.book_append_sheet(wb, ws, name);
   }
-  XLSX.writeFile(wb, filename);
+  return wb;
 }
