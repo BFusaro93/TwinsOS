@@ -59,7 +59,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/utils";
 import { visitServices, isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-stops";
-import { budgetCountdown } from "@/lib/crew/budget-countdown";
+import { budgetCountdown, visitBudgetHours } from "@/lib/crew/budget-countdown";
 import { isPhaseCaption, phaseCaption } from "@/lib/crew/required-photos";
 import { TimeSummaryDialog } from "@/components/crm/crew/TimeSummaryDialog";
 import { TranslateNote } from "@/components/crm/crew/TranslateNote";
@@ -352,7 +352,14 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       ? budgetCountdown({
           budgetedHours: stop.visits
             .filter((v) => !["skipped", "cancelled", "completed"].includes(v.status))
-            .map((v) => visitServices(v)[0]?.budgetedHours),
+            .map((v) =>
+              visitBudgetHours({
+                budgetedHoursOverride: v.budgetedHours,
+                menCount: v.menCount,
+                services: visitServices(v),
+                jobBudgetedHours: v.job?.budgetedHours ?? null,
+              })
+            ),
           clockedInAt: stop.clockedInAt,
           // Written to every live visit in the stop alike, so any one carries it.
           breakMinutes: Math.max(0, ...stop.visits.map((v) => v.breakMinutes ?? 0)),
@@ -981,7 +988,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 <Button
                   className="w-full h-14 text-base font-bold bg-green-600 hover:bg-green-700 gap-2"
                   onClick={handleClockIn}
-                  disabled={stopClockIn.isPending || (hasNotes && !acknowledged) || needBeforePhoto}
+                  disabled={stopClockIn.isPending || (hasNotes && !acknowledged)}
                 >
                   {stopClockIn.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
                   {t("Start Job")}
@@ -990,7 +997,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   <p className="text-center text-xs text-amber-700 dark:text-amber-400">{t("Read the job notes and tap “I've read the notes” to start.")}</p>
                 )}
                 {needBeforePhoto && (
-                  <p className="text-center text-xs text-amber-700 dark:text-amber-400">{t("Take a Before photo (in Photos, below) to start.")}</p>
+                  <p className="text-center text-xs text-slate-500 dark:text-neutral-400">{t("A Before photo is required before you can finish — add it in Photos, below.")}</p>
                 )}
               </>
             ) : (
@@ -1018,7 +1025,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 <Button
                   className="w-full h-14 text-base font-bold bg-red-600 hover:bg-red-700 gap-2"
                   onClick={() => setClockOutOpen(true)}
-                  disabled={chemBlocked || needAfterPhoto}
+                  disabled={chemBlocked || needBeforePhoto || needAfterPhoto}
                 >
                   <StopIcon className="h-5 w-5" />
                   {t("Stop Job")}
@@ -1028,9 +1035,13 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                     {t("Confirm the chemicals applied (above) to stop this job.")}
                   </p>
                 )}
-                {needAfterPhoto && (
+                {(needBeforePhoto || needAfterPhoto) && (
                   <p className="text-center text-xs text-amber-700 dark:text-amber-400">
-                    {t("Take an After photo (in Photos, below) to stop this job.")}
+                    {needBeforePhoto && needAfterPhoto
+                      ? t("Add a Before and an After photo (in Photos, below) to stop this job.")
+                      : needBeforePhoto
+                        ? t("Add a Before photo (in Photos, below) to stop this job.")
+                        : t("Add an After photo (in Photos, below) to stop this job.")}
                   </p>
                 )}
               </>
@@ -1084,10 +1095,11 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                 .filter(([, , required]) => required)
                 .map(([phase]) => (
                   <label key={phase} className="cursor-pointer">
+                    {/* No `capture`: the phone offers Camera or Photo Library, so a
+                        photo taken earlier can be tagged Before / After too. */}
                     <input
                       type="file"
                       accept="image/*"
-                      capture="environment"
                       className="sr-only"
                       onChange={(e) => handlePhotoCapture(e, phase)}
                     />
@@ -1429,6 +1441,9 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
       <TimeSummaryDialog
         open={timeSummaryOpen}
         visitId={anchorVisitId}
+        visitBreakMinutes={stop?.visits.find((v) => v.id === anchorVisitId)?.breakMinutes ?? 0}
+        visitClockedInAt={stop?.clockedInAt ?? null}
+        visitClockedOutAt={stop?.clockedOutAt ?? null}
         onClose={() => {
           setTimeSummaryOpen(false);
           router.push("/crm/crew");

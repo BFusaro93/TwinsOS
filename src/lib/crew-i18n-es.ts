@@ -197,4 +197,9 @@ export const CREW_ES: Record<string, string> = {
   "{name} will come out of inventory but won't be added to the client's invoice. Continue?":
     "{name} saldrá del inventario pero no se agregará a la factura del cliente. ¿Continuar?",
   "{name} won't be counted as used on this job. Continue?": "{name} no se contará como usado en este trabajo. ¿Continuar?",
+  "After {time} of breaks": "Después de {time} de descansos",
+  "A Before photo is required before you can finish — add it in Photos, below.": "Se requiere una foto de antes para poder terminar. Agrégala en Fotos, abajo.",
+  "Add a Before and an After photo (in Photos, below) to stop this job.": "Agrega una foto de antes y una de después (en Fotos, abajo) para detener este trabajo.",
+  "Add a Before photo (in Photos, below) to stop this job.": "Agrega una foto de antes (en Fotos, abajo) para detener este trabajo.",
+  "Add an After photo (in Photos, below) to stop this job.": "Agrega una foto de después (en Fotos, abajo) para detener este trabajo.",
 };

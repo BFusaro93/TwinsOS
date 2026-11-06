@@ -193,6 +193,10 @@ export interface ProposalData {
    * publishable key (see getScopedStripeJs). */
   orgLivemode: boolean;
   lineItems: ProposalLineItem[];
+  /** Lines the client already agreed to (accepted earlier). Shown as "Already
+   *  agreed" — not selectable — and always part of the totals. Absent/empty
+   *  on most proposals. */
+  agreedLineItems?: ProposalLineItem[];
   photos: ProposalPhoto[];
 }
 

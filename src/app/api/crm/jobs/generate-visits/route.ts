@@ -9,12 +9,14 @@ import {
   GENERATOR_JOB_COLUMNS,
   NON_GENERATING_JOB_STATUSES,
   generateVisitsForJobs,
+  loadSchedulesByOrg,
   type GeneratorJob,
 } from "@/lib/visits/generate";
 import {
   SCHEDULE_CHANGE_PRUNE_STATUSES,
   findUntouchedFutureVisits,
   pruneVisits,
+  rescheduleKeepDates,
 } from "@/lib/visits/prune";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
@@ -32,12 +34,19 @@ const Body = z.object({
    * generate           — top up missing visits (default)
    * preview_reschedule — how many untouched future visits a schedule edit would remove
    * reschedule         — remove those visits, then regenerate on the job's (saved) schedule
+   *
+   * Both are a DIFF: an untouched visit on a date the new rules still produce
+   * is kept as is; only dates the new rules drop are removed.
    */
   action: z.enum(["generate", "preview_reschedule", "reschedule"]).optional(),
   /** schedule / schedule_days / recurrence_start changed → replace ALL untouched future visits. */
   scheduleChanged: z.boolean().optional(),
   /** preview only: the pending recurrence_end (reschedule reads the saved one). */
   recurrenceEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  /** preview only: the pending schedule name / days / start (undefined = unchanged). */
+  schedule: z.string().max(200).nullable().optional(),
+  scheduleDays: z.array(z.string().max(20)).max(7).optional(),
+  recurrenceStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 });
 
 export async function POST(request: Request) {
@@ -77,31 +86,50 @@ export async function POST(request: Request) {
 
   // ── schedule-change pruning ───────────────────────────────────────────────
   // Untouched = status 'scheduled', never clocked in, not invoiced, on/after
-  // the org's today. A schedule change replaces all of them; a shortened end
-  // date only removes the ones past the new end.
-  const pruneScope = (endDate: string | null | undefined) =>
-    scheduleChanged
-      ? { fromDate: today, statuses: SCHEDULE_CHANGE_PRUNE_STATUSES }
-      : endDate
-        ? { fromDate: today, afterDate: endDate, statuses: SCHEDULE_CHANGE_PRUNE_STATUSES }
-        : null;
+  // the org's today, and not moved by hand (same rule as Settings →
+  // Schedules). A schedule change removes the ones whose date the new rules
+  // no longer produce (the rest keep their crew, time and notes); a shortened
+  // end date only removes the ones past the new end.
+  const pruneScope = async (rulesJob: GeneratorJob) => {
+    const endDate = rulesJob.recurrence_end;
+    if (!scheduleChanged && !endDate) return null;
+    const { byOrg, error } = await loadSchedulesByOrg(supabase, orgId ? [orgId] : []);
+    if (error) throw new Error(error);
+    const keepDates = rescheduleKeepDates(rulesJob, byOrg.get(orgId ?? "") ?? new Map(), today);
+    return scheduleChanged
+      ? { fromDate: today, statuses: SCHEDULE_CHANGE_PRUNE_STATUSES, skipMoved: true, keepDates }
+      : { fromDate: today, afterDate: endDate, statuses: SCHEDULE_CHANGE_PRUNE_STATUSES, skipMoved: true, keepDates };
+  };
 
   if (action === "preview_reschedule") {
-    const scope = pruneScope(parsed.data.recurrenceEnd ?? null);
-    const ids = scope ? await findUntouchedFutureVisits(supabase, jobId, scope) : [];
-    return NextResponse.json({ removeCount: ids.length });
+    // The edit isn't saved yet: evaluate the PENDING schedule / days / dates.
+    const d = parsed.data;
+    const pending: GeneratorJob = {
+      ...j,
+      schedule: d.schedule !== undefined ? d.schedule : j.schedule,
+      schedule_days: d.scheduleDays !== undefined ? d.scheduleDays : j.schedule_days,
+      recurrence_start: d.recurrenceStart !== undefined ? d.recurrenceStart : j.recurrence_start,
+      recurrence_end: d.recurrenceEnd !== undefined ? d.recurrenceEnd : j.recurrence_end,
+    };
+    try {
+      const scope = await pruneScope(pending);
+      const ids = scope ? await findUntouchedFutureVisits(supabase, jobId, scope) : [];
+      return NextResponse.json({ removeCount: ids.length });
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to check existing visits" }, { status: 500 });
+    }
   }
 
   let removed = 0;
   if (action === "reschedule") {
-    const scope = pruneScope(j.recurrence_end);
-    if (scope) {
-      try {
+    try {
+      const scope = await pruneScope(j);
+      if (scope) {
         const ids = await findUntouchedFutureVisits(supabase, jobId, scope);
         removed = await pruneVisits(supabase, ids, scope.statuses);
-      } catch (e) {
-        return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to remove old visits" }, { status: 500 });
       }
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to remove old visits" }, { status: 500 });
     }
   }
 

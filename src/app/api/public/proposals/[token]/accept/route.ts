@@ -7,7 +7,7 @@ import { orgEmailFrom } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
-import { notifyStaffOfDepositExcess } from "@/lib/estimate-deposit-excess-notify";
+import { notifyStaffOfDepositExcess, notifyStaffOfUnacceptedDeposit } from "@/lib/estimate-deposit-excess-notify";
 import { recordAcceptedVersion } from "@/lib/estimates/versions";
 import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
 import { sendConfiguredAcceptanceConfirmation } from "@/lib/estimates/accept-confirmation";
@@ -110,6 +110,9 @@ export async function POST(
     .is("deleted_at", null)
     .single();
   if (!currentEstimate || currentEstimate.stage !== "sent") {
+    // A card deposit is charged before this request; if one landed, staff
+    // need to follow up (no-op when there's no deposit).
+    if (currentEstimate) await notifyStaffOfUnacceptedDeposit(supabase, shareToken.org_id, shareToken.estimate_id);
     return NextResponse.json({ error: "This proposal is no longer actionable" }, { status: 409 });
   }
   // A Good/Better/Best proposal is accepted for exactly one tier. Without a
@@ -130,6 +133,7 @@ export async function POST(
     }
   }
   if (await isEstimatePastValidUntil(supabase, shareToken.org_id, currentEstimate.valid_until_date)) {
+    await notifyStaffOfUnacceptedDeposit(supabase, shareToken.org_id, shareToken.estimate_id);
     return NextResponse.json(
       { error: "This proposal has expired. Use Request changes to ask for an updated one." },
       { status: 410 }
@@ -139,6 +143,7 @@ export async function POST(
   // The client can only accept the version their link shows. If staff have
   // edited past it, accepting would apply terms the client never saw.
   if (await isChangedSinceSent(supabase, shareToken.estimate_id)) {
+    await notifyStaffOfUnacceptedDeposit(supabase, shareToken.org_id, shareToken.estimate_id);
     return NextResponse.json(
       { error: "This proposal was updated after it was sent to you. We'll send you the latest version shortly." },
       { status: 409 }

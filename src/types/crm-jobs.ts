@@ -322,6 +322,8 @@ export interface CRMJobVisit {
   /** Which specific job service/visit (e.g. "Visit 3 of 5" on a package job) this scheduling event is for, if any. */
   jobServiceId: string | null
   stormEventId: string | null
+  /** Snow: which push of the storm this visit is (1 = the initial dispatch). Only Per Push jobs get push 2+. */
+  pushNumber: number
   snowDepthInches: number | null
   temperature: number | null
   assetType: string | null

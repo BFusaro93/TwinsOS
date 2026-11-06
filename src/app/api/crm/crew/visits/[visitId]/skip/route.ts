@@ -99,8 +99,11 @@ export async function POST(
       const mates = ((stopMates ?? []) as { id: string; status: string }[]);
       const stillRunning = mates.some((m) => m.id !== visitId && !["completed", "cancelled", "skipped"].includes(m.status));
       if (!stillRunning) {
+        // Service client: crew logins can't write punches directly (RLS); the
+        // visit was authorized above and its stop-mates are found from it.
+        const punchWriter = createServiceClient();
         for (const id of new Set([visitId, ...mates.map((m) => m.id)])) {
-          await closeStopPunches(supabase, id, now);
+          await closeStopPunches(punchWriter, id, now);
         }
       }
     } catch (err) {

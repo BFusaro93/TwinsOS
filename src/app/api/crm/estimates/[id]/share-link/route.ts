@@ -90,7 +90,7 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: est } = await (supabase as any)
-    .from("estimates").select("id, org_id, approval_status, stage, sent_at, total_cents").eq("id", estimateId).is("deleted_at", null).maybeSingle();
+    .from("estimates").select("id, org_id, approval_status, stage, sent_at, total_cents, approval_amount_cents, tiers_enabled").eq("id", estimateId).is("deleted_at", null).maybeSingle();
   if (!est) return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
 
   // A lost estimate must not hand out a live link (the public accept route
@@ -126,10 +126,13 @@ export async function POST(
       .map((r) => r.entity_total_cents)
       .filter((n): n is number => typeof n === "number");
     const approvedTotal = approvedTotals.length ? Math.max(...approvedTotals) : null;
-    if (approvedTotal != null && (est.total_cents ?? 0) > approvedTotal) {
+    // Compare the amount approval has to cover — the highest Good/Better/Best
+    // tier while none is chosen (approval_amount_cents), not the cheapest one.
+    const approvalAmount = (est.approval_amount_cents as number | null) ?? est.total_cents ?? 0;
+    if (approvedTotal != null && approvalAmount > approvedTotal) {
       return NextResponse.json(
         {
-          error: `This estimate was approved at $${(approvedTotal / 100).toFixed(2)} and now totals $${((est.total_cents ?? 0) / 100).toFixed(2)}. Resubmit it for approval before sharing the link.`,
+          error: `This estimate was approved at $${(approvedTotal / 100).toFixed(2)} and now totals $${(approvalAmount / 100).toFixed(2)}${est.tiers_enabled ? " (highest option)" : ""}. Resubmit it for approval before sharing the link.`,
           code: "reapproval_required",
         },
         { status: 409 }

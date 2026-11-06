@@ -117,6 +117,7 @@ function mapEstimate(row: any): Estimate {
     taxRateBps: row.tax_rate_bps,
     taxCents: row.tax_cents,
     totalCents: row.total_cents,
+    approvalAmountCents: row.approval_amount_cents ?? null,
     revenueCents: row.revenue_cents,
     overheadRateBps: row.overhead_rate_bps,
     overheadCostCents: row.overhead_cost_cents,

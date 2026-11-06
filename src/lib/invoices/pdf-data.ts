@@ -1,6 +1,7 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { InvoiceDocument, InvoiceDocumentMulti } from "@/components/crm/invoices/pdf/InvoiceDocument";
+import { fetchOrgCardPaymentsAvailable } from "@/lib/stripe/card-payments-available";
 import type { InvoicePDFData, InvoicePDFLineItem, OrgPDFData } from "@/components/crm/invoices/pdf/InvoiceDocument";
 import type { InvoicePDFLayoutKey } from "@/types/crm-invoices";
 import { buildInvoiceStatementData } from "@/lib/invoices/statement-data";
@@ -136,6 +137,7 @@ async function buildInvoicePDFData(
     ),
     advertisementText: (template?.advertisement_text as string | null) ?? null,
     viewOnlineUrl: shareToken ? buildInvoiceViewUrl(shareToken) : null,
+    payOnlineAvailable: await fetchOrgCardPaymentsAvailable(supabase, inv.org_id as string),
     clientName: inv.clients?.display_name ?? null,
     clientAddress: inv.clients?.billing_address ?? null,
     clientCity: inv.clients?.billing_city ?? null,

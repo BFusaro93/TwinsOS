@@ -293,6 +293,7 @@ interface DetailsState {
   autoGenerate: boolean;
   isActive: boolean;
   includeSubProperties: boolean;
+  snowOutsideDates: "bill_per_event" | "included";
 }
 
 /**
@@ -317,6 +318,7 @@ function ContractDetailsTab({
   signedAt,
   createdAt,
   hadMonthOverrides,
+  coversSnow,
 }: {
   state: DetailsState;
   onChange: (patch: Partial<DetailsState>) => void;
@@ -326,6 +328,8 @@ function ContractDetailsTab({
   createdAt?: string | null;
   /** A non-monthly contract (set via API/import) whose per-month amounts differ from its flat amount. */
   hadMonthOverrides?: boolean;
+  /** The contract covers snow (a linked snow job) — shows the storms-outside-dates setting. */
+  coversSnow?: boolean;
 }) {
   const isMonthly = state.billingFrequency === "monthly";
   const subMonthly = state.billingFrequency === "weekly" || state.billingFrequency === "biweekly";
@@ -421,6 +425,22 @@ function ContractDetailsTab({
           <FieldRow label="End Date">
             <Input type="date" className="h-8 w-44 text-sm" value={state.endDate} onChange={(e) => onChange({ endDate: e.target.value })} />
           </FieldRow>
+          {(coversSnow || state.snowOutsideDates === "included") && (
+            <FieldRow label="Storms outside the contract dates">
+              <div className="space-y-1">
+                <Select value={state.snowOutsideDates} onValueChange={(v) => onChange({ snowOutsideDates: v as DetailsState["snowOutsideDates"] })}>
+                  <SelectTrigger className="h-8 w-56 text-sm" aria-label="Storms outside the contract dates"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bill_per_event">Bill per event</SelectItem>
+                    <SelectItem value="included">Included in the contract</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  A snow storm before the start date or after the end date is billed per event in Snow Invoicing, unless it&apos;s included.
+                </p>
+              </div>
+            </FieldRow>
+          )}
         </Section>
       </div>
 
@@ -1255,6 +1275,7 @@ export function ContractDialog({
     autoGenerate: contract?.autoGenerate ?? true,
     isActive: contract?.isActive ?? true,
     includeSubProperties: contract?.includeSubProperties ?? true,
+    snowOutsideDates: contract?.snowOutsideDates ?? "bill_per_event",
   });
 
   const [source, setSource] = useState(contract?.source ?? "");
@@ -1364,6 +1385,7 @@ export function ContractDialog({
             auto_generate: details.autoGenerate,
             is_active: details.isActive,
             include_sub_properties: details.includeSubProperties,
+            snow_outside_dates: details.snowOutsideDates,
             source: source || null,
             sales_rep_id: salesRepId || null,
             sale_type: saleType,
@@ -1479,6 +1501,7 @@ export function ContractDialog({
               hideClient={!!defaultClientId}
               signedAt={contract?.signedAt}
               createdAt={contract?.createdAt}
+              coversSnow={(linkedJobs ?? []).some((j) => j.jobType === "snow")}
               hadMonthOverrides={
                 !!contract &&
                 normalizeBillingFrequency(contract.billingFrequency) !== "monthly" &&

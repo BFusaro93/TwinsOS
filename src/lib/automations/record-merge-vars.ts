@@ -2,6 +2,7 @@ import { loadChemicalNoticeData, loadInvoiceTemplateBranding, noticeOrgFromRow, 
 import { billingTermsLabel } from "@/lib/constants";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
+import { fetchOrgCardPaymentsAvailable, invoiceLinkLabel } from "@/lib/stripe/card-payments-available";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -49,8 +50,13 @@ export async function buildInvoiceExtras(
     "[balancedue]": fmtCents(inv.balance_cents as number),
     "[viewinvoiceonline]": url,
     // SMS is plain text, so the payment link there is the bare URL.
+    // Still the online invoice when the org can't take payments online (no
+    // Stripe Connect) — just labelled as a view link, never "Pay Now".
     "[paymentlink]": params.html && url
-      ? `<a href="${url}" style="color:#fff;background:#60ab45;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">Pay Now</a>`
+      ? `<a href="${url}" style="color:#fff;background:#60ab45;padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">${invoiceLinkLabel(
+          await fetchOrgCardPaymentsAvailable(supabase, params.orgId),
+          "button"
+        )}</a>`
       : url,
   };
 }

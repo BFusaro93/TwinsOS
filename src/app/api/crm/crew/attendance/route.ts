@@ -4,6 +4,7 @@ import { getRouteAuth, resolveCallerCrewId } from "@/lib/supabase/route-auth";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { closeMemberOpenShift } from "@/lib/crew/day-shifts";
+import { createServiceClient } from "@/lib/supabase/server";
 
 /**
  * POST /api/crm/crew/attendance — the crew leader marks a member as not
@@ -86,6 +87,10 @@ export async function POST(request: Request) {
   }
 
   const now = new Date().toISOString();
+  // Crew logins can't write shifts / punches directly (RLS) — their time writes
+  // go through the service client, after the own-crew check above. Office users
+  // keep writing under their own RLS.
+  const timeWriter = profile.role === "crew" ? createServiceClient() : db;
   if (absent) {
     const { data: existing } = await db
       .from("crm_crew_day_absences")
@@ -104,13 +109,13 @@ export async function POST(request: Request) {
     // the same way crew/day member_out does, so they aren't paid until a
     // forgotten End Day.
     try {
-      await closeMemberOpenShift(db, { orgId, crewMemberId, workDate, at: now });
+      await closeMemberOpenShift(timeWriter, { orgId, crewMemberId, workDate, at: now });
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to close shift" }, { status: 500 });
     }
     if (visitId) {
       // Ends an in-progress punch: the member isn't on this job any more.
-      await db
+      await timeWriter
         .from("crm_crew_member_times")
         .update({ clocked_out_at: now, updated_at: now })
         .eq("org_id", orgId)

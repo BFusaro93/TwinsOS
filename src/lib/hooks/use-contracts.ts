@@ -42,6 +42,7 @@ function mapContract(row: any): CRMContract {
     autoGenerate: row.auto_generate ?? true,
     isActive: row.is_active ?? true,
     includeSubProperties: row.include_sub_properties ?? true,
+    snowOutsideDates: row.snow_outside_dates === "included" ? "included" : "bill_per_event",
     source: row.source ?? null,
     salesRepId: row.sales_rep_id ?? null,
     saleType: row.sale_type ?? null,
@@ -346,6 +347,9 @@ const CONTRACT_FINANCIAL_FIELDS = [
   "bill_month_in_advance",
   "billing_frequency",
   "start_billing_mode",
+  // Whether storms outside the contract dates are billed per event or
+  // included changes what the client pays for a snow season.
+  "snow_outside_dates",
 ] as const;
 
 /** Stable, null-tolerant equality for contract field values (dates, numbers, jsonb). */
@@ -500,8 +504,9 @@ export function isValidContractStatusTransition(from: ContractStatus, to: Contra
 }
 
 /**
- * Cancels every not-yet-completed, today-or-future visit on jobs linked to
- * this contract (crm_jobs.contract_id) — otherwise cancelling a contract
+ * Cancels every not-yet-started (scheduled / dispatched, never clocked in),
+ * today-or-future visit on jobs linked to this contract
+ * (crm_jobs.contract_id) — otherwise cancelling a contract
  * leaves its recurring visits scheduled and the crew still shows up.
  * Scoped to visits only (not the parent job's own status) — a job can carry
  * visits from more than one billing cycle and deciding how to represent
@@ -512,18 +517,27 @@ export function isValidContractStatusTransition(from: ContractStatus, to: Contra
 async function cancelFutureContractVisits(supabase: any, contractId: string, orgId: string) {
   // "Future" is relative to the org's day, not the browser's.
   const todayStr = todayInZone(await getOrgTimeZone(supabase, orgId));
-  const { data: visits, error } = await supabase
-    .from("crm_job_visits")
-    .select("id, job_comments, status, crm_jobs!inner(contract_id)")
-    .eq("crm_jobs.contract_id", contractId)
-    .gte("scheduled_date", todayStr)
-    .neq("status", "completed")
-    .neq("status", "cancelled")
-    .is("deleted_at", null);
-  if (error || !visits?.length) return;
+  // Only visits nobody has started: scheduled / dispatched and never clocked
+  // in (the same "untouched" rule a job cancel uses — see
+  // findJobVisitsToRemove). A crew mid-stop keeps its visit, and a visit
+  // already skipped keeps its skip reason. Paged: a season of weekly visits
+  // across a contract's jobs can pass PostgREST's 1000-row cap.
+  const visits = await fetchAllRows<{ id: string; job_comments: unknown }>(() =>
+    supabase
+      .from("crm_job_visits")
+      .select("id, job_comments, crm_jobs!inner(contract_id)")
+      .eq("crm_jobs.contract_id", contractId)
+      .gte("scheduled_date", todayStr)
+      .in("status", ["scheduled", "dispatched"])
+      .is("clocked_in_at", null)
+      .is("deleted_at", null)
+  );
+  if (!visits.length) return;
 
   const now = new Date().toISOString();
-  for (const visit of visits as { id: string; job_comments: unknown }[]) {
+  let failed = 0;
+  let firstError: string | null = null;
+  for (const visit of visits) {
     const existingComments = Array.isArray(visit.job_comments) ? visit.job_comments : [];
     const newComments = [
       ...existingComments,
@@ -535,10 +549,22 @@ async function cancelFutureContractVisits(supabase: any, contractId: string, org
         createdAt: now,
       },
     ];
-    await supabase
+    const { error: updErr } = await supabase
       .from("crm_job_visits")
       .update({ status: "cancelled", job_comments: newComments, updated_at: now })
-      .eq("id", visit.id);
+      .eq("id", visit.id)
+      // Re-check: the crew may have clocked in since the read.
+      .in("status", ["scheduled", "dispatched"])
+      .is("clocked_in_at", null);
+    if (updErr) {
+      failed++;
+      firstError ??= (updErr as { message?: string }).message ?? "update failed";
+    }
+  }
+  if (failed > 0) {
+    throw new Error(
+      `The contract was updated, but ${failed} of ${visits.length} upcoming visit${visits.length !== 1 ? "s" : ""} couldn't be cancelled (${firstError}). Cancel them from the Dispatch Board.`
+    );
   }
 }
 

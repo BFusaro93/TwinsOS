@@ -13,6 +13,10 @@ import type { ProposalData, ProposalLineItem } from "@/types/crm-proposals";
 import { groupIntoSections, type DisplaySettings } from "@/lib/estimate-display-settings";
 import { unitLabel } from "@/lib/estimates/units";
 import { LineDescription } from "@/components/shared/LineDescription";
+import { deriveProposalTotals, proposalLineNet } from "@/lib/estimates/proposal-totals";
+
+const TIERS = ["basic", "standard", "premium"] as const;
+type Tier = (typeof TIERS)[number];
 
 function cents(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n / 100);
@@ -161,15 +165,16 @@ function lineMeta(li: ProposalLineItem, settings: DisplaySettings): string | nul
 // Client-side mirror of recalcEstimateTotals' discount/tax rule, used ONLY
 // when the client changes the selection (unchecks items / picks a tier) and
 // the stored totals no longer describe what they're accepting. A percent
-// discount is re-derived from the new subtotal; a flat discount is clamped
-// to it; tax is applied to the discounted amount.
+// discount is re-derived from the new subtotal; a flat discount is the amount
+// asked for, clamped to it; tax is applied to the discounted amount. Shared
+// with the client portal (lib/estimates/proposal-totals).
 function deriveTotals(proposal: ProposalData, subtotalCents: number) {
-  const rawDiscount = proposal.discountType === "percent"
-    ? Math.round(subtotalCents * ((proposal.discountValue ?? 0) / 10000))
-    : proposal.discountCents;
-  const discountCents = Math.max(0, Math.min(rawDiscount, subtotalCents));
-  const taxCents = Math.round(((subtotalCents - discountCents) * proposal.taxRateBps) / 10000);
-  return { subtotalCents, discountCents, taxCents, totalCents: subtotalCents - discountCents + taxCents };
+  return deriveProposalTotals(proposal, subtotalCents);
+}
+
+/** Tiers that actually have lines — an empty tier is never offered. */
+function tiersWithLines(lineItems: ProposalLineItem[]): Tier[] {
+  return TIERS.filter((t) => lineItems.some((li) => li.rowType !== "section" && li.tier === t));
 }
 
 // ── Signature pad ─────────────────────────────────────────────────────────────
@@ -405,7 +410,10 @@ export default function ProposalPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [selectedTier, setSelectedTier] = useState<'basic' | 'standard' | 'premium'>('standard');
+  // Defaults to the first tier that has lines once the proposal loads — a
+  // fixed 'standard' default pointed at an empty tier on a Basic/Premium-only
+  // proposal.
+  const [selectedTier, setSelectedTier] = useState<Tier>('standard');
   const [acceptedByName, setAcceptedByName] = useState("");
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -439,6 +447,8 @@ export default function ProposalPage() {
         setProposal(data);
         // Pre-select all quote line items
         setSelectedIds(new Set(data.lineItems.filter((li) => li.rowType !== "section").map((li) => li.id)));
+        const firstTier = tiersWithLines(data.lineItems)[0];
+        if (firstTier) setSelectedTier(firstTier);
         if (data.alreadyAccepted) setAccepted(true);
       })
       .catch(() => setError("Failed to load proposal."))
@@ -476,11 +486,15 @@ export default function ProposalPage() {
   // recalcEstimateTotals uses, so the derived subtotal equals the stored one
   // when everything is selected. Direct costs (estimate_direct_costs) are
   // internal cost, never part of the client's price, and are not sent here.
-  const lineNet = (li: ProposalLineItem) =>
-    Math.max(0, li.totalCents - (li.discountCents ?? 0)) + (li.subitemTotalCents ?? 0);
-  const selectedTotal = proposal?.tiersEnabled
+  const lineNet = proposalLineNet;
+  // Lines accepted earlier: not selectable, but the stored totals count them,
+  // and so does every derived total here.
+  const agreedItems = proposal?.agreedLineItems ?? [];
+  const agreedNet = agreedItems.reduce((sum, li) => sum + lineNet(li), 0);
+  const selectedTotal = agreedNet + (proposal?.tiersEnabled
     ? visibleLineItems.filter((li) => li.rowType !== "section").reduce((sum, li) => sum + lineNet(li), 0)
-    : quoteItems.filter((li) => selectedIds.has(li.id)).reduce((sum, li) => sum + lineNet(li), 0);
+    : quoteItems.filter((li) => selectedIds.has(li.id)).reduce((sum, li) => sum + lineNet(li), 0));
+  const availableTiers = proposal ? tiersWithLines(proposal.lineItems) : [];
 
   // Totals shown to the client. While the proposal is untouched (all items
   // selected, no tier choice) these are EXACTLY the estimate's stored
@@ -854,10 +868,16 @@ export default function ProposalPage() {
         <div className="mb-6">
           <p className="mb-3 text-sm font-semibold text-slate-700">Choose Your Package</p>
           <div className="grid grid-cols-3 gap-3">
-            {(["basic", "standard", "premium"] as const).map((tier) => {
+            {availableTiers.map((tier) => {
               const label = proposal.tierLabels[tier];
               const tierItems = proposal.lineItems.filter((li) => li.rowType !== "section" && (li.tier === null || li.tier === tier));
-              const tierTotal = tierItems.reduce((s, li) => s + li.totalCents, 0);
+              // The same figure the totals box shows for this tier: line nets
+              // (line discounts, sub-items) plus anything already agreed, then
+              // the header discount and tax.
+              const tierTotal = deriveTotals(
+                proposal,
+                agreedNet + tierItems.reduce((s, li) => s + lineNet(li), 0),
+              ).totalCents;
               const isSelected = selectedTier === tier;
               return (
                 <button
@@ -1007,6 +1027,35 @@ export default function ProposalPage() {
           </div>
         ))}
       </div>
+
+      {/* Lines accepted earlier — shown so the totals below add up, but not
+          selectable: they're already agreed. */}
+      {agreedItems.length > 0 && (
+        <div className="mb-6 rounded-lg border bg-white shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b bg-slate-50">
+            <p className="text-sm font-semibold text-slate-700">Already agreed</p>
+            <p className="text-xs text-slate-500">Accepted earlier — included in the total below.</p>
+          </div>
+          <div className="divide-y">
+            {agreedItems.map((li) => {
+              const meta = lineMeta(li, proposal.displaySettings);
+              return (
+                <div key={li.id} className="flex items-start gap-3 px-4 py-3">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-slate-700">{li.serviceName ?? "Service"}</p>
+                    {li.estimateDesc && <LineDescription html={li.estimateDesc} />}
+                    {meta && <p className="mt-1 text-xs text-slate-400">{meta}</p>}
+                  </div>
+                  {proposal.displaySettings.showLineTotals && (
+                    <p className="shrink-0 font-semibold text-slate-600">{cents(lineNet(li))}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Totals — stored estimate figures (see `totals` above), never recomputed
           from line items while the selection is untouched. */}

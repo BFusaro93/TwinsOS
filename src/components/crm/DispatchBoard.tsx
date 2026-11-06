@@ -250,6 +250,8 @@ export function effectiveCrewId(
  * their own rather than being lumped in with some real crew's block.
  */
 const UNASSIGNED_CREW_KEY = "unassigned";
+/** Route tools work on one crew's ONE day; a From/To range mixes several. */
+const MULTI_DAY_ROUTE_TIP = "Routes are built one day at a time — set the board to a single day to optimize, reorder or save a route.";
 
 // How many people are actually on a crew for a given day — the crew's default
 // roster (crm_crew_members), with any same-day-only reassignments from the
@@ -2979,6 +2981,7 @@ function EditJobTimeRow({
   memberName,
   clockedInAt,
   clockedOutAt,
+  breakMinutes,
   visitDate,
   onSave,
   onDelete,
@@ -2987,8 +2990,11 @@ function EditJobTimeRow({
   memberName: string;
   clockedInAt: string | null;
   clockedOutAt: string | null;
+  /** The member's own break on this punch (time away is added to it when they come back). */
+  breakMinutes: number;
   visitDate: string;
-  onSave: (date: string, start: string, end: string) => void;
+  /** breakMinutes is passed only when the office changed the Break box; otherwise the server keeps it (clamped to the punch). */
+  onSave: (date: string, start: string, end: string, breakMinutes?: number) => void;
   onDelete: () => void;
 }) {
   const tz = useOrgTimeZone();
@@ -2997,6 +3003,7 @@ function EditJobTimeRow({
   const [date, setDate] = useState(startInit.date || endInit.date || visitDate);
   const [start, setStart] = useState(startInit.time);
   const [end, setEnd] = useState(endInit.time);
+  const [brk, setBrk] = useState(String(breakMinutes));
 
   useEffect(() => {
     const s = isoToDateAndTime(clockedInAt, visitDate, tz);
@@ -3005,6 +3012,12 @@ function EditJobTimeRow({
     setStart(s.time);
     setEnd(e.time);
   }, [clockedInAt, clockedOutAt, visitDate, tz]);
+  useEffect(() => { setBrk(String(breakMinutes)); }, [breakMinutes]);
+  const save = () => {
+    const n = Number(brk);
+    const changed = brk.trim() !== "" && Number.isInteger(n) && n >= 0 && n !== breakMinutes;
+    onSave(date, start, end, changed ? n : undefined);
+  };
   // An end on a later calendar day than the start is an overnight punch.
   const overnight = !!clockedInAt && !!clockedOutAt && endInit.date > startInit.date;
 
@@ -3012,13 +3025,17 @@ function EditJobTimeRow({
     <div className="flex flex-wrap items-center gap-1.5 py-1.5">
       <span className="w-28 shrink-0 truncate text-sm text-slate-700 dark:text-neutral-300">{memberName}</span>
       <Input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-        onBlur={() => onSave(date, start, end)} className="h-8 w-36 shrink-0 text-xs" />
+        onBlur={save} className="h-8 w-36 shrink-0 text-xs" />
       <Input type="time" value={start} onChange={(e) => setStart(e.target.value)}
-        onBlur={() => onSave(date, start, end)} className="h-8 w-32 shrink-0 text-xs" />
+        onBlur={save} className="h-8 w-32 shrink-0 text-xs" />
       <span className="shrink-0 text-xs text-slate-400 dark:text-neutral-500">to</span>
       <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)}
-        onBlur={() => onSave(date, start, end)} className="h-8 w-32 shrink-0 text-xs" />
+        onBlur={save} className="h-8 w-32 shrink-0 text-xs" />
       {overnight && <span className="shrink-0 text-[10px] text-muted-foreground" title="Ends the next day">+1 day</span>}
+      <Input type="number" min={0} step={1} value={brk} onChange={(e) => setBrk(e.target.value)}
+        onBlur={save} className="h-8 w-16 shrink-0 text-xs" aria-label={`${memberName} break minutes`}
+        title="This person's own break on this punch, in minutes (not the stop's pause)" />
+      <span className="shrink-0 text-[10px] text-muted-foreground">min break</span>
       <button onClick={onDelete} className="shrink-0 text-slate-300 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400" title="Remove">
         <Trash2 className="h-3.5 w-3.5" />
       </button>
@@ -3170,7 +3187,7 @@ function EditJobTimesDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberTimes, visitId, visitDate, tz]);
 
-  async function saveRow(memberId: string, date: string, start: string, end: string) {
+  async function saveRow(memberId: string, date: string, start: string, end: string, breakMinutes?: number) {
     // End == Start is a zero-length punch. End BEFORE Start means the shift
     // ran past midnight (snow/storm punches routinely do) — the end lands on
     // the next calendar day; the route still rejects anything over 24h.
@@ -3185,6 +3202,7 @@ function EditJobTimesDialog({
         crewMemberId: memberId,
         clockedInAt: dateAndTimeToIso(date, start, tz),
         clockedOutAt: dateAndTimeToIso(date, end, tz, endDayOffset),
+        ...(breakMinutes != null && start && end ? { breakMinutes } : {}),
       });
     } catch {
       toast.error("Failed to save time");
@@ -3269,7 +3287,8 @@ function EditJobTimesDialog({
               clockedInAt={t.clockedInAt}
               clockedOutAt={t.clockedOutAt}
               visitDate={visitDate}
-              onSave={(date, start, end) => saveRow(t.crewMemberId, date, start, end)}
+              breakMinutes={t.breakMinutes}
+              onSave={(date, start, end, brk) => saveRow(t.crewMemberId, date, start, end, brk)}
               onDelete={() => removeRow(t.crewMemberId)}
             />
           ))}
@@ -4358,6 +4377,14 @@ export function DispatchBoard() {
   const [routeStrategy,      setRouteStrategy]      = useState<"nearest_first" | "furthest_first">("nearest_first");
 
   const effectiveEnd = endDate || undefined;
+  // A From/To range shows several days at once. A route is one crew's ONE
+  // day, so numbering and drag reordering are per (crew, day), and the
+  // route-building tools (optimize, manual #, reverse, group, save) are off
+  // until the board is back on a single day.
+  const multiDay = !!endDate && endDate > selectedDate;
+  useEffect(() => {
+    if (multiDay) setManualRouteMode(false);
+  }, [multiDay]);
   const { data: visits, isLoading, refetch } = useVisitsForDate(selectedDate, effectiveEnd);
   const { data: crews }             = useCRMCrews();
   const { data: allServices }       = useCRMServices();
@@ -4519,6 +4546,7 @@ export function DispatchBoard() {
    * positions untouched — the same technique handleReorder uses for drags.
    */
   async function handleOptimizeRoute() {
+    if (multiDay) { toast.error(MULTI_DAY_ROUTE_TIP); return; }
     const scope = routeScope();
     // `job.serviceAddress` here is the stop's RESOLVED address (job snapshot →
     // linked property → client service → client billing; see
@@ -4913,6 +4941,10 @@ export function DispatchBoard() {
           const byCrew = an.localeCompare(bn);
           if (byCrew !== 0) return byCrew;
 
+          // Multi-day range: each crew's days in date order, each day its own route.
+          const byDay = (a.scheduledDate ?? "").localeCompare(b.scheduledDate ?? "");
+          if (byDay !== 0) return byDay;
+
           const byPriority = (a.priority ?? 0) - (b.priority ?? 0);
           if (byPriority !== 0) return byPriority;
 
@@ -4932,16 +4964,21 @@ export function DispatchBoard() {
   // Order numbers and drag/drop reordering are scoped per crew — each crew
   // runs its own separate route, so "#3" should mean the 3rd stop for THAT
   // crew, and reordering one crew's stops must never renumber another's.
+  // On a multi-day range the key is (crew, day): a crew's Tuesday is a
+  // different route from its Monday, so stops number from #1 each day and a
+  // drag can't carry a stop into another day's route.
   const visitById = new Map(displayVisits.map((v) => [v.id, v]));
+  const routeKeyOfVisit = (v: typeof displayVisits[number]) =>
+    `${effectiveCrewIdOf(v) ?? UNASSIGNED_CREW_KEY}|${v.scheduledDate ?? ""}`;
   const crewKeyOf = (id: string) => {
     const v = visitById.get(id);
-    return (v ? effectiveCrewIdOf(v) : null) ?? UNASSIGNED_CREW_KEY;
+    return v ? routeKeyOfVisit(v) : UNASSIGNED_CREW_KEY;
   };
   const crewOrderNumById = new Map<string, number>();
   {
     const counters = new Map<string, number>();
     for (const v of displayVisits) {
-      const key = effectiveCrewIdOf(v) ?? UNASSIGNED_CREW_KEY;
+      const key = routeKeyOfVisit(v);
       const next = (counters.get(key) ?? 0) + 1;
       counters.set(key, next);
       crewOrderNumById.set(v.id, next);
@@ -5006,6 +5043,7 @@ export function DispatchBoard() {
   /** Reorder every crew's stops by the numbers typed so far, in one go. */
   function handleApplyRouteNumbers() {
     if (draftNumbers.size === 0) return;
+    if (multiDay) { toast.error(MULTI_DAY_ROUTE_TIP); return; }
     const cur = manualOrder ?? displayVisits.map((v) => v.id);
     const { order, crewsWithDuplicates } = applyRouteNumbers(cur, crewKeyOf, draftNumbers);
     setManualOrder(order);
@@ -5019,6 +5057,7 @@ export function DispatchBoard() {
   }
 
   async function handleSaveOrder() {
+    if (multiDay) { toast.error(MULTI_DAY_ROUTE_TIP); return; }
     // Only ever save ids that belong to the visit set currently loaded for
     // this date/range. clearPendingOrder() should already have dropped a
     // manualOrder left over from another day, but this is the last gate before
@@ -5170,6 +5209,7 @@ export function DispatchBoard() {
   // optimize, so it — not manualOrder, which can outlive a filter change — is
   // the right base for these two.
   function handleReverseRoute() {
+    if (multiDay) { toast.error(MULTI_DAY_ROUTE_TIP); return; }
     const cur = displayVisits.map((v) => v.id);
     const scope = routeScope();
     setManualOrder(reorderWithinCrews(cur, (ids) => [...ids].reverse(), scope.has));
@@ -5180,6 +5220,7 @@ export function DispatchBoard() {
   }
 
   function handleGroupStops() {
+    if (multiDay) { toast.error(MULTI_DAY_ROUTE_TIP); return; }
     const cur = displayVisits.map((v) => v.id);
     const scope = routeScope();
     const zipAreaOf = (id: string) =>
@@ -5410,7 +5451,8 @@ export function DispatchBoard() {
             <Button size="sm" variant="outline"
               className={cn("h-9 max-lg:h-11 rounded-r-none border-r-0 text-xs gap-1 px-2.5", (optimizedOrder || manualOrder) && "border-brand-400 text-brand-600 dark:text-brand-400")}
               onClick={handleOptimizeRoute}
-              disabled={optimizing}
+              disabled={optimizing || multiDay}
+              title={multiDay ? MULTI_DAY_ROUTE_TIP : undefined}
             >
               <Route className="h-3.5 w-3.5" />
               {optimizing ? "Optimizing…" : optimizedOrder ? "Re-Optimize" : "Optimize Route"}
@@ -5452,12 +5494,12 @@ export function DispatchBoard() {
           </p>
           <div className="flex items-center gap-2">
             {draftNumbers.size > 0 ? (
-              <Button size="sm" className="h-7 max-lg:h-10 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleApplyRouteNumbers}>
+              <Button size="sm" className="h-7 max-lg:h-10 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleApplyRouteNumbers} disabled={multiDay} title={multiDay ? MULTI_DAY_ROUTE_TIP : undefined}>
                 <Route className="h-3.5 w-3.5" />
                 Apply Route
               </Button>
             ) : (
-              <Button size="sm" className="h-7 max-lg:h-10 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleSaveOrder}>
+              <Button size="sm" className="h-7 max-lg:h-10 gap-1.5 px-3 text-xs bg-brand-500 hover:bg-brand-600 text-white" onClick={handleSaveOrder} disabled={multiDay} title={multiDay ? MULTI_DAY_ROUTE_TIP : undefined}>
                 Save Order
               </Button>
             )}
@@ -5668,16 +5710,17 @@ export function DispatchBoard() {
             size="sm" variant="outline"
             className={cn("h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs", manualRouteMode && "border-brand-400 text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30")}
             onClick={() => { setManualRouteMode((m) => !m); setRouteDrafts({}); }}
-            title="Enable drag-and-drop and manual # entry — type a number on each stop, then press Apply Route"
+            disabled={multiDay}
+            title={multiDay ? MULTI_DAY_ROUTE_TIP : "Enable drag-and-drop and manual # entry — type a number on each stop, then press Apply Route"}
           >
             <GripVertical className="h-3.5 w-3.5" />
             Manual Route
           </Button>
-          <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={handleReverseRoute} title="Reverse each crew's route order">
+          <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={handleReverseRoute} disabled={multiDay} title={multiDay ? MULTI_DAY_ROUTE_TIP : "Reverse each crew's route order"}>
             <ArrowUpDown className="h-3.5 w-3.5" />
             Reverse
           </Button>
-          <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={handleGroupStops} title="Group each crew's stops by zip area">
+          <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={handleGroupStops} disabled={multiDay} title={multiDay ? MULTI_DAY_ROUTE_TIP : "Group each crew's stops by zip area"}>
             <MapPin className="h-3.5 w-3.5" />
             Group Stops
           </Button>
@@ -6101,7 +6144,9 @@ export function DispatchBoard() {
                   "#1" — one each, for their own crew — not a single #1/#2. */}
               <DropdownMenuItem
                 className="text-xs"
+                disabled={multiDay}
                 onSelect={() => {
+                  if (multiDay) { toast.error(MULTI_DAY_ROUTE_TIP); return; }
                   // Same splice-in-place approach as handleReorder — move
                   // each crew's selected stops to the front of THAT crew's
                   // own subsequence only. Prepending every selected id to

@@ -20,6 +20,8 @@ interface LineItemRow {
   section_name: string | null;
   tier: string | null;
   package_id: string | null;
+  discount_cents: number | null;
+  subitems?: { total_cents: number | null; deleted_at: string | null }[] | null;
 }
 
 interface EstimateRow {
@@ -34,6 +36,10 @@ interface EstimateRow {
   display_settings: unknown;
   tiers_enabled: boolean | null;
   tier_labels: { basic?: string; standard?: string; premium?: string } | null;
+  discount_cents: number | null;
+  discount_type: "percent" | "flat" | null;
+  discount_value: number | null;
+  tax_rate_bps: number | null;
   line_items: LineItemRow[];
 }
 
@@ -70,7 +76,8 @@ export default async function EstimatesPage() {
         .from("estimates")
         .select(
           "id, client_id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
-            "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, status, sort_order, row_type, section_name, tier, package_id)"
+            "discount_cents, discount_type, discount_value, tax_rate_bps, " +
+            "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, discount_cents, status, sort_order, row_type, section_name, tier, package_id, subitems:estimate_line_item_subitems(total_cents, deleted_at))"
         )
         .in("client_id", ids)
         .eq("org_id", ctx.orgId)
@@ -93,6 +100,21 @@ export default async function EstimatesPage() {
     const published = e.status === "sent" ? await getPublishedProposal(service, e.id) : null;
     if (published) {
       const c = published.content;
+      const toPortalLine = (li: (typeof c.lineItems)[number], status: string) => ({
+        id: li.id,
+        description: li.estimateDesc ?? li.serviceName ?? "",
+        quantity: li.qty,
+        unit_price_cents: li.rateCents,
+        visits: li.visits,
+        total_cents: li.totalCents,
+        discount_cents: li.discountCents ?? 0,
+        subitem_total_cents: li.subitemTotalCents ?? 0,
+        status,
+        package_id: li.packageId ?? null,
+        row_type: li.rowType,
+        section_name: li.sectionName,
+        tier: li.tier,
+      });
       return {
         ...e,
         title: c.description,
@@ -101,19 +123,17 @@ export default async function EstimatesPage() {
         display_settings: c.displaySettings,
         tiers_enabled: c.tiersEnabled,
         tier_labels: c.tierLabels,
-        line_items: c.lineItems.map((li) => ({
-          id: li.id,
-          description: li.estimateDesc ?? li.serviceName ?? "",
-          quantity: li.qty,
-          unit_price_cents: li.rateCents,
-          visits: li.visits,
-          total_cents: li.totalCents,
-          status: li.status,
-          package_id: li.packageId ?? null,
-          row_type: li.rowType,
-          section_name: li.sectionName,
-          tier: li.tier,
-        })),
+        // The sent version's header discount / tax, so the Selected Total
+        // matches what accepting records (see lib/estimates/proposal-totals).
+        discount_cents: c.discountCents,
+        discount_type: c.discountType,
+        discount_value: c.discountValue,
+        tax_rate_bps: c.taxRateBps,
+        // Lines already agreed (status 'won') are shown as such, not offered.
+        line_items: [
+          ...c.lineItems.map((li) => toPortalLine(li, li.status)),
+          ...(c.agreedLineItems ?? []).map((li) => toPortalLine(li, "won")),
+        ],
       };
     }
     return {
@@ -125,7 +145,12 @@ export default async function EstimatesPage() {
         premium: e.tier_labels?.premium ?? "Premium",
       },
       display_settings: toDisplaySettings(e.display_settings),
-      line_items: e.line_items.map((li) => ({ ...li, description: li.description ?? "" })),
+      line_items: e.line_items.map(({ subitems, ...li }) => ({
+        ...li,
+        description: li.description ?? "",
+        discount_cents: li.discount_cents ?? 0,
+        subitem_total_cents: (subitems ?? []).filter((si) => !si.deleted_at).reduce((sum, si) => sum + (si.total_cents ?? 0), 0),
+      })),
     };
   }));
 

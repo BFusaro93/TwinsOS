@@ -40,14 +40,17 @@ interface Props {
   onApply: (patch: BudgetedHoursPatch) => void;
 }
 
-function occurrenceCostCents(totalCostCents: number, visits: number, calcType: 0 | 1): number {
-  // Mirrors computeLineItem: calcType 0 ("$" fixed) never multiplies by
-  // visits, so totalCostCents IS the occurrence cost already.
-  return calcType === 1 ? totalCostCents / (visits || 1) : totalCostCents;
+function occurrenceCostCents(totalCostCents: number, visits: number): number {
+  // Mirrors computeLineItem: a line's cost covers all of its visits for both
+  // calc types (a multi-visit fixed line is the same work repeated), so one
+  // occurrence is the total ÷ visits.
+  return totalCostCents / (visits || 1);
 }
 
-function costCentsFromOccurrence(occurrenceCents: number, qty: number, calcType: 0 | 1): number {
-  return calcType === 1 ? occurrenceCents / (qty || 1) : occurrenceCents;
+function costCentsFromOccurrence(occurrenceCents: number, qty: number, visits: number, calcType: 0 | 1): number {
+  // Per-unit cost (× qty × visits in computeLineItem) for "per unit" lines;
+  // a fixed line's Cost is the line's whole cost, i.e. every occurrence.
+  return calcType === 1 ? occurrenceCents / (qty || 1) : occurrenceCents * (visits || 1);
 }
 
 export function BudgetedHoursPopover({
@@ -101,14 +104,14 @@ export function BudgetedHoursPopover({
   // Both sides carry the same factor, so it cancels: base cost ÷ base hours is
   // the same $/man-hour as scaled cost ÷ scaled hours. Anything written back
   // out is therefore already in the base units the row stores.
-  const occCostCents = occurrenceCostCents(totalCostCents, visits, calcType) / factor;
+  const occCostCents = occurrenceCostCents(totalCostCents, visits) / factor;
   const currentRateCentsPerHr = hoursDraft > 0 ? occCostCents / hoursDraft : 0;
   const targetRateCents = Math.round((parseFloat(targetRate) || 0) * 100);
 
   function handleAdjustCost() {
     if (hoursDraft <= 0) return;
     const newOccCostCents = Math.round(targetRateCents * hoursDraft);
-    const newCostCents = Math.round(costCentsFromOccurrence(newOccCostCents, qty, calcType));
+    const newCostCents = Math.round(costCentsFromOccurrence(newOccCostCents, qty, visits, calcType));
     onApply({ budgetedHours: hoursDraft, costCents: newCostCents });
     setOpen(false);
   }
@@ -123,7 +126,7 @@ export function BudgetedHoursPopover({
     // rate and land back at the old ratio, not the target typed above — pin
     // cost to its current occurrence value first so the target actually holds.
     if (isAutoCost) {
-      patch.costCents = Math.round(costCentsFromOccurrence(occCostCents, qty, calcType));
+      patch.costCents = Math.round(costCentsFromOccurrence(occCostCents, qty, visits, calcType));
     }
     onApply(patch);
     setOpen(false);

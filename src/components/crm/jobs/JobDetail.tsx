@@ -101,7 +101,8 @@ import { useClient } from "@/lib/hooks/use-clients";
 import { useProject } from "@/lib/hooks/use-projects";
 import { ProjectDetailSheet } from "@/components/po/ProjectDetailSheet";
 import { computeJobServiceBudgetedHours } from "@/lib/estimate-calc";
-import type { CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
+import type { CRMJobVisit, CRMJobService, CRMSchedule } from "@/types/crm-jobs";
+import { DAY_INDEX, parseLegacySchedule } from "@/lib/visits/recurrence";
 import { JobCostingTab } from "@/components/crm/jobs/JobCostingTab";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
@@ -293,6 +294,10 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
             action: "preview_reschedule",
             scheduleChanged,
             recurrenceEnd: endChanged ? ((edits.recurrence_end as string | null) ?? null) : undefined,
+            // The pending values: the preview diffs existing visits against the NEW rules.
+            schedule: "schedule" in edits ? ((edits.schedule as string | null) ?? null) : undefined,
+            scheduleDays: "schedule_days" in edits ? ((edits.schedule_days as string[] | null) ?? []) : undefined,
+            recurrenceStart: "recurrence_start" in edits ? ((edits.recurrence_start as string | null) ?? null) : undefined,
           }),
         });
         const preview = await res.json() as { removeCount?: number; error?: string };
@@ -300,11 +305,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         const n = preview.removeCount ?? 0;
         if (n > 0) {
           const ok = await confirm({
-            title: `Replace ${n} upcoming visit${n !== 1 ? "s" : ""}?`,
+            title: `Remove ${n} upcoming visit${n !== 1 ? "s" : ""}?`,
             description: scheduleChanged
-              ? `${n} upcoming visit${n !== 1 ? "s" : ""} on the old schedule that haven't been dispatched, started or invoiced will be removed and new visits generated on the new schedule. Dispatched, started, completed and invoiced visits are kept.`
-              : `${n} upcoming visit${n !== 1 ? "s" : ""} after the new end date that haven't been dispatched, started or invoiced will be removed.`,
-            confirmLabel: "Save and replace",
+              ? `${n} upcoming visit${n !== 1 ? "s" : ""} on dates the new schedule no longer includes will be removed, and visits for the new schedule's dates generated. Visits on dates the new schedule keeps stay as they are (crew, time and notes included), and dispatched, started, moved-by-hand, completed and invoiced visits are never removed.`
+              : `${n} upcoming visit${n !== 1 ? "s" : ""} after the new end date that haven't been dispatched, started, moved by hand or invoiced will be removed.`,
+            confirmLabel: "Save and update visits",
             destructive: true,
           });
           if (!ok) return;
@@ -392,7 +397,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         const propagateRes = await fetch(`/api/crm/jobs/${job.id}/propagate-crew`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ crewId: edits.crew_id ?? null, fromDate: today }),
+          body: JSON.stringify({ crewId: edits.crew_id ?? null, fromDate: today, previousCrewId: job.crewId ?? null }),
         });
         if (!propagateRes.ok) {
           toast.error("Job saved, but the crew change couldn't be applied to its upcoming visits — reassign them from the Dispatch Board.");
@@ -1129,14 +1134,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             } else {
                               const sched = schedules.find((s) => s.id === v);
                               if (!sched) return;
-                              const DAY_FULL: Record<string, string> = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
-                              const fullDay = DAY_FULL[sched.dayOfWeek] ?? sched.dayOfWeek;
-                              const schedStr = sched.frequency === "bi_weekly"
-                                ? `Bi-weekly - ${fullDay}${sched.weekPattern && sched.weekPattern !== "any" ? ` - ${sched.weekPattern === "even" ? "Even" : "Odd"} Weeks` : ""}`
-                                : `Weekly - ${fullDay}`;
-                              patch("schedule", schedStr);
-                              patch("schedule_days", [fullDay]);
-                              patch("recurrence_rule", sched.name);
+                              // Jobs point at their schedule BY NAME (crm_jobs.schedule) — the visit
+                              // generator, Settings reschedule, rename carry-over and the on/off switch
+                              // all look it up that way. Same fields New Job writes.
+                              patch("schedule", sched.name);
+                              patch("schedule_days", []);
+                              patch("recurrence_rule", null);
                             }
                           }}
                         >
@@ -1146,7 +1149,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             {schedules.map((s) => (
                               <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                             ))}
-                            <SelectItem value="__new__">+ Create new schedule…</SelectItem>
+                            {(can("scheduling_settings") || can("job_add")) && (
+                              <SelectItem value="__new__">+ Create new schedule…</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
                         {creatingSchedule && (
@@ -1197,9 +1202,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                 const name = schedStr;
                                 try {
                                   const newSched = await createSchedule.mutateAsync({ name, frequency: newSchedFreq, dayOfWeek: newSchedDay as never, weekPattern: newSchedFreq === "bi_weekly" ? newSchedPattern : null, anchorDate: null, seasonStart: null, seasonEnd: null });
-                                  patch("schedule", schedStr);
-                                  patch("schedule_days", [fullDay]);
-                                  patch("recurrence_rule", name);
+                                  patch("schedule", newSched.name);
+                                  patch("schedule_days", []);
+                                  patch("recurrence_rule", null);
                                   setSelectedSchedId(newSched.id);
                                   setCreatingSchedule(false);
                                   toast.success("Schedule created");
@@ -1863,8 +1868,10 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   {/* Bulk-delete by day of week — useful when a schedule changes */}
                   {visits.length > 0 && (() => {
                     const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                    // Upcoming only — the removal skips past visits, so they mustn't be counted.
+                    const today = orgToday();
                     const dayCounts = visits
-                      .filter((v) => v.status === "scheduled" && v.scheduledDate)
+                      .filter((v) => v.status === "scheduled" && v.scheduledDate && v.scheduledDate >= today && !v.clockedInAt)
                       .reduce<Record<number, number>>((acc, v) => {
                         const d = new Date(v.scheduledDate! + "T00:00:00").getDay();
                         acc[d] = (acc[d] ?? 0) + 1;
@@ -1880,8 +1887,10 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                           const entry = days.find((d) => d.day === day);
                           if (!entry) return;
                           if (!(await confirm({
-                            title: `Remove all ${entry.count} scheduled ${entry.name} visits?`,
-                            description: "This cannot be undone.",
+                            title: `Remove ${entry.count} upcoming ${entry.name} visit${entry.count !== 1 ? "s" : ""}?`,
+                            description: job.jobType === "recurring" && scheduleIncludesWeekday(job.schedule, job.scheduleDays, schedules, day, today)
+                              ? `Removes this job's upcoming ${entry.name} visits that haven't been dispatched or started. The job's schedule (${job.schedule}) still includes ${entry.name}, so new ${entry.name} visits will be generated again as the schedule rolls forward — change the job's schedule to stop them for good.`
+                              : `Removes this job's upcoming ${entry.name} visits that haven't been dispatched or started. This cannot be undone.`,
                             confirmLabel: "Remove Visits",
                             destructive: true,
                           }))) return;
@@ -2642,4 +2651,24 @@ function InfoRow({ icon, label, value, title }: { icon: React.ReactNode; label: 
       <span className="font-medium truncate" title={title}>{value}</span>
     </div>
   );
+}
+
+/** Whether the job's schedule still lands on `day` (0 = Sun) from `today` on — the
+ *  generator will keep re-creating visits on that weekday until the schedule changes. */
+function scheduleIncludesWeekday(
+  scheduleName: string | null,
+  scheduleDays: string[],
+  schedules: CRMSchedule[],
+  day: number,
+  today: string,
+): boolean {
+  if (!scheduleName && scheduleDays.length === 0) return false;
+  const row = schedules.find((s) => s.name === scheduleName);
+  if (row) {
+    if (row.frequency === "custom") {
+      return (row.customDates ?? []).some((d) => d >= today && new Date(`${d}T00:00:00Z`).getUTCDay() === day);
+    }
+    return DAY_INDEX[row.dayOfWeek.toLowerCase()] === day;
+  }
+  return parseLegacySchedule(scheduleName, scheduleDays).some((r) => r.dayIndex === day);
 }

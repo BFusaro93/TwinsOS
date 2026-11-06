@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useCrewMemberTimes, useUpsertCrewMemberTime } from "@/lib/hooks/use-crew-app";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { instantToZoneWallClock, zoneWallClockToInstant } from "@/lib/time/zone";
+import { memberVisitPauseMinutes } from "@/lib/crew/visit-pause";
 import { t } from "@/lib/crew-i18n";
 
 interface RowDraft {
@@ -20,6 +21,8 @@ interface RowDraft {
   outTime: string;
   originalIn: string;
   originalOut: string;
+  /** This person's own break + lunch minutes, taken off their time like the saved hours do. */
+  deductMinutes: number;
 }
 
 function minutesBetween(inDate: string, inTime: string, outDate: string, outTime: string, tz: string): number | null {
@@ -39,15 +42,23 @@ function fmtMinutes(m: number | null): string {
  * Shown after a crew finishes a stop: what each person is on the clock for, with
  * the start and finish adjustable before the crew leaves the screen (SA's "Time
  * Summary"). Edits go through the same member-times route as Edit Crew, which
- * keeps its own guards (crew must own the visit, no edits once invoiced).
+ * keeps its own guards (crew must own the visit; locked once the invoice has been sent — a draft invoice still allows edits).
  */
 export function TimeSummaryDialog({
   open,
   visitId,
+  visitBreakMinutes = 0,
+  visitClockedInAt = null,
+  visitClockedOutAt = null,
   onClose,
 }: {
   open: boolean;
   visitId: string;
+  /** The stop's pause time — taken off every person's time (sumPunchManHours). */
+  visitBreakMinutes?: number;
+  /** The stop's own clock window — a person's share of the pause is capped at their overlap with it. */
+  visitClockedInAt?: string | null;
+  visitClockedOutAt?: string | null;
   onClose: () => void;
 }) {
   const tz = useOrgTimeZone();
@@ -75,15 +86,33 @@ export function TimeSummaryDialog({
             outTime: o.time,
             originalIn: i.time,
             originalOut: o.time,
+            deductMinutes: Math.max(0, (row.breakMinutes ?? 0) + (row.lunchMinutes ?? 0)),
           };
         })
     );
   }, [open, times, tz]);
 
-  const totalMinutes = useMemo(
-    () => drafts.reduce((sum, d) => sum + (minutesBetween(d.inDate, d.inTime, d.outDate, d.outTime, tz) ?? 0), 0),
-    [drafts, tz]
-  );
+  // Net of breaks, lunch and the stop's pause — the same figure Job Costing and the
+  // Timesheet report save (sumPunchManHours), so crew don't "fix" times to match it.
+  // Each person's share of the stop's pause is capped at the time they overlapped
+  // the stop (memberVisitPauseMinutes — the rule payroll and Job Costing use).
+  const pauseFor = (d: RowDraft): number => {
+    const a = zoneWallClockToInstant(d.inDate, d.inTime, tz);
+    const b = zoneWallClockToInstant(d.outDate, d.outTime, tz);
+    if (!a || !b) return 0;
+    return Math.round(memberVisitPauseMinutes({
+      pauseMinutes: visitBreakMinutes,
+      punchIn: a.toISOString(),
+      punchOut: b.toISOString(),
+      visitIn: visitClockedInAt,
+      visitOut: visitClockedOutAt,
+    }));
+  };
+  const netMinutes = (d: RowDraft): number | null => {
+    const span = minutesBetween(d.inDate, d.inTime, d.outDate, d.outTime, tz);
+    return span == null ? null : Math.max(0, span - d.deductMinutes - pauseFor(d));
+  };
+  const totalMinutes = drafts.reduce((sum, d) => sum + (netMinutes(d) ?? 0), 0);
   const invalid = drafts.some((d) => minutesBetween(d.inDate, d.inTime, d.outDate, d.outTime, tz) == null);
 
   function patch(idx: number, change: Partial<RowDraft>) {
@@ -132,13 +161,17 @@ export function TimeSummaryDialog({
               {t("Check each person's start and finish. Change one if someone arrived late or left early.")}
             </p>
             {drafts.map((d, idx) => {
-              const mins = minutesBetween(d.inDate, d.inTime, d.outDate, d.outTime, tz);
+              const mins = netMinutes(d);
+              const offMinutes = d.deductMinutes + pauseFor(d);
               return (
                 <div key={d.crewMemberId} className="rounded-lg bg-slate-50 dark:bg-muted/40 p-3">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-slate-800 dark:text-neutral-100">{d.name}</p>
                     <p className={`text-sm font-semibold ${mins == null ? "text-red-600" : ""}`}>{fmtMinutes(mins)}</p>
                   </div>
+                  {offMinutes > 0 && mins != null && (
+                    <p className="text-xs text-muted-foreground">{t("After {time} of breaks", { time: fmtMinutes(offMinutes) })}</p>
+                  )}
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <label className="text-xs text-muted-foreground">
                       {t("Started")}

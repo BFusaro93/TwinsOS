@@ -36,7 +36,7 @@ import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { useDocumentTemplates } from "@/lib/hooks/use-crm-documents";
 import { useOrgList } from "@/lib/hooks/use-org-lists";
-import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents, computeInstallmentSchedule, resolveLineDiscountCents, tierBasis } from "@/lib/estimate-calc";
+import { computeLineItem, hasPerTypeOverhead, getBreakevenRateCents, computeInstallmentSchedule, resolveLineDiscountCents, tierBasis, invoiceLinePricingFromEstimateLine } from "@/lib/estimate-calc";
 import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { EstimateLineItemsGrid } from "./EstimateLineItemsGrid";
@@ -527,7 +527,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const approvedTotalCents = approvalRequests
     .filter((r) => r.status === "approved" && typeof r.entityTotalCents === "number")
     .reduce<number | null>((max, r) => (max == null || (r.entityTotalCents as number) > max ? (r.entityTotalCents as number) : max), null);
-  const approvalOutgrown = estimate?.approvalStatus === "approved" && approvedTotalCents != null && estimate.totalCents > approvedTotalCents;
+  // Approval covers the HIGHEST Good/Better/Best tier (the client can accept
+  // any of them), not total_cents, which is the cheapest tier until one is
+  // chosen. submit_for_approval reads the same column server-side.
+  const approvalAmountCents = estimate ? (estimate.approvalAmountCents ?? estimate.totalCents) : 0;
+  const approvalOutgrown = estimate?.approvalStatus === "approved" && approvedTotalCents != null && approvalAmountCents > approvedTotalCents;
 
   function handleSendClick() {
     if (!estimate) return;
@@ -535,7 +539,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
     if (estimate.approvalStatus === "not_required" && hasApprovalGate) {
       submitForApproval(
-        { entityId: estimate.id, entityType: "crm_estimate", grandTotalCents: estimate.totalCents },
+        { entityId: estimate.id, entityType: "crm_estimate", grandTotalCents: approvalAmountCents },
         {
           onSuccess: (result) => {
             // No steps applied to this amount (or admin bypass) — proceed straight to send.
@@ -547,14 +551,14 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     }
 
     if (estimate.approvalStatus === "rejected") {
-      submitForApproval({ entityId: estimate.id, entityType: "crm_estimate", grandTotalCents: estimate.totalCents });
+      submitForApproval({ entityId: estimate.id, entityType: "crm_estimate", grandTotalCents: approvalAmountCents });
       return;
     }
 
     if (approvalOutgrown) {
       toast.info(`The total grew past the approved $${((approvedTotalCents ?? 0) / 100).toFixed(2)} — resubmitting for approval.`);
       submitForApproval(
-        { entityId: estimate.id, entityType: "crm_estimate", grandTotalCents: estimate.totalCents },
+        { entityId: estimate.id, entityType: "crm_estimate", grandTotalCents: approvalAmountCents },
         { onSuccess: (result) => { if (result?.autoApproved) setSendDialogOpen(true); } }
       );
       return;
@@ -1119,18 +1123,24 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                   );
                   const invoiceLines = liveLines
                     .filter((li) => !basis || !li.tier || li.tier === basis)
-                    .map((li) => ({
+                    .map((li) => {
+                      // qty × rate must equal the line total, or the invoice
+                      // re-prices the line on its first edit (it recomputes
+                      // total = qty × rate). See invoiceLinePricingFromEstimateLine.
+                      const pricing = invoiceLinePricingFromEstimateLine(li);
+                      return {
                       serviceId: li.serviceId ?? null,
                       name: li.serviceName ?? li.serviceId ?? "Service",
                       description: li.invoiceDesc ?? "",
-                      qty: li.qty,
-                      rateCents: li.rateCents,
+                      qty: pricing.qty,
+                      rateCents: pricing.rateCents,
                       totalCents: li.totalCents,
                       discountCents: li.discountCents,
                       discountType: li.discountType,
                       discountValue: li.discountValue,
                       isTaxable,
-                    }));
+                      };
+                    });
 
                   // Derive the header from the lines actually being written,
                   // using the same arithmetic the invoice recalc uses
@@ -1162,7 +1172,10 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                     subtotalCents,
                     discountCents,
                     discountType: estimate.discountType,
-                    discountValue: estimate.discountValue,
+                    // A flat estimate discount's discount_value is the amount
+                    // ASKED for, which can exceed what applied; the invoice
+                    // records what was actually discounted.
+                    discountValue: estimate.discountType === "percent" ? estimate.discountValue : discountCents,
                     taxRateBps,
                     taxCents,
                     totalCents,

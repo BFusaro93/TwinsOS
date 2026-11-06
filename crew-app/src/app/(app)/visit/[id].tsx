@@ -193,13 +193,17 @@ export default function StopDetailScreen() {
   const isPauseActionPending = pauseQueueItems.some((i) => i.status === 'pending' || i.status === 'syncing');
 
   const photoQueueItems = queueItems.filter((i) => i.type === 'add_photo');
-  // Required Before / After photos (org setting). A photo counts once it is
-  // either uploaded or still queued on this device — the queue replays in order,
-  // so a queued Before photo lands ahead of the Clock In that waited for it.
+  // Required Before / After photos (org setting) — both are checked only at
+  // Clock Out (the server enforces the same). A photo counts once it is either
+  // uploaded or still queued on this device; the sync engine uploads a visit's
+  // queued photos before its Clock Out. A FAILED upload doesn't count — it will
+  // never reach the server unless retried, so the clock-out would be refused.
   const hasPhase = (phase: 'Before' | 'After') =>
     confirmedPhotos.some((p) => (p.caption ?? '').trim().toLowerCase() === phase.toLowerCase()) ||
     photoQueueItems.some(
-      (i) => ((i.payload as { caption?: string }).caption ?? '').trim().toLowerCase() === phase.toLowerCase()
+      (i) =>
+        i.status !== 'failed' &&
+        ((i.payload as { caption?: string }).caption ?? '').trim().toLowerCase() === phase.toLowerCase()
     );
   const needBeforePhoto = photoRules.requireBefore && !hasPhase('Before');
   const needAfterPhoto = photoRules.requireAfter && !hasPhase('After');
@@ -742,7 +746,7 @@ export default function StopDetailScreen() {
           )}
         </View>
       ) : null}
-      <TimeSummaryModal visible={timeSummaryOpen} visitId={stop.anchorVisitId} onClose={() => setTimeSummaryOpen(false)} />
+      <TimeSummaryModal visible={timeSummaryOpen} visitId={stop.anchorVisitId} visitBreakMinutes={stop.breakMinutes ?? 0} visitClockedInAt={stop.clockedInAt} visitClockedOutAt={stop.clockedOutAt} onClose={() => setTimeSummaryOpen(false)} />
 
       {failedClockItem ? (
         <ConflictBox
@@ -796,11 +800,11 @@ export default function StopDetailScreen() {
           label={t('Clock In')}
           variant="solidGreen"
           onPress={handleClockIn}
-          disabled={(hasNotes && !acknowledged) || needBeforePhoto}
+          disabled={hasNotes && !acknowledged}
         />
       ) : null}
       {progress === 'not_started' && needBeforePhoto ? (
-        <Text style={styles.gateHint}>{t('Take a Before photo (below) to clock in.')}</Text>
+        <Text style={styles.gateHint}>{t('A Before photo is required before you can clock out — add it below.')}</Text>
       ) : null}
 
       {progress === 'on_break' ? (
@@ -810,13 +814,19 @@ export default function StopDetailScreen() {
       ) : null}
 
       {progress === 'clocked_in' || progress === 'on_break' ? (
-        <ActionButton label={t('Clock Out')} variant="solidRed" onPress={handleClockOut} disabled={chemBlocked || needAfterPhoto} />
+        <ActionButton label={t('Clock Out')} variant="solidRed" onPress={handleClockOut} disabled={chemBlocked || needBeforePhoto || needAfterPhoto} />
       ) : null}
       {(progress === 'clocked_in' || progress === 'on_break') && chemBlocked ? (
         <Text style={styles.gateHint}>{t('Confirm the chemicals applied (above) to clock out.')}</Text>
       ) : null}
-      {(progress === 'clocked_in' || progress === 'on_break') && needAfterPhoto ? (
-        <Text style={styles.gateHint}>{t('Take an After photo (below) to clock out.')}</Text>
+      {(progress === 'clocked_in' || progress === 'on_break') && (needBeforePhoto || needAfterPhoto) ? (
+        <Text style={styles.gateHint}>
+          {needBeforePhoto && needAfterPhoto
+            ? t('Add a Before and an After photo (below) to clock out.')
+            : needBeforePhoto
+              ? t('Add a Before photo (below) to clock out.')
+              : t('Add an After photo (below) to clock out.')}
+        </Text>
       ) : null}
 
       {progress === 'skipped' ? (
@@ -1530,6 +1540,14 @@ function PhotosSection({
   onRetry: (itemId: string) => void;
   onDiscard: (itemId: string) => void;
 }) {
+  // A Before / After photo can be taken now or picked from the library (one
+  // shot earlier, or from another camera) — either way it's tagged with the phase.
+  const choosePhaseSource = (phase: 'Before' | 'After') =>
+    Alert.alert(t(phase === 'Before' ? 'Before photo' : 'After photo'), undefined, [
+      { text: t('Take Photo'), onPress: () => onAdd('camera', phase) },
+      { text: t('Choose from Library'), onPress: () => onAdd('library', phase) },
+      { text: t('Cancel'), style: 'cancel' },
+    ]);
   return (
     <View style={styles.card}>
       <View style={styles.cardHeaderRow}>
@@ -1546,7 +1564,7 @@ function PhotosSection({
             {requireBefore ? (
               <Pressable
                 style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
-                onPress={() => onAdd('camera', 'Before')}
+                onPress={() => choosePhaseSource('Before')}
                 disabled={isCapturing}
               >
                 <Text style={styles.secondaryButtonText}>{hasBefore ? t('✓ Before photo') : t('Before photo (required)')}</Text>
@@ -1555,7 +1573,7 @@ function PhotosSection({
             {requireAfter ? (
               <Pressable
                 style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
-                onPress={() => onAdd('camera', 'After')}
+                onPress={() => choosePhaseSource('After')}
                 disabled={isCapturing}
               >
                 <Text style={styles.secondaryButtonText}>{hasAfter ? t('✓ After photo') : t('After photo (required)')}</Text>

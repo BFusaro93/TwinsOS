@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import { memberVisitPauseMinutes } from "@/lib/crew/visit-pause";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = any;
@@ -86,7 +87,8 @@ export async function memberLaborRatesCents(
  *
  * Pause time (the visit's break_minutes, written by Pause/Resume on every
  * visit in the stop, so the anchor's value is the stop's) is deducted from each
- * member's span when the break is UNPAID (org default, or the visit's
+ * member's span — capped at the time that member's punch overlaps the visit's
+ * clock window (memberVisitPauseMinutes) — when the break is UNPAID (org default, or the visit's
  * break_paid override); when PAID the full span is costed. Hours elsewhere
  * (computeActualHours, crm_recompute_job_actual_hours, rpt_job_visits) are net
  * of break either way: hours measure productivity on site, pay is a separate
@@ -110,13 +112,11 @@ export async function sumPunchLaborCents(supabase: AnySupabase, visitId: string)
 
   const { data: visitRow } = await supabase
     .from("crm_job_visits")
-    .select("org_id, break_minutes, break_paid")
+    .select("org_id, break_minutes, break_paid, clocked_in_at, clocked_out_at")
     .eq("id", visitId)
     .maybeSingle();
   const orgBreaksUnpaid = await getCrewBreaksUnpaid(supabase, visitRow?.org_id as string | undefined);
-  const unpaidBreakMins = visitRow && isBreakUnpaid(visitRow.break_paid as boolean | null, orgBreaksUnpaid)
-    ? Math.max(0, Number(visitRow.break_minutes ?? 0))
-    : 0;
+  const pauseUnpaid = !!visitRow && isBreakUnpaid(visitRow.break_paid as boolean | null, orgBreaksUnpaid);
 
   const memberIds = [...new Set(punches.map((p) => p.crew_member_id))];
   const rateById = await memberLaborRatesCents(supabase, memberIds, visitRow?.org_id as string | undefined);
@@ -126,6 +126,15 @@ export async function sumPunchLaborCents(supabase: AnySupabase, visitId: string)
     if (!p.clocked_in_at) continue;
     const inMs = new Date(p.clocked_in_at).getTime();
     const outMs = new Date(p.clocked_out_at).getTime();
+    const unpaidBreakMins = pauseUnpaid
+      ? memberVisitPauseMinutes({
+          pauseMinutes: visitRow?.break_minutes as number | null,
+          punchIn: p.clocked_in_at,
+          punchOut: p.clocked_out_at,
+          visitIn: visitRow?.clocked_in_at as string | null,
+          visitOut: visitRow?.clocked_out_at as string | null,
+        })
+      : 0;
     const deductMins = Number(p.break_minutes ?? 0) + Number(p.lunch_minutes ?? 0) + unpaidBreakMins;
     const hours = Math.max(0, (outMs - inMs) / 3_600_000 - deductMins / 60);
     total += Math.round(hours * (rateById.get(p.crew_member_id) ?? 0));
@@ -135,8 +144,9 @@ export async function sumPunchLaborCents(supabase: AnySupabase, visitId: string)
 
 /**
  * Man-hours of the CLOSED crew-member punches recorded against `visitId`:
- * Σ per member of (out − in) − that member's break and lunch − the visit's
- * pause time. Always net of the pause (paid or not) — hours measure time on
+ * Σ per member of (out − in) − that member's break and lunch − their share of
+ * the visit's pause time (memberVisitPauseMinutes: capped at their overlap
+ * with the visit's clock window). Always net of the pause (paid or not) — hours measure time on
  * site, pay is a separate question — which is the same netting
  * computeActualHours / rpt_job_visits / rpt_timesheets apply. Returns null when
  * nothing has been punched out yet. This is the figure the Timesheet report
@@ -159,15 +169,21 @@ export async function sumPunchManHours(supabase: AnySupabase, visitId: string): 
 
   const { data: visitRow } = await supabase
     .from("crm_job_visits")
-    .select("break_minutes")
+    .select("break_minutes, clocked_in_at, clocked_out_at")
     .eq("id", visitId)
     .maybeSingle();
-  const visitBreakHours = Math.max(0, Number(visitRow?.break_minutes ?? 0)) / 60;
 
   let total = 0;
   for (const p of punches) {
     const spanHours = (new Date(p.clocked_out_at).getTime() - new Date(p.clocked_in_at as string).getTime()) / 3_600_000;
-    total += Math.max(0, spanHours - (Number(p.break_minutes ?? 0) + Number(p.lunch_minutes ?? 0)) / 60 - visitBreakHours);
+    const pauseHours = memberVisitPauseMinutes({
+      pauseMinutes: visitRow?.break_minutes as number | null,
+      punchIn: p.clocked_in_at as string,
+      punchOut: p.clocked_out_at,
+      visitIn: visitRow?.clocked_in_at as string | null,
+      visitOut: visitRow?.clocked_out_at as string | null,
+    }) / 60;
+    total += Math.max(0, spanHours - (Number(p.break_minutes ?? 0) + Number(p.lunch_minutes ?? 0)) / 60 - pauseHours);
   }
   return Math.round(total * 100) / 100;
 }

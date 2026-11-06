@@ -99,7 +99,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const today = todayInZone(await getOrgTimeZone(db, auth.orgId));
 
     if (body.crewId !== undefined && body.crewId !== before.crew_id) {
-      const res = await propagateCrewToVisits(db, { jobId: id, crewId: body.crewId, fromDate: today });
+      const res = await propagateCrewToVisits(db, { jobId: id, crewId: body.crewId, fromDate: today, previousCrewId: (before.crew_id as string | null) ?? null });
       if (res.error) log.error("crew propagation failed", { jobId: id, error: res.error });
     }
 

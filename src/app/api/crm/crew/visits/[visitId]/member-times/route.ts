@@ -17,7 +17,9 @@ import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib
  *     only returns the visit to office roles in the same org;
  *   - crewMemberId must be on the visit's effective crew (default roster, or a
  *     same-day crm_crew_daily_members reassignment onto it), or already have a
- *     punch on this visit (so a correction survives a later roster change);
+ *     punch on this visit (so a correction survives a later roster change — or
+ *     the member being removed from the crew: their existing punch stays
+ *     editable, but a removed member gets no NEW punch);
  *   - timestamps must be real ISO datetimes, out after in, and a sane length;
  *   - DELETE soft-deletes (deleted_at), per the repo's no-hard-delete rule.
  */
@@ -33,6 +35,8 @@ const Body = z.object({
   crewMemberId: z.string().uuid(),
   clockedInAt:  IsoDateTime.nullable().optional(),
   clockedOutAt: IsoDateTime.nullable().optional(),
+  /** Office only: the member's own break on this punch, in minutes (replaces it). Ignored for crew logins. */
+  breakMinutes: z.number().int().min(0).max(1440).nullable().optional(),
 });
 
 const DeleteBody = z.object({ crewMemberId: z.string().uuid() });
@@ -51,11 +55,16 @@ type Supabase = Awaited<ReturnType<typeof getRouteAuth>>["supabase"];
 
 
 const INVOICED_PUNCH_MESSAGE =
-  "This visit has already been invoiced, so crew punches can't be changed. Ask the office to correct the time.";
+  "This visit's invoice has already been sent, so crew punches can't be changed. Ask the office to correct the time.";
 
 /**
- * True when the visit carries a line on a live (not deleted, not void)
- * invoice — same definition as lib/visits/invoiced-guard. Fails closed: if the
+ * True when the visit carries a line on an ISSUED invoice (not deleted, not
+ * draft, not void). A draft doesn't count: clock-out auto-invoices the visit
+ * onto a draft straight away, and crew must still be able to fix their punches
+ * after Stop Job — auto-invoice lines bill the service's qty × rate, not punch
+ * hours, so a punch edit doesn't change the draft's amount. (Stricter than
+ * lib/visits/invoiced-guard on purpose — that one guards moving/un-completing
+ * the visit, which a draft invoice line does depend on.) Fails closed: if the
  * check errors, a crew caller is refused rather than let rewrite billed hours.
  */
 async function visitIsInvoiced(_supabase: Supabase, visitId: string): Promise<boolean> {
@@ -68,7 +77,7 @@ async function visitIsInvoiced(_supabase: Supabase, visitId: string): Promise<bo
     .select("visit_id, crm_invoices!inner(deleted_at, status)")
     .eq("visit_id", visitId)
     .is("crm_invoices.deleted_at", null)
-    .neq("crm_invoices.status", "void")
+    .not("crm_invoices.status", "in", "(draft,void)")
     .limit(1);
   if (error) return true;
   return (data ?? []).length > 0;
@@ -135,12 +144,13 @@ async function memberBelongsToVisit(
 ): Promise<boolean> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any;
+  // Not filtered on deleted_at: a member removed from the crew (soft-deleted
+  // roster row) mid-day must still have the punch they already have corrected.
   const { data: member } = await db
     .from("crm_crew_members")
-    .select("id, crew_id, org_id")
+    .select("id, crew_id, org_id, deleted_at")
     .eq("id", crewMemberId)
     .eq("org_id", visit.org_id)
-    .is("deleted_at", null)
     .maybeSingle();
   if (!member) return false;
 
@@ -152,6 +162,8 @@ async function memberBelongsToVisit(
     .is("deleted_at", null)
     .limit(1);
   if ((existing ?? []).length > 0) return true;
+  // Removed from the crew: no new punches.
+  if (member.deleted_at) return false;
 
   const crewId = effectiveVisitCrewId(visit);
   // An unassigned visit has no roster to check against; the member is already
@@ -213,7 +225,8 @@ export async function POST(
   if ("response" in auth) return auth.response;
   const { visit, isCrew } = auth;
 
-  // Crew can't rewrite punches once the visit is billed; office keeps the ability.
+  // Crew can't rewrite punches once the visit's invoice is issued (a draft is
+  // fine); office keeps the ability.
   if (isCrew && (await visitIsInvoiced(supabase, visit.id))) {
     return NextResponse.json({ error: INVOICED_PUNCH_MESSAGE, code: "invoiced_visit_locked" }, { status: 409 });
   }
@@ -229,12 +242,40 @@ export async function POST(
     return NextResponse.json({ error: "That crew member isn't on this visit's crew" }, { status: 403 });
   }
 
+  // Crew logins can't write punches directly (RLS) — after the checks above
+  // their edit goes through the service client. Office edits stay under RLS.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const writer = (isCrew ? createServiceClient() : supabase) as any;
+
+  // A corrected in/out kept the punch's old break and lunch: a member who came
+  // back (time away is added to break_minutes) and was then corrected to a
+  // short punch could keep a break longer than the punch and drop to 0 hours.
+  // With both times given: the office may set the break outright; otherwise the
+  // existing break and lunch are kept but clamped to the new punch length.
+  const breakFields: { break_minutes?: number; lunch_minutes?: number } = {};
+  if (clockedInAt && clockedOutAt) {
+    const punchMinutes = Math.floor((Date.parse(clockedOutAt) - Date.parse(clockedInAt)) / 60_000);
+    const { data: prior } = await writer
+      .from("crm_crew_member_times")
+      .select("break_minutes, lunch_minutes")
+      .eq("visit_id", visit.id)
+      .eq("crew_member_id", crewMemberId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    const lunch = Math.min(Math.max(0, Number(prior?.lunch_minutes ?? 0)), punchMinutes);
+    const requested = !isCrew && parsed.data.breakMinutes != null ? parsed.data.breakMinutes : null;
+    if (requested != null && requested + lunch > punchMinutes) {
+      return NextResponse.json({ error: "The break can't be longer than the time worked on this punch." }, { status: 422 });
+    }
+    breakFields.break_minutes = requested ?? Math.min(Math.max(0, Number(prior?.break_minutes ?? 0)), punchMinutes - lunch);
+    breakFields.lunch_minutes = lunch;
+  }
+
   const now = new Date().toISOString();
   // Upsert — one record per (visit_id, crew_member_id). deleted_at is cleared
   // so re-adding a member whose punch was removed revives that row (the unique
   // constraint would otherwise reject a second one).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const { data, error } = await writer
     .from("crm_crew_member_times")
     .upsert(
       {
@@ -243,6 +284,7 @@ export async function POST(
         crew_member_id: crewMemberId,
         clocked_in_at:  clockedInAt,
         clocked_out_at: clockedOutAt,
+        ...breakFields,
         deleted_at:     null,
         updated_at:     now,
       },
@@ -274,10 +316,11 @@ export async function DELETE(
     return NextResponse.json({ error: INVOICED_PUNCH_MESSAGE, code: "invoiced_visit_locked" }, { status: 409 });
   }
 
-  // Soft delete — never hard-delete payroll punches.
+  // Soft delete — never hard-delete payroll punches. Crew logins can't write
+  // punches directly (RLS), so theirs goes through the service client.
   const now = new Date().toISOString();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await ((auth.isCrew ? createServiceClient() : supabase) as any)
     .from("crm_crew_member_times")
     .update({ deleted_at: now, updated_at: now })
     .eq("visit_id", auth.visit.id)

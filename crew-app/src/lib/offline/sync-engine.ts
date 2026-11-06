@@ -88,7 +88,8 @@ export async function recoverOrphanedQueueItems(userId: string): Promise<void> {
   if (recovered > 0) notifyListeners();
 }
 
-async function processItem(item: QueueItem): Promise<void> {
+/** Sends one queued item. Resolves true when it was accepted and removed from the queue. */
+async function processItem(item: QueueItem): Promise<boolean> {
   await setQueueItemStatus(item.id, 'syncing');
   inFlightItemIds.add(item.id);
   notifyListeners();
@@ -204,6 +205,7 @@ async function processItem(item: QueueItem): Promise<void> {
     }
     await removeQueueItem(item.id);
     notifyListeners();
+    return true;
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
       // The server rejected this as a conflict — surface it plainly rather
@@ -221,7 +223,7 @@ async function processItem(item: QueueItem): Promise<void> {
             : "This didn't sync — a supervisor may have already updated this visit."),
       });
       notifyListeners();
-      return;
+      return false;
     }
 
     // 401 (token expired mid-request), 408 (timeout) and 429 (rate limit) are about the
@@ -234,7 +236,7 @@ async function processItem(item: QueueItem): Promise<void> {
         lastError: err.message,
       });
       notifyListeners();
-      return;
+      return false;
     }
 
     // Either a 5xx from the server or the fetch/upload itself threw (no ApiError at all,
@@ -255,12 +257,38 @@ async function processItem(item: QueueItem): Promise<void> {
       // Looks like a connectivity failure rather than a server response — stop this pass.
       throw new ConnectivityStop(message);
     }
+    return false;
   } finally {
     inFlightItemIds.delete(item.id);
   }
 }
 
-/** Drains the pending queue, oldest first. Safe to call redundantly — re-entrant calls no-op. */
+/**
+ * Oldest-first order, except that a visit's pending photos always go ahead of
+ * its Clock Out — including a photo queued after the tap (an offline crew can
+ * add one while the Clock Out waits). Photos and clock-outs are both queued
+ * against the stop's anchor visit id, so they match on item.visitId.
+ */
+function photosBeforeClockOut(items: QueueItem[]): QueueItem[] {
+  const ordered: QueueItem[] = [];
+  const emitted = new Set<string>();
+  for (const item of items) {
+    if (emitted.has(item.id)) continue;
+    if (item.type === 'clock_out') {
+      for (const photo of items) {
+        if (photo.type === 'add_photo' && photo.visitId === item.visitId && !emitted.has(photo.id)) {
+          ordered.push(photo);
+          emitted.add(photo.id);
+        }
+      }
+    }
+    ordered.push(item);
+    emitted.add(item.id);
+  }
+  return ordered;
+}
+
+/** Drains the pending queue, oldest first (see photosBeforeClockOut). Safe to call redundantly — re-entrant calls no-op. */
 export async function drainQueue(): Promise<void> {
   if (isDraining) return;
   isDraining = true;
@@ -274,10 +302,17 @@ export async function drainQueue(): Promise<void> {
     const userId = data.session?.user.id;
     if (!userId) return;
 
-    const items = await listPendingQueueItems(userId);
+    const items = photosBeforeClockOut(await listPendingQueueItems(userId));
+    // Visits with a photo that didn't upload in this pass. Their Clock Out is
+    // held (left pending for the next pass): the server checks required
+    // Before / After photos at clock-out, so finishing ahead of the photos
+    // would be refused — or would complete the stop without them.
+    const photoNotSent = new Set<string>();
     for (const item of items) {
+      if (item.type === 'clock_out' && photoNotSent.has(item.visitId)) continue;
       try {
-        await processItem(item);
+        const sent = await processItem(item);
+        if (item.type === 'add_photo' && !sent) photoNotSent.add(item.visitId);
       } catch (err) {
         if (err instanceof ConnectivityStop) break;
         // Unexpected error outside the try/catch in processItem (shouldn't normally happen,

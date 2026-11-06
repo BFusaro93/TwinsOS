@@ -211,6 +211,7 @@ export async function GET(
     achDepositAvailable: !!org?.ach_payments_enabled,
 
     lineItems: content.lineItems,
+    agreedLineItems: content.agreedLineItems ?? [],
     photos,
   });
 }

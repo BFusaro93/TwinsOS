@@ -227,4 +227,11 @@ export const ES: Record<string, string> = {
   '✓ After photo': '✓ Foto de después',
   '✓ Before photo': '✓ Foto de antes',
   '✓ Not used': '✓ No usado',
+  'After {time} of breaks': 'Después de {time} de descansos',
+  'A Before photo is required before you can clock out — add it below.': 'Se requiere una foto de antes para poder marcar la salida. Agrégala abajo.',
+  'Add a Before and an After photo (below) to clock out.': 'Agrega una foto de antes y una de después (abajo) para marcar la salida.',
+  'Add a Before photo (below) to clock out.': 'Agrega una foto de antes (abajo) para marcar la salida.',
+  'Add an After photo (below) to clock out.': 'Agrega una foto de después (abajo) para marcar la salida.',
+  'Before photo': 'Foto de antes',
+  'After photo': 'Foto de después',
 };

@@ -39,6 +39,18 @@ interface Invoice {
   accountName?: string | null;
 }
 
+/**
+ * One card/bank charge carries its invoice split in Stripe metadata (500 chars,
+ * ~45 per invoice — MAX_ALLOCATION_METADATA_LENGTH in lib/stripe/crm-payments),
+ * so the server refuses more than about 11. Selection stops at 10 to stay clear.
+ */
+const MAX_INVOICES_PER_PAYMENT = 10;
+
+/** Oldest due first (falling back to when the invoice was created). */
+function oldestFirst(list: Invoice[]): Invoice[] {
+  return [...list].sort((a, b) => (a.due_date ?? a.created_at).localeCompare(b.due_date ?? b.created_at));
+}
+
 export interface PortalPayment {
   id: string;
   date: string;
@@ -75,11 +87,16 @@ export default function PortalBillingPage({
   today,
   payments,
   accounts,
+  cardPaymentsAvailable = true,
+  orgName = "",
 }: {
   invoices: Invoice[];
   today: string;
   payments: PortalPayment[];
   accounts: PortalAccountOption[];
+  /** False when the service provider hasn't set up online payments (Stripe Connect): no Pay or prepay buttons. */
+  cardPaymentsAvailable?: boolean;
+  orgName?: string;
 }) {
   const router = useRouter();
   const [dialog, setDialog] = useState<PayDialogTarget | null>(null);
@@ -91,9 +108,11 @@ export default function PortalBillingPage({
   // Everything outstanding starts checked (SA's default), so the common case —
   // pay what I owe — is one click. A payment settles against ONE account, so
   // when sub-accounts exist the selection only ever spans a single account.
+  // Capped at what one payment can carry — the oldest are checked first.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => {
     const first = invoices.filter(isOutstanding)[0];
-    return new Set(invoices.filter((i) => isOutstanding(i) && i.client_id === first?.client_id).map((i) => i.id));
+    const group = invoices.filter((i) => isOutstanding(i) && i.client_id === first?.client_id);
+    return new Set(oldestFirst(group).slice(0, MAX_INVOICES_PER_PAYMENT).map((i) => i.id));
   });
   // A paid invoice drops out of "open" after the refresh; keep the selection honest.
   useEffect(() => {
@@ -106,7 +125,9 @@ export default function PortalBillingPage({
 
   const selected = useMemo(() => open.filter((i) => selectedIds.has(i.id)), [open, selectedIds]);
   const selectedTotal = selected.reduce((sum, i) => sum + i.balance_cents, 0);
-  const allSelected = open.length > 0 && selected.length === open.filter((i) => i.client_id === (selected[0] ?? open[0]).client_id).length;
+  const anchorGroupSize = open.length > 0 ? open.filter((i) => i.client_id === (selected[0] ?? open[0]).client_id).length : 0;
+  const allSelected = open.length > 0 && selected.length === Math.min(anchorGroupSize, MAX_INVOICES_PER_PAYMENT);
+  const overLimit = anchorGroupSize > MAX_INVOICES_PER_PAYMENT;
 
   function toggle(inv: Invoice) {
     setSelectedIds((cur) => {
@@ -118,6 +139,7 @@ export default function PortalBillingPage({
       const other = open.find((i) => next.has(i.id));
       // Different account than what's already checked → start a new selection.
       if (other && other.client_id !== inv.client_id) next.clear();
+      if (next.size >= MAX_INVOICES_PER_PAYMENT) return cur;
       next.add(inv.id);
       return next;
     });
@@ -127,7 +149,7 @@ export default function PortalBillingPage({
     const anchor = selected[0] ?? open[0];
     if (!anchor) return;
     const group = open.filter((i) => i.client_id === anchor.client_id);
-    setSelectedIds(allSelected ? new Set() : new Set(group.map((i) => i.id)));
+    setSelectedIds(allSelected ? new Set() : new Set(oldestFirst(group).slice(0, MAX_INVOICES_PER_PAYMENT).map((i) => i.id)));
   }
 
   function handlePaid() {
@@ -146,6 +168,11 @@ export default function PortalBillingPage({
           <p className={`text-3xl font-bold ${totalBalance > 0 ? "text-slate-900" : "text-slate-400"}`}>
             {fmt(totalBalance)}
           </p>
+          {!cardPaymentsAvailable ? (
+            <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Online payment isn&apos;t available — contact {orgName || "us"} to pay.
+            </p>
+          ) : (
           <div className="mt-4">
             <button
               disabled={selected.length === 0}
@@ -163,6 +190,7 @@ export default function PortalBillingPage({
               Make a prepayment
             </button>
           </div>
+          )}
         </div>
 
         <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -185,12 +213,19 @@ export default function PortalBillingPage({
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Outstanding</h2>
-            <button onClick={toggleAll} className="text-xs font-medium text-brand-600 hover:underline">
-              {allSelected ? "Deselect all" : "Select all unpaid"}
-            </button>
+            {cardPaymentsAvailable && (
+              <button onClick={toggleAll} className="text-xs font-medium text-brand-600 hover:underline">
+                {allSelected ? "Deselect all" : overLimit ? `Select oldest ${MAX_INVOICES_PER_PAYMENT}` : "Select all unpaid"}
+              </button>
+            )}
           </div>
-          {multiAccount && (
+          {multiAccount && cardPaymentsAvailable && (
             <p className="mb-2 text-xs text-slate-400">Invoices from different accounts are paid separately.</p>
+          )}
+          {overLimit && cardPaymentsAvailable && (
+            <p className="mb-2 text-xs text-slate-400">
+              Up to {MAX_INVOICES_PER_PAYMENT} invoices can be paid at once, so the oldest are checked. Pay the rest with a second payment.
+            </p>
           )}
           <ul className="flex flex-col gap-2">
             {open.map((inv) => (
@@ -198,9 +233,9 @@ export default function PortalBillingPage({
                 key={inv.id}
                 invoice={inv}
                 today={today}
-                onPay={() => setDialog({ kind: "invoices", invoiceIds: [inv.id], balanceCents: inv.balance_cents })}
+                onPay={cardPaymentsAvailable ? () => setDialog({ kind: "invoices", invoiceIds: [inv.id], balanceCents: inv.balance_cents }) : undefined}
                 checked={selectedIds.has(inv.id)}
-                onToggle={() => toggle(inv)}
+                onToggle={cardPaymentsAvailable ? () => toggle(inv) : undefined}
               />
             ))}
           </ul>
@@ -245,6 +280,7 @@ export default function PortalBillingPage({
           open
           onClose={() => setDialog(null)}
           onPaid={handlePaid}
+          accounts={accounts}
         />
       )}
     </div>
