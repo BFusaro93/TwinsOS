@@ -4368,10 +4368,12 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         ticket={openTicket ?? null}
         onClose={() => setOpenTicketId(null)}
       />
-      <AddPaymentDialog
-        open={!!openPaymentId}
-        onOpenChange={(o) => { if (!o) setOpenPaymentId(null); }}
-        payment={openPayment}
+      {/* A payment clicked in the Activity timeline opens its details (with Edit and
+          Refund inside), the same as the Accounting tab and the Payments list — not
+          straight into the edit form. */}
+      <PaymentDetailDialog
+        payment={openPayment ?? null}
+        onClose={() => setOpenPaymentId(null)}
       />
       <InvoiceDetailSheet
         invoiceId={openInvoiceId}
