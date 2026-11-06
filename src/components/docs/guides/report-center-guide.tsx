@@ -314,6 +314,36 @@ export function ReportCenterGuide() {
             &quot;Collected&quot; number should filter Is Cash = true and sum Net Amount.
           </li>
         </ul>
+        <p>Beyond plain columns, the builder supports:</p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Joins</strong> — on the Data card, tick <em>Client data</em> (invoices,
+            payments, jobs, estimates, contracts) or the parent invoice / estimate (line items) to
+            add that record&apos;s columns, shown as &quot;Client: …&quot;. Joined columns repeat on
+            every row, so they&apos;re never added into totals. Using a join also requires access to
+            the joined dataset.
+          </li>
+          <li>
+            <strong>Client custom fields</strong> — every custom field defined in Settings appears
+            as a &quot;Custom: …&quot; column on clients, invoices, payments, jobs, estimates and
+            contracts, and can be filtered, grouped and aggregated like any column.
+          </li>
+          <li>
+            <strong>Formulas</strong> — a calculated column can combine two columns, a column and a
+            fixed number (e.g. × 100), or an earlier formula, and can be sorted on.
+          </li>
+          <li>
+            <strong>Multi-level sort</strong> — sort by up to four columns (&quot;then by&quot;).
+          </li>
+        </ul>
+        <p>
+          Every report table also has a menu on each column header: <strong>sort</strong>,{" "}
+          <strong>filter</strong>, <strong>format</strong> (alignment, number, currency, percent,
+          timespan, true/false, color spectrum, bar gauges), <strong>merge duplicate cells</strong>{" "}
+          and <strong>hide column</strong>. These change only what&apos;s on screen — exports and the
+          saved report stay as run — and <em>Reset view</em> undoes them. Filters apply to the rows
+          already loaded, and the totals row follows them.
+        </p>
         <p>
           Saving or running a custom analysis requires the <strong>View Report Center</strong>{" "}
           permission, and some datasets additionally require a report permission — see{" "}
