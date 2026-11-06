@@ -14,6 +14,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { RecordDetailTabs } from "@/components/shared/RecordDetailTabs";
 import {
+  ProjectDetailsTabConnected,
+  MaterialsTab,
+  SubcontractsTab,
+  TicketsTab,
+  HistoryTab,
+  FilesTab,
+} from "@/components/po/ProjectDetailPanel";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -479,6 +487,10 @@ function ProjectDetailDialog({
         <RecordDetailTabs
           className="overflow-hidden"
           tabs={[
+            // One project, every tab: the billing side (Milestone … Analysis) and
+            // the purchasing side (Materials, Other Costs) that the Photos >
+            // Projects panel shows. Both read the same projects row.
+            { value: "details", label: "Details", content: <ProjectDetailsTabConnected project={project} /> },
             { value: "milestone", label: "Milestone", content: <div className="p-6"><MilestoneTab project={project} /></div> },
             { value: "changeorders", label: "Change Orders", content: <div className="p-6"><ChangeOrdersTab project={project} /></div> },
             ...(project.clientId && can("warranty_view")
@@ -486,18 +498,14 @@ function ProjectDetailDialog({
               : []),
             { value: "billing", label: "Billing", content: <div className="p-6"><BillingTab project={project} /></div> },
             { value: "analysis", label: "Analysis", content: <div className="p-6"><AnalysisTab project={project} /></div> },
-            { value: "notes", label: "Notes & Attachments", content: <div className="p-6"><NotesTab project={project} /></div> },
-            {
-              value: "audit",
-              label: "Audit Trail",
-              content: (
-                <div className="p-6">
-                  <div className="rounded-lg border bg-slate-50 dark:bg-muted/40 p-6 text-center text-sm text-slate-400 dark:text-neutral-500">
-                    Audit trail coming soon
-                  </div>
-                </div>
-              ),
-            },
+            { value: "materials", label: "Materials", content: <MaterialsTab project={project} /> },
+            { value: "subcontracts", label: "Other Costs", content: <SubcontractsTab project={project} /> },
+            { value: "tickets", label: "Tickets", content: <TicketsTab project={project} /> },
+            { value: "notes", label: "Notes", content: <div className="p-6"><NotesTab project={project} /></div> },
+            { value: "files", label: "Files", content: <FilesTab project={project} /> },
+            // Replaces the old "Audit trail coming soon" placeholder: the comments
+            // thread plus the real audit trail the Photos > Projects panel uses.
+            { value: "history", label: "Comments & Audit Trail", content: <HistoryTab project={project} /> },
           ]}
         />
       </DialogContent>
