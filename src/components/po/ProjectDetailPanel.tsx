@@ -138,7 +138,7 @@ interface ProjectLineItem {
   taxable: boolean;
 }
 
-function MaterialsTab({ project }: { project: Project }) {
+export function MaterialsTab({ project }: { project: Project }) {
   const { canWriteEquipt } = useRoleCapabilities();
   const { data: requisitions } = useRequisitions();
   const { data: purchaseOrders } = usePurchaseOrders();
@@ -708,7 +708,7 @@ const BLANK_FORM = {
   notes: "",
 };
 
-function SubcontractsTab({ project }: { project: Project }) {
+export function SubcontractsTab({ project }: { project: Project }) {
   const { canWriteEquipt } = useRoleCapabilities();
   const { data: costsRaw = [], isLoading } = useProjectSubcontractCosts(project.id);
   const costs: import("@/types").ProjectSubcontractCost[] = costsRaw;
@@ -1375,7 +1375,7 @@ const TICKET_STATUS_CLASS: Record<string, string> = {
   closed: "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
 };
 
-function TicketsTab({ project }: { project: Project }) {
+export function TicketsTab({ project }: { project: Project }) {
   const { data: tickets = [], isLoading } = useTicketsLinkedTo("project", project.id);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
   const openTicket = tickets.find((t) => t.id === openTicketId) ?? null;
@@ -1431,7 +1431,7 @@ function TicketsTab({ project }: { project: Project }) {
   );
 }
 
-function HistoryTab({ project }: { project: Project }) {
+export function HistoryTab({ project }: { project: Project }) {
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -1449,12 +1449,100 @@ function HistoryTab({ project }: { project: Project }) {
   );
 }
 
-function FilesTab({ project }: { project: Project }) {
+export function FilesTab({ project }: { project: Project }) {
   return (
     <div className="p-6">
       <AttachmentsSection recordType="project" recordId={project.id} />
     </div>
   );
+}
+
+/**
+ * The Equipt Details tab (status flow, hours, labor rates, contract / cost /
+ * net-profit summary) as a self-contained tab, so the CRM project dialog can
+ * show the same thing the Photos > Projects panel does.
+ */
+export function ProjectDetailsTabConnected({ project }: { project: Project }) {
+  const [status, setStatus] = useState<ProjectStatus>(project.status);
+  const { mutate: updateProject } = useUpdateProject();
+  const computedTotalCost = useProjectComputedTotalCost(project.id);
+  useEffect(() => {
+    setStatus(project.status);
+  }, [project.id, project.status]);
+  return (
+    <DetailsTab
+      project={project}
+      status={status}
+      computedTotalCost={computedTotalCost}
+      onStatusChange={(next) => {
+        setStatus(next);
+        updateProject({ id: project.id, status: next });
+      }}
+      onUpdateHours={(laborHours, budgetHours) => updateProject({ id: project.id, laborHours, budgetHours })}
+      onUpdateRates={(laborRateCents, burdenedRateCents) => updateProject({ id: project.id, laborRateCents, burdenedRateCents })}
+    />
+  );
+}
+
+/**
+ * A project's total cost, derived from its linked requisition / PO lines, the
+ * PO shipping allocated to it, subcontract costs and direct items
+ * (projects.total_cost in the DB is never written, so it is computed here).
+ * Shared by the Equipt panel and the CRM project dialog so both agree.
+ */
+function useProjectComputedTotalCost(projectId: string): number {
+  const { data: allRequisitions } = useRequisitions();
+  const { data: allPurchaseOrders } = usePurchaseOrders();
+  const { data: subcontractCostsRaw = [] } = useProjectSubcontractCosts(projectId);
+  const subcontractCosts: import("@/types").ProjectSubcontractCost[] = subcontractCostsRaw;
+  const { data: allDirectItems = [] } = useProjectDirectItems(projectId);
+
+  // Compute project total cost dynamically from linked line items + allocated shipping + subcontract costs.
+  // projects.total_cost in the DB is never written to, so we derive it here instead.
+  return (() => {
+    const taxRateBySourceId = new Map<string, number>();
+    (allPurchaseOrders ?? []).forEach((po) => taxRateBySourceId.set(po.id, po.taxRatePercent));
+    (allRequisitions ?? []).forEach((req) => taxRateBySourceId.set(req.id, req.taxRatePercent));
+
+    let subtotal = 0;
+    let tax = 0;
+
+    (allRequisitions ?? []).forEach((req) => {
+      if (req.convertedPoId && req.status === "ordered") return;
+      req.lineItems.filter((li) => li.projectId === projectId).forEach((li) => {
+        subtotal += li.quantity * li.unitCost;
+        const rate = taxRateBySourceId.get(req.id) ?? 0;
+        tax += Math.round(li.quantity * li.unitCost * rate / 100);
+      });
+    });
+    (allPurchaseOrders ?? []).forEach((po) => {
+      po.lineItems.filter((li) => li.projectId === projectId).forEach((li) => {
+        subtotal += li.quantity * li.unitCost;
+        if (li.taxable !== false) {
+          const rate = taxRateBySourceId.get(po.id) ?? 0;
+          tax += Math.round(li.quantity * li.unitCost * rate / 100);
+        }
+      });
+    });
+
+    // Allocate PO shipping proportionally across the projects that share each PO
+    const allocatedShipping = (allPurchaseOrders ?? []).reduce((acc, po) => {
+      if (!po.shippingCost) return acc;
+      const projectSubtotal = po.lineItems
+        .filter((li) => li.projectId === projectId)
+        .reduce((s, li) => s + li.quantity * li.unitCost, 0);
+      if (projectSubtotal === 0) return acc;
+      const poSubtotal = po.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
+      if (poSubtotal === 0) return acc;
+      return acc + Math.round((projectSubtotal / poSubtotal) * po.shippingCost);
+    }, 0);
+
+    const subcontractTotal = subcontractCosts.reduce((s, c) => s + c.amount, 0);
+    const directTotal = allDirectItems.reduce((s, di) => s + di.quantity * di.unitCost, 0);
+
+    return subtotal + tax + allocatedShipping + subcontractTotal + directTotal;
+  })();
+
 }
 
 export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
@@ -1468,55 +1556,8 @@ export function ProjectDetailPanel({ project }: ProjectDetailPanelProps) {
   const { mutate: updateProject } = useUpdateProject();
   const { data: allRequisitions } = useRequisitions();
   const { data: allPurchaseOrders } = usePurchaseOrders();
-  const { data: subcontractCostsRaw = [] } = useProjectSubcontractCosts(project.id);
-  const subcontractCosts: import("@/types").ProjectSubcontractCost[] = subcontractCostsRaw;
   const { data: allDirectItems = [] } = useProjectDirectItems(project.id);
-
-  // Compute project total cost dynamically from linked line items + allocated shipping + subcontract costs.
-  // projects.total_cost in the DB is never written to, so we derive it here instead.
-  const computedTotalCost = (() => {
-    const taxRateBySourceId = new Map<string, number>();
-    (allPurchaseOrders ?? []).forEach((po) => taxRateBySourceId.set(po.id, po.taxRatePercent));
-    (allRequisitions ?? []).forEach((req) => taxRateBySourceId.set(req.id, req.taxRatePercent));
-
-    let subtotal = 0;
-    let tax = 0;
-
-    (allRequisitions ?? []).forEach((req) => {
-      if (req.convertedPoId && req.status === "ordered") return;
-      req.lineItems.filter((li) => li.projectId === project.id).forEach((li) => {
-        subtotal += li.quantity * li.unitCost;
-        const rate = taxRateBySourceId.get(req.id) ?? 0;
-        tax += Math.round(li.quantity * li.unitCost * rate / 100);
-      });
-    });
-    (allPurchaseOrders ?? []).forEach((po) => {
-      po.lineItems.filter((li) => li.projectId === project.id).forEach((li) => {
-        subtotal += li.quantity * li.unitCost;
-        if (li.taxable !== false) {
-          const rate = taxRateBySourceId.get(po.id) ?? 0;
-          tax += Math.round(li.quantity * li.unitCost * rate / 100);
-        }
-      });
-    });
-
-    // Allocate PO shipping proportionally across the projects that share each PO
-    const allocatedShipping = (allPurchaseOrders ?? []).reduce((acc, po) => {
-      if (!po.shippingCost) return acc;
-      const projectSubtotal = po.lineItems
-        .filter((li) => li.projectId === project.id)
-        .reduce((s, li) => s + li.quantity * li.unitCost, 0);
-      if (projectSubtotal === 0) return acc;
-      const poSubtotal = po.lineItems.reduce((s, li) => s + li.quantity * li.unitCost, 0);
-      if (poSubtotal === 0) return acc;
-      return acc + Math.round((projectSubtotal / poSubtotal) * po.shippingCost);
-    }, 0);
-
-    const subcontractTotal = subcontractCosts.reduce((s, c) => s + c.amount, 0);
-    const directTotal = allDirectItems.reduce((s, di) => s + di.quantity * di.unitCost, 0);
-
-    return subtotal + tax + allocatedShipping + subcontractTotal + directTotal;
-  })();
+  const computedTotalCost = useProjectComputedTotalCost(project.id);
 
   function getPrintMaterials() {
     const materials: Array<{ productItemName: string; partNumber: string; quantity: number; unitCost: number; sourceNumber: string; sourceType: string }> = [];
