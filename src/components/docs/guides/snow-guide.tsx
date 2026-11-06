@@ -27,6 +27,13 @@ const INVOICE_TYPES: [string, string, string][] = [
   ],
 ];
 
+const SERVICE_RULES: [string, string, string][] = [
+  ["Per Event", "As many as you need.", "Used — every service row is added together."],
+  ["Per Event, Per Inch / Per Push", "One.", "Not used — the depth ranges (or Rate Per Inch) set the price."],
+  ["Hourly", "One.", "Used — the service's Rate is the hourly rate."],
+  ["Monthly Flat Rate", "As many as you need.", "Not used — the linked contract sets the price."],
+];
+
 export function SnowGuide() {
   return (
     <DocsFontScope className="flex h-full flex-col gap-6 overflow-y-auto pb-12">
@@ -49,6 +56,7 @@ export function SnowGuide() {
           <TOCLink href="#worked-scenario">Worked scenario: a 6&quot; storm</TOCLink>
           <TOCLink href="#invoicing">Snow invoicing and the three rate types</TOCLink>
           <TOCLink href="#interval-billing">Interval billing (rate by inches)</TOCLink>
+          <TOCLink href="#services-on-snow-jobs">Services on a snow job: one per job, and when their price counts</TOCLink>
           <TOCLink href="#why-separate">Why snow billing has its own screen</TOCLink>
           <TOCLink href="#good-to-know">Good to know</TOCLink>
         </div>
@@ -241,7 +249,8 @@ export function SnowGuide() {
           </li>
           <li>
             <strong>Crew stats.</strong> <em>Show Crew Stats</em> opens a card per crew with stops,
-            done, left, and billable total.
+            done, left, and billable total. Skipped and cancelled stops show a dash in the Amt column
+            and are left out of the Totals row and the crew totals, since nothing is billed for them.
           </li>
           <li>
             <strong>Notes to crew.</strong> A column you edit in place: click the cell, type, Save.
@@ -397,6 +406,20 @@ export function SnowGuide() {
             3.01–6) still work: a depth inside the gap bills the lower range.
           </li>
           <li>
+            <strong>Pricing bands that end in .99</strong> (0–1.99&quot;, 2–3.99&quot;, 4–5.99&quot;,
+            6–7.99&quot;, where exactly 4&quot; counts as the <em>4–5.99</em> band): because a
+            boundary depth bills the lower range and ranges can&apos;t have gaps, enter them as{" "}
+            <strong>0–1.99, 1.99–3.99, 3.99–5.99, 5.99–7.99</strong>. A push recorded at 4&quot; then
+            lands in 3.99–5.99 and bills the 4–5.99 price. Depths above the last range bill $0 unless
+            the last range is left open-ended, so price anything deeper by hand or add a top range.
+          </li>
+          <li>
+            <strong>A flat price per push</strong> (the same amount whatever the depth, for example a
+            drive-lane-only push) is a Per Push job with a single range, such as 0–99&quot; at the
+            flat amount. The visit still needs a recorded depth to price; with none it waits in the
+            Snow Invoicing queue at $0.
+          </li>
+          <li>
             If no range matches a depth (below the first range, or above the last one with no
             open-ended range), it falls back to the flat <strong>Rate Per Inch</strong> on the job.
             Only the last range may be open-ended.
@@ -404,6 +427,52 @@ export function SnowGuide() {
           <li>
             The Snow Jobs board totals and the Snow Invoicing queue both price from the ranges, and
             the queue&apos;s description column says when a row used them.
+          </li>
+        </ul>
+      </Section>
+
+      <Section id="services-on-snow-jobs" title="Services on a snow job: one per job, and when their price counts">
+        <p>
+          A snow job&apos;s invoice type decides whether the Services table matters for billing, so
+          the job form limits it. Make one job per service (plowing, sidewalks, de-icing), each with
+          its own invoice type and depth ranges, rather than one job with several services.
+        </p>
+        <Table>
+          <thead>
+            <TableHeadRow>
+              <th className="px-3 py-2">Invoice type</th>
+              <th className="px-3 py-2">Services on the job</th>
+              <th className="px-3 py-2">Service price</th>
+            </TableHeadRow>
+          </thead>
+          <tbody>
+            {SERVICE_RULES.map(([name, count, price]) => (
+              <tr key={name} className="border-b border-[#eceae3] dark:border-border last:border-0">
+                <td className="whitespace-nowrap px-3 py-2 font-medium text-[#0a0a0a] dark:text-neutral-100">{name}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{count}</td>
+                <td className="px-3 py-2 text-[#4a4a46] dark:text-neutral-300">{price}</td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            When the price isn&apos;t used, the Rate field shows <em>Not used</em> and the job is
+            saved with a $0 service price. Billing never read it, and a price there would only
+            have inflated the job&apos;s value in reports.
+          </li>
+          <li>
+            The <strong>Add Service</strong> button is disabled once a one-service type has its
+            service. Choosing such a type after adding several services keeps the first and
+            clears the prices, and the form says so. The same limits apply to the Services tab of
+            an existing job and are enforced in the database, so imports and the API follow them
+            too.
+          </li>
+          <li>
+            <strong>Monthly Flat Rate</strong> does not invoice by itself. It bills only through a
+            linked, active contract that generates invoices automatically, so saving the job
+            requires choosing the client&apos;s contract; without one it would never be billed. Its
+            storm visits stay out of the Snow Invoicing queue.
           </li>
         </ul>
       </Section>

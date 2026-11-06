@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
-import { exportReportPDF } from "@/lib/reports/export-pdf";
+import { exportReportPDF, printReportPDF } from "@/lib/reports/export-pdf";
 import { useRunReport } from "@/lib/hooks/use-report-center";
 import { getReport } from "@/lib/reports/registry";
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
@@ -132,15 +132,21 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
   };
 
   const [exportingPdf, setExportingPdf] = useState(false);
-  const handleExportPdf = async () => {
+  const [printing, setPrinting] = useState(false);
+  // Shared by the PDF and Print buttons so they always produce the same file.
+  const runPdfAction = async (
+    action: typeof exportReportPDF,
+    setBusy: (busy: boolean) => void,
+    failMessage: string
+  ) => {
     if (!result) return;
-    setExportingPdf(true);
+    setBusy(true);
     try {
       const charts = headerVisuals
         .map((hv) => (chartResults[hv.title] ? chartInputFromResult(hv.title, chartResults[hv.title]) : null))
         .filter((c): c is ReportExportChartInput => c !== null);
       const grouped = buildGroupedPdfSection(result, formatCellValue) ?? undefined;
-      await exportReportPDF(
+      await action(
         def.name,
         [
           {
@@ -154,11 +160,13 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
         charts
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "PDF export failed");
+      toast.error(err instanceof Error ? err.message : failMessage);
     } finally {
-      setExportingPdf(false);
+      setBusy(false);
     }
   };
+  const handleExportPdf = () => runPdfAction(exportReportPDF, setExportingPdf, "PDF export failed");
+  const handlePrint = () => runPdfAction(printReportPDF, setPrinting, "Print failed");
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -209,9 +217,14 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
                 <FileText className="mr-1.5 h-3.5 w-3.5" />
                 {exportingPdf ? "Exporting…" : "PDF"}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => window.print()}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handlePrint()}
+                disabled={!result || result.rows.length === 0 || printing}
+              >
                 <Printer className="mr-1.5 h-3.5 w-3.5" />
-                Print
+                {printing ? "Preparing…" : "Print"}
               </Button>
               {def.schedulable && <ReportScheduleDialog reportKey={def.key} reportName={def.name} />}
             </>

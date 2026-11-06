@@ -51,7 +51,7 @@ export default function StaffChatPage() {
 
   return (
     <div className="flex h-full gap-4">
-      <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-lg border bg-white">
+      <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-wrap gap-1 border-b p-2">
           {FILTERS.map((f) => (
             <button
@@ -59,7 +59,7 @@ export default function StaffChatPage() {
               onClick={() => setFilter(f.value)}
               className={cn(
                 "rounded-full px-2.5 py-0.5 text-xs transition-colors",
-                filter === f.value ? "bg-brand-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                filter === f.value ? "bg-brand-500 text-white" : "bg-muted text-slate-600 dark:text-neutral-400 hover:bg-slate-200 dark:hover:bg-neutral-700"
               )}
             >
               {f.label}
@@ -68,9 +68,9 @@ export default function StaffChatPage() {
         </div>
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
-            <p className="p-4 text-sm text-slate-400">Loading…</p>
+            <p className="p-4 text-sm text-slate-400 dark:text-neutral-500">Loading…</p>
           ) : visible.length === 0 ? (
-            <p className="p-4 text-sm text-slate-400">
+            <p className="p-4 text-sm text-slate-400 dark:text-neutral-500">
               {conversations.length === 0 ? "No conversations yet." : "Nothing in this view."}
             </p>
           ) : (
@@ -79,23 +79,23 @@ export default function StaffChatPage() {
                 key={threadKey(c)}
                 onClick={() => setSelectedKey(threadKey(c))}
                 className={cn(
-                  "flex w-full flex-col gap-0.5 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50",
-                  selected && threadKey(c) === threadKey(selected) && "bg-brand-50"
+                  "flex w-full flex-col gap-0.5 border-b px-4 py-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-muted/40",
+                  selected && threadKey(c) === threadKey(selected) && "bg-brand-50 dark:bg-brand-900/30"
                 )}
               >
-                <span className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                <span className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-neutral-100">
                   <span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_DOT[c.status])} title={CONVERSATION_STATUS_LABEL[c.status]} />
                   {c.orgName}
-                  {c.personName && <span className="font-normal text-slate-500">· {c.personName}</span>}
+                  {c.personName && <span className="font-normal text-muted-foreground">· {c.personName}</span>}
                 </span>
-                <span className="truncate text-xs text-slate-500">{c.lastMessage}</span>
+                <span className="truncate text-xs text-muted-foreground">{c.lastMessage}</span>
               </button>
             ))
           )}
         </div>
       </div>
 
-      <div className="flex-1 rounded-lg border bg-white">
+      <div className="flex-1 rounded-lg border bg-card">
         {selected ? (
           <ConversationPane
             key={threadKey(selected)}
@@ -107,7 +107,7 @@ export default function StaffChatPage() {
             status={selected.status}
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-slate-400">
+          <div className="flex h-full items-center justify-center text-sm text-slate-400 dark:text-neutral-500">
             <MessageCircle className="mr-2 h-4 w-4" />
             Select a conversation
           </div>
@@ -153,7 +153,7 @@ function ConversationPane({ thread, orgName, personName, staffName, staffId, sta
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <span className="font-medium text-slate-800">{orgName}{personName ? ` · ${personName}` : ""}</span>
+        <span className="font-medium text-slate-800 dark:text-neutral-100">{orgName}{personName ? ` · ${personName}` : ""}</span>
         <div className="flex gap-1">
           {(["open", "in_progress", "resolved"] as ConversationStatus[]).map((st) => (
             <button
@@ -165,7 +165,7 @@ function ConversationPane({ thread, orgName, personName, staffName, staffId, sta
               )}
               className={cn(
                 "flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors",
-                st === status ? "border-brand-500 bg-brand-50 text-brand-700" : "text-slate-500 hover:bg-slate-50"
+                st === status ? "border-brand-500 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400" : "text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted/40"
               )}
             >
               <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[st])} />
@@ -176,7 +176,7 @@ function ConversationPane({ thread, orgName, personName, staffName, staffId, sta
       </div>
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
         {isLoading ? (
-          <p className="text-sm text-slate-400">Loading…</p>
+          <p className="text-sm text-slate-400 dark:text-neutral-500">Loading…</p>
         ) : (
           <SupportThread messages={messages} viewerIsStaff viewerId={staffId} />
         )}

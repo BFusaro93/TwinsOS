@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/shared/BrandMark";
 import { RealtimeSync } from "@/components/shared/RealtimeSync";
+import { AppearanceMenu } from "@/components/shared/AppearanceMenu";
 import { useIsStaff } from "@/lib/hooks/use-impersonation";
 
 const TABS = [
@@ -35,19 +36,19 @@ export default function InternalLayout({ children }: { children: React.ReactNode
 
   if (isLoading || !isStaff) {
     return (
-      <div className="flex h-dvh items-center justify-center bg-slate-50">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+      <div className="flex h-dvh items-center justify-center bg-slate-50 dark:bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-slate-400 dark:text-neutral-500" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-slate-50">
+    <div className="flex h-dvh flex-col overflow-hidden bg-slate-50 dark:bg-background">
       <RealtimeSync />
-      <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-white px-4">
+      <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-card px-4">
         <div className="flex items-center gap-2">
           <BrandMark variant="color" className="h-7 w-7 rounded-md" />
-          <span className="font-semibold text-slate-800">Staff Tools</span>
+          <span className="font-semibold text-slate-800 dark:text-neutral-100">Staff Tools</span>
         </div>
         <nav className="flex items-center gap-1">
           {TABS.map((tab) => (
@@ -57,14 +58,18 @@ export default function InternalLayout({ children }: { children: React.ReactNode
               className={cn(
                 "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                 pathname === tab.href
-                  ? "bg-brand-50 text-brand-700"
-                  : "text-slate-500 hover:bg-slate-100"
+                  ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+                  : "text-muted-foreground hover:bg-muted"
               )}
             >
               {tab.label}
             </Link>
           ))}
         </nav>
+        {/* Theme + display size — also what applies the saved 80% scale here. */}
+        <div className="ml-auto">
+          <AppearanceMenu />
+        </div>
       </header>
       <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
     </div>

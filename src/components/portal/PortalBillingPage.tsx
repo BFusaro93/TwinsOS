@@ -58,6 +58,8 @@ export interface PortalPayment {
   amountCents: number;
   refundedCents: number;
   unusedCents: number;
+  /** Card fee charged on top of amountCents. */
+  feeCents: number;
   isCredit: boolean;
   isPrepayment: boolean;
   accountName: string | null;
@@ -307,6 +309,11 @@ function PaymentRow({ payment: p }: { payment: PortalPayment }) {
         </div>
         <div className="text-right shrink-0">
           <p className="text-sm font-semibold text-slate-900">{fmt(p.amountCents)}</p>
+          {p.feeCents > 0 && (
+            <p className="text-xs text-slate-400">
+              + {fmt(p.feeCents)} card fee = {fmt(p.amountCents + p.feeCents)} charged
+            </p>
+          )}
           {p.refundedCents > 0 && <p className="text-xs text-slate-400">Refunded {fmt(p.refundedCents)}</p>}
         </div>
       </div>

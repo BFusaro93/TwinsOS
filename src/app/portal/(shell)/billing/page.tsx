@@ -26,6 +26,7 @@ interface PaymentRow {
   amount_cents: number;
   refunded_amount_cents: number;
   unused_amount_cents: number;
+  processing_fee_cents: number;
   payment_date: string;
   method: string;
   is_credit: boolean;
@@ -90,7 +91,7 @@ export default async function BillingPage() {
     (ids) =>
       supabase
         .from("crm_payments")
-        .select("id, client_id, invoice_id, amount_cents, refunded_amount_cents, unused_amount_cents, payment_date, method, is_credit, is_prepayment, created_at")
+        .select("id, client_id, invoice_id, amount_cents, refunded_amount_cents, unused_amount_cents, processing_fee_cents, payment_date, method, is_credit, is_prepayment, created_at")
         .in("client_id", ids)
         .eq("org_id", ctx.orgId)
         .neq("method", "AR Write-off")
@@ -135,6 +136,7 @@ export default async function BillingPage() {
       amountCents: p.amount_cents,
       refundedCents: p.refunded_amount_cents ?? 0,
       unusedCents: p.unused_amount_cents ?? 0,
+      feeCents: p.processing_fee_cents ?? 0,
       isCredit: p.is_credit,
       isPrepayment: p.is_prepayment,
       accountName: accountNames.get(p.client_id) ?? null,

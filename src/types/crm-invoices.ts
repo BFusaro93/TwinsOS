@@ -166,6 +166,8 @@ export interface CRMPayment {
   amountCents: number;
   unusedAmountCents: number;
   refundedAmountCents: number;
+  /** Card surcharge the customer paid ON TOP of amountCents (not the invoice credit and not Stripe's own cost). 0 when none. */
+  processingFeeCents: number;
   paymentDate: string;
   method: PaymentMethod;
   reference: string | null;

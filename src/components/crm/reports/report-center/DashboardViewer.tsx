@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowLeft, Download, FileSpreadsheet, FileText, Pencil } from "lucide-react";
+import { AlertCircle, ArrowLeft, Download, FileSpreadsheet, FileText, Pencil, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
+import { exportReportPDF, printReportPDF } from "@/lib/reports/export-pdf";
+import { buildGroupedPdfSection } from "@/lib/reports/pdf-grouping";
+import { buildTotalsRow } from "@/lib/reports/export-rows";
 import {
   useDashboard,
   useReportFilterOptions,
@@ -299,12 +302,54 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
     }
   };
 
+  // PDF and Print both render the loaded panel data server-side (one section
+  // per panel, bar/pie panels as charts) rather than printing the live page,
+  // which came out blank/clipped whenever a panel was mid-refetch. Same
+  // approach as the single-report viewer.
+  const [pdfBusy, setPdfBusy] = useState<"pdf" | "print" | null>(null);
+  const runPdfAction = async (kind: "pdf" | "print") => {
+    if (!hasData) return;
+    setPdfBusy(kind);
+    try {
+      const charts = panelsWithData
+        .filter((p) => p.visual.type === "bar" || p.visual.type === "pie")
+        .map((p) => {
+          const result = panelResults[p.id];
+          const labelCol = result.columns[0];
+          const valueCol = result.columns[1];
+          if (!labelCol || !valueCol) return null;
+          return {
+            title: p.title,
+            bars: result.rows.map((row) => ({
+              label: String(row[labelCol.key] ?? ""),
+              value: typeof row[valueCol.key] === "number" ? (row[valueCol.key] as number) : 0,
+              valueLabel: formatCellValue(row[valueCol.key], valueCol.type),
+            })),
+          };
+        })
+        .filter((c): c is NonNullable<typeof c> => c !== null);
+      const sections = panelsWithData.map((panel) => {
+        const result = panelResults[panel.id];
+        const grouped = buildGroupedPdfSection(result, formatCellValue) ?? undefined;
+        return {
+          heading: panel.title,
+          columns: grouped ? grouped.columns : result.columns.map((c) => c.label),
+          rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
+          totals: grouped ? undefined : buildTotalsRow(result, formatCellValue) ?? undefined,
+          grouped,
+        };
+      });
+      const title = `${dashboardName} — ${tab.name}`;
+      await (kind === "pdf" ? exportReportPDF : printReportPDF)(title, sections, charts);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : kind === "pdf" ? "PDF export failed" : "Print failed");
+    } finally {
+      setPdfBusy(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
-      {/* The PDF button prints the page as shown (charts, KPIs, tables) —
-          choose "Save as PDF" in the print dialog. */}
-      <style media="print">{"@page { size: letter landscape; margin: 0.4in; }"}</style>
-      <h1 className="hidden text-lg font-semibold print:block">{dashboardName} — {tab.name}</h1>
       <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
         <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={!hasData}>
           <Download className="mr-1.5 h-3.5 w-3.5" />
@@ -317,11 +362,20 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
         <Button
           variant="outline"
           size="sm"
-          onClick={() => window.print()}
-          disabled={!hasData}
+          onClick={() => void runPdfAction("pdf")}
+          disabled={!hasData || pdfBusy !== null}
         >
           <FileText className="mr-1.5 h-3.5 w-3.5" />
-          PDF
+          {pdfBusy === "pdf" ? "Exporting…" : "PDF"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void runPdfAction("print")}
+          disabled={!hasData || pdfBusy !== null}
+        >
+          <Printer className="mr-1.5 h-3.5 w-3.5" />
+          {pdfBusy === "print" ? "Preparing…" : "Print"}
         </Button>
       </div>
       {tab.useDateFilter && (

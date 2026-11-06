@@ -58,6 +58,7 @@ import { stripHtml } from "@/lib/utils/strip-html";
 import { useServiceTreatedAreaKinds } from "@/lib/hooks/use-chemical-tracking";
 import { areaKindLabel } from "@/lib/chemical-area";
 import { lineTotalCents } from "@/lib/invoices/auto-invoice-tax";
+import { snowServiceRule } from "@/lib/snow-billing";
 import { toast } from "sonner";
 import {
   CalendarPlus,
@@ -581,7 +582,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         id: editingSvcId,
         patch: {
           qty: parsePositiveQty(svcQty),
-          rate_cents: svcRate ? Math.round(parseFloat(svcRate) * 100) : null,
+          // A locked (not-billed) price is left as it is rather than rewritten.
+          ...(svcRateLocked ? {} : { rate_cents: svcRate ? Math.round(parseFloat(svcRate) * 100) : null }),
           budgeted_hours: parseFloat(svcBHrs) || 0,
           treated_area: parseFloat(svcTreatedArea) > 0 ? parseFloat(svcTreatedArea) : null,
           job_note: nextJobNote,
@@ -626,7 +628,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         serviceId: svc.id,
         serviceName: svc.name,
         qty: parsePositiveQty(newSvcQty),
-        rateCents: newSvcRate ? Math.round(parseFloat(newSvcRate) * 100) : (svc.defaultRateCents ?? null),
+        rateCents: svcRateLocked ? 0 : newSvcRate ? Math.round(parseFloat(newSvcRate) * 100) : (svc.defaultRateCents ?? null),
         budgetedHours: parseFloat(newSvcBHrs) || 0,
         budgetMethod: svc.budgetMethod,
         startDate: newSvcStartDate || null,
@@ -725,6 +727,10 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   }
 
   const services = job.services ?? [];
+  // How this snow invoice type uses service rows (uses the type being edited, so the note follows an unsaved change).
+  const snowRule = job.jobType === "snow" ? snowServiceRule((edits.invoice_type as string | undefined) ?? job.invoiceType) : null;
+  const svcRateLocked = snowRule != null && !snowRule.servicePriceUsed;
+  const svcLimitReached = snowRule?.maxServices != null && services.length >= snowRule.maxServices;
   // Package services that haven't actually been dispatched yet — a service
   // only drops off here once its visit moves past the placeholder
   // 'scheduled' state, mirroring the Waiting List's own definition of "still
@@ -1592,6 +1598,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
           {tab === "services" && (
             <div className="flex flex-col gap-3">
+              {snowRule && (
+                <p className="rounded bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">{snowRule.note}</p>
+              )}
               <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
@@ -1706,14 +1715,15 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                               <Input
                                 type="number"
                                 step="0.01"
-                                value={svcRate}
+                                value={svcRateLocked ? "" : svcRate}
                                 onChange={(e) => setSvcRate(e.target.value)}
-                                placeholder="0.00"
+                                placeholder={svcRateLocked ? "Not used" : "0.00"}
+                                disabled={svcRateLocked}
                                 className="h-7 w-24 text-right text-sm ml-auto"
                               />
                             </td>
                             <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">
-                              {svcRate ? formatCurrency(Math.round(parseFloat(svcRate) * 100) * (parseFloat(svcQty) || 1)) : "—"}
+                              {svcRate && !svcRateLocked ? formatCurrency(Math.round(parseFloat(svcRate) * 100) * (parseFloat(svcQty) || 1)) : "—"}
                             </td>
                             <td className="px-2 py-2">
                               <div className="flex justify-end gap-1">
@@ -1731,10 +1741,12 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{s.budgetedHours ? `${formatHours(s.budgetedHours)}h` : "—"}</td>
                             <td className="px-4 py-3 text-right tabular-nums">{s.qty ?? 1}</td>
                             <td className="px-4 py-3 text-right tabular-nums">
-                              {s.rateCents != null ? formatCurrency(s.rateCents) : "—"}
+                              {svcRateLocked
+                                ? <span className="text-xs text-slate-400 dark:text-neutral-500" title={snowRule?.note}>{s.rateCents ? `${formatCurrency(s.rateCents)} (not used)` : "Not used"}</span>
+                                : s.rateCents != null ? formatCurrency(s.rateCents) : "—"}
                             </td>
                             <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                              {s.rateCents != null ? formatCurrency((s.rateCents ?? 0) * (s.qty ?? 1)) : "—"}
+                              {svcRateLocked ? "—" : s.rateCents != null ? formatCurrency((s.rateCents ?? 0) * (s.qty ?? 1)) : "—"}
                             </td>
                             <td className="px-4 py-3">
                               {(job.jobType !== "package" || can("job_add_remove_custom_package_line_items")) && (
@@ -1805,13 +1817,14 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             className="h-7 w-20 text-right text-xs ml-auto" />
                         </td>
                         <td className="px-2 py-2 text-right">
-                          <Input type="number" min="0" step="0.01" value={newSvcRate}
+                          <Input type="number" min="0" step="0.01" value={svcRateLocked ? "" : newSvcRate}
                             onChange={(e) => setNewSvcRate(e.target.value)}
-                            placeholder="0.00"
+                            placeholder={svcRateLocked ? "Not used" : "0.00"}
+                            disabled={svcRateLocked}
                             className="h-7 w-24 text-right text-xs ml-auto" />
                         </td>
                         <td className="px-2 py-2 text-right tabular-nums text-xs text-muted-foreground">
-                          {newSvcRate && newSvcQty
+                          {newSvcRate && newSvcQty && !svcRateLocked
                             ? formatCurrency(Math.round(parseFloat(newSvcRate) * 100) * (parseFloat(newSvcQty) || 1))
                             : "—"}
                         </td>
@@ -1833,7 +1846,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       <tr className="border-t bg-slate-50 dark:bg-muted/40">
                         <td colSpan={3} className="px-4 py-2 text-right text-xs font-semibold text-muted-foreground">Total</td>
                         <td className="px-4 py-2 text-right font-bold text-slate-800 dark:text-neutral-100">
-                          {formatCurrency(services.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0))}
+                          {svcRateLocked ? "—" : formatCurrency(services.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0))}
                         </td>
                         <td />
                       </tr>
@@ -1844,6 +1857,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               {!addingSvc && (job.jobType !== "package" || can("job_add_remove_custom_package_line_items")) && (
                 <div>
                   <Button size="sm" variant="outline" className="h-7 text-xs"
+                    disabled={svcLimitReached}
+                    title={svcLimitReached ? "This invoice type takes one service per job — make a separate job for each service" : undefined}
                     onClick={() => { setAddingSvc(true); setNewSvcId(""); setNewSvcRate(""); setNewSvcQty("1"); setNewSvcBHrs("0"); }}>
                     <Plus className="mr-1 h-3 w-3" /> Add Service
                   </Button>

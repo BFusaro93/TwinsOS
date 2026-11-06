@@ -164,3 +164,44 @@ export function describeAmount(visit: CRMJobVisit, groupSize: number, tiersByJob
   }
   return `${INVOICE_TYPE_LABEL[invoiceType] ?? "Per Event"}${splitSuffix}`;
 }
+
+/** How a snow job's invoice type uses its service rows. The depth/interval types bill
+ *  from the job's ranges (or Rate Per Inch), Hourly bills the job's hourly rate (which is
+ *  the one service row's rate), and Monthly Flat Rate bills from the linked contract — so
+ *  a price typed on a service row is either ignored by billing (yet still rolls up into
+ *  the job's reported value) or only meaningful on a single row. Per Event is the only
+ *  type that sums every service row. */
+export interface SnowServiceRule {
+  /** Most service rows the job may have, or null for no limit. */
+  maxServices: number | null;
+  /** False when billing never reads a service row's price. */
+  servicePriceUsed: boolean;
+  /** Shown above the services table. */
+  note: string;
+}
+
+export function snowServiceRule(invoiceType: string | null | undefined): SnowServiceRule | null {
+  switch (invoiceType) {
+    case "per_event_per_inch":
+    case "per_push_per_inch":
+      return {
+        maxServices: 1,
+        servicePriceUsed: false,
+        note: "Priced by the depth ranges (or Rate Per Inch) above, so a service price isn't used. One service per job — make a separate job for each service.",
+      };
+    case "hourly":
+      return {
+        maxServices: 1,
+        servicePriceUsed: true,
+        note: "The service's Rate is the hourly rate. One service per job.",
+      };
+    case "monthly_flat_rate":
+      return {
+        maxServices: null,
+        servicePriceUsed: false,
+        note: "Bills only through the linked contract (not automatically on its own), so a service price isn't used. Link an active contract that auto-generates invoices, or this job will never be billed.",
+      };
+    default:
+      return null;
+  }
+}
