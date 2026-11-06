@@ -6,12 +6,13 @@ import { Loader2, CreditCard, Check, X } from "lucide-react";
 import { useCreatePortalPaymentIntent, type CreatePaymentIntentResult } from "@/lib/hooks/use-portal-payments";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
 import { STRIPE_ELEMENT_MIN_HEIGHT } from "@/lib/stripe/dialog-guard";
+import { payOutcome, payOutcomeMessage, payOutcomeTitle, type PayOutcome } from "@/lib/stripe/pay-outcome";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
-function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: () => void }) {
+function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: (outcome: PayOutcome) => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -30,8 +31,9 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
       setError(confirmError.message ?? "Payment failed");
       return;
     }
-    if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing" || paymentIntent?.status === "requires_capture") {
-      onSuccess();
+    const outcome = payOutcome(paymentIntent);
+    if (outcome) {
+      onSuccess(outcome);
     } else {
       setError("Payment was not completed");
     }
@@ -69,17 +71,23 @@ export function PayInvoiceDialog({
   open,
   onClose,
   onPaid,
+  accounts = [],
 }: {
   target: PayDialogTarget;
   open: boolean;
   onClose: () => void;
   onPaid: () => void;
+  /** The login's own account plus any sub-accounts. With more than one, a prepayment asks which it's for. */
+  accounts?: { id: string; displayName: string; isSelf: boolean }[];
 }) {
   const [paymentMethod, setPaymentMethod] = useState<"card" | "us_bank_account">("card");
   const [intent, setIntent] = useState<CreatePaymentIntentResult | null>(null);
-  const [succeeded, setSucceeded] = useState(false);
+  const [succeeded, setSucceeded] = useState<PayOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [prepayInput, setPrepayInput] = useState("");
+  const [prepayAccountId, setPrepayAccountId] = useState<string | undefined>(
+    () => (target.kind === "prepayment" ? target.accountId : undefined) ?? accounts.find((a) => a.isSelf)?.id
+  );
   // One per opened dialog so a second prepayment of the same amount is a new charge (see the route).
   const [nonce] = useState(() => crypto.randomUUID());
   const createIntent = useCreatePortalPaymentIntent();
@@ -94,7 +102,7 @@ export function PayInvoiceDialog({
   function handleClose() {
     setPaymentMethod("card");
     setIntent(null);
-    setSucceeded(false);
+    setSucceeded(null);
     setError(null);
     setPrepayInput("");
     onClose();
@@ -105,7 +113,7 @@ export function PayInvoiceDialog({
     try {
       const result = await createIntent.mutateAsync(
         target.kind === "prepayment"
-          ? { prepaymentCents: prepayCents, nonce, accountId: target.accountId, paymentMethod }
+          ? { prepaymentCents: prepayCents, nonce, accountId: prepayAccountId, paymentMethod }
           : { invoiceIds: target.invoiceIds, paymentMethod }
       );
       setIntent(result);
@@ -114,8 +122,8 @@ export function PayInvoiceDialog({
     }
   }
 
-  function handleSuccess() {
-    setSucceeded(true);
+  function handleSuccess(outcome: PayOutcome) {
+    setSucceeded(outcome);
     onPaid();
   }
 
@@ -135,12 +143,8 @@ export function PayInvoiceDialog({
         {succeeded ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <Check className="h-8 w-8 text-green-500" />
-            <p className="text-sm font-medium text-slate-900">Payment submitted</p>
-            <p className="text-xs text-slate-500">
-              {isPrepay
-                ? "Your prepayment will appear on your account in a few seconds. It is held as credit and is applied to your next invoice — it doesn't change any invoice you already have."
-                : "Your balance will update in a few seconds."}
-            </p>
+            <p className="text-sm font-medium text-slate-900">{payOutcomeTitle(succeeded)}</p>
+            <p className="text-xs text-slate-500">{payOutcomeMessage(succeeded, { prepayment: isPrepay })}</p>
             <button onClick={handleClose} className="mt-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white">
               Done
             </button>
@@ -156,6 +160,23 @@ export function PayInvoiceDialog({
                   <span className="font-semibold tabular-nums">{fmt(target.balanceCents)}</span>
                 </div>
               ) : (
+                <>
+                {accounts.length > 1 && (
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="text-slate-500">Prepay for</span>
+                    <select
+                      value={prepayAccountId ?? ""}
+                      onChange={(e) => setPrepayAccountId(e.target.value)}
+                      className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                      {accounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.displayName}{a.isSelf ? " (your account)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <label className="flex flex-col gap-1 text-sm">
                   <span className="text-slate-500">Amount to prepay</span>
                   <div className="flex items-center rounded-md border border-slate-200 px-3 focus-within:ring-2 focus-within:ring-brand-500">
@@ -168,8 +189,13 @@ export function PayInvoiceDialog({
                       className="h-9 flex-1 bg-transparent px-2 text-sm tabular-nums outline-none"
                     />
                   </div>
-                  <span className="text-xs text-slate-400">Held as credit on your account and applied to your next invoice.</span>
+                  <span className="text-xs text-slate-400">
+                    {accounts.length > 1
+                      ? "Held as credit on that account and applied to its next invoice."
+                      : "Held as credit on your account and applied to your next invoice."}
+                  </span>
                 </label>
+                </>
               )}
               <div className="grid grid-cols-2 gap-2">
                 <button

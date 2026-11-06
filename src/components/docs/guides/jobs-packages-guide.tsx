@@ -197,6 +197,13 @@ export function JobsPackagesGuide() {
           typed on one particular visit is left alone.
         </p>
         <p>
+          <strong>Changing the job&apos;s crew moves its upcoming visits.</strong> Upcoming visits
+          (today onward, not started, completed, skipped or cancelled) that follow the job&apos;s
+          crew — ones with no crew of their own or still on the job&apos;s old crew — move to the new
+          crew. A visit you moved to a different crew on the Dispatch Board, a visit pinned to
+          &ldquo;no crew&rdquo;, and multi-crew stops keep their crews.
+        </p>
+        <p>
           <strong>Per-service notes.</strong> Each service on a job can carry its own crew note,
           invoice description and internal note (they come over from the estimate line&apos;s Notes,
           or are set on the service). A visit for one service shows the job note followed by that
@@ -582,16 +589,30 @@ export function JobsPackagesGuide() {
           frequency (Weekly, Bi-Weekly, Every 3 or 4 Weeks, Monthly, or Custom dates), a day of the
           week, and an optional season window. The <strong>Upcoming Dates</strong> panel in the
           dialog previews the dates it will produce, and those are the same dates the visit
-          generator uses.
+          generator uses. Managing schedules needs the <strong>Scheduling Settings</strong> permission
+          (admins always have it); without it the Schedules page and sidebar item are hidden, and
+          schedules can&apos;t be edited, switched off or deleted. Anyone who can add jobs can still
+          create a new schedule from a job&apos;s <strong>Recurring Schedule</strong> picker.
+        </p>
+        <p>
+          <strong>Every-other-week, every-3-weeks and every-4-weeks schedules run per job.</strong>{" "}
+          Unless a bi-weekly schedule is set to Even or Odd weeks with an anchor, each job on one of
+          these schedules counts its own cycle from its <strong>Start Recurring</strong> date — two
+          jobs on &ldquo;Every 3 Weeks Tuesday&rdquo; can land on different Tuesdays. The Upcoming
+          Dates preview then shows one <em>example</em> cycle and says so.
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Skip Dates.</strong> To drop a single date from a recurring schedule — say a
             holiday Monday on a weekly Monday run — use the <strong>Skip Dates</strong> calendar in
             the dialog. Dates the schedule lands on show in green; click one to skip it (it turns
-            red and struck through) and click again to restore it. Skipped dates are left out of the
-            preview and out of newly generated visits. Visits already created for a date you later
-            skip are not removed — cancel those on the Dispatch Board.
+            red and struck through) and click again to restore it. On a per-job schedule
+            (every other week, every 3 or 4 weeks) every in-season day on the schedule&apos;s weekday
+            can be skipped: the example cycle&apos;s dates are filled in green and the other weeks are
+            outlined, because some job on the schedule may land on them. Skipped dates are left out
+            of the preview and out of newly generated visits. Visits already created for a date you
+            later skip are removed only if you choose to update visits when you save (see below);
+            otherwise cancel those on the Dispatch Board.
           </li>
           <li>
             <strong>Custom dates.</strong> Choose the <strong>Custom dates</strong> frequency to pick
@@ -606,12 +627,17 @@ export function JobsPackagesGuide() {
           <li>
             <strong>Rescheduling existing visits.</strong> After you save a change to a
             schedule&apos;s day, frequency, week pattern, season, custom dates or skip dates
-            (holidays), you&apos;re asked <strong>&quot;Reschedule N upcoming visits on this
-            schedule?&quot;</strong> Yes replaces the upcoming visits that are still untouched —
+            (holidays), the app compares each job&apos;s upcoming visits with the new rules. Visits on
+            dates the new rules still include are kept exactly as they are — crew, time, notes,
+            priority and multi-crew setup included. If some visits fall on dates the new rules drop,
+            you&apos;re asked <strong>&quot;Remove N upcoming visits the new schedule
+            drops?&quot;</strong> <strong>Update visits</strong> removes those (only untouched ones:
             scheduled, not dispatched, not clocked in, not invoiced and not dragged to another day by
-            hand — with new ones on the new rules. In-progress, completed, dispatched and hand-moved
-            visits are left exactly where they are. Choose Keep existing visits to leave them; new
-            visits still follow the new schedule.
+            hand) and adds visits for the new dates. If nothing needs removing, the new dates are
+            simply added. In-progress, completed, dispatched and hand-moved visits are never removed.
+            Choose Keep existing visits to leave them; new visits still follow the new schedule.
+            Editing one job&apos;s schedule, start date or end date on its Job Detail works the same
+            way.
           </li>
           <li>
             <strong>Names are unique, and Active means active.</strong> Two live schedules can&apos;t
@@ -619,7 +645,16 @@ export function JobsPackagesGuide() {
             clashes is refused with a message, and a duplicate row in a CSV import is skipped.
             Switching a schedule off stops any new visits being generated for the jobs on it
             (including the per-job Generate Visits button); visits that already exist are kept. Renaming a schedule carries every job on it
-            along, so they keep their cadence.
+            along, so they keep their cadence. A schedule that active jobs still use can&apos;t be
+            deleted: the Delete dialog shows how many jobs use it — move them to another schedule
+            first, or switch the schedule off instead.
+          </li>
+          <li>
+            <strong>Removing one weekday&apos;s visits.</strong> On a job&apos;s Visits tab,{" "}
+            <strong>Remove day…</strong> removes that job&apos;s upcoming (today onward) visits on one
+            weekday that haven&apos;t been dispatched or started. It doesn&apos;t change the schedule:
+            if the job&apos;s schedule still includes that weekday, new visits on it come back as the
+            schedule rolls forward, so change the job&apos;s schedule to stop them for good.
           </li>
         </ul>
       </Section>

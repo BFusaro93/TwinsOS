@@ -150,9 +150,9 @@ function crewVisitSelect(hidePricing: boolean): string {
 
   const visitCols = [
     "id", "org_id", "job_id", "client_id", "job_service_id",
-    "storm_event_id", "snow_depth_inches", "temperature", "asset_type",
+    "storm_event_id", "push_number", "snow_depth_inches", "temperature", "asset_type",
     "crew_id", "crew_unassigned", "scheduled_date", "start_time", "end_time",
-    "status", "sub_status", "completion_notes", "actual_hours", "completed_at",
+    "status", "sub_status", "completion_notes", "actual_hours", "budgeted_hours", "completed_at",
     "priority", "notes_to_crew", "notes_to_client", "invoice_description",
     "men_count", "job_comments", "assigned_employee_id", "dispatched_at",
     "clocked_in_at", "clocked_out_at", "paused_at", "break_minutes",
@@ -230,6 +230,7 @@ function mapVisit(row: Record<string, unknown>): VisitWithNotesStamp {
     clientId:             row.client_id as string,
     jobServiceId:         (row.job_service_id as string) ?? null,
     stormEventId:         (row.storm_event_id as string) ?? null,
+    pushNumber:           Number(row.push_number ?? 1) || 1,
     snowDepthInches:      (row.snow_depth_inches as number) ?? null,
     temperature:          (row.temperature as number) ?? null,
     assetType:            (row.asset_type as string) ?? null,
@@ -252,7 +253,9 @@ function mapVisit(row: Record<string, unknown>): VisitWithNotesStamp {
     orderNum:             null,
     completionNotes:      row.completion_notes as string | null,
     actualHours:          row.actual_hours as number | null,
-    budgetedHours:        (job?.budgeted_hours as number) ?? null,
+    // The visit's OWN override (man-hours) only; job.budgetedHours carries the
+    // job's. visitBudgetHours() (lib/crew/budget-countdown) combines them.
+    budgetedHours:        (row.budgeted_hours as number) ?? null,
     completedAt:          row.completed_at as string | null,
     priority:             (row.priority as number) ?? 1,
     isHighPriority:       (row.is_high_priority as boolean | null) ?? null,
@@ -1477,16 +1480,19 @@ export function useUpsertCrewMemberTime() {
       crewMemberId,
       clockedInAt,
       clockedOutAt,
+      breakMinutes,
     }: {
       visitId: string;
       crewMemberId: string;
       clockedInAt?: string | null;
       clockedOutAt?: string | null;
+      /** Office only — the member's own break on this punch (omit to keep it, clamped to the punch). */
+      breakMinutes?: number | null;
     }) => {
       const res = await fetch(`/api/crm/crew/visits/${visitId}/member-times`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ crewMemberId, clockedInAt, clockedOutAt }),
+        body: JSON.stringify({ crewMemberId, clockedInAt, clockedOutAt, breakMinutes }),
       });
       if (!res.ok) throw new Error(await res.text());
       return res.json();

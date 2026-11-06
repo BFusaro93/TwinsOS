@@ -6,6 +6,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { rescheduleVisitsForSchedule } from "@/lib/visits/schedule-reschedule";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 
 const Body = z.object({
   /** preview — how many upcoming untouched visits would be replaced; apply — replace them. */
@@ -30,6 +31,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ sch
   );
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Same key as Settings → Schedules (and the crm_schedules write guard): this
+  // rewrites every job's upcoming visits on the schedule.
+  if (!(await hasAnySettingsPermission(supabase, ["scheduling_settings"]))) {
+    return NextResponse.json({ error: "You do not have permission to manage schedules" }, { status: 403 });
+  }
 
   const { scheduleId } = await params;
   if (!z.string().uuid().safeParse(scheduleId).success) {

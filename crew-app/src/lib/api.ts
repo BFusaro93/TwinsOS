@@ -558,6 +558,8 @@ export interface MemberTimeRow {
   name: string;
   clockedInAt: string | null;
   clockedOutAt: string | null;
+  /** This person's own break + lunch minutes (deducted from their saved hours). */
+  breakMinutes: number;
 }
 
 export async function fetchMemberTimes(visitId: string): Promise<MemberTimeRow[]> {
@@ -565,6 +567,8 @@ export async function fetchMemberTimes(visitId: string): Promise<MemberTimeRow[]
     crew_member_id: string;
     clocked_in_at: string | null;
     clocked_out_at: string | null;
+    break_minutes?: number | null;
+    lunch_minutes?: number | null;
     crm_crew_members: { name?: string | null } | { name?: string | null }[] | null;
   }[];
   return rows.map((r) => {
@@ -574,6 +578,7 @@ export async function fetchMemberTimes(visitId: string): Promise<MemberTimeRow[]
       name: member?.name ?? 'Crew member',
       clockedInAt: r.clocked_in_at,
       clockedOutAt: r.clocked_out_at,
+      breakMinutes: Math.max(0, Number(r.break_minutes ?? 0) + Number(r.lunch_minutes ?? 0)),
     };
   });
 }

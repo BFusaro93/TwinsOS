@@ -221,6 +221,8 @@ export interface CRMContract {
   autoGenerate: boolean;
   isActive: boolean;
   includeSubProperties: boolean;
+  /** Snow storms dated before the start date / after the end date: billed per event (default) or included in the price. */
+  snowOutsideDates: "bill_per_event" | "included";
   source: string | null;
   salesRepId: string | null;
   saleType: "new" | "renewal" | null;

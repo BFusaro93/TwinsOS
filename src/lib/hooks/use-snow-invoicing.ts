@@ -47,21 +47,40 @@ export interface SnowContractRow {
   status: string | null;
   is_active: boolean | null;
   deleted_at: string | null;
+  start_date: string | null;
   end_date: string | null;
+  /** Storms before start_date / after end_date: 'bill_per_event' (default) or 'included'. */
+  snow_outside_dates: string | null;
 }
 
-/** The "ended" test shared with complete-visit-side-effects: a contract that is
- *  missing, cancelled, expired, inactive, deleted or past its end date no longer
- *  covers the visit. Draft/sent contracts are NOT ended. */
+/** Missing, deleted, switched inactive, cancelled or expired — covers nothing. */
+function isSnowContractDead(c: SnowContractRow | undefined): boolean {
+  return !c || c.deleted_at != null || c.is_active === false || c.status === "cancelled" || c.status === "expired";
+}
+
+function stormsOutsideDatesIncluded(c: SnowContractRow): boolean {
+  return c.snow_outside_dates === "included";
+}
+
+/** Billing: the contract does NOT cover a storm visit on `day` (so Snow
+ *  Invoicing bills it per event). A dead contract never covers; a live one
+ *  covers visits inside its start–end dates, and visits outside them only when
+ *  the contract's "Storms outside the contract dates" is set to included.
+ *  Draft/sent contracts are NOT ended. */
 export function isSnowContractEnded(c: SnowContractRow | undefined, day: string | null | undefined): boolean {
-  return (
-    !c ||
-    c.deleted_at != null ||
-    c.is_active === false ||
-    c.status === "cancelled" ||
-    c.status === "expired" ||
-    (c.end_date != null && !!day && c.end_date < day)
-  );
+  if (isSnowContractDead(c)) return true;
+  const contract = c as SnowContractRow;
+  if (!day || stormsOutsideDatesIncluded(contract)) return false;
+  return (contract.end_date != null && contract.end_date < day) || (contract.start_date != null && day < contract.start_date);
+}
+
+/** Dispatch: the contract's job is no longer served — dead, or past its end
+ *  date unless storms outside the dates are included. A contract that hasn't
+ *  started yet still gets its storms dispatched (they bill per event). */
+export function isSnowContractClosedForDispatch(c: SnowContractRow | undefined, day: string): boolean {
+  if (isSnowContractDead(c)) return true;
+  const contract = c as SnowContractRow;
+  return !stormsOutsideDatesIncluded(contract) && contract.end_date != null && contract.end_date < day;
 }
 
 export async function loadContractsById(
@@ -74,7 +93,7 @@ export async function loadContractsById(
     const rows = await fetchAllRows<SnowContractRow>(() =>
       supabase
         .from("crm_contracts")
-        .select("id, status, is_active, deleted_at, end_date")
+        .select("id, status, is_active, deleted_at, start_date, end_date, snow_outside_dates")
         .in("id", ids)
         .order("id", { ascending: true })
     );
@@ -132,8 +151,9 @@ export function useUninvoicedSnowVisits(filters: {
       // invoice_type is NULL, per SQL's three-valued NULL comparison logic —
       // those should default to per-event billing, not be excluded).
       // Contract-linked snow jobs are billed on the contract's cycle only while
-      // that contract is in force. Once it is cancelled / expired / inactive /
-      // deleted / past its end date nothing else bills the visit (the auto-invoice
+      // that contract is in force and the storm falls inside its dates (or the
+      // contract includes storms outside them). Once it is cancelled / expired /
+      // inactive / deleted / outside its dates nothing else bills the visit (the auto-invoice
       // path skips snow jobs, the contract cron has stopped) — it used to vanish
       // from this queue too, so those storms were never invoiced. Mirrors the
       // "ended" test in complete-visit-side-effects.

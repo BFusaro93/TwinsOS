@@ -20,6 +20,7 @@ import { settleSurchargeAuthorization } from "@/lib/stripe/surcharge-capture";
 import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { notifyStaffOfFailedDeposit } from "@/lib/estimate-deposit-notify";
+import { notifyStaffOfUnacceptedDeposit } from "@/lib/estimate-deposit-excess-notify";
 import { resolveBroadcastRecipients } from "@/lib/notify-shared";
 import { logger } from "@/lib/logger";
 
@@ -218,6 +219,39 @@ export async function POST(request: Request) {
         // invoice becomes chargeable again instead of looking pending forever.
         await clearPendingCharge(db, failedIntent.id);
       }
+
+      // A portal prepayment that failed — above all an ACH debit the bank
+      // returned days after the customer saw "processing". No crm_payments
+      // row was ever written (the webhook only records a succeeded intent), so
+      // there's nothing to reverse; the office just has to hear about it the
+      // same way it hears about a failed invoice payment.
+      if (
+        failedIntent.metadata?.source === "crm_client_prepayment" &&
+        failedOrgId &&
+        failedClientId &&
+        event.account &&
+        (await eventAccountOwnedByOrg(db, failedOrgId, event.account))
+      ) {
+        await fireSimpleTrigger(supabase, {
+          orgId: failedOrgId,
+          clientId: failedClientId,
+          triggerType: "credit_card_charge_failed",
+        });
+        if (failedIntent.payment_method_types.includes("us_bank_account")) {
+          // A card decline happens in front of the customer; a bank return
+          // doesn't, so leave a trace on the client's timeline for staff.
+          const cents = Number.parseInt(failedIntent.metadata?.prepayment_cents ?? "", 10) || failedIntent.amount;
+          const amount = (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+          const reason = failedIntent.last_payment_error?.message?.trim() || "The bank returned the transfer.";
+          const { error: activityErr } = await db.from("client_activity").insert({
+            org_id: failedOrgId,
+            client_id: failedClientId,
+            activity_type: "payment",
+            subject: `Prepayment failed: ${amount} bank transfer — ${reason}`,
+          });
+          if (activityErr) log.error("failed to log a failed prepayment", { error: activityErr, paymentIntentId: failedIntent.id });
+        }
+      }
       break;
     }
 
@@ -261,10 +295,27 @@ export async function POST(request: Request) {
         (await eventAccountOwnedByOrg(db, pendingOrgId, event.account))
       ) {
         await markEstimateDepositPending(db, pendingIntent);
+        // Same follow-up as a settled card deposit (see payment_intent.succeeded).
+        const pendingEstimateId = pendingIntent.metadata?.estimate_id;
+        if (pendingEstimateId) await notifyStaffOfUnacceptedDeposit(db, pendingOrgId, pendingEstimateId);
         break;
       }
 
       await markIntentInvoicesPending(db, pendingIntent, event.account ?? null);
+      break;
+    }
+
+    // A bank account Stripe couldn't verify instantly falls back to microdeposits:
+    // the intent waits in requires_action for days until the customer confirms the
+    // two small deposits. Mark the invoices like a processing debit, so a second
+    // payment (the customer giving up and paying by card) is refused instead of
+    // landing alongside the debit once it's verified. Needs this event enabled on
+    // the Connect webhook endpoint; without it the marker is simply never set.
+    case "payment_intent.requires_action": {
+      const actionIntent = event.data.object as Stripe.PaymentIntent;
+      if (actionIntent.next_action?.type === "verify_with_microdeposits") {
+        await markIntentInvoicesPending(db, actionIntent, event.account ?? null);
+      }
       break;
     }
 
@@ -326,6 +377,12 @@ export async function POST(request: Request) {
             : await applyCrmInvoicePayment(db, supabase, event);
       if (result === "error") {
         return NextResponse.json({ error: "Failed to apply payment to invoice" }, { status: 500 });
+      }
+      // The deposit is charged before the acceptance is submitted. If the
+      // proposal can't be accepted any more (expired / edited since sent in
+      // between), tell staff — the money is on the client's account as credit.
+      if (source === "crm_estimate_deposit" && metaOrg && paymentIntent.metadata?.estimate_id) {
+        await notifyStaffOfUnacceptedDeposit(db, metaOrg, paymentIntent.metadata.estimate_id);
       }
       // Settled: the payment is recorded and the balance is down, so the
       // pending marker has done its job. Cleared by intent id, so this covers

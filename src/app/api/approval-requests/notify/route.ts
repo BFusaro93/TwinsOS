@@ -98,8 +98,11 @@ export async function POST(request: Request) {
   const entityNumber = entityType === "crm_estimate" && /^\d+$/.test(rawNumber) ? `#${rawNumber}` : rawNumber;
 
   // Compute grand total for display (stored in cents)
-  const grandTotalDisplay = entity?.[meta.totalField]
-    ? formatCurrency(entity[meta.totalField] as number)
+  // A tiered estimate is approved on its most expensive option (approval_amount_cents),
+  // not total_cents (the cheapest open tier) — show approvers the amount they approve.
+  const displayTotal = (entityType === "crm_estimate" ? entity?.approval_amount_cents : null) ?? entity?.[meta.totalField];
+  const grandTotalDisplay = displayTotal
+    ? formatCurrency(displayTotal as number)
     : "";
 
   // 3. Fetch pending approval requests for this entity

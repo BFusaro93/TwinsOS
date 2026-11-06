@@ -13,7 +13,8 @@
  * new schedule). See src/lib/visits/generate.ts.
  */
 
-import { selectAllRows } from "@/lib/visits/generate";
+import { recurringDatesForJob, selectAllRows, type GeneratorJob } from "@/lib/visits/generate";
+import { addDaysYmd, type ScheduleRow } from "@/lib/visits/recurrence";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -34,6 +35,29 @@ export interface FindUntouchedOptions {
    *  generator produced the visit for, so a live visit whose scheduled_date
    *  differs from it was dragged elsewhere and must stay where it is. */
   skipMoved?: boolean;
+  /** Reschedule diff: the dates the job's NEW rules still produce. An
+   *  untouched visit whose occurrence (occurrence_date, else scheduled_date)
+   *  is one of them is kept exactly as it is — crew, time, notes, priority and
+   *  multi-crew setup survive — and the generator won't duplicate it. Only
+   *  occurrences the new rules drop are removed. */
+  keepDates?: Set<string> | null;
+}
+
+/** How far ahead a reschedule looks for dates to keep (visits are generated up to a year out). */
+const RESCHEDULE_KEEP_HORIZON_DAYS = 730;
+
+/**
+ * The keep-set for a reschedule: every date the job's (new) rules produce from
+ * the org's today on. Non-recurring jobs keep nothing (a schedule change
+ * doesn't apply to them).
+ */
+export function rescheduleKeepDates(
+  job: Pick<GeneratorJob, "job_type" | "schedule" | "schedule_days" | "recurrence_start" | "recurrence_end" | "scheduled_date" | "start_date_window">,
+  schedulesByName: Map<string, ScheduleRow>,
+  today: string
+): Set<string> {
+  if (job.job_type !== "recurring") return new Set();
+  return new Set(recurringDatesForJob(job, schedulesByName, today, addDaysYmd(today, RESCHEDULE_KEEP_HORIZON_DAYS)));
 }
 
 export async function findUntouchedFutureVisits(
@@ -78,7 +102,16 @@ export async function findUntouchedFutureVisits(
       ? rows.filter((r) => r.occurrence_date && r.scheduled_date && r.occurrence_date !== r.scheduled_date).map((r) => r.id)
       : []
   );
-  const eligible = new Set(ids.filter((id) => !invoiced.has(id) && !movedByHand.has(id)));
+  const keep = opts.keepDates;
+  const stillScheduled = new Set(
+    keep
+      ? rows.filter((r) => {
+          const occ = r.occurrence_date ?? r.scheduled_date;
+          return !!occ && keep.has(occ);
+        }).map((r) => r.id)
+      : []
+  );
+  const eligible = new Set(ids.filter((id) => !invoiced.has(id) && !movedByHand.has(id) && !stillScheduled.has(id)));
 
   // A multi-crew stop is pruned all-or-nothing. If any crew on it has started,
   // been dispatched past the allowed statuses, or been billed, leave the whole

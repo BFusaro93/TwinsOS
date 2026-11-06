@@ -11,6 +11,7 @@ import {
   useSaveSnowRateTiers,
   type TierInput,
 } from "@/lib/hooks/use-snow-rate-tiers";
+import { snowTierRangeProblem } from "@/lib/snow-billing";
 
 export interface DraftTier {
   minInches: string;
@@ -56,27 +57,13 @@ export function parseTierDrafts(tiers: DraftTier[]): TierInput[] | null {
     }
   }
 
-  // priceWithTiers (src/lib/snow-billing.ts) sorts by minInches and
-  // returns the FIRST matching tier — an overlap silently makes every
-  // tier after the first match for a given depth unreachable, with no
-  // error ever surfacing to whoever created the overlap. Validate here
-  // instead of trusting the editor's row order.
-  const sorted = [...parsed].sort((a, b) => a.minInches - b.minInches);
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const current = sorted[i];
-    const next = sorted[i + 1];
-    if (current.maxInches === null) {
-      toast.error(
-        `"${current.minInches}"+ is open-ended but isn't the last tier — the tier(s) after it can never apply.`
-      );
-      return null;
-    }
-    if (next.minInches < current.maxInches) {
-      toast.error(
-        `Tiers overlap between ${current.minInches}–${current.maxInches}" and ${next.minInches}"+ — a storm in the overlap always prices at the lower tier's rate.`
-      );
-      return null;
-    }
+  // Ranges must be contiguous ("0–3, 3–6, 6+"): an overlap makes a range
+  // unreachable and a gap leaves depths nobody priced on purpose. A depth
+  // exactly on a boundary bills the lower range (see priceWithTiers).
+  const problem = snowTierRangeProblem(parsed);
+  if (problem) {
+    toast.error(problem);
+    return null;
   }
   return parsed;
 }
@@ -114,9 +101,9 @@ export function SnowRateTierRows({
       </div>
       <p className="text-[11px] text-slate-400 dark:text-neutral-500">
         {perPush
-          ? "Prices each push by the depth recorded for that push (e.g. 0–3\" = $165, 3.01–6\" = $299)"
-          : "Prices the storm by its total depth (e.g. 0–3\" = $165, 3.01–6\" = $299)"}
-        {" "}instead of a flat rate per inch. Leave the last range&apos;s &quot;to&quot; blank for an open-ended top range billed per inch.
+          ? "Prices each push by the depth recorded for that push (e.g. 0–3\" = $165, 3–6\" = $299)"
+          : "Prices the storm by its total depth (e.g. 0–3\" = $165, 3–6\" = $299)"}
+        {" "}instead of a flat rate per inch. Start each range where the last one ends; a depth exactly on a boundary (3&quot;) bills the lower range. Leave the last range&apos;s &quot;to&quot; blank for an open-ended top range billed per inch.
       </p>
       {tiers.length === 0 && (
         <p className="text-xs italic text-slate-400 dark:text-neutral-500">No ranges — billed at the flat Rate Per Inch.</p>

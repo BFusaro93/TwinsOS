@@ -161,7 +161,14 @@ export async function endCrewDay(
   p: { orgId: string; crewId: string; workDate: string; at: string }
 ): Promise<number> {
   // includeAbsent: someone who left early was marked absent but still has a shift to close.
-  const memberIds = await resolveWorkingMemberIds(supabase, p.orgId, p.crewId, p.workDate, { includeAbsent: true, includeInactive: true });
+  // includeInactive / includeRemovedSince: an employee deactivated, or a roster
+  // row removed, mid-day still has the shift they were on closed — any removal
+  // recent enough for one of their shifts to still be closable here.
+  const memberIds = await resolveWorkingMemberIds(supabase, p.orgId, p.crewId, p.workDate, {
+    includeAbsent: true,
+    includeInactive: true,
+    includeRemovedSince: new Date(new Date(p.at).getTime() - MAX_AUTO_CLOSE_SHIFT_MS).toISOString(),
+  });
   if (memberIds.length === 0) return 0;
   const { data: open } = await supabase
     .from("crm_crew_day_shifts")

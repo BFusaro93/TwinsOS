@@ -157,7 +157,10 @@ export function EstimatingGuide() {
           exists to hold an estimate back regardless of what stage says. An approval covers the total
           that was approved: if lines added afterwards push the total above it, Send and Copy link ask for
           approval again (clicking Send resubmits it), and the estimate can&apos;t go out until it is
-          re-approved.
+          re-approved. On a <strong>Good / Better / Best</strong> estimate the approval covers the{" "}
+          <em>highest</em> option (with its discount and tax), not the &ldquo;starting at&rdquo; total,
+          because the client can accept any of them; once the client picks a tier, it&rsquo;s that
+          tier&rsquo;s total.
         </p>
         <Callout>
           <strong>The trap.</strong> An estimate can show stage &ldquo;Sent&rdquo; while its
@@ -332,7 +335,15 @@ export function EstimatingGuide() {
           Each line also has a <strong>Calc Type</strong> toggle between per-unit pricing (
           <strong>&times;</strong> &mdash; rate &times; qty &times; visits) and a fixed total (
           <strong>$</strong> &mdash; the entered rate <em>is</em> the line&rsquo;s total,
-          regardless of quantity).
+          regardless of quantity). A fixed line with several visits is the same work repeated: its
+          price covers every visit, and its budgeted hours and auto-calculated cost both count every
+          visit, so the margin isn&rsquo;t overstated.
+        </p>
+        <p>
+          An <strong>estimate-level flat discount</strong> keeps the amount you typed. If the subtotal
+          is smaller than the discount, only the subtotal&rsquo;s worth applies (a note under the field
+          says so), and the rest comes back automatically when lines are added. On a Good / Better /
+          Best estimate each option is discounted against its own subtotal.
         </p>
         <p>
           Overhead on the estimate as a whole is either one flat percentage applied to total cost,
@@ -544,6 +555,20 @@ export function EstimatingGuide() {
           accepted it and whether it was through the proposal link or the portal.
         </p>
         <p>
+          <strong>Lines already agreed.</strong> If you re-send an estimate the client has already
+          partly accepted (for example after adding more work), the lines they accepted before appear
+          under <strong>Already agreed</strong> on the proposal page and in the client portal. They
+          can&rsquo;t be unticked, and they&rsquo;re included in the total, so the total on the page is
+          what accepting records.
+        </p>
+        <p>
+          <strong>Choosing a tier.</strong> On a Good / Better / Best proposal only the options that
+          have lines are shown, the first one is selected to start with, and each option&rsquo;s price
+          is its full total (line and estimate discounts, sub-items and tax) &mdash; the same figure as
+          the totals box when it&rsquo;s selected. The client portal&rsquo;s Selected Total follows the
+          same rules.
+        </p>
+        <p>
           <strong>Valid until.</strong> The proposal page shows the Valid until date. Through the
           end of that day it can be accepted; after it, the page reads &ldquo;Expired,&rdquo; the
           Accept controls are replaced by a notice, and acceptance (by link or portal) is refused.
@@ -690,6 +715,14 @@ export function EstimatingGuide() {
           screen still opens.
         </Callout>
         <Callout>
+          <strong>Paid, but not accepted.</strong> The card is charged just before the acceptance is
+          submitted. If the proposal expired, or you edited the estimate after sending it, in those
+          few moments, the acceptance is refused but the deposit is real: it sits on the client as
+          unapplied credit and you get a <strong>Deposit paid, not accepted</strong> bell notification
+          (same recipients as proposal decisions, plus the sales rep). Re-send the proposal or refund
+          the deposit.
+        </Callout>
+        <Callout>
           If you change the deposit amount (or the card fee setting) while a client has a card
           payment half-started, their next attempt is for the new amount &mdash; the old pending
           payment is cancelled rather than reused, so they&rsquo;re never charged the old figure.
@@ -752,7 +785,13 @@ export function EstimatingGuide() {
             also left out when you create an invoice from the estimate.
           </li>
           <li>
-            Pick a <strong>Job Type</strong>: One Time, Recurring, Project, or Waiting List.
+            Pick a <strong>Job Type</strong>: One Time, Recurring, Project, or Waiting List. An
+            estimate that already bills on its own converts only as a <strong>Project</strong> (the
+            Job Type is locked and the window says why): one with a live invoice created from it
+            (&ldquo;This estimate has already been invoiced (#N)&rdquo;), or one set to bill by{" "}
+            <strong>milestones</strong>. Project jobs aren&rsquo;t invoiced per visit and take over the
+            estimate&rsquo;s milestones when you link a project, so the client isn&rsquo;t billed twice.
+            Void the invoice first if you really want a regular job.
           </li>
           <li>
             Set the scheduled date, assign a crew, and enter a <strong>Crew Size (men)</strong>. The
@@ -769,6 +808,13 @@ export function EstimatingGuide() {
           agreed to pay: each included line&rsquo;s own discount <em>and</em> its share of any
           estimate-level discount are applied to the job&rsquo;s service pricing. A 10%-off estimate
           produces a job priced 10% off, not one priced at the undiscounted subtotal.
+        </Callout>
+        <Callout>
+          <strong>Invoicing straight from the estimate.</strong> Each invoice line gets a quantity and
+          rate that multiply exactly to the estimate line&rsquo;s total &mdash; for a per-unit line,
+          quantity &times; visits units at the per-unit rate the total works out to (Adj Rate and
+          complexity included); for a fixed line, or when that rate isn&rsquo;t a whole number of
+          cents, 1 &times; the line total. Editing anything on the invoice line then keeps its price.
         </Callout>
         <Callout>
           <strong>A multi-visit line becomes a per-visit price.</strong> An estimate line priced

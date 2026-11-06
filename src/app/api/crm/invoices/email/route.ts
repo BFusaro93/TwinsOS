@@ -17,6 +17,7 @@ import { loadInvoicePhotosForPdf } from "@/lib/invoices/photos";
 import { loadInvoiceChemicalsForPdf } from "@/lib/invoices/chemical-applications";
 import { loadInvoiceVisitNotes, combineInvoiceNotes } from "@/lib/invoices/visit-notes";
 import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoices/share-token";
+import { fetchOrgCardPaymentsAvailable, invoiceLinkLabel } from "@/lib/stripe/card-payments-available";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
 import { computeInvoiceTotals } from "@/lib/invoices/totals";
 import { replyToFromCustomizations } from "@/lib/email/reply-to";
@@ -266,6 +267,10 @@ export async function POST(req: NextRequest) {
     createdBy: user.id,
   });
   const viewOnlineUrl = shareToken ? buildInvoiceViewUrl(shareToken) : null;
+  // No Stripe Connect (or onboarding unfinished): the online invoice can be
+  // viewed but not paid, so every button says "View Invoice" rather than
+  // promising a payment the page can't take.
+  const cardPaymentsAvailable = await fetchOrgCardPaymentsAvailable(supabase, inv.org_id as string);
 
   // The invoice's own sales rep (crm_invoices.sales_rep_id → crm_employees),
   // not the org name — [salesperson]/[salesrepname] previously always showed
@@ -296,7 +301,7 @@ export async function POST(req: NextRequest) {
   // below already HTML-escapes every non-HTML-safe tag at substitution time.
   const invoiceLogoUrl = (pdfTemplate?.logo_url as string) || (org?.customizations as Record<string, unknown> | undefined)?.logoDataUrl as string | undefined;
   const paymentLinkHtml = viewOnlineUrl
-    ? `<a href="${viewOnlineUrl}" style="color:#fff;background:${brandColor};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">Pay Now</a>`
+    ? `<a href="${viewOnlineUrl}" style="color:#fff;background:${brandColor};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">${invoiceLinkLabel(cardPaymentsAvailable, "button")}</a>`
     : "";
   const mergeVars: Record<string, string> = {
     ...buildClientMergeVars(
@@ -383,7 +388,7 @@ export async function POST(req: NextRequest) {
   <div style="padding:28px 32px;font-size:14px;line-height:1.6">${resolvedBodyContent}</div>
   ${viewOnlineUrl ? `
   <div style="padding:0 32px 28px;text-align:center">
-    <a href="${viewOnlineUrl}" style="display:inline-block;background:${brandColor};color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;font-weight:600">View &amp; Pay Invoice Online</a>
+    <a href="${viewOnlineUrl}" style="display:inline-block;background:${brandColor};color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;font-weight:600">${escapeHtml(invoiceLinkLabel(cardPaymentsAvailable, "banner"))}</a>
   </div>` : ""}
   <div style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;text-align:center">
     <p style="margin:0;font-size:11px;color:#94a3b8">${orgNameHtml}</p>
@@ -440,6 +445,7 @@ export async function POST(req: NextRequest) {
     ),
     advertisementText: (pdfTemplate?.advertisement_text as string | null) ?? null,
     viewOnlineUrl,
+    payOnlineAvailable: cardPaymentsAvailable,
     clientName: inv.clients?.display_name ?? null,
     clientAddress: inv.clients?.billing_address ?? null,
     clientCity: inv.clients?.billing_city ?? null,

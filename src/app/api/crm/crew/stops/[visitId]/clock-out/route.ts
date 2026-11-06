@@ -1,5 +1,5 @@
 import { chemicalGateMessage, isChemicalGateError } from "@/lib/crew/chemical-gate";
-import { missingRequiredPhoto } from "@/lib/crew/required-photos";
+import { missingPhotosMessage, missingRequiredPhotos } from "@/lib/crew/required-photos";
 import { NextResponse } from "next/server";
 import { resolveOccurredAt } from "@/lib/crew/occurred-at";
 import { z } from "zod";
@@ -13,7 +13,8 @@ import { sumPunchLaborCents, sumPunchManHours, recomputeStopLabor } from "@/lib/
 import { closeStopPunches, resolvePunchOwnerVisitId } from "@/lib/crew/stop-punches";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { isoInZone, todayInZone } from "@/lib/time/zone";
+import { instantToZoneWallClock, isoInZone, todayInZone } from "@/lib/time/zone";
+import { runningPauseClockOut } from "@/lib/crew/visit-pause";
 
 const log = logger.child("crew/stops/clock-out");
 
@@ -36,6 +37,7 @@ interface VisitRow {
   job_id: string;
   client_id: string;
   scheduled_date: string;
+  push_number?: number | null;
   crew_id: string | null;
   job_service_id: string | null;
   status: string;
@@ -65,6 +67,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
     clientId: row.client_id,
     scheduledDate: row.scheduled_date,
     crewId: effectiveVisitCrewId(row),
+    pushNumber: row.push_number,
     job: row.crm_jobs
       ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
       : undefined,
@@ -72,7 +75,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 }
 
 const VISIT_SELECT = `
-  id, org_id, job_id, client_id, scheduled_date, crew_id, crew_unassigned, job_service_id, status,
+  id, org_id, job_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, job_service_id, status,
   men_count, clocked_in_at, clocked_out_at, paused_at, break_minutes, start_time,
   crm_jobs(crew_id, status, property_id, service_address, service_city, crm_job_services(id, budgeted_hours, team_size))
 `;
@@ -180,7 +183,9 @@ export async function POST(
       // in (Mark Complete never closes punches). The crew's Clock Out is then the
       // only thing that will, or those punches stay open on the Timesheet forever.
       // No-op when there are none (a true replay).
-      await closeStopPunches(supabase, punchVisitId, anchor.clocked_out_at ?? new Date().toISOString());
+      // Service client: crew logins can no longer write punches directly (the
+      // stop was authorized above).
+      await closeStopPunches(createServiceClient(), punchVisitId, anchor.clocked_out_at ?? new Date().toISOString());
       // ...and file the hours those punches represent (Job Costing showed 0 hours
       // for a stop the office completed while the crew was still punched in).
       await recomputeStopLabor(supabase, punchVisitId).catch((err: unknown) => {
@@ -191,12 +196,17 @@ export async function POST(
     return NextResponse.json({ error: "Nothing to clock out for this stop" }, { status: 400 });
   }
 
-  // Required After photo (org setting). Enforced here and not only in the
-  // crew apps, for the same reason as the chemical gate below: a replayed or
-  // stale request must not walk past it. Only a real clock-out gets here —
-  // a replay of one that landed returned above.
-  if (await missingRequiredPhoto(createServiceClient(), { orgId: anchor.org_id, visitIds: stopRows.map((r) => r.id), phase: "after" })) {
-    return NextResponse.json({ error: "Add an After photo before finishing this job.", code: "photo_required", phase: "after" }, { status: 409 });
+  // Required Before / After photos (org setting) — both checked here at
+  // Finish, never at Start. Enforced here and not only in the crew apps, for
+  // the same reason as the chemical gate below: a replayed or stale request
+  // must not walk past it. Only a real clock-out gets here — a replay of one
+  // that landed returned above.
+  const missingPhotos = await missingRequiredPhotos(createServiceClient(), { orgId: anchor.org_id, visitIds: stopRows.map((r) => r.id) });
+  if (missingPhotos.length > 0) {
+    return NextResponse.json(
+      { error: missingPhotosMessage(missingPhotos), code: "photo_required", phase: missingPhotos[0], phases: missingPhotos },
+      { status: 409 }
+    );
   }
 
   // Duration is measured from the OPEN visits' own clock-in. The anchor can
@@ -206,7 +216,19 @@ export async function POST(
   // The clock-out moment, bounded to after the earliest clock-in. Server time here
   // credited every hour between an offline tap and its sync as time on site.
   const earliestClockIn = openRows.map((r) => r.clocked_in_at).filter(Boolean).sort()[0] ?? null;
-  const now = resolveOccurredAt(rawOccurredAt, { notBefore: earliestClockIn }).toISOString();
+  const tappedAt = resolveOccurredAt(rawOccurredAt, { notBefore: earliestClockIn }).toISOString();
+  // Clocked out while still PAUSED (never tapped Resume): no work happened after
+  // the pause began, and counting the pause up to the tap docked an overnight
+  // pause (paused 4pm, Stop Job next morning) from punches and a day shift that
+  // ended at 5pm — zeroing the day. The stop is clocked out when the crew's day
+  // actually ended (End Day / the last punch-out) instead; see runningPauseClockOut.
+  const runningPausedAt = openRows.map((r) => r.paused_at).filter((v): v is string => !!v).sort()[0] ?? null;
+  const now = runningPausedAt
+    ? await runningPauseClockOut(supabase, { orgId: anchor.org_id, punchVisitId, pausedAt: runningPausedAt, now: tappedAt })
+    : tappedAt;
+  const endLocalTime = now !== tappedAt
+    ? instantToZoneWallClock(new Date(now), await getOrgTimeZone(supabase, anchor.org_id)).time
+    : localTime;
   const anchorIsOpen = openRows.some((r) => r.id === anchor.id);
   const punchVisitIsOpen = openRows.some((r) => r.id === punchVisitId);
   const startedAt = openRows.map((r) => r.clocked_in_at).filter(Boolean).sort()[0]
@@ -281,7 +303,7 @@ export async function POST(
       .from("crm_job_visits")
       .update({
         clocked_out_at: now,
-        end_time: localTime ? `${localTime}:00` : undefined,
+        end_time: endLocalTime ? `${endLocalTime}:00` : undefined,
         completed_at: now,
         status: "completed",
         actual_hours: allocation?.get(row.id) ?? undefined,
@@ -337,7 +359,7 @@ export async function POST(
 
   // Stop Job also clocks the whole crew out; this must land before the labor
   // total below is summed from the punches.
-  await closeStopPunches(supabase, punchVisitId, now);
+  await closeStopPunches(createServiceClient(), punchVisitId, now);
 
   // Hours follow the ACTUAL punches when they exist: span × men_count above is
   // only a guess at how many people were on site, and a member who arrived

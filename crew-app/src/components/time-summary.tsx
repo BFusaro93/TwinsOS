@@ -30,15 +30,38 @@ interface Draft {
   outMs: number;
   originalIn: number;
   originalOut: number;
+  /** Own break + lunch minutes — taken off like the saved hours (sumPunchManHours). */
+  deductMinutes: number;
+}
+
+/**
+ * A person's share of the stop's pause, capped at how long their punch overlaps the
+ * stop's own clock window. Copy of memberVisitPauseMinutes (src/lib/crew/visit-pause.ts)
+ * — the rule payroll, Job Costing and the Timesheet report use. Keep them identical.
+ */
+function memberPauseMinutes(pause: number, inMs: number, outMs: number, visitIn: string | null, visitOut: string | null): number {
+  if (pause <= 0) return 0;
+  const vIn = visitIn ? Date.parse(visitIn) : NaN;
+  const vOut = visitOut ? Date.parse(visitOut) : NaN;
+  const from = Math.max(inMs, Number.isFinite(vIn) ? vIn : inMs);
+  const to = Math.min(outMs, Number.isFinite(vOut) ? vOut : outMs);
+  return Math.round(Math.min(pause, Math.max(0, (to - from) / 60000)));
 }
 
 export function TimeSummaryModal({
   visible,
   visitId,
+  visitBreakMinutes = 0,
+  visitClockedInAt = null,
+  visitClockedOutAt = null,
   onClose,
 }: {
   visible: boolean;
   visitId: string;
+  /** The stop's pause time, taken off every person's time like the saved hours. */
+  visitBreakMinutes?: number;
+  visitClockedInAt?: string | null;
+  visitClockedOutAt?: string | null;
   onClose: () => void;
 }) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -64,6 +87,7 @@ export function TimeSummaryModal({
               outMs: new Date(r.clockedOutAt!).getTime(),
               originalIn: new Date(r.clockedInAt!).getTime(),
               originalOut: new Date(r.clockedOutAt!).getTime(),
+              deductMinutes: r.breakMinutes,
             }))
         );
       })
@@ -78,7 +102,10 @@ export function TimeSummaryModal({
     };
   }, [visible, visitId]);
 
-  const total = useMemo(() => drafts.reduce((sum, d) => sum + Math.max(0, Math.round((d.outMs - d.inMs) / 60000)), 0), [drafts]);
+  // Net of breaks and the stop's pause — the figure Job Costing / Timesheet save.
+  const pauseFor = (d: Draft) => memberPauseMinutes(Math.max(0, visitBreakMinutes), d.inMs, d.outMs, visitClockedInAt, visitClockedOutAt);
+  const net = (d: Draft) => Math.max(0, Math.round((d.outMs - d.inMs) / 60000) - d.deductMinutes - pauseFor(d));
+  const total = useMemo(() => drafts.reduce((sum, d) => sum + (d.outMs > d.inMs ? net(d) : 0), 0), [drafts, visitBreakMinutes, visitClockedInAt, visitClockedOutAt]); // eslint-disable-line react-hooks/exhaustive-deps
   const invalid = drafts.some((d) => d.outMs <= d.inMs);
 
   function nudge(idx: number, field: 'inMs' | 'outMs', minutes: number) {
@@ -125,9 +152,12 @@ export function TimeSummaryModal({
                 <View style={styles.cardTop}>
                   <Text style={styles.name}>{d.name}</Text>
                   <Text style={[styles.minutes, d.outMs <= d.inMs && { color: C.red }]}>
-                    {d.outMs > d.inMs ? fmtMinutes(Math.round((d.outMs - d.inMs) / 60000)) : '—'}
+                    {d.outMs > d.inMs ? fmtMinutes(net(d)) : '—'}
                   </Text>
                 </View>
+                {d.deductMinutes + pauseFor(d) > 0 && d.outMs > d.inMs ? (
+                  <Text style={styles.muted}>After {fmtMinutes(d.deductMinutes + pauseFor(d))} of breaks</Text>
+                ) : null}
                 {(['inMs', 'outMs'] as const).map((field) => (
                   <View key={field} style={styles.row}>
                     <Text style={styles.rowLabel}>

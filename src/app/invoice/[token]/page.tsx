@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import { getScopedStripeJs, hasPublishableKey } from "@/lib/stripe/client";
+import { payOutcome, payOutcomeMessage, payOutcomeTitle, type PayOutcome } from "@/lib/stripe/pay-outcome";
 
 function cents(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n / 100);
@@ -33,6 +34,8 @@ interface PublicInvoice {
   photos?: { url: string; caption: string | null }[];
   /** Org has bank transfer (ACH) turned on. */
   achAvailable?: boolean;
+  /** Org can take payment online (Stripe Connect set up). False → no Pay button. */
+  cardPaymentsAvailable?: boolean;
 }
 
 interface CreateIntentResult {
@@ -45,7 +48,7 @@ interface CreateIntentResult {
   totalChargeCents: number;
 }
 
-function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: () => void }) {
+function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: (outcome: PayOutcome) => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -64,8 +67,9 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
       setError(confirmError.message ?? "Payment failed");
       return;
     }
-    if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing" || paymentIntent?.status === "requires_capture") {
-      onSuccess();
+    const outcome = payOutcome(paymentIntent);
+    if (outcome) {
+      onSuccess(outcome);
     } else {
       setError("Payment was not completed");
     }
@@ -96,7 +100,7 @@ export default function PublicInvoicePage() {
   const [payOpen, setPayOpen] = useState(false);
   const [intent, setIntent] = useState<CreateIntentResult | null>(null);
   const [creatingIntent, setCreatingIntent] = useState(false);
-  const [paySucceeded, setPaySucceeded] = useState(false);
+  const [paySucceeded, setPaySucceeded] = useState<PayOutcome | null>(null);
   // A failed "start payment" is shown next to the button. It must NOT reuse
   // loadError, which replaces the whole page — the invoice itself loaded fine.
   const [payError, setPayError] = useState<string | null>(null);
@@ -174,8 +178,10 @@ export default function PublicInvoicePage() {
         ? "This invoice isn't ready for payment yet."
         : invoice.balanceCents <= 0
           ? "This invoice has no balance due."
-          : null;
-  const canPay = payBlockedNote === null && hasPublishableKey();
+          : invoice.cardPaymentsAvailable === false || !hasPublishableKey()
+            ? `Online payment isn't available for this invoice — contact ${invoice.org.name || "us"} to pay.`
+            : null;
+  const canPay = payBlockedNote === null;
 
   return (
     <div className="min-h-dvh bg-slate-50 py-10">
@@ -274,8 +280,8 @@ export default function PublicInvoicePage() {
         {paySucceeded ? (
           <div className="mt-8 flex flex-col items-center gap-2 rounded-md border border-green-200 bg-green-50 py-6 text-center">
             <CheckCircle2 className="h-8 w-8 text-green-600" />
-            <p className="text-sm font-medium text-green-800">Payment submitted</p>
-            <p className="text-xs text-green-700">The balance above will update in a few seconds once it&apos;s confirmed.</p>
+            <p className="text-sm font-medium text-green-800">{payOutcomeTitle(paySucceeded)}</p>
+            <p className="text-xs text-green-700">{payOutcomeMessage(paySucceeded)}</p>
           </div>
         ) : payBlockedNote ? (
           <p className="mt-8 rounded-md border bg-slate-50 px-4 py-3 text-center text-sm text-slate-600">{payBlockedNote}</p>
@@ -319,7 +325,7 @@ export default function PublicInvoicePage() {
                 </p>
               )}
               <Elements stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
-                <PayForm totalChargeCents={intent.totalChargeCents} onSuccess={() => setPaySucceeded(true)} />
+                <PayForm totalChargeCents={intent.totalChargeCents} onSuccess={setPaySucceeded} />
               </Elements>
             </div>
           ) : null

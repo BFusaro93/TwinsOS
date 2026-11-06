@@ -7,9 +7,12 @@ import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { applyVisitCompletionSideEffects } from "@/lib/visits/complete-visit-side-effects";
 import { sumPunchLaborCents } from "@/lib/crew/visit-labor";
+import { missingPhotosMessage, missingRequiredPhotos } from "@/lib/crew/required-photos";
+import { stopPunchOwnerVisitId, stopSiblingVisitIds } from "@/lib/crew/stop-punches";
+import { runningPauseClockOut } from "@/lib/crew/visit-pause";
 import { logger } from "@/lib/logger";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { isoInZone } from "@/lib/time/zone";
+import { instantToZoneWallClock, isoInZone } from "@/lib/time/zone";
 
 const log = logger.child("crew/clock-out");
 
@@ -69,7 +72,21 @@ export async function POST(
 
   // The clock-out moment (a queued offline tap replays later), bounded to after
   // this visit's own clock-in. See crew/occurred-at.ts.
-  const now = resolveOccurredAt(rawOccurredAt, { notBefore: existing.clocked_in_at }).toISOString();
+  const tappedAt = resolveOccurredAt(rawOccurredAt, { notBefore: existing.clocked_in_at }).toISOString();
+  // Still paused at clock-out: the work stopped at the pause, so the visit is
+  // clocked out when the crew's day ended (End Day / last punch-out) rather than
+  // counting an overnight pause up to the tap — see runningPauseClockOut.
+  const now = existing.paused_at
+    ? await runningPauseClockOut(supabase, {
+        orgId: existing.org_id as string,
+        punchVisitId: await stopPunchOwnerVisitId(supabase, visitId),
+        pausedAt: existing.paused_at as string,
+        now: tappedAt,
+      })
+    : tappedAt;
+  const endLocalTime = now !== tappedAt
+    ? instantToZoneWallClock(new Date(now), await getOrgTimeZone(supabase, existing.org_id as string)).time
+    : localTime;
 
   // Clocking out straight from a break (no Resume tap) must still net the
   // in-progress pause off the visit's hours, and must not leave paused_at
@@ -94,13 +111,28 @@ export async function POST(
     if (chemMessage) {
       return NextResponse.json({ error: chemMessage, code: "chemical_confirmation_required" }, { status: 409 });
     }
+    // Required Before / After photos — the same Finish gate as the stop
+    // clock-out, so this per-visit route can't be used to walk past it. A
+    // photo on any visit of the same stop counts (the apps attach them to
+    // the stop's anchor visit).
+    const service = createServiceClient();
+    const missingPhotos = await missingRequiredPhotos(service, {
+      orgId: existing.org_id as string,
+      visitIds: await stopSiblingVisitIds(service, visitId).catch(() => [visitId]),
+    });
+    if (missingPhotos.length > 0) {
+      return NextResponse.json(
+        { error: missingPhotosMessage(missingPhotos), code: "photo_required", phase: missingPhotos[0], phases: missingPhotos },
+        { status: 409 }
+      );
+    }
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: clockedOut, error } = await (supabase as any)
     .from("crm_job_visits")
     .update({
       clocked_out_at:   now,
-      end_time:         localTime ? `${localTime}:00` : undefined,
+      end_time:         endLocalTime ? `${endLocalTime}:00` : undefined,
       // Absent notes leave existing completion notes alone (a retry or a
       // no-notes clock-out must not blank what the office or crew already wrote).
       completion_notes: notes ?? undefined,

@@ -427,11 +427,22 @@ export function CrewAppGuide() {
           hours, so a stop with a two-hour cleanup and a half-hour mow doesn&apos;t credit them equally.
           That&apos;s what the office compares against budget on the dispatch board.
         </p>
+        <p>
+          <strong>Time left on the running job.</strong> While a stop is running, its timer counts
+          down from the stop&apos;s budget in clock time, not including breaks. Each visit on the stop
+          adds its budget: the visit&apos;s own Budgeted Hours (set on the dispatch board, in
+          man-hours) divided by the number of men on it, or otherwise the per-person budgeted hours of
+          every service the visit covers. The web and phone apps work it out the same way.
+        </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Breaks come off the total.</strong> Pausing for lunch and resuming subtracts those
             minutes. If a crew clocks out while still on a break, the break is closed at that moment
-            and still subtracted — nobody gets billed for a break somebody forgot to end.
+            and still subtracted — nobody gets billed for a break somebody forgot to end. If the crew
+            had already ended the day (End Day, or everyone clocked off) before that late Stop Job
+            &mdash; say paused at 4pm, End Day at 5pm, Stop Job the next morning &mdash; the stop is
+            closed at the end of the day instead, so the overnight isn&apos;t counted as a break
+            against anyone&apos;s hours.
           </li>
           <li>
             <strong>Forgot to clock in?</strong> If there&apos;s no clock-in on the stop, the app falls
@@ -449,13 +460,27 @@ export function CrewAppGuide() {
           (Start Job punches the crew in), the visit&apos;s hours follow the real punches instead:
           each person&apos;s own clock-in to clock-out, minus their breaks, added together — so
           someone who arrived late or left early is counted for exactly the time they were there. The
+          stop&apos;s pause time comes off each person only up to the time they were on the job, so
+          someone who joined after a lunch pause isn&apos;t docked for it. (The app records how long
+          the stop was paused, not exactly when, so someone on the job for part of the visit can
+          still be docked up to their own time there.) The
           crew-size multiplication is used only when there are no punches for the stop.
         </p>
         <p>
-          <strong>Once a visit is invoiced, its punches are locked for crew.</strong> After a
-          visit&apos;s hours have been billed on a live (not voided or deleted) invoice, the crew
-          app refuses changes or deletions to member punches on that visit and tells you to ask the
-          office to correct the time. The office can still edit times.
+          <strong>Crew times only change through the app.</strong> Start Day, End Day, clocking
+          people in and out and editing punches all go through the crew app&apos;s own checks; a crew
+          login can&apos;t change shift or punch times any other way. Every change to a day shift,
+          and every Payroll correction, is kept in the audit history.
+        </p>
+        <p>
+          <strong>Once a visit&apos;s invoice is sent, its punches are locked for crew.</strong> Stop
+          Job usually puts the visit straight onto a <em>draft</em> invoice, and while that invoice is
+          still a draft the crew can keep correcting member punches (Edit Crew, Time Summary). Once the
+          invoice has been issued (printed, sent or paid, and not voided or deleted), the crew app
+          refuses changes or deletions to member punches on that visit and tells you to ask the office
+          to correct the time. The office can still edit times. Editing punches doesn&apos;t change the
+          invoice amount: an auto-created invoice bills each service&apos;s quantity and rate, not the
+          hours worked.
         </p>
         <Callout>
           Hours on a stop are per <em>crew</em>, multiplied by headcount. Individual start and finish
@@ -486,13 +511,25 @@ export function CrewAppGuide() {
           there, and you still have to acknowledge it before you can start.
         </p>
         <p>
-          <strong>Add Photo</strong> takes a picture with the camera and attaches it to the visit.
+          <strong>Add Photo</strong> takes a picture with the camera (or, in the phone app, picks one
+          from the library) and attaches it to the visit.
           Before-and-afters, damage found on arrival, and anything a client might query later all
           belong here — they stay attached to the visit rather than living in someone&apos;s camera roll.
           Photos bigger than about 3 MB (typical for a recent phone camera) are shrunk on the phone
           before they upload (longest side 2,400 px, re-saved as a JPEG), so uploads don&apos;t fail
           on a weak connection; smaller photos go up untouched. If an upload fails you can pick the
           same photo again and retry.
+        </p>
+        <p>
+          <strong>Required Before and After photos.</strong> When your company turns on
+          &quot;Require Before photo&quot; and/or &quot;Require After photo&quot;, the Photos card shows a{" "}
+          <strong>Before photo</strong> and an <strong>After photo</strong> button. Each one lets you
+          take the picture or choose one already in your photo library, and tags it Before or After
+          (a photo added with the plain Add Photo button doesn&apos;t count). Nothing stops you
+          starting the job — both required photos are checked when you tap{" "}
+          <strong>Stop Job</strong>, which stays disabled until they&apos;re on the stop. A photo still
+          waiting to upload with no signal counts; the app uploads it before it sends the Stop Job.
+          A photo whose upload failed doesn&apos;t count until you retry it.
         </p>
       </Section>
 

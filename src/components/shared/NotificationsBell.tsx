@@ -99,6 +99,7 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
     case "estimate_client_rejected":
       return <ThumbsDown className={cn(cls, "text-red-500 dark:text-red-400")} />;
     case "estimate_deposit_excess":
+    case "estimate_deposit_unaccepted":
       return <CircleAlert className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "estimate_deposit_failed":
       return <CircleAlert className={cn(cls, "text-red-500 dark:text-red-400")} />;
@@ -223,7 +224,7 @@ export function NotificationsBell() {
         .from("notifications")
         .select("id, type, title, message, entity_id, entity_type, created_at")
         .eq("user_id", currentUser.id)
-        .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "ticket_created", "ticket_assigned", "ticket_contributor_added", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed", "approved", "rejected"])
+        .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "estimate_deposit_unaccepted", "ticket_created", "ticket_assigned", "ticket_contributor_added", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed", "approved", "rejected"])
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -381,6 +382,7 @@ export function NotificationsBell() {
       estimate_client_rejected:   { href: (id) => `/crm/estimates/${id}`, title: "Estimate Declined" },
       estimate_deposit_excess:    { href: (id) => `/crm/estimates/${id}`, title: "Deposit Exceeds Total" },
       estimate_deposit_failed:    { href: (id) => `/crm/estimates/${id}`, title: "Deposit Failed" },
+      estimate_deposit_unaccepted: { href: (id) => `/crm/estimates/${id}`, title: "Deposit Paid, Not Accepted" },
       ticket_created:             { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "New Ticket" },
       ticket_assigned:            { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "Ticket Assigned" },
       ticket_contributor_added:   { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "Added to Ticket" },

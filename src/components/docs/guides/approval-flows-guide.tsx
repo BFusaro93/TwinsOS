@@ -133,6 +133,8 @@ export function ApprovalFlowsGuide() {
           Dollar-threshold routing is a real, per-step setting (not a hypothetical) — it applies
           equally to Requisition and Purchase Order flows. A $0 threshold always runs; any other
           amount is a floor the request total must meet or exceed for that step to be required.
+          For a Good / Better / Best estimate the amount checked is its <em>highest</em> option&rsquo;s
+          total (the client can accept any of them) until the client picks one.
         </Callout>
       </Section>
 

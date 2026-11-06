@@ -3487,6 +3487,7 @@ export type Database = {
           signed_by: string | null
           source: string | null
           start_billing_mode: string
+          snow_outside_dates: string
           start_date: string | null
           status: string
           title: string
@@ -3526,6 +3527,7 @@ export type Database = {
           signed_by?: string | null
           source?: string | null
           start_billing_mode?: string
+          snow_outside_dates?: string
           start_date?: string | null
           status?: string
           title: string
@@ -3565,6 +3567,7 @@ export type Database = {
           signed_by?: string | null
           source?: string | null
           start_billing_mode?: string
+          snow_outside_dates?: string
           start_date?: string | null
           status?: string
           title?: string
@@ -6545,6 +6548,7 @@ export type Database = {
           org_id: string
           paused_at: string | null
           priority: number
+          push_number: number
           qty: number | null
           rate_cents: number | null
           scheduled_date: string
@@ -6598,6 +6602,7 @@ export type Database = {
           org_id?: string
           paused_at?: string | null
           priority?: number
+          push_number?: number
           qty?: number | null
           rate_cents?: number | null
           scheduled_date: string
@@ -6651,6 +6656,7 @@ export type Database = {
           org_id?: string
           paused_at?: string | null
           priority?: number
+          push_number?: number
           qty?: number | null
           rate_cents?: number | null
           scheduled_date?: string
@@ -11491,6 +11497,7 @@ export type Database = {
       estimates: {
         Row: {
           applied_discount_id: string | null
+          approval_amount_cents: number | null
           approval_status: string
           client_id: string
           created_at: string
@@ -11561,6 +11568,7 @@ export type Database = {
         }
         Insert: {
           applied_discount_id?: string | null
+          approval_amount_cents?: number | null
           approval_status?: string
           client_id: string
           created_at?: string
@@ -11631,6 +11639,7 @@ export type Database = {
         }
         Update: {
           applied_discount_id?: string | null
+          approval_amount_cents?: number | null
           approval_status?: string
           client_id?: string
           created_at?: string

@@ -209,7 +209,16 @@ export function ClientPortalGuide() {
           fee, and the total charge before the client confirms. On success the invoice balance updates within
           a few seconds (the UI refreshes the page automatically). If the org has no Stripe publishable key
           configured, the dialog simply says online payments aren&apos;t available yet, in place of the payment
-          form.
+          form. If your company hasn&apos;t connected Stripe (or hasn&apos;t finished its setup), the Billing
+          tab hides the Pay and prepayment buttons and shows a note asking the client to contact you to pay,
+          and the Home tab&apos;s balance button reads View Billing instead of Pay Now.
+        </p>
+        <p>
+          <strong>Make a prepayment</strong> lets a client put money on account ahead of their next invoice.
+          A property manager with sub-accounts picks which account the prepayment is for (their own or one of
+          the sub-accounts); the credit only applies to that account&apos;s invoices. If a bank-transfer
+          prepayment is later returned by the bank, it is logged on the client&apos;s timeline and fires the
+          same <em>Credit card charge failed</em> automation trigger as a failed invoice payment.
         </p>
         <p>
           A client can also save a payment method on their Account page for reuse, and remove it later; the

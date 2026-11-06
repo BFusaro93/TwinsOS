@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getRouteAuth } from "@/lib/supabase/route-auth";
 import { createServiceClient } from "@/lib/supabase/server";
 import { photoRulesFromCustomizations } from "@/lib/crew/required-photos";
+import { visitBudgetHours } from "@/lib/crew/budget-countdown";
+
 import {
   crewVisitComparator,
   effectiveVisitCrewId,
@@ -17,6 +19,9 @@ import { mapServiceSubitems } from "@/lib/utils/job-service-subitems";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { embeddedOne, resolveStopAddress } from "@/lib/utils/stop-address";
+
+/** 2 decimals — an override ÷ men count can be 1.3333…, and the app shows it. */
+const roundBudget = (h: number | null) => (h == null ? null : Math.round(h * 100) / 100);
 
 /** The stop's routable address, in the shape the crew app's payload uses. */
 function stopAddress(
@@ -109,7 +114,7 @@ export async function GET(request: Request) {
   // raw visit.crew_id hid every job-inherited visit (most of them) from the
   // crew's own day. See selectEffectiveCrewVisits().
   const visitSelect = `
-      id, job_id, client_id, job_service_id, crew_id, crew_unassigned, scheduled_date,
+      id, job_id, client_id, job_service_id, crew_id, crew_unassigned, scheduled_date, push_number,
       start_time, end_time, status, sub_status, priority,
       notes_to_crew, notes_to_client, completion_notes, job_comments,
       men_count, actual_hours, budgeted_hours, clocked_in_at, clocked_out_at,
@@ -240,6 +245,8 @@ export async function GET(request: Request) {
       clientId: row.client_id as string,
       jobServiceId: (row.job_service_id as string) ?? null,
       stormEventId: null,
+      // A snow job's push 2+ is its own stop (see stopKeyForVisit).
+      pushNumber: Number(row.push_number ?? 1) || 1,
       snowDepthInches: null,
       temperature: null,
       assetType: null,
@@ -255,7 +262,9 @@ export async function GET(request: Request) {
       orderNum: null,
       completionNotes: row.completion_notes as string | null,
       actualHours: row.actual_hours as number | null,
-      budgetedHours: (row.budgeted_hours as number) ?? (job?.budgeted_hours as number) ?? null,
+      // The visit's OWN override only — visitBudgetHours() below falls back to
+      // the services, then the job, itself.
+      budgetedHours: (row.budgeted_hours as number) ?? null,
       completedAt: row.completed_at as string | null,
       priority: (row.priority as number) ?? 1,
       notesToCrew: row.notes_to_crew as string | null,
@@ -333,7 +342,14 @@ export async function GET(request: Request) {
         id: v.id,
         jobServiceId: v.jobServiceId,
         serviceName: svc?.serviceName ?? null,
-        budgetedHours: svc?.budgetedHours ?? v.budgetedHours ?? null,
+        // Wall-clock hours (what the native countdown sums) — shared rule with
+        // the web stop page, see visitBudgetHours().
+        budgetedHours: roundBudget(visitBudgetHours({
+          budgetedHoursOverride: v.budgetedHours,
+          menCount: v.menCount,
+          services: visitServices(v),
+          jobBudgetedHours: v.job?.budgetedHours ?? null,
+        })),
         teamSize: svc?.teamSize ?? null,
         status: v.status,
         startTime: v.startTime,

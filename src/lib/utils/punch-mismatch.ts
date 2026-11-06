@@ -1,6 +1,7 @@
 import type { CRMJobVisit, CrewMemberTime } from "@/types/crm-jobs";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { instantToZoneWallClock } from "@/lib/time/zone";
+import { memberVisitPauseMinutes } from "@/lib/crew/visit-pause";
 
 // A crew member who arrives late or leaves early legitimately differs from the
 // rest of the stop, so neither check compares individuals: the span check looks
@@ -69,12 +70,19 @@ export function stopPunchMismatch({
     issues.push(`End is ${label(visitEnd as string)} but the crew's last punch is ${label(punchEnd)}`);
   }
 
-  // 2. Visit man-hours vs the punches' man-hours (net of the break and lunch).
-  const visitBreakHours = Math.max(0, anchor.breakMinutes ?? 0) / 60;
+  // 2. Visit man-hours vs the punches' man-hours (net of the break and lunch,
+  // and of each member's share of the stop's pause — same rule as the Timesheet).
   let punchHours = 0;
   for (const t of closed) {
     const spanHours = (new Date(t.clockedOutAt as string).getTime() - new Date(t.clockedInAt as string).getTime()) / 3_600_000;
-    punchHours += Math.max(0, spanHours - (t.breakMinutes + t.lunchMinutes) / 60 - visitBreakHours);
+    const pauseHours = memberVisitPauseMinutes({
+      pauseMinutes: anchor.breakMinutes,
+      punchIn: t.clockedInAt as string,
+      punchOut: t.clockedOutAt as string,
+      visitIn: anchor.clockedInAt,
+      visitOut: anchor.clockedOutAt,
+    }) / 60;
+    punchHours += Math.max(0, spanHours - (t.breakMinutes + t.lunchMinutes) / 60 - pauseHours);
   }
   const perVisit = visits.map((v) => computeActualHours(v));
   if (perVisit.every((h): h is number => h != null)) {

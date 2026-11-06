@@ -235,6 +235,15 @@ export function InvoicingGuide() {
             and Clear bounce on the client lifts a bounce once the mailbox works again.
           </li>
           <li>
+            <strong>Pay Now needs online payments set up.</strong> The emailed invoice carries a{" "}
+            <strong>View &amp; Pay Invoice Online</strong> button, and the <code>[paymentlink]</code>{" "}
+            merge tag (in invoice emails and invoice automations) renders a <strong>Pay Now</strong>{" "}
+            button. Until your company has connected Stripe and finished its setup, both say{" "}
+            <strong>View Invoice</strong> instead and still open the online invoice, the attached
+            PDF says &quot;View Online&quot; rather than &quot;View &amp; Pay Online&quot;, and the online
+            invoice page shows a note asking the client to contact you to pay instead of a Pay button.
+          </li>
+          <li>
             <strong>Emailing locks the invoice.</strong> An invoice is locked the moment it is
             emailed, including when you email several at once from the Invoices list, so the amounts
             the client received can&apos;t be edited underneath them. Unlock it first to change it.

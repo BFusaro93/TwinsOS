@@ -123,8 +123,8 @@ export function stopServiceNames(stop: Pick<CrewStop, 'visits'>): string {
 
 /**
  * Time left against a stop's budgeted hours (SA's Team app counts down from the
- * budget). Budgeted hours are per crew member and a crew works side by side, so
- * the budget is the sum of the stop's live services' hours as wall-clock time;
+ * budget). Each visit's budgetedHours is already wall-clock time (the server's
+ * visitBudgetHours()), so the budget is their sum over the stop's live visits;
  * break time already taken doesn't count. null when nothing is budgeted.
  * Mirrors src/lib/crew/budget-countdown.ts on the web.
  */

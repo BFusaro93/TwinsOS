@@ -421,7 +421,13 @@ export function DispatchBoardGuide() {
             <strong>Correcting one person in Edit Job Times.</strong> If three people clocked in and
             out together and you change one of them because they arrived late or left early, the
             visit&apos;s hours become the <strong>sum of everyone&apos;s punch hours</strong> (each
-            person&apos;s time minus their break, lunch and the stop&apos;s pause time). With several
+            person&apos;s time minus their break, lunch and their share of the stop&apos;s pause time
+            &mdash; never more pause than the time their punch overlaps the job, so someone who
+            joined after a lunch pause isn&apos;t docked for it). Each row also has a{" "}
+            <strong>min break</strong> box: that person&apos;s own break on the punch (time they were
+            away is added there when they come back). Change it to correct the break; if you only
+            change the times, the existing break is kept but trimmed so it&apos;s never longer than
+            the punch. With several
             services in the stop, those hours are split across them in the proportions they already
             held. Labor cost is worked out from the same punches, so Job Costing and the Timesheet
             report show the same hours. For example, three people for 4 hours is 12 hours; if one
@@ -597,7 +603,10 @@ export function DispatchBoardGuide() {
           </li>
           <li>
             <strong>Date range</strong> — an optional end date lets the board span more than a single
-            day when you need to look ahead.
+            day when you need to look ahead. On a range, each crew&apos;s stops are listed day by day
+            and numbered from #1 on each day. Building a route (Optimize Route, Manual Route, Apply
+            Route, Reverse, Group Stops, Move to top and Save Order) works one day at a time, so
+            those tools are turned off until you go back to a single day.
           </li>
           <li>
             <strong>Stats</strong> and <strong>Call Ahead</strong> panels — Stats gives a
@@ -705,7 +714,9 @@ export function DispatchBoardGuide() {
         <p>
           Stop order is <strong>per crew</strong>. The <strong>#</strong> column numbers each crew&apos;s
           own stops from 1, so &quot;#3&quot; means that crew&apos;s third stop of the day, not the third
-          row on the board. Reordering one crew never renumbers another.
+          row on the board. Reordering one crew never renumbers another. On a multi-day range the
+          numbering restarts on each day, and the route tools are off until the board shows a single
+          day.
         </p>
         <p>
           <strong>Typing route numbers.</strong> You can also type a stop&apos;s number straight into the

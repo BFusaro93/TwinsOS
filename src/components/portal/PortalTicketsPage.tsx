@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Ticket, Plus, Loader2, CheckCircle2, Clock, AlertCircle, XCircle, ChevronDown, Paperclip, X } from "lucide-react";
 import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
+import { downscaleImage } from "@/lib/utils/downscale-image";
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -97,7 +98,8 @@ function NewTicketDialog({
     let failedPhotos = 0;
     for (const photo of photos) {
       const fd = new FormData();
-      fd.append("file", photo);
+      // Full-size phone photos are routinely over the ~4.5MB request limit.
+      fd.append("file", await downscaleImage(photo));
       const up = await fetch(`/api/portal/tickets/${data.ticket.id}/attachments`, { method: "POST", body: fd }).catch(() => null);
       if (!up?.ok) failedPhotos += 1;
     }

@@ -61,6 +61,7 @@ export interface CrewStopVisit {
   id: string;
   jobServiceId: string | null;
   serviceName: string | null;
+  /** Wall-clock hours budgeted for this visit (server-computed by visitBudgetHours()). */
   budgetedHours: number | null;
   teamSize: number | null;
   status: VisitStatus;

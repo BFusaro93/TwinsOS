@@ -820,6 +820,7 @@ export function mapVisit(row: any): CRMJobVisit {
     clientId: row.client_id,
     jobServiceId: row.job_service_id ?? null,
     stormEventId: row.storm_event_id ?? null,
+    pushNumber: Number(row.push_number ?? 1) || 1,
     snowDepthInches: row.snow_depth_inches ?? null,
     temperature: row.temperature ?? null,
     assetType: row.asset_type ?? null,
@@ -1215,31 +1216,46 @@ export function useRemoveVisitCrew() {
 
 export function useDeleteVisitsByDayOfWeek() {
   const qc = useQueryClient();
+  const orgTimeZone = useOrgTimeZone();
   return useMutation({
     mutationFn: async ({ jobId, dayOfWeek }: { jobId: string; dayOfWeek: number }) => {
       // dayOfWeek: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from('crm_job_visits')
-        .select('id, scheduled_date')
-        .eq('job_id', jobId)
-        .is('deleted_at', null)
-        // Multi-crew group members are removed per crew (crm_remove_visit_crew).
-        .is('crew_group_id', null)
-        .eq('status', 'scheduled');
-      if (error) throw error;
-      const ids = (data as { id: string; scheduled_date: string }[])
-        .filter((r) => new Date(r.scheduled_date + 'T00:00:00').getDay() === dayOfWeek)
+      // Upcoming only (the org's today onward): a past visit still marked
+      // 'scheduled' is history the office has yet to close out, not a slot
+      // to clear. Paged — a long-running job can exceed PostgREST's 1000 rows.
+      const today = todayInZone(orgTimeZone);
+      const rows = await fetchAllRows<{ id: string; scheduled_date: string }>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from('crm_job_visits')
+          .select('id, scheduled_date')
+          .eq('job_id', jobId)
+          .is('deleted_at', null)
+          // Multi-crew group members are removed per crew (crm_remove_visit_crew).
+          .is('crew_group_id', null)
+          .is('clocked_in_at', null)
+          .eq('status', 'scheduled')
+          .gte('scheduled_date', today));
+      const ids = rows
+        .filter((r) => new Date(r.scheduled_date + 'T00:00:00Z').getUTCDay() === dayOfWeek)
         .map((r) => r.id);
       if (ids.length === 0) return 0;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: delErr } = await (supabase as any)
-        .from('crm_job_visits')
-        .update({ deleted_at: new Date().toISOString() })
-        .in('id', ids);
-      if (delErr) throw delErr;
-      return ids.length;
+      let removed = 0;
+      for (let i = 0; i < ids.length; i += 100) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: done, error: delErr } = await (supabase as any)
+          .from('crm_job_visits')
+          .update({ deleted_at: new Date().toISOString() })
+          .in('id', ids.slice(i, i + 100))
+          .is('deleted_at', null)
+          .is('clocked_in_at', null)
+          .eq('status', 'scheduled')
+          .select('id');
+        if (delErr) throw delErr;
+        removed += (done ?? []).length;
+      }
+      return removed;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['crm-job-visits'] }),
   });
@@ -2335,6 +2351,65 @@ async function fetchEstimateConvertedLines(
   return { convertedLineIds, legacyConverted };
 }
 
+/**
+ * Whether an estimate already bills on its own, which means it can only be
+ * converted as a Project (project jobs aren't invoiced per visit and adopt the
+ * estimate's milestones). Otherwise the job's visit invoices would bill the
+ * same work a second time. `invoiceLabel` is "#N" for the first live
+ * (non-void, non-deleted) invoice created from the estimate, or "a draft
+ * invoice" when it has no number yet; null when there is none.
+ * Mirrored server-side by trg_crm_jobs_estimate_billing_guard.
+ */
+export interface EstimateBillingLock {
+  invoiceLabel: string | null;
+  milestoneBilled: boolean;
+}
+
+async function fetchEstimateBillingLock(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  estimateId: string,
+): Promise<EstimateBillingLock> {
+  const [{ data: inv, error: invErr }, { data: est, error: estErr }] = await Promise.all([
+    supabase
+      .from('crm_invoices')
+      .select('invoice_number')
+      .eq('estimate_id', estimateId)
+      .is('deleted_at', null)
+      .neq('status', 'void')
+      .order('created_at', { ascending: true })
+      .limit(1),
+    supabase.from('estimates').select('payment_plan_type').eq('id', estimateId).maybeSingle(),
+  ]);
+  if (invErr) throw invErr;
+  if (estErr) throw estErr;
+  const first = ((inv ?? []) as { invoice_number: string | number | null }[])[0];
+  return {
+    invoiceLabel: first ? (first.invoice_number != null ? `#${first.invoice_number}` : 'a draft invoice') : null,
+    milestoneBilled: (est as { payment_plan_type?: string } | null)?.payment_plan_type === 'milestones',
+  };
+}
+
+export function useEstimateBillingLock(estimateId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['crm-jobs', 'by-estimate', estimateId, 'billing-lock'],
+    enabled: !!estimateId,
+    queryFn: async () => fetchEstimateBillingLock(createClient(), estimateId as string),
+  });
+}
+
+/** The reason a non-project conversion is refused, or null when it's allowed. */
+export function estimateBillingLockMessage(lock: EstimateBillingLock | null | undefined): string | null {
+  if (!lock) return null;
+  if (lock.invoiceLabel) {
+    return `This estimate has already been invoiced (${lock.invoiceLabel}) — convert it as a Project (project jobs aren't invoiced per visit), or void the invoice first.`;
+  }
+  if (lock.milestoneBilled) {
+    return "This estimate bills by milestones — convert it as a Project so the milestones carry over and its visits aren't invoiced separately.";
+  }
+  return null;
+}
+
 export function useCreateJobsFromEstimate() {
   // Date Sold is the org's calendar day for the acceptance instant.
   const orgTimeZone = useOrgTimeZone();
@@ -2441,6 +2516,14 @@ export function useCreateJobsFromEstimate() {
       const alreadyConverted = services.filter((sv) => sv.estimateLineItemId && convertedLineIds.has(sv.estimateLineItemId));
       if (alreadyConverted.length > 0) {
         throw new Error(`Already converted to a job: ${alreadyConverted.map((sv) => sv.serviceName).join(", ")}`);
+      }
+
+      // An estimate that already bills on its own (an invoice created from it,
+      // or milestone billing) converts only as a Project — any other job type
+      // invoices its visits and bills the same work twice.
+      if (jobType !== "project") {
+        const lockMessage = estimateBillingLockMessage(await fetchEstimateBillingLock(supabase, estimateId));
+        if (lockMessage) throw new Error(lockMessage);
       }
 
       // Package job: resolve the package and each line's step window up front
@@ -3390,11 +3473,56 @@ export function useUpdateCRMSchedule() {
   });
 }
 
+/** Thrown (with a user-facing message) when deleting a schedule live jobs still use. */
+export class ScheduleInUseError extends Error {}
+
+/** Live jobs (not deleted, completed or cancelled) whose schedule is `name`. */
+async function countJobsOnSchedule(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  name: string
+): Promise<number> {
+  const { count, error } = await supabase
+    .from('crm_jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('schedule', name)
+    .is('deleted_at', null)
+    .not('status', 'in', '("completed","cancelled")');
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/** How many live jobs use the schedule — shown (and enforced) before a delete. */
+export function useCRMScheduleJobCount(name: string | null) {
+  return useQuery({
+    queryKey: ['crm-schedules', 'job-count', name],
+    enabled: !!name,
+    queryFn: async () => countJobsOnSchedule(createClient(), name!),
+  });
+}
+
 export function useDeleteCRMSchedule() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
       const supabase = createClient();
+      // Jobs point at their schedule BY NAME: deleting one still in use leaves
+      // its jobs falling back to parsing the name (wrong cadence or no visits).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: sched, error: readErr } = await (supabase as any)
+        .from('crm_schedules')
+        .select('name')
+        .eq('id', id)
+        .maybeSingle();
+      if (readErr) throw readErr;
+      if (sched?.name) {
+        const inUse = await countJobsOnSchedule(supabase, sched.name as string);
+        if (inUse > 0) {
+          throw new ScheduleInUseError(
+            `${inUse} job${inUse !== 1 ? 's' : ''} still use "${sched.name}". Move ${inUse !== 1 ? 'them' : 'it'} to another schedule (or switch this schedule off) before deleting it.`
+          );
+        }
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
         .from('crm_schedules')

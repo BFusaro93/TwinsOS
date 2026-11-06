@@ -2,6 +2,7 @@ import {
   GENERATOR_JOB_COLUMNS,
   NON_GENERATING_JOB_STATUSES,
   generateVisitsForJobs,
+  loadSchedulesByOrg,
   selectAllRows,
   type GeneratorJob,
 } from "@/lib/visits/generate";
@@ -9,6 +10,7 @@ import {
   SCHEDULE_CHANGE_PRUNE_STATUSES,
   findUntouchedFutureVisits,
   pruneVisits,
+  rescheduleKeepDates,
 } from "@/lib/visits/prune";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,9 +19,11 @@ type AnyClient = any;
 /**
  * After a schedule's day / frequency / excluded dates change in Settings, the
  * visits already generated from the OLD rules are stale. This re-runs the same
- * per-job reschedule the Job Detail edit does (prune untouched future visits,
- * regenerate on the saved schedule) for every live recurring job on the
- * schedule — via the existing prune + generator, so it stays idempotent.
+ * per-job reschedule the Job Detail edit does for every live recurring job on
+ * the schedule — via the existing prune + generator, so it stays idempotent.
+ * It is a DIFF: an untouched visit whose date the saved rules still produce is
+ * kept as is (crew, time, notes, priority, multi-crew setup); only dates the
+ * new rules drop are removed, and the generator fills in the new ones.
  *
  * "Untouched" is stricter than a hold/cancel prune: status 'scheduled', never
  * clocked in, not invoiced, on/after the org's today, and NOT moved by hand
@@ -72,8 +76,20 @@ export async function rescheduleVisitsForSchedule(
   }
   out.jobs = jobs.length;
 
-  const scope = { fromDate: args.today, statuses: SCHEDULE_CHANGE_PRUNE_STATUSES, skipMoved: true };
+  const { byOrg, error: schedErr } = await loadSchedulesByOrg(supabase, [args.orgId]);
+  if (schedErr) {
+    out.errors.push(schedErr);
+    return out;
+  }
+  const schedulesByName = byOrg.get(args.orgId) ?? new Map();
+
   for (const job of jobs) {
+    const scope = {
+      fromDate: args.today,
+      statuses: SCHEDULE_CHANGE_PRUNE_STATUSES,
+      skipMoved: true,
+      keepDates: rescheduleKeepDates(job, schedulesByName, args.today),
+    };
     try {
       const ids = await findUntouchedFutureVisits(supabase, job.id, scope);
       if (args.apply && ids.length > 0) out.count += await pruneVisits(supabase, ids, scope.statuses);

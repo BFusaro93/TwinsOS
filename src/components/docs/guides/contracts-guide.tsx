@@ -121,8 +121,8 @@ export function ContractsGuide() {
         <Callout>
           <strong>Changing a signed contract&apos;s terms flags it &mdash; billing keeps running.</strong>{" "}
           If you actually change the monthly amount, the monthly-amounts grid, the invoice line
-          items, the start/end dates, the client, the billing day / frequency or the
-          mid-cycle start setting on a contract that&apos;s already Signed or Active, the contract
+          items, the start/end dates, the client, the billing day / frequency, the
+          mid-cycle start setting or the storms-outside-the-contract-dates setting on a contract that&apos;s already Signed or Active, the contract
           stays Signed/Active and the daily invoicing cron bills the new terms from then on. A
           &quot;Changed since signed &mdash; needs client approval&quot; banner appears on the
           contract until you click <em>Client approved &mdash; clear flag</em> (which re-stamps the
@@ -296,6 +296,21 @@ export function ContractsGuide() {
           per-visit work, on the client&apos;s usual invoicing frequency. When you cancel or end a
           contract that has linked jobs, the app tells you how many will now bill per visit before
           you confirm.
+        </p>
+        <p>
+          <strong>Cancelling or deleting a contract cancels its upcoming visits.</strong> Visits on
+          its linked jobs from today on that are still scheduled or dispatched and haven&apos;t been
+          started are marked Cancelled, with a note on each. A visit a crew is clocked in to, and
+          visits already skipped or completed, are left as they are. If some visits can&apos;t be
+          cancelled you get an error saying how many — cancel those from the Dispatch Board.
+        </p>
+        <p>
+          <strong>Snow contracts and storms outside the dates.</strong> A contract with a linked
+          snow job has a <strong>Storms outside the contract dates</strong> setting under its start
+          and end dates. With <strong>Bill per event</strong> (the default), a storm visit dated
+          before the start date or after the end date is billed per event in Snow Invoicing. With{" "}
+          <strong>Included in the contract</strong>, those storms are covered by the contract price
+          too (a cancelled, expired or inactive contract still covers nothing).
         </p>
       </Section>
 
