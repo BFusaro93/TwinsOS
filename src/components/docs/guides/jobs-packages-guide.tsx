@@ -146,7 +146,12 @@ export function JobsPackagesGuide() {
           <li>
             <strong>Snow</strong> — service, days authorized, inch trigger, invoice type, and rate.
             Picking a service fills in its default rate only while the rate is still blank; a rate
-            you&apos;ve already typed is never overwritten by choosing a service afterward.
+            you&apos;ve already typed is never overwritten by choosing a service afterward. The
+            invoice type controls the Services table: Per Event, Per Inch and Per Push take one
+            service and price from the depth ranges (the service Rate shows <em>Not used</em>),
+            Hourly takes one service whose Rate is the hourly rate, Monthly Flat Rate bills only
+            through a contract you must choose, and Per Event sums any number of services. Make one
+            snow job per service.
           </li>
           <li>
             <strong>One Time</strong>, <strong>Project</strong>, <strong>Waiting List</strong> — a
