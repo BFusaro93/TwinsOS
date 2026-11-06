@@ -6,6 +6,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { hourInZone, todayInZone } from "@/lib/time/zone";
 import { labelPortalVisits, loadUpcomingPortalVisits } from "@/lib/portal/visit-labels";
 import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
+import { fetchOrgCardPaymentsAvailable } from "@/lib/stripe/card-payments-available";
 
 interface EstimateRow {
   id: string;
@@ -131,6 +132,9 @@ export default async function PortalHomePage() {
   const hour = hourInZone(new Date(), timeZone);
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
+  // Portal users can't read the org row under RLS — service client, this org only.
+  const cardPaymentsAvailable = await fetchOrgCardPaymentsAvailable(createServiceClient(), ctx.orgId);
+
   // Map visits to shape PortalDashboard expects
   const upcomingRows = visitsRes.visits;
   const recentRows = recentRes.data ?? [];
@@ -172,6 +176,7 @@ export default async function PortalHomePage() {
       estimates={(estimatesRes.data ?? []).map((e) => ({ ...e, accountName: accountNames.get(e.client_id) ?? null }))}
       clientIds={clientIds}
       orgId={ctx.orgId}
+      cardPaymentsAvailable={cardPaymentsAvailable}
     />
   );
 }

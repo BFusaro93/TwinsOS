@@ -7,7 +7,7 @@ import { mapJob, mapVisit } from "./use-crm-jobs";
 import type { CRMJob, CRMJobVisit, StormEvent, StormEventStatus, SnowRoute, SnowRouteStop } from "@/types/crm-jobs";
 import { embeddedOne, resolveStopAddress, stopAddressJobFields } from "@/lib/utils/stop-address";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
-import { loadContractsById, isSnowContractEnded } from "./use-snow-invoicing";
+import { loadContractsById, isSnowContractClosedForDispatch } from "./use-snow-invoicing";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 
@@ -97,8 +97,10 @@ export function useSnowJobs() {
       // generator already stops serving them (excludeInactiveParents), so a storm
       // must not send a crew (and an invoice) there either.
       // A contract-linked snow job whose contract has ended (cancelled / expired /
-      // inactive / deleted / past end_date) is no longer served, so it must not be
-      // offered for dispatch — same "ended" test as complete-visit-side-effects.
+      // inactive / deleted / past end_date, unless the contract includes storms
+      // outside its dates) is no longer served, so it must not be offered for
+      // dispatch. A contract that hasn't started yet still dispatches — those
+      // storms bill per event.
       // Visits that already exist or completed are untouched and still bill via
       // Snow Invoicing, which reads visits rather than this list.
       const contractIds = [...new Set(
@@ -109,7 +111,7 @@ export function useSnowJobs() {
       const today = todayInZone(timeZone);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const contractOk = (row: any): boolean =>
-        !row.contract_id || !isSnowContractEnded(contractById.get(row.contract_id), today);
+        !row.contract_id || !isSnowContractClosedForDispatch(contractById.get(row.contract_id), today);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (data.filter((row: any) => contractOk(row) && !["lead", "lost", "cancelled"].includes(row.clients?.status) && !row.clients?.deleted_at).map((row: any) => ({
         ...mapJob({
@@ -402,6 +404,8 @@ export function useStormEventVisits(stormEventId: string) {
           .eq("storm_event_id", stormEventId)
           .is("deleted_at", null)
           .order("order_num", { ascending: true, nullsFirst: false })
+        // fetchAllRows appends the unique `id` tiebreaker — order_num repeats
+        // (and is null for some rows), so it alone can't page stably.
       );
       return (data.map(mapVisit)) as CRMJobVisit[];
     },
@@ -438,6 +442,8 @@ export function useAddJobsToStormEvent() {
           .eq("storm_event_id", stormEventId)
           .is("deleted_at", null)
       );
+      // Any push of the job counts — "Add Jobs" only ever creates push 1, and a
+      // later push is added from the board's "Add push" action.
       const alreadyAdded = new Set(existing.map((r) => r.job_id));
       const newJobs = jobs.filter((j) => !alreadyAdded.has(j.jobId));
 
@@ -504,6 +510,79 @@ export function useAddJobsToStormEvent() {
   });
 }
 
+/**
+ * Per Push jobs bill every push on its own depth, and each push is its own
+ * visit on the storm (crm_job_visits.push_number). Creates the job's next push
+ * from its latest one: same storm, client, crew and men, appended to the end
+ * of the storm's stop order, dated the org's today (never before the previous
+ * push) so it shows on the crew's list for the day it is plowed. The DB guard
+ * (crm_job_visits_push_number_guard) rejects push 2+ on any other billing type.
+ */
+export function useAddStormPush() {
+  const qc = useQueryClient();
+  const timeZone = useOrgTimeZone();
+  return useMutation({
+    mutationFn: async (source: CRMJobVisit): Promise<number> => {
+      if (!source.stormEventId) throw new Error("Only a storm visit can get another push.");
+      if (source.job?.invoiceType !== "per_push_per_inch") {
+        throw new Error("Only Per Push jobs bill each push separately — this job bills once per storm.");
+      }
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: pushes, error: pushErr } = await (supabase as any)
+        .from("crm_job_visits")
+        .select("push_number")
+        .eq("job_id", source.jobId)
+        .eq("storm_event_id", source.stormEventId)
+        .is("deleted_at", null)
+        .order("push_number", { ascending: false })
+        .limit(1);
+      if (pushErr) throw pushErr;
+      const lastPush = Number((pushes ?? [])[0]?.push_number ?? source.pushNumber ?? 1) || 1;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: maxRow } = await (supabase as any)
+        .from("crm_job_visits")
+        .select("order_num")
+        .eq("storm_event_id", source.stormEventId)
+        .is("deleted_at", null)
+        .not("order_num", "is", null)
+        .order("order_num", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const orderNum = maxRow?.order_num != null ? Number(maxRow.order_num) + 1 : 0;
+      const today = todayInZone(timeZone);
+
+      const row = {
+        job_id: source.jobId,
+        client_id: source.clientId,
+        scheduled_date: source.scheduledDate > today ? source.scheduledDate : today,
+        men_count: Math.max(1, source.menCount || 1),
+        crew_id: source.crewId ?? null,
+        crew_unassigned: source.crewUnassigned ?? false,
+        notes_to_crew: source.notesToCrew ?? null,
+        storm_event_id: source.stormEventId,
+        order_num: orderNum,
+        status: "scheduled",
+      };
+      // A second dispatcher adding the same push at once loses the unique
+      // (job, storm, push) race with 23505 — take the next number instead.
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const pushNumber = lastPush + attempt;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any).from("crm_job_visits").insert({ ...row, push_number: pushNumber });
+        if (!error) return pushNumber;
+        if ((error as { code?: string }).code !== "23505") throw error;
+      }
+      throw new Error("Another push was just added for this job — refresh and try again.");
+    },
+    onSuccess: (_d, source) => {
+      qc.invalidateQueries({ queryKey: ["crm-job-visits", "storm-event", source.stormEventId] });
+      qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+    },
+  });
+}
+
 // ── master-route order lookups + saving a storm's order back ────────────────
 
 export interface MasterRouteSlot {
@@ -523,12 +602,16 @@ export function useMasterRouteSlots() {
     queryKey: ["snow-route-stops", "all"],
     queryFn: async () => {
       const supabase = createClient();
+      // Paged: every stop on every route — a large snow book passes PostgREST's
+      // 1000-row cap, and the jobs past it lost their route order and crew.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("crm_snow_route_stops")
-        .select("job_id, sort_order, route_id, crm_snow_routes!inner(name, default_crew_id, is_active, deleted_at)")
-        .is("crm_snow_routes.deleted_at", null);
-      if (error) throw error;
+      const data = await fetchAllRows<any>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("crm_snow_route_stops")
+          .select("id, job_id, sort_order, route_id, crm_snow_routes!inner(name, default_crew_id, is_active, deleted_at)")
+          .is("crm_snow_routes.deleted_at", null)
+      );
       const map = new Map<string, MasterRouteSlot>();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const row of (data ?? []) as any[]) {

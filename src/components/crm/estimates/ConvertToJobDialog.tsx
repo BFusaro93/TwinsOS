@@ -26,7 +26,7 @@ import { CalendarDays, Briefcase, Plus, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency, roundHours, todayLocalISODate } from "@/lib/utils";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
-import { useCreateJobsFromEstimate, useCRMCrews, useCRMSchedules, useEstimateConvertedLines } from "@/lib/hooks/use-crm-jobs";
+import { estimateBillingLockMessage, useCreateJobsFromEstimate, useCRMCrews, useCRMSchedules, useEstimateBillingLock, useEstimateConvertedLines } from "@/lib/hooks/use-crm-jobs";
 import { useClientProjects } from "@/lib/hooks/use-client-cmms";
 import { useEstimateShareTokens, useEstimateSubitemTotals } from "@/lib/hooks/use-estimates";
 import { useSelectableEmployees } from "@/lib/hooks/use-employees";
@@ -174,6 +174,9 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   );
   const { data: subitemTotals = {} } = useEstimateSubitemTotals(estimate.id);
   const { data: convertedInfo } = useEstimateConvertedLines(estimate.id);
+  // Already invoiced, or milestone-billed: only a Project conversion is allowed.
+  const { data: billingLock } = useEstimateBillingLock(estimate.id);
+  const billingLockMessage = estimateBillingLockMessage(billingLock);
   const convertedLineIds = convertedInfo?.convertedLineIds ?? new Set<string>();
   const legacyConverted = !!convertedInfo?.legacyConverted;
   const isConverted = (li: EstimateLineItem) => legacyConverted || convertedLineIds.has(li.id);
@@ -331,7 +334,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const selectedPackageIds = [...new Set(selectedItems.map((li) => li.packageId).filter((x): x is string => !!x))];
   const hasPackageSel = selectedPackageIds.length > 0;
   // Package lines force a package job; the Job Type picker is locked to it.
-  const effectiveJobType = hasPackageSel ? "package" : jobType;
+  const effectiveJobType = hasPackageSel ? "package" : billingLockMessage ? "project" : jobType;
   const { data: crmPackages = [] } = usePackages(true);
   // The selected package is fetched by id, deleted ones included: a package
   // removed after the estimate was built used to resolve to nothing, and the
@@ -407,6 +410,10 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
     }
     if (hasPackageSel && selectedItems.some((li) => !li.packageId)) {
       toast.error("Package lines convert to their own package job — select the package's lines or the other lines, not both");
+      return;
+    }
+    if (billingLockMessage && hasPackageSel) {
+      toast.error(billingLockMessage);
       return;
     }
     if (selectedPackageIds.length > 1) {
@@ -695,7 +702,7 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
             <Label className="text-xs font-medium text-slate-600 dark:text-neutral-400">Job Type</Label>
-            <Select value={effectiveJobType} onValueChange={setJobType} disabled={hasPackageSel}>
+            <Select value={effectiveJobType} onValueChange={setJobType} disabled={hasPackageSel || !!billingLockMessage}>
               <SelectTrigger className="text-sm">
                 <SelectValue />
               </SelectTrigger>
@@ -705,6 +712,9 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
                 ))}
               </SelectContent>
             </Select>
+            {billingLockMessage && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-400">{billingLockMessage}</p>
+            )}
           </div>
 
           <div className="flex flex-col gap-1">

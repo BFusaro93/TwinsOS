@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { addDays, endOfWeek, format, parseISO, startOfWeek, subWeeks } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { AlertTriangle, ChevronDown, ChevronRight, Download, RotateCcw, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
-import { instantToZoneWallClock } from "@/lib/time/zone";
+import { instantToZoneWallClock, mondayOfYmd, shiftYmd, todayInZone } from "@/lib/time/zone";
 import {
   PayrollForbiddenError,
   usePayroll,
@@ -28,25 +28,29 @@ import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
 import { exportReportPDF } from "@/lib/reports/export-pdf";
 
-const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 const fmt = (n: number) => n.toFixed(2);
 
-function lastWeek(): { from: string; to: string } {
-  const start = startOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 });
-  return { from: ymd(start), to: ymd(endOfWeek(start, { weekStartsOn: 1 })) };
+// Presets run on the ORG's calendar (its today, Monday-start weeks), not the
+// viewer's laptop: an office in another zone, or a late-Sunday export, picked
+// the wrong week. There is no per-org pay-week setting yet, so weeks start Monday.
+function thisWeek(tz: string): { from: string; to: string } {
+  const start = mondayOfYmd(todayInZone(tz));
+  return { from: start, to: shiftYmd(start, 6) };
 }
-function thisWeek(): { from: string; to: string } {
-  const start = startOfWeek(new Date(), { weekStartsOn: 1 });
-  return { from: ymd(start), to: ymd(addDays(start, 6)) };
+function lastWeek(tz: string): { from: string; to: string } {
+  const start = shiftYmd(mondayOfYmd(todayInZone(tz)), -7);
+  return { from: start, to: shiftYmd(start, 6) };
 }
-function lastTwoWeeks(): { from: string; to: string } {
-  const start = startOfWeek(subWeeks(new Date(), 2), { weekStartsOn: 1 });
-  return { from: ymd(start), to: ymd(endOfWeek(subWeeks(new Date(), 1), { weekStartsOn: 1 })) };
+function lastTwoWeeks(tz: string): { from: string; to: string } {
+  const start = shiftYmd(mondayOfYmd(todayInZone(tz)), -14);
+  return { from: start, to: shiftYmd(start, 13) };
 }
 
 export function PayrollReport() {
-  const initial = useMemo(lastWeek, []);
   const tz = useOrgTimeZone();
+  // Initial range only; it may be computed before the org's zone loads (the
+  // default zone), which at worst differs by a day around midnight Monday.
+  const initial = useMemo(() => lastWeek(tz), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -110,9 +114,9 @@ export function PayrollReport() {
           <label className="text-xs text-muted-foreground">To</label>
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
         </div>
-        <Button variant="outline" size="sm" onClick={() => setRange(thisWeek())}>This week</Button>
-        <Button variant="outline" size="sm" onClick={() => setRange(lastWeek())}>Last week</Button>
-        <Button variant="outline" size="sm" onClick={() => setRange(lastTwoWeeks())}>Last 2 weeks</Button>
+        <Button variant="outline" size="sm" onClick={() => setRange(thisWeek(tz))}>This week</Button>
+        <Button variant="outline" size="sm" onClick={() => setRange(lastWeek(tz))}>Last week</Button>
+        <Button variant="outline" size="sm" onClick={() => setRange(lastTwoWeeks(tz))}>Last 2 weeks</Button>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-sm text-muted-foreground">Total <strong className="text-foreground">{fmt(grand)} h</strong></span>
           <DropdownMenu>

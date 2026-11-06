@@ -35,12 +35,13 @@ export async function resolvePunchOwnerVisitId(
 }
 
 const STOP_VISIT_SELECT =
-  "id, org_id, client_id, scheduled_date, crew_id, crew_unassigned, crm_jobs(crew_id, property_id, service_address, service_city)";
+  "id, org_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, crm_jobs(crew_id, property_id, service_address, service_city)";
 
 interface StopVisitRow {
   id: string;
   client_id: string | null;
   scheduled_date: string;
+  push_number?: number | null;
   crew_id: string | null;
   crew_unassigned: boolean | null;
   crm_jobs: { crew_id: string | null; property_id: string | null; service_address: string | null; service_city: string | null } | null;
@@ -55,26 +56,36 @@ interface StopVisitRow {
  */
 export async function stopPunchOwnerVisitId(supabase: AnySupabase, visitId: string): Promise<string> {
   try {
-    const { data: visit } = await supabase
-      .from("crm_job_visits")
-      .select(STOP_VISIT_SELECT)
-      .eq("id", visitId)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (!visit) return visitId;
-    const row = visit as StopVisitRow;
-    const query = supabase.from("crm_job_visits").select(STOP_VISIT_SELECT);
-    const { data: candidates } = await (row.client_id ? query.eq("client_id", row.client_id) : query.is("client_id", null))
-      .eq("scheduled_date", row.scheduled_date)
-      .is("deleted_at", null);
-    const key = stopKeyForVisit(toStopKey(row));
-    const siblingIds = ((candidates ?? []) as StopVisitRow[])
-      .filter((r) => stopKeyForVisit(toStopKey(r)) === key && effectiveVisitCrewId(r) === effectiveVisitCrewId(row))
-      .map((r) => r.id);
+    const siblingIds = await stopSiblingVisitIds(supabase, visitId);
     return resolvePunchOwnerVisitId(supabase, siblingIds, visitId);
   } catch {
     return visitId;
   }
+}
+
+/**
+ * Every visit on the same stop as `visitId` (same stop key and effective
+ * crew, any status), including `visitId` itself. Derived from the visit, never
+ * from the request. Returns just `[visitId]` when the visit can't be read.
+ */
+export async function stopSiblingVisitIds(supabase: AnySupabase, visitId: string): Promise<string[]> {
+  const { data: visit } = await supabase
+    .from("crm_job_visits")
+    .select(STOP_VISIT_SELECT)
+    .eq("id", visitId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!visit) return [visitId];
+  const row = visit as StopVisitRow;
+  const query = supabase.from("crm_job_visits").select(STOP_VISIT_SELECT);
+  const { data: candidates } = await (row.client_id ? query.eq("client_id", row.client_id) : query.is("client_id", null))
+    .eq("scheduled_date", row.scheduled_date)
+    .is("deleted_at", null);
+  const key = stopKeyForVisit(toStopKey(row));
+  const ids = ((candidates ?? []) as StopVisitRow[])
+    .filter((r) => stopKeyForVisit(toStopKey(r)) === key && effectiveVisitCrewId(r) === effectiveVisitCrewId(row))
+    .map((r) => r.id);
+  return ids.includes(visitId) ? ids : [visitId, ...ids];
 }
 
 function toStopKey(row: StopVisitRow) {
@@ -82,6 +93,7 @@ function toStopKey(row: StopVisitRow) {
     clientId: row.client_id ?? "",
     scheduledDate: row.scheduled_date,
     crewId: effectiveVisitCrewId(row),
+    pushNumber: row.push_number,
     job: row.crm_jobs
       ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
       : undefined,
@@ -99,10 +111,22 @@ export async function resolveWorkingMemberIds(
   orgId: string,
   crewId: string,
   workDate: string,
-  opts: { includeAbsent?: boolean; includeInactive?: boolean } = {}
+  opts: {
+    includeAbsent?: boolean;
+    includeInactive?: boolean;
+    /**
+     * ISO instant: also include roster rows soft-deleted at/after it. End Day
+     * passes this so a member removed from the crew mid-day still has the shift
+     * they were already on closed (otherwise it stayed open for payroll to flag).
+     */
+    includeRemovedSince?: string;
+  } = {}
 ): Promise<string[]> {
+  const memberQuery = supabase.from("crm_crew_members").select("id, crew_id, employee_id, days_of_week").eq("org_id", orgId);
   const [{ data: defaults }, { data: overrides }, { data: absences }] = await Promise.all([
-    supabase.from("crm_crew_members").select("id, crew_id, employee_id, days_of_week").eq("org_id", orgId).is("deleted_at", null),
+    opts.includeRemovedSince
+      ? memberQuery.or(`deleted_at.is.null,deleted_at.gte."${opts.includeRemovedSince}"`)
+      : memberQuery.is("deleted_at", null),
     supabase.from("crm_crew_daily_members").select("member_id, crew_id").eq("org_id", orgId).eq("work_date", workDate),
     supabase.from("crm_crew_day_absences").select("crew_member_id").eq("org_id", orgId).eq("work_date", workDate).is("deleted_at", null),
   ]);

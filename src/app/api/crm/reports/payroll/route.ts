@@ -16,17 +16,19 @@ import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
  */
 const Ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const MAX_RANGE_DAYS = 62;
+/** One member-day: storm work past midnight can legitimately run past 24 hours of pay. */
+const MAX_DAY_HOURS = 48;
 
 const PutBody = z.object({
   crewMemberId: z.string().uuid(),
   workDate: Ymd,
-  hoursOverride: z.number().min(0).max(24).nullable(),
+  hoursOverride: z.number().min(0).max(MAX_DAY_HOURS).nullable(),
   /** Corrected clock times, "HH:mm" in the org's timezone on workDate. */
   startTime: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
   endTime: z.string().regex(/^\d{2}:\d{2}$/).nullable(),
   /** Unpaid minutes off the clock for the day (replaces the recorded break). */
   breakMinutes: z.number().int().min(0).max(1440).nullable(),
-  extraHours: z.number().min(0).max(24),
+  extraHours: z.number().min(0).max(MAX_DAY_HOURS),
   note: z.string().max(500).nullable(),
 });
 

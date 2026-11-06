@@ -120,7 +120,12 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   // Editable financial settings — initialized from estimate
   const [taxRateStr,      setTaxRateStr]      = useState(String((estimate.taxRateBps / 100).toFixed(2)));
   const [overheadRateStr, setOverheadRateStr] = useState(String((estimate.overheadRateBps / 100).toFixed(2)));
-  const [discountStr,     setDiscountStr]     = useState(String((estimate.discountCents / 100).toFixed(2)));
+  // A flat discount shows what was ASKED for (discount_value) — discount_cents
+  // is only the part that fits the current subtotal (recalcEstimateTotals).
+  const intendedFlatCents = estimate.discountType === "flat" && estimate.discountValue != null
+    ? estimate.discountValue
+    : null;
+  const [discountStr,     setDiscountStr]     = useState(String(((intendedFlatCents ?? estimate.discountCents) / 100).toFixed(2)));
   const [discountType,       setDiscountType]       = useState<DiscountType | null>(estimate.discountType);
   const [discountValue,      setDiscountValue]      = useState<number | null>(estimate.discountValue);
   const [appliedDiscountId,  setAppliedDiscountId]  = useState<string | null>(estimate.appliedDiscountId);
@@ -152,16 +157,17 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   // A manual edit to the raw $ amount decouples it from whatever saved
   // discount preset produced it — treat it as a plain flat amount.
   function handleDiscountStrChange(v: string) {
-    // Clamp a manually-typed flat discount to the current subtotal — a
-    // discount larger than the subtotal would otherwise drive
-    // revenue/tax/total negative (recalcEstimateTotals also clamps this
-    // server-side as a backstop, but doing it here gives immediate feedback
-    // instead of a silently-reduced total after the next recalc).
-    const rawCents = Math.round((parseFloat(v) || 0) * 100);
-    const clampedCents = Math.max(0, Math.min(rawCents, estimate.subtotalCents));
-    setDiscountStr(v === "" ? v : (clampedCents / 100).toFixed(2));
+    // The typed amount is kept as the INTENDED discount (discount_value).
+    // recalcEstimateTotals clamps what it applies to each subtotal, so a
+    // discount bigger than the subtotal never drives the total negative —
+    // but clamping the intent here (against the cheapest tier's subtotal, on
+    // a Good/Better/Best estimate) shrank it for every other tier too and
+    // lost it for good once lines were added back. The note below the field
+    // shows when only part of it applies.
+    const rawCents = Math.max(0, Math.round((parseFloat(v) || 0) * 100));
+    setDiscountStr(v);
     setDiscountType("flat");
-    setDiscountValue(clampedCents);
+    setDiscountValue(rawCents);
     setAppliedDiscountId(null);
   }
 
@@ -268,7 +274,7 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
               suffix="$"
             />
           </div>
-          {(estimate.discountCents > 0 || appliedDiscountId) && (
+          {(estimate.discountCents > 0 || (intendedFlatCents ?? 0) > 0 || appliedDiscountId) && (
             <button
               type="button"
               onClick={clearDiscount}
@@ -279,6 +285,11 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
             </button>
           )}
         </div>
+        {intendedFlatCents != null && intendedFlatCents > estimate.discountCents && (
+          <p className="mt-0.5 text-[10px] leading-tight text-amber-600 dark:text-amber-400">
+            Only {formatCurrency(estimate.discountCents)} applies — the {estimate.tiersEnabled ? "lowest tier's " : ""}subtotal is {formatCurrency(estimate.subtotalCents)}.
+          </p>
+        )}
         {activeDiscounts.length > 0 && (
           <div className="mt-1.5">
             <Select

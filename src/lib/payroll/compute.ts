@@ -1,5 +1,6 @@
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { getCrewBreaksUnpaid, isBreakUnpaid } from "@/lib/crew/visit-labor";
+import { memberVisitPauseMinutes } from "@/lib/crew/visit-pause";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
 
@@ -51,7 +52,12 @@ interface PunchRow {
   clocked_out_at: string | null;
   break_minutes: number | null;
   lunch_minutes: number | null;
-  crm_job_visits: { break_minutes: number | null; break_paid: boolean | null } | null;
+  crm_job_visits: {
+    break_minutes: number | null;
+    break_paid: boolean | null;
+    clocked_in_at: string | null;
+    clocked_out_at: string | null;
+  } | null;
 }
 
 interface ShiftRow {
@@ -86,7 +92,7 @@ export async function computePayroll(
   const punches = await fetchAllRows<PunchRow>(() =>
     supabase
       .from("crm_crew_member_times")
-      .select("crew_member_id, clocked_in_at, clocked_out_at, break_minutes, lunch_minutes, crm_job_visits(break_minutes, break_paid)")
+      .select("crew_member_id, clocked_in_at, clocked_out_at, break_minutes, lunch_minutes, crm_job_visits(break_minutes, break_paid, clocked_in_at, clocked_out_at)")
       .eq("org_id", orgId)
       .is("deleted_at", null)
       .not("clocked_in_at", "is", null)
@@ -160,12 +166,24 @@ export async function computePayroll(
     if (!p.clocked_out_at) {
       cur.open += 1;
     } else {
+      // This member's share of the stop's pause, capped at their time on the
+      // job (see memberVisitPauseMinutes) — a member who wasn't there for the
+      // pause used to lose the whole of it, and so did their day shift.
+      // Whole minutes: it is shown as the day's break.
       const visitPause = isBreakUnpaid(p.crm_job_visits?.break_paid, orgBreaksUnpaid)
-        ? Math.max(0, Number(p.crm_job_visits?.break_minutes ?? 0))
+        ? Math.round(memberVisitPauseMinutes({
+            pauseMinutes: p.crm_job_visits?.break_minutes,
+            punchIn: p.clocked_in_at,
+            punchOut: p.clocked_out_at,
+            visitIn: p.crm_job_visits?.clocked_in_at,
+            visitOut: p.crm_job_visits?.clocked_out_at,
+          }))
         : 0;
       const own = Number(p.break_minutes ?? 0) + Number(p.lunch_minutes ?? 0);
-      cur.jobHours += Math.max(0, hoursBetween(p.clocked_in_at, p.clocked_out_at) - (own + visitPause) / 60);
-      cur.offClockMinutes += own + visitPause;
+      const spanHours = Math.max(0, hoursBetween(p.clocked_in_at, p.clocked_out_at));
+      cur.jobHours += Math.max(0, spanHours - (own + visitPause) / 60);
+      // Never take more off the day than the punch itself lasted.
+      cur.offClockMinutes += Math.min(own + visitPause, Math.round(spanHours * 60));
     }
     jobs.set(k, cur);
   }

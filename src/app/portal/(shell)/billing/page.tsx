@@ -5,6 +5,7 @@ import PortalBillingPage from "@/components/portal/PortalBillingPage";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
+import { orgCardPaymentsAvailable } from "@/lib/stripe/card-payments-available";
 
 interface InvoiceRow {
   id: string;
@@ -145,12 +146,22 @@ export default async function BillingPage() {
   // the portal, not the server's UTC day or the viewer's.
   const today = todayInZone(await getOrgTimeZone(supabase, ctx.orgId));
 
+  // No Stripe Connect (or onboarding unfinished) → the page shows invoices with
+  // a "contact us to pay" note instead of Pay / prepay buttons.
+  const { data: orgRow } = await supabase
+    .from("organizations")
+    .select("name, stripe_connect_account_id, stripe_connect_charges_enabled")
+    .eq("id", ctx.orgId)
+    .maybeSingle();
+
   return (
     <PortalBillingPage
       invoices={invoices.map((inv) => ({ ...inv, accountName: accountNames.get(inv.client_id) ?? null }))}
       today={today}
       payments={payments}
       accounts={accounts.map((a) => ({ id: a.id, displayName: a.displayName, isSelf: a.isSelf }))}
+      cardPaymentsAvailable={orgCardPaymentsAvailable(orgRow)}
+      orgName={orgRow?.name ?? ""}
     />
   );
 }

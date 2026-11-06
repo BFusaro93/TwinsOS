@@ -273,6 +273,12 @@ export function UsersRolesGuide() {
             <strong>Teams</strong> need Teams; the Dispatch Board permission can still add an
             employee to a crew&apos;s roster and set a crew&apos;s default equipment.
           </li>
+          <li>
+            <strong>Schedules</strong> (the recurring-schedule templates) need the Scheduling settings
+            permission to edit, rename, switch off, delete or reschedule; without it the Schedules page
+            and sidebar item are hidden. Add Job can still create a new schedule from a job&apos;s
+            Recurring Schedule picker.
+          </li>
         </ul>
         <p>
           Editing an existing job, its visits and crew time stays open to every CRM role in the

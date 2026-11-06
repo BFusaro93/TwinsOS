@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { signPhotoPaths, type PhotoBucket } from "@/lib/invoices/photos";
 import { logger } from "@/lib/logger";
+import { orgCardPaymentsAvailable } from "@/lib/stripe/card-payments-available";
 
 const log = logger.child("public-invoice");
 
@@ -66,7 +67,7 @@ export async function GET(
 
   const { data: org } = await supabase
     .from("organizations")
-    .select("name, brand_color, address, customizations, ach_payments_enabled")
+    .select("name, brand_color, address, customizations, ach_payments_enabled, stripe_connect_account_id, stripe_connect_charges_enabled")
     .eq("id", shareToken.org_id)
     .single();
 
@@ -120,6 +121,10 @@ export async function GET(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     clientName: (inv.clients as any)?.display_name ?? null,
     lineItems,
+    // Whether the org can take payment online at all (Stripe Connect set up and
+    // charges enabled — the same test create-intent refuses on). When false the
+    // page shows the invoice with a "contact us to pay" note instead of Pay.
+    cardPaymentsAvailable: orgCardPaymentsAvailable(org),
     // Whether the pay page offers bank transfer (the intent route re-checks Stripe).
     achAvailable: org?.ach_payments_enabled === true,
     org: {

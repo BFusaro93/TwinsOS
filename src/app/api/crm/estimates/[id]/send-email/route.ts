@@ -166,10 +166,13 @@ export async function POST(
       .map((r) => r.entity_total_cents)
       .filter((n): n is number => typeof n === "number");
     const approvedTotal = approvedTotals.length ? Math.max(...approvedTotals) : null;
-    if (approvedTotal != null && (est.total_cents ?? 0) > approvedTotal) {
+    // Compare the amount approval has to cover — the highest Good/Better/Best
+    // tier while none is chosen (approval_amount_cents), not the cheapest one.
+    const approvalAmount = (est.approval_amount_cents as number | null) ?? est.total_cents ?? 0;
+    if (approvedTotal != null && approvalAmount > approvedTotal) {
       return NextResponse.json(
         {
-          error: `This estimate was approved at $${(approvedTotal / 100).toFixed(2)} and now totals $${((est.total_cents ?? 0) / 100).toFixed(2)}. Resubmit it for approval before sending.`,
+          error: `This estimate was approved at $${(approvedTotal / 100).toFixed(2)} and now totals $${(approvalAmount / 100).toFixed(2)}${est.tiers_enabled ? " (highest option)" : ""}. Resubmit it for approval before sending.`,
           code: "reapproval_required",
         },
         { status: 409 }

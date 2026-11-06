@@ -101,6 +101,8 @@ interface Props {
   /** The login's client plus its sub-accounts (getPortalAccounts). */
   clientIds: string[];
   orgId: string;
+  /** False when the org can't take online payments — the balance button reads "View Billing", not "Pay Now". */
+  cardPaymentsAvailable?: boolean;
 }
 
 export default function PortalDashboard({
@@ -117,6 +119,7 @@ export default function PortalDashboard({
   allowEstimates,
   clientIds,
   orgId,
+  cardPaymentsAvailable = true,
 }: Props) {
   const [upcomingVisits, setUpcomingVisits] = useState(initialVisits);
 
@@ -280,7 +283,7 @@ export default function PortalDashboard({
               href="/portal/billing"
               className="mt-auto inline-flex h-9 items-center justify-center rounded-lg bg-brand-500 text-sm font-medium text-white transition hover:bg-brand-600"
             >
-              Pay Now
+              {cardPaymentsAvailable ? "Pay Now" : "View Billing"}
             </a>
           ) : (
             <p className="mt-auto flex items-center gap-1.5 text-sm text-slate-500">

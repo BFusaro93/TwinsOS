@@ -28,6 +28,7 @@ export interface AppNotification {
     | "estimate_client_rejected"
     | "estimate_deposit_failed"
     | "estimate_deposit_excess"
+    | "estimate_deposit_unaccepted"
     | "ticket_created"
     | "ticket_assigned"
     | "ticket_contributor_added"

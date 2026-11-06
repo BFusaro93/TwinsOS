@@ -82,6 +82,12 @@ export interface ProposalContent {
     adjRateCents: number | null;
     complexityBps: number | null;
   }[];
+  /** Lines the client already agreed to (status 'won' — accepted earlier,
+   *  e.g. on a re-sent proposal after a partial acceptance). Shown as
+   *  "Already agreed", never selectable, and part of every total (the stored
+   *  totals count them). Only present when there are any, so versions sent
+   *  before this existed fingerprint the same (see alignToPublished). */
+  agreedLineItems?: ProposalContent["lineItems"];
   subtotalCents: number;
   taxRateBps: number;
   taxCents: number;
@@ -108,10 +114,10 @@ export interface ProposalContent {
  *  the company pays for) — they are not part of subtotal/total and are never
  *  shown to, or priced to, the client. */
 export function buildProposalContent(est: Record<string, unknown>): ProposalContent {
-  const lineItems = ((est.estimate_line_items ?? []) as Record<string, unknown>[])
-    .filter((li) => !li.deleted_at && li.status === "quote")
-    .sort((a, b) => ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0))
-    .map((li) => ({
+  const sorted = ((est.estimate_line_items ?? []) as Record<string, unknown>[])
+    .filter((li) => !li.deleted_at)
+    .sort((a, b) => ((a.sort_order as number) ?? 0) - ((b.sort_order as number) ?? 0));
+  const toLine = (li: Record<string, unknown>): ProposalContent["lineItems"][number] => ({
       id: li.id as string,
       rowType: ((li.row_type as string) ?? "item") as "item" | "section",
       sectionName: (li.section_name as string | null) ?? null,
@@ -132,13 +138,19 @@ export function buildProposalContent(est: Record<string, unknown>): ProposalCont
       packageId: (li.package_id as string | null) ?? null,
       adjRateCents: (li.adj_rate_cents as number | null) ?? null,
       complexityBps: (li.complexity_bps as number | null) ?? null,
-    }));
+    });
+  const lineItems = sorted.filter((li) => li.status === "quote").map(toLine);
+  // Section headers aren't agreed to; only priced lines are.
+  const agreedLineItems = sorted
+    .filter((li) => li.status === "won" && ((li.row_type as string | null) ?? "item") !== "section")
+    .map(toLine);
 
   return {
     description: (est.description as string | null) ?? null,
     validUntil: (est.valid_until_date as string | null) ?? null,
     notes: (est.notes as string | null) ?? null,
     lineItems,
+    ...(agreedLineItems.length > 0 ? { agreedLineItems } : {}),
     subtotalCents: (est.subtotal_cents as number) ?? 0,
     taxRateBps: (est.tax_rate_bps as number) ?? 0,
     taxCents: (est.tax_cents as number) ?? 0,
@@ -183,6 +195,15 @@ export function proposalFingerprint(content: ProposalContent): string {
 const LATE_LINE_KEYS = ["discountCents", "subitemTotalCents", "printedSubitems", "packageId"] as const;
 
 function alignToPublished(live: ProposalContent, published: ProposalContent): ProposalContent {
+  // agreedLineItems is new: a version sent before it existed has no such key,
+  // and its won lines were simply not shown. Drop it from the live side then,
+  // so that alone doesn't read as "changed since sent" (a real price change
+  // still moves subtotal/total).
+  if (live.agreedLineItems && !("agreedLineItems" in published)) {
+    const rest = { ...live };
+    delete rest.agreedLineItems;
+    live = rest;
+  }
   const sample = published.lineItems?.[0] as Record<string, unknown> | undefined;
   if (!sample) return live;
   const missing = LATE_LINE_KEYS.filter((k) => !(k in sample));

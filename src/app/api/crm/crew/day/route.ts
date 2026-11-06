@@ -114,14 +114,19 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   const { action, crewMemberId, visitId } = parsed.data;
   const now = new Date().toISOString();
+  // Shift and punch WRITES go through the service client: crew logins can't
+  // write crm_crew_day_shifts / crm_crew_member_times directly (RLS), so the
+  // only way to change their times is through the checks in this route. Every
+  // write below is scoped to this crew's roster / visit, verified first.
+  const admin = createServiceClient();
 
   try {
     if (action === "start_day") {
-      const opened = await startCrewDay(db, { orgId, crewId, workDate, at: now, source: "crew", userId: user.id });
+      const opened = await startCrewDay(admin, { orgId, crewId, workDate, at: now, source: "crew", userId: user.id });
       return NextResponse.json({ ok: true, opened });
     }
     if (action === "end_day") {
-      const closed = await endCrewDay(db, { orgId, crewId, workDate, at: now });
+      const closed = await endCrewDay(admin, { orgId, crewId, workDate, at: now });
       return NextResponse.json({ ok: true, closed });
     }
 
@@ -132,7 +137,6 @@ export async function POST(request: Request) {
     // clock them in below like a late arrival. Written with the service client:
     // the caller can't yet "own" this member, which is what crew RLS checks.
     if (action === "add_member") {
-      const admin = createServiceClient();
       const { data: member } = await admin.from("crm_crew_members").select("id").eq("id", crewMemberId).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
       if (!member) return NextResponse.json({ error: "That person isn't in your company's crew list" }, { status: 404 });
       // Mid-day move: end their open job punches on the OLD crew's visits at
@@ -197,24 +201,24 @@ export async function POST(request: Request) {
           const outMs = new Date(punch.clocked_out_at as string).getTime();
           if (outMs < new Date(now).getTime()) {
             const away = Math.max(0, Math.round((new Date(now).getTime() - outMs) / 60_000));
-            const { data: reopened } = await db.from("crm_crew_member_times")
+            const { data: reopened } = await admin.from("crm_crew_member_times")
               .update({ clocked_out_at: null, break_minutes: Number(punch.break_minutes ?? 0) + away, updated_at: now })
               .eq("id", punch.id).eq("clocked_out_at", punch.clocked_out_at).select("id");
             if (reopened && reopened.length > 0 && away > 0) {
               // crew_day_member_in already added this same time away to the shift's break, and
               // payroll subtracts the job punch's break from the shift as well — take the
               // shift's copy back off so the member isn't docked twice.
-              const { data: shiftRow } = await db.from("crm_crew_day_shifts").select("id, break_minutes")
+              const { data: shiftRow } = await admin.from("crm_crew_day_shifts").select("id, break_minutes")
                 .eq("crew_member_id", crewMemberId).eq("work_date", shiftWorkDate).eq("org_id", orgId).is("deleted_at", null).maybeSingle();
               if (shiftRow) {
-                await db.from("crm_crew_day_shifts")
+                await admin.from("crm_crew_day_shifts")
                   .update({ break_minutes: Math.max(0, Number(shiftRow.break_minutes ?? 0) - away) })
                   .eq("id", shiftRow.id);
               }
             }
           }
         } else if (!punch) {
-          await db.from("crm_crew_member_times").upsert(
+          await admin.from("crm_crew_member_times").upsert(
             { org_id: orgId, visit_id: punchVisitId, crew_member_id: crewMemberId, clocked_in_at: now, clocked_out_at: null, deleted_at: null, updated_at: now },
             { onConflict: "visit_id,crew_member_id", ignoreDuplicates: false }
           );
@@ -227,9 +231,9 @@ export async function POST(request: Request) {
     // and drop them from the roster so the next Start Job doesn't punch them.
     // The open shift may have started before midnight (storm work); a
     // forgotten shift older than 16h is left open for payroll to flag.
-    await closeMemberOpenShift(db, { orgId, crewMemberId, workDate, at: now });
+    await closeMemberOpenShift(admin, { orgId, crewMemberId, workDate, at: now });
     if (punchVisitId) {
-      await db.from("crm_crew_member_times").update({ clocked_out_at: now, updated_at: now })
+      await admin.from("crm_crew_member_times").update({ clocked_out_at: now, updated_at: now })
         .eq("visit_id", punchVisitId).eq("crew_member_id", crewMemberId).is("deleted_at", null).is("clocked_out_at", null).lt("clocked_in_at", now);
     }
     const { data: absence } = await db.from("crm_crew_day_absences").select("id")

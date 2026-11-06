@@ -375,12 +375,14 @@ export function ReportCenterGuide() {
           <li>
             <strong>Pick the period.</strong> From / To dates, or the <strong>This week</strong>,{" "}
             <strong>Last week</strong> and <strong>Last 2 weeks</strong> buttons (weeks run Monday to
-            Sunday). It opens on last week. A single report covers at most 62 days.
+            Sunday, on your company&apos;s calendar &mdash; its timezone, not your computer&apos;s). It
+            opens on last week. A single report covers at most 62 days.
           </li>
           <li>
             <strong>Paid time is the shift.</strong> Each person&apos;s day is clock-in at the shop to
             clock-out at the shop, less lunch and unpaid pauses (whether a job pause is paid follows
-            the company setting, or the visit&apos;s own override). The <strong>On jobs</strong> column
+            the company setting, or the visit&apos;s own override). A job&apos;s pause comes off a
+            person only up to the time they were on that job, never more. The <strong>On jobs</strong> column
             is the part of that day spent on stops &mdash; the same punches Job Costing uses &mdash; so
             the gap is drive and shop time. If nobody tapped Start Day for a person, their job punches
             are used instead and the day is flagged.
@@ -393,8 +395,8 @@ export function ReportCenterGuide() {
             <strong>Correct any day.</strong> In the detail, change the <strong>clock-in and
             clock-out times</strong>, the <strong>unpaid break minutes</strong> (the number you enter is the
             day&apos;s whole unpaid break, replacing the recorded breaks rather than adding to them), or type the hours
-            directly to override them; add <strong>Extra</strong> hours (shop time, PTO, anything not
-            on the clock); write a <strong>note</strong> saying why; and click <strong>Save</strong>. An
+            directly to override them (up to 48 hours for a day); add <strong>Extra</strong> hours
+            (shop time, PTO, anything not on the clock, also up to 48); write a <strong>note</strong> saying why; and click <strong>Save</strong>. An
             end time earlier than the start is read as the next morning, for storm work past
             midnight. The reset arrow puts the day back to the recorded figures. Edited days show an{" "}
             <em>adjusted</em> badge.
@@ -420,7 +422,12 @@ export function ReportCenterGuide() {
         <Callout>
           Payroll reads the crew&apos;s roster, so an employee has to be on a crew (Team → Crews → Team
           Assignments, or placed on one for the day on the Crew Board) to be clocked in by Start Day.
-          Someone marked <em>Not working</em> in Edit Crew is skipped.
+          Someone marked <em>Not working</em> in Edit Crew is skipped. Someone deactivated or taken
+          off the crew partway through a day still has that day&apos;s shift closed by End Day, and
+          the office can still correct the punches they already had. Every change to a shift and
+          every correction made here is kept in the audit history. Payroll doesn&apos;t calculate
+          overtime and doesn&apos;t lock a pay period once exported &mdash; do both in your payroll
+          system.
         </Callout>
       </Section>
 

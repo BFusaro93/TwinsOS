@@ -14,7 +14,10 @@ import {
   useSnowJobs,
   useStormEventVisits,
   useAddJobsToStormEvent,
+  useAddStormPush,
 } from "@/lib/hooks/use-snow-dispatch";
+import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import { useCRMCrews, useUpdateVisit, useUpdateVisitStatus } from "@/lib/hooks/use-crm-jobs";
 import { printSnowRouteSheets } from "@/lib/print";
 import { JobDetailSheet } from "@/components/crm/jobs/JobDetailSheet";
@@ -70,13 +73,6 @@ import {
 import type { CRMJobVisit, VisitStatus, StormEventStatus } from "@/types/crm-jobs";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-
-function toLocalDateString(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 const DAY_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -242,7 +238,9 @@ function StormEventDialog({
   onCreated: (id: string) => void;
 }) {
   const { mutateAsync: createEvent, isPending } = useCreateStormEvent();
-  const today = toLocalDateString(new Date());
+  // The org's day, not the browser's — a dispatcher in another zone (or late
+  // at night) defaulted the storm to the wrong date.
+  const today = todayInZone(useOrgTimeZone());
   const [name, setName] = useState(`Snow Event ${today}`);
   const [eventDate, setEventDate] = useState(today);
   const [forecastDepth, setForecastDepth] = useState("");
@@ -420,8 +418,18 @@ function AddJobsDialog({
       }));
     if (jobs.length === 0) { toast.error("No jobs selected"); return; }
     try {
-      await addJobs.mutateAsync({ stormEventId, date, jobs });
-      toast.success(`Added ${jobs.length} job${jobs.length > 1 ? "s" : ""} to the storm event`);
+      const added = await addJobs.mutateAsync({ stormEventId, date, jobs });
+      // Jobs already on the storm (or added by another dispatcher meanwhile)
+      // are skipped, so report what was actually added.
+      const skipped = jobs.length - added;
+      if (added === 0) {
+        toast.info(`${jobs.length === 1 ? "That job is" : "All selected jobs are"} already on this storm event`);
+      } else {
+        toast.success(
+          `Added ${added} job${added !== 1 ? "s" : ""} to the storm event` +
+          (skipped > 0 ? ` (${skipped} already on it)` : "")
+        );
+      }
       onDone();
       onOpenChange(false);
       setInitialized(false);
@@ -937,7 +945,13 @@ function CloseOutDialog({
               materials_used: materialName
                 ? [{ name: materialName, qty, rate_cents: unitCostCents }]
                 : [],
-              ...(hoursPerVisit !== null && v.job?.invoiceType === "hourly" ? { actual_hours: hoursPerVisit } : {}),
+              // Hours entered here are hours ON SITE (what an hourly snow job bills,
+              // once). actual_hours is man-hours for job costing — the crew-app
+              // clock-out stores Σ every member's punches — so it's stored × the
+              // visit's men, and snowBillableHours divides it back for billing.
+              ...(hoursPerVisit !== null && v.job?.invoiceType === "hourly"
+                ? { actual_hours: Math.round(hoursPerVisit * Math.max(1, v.menCount || 1) * 100) / 100 }
+                : {}),
             },
           });
           // materials_used on crm_job_visits is display-only — it never feeds
@@ -989,7 +1003,7 @@ function CloseOutDialog({
           </div>
           {hasHourlyJob && (
             <div className="space-y-1.5">
-              <Label>Actual Hours <span className="text-slate-400 dark:text-neutral-500">(billed hourly)</span></Label>
+              <Label>Hours on Site <span className="text-slate-400 dark:text-neutral-500">(billed hourly, once per visit — not per crew member)</span></Label>
               <Input type="number" step="0.25" value={actualHours} onChange={(e) => setActualHours(e.target.value)} placeholder="e.g. 2.5" className="h-9 text-sm" />
             </div>
           )}
@@ -1074,6 +1088,7 @@ export function SnowDispatchBoard() {
   const [driveMins, setDriveMins] = useState<Map<string, { mins: number; fromShop: boolean }>>(new Map());
   const { mutateAsync: updateVisitMutation } = useUpdateVisit();
   const { mutateAsync: saveOrderToRoutes, isPending: savingOrder } = useSaveStormOrderToRoutes();
+  const { mutateAsync: addStormPush, isPending: addingPush } = useAddStormPush();
 
   const activeEvent = events.find((e) => e.id === selectedEventId) ?? events[0] ?? null;
   const effectiveEventId = activeEvent?.id ?? "";
@@ -1150,6 +1165,26 @@ export function SnowDispatchBoard() {
   );
 
   const crewNameById = useMemo(() => new Map(crews.map((c) => [c.id, c.name])), [crews]);
+
+  // Each job's latest push on this storm — "Add push" hangs off that row only.
+  const latestPushVisitIdByJob = useMemo(() => {
+    const best = new Map<string, CRMJobVisit>();
+    for (const v of visits) {
+      const cur = best.get(v.jobId);
+      if (!cur || (v.pushNumber ?? 1) > (cur.pushNumber ?? 1)) best.set(v.jobId, v);
+    }
+    return new Map([...best].map(([jobId, v]) => [jobId, v.id]));
+  }, [visits]);
+
+  /** Per Push jobs: each push is its own visit on the storm, billed on its own depth. */
+  async function addPush(v: CRMJobVisit) {
+    try {
+      const n = await addStormPush(v);
+      toast.success(`Push ${n} added for ${v.clientName ?? "this job"}`);
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : "Failed to add a push");
+    }
+  }
 
   const filteredVisits = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1742,6 +1777,20 @@ export function SnowDispatchBoard() {
                       <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}><StatusCycleButton visit={v} /></td>
                       <td className="px-2 py-2 max-lg:sticky max-lg:left-0 max-lg:z-[1] max-lg:bg-inherit max-lg:shadow-[1px_0_0_rgb(226_232_240)]" onClick={(e) => e.stopPropagation()}>
                         <Link href={`/crm/clients/${v.clientId}`} className="font-medium text-brand-600 dark:text-brand-400 hover:underline">{v.clientName ?? "—"}</Link>
+                        {(v.pushNumber ?? 1) > 1 && (
+                          <Badge variant="secondary" className="ml-1.5 px-1.5 py-0 text-[9px]">Push {v.pushNumber}</Badge>
+                        )}
+                        {canManage && v.job?.invoiceType === "per_push_per_inch" && latestPushVisitIdByJob.get(v.jobId) === v.id && (
+                          <button
+                            type="button"
+                            title="Add another push for this job on this storm — billed on its own depth"
+                            disabled={addingPush}
+                            onClick={() => void addPush(v)}
+                            className="ml-1.5 inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 max-lg:py-1.5"
+                          >
+                            <Plus className="h-2.5 w-2.5" />Add push
+                          </button>
+                        )}
                       </td>
                       {isVisible("address") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceAddress ?? "—"}</td>}
                       {isVisible("city") && <td className="px-2 py-2 text-muted-foreground">{v.job?.serviceCity ?? "—"}</td>}

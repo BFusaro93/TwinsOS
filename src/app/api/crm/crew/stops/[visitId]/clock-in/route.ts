@@ -6,7 +6,6 @@ import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib
 import { closeOpenDriveSegment } from "@/lib/crew/drive-time";
 import { openStopPunches, resolvePunchOwnerVisitId } from "@/lib/crew/stop-punches";
 import { startCrewDay } from "@/lib/crew/day-shifts";
-import { missingRequiredPhoto } from "@/lib/crew/required-photos";
 import { createServiceClient } from "@/lib/supabase/server";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -32,6 +31,7 @@ interface VisitRow {
   org_id: string;
   client_id: string;
   scheduled_date: string;
+  push_number?: number | null;
   crew_id: string | null;
   status: string;
   clocked_in_at: string | null;
@@ -60,6 +60,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
     clientId: row.client_id,
     scheduledDate: row.scheduled_date,
     crewId: effectiveVisitCrewId(row),
+    pushNumber: row.push_number,
     job: row.crm_jobs
       ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
       : undefined,
@@ -67,7 +68,7 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
 }
 
 const VISIT_SELECT = `
-  id, org_id, client_id, scheduled_date, crew_id, crew_unassigned, status, clocked_in_at,
+  id, org_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, status, clocked_in_at,
   notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
   crm_jobs(crew_id, status, property_id, service_address, service_city, notes_to_crew, notes_to_crew_updated_at, client_properties(notes_to_crew))
 `;
@@ -208,11 +209,9 @@ export async function POST(
     return NextResponse.json({ error: "Nothing to clock in for this stop" }, { status: 400 });
   }
 
-  // Required Before photo (org setting). Enforced server-side as well as in the
-  // apps; a replay of a clock-in that already landed returned above.
-  if (await missingRequiredPhoto(createServiceClient(), { orgId: anchor.org_id, visitIds: stopRows.map((r) => r.id), phase: "before" })) {
-    return NextResponse.json({ error: "Add a Before photo before starting this job.", code: "photo_required", phase: "before" }, { status: 409 });
-  }
+  // Required Before photo (org setting) is NOT checked here: it's enforced with
+  // the After photo at clock-out, so a crew can start, then shoot or pick the
+  // Before photo from the library (see lib/crew/required-photos.ts).
 
   const now = resolveOccurredAt(parsed.data.occurredAt).toISOString();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -258,7 +257,9 @@ export async function POST(
   try {
     const crewId = effectiveVisitCrewId(anchor);
     if (crewId) {
-      await startCrewDay(supabase, {
+      // Service client: crew logins can't write shifts directly (RLS); the
+      // stop was authorized above.
+      await startCrewDay(createServiceClient(), {
         orgId: anchor.org_id,
         crewId,
         workDate: isoInZone(new Date(now), await getOrgTimeZone(supabase, anchor.org_id)),
@@ -277,7 +278,7 @@ export async function POST(
   // them together there rather than opening a second set on today's anchor.
   const punchVisitId = await resolvePunchOwnerVisitId(supabase, stopRows.map((r) => r.id), anchor.id);
   const { rosterEmpty } = await openStopPunches(
-    supabase,
+    createServiceClient(), // crew can't write punches directly; stop authorized above
     { id: punchVisitId, orgId: anchor.org_id, crewId: effectiveVisitCrewId(anchor), scheduledDate: anchor.scheduled_date },
     now
   );

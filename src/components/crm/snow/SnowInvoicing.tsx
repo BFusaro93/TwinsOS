@@ -174,7 +174,9 @@ export function SnowInvoicing() {
           .map((r) => ({
             visitId: r.visit.id,
             jobId: r.visit.jobId,
-            description: r.visit.job?.services?.[0]?.serviceName ?? r.visit.job?.invoiceDescription ?? "Snow Service",
+            // Two pushes on one storm would otherwise read as duplicate lines.
+            description: (r.visit.job?.services?.[0]?.serviceName ?? r.visit.job?.invoiceDescription ?? "Snow Service")
+              + ((r.visit.pushNumber ?? 1) > 1 ? ` — Push ${r.visit.pushNumber}` : ""),
             amountCents: r.amountCents,
             serviceDate: r.visit.scheduledDate,
           })),

@@ -9,6 +9,8 @@ import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 const BodySchema = z.object({
   crewId: z.string().uuid().nullable(),
   fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "fromDate must be YYYY-MM-DD"),
+  /** The job's crew before the change: only visits with no crew or on that crew follow the job. */
+  previousCrewId: z.string().uuid().nullable().optional(),
 });
 
 export async function POST(
@@ -35,7 +37,7 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { crewId, fromDate } = parsed.data;
+  const { crewId, fromDate, previousCrewId } = parsed.data;
 
   // Org always comes from the session, never the body.
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
@@ -56,7 +58,7 @@ export async function POST(
     if (!crew) return NextResponse.json({ error: "Crew not found" }, { status: 404 });
   }
 
-  const { updated, error } = await propagateCrewToVisits(supabase, { jobId, crewId, fromDate });
+  const { updated, error } = await propagateCrewToVisits(supabase, { jobId, crewId, fromDate, previousCrewId });
   if (error) return NextResponse.json({ error }, { status: 500 });
 
   return NextResponse.json({ updated });

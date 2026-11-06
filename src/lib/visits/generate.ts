@@ -37,6 +37,9 @@ import {
  */
 
 import { composeVisitNote } from "@/lib/utils/visit-note";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("visits/generate");
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyClient = any;
@@ -215,17 +218,8 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
   if (job.job_type !== "recurring") return out;
 
   // ── recurring ─────────────────────────────────────────────────────────────
-  const jobStart = job.recurrence_start ?? job.scheduled_date ?? job.start_date_window ?? null;
-  const from = jobStart && jobStart > today ? jobStart : today;
-  const to = job.recurrence_end && job.recurrence_end < horizonEnd ? job.recurrence_end : horizonEnd;
-  if (to < from) return out;
-
-  // A schedule switched off in Settings stops NEW generation for its jobs.
-  // Existing visits are left exactly where they are.
-  if (job.schedule && schedulesByName.get(job.schedule)?.is_active === false) return out;
-  const rules = rulesForJob(job.schedule, job.schedule_days, schedulesByName);
-  if (rules.length === 0) return out;
-  const dates = occurrencesForRules(rules, from, to, { fallbackAnchor: jobStart });
+  const dates = recurringDatesForJob(job, schedulesByName, today, horizonEnd);
+  if (dates.length === 0) return out;
 
   // Service rows exist but all are excluded: nothing billable to generate.
   // (Only a job with NO service rows gets unlinked whole-job visits.)
@@ -257,6 +251,52 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
     }
   }
   return out;
+}
+
+/**
+ * The dates a recurring job's rules produce from the org's today (or the
+ * job's start, if later) through `horizonEnd` / its recurrence_end, ascending.
+ * Empty for a schedule switched off in Settings (it stops NEW generation;
+ * existing visits are left where they are) or one that can't be read.
+ * Interval schedules with no anchor phase from the job's own start date.
+ */
+export function recurringDatesForJob(
+  job: Pick<GeneratorJob, "schedule" | "schedule_days" | "recurrence_start" | "recurrence_end" | "scheduled_date" | "start_date_window">,
+  schedulesByName: Map<string, ScheduleRow>,
+  today: string,
+  horizonEnd: string
+): string[] {
+  const jobStart = job.recurrence_start ?? job.scheduled_date ?? job.start_date_window ?? null;
+  const from = jobStart && jobStart > today ? jobStart : today;
+  const to = job.recurrence_end && job.recurrence_end < horizonEnd ? job.recurrence_end : horizonEnd;
+  if (to < from) return [];
+  if (job.schedule && schedulesByName.get(job.schedule)?.is_active === false) return [];
+  const rules = rulesForJob(job.schedule, job.schedule_days, schedulesByName);
+  if (rules.length === 0) return [];
+  return occurrencesForRules(rules, from, to, { fallbackAnchor: jobStart });
+}
+
+/** Live crm_schedules rows by name, per org (one paged read). */
+export async function loadSchedulesByOrg(
+  supabase: AnyClient,
+  orgIds: string[]
+): Promise<{ byOrg: Map<string, Map<string, ScheduleRow>>; error: string | null }> {
+  const byOrg = new Map<string, Map<string, ScheduleRow>>();
+  const { rows, error } = await selectAllRows<ScheduleRow & { org_id: string | null }>(() => {
+    let q = supabase
+      .from("crm_schedules")
+      .select("org_id, name, frequency, day_of_week, week_pattern, anchor_date, week_of_month, season_start, season_end, custom_dates, excluded_dates, is_active")
+      .is("deleted_at", null);
+    if (orgIds.length) q = q.in("org_id", orgIds);
+    return q;
+  });
+  if (error) return { byOrg, error };
+  for (const r of rows) {
+    const k = r.org_id ?? "";
+    if (!byOrg.has(k)) byOrg.set(k, new Map());
+    byOrg.get(k)!.set(r.name, r);
+  }
+  return { byOrg, error: null };
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -472,21 +512,8 @@ export async function generateVisitsForJobs(
   // Only the orgs these jobs belong to (the cron calls this once per org; reading every org's
   // schedules each time was O(orgs x schedules), and one failure failed every org).
   const scheduleOrgIds = [...new Set(jobs.map((j) => j.org_id ?? opts.fallbackOrgId ?? null).filter((x): x is string => !!x))];
-  const { rows: scheduleRows, error: schedErr } = await selectAllRows<ScheduleRow & { org_id: string | null }>(() => {
-    let q = supabase
-      .from("crm_schedules")
-      .select("org_id, name, frequency, day_of_week, week_pattern, anchor_date, week_of_month, season_start, season_end, custom_dates, excluded_dates, is_active")
-      .is("deleted_at", null);
-    if (scheduleOrgIds.length) q = q.in("org_id", scheduleOrgIds);
-    return q;
-  });
+  const { byOrg: schedulesByOrg, error: schedErr } = await loadSchedulesByOrg(supabase, scheduleOrgIds);
   if (schedErr) { result.errors.push(schedErr); return result; }
-  const schedulesByOrg = new Map<string, Map<string, ScheduleRow>>();
-  for (const r of scheduleRows) {
-    const k = r.org_id ?? "";
-    if (!schedulesByOrg.has(k)) schedulesByOrg.set(k, new Map());
-    schedulesByOrg.get(k)!.set(r.name, r);
-  }
 
   const servicesByJob = new Map<string, GeneratorService[]>();
   for (const s of services) {
@@ -523,16 +550,24 @@ export async function generateVisitsForJobs(
     result.inserted += rows.length;
     for (const r of rows) result.insertedByJob.set(r.job_id, (result.insertedByJob.get(r.job_id) ?? 0) + 1);
   };
+  const failedJobs = new Set<string>();
   for (const rows of chunk(toInsert, 100)) {
     const { error } = await supabase.from("crm_job_visits").insert(rows);
     if (!error) { count(rows); continue; }
-    if ((error as { code?: string }).code !== "23505") { result.errors.push(error.message); continue; }
-    // A concurrent run claimed some of these occurrences first
-    // (crm_job_visits_occurrence_unique) — insert one by one, skipping those.
+    // One bad row fails the whole batch insert. Retry row by row so the other
+    // jobs in the batch still get their visits: a 23505 means a concurrent run
+    // claimed that occurrence first (crm_job_visits_occurrence_unique) and is
+    // skipped silently; anything else is reported against its job.
     for (const row of rows) {
       const { error: oneErr } = await supabase.from("crm_job_visits").insert(row);
-      if (!oneErr) count([row]);
-      else if ((oneErr as { code?: string }).code !== "23505") result.errors.push(oneErr.message);
+      if (!oneErr) { count([row]); continue; }
+      if ((oneErr as { code?: string }).code === "23505") continue;
+      // One report per job (a broken job would otherwise log every date).
+      if (failedJobs.has(row.job_id)) continue;
+      failedJobs.add(row.job_id);
+      const message = (oneErr as { message: string }).message;
+      result.errors.push(`job ${row.job_id} (${row.scheduled_date}): ${message}`);
+      log.warn("visit insert failed", { jobId: row.job_id, scheduledDate: row.scheduled_date, error: message });
     }
   }
   return result;

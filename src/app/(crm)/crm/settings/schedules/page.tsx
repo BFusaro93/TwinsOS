@@ -2,7 +2,9 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ScheduleNameTakenError, useAllCRMSchedules, useCreateCRMSchedule, useUpdateCRMSchedule, useDeleteCRMSchedule, useBulkImportCRMSchedules } from "@/lib/hooks/use-crm-jobs";
+import { ScheduleInUseError, ScheduleNameTakenError, useAllCRMSchedules, useCreateCRMSchedule, useUpdateCRMSchedule, useDeleteCRMSchedule, useBulkImportCRMSchedules, useCRMScheduleJobCount } from "@/lib/hooks/use-crm-jobs";
+import { usePermissions } from "@/lib/hooks/use-permissions";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import type { CRMSchedule } from "@/types/crm-jobs";
 import { Button } from "@/components/ui/button";
@@ -99,6 +101,23 @@ function computeUpcomingDates(sched: CRMSchedule, count = 20): Date[] {
 
 function formatDate(d: Date) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/**
+ * Interval schedules (bi-weekly "any week", every 3 / 4 weeks) with no anchor
+ * date have no schedule-wide phase: each job runs its own cycle counted from
+ * its start date (see rawOccurrences in recurrence.ts). The preview can only
+ * show ONE example phase, so it must say so — and a skip date can be any day
+ * on the schedule's weekday, since some job will land on it.
+ */
+function phasePerJob(s: Pick<CRMSchedule, 'frequency' | 'weekPattern' | 'anchorDate'>): boolean {
+  if (s.anchorDate) return false;
+  if (s.frequency === 'every_3_weeks' || s.frequency === 'every_4_weeks') return true;
+  return s.frequency === 'bi_weekly' && s.weekPattern !== 'even' && s.weekPattern !== 'odd';
+}
+
+function cycleLabel(f: CRMSchedule['frequency']): string {
+  return f === 'every_3_weeks' ? 'every-3-weeks' : f === 'every_4_weeks' ? 'every-4-weeks' : 'every-other-week';
 }
 
 // ── MonthDayPicker ────────────────────────────────────────────────────────────
@@ -270,6 +289,7 @@ function SkipDatesPicker({
   const monthEnd = `${cursor.year}-${pad(cursor.month + 1)}-${pad(daysInMonth)}`;
 
   // Occurrences with NOTHING skipped, so skipped days stay visible (as red) and can be restored.
+  const perJob = phasePerJob(schedule);
   const scheduled = useMemo(() => {
     const rule = ruleFromScheduleRow({
       name: schedule.name,
@@ -283,6 +303,19 @@ function SkipDatesPicker({
     });
     return new Set(rule ? scheduleOccurrences(rule, monthStart, monthEnd) : []);
   }, [schedule.frequency, schedule.dayOfWeek, schedule.weekPattern, schedule.anchorDate, schedule.weekOfMonth, schedule.seasonStart, schedule.seasonEnd, schedule.name, monthStart, monthEnd]);
+  // Per-job phase: every in-season day on the schedule's weekday is some job's
+  // service day, so any of them can be skipped (not just the example cycle's).
+  const skippable = useMemo(() => {
+    if (!perJob) return scheduled;
+    const weekly = ruleFromScheduleRow({
+      name: schedule.name,
+      frequency: 'weekly',
+      day_of_week: schedule.dayOfWeek,
+      season_start: schedule.seasonStart ?? null,
+      season_end: schedule.seasonEnd ?? null,
+    });
+    return new Set(weekly ? scheduleOccurrences(weekly, monthStart, monthEnd) : []);
+  }, [perJob, scheduled, schedule.name, schedule.dayOfWeek, schedule.seasonStart, schedule.seasonEnd, monthStart, monthEnd]);
 
   const firstDow = new Date(cursor.year, cursor.month, 1).getDay();
   const cells: (string | null)[] = [
@@ -324,7 +357,7 @@ function SkipDatesPicker({
           if (!ymd) return <span key={`b${i}`} />;
           const day = Number(ymd.slice(8));
           const isSkipped = skipped.has(ymd);
-          if (!scheduled.has(ymd) && !isSkipped) {
+          if (!skippable.has(ymd) && !isSkipped) {
             return <span key={ymd} className="flex h-8 items-center justify-center text-xs text-slate-300 dark:text-neutral-700">{day}</span>;
           }
           return (
@@ -332,11 +365,13 @@ function SkipDatesPicker({
               key={ymd}
               type="button"
               onClick={() => toggle(ymd)}
-              title={isSkipped ? 'Skipped — click to restore' : 'Scheduled — click to skip'}
+              title={isSkipped ? 'Skipped — click to restore' : perJob && !scheduled.has(ymd) ? `A ${schedule.dayOfWeek} some jobs may land on — click to skip` : 'Scheduled — click to skip'}
               className={`h-8 rounded text-xs font-semibold transition-colors ${
                 isSkipped
                   ? 'bg-red-100 dark:bg-red-950/50 text-red-600 dark:text-red-400 line-through hover:bg-red-200 dark:hover:bg-red-950'
-                  : 'bg-brand-600 text-white hover:bg-brand-700'
+                  : scheduled.has(ymd)
+                  ? 'bg-brand-600 text-white hover:bg-brand-700'
+                  : 'border border-brand-400 dark:border-brand-600 text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950/40'
               }`}
             >
               {day}
@@ -347,6 +382,9 @@ function SkipDatesPicker({
       <p className="text-xs text-muted-foreground">
         {value.length > 0 ? `${value.length} date${value.length !== 1 ? 's' : ''} skipped. ` : ''}
         Click a green date to skip it; click a red one to restore it. Visits already created for a skipped date aren&rsquo;t removed.
+        {perJob && (
+          <> Jobs on this schedule each run their own {cycleLabel(schedule.frequency)} cycle from their start date, so every {schedule.dayOfWeek} is shown: filled dates are the example cycle from the preview, outlined dates are the other {schedule.dayOfWeek}s. Skip a date and no job on this schedule is visited that day.</>
+        )}
       </p>
     </div>
   );
@@ -439,16 +477,22 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
         return out;
       };
       const { count = 0 } = await post('preview');
-      if (count === 0) return;
+      if (count === 0) {
+        // Nothing to remove — only new dates to add (e.g. weekly from bi-weekly). Not destructive.
+        const out = await post('apply');
+        if ((out.generated ?? 0) > 0) toast.success(`${out.generated} visit${out.generated !== 1 ? 's' : ''} added on the new schedule`);
+        await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
+        return;
+      }
       const ok = await confirm({
-        title: `Reschedule ${count} upcoming visit${count !== 1 ? 's' : ''} on this schedule?`,
-        description: `${count} upcoming visit${count !== 1 ? 's' : ''} that haven't been dispatched, started, moved by hand or invoiced will be removed and regenerated on the new schedule. Choose "Keep existing visits" to leave them where they are; new visits will still follow the new schedule.`,
-        confirmLabel: 'Reschedule visits',
+        title: `Remove ${count} upcoming visit${count !== 1 ? 's' : ''} the new schedule drops?`,
+        description: `${count} upcoming visit${count !== 1 ? 's' : ''} on dates this schedule no longer includes (not dispatched, started, moved by hand or invoiced) will be removed, and visits for the new dates generated. Visits on dates the schedule keeps stay as they are, with their crew, time and notes. Choose "Keep existing visits" to leave them all where they are; new visits will still follow the new schedule.`,
+        confirmLabel: 'Update visits',
         cancelLabel: 'Keep existing visits',
       });
       if (!ok) return;
       const out = await post('apply');
-      toast.success(`Visits rescheduled: ${count} replaced, ${out.generated ?? 0} scheduled`);
+      toast.success(`Visits rescheduled: ${count} removed, ${out.generated ?? 0} scheduled`);
       await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
     } catch (e) {
       toast.error(e instanceof Error ? `Schedule saved, but upcoming visits weren't rescheduled: ${e.message}` : 'Schedule saved, but upcoming visits weren\'t rescheduled');
@@ -666,7 +710,9 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
                     )}
                   </div>
                   <div className="border-t bg-slate-50 dark:bg-muted/40 px-3 py-1.5 text-[10px] text-slate-400 dark:text-neutral-500">
-                    Next {previewDates.length} occurrences
+                    {phasePerJob(previewSched)
+                      ? `Example cycle — jobs run on their own ${cycleLabel(previewSched.frequency)} cycle from their start date`
+                      : `Next ${previewDates.length} occurrences`}
                   </div>
                 </div>
               </div>
@@ -698,7 +744,7 @@ function SchedulePreviewPopover({ schedule }: { schedule: CRMSchedule }) {
       </PopoverTrigger>
       <PopoverContent className="w-56 p-0" align="end">
         <div className="bg-slate-800 text-white text-xs font-semibold px-3 py-2">
-          Next {dates.length} dates
+          {phasePerJob(schedule) ? 'Example dates' : `Next ${dates.length} dates`}
         </div>
         <div className="divide-y max-h-64 overflow-y-auto">
           {dates.length === 0 ? (
@@ -709,12 +755,31 @@ function SchedulePreviewPopover({ schedule }: { schedule: CRMSchedule }) {
             ))
           )}
         </div>
+        {phasePerJob(schedule) && (
+          <p className="border-t px-3 py-1.5 text-[10px] text-slate-400 dark:text-neutral-500">
+            Jobs run on their own {cycleLabel(schedule.frequency)} cycle from their start date, so a job&rsquo;s dates may be a week or two off from these.
+          </p>
+        )}
       </PopoverContent>
     </Popover>
   );
 }
 
 export default function SchedulesPage() {
+  const { can, isLoading: permissionsLoading } = usePermissions();
+  if (!permissionsLoading && !can("scheduling_settings")) {
+    return (
+      <EmptyState
+        icon={CalendarDays}
+        title="No access"
+        description="You don't have permission to manage Schedules (Scheduling Settings)."
+      />
+    );
+  }
+  return <SchedulesPageContent />;
+}
+
+function SchedulesPageContent() {
   const { data: schedules = [], isLoading } = useAllCRMSchedules();
   const updateSchedule = useUpdateCRMSchedule();
   const deleteSchedule = useDeleteCRMSchedule();
@@ -723,6 +788,8 @@ export default function SchedulesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CRMSchedule | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CRMSchedule | null>(null);
+  const { data: deleteJobCount, isLoading: deleteCountLoading } = useCRMScheduleJobCount(deleteTarget?.name ?? null);
+  const deleteBlocked = (deleteJobCount ?? 0) > 0;
 
   function openAdd() { setEditing(null); setDialogOpen(true); }
   function openEdit(s: CRMSchedule) { setEditing(s); setDialogOpen(true); }
@@ -741,8 +808,8 @@ export default function SchedulesPage() {
     try {
       await deleteSchedule.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
-    } catch {
-      toast.error("Failed to delete schedule");
+    } catch (err) {
+      toast.error(err instanceof ScheduleInUseError ? err.message : "Failed to delete schedule");
     }
   }
 
@@ -861,12 +928,20 @@ export default function SchedulesPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Schedule</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &ldquo;{deleteTarget?.name}&rdquo;? Jobs using this schedule will retain their schedule name.
+              {deleteCountLoading
+                ? 'Checking which jobs use this schedule…'
+                : deleteBlocked
+                ? `${deleteJobCount} job${deleteJobCount !== 1 ? 's' : ''} still use \u201c${deleteTarget?.name}\u201d. Move ${deleteJobCount !== 1 ? 'them' : 'it'} to another schedule first, or switch this schedule off to stop new visits without deleting it.`
+                : `Are you sure you want to delete \u201c${deleteTarget?.name}\u201d? No active jobs use it.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete} className="bg-red-600 hover:bg-red-700 text-white">
+            <AlertDialogCancel>{deleteBlocked ? 'Close' : 'Cancel'}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); void handleConfirmDelete(); }}
+              disabled={deleteCountLoading || deleteBlocked || deleteSchedule.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

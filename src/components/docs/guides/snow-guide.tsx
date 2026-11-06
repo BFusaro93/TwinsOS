@@ -22,8 +22,8 @@ const INVOICE_TYPES: [string, string, string][] = [
   ],
   [
     "Hourly",
-    "Actual hours logged at close-out × the job’s hourly rate — for jobs billed on time on site rather than snowfall.",
-    "1.5 hrs × $150/hr = $225.00",
+    "Hours on site × the job’s hourly rate — for jobs billed on time on site rather than snowfall. Billed once per visit, however many people were on the crew: from the crew app it’s clock-in to clock-out minus breaks; from the office Close Out it’s the hours you enter.",
+    "1.5 hrs on site (3-person crew) × $150/hr = $225.00",
   ],
 ];
 
@@ -129,7 +129,8 @@ export function SnowGuide() {
         <p>
           Jobs are also excluded automatically if today isn&apos;t one of the days their contract
           authorizes service on. A snow job whose contract has ended (cancelled, expired, inactive,
-          deleted or past its end date) no longer appears on this board at all. Everything not excluded is pre-checked; uncheck or check
+          deleted or past its end date — unless the contract includes storms outside its dates)
+          no longer appears on this board at all. Everything not excluded is pre-checked; uncheck or check
           individual rows before clicking <strong>Add to Dispatch</strong>.
         </p>
         <Callout>
@@ -164,9 +165,19 @@ export function SnowGuide() {
           per visit, when the crew&apos;s work is closed out.</strong> Select one or more completed
           visits and click <strong>Close Out…</strong> to enter the actual depth (in), temperature,
           asset type used, any material (e.g. salt) with quantity and unit cost, and — for
-          hourly-billed jobs — actual hours on site. This is also how a &quot;push&quot; gets
-          logged: if a crew visits a client twice during one long storm (morning and afternoon), each
-          visit is its own row with its own depth reading, closed out separately.
+          hourly-billed jobs — hours on site (the time the crew was at the property, not
+          multiplied by crew size). Each visit is its own row with its own depth reading, closed
+          out separately.
+        </p>
+        <p>
+          <strong>Adding a push.</strong> A <strong>Per Push</strong> job bills every push on its
+          own depth, so when a crew has to go back during a long storm, click{" "}
+          <strong>Add push</strong> next to the client&apos;s name on that job&apos;s latest row. It
+          adds the next push (marked <em>Push 2</em>, <em>Push 3</em>…) to the same storm with the
+          same crew and men, at the end of the stop order and dated today, so it shows on the
+          crew&apos;s list as its own stop. Close it out with its own depth like any other visit.
+          Only Per Push jobs get extra pushes — a Per Event job is one visit per storm, and Add Jobs
+          never adds a job that is already on the storm.
         </p>
         <p>
           Skipped and cancelled stops are never closed out: they were called off rather than
@@ -293,12 +304,21 @@ export function SnowGuide() {
           visits that don&apos;t already have an invoice line item appear in the queue, so
           generating invoices twice never double-bills. A snow job linked to a contract is billed
           on the contract&apos;s cycle only while that contract is in force; once the contract is
-          cancelled, expired, inactive, deleted or past its end date, nothing else bills its
-          visits, so they appear in this queue like any other snow visit.
+          cancelled, expired, inactive or deleted, nothing else bills its visits, so they appear in
+          this queue like any other snow visit.
         </p>
         <p>
-          A per-inch visit that was completed from the crew app has no snow depth (only the office
-          Close Out records one), so it prices at $0 and waits in the queue. Type the measured
+          <strong>Storms outside the contract dates.</strong> A storm visit dated before the
+          contract&apos;s start date or after its end date is billed per event here by default. To
+          have those storms covered by the contract price instead, open the contract and set{" "}
+          <strong>Storms outside the contract dates</strong> (under its start and end dates) to{" "}
+          <strong>Included in the contract</strong>. The setting appears once a snow job is linked
+          to the contract, and changing it on a signed contract flags it as changed since signed.
+        </p>
+        <p>
+          A per-inch visit with no recorded depth (for example one completed from the crew app,
+          where only the office Close Out records depth) is never priced at the bottom range — it
+          shows <em>no depth recorded</em>, prices at $0 and waits in the queue. Type the measured
           depth into the box under its Billing column and the amount updates. When you Close Out a
           mixed batch, the hours you enter are split across the hourly jobs only.
         </p>
@@ -352,7 +372,7 @@ export function SnowGuide() {
       <Section id="interval-billing" title="Interval billing (rate by inches)">
         <p>
           Many snow contracts price by bands of snowfall rather than a straight rate per inch — for
-          example 0–3&quot; is $165, 3.01–6&quot; is $299, and 6.01–9&quot; is $422. That is{" "}
+          example 0–3&quot; is $165, 3–6&quot; is $299, and 6–9&quot; is $422. That is{" "}
           <strong>interval billing</strong>, and you set it while creating the job: choose{" "}
           <strong>Per Event, Per Inch</strong> or <strong>Per Push</strong> as the invoice type and
           an <strong>Interval Billing — Rate by Inches</strong> table appears. Click{" "}
@@ -368,9 +388,16 @@ export function SnowGuide() {
             depth against the ranges.
           </li>
           <li>
-            If no range matches a depth (below the first range or in a gap), it falls back to the
-            flat <strong>Rate Per Inch</strong> on the job. Ranges can&apos;t overlap, and only the
-            last one may be open-ended.
+            Start each range where the previous one ends (0–3, 3–6, 6–9). A depth exactly on a
+            boundary bills the <strong>lower</strong> range — exactly 3&quot; is the 0–3 band, and
+            3.1&quot; is the 3–6 band. Saving ranges with a gap or an overlap between them is
+            refused with a message saying where. Ranges saved earlier with a small gap (0–3,
+            3.01–6) still work: a depth inside the gap bills the lower range.
+          </li>
+          <li>
+            If no range matches a depth (below the first range, or above the last one with no
+            open-ended range), it falls back to the flat <strong>Rate Per Inch</strong> on the job.
+            Only the last range may be open-ended.
           </li>
           <li>
             The Snow Jobs board totals and the Snow Invoicing queue both price from the ranges, and

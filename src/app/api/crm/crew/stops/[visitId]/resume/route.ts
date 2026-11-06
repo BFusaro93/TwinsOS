@@ -8,6 +8,7 @@ interface VisitRow {
   org_id: string;
   client_id: string;
   scheduled_date: string;
+  push_number?: number | null;
   crew_id: string | null;
   status: string;
   clocked_in_at: string | null;
@@ -22,13 +23,14 @@ function toStopKeyInput(row: VisitRow): StopKeyInput {
     clientId: row.client_id,
     scheduledDate: row.scheduled_date,
     crewId: effectiveVisitCrewId(row),
+    pushNumber: row.push_number,
     job: row.crm_jobs
       ? { propertyId: row.crm_jobs.property_id, serviceAddress: row.crm_jobs.service_address, serviceCity: row.crm_jobs.service_city }
       : undefined,
   };
 }
 
-const VISIT_SELECT = "id, org_id, client_id, scheduled_date, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, paused_at, break_minutes, crm_jobs(crew_id, property_id, service_address, service_city)";
+const VISIT_SELECT = "id, org_id, client_id, scheduled_date, push_number, crew_id, crew_unassigned, status, clocked_in_at, clocked_out_at, paused_at, break_minutes, crm_jobs(crew_id, property_id, service_address, service_city)";
 
 /**
  * Resumes every paused visit in this stop — rolls the elapsed break time

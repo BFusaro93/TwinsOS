@@ -621,8 +621,12 @@ function LineItemRow({
       : row.marginBps;
   const isAutoCost = !costFocused && row.costCents === 0 && !!breakevenRateCents && row.budgetedHours > 0;
   const isComplexityAdjusted = row.complexityBps !== 10000;
+  // A fixed line's Cost is the whole line's cost (computeLineItem), so its
+  // auto figure is the total, not a per-unit share.
   const autoCostPerUnitCents = isAutoCost
-    ? row.totalCostCents / (row.qty > 0 ? row.qty : 1) / (row.visits > 0 ? row.visits : 1)
+    ? row.calcType === 1
+      ? row.totalCostCents / (row.qty > 0 ? row.qty : 1) / (row.visits > 0 ? row.visits : 1)
+      : row.totalCostCents
     : 0;
 
   return (

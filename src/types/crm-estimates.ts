@@ -151,6 +151,10 @@ export interface Estimate {
   taxRateBps: number;
   taxCents: number;
   totalCents: number;
+  /** Amount an approval must cover — the highest Good/Better/Best tier while
+   *  none is chosen, else totalCents (estimates.approval_amount_cents; null on
+   *  rows not recalculated since it shipped). See estimateApprovalAmountCents. */
+  approvalAmountCents: number | null;
   revenueCents: number;
   overheadRateBps: number;
   overheadCostCents: number;

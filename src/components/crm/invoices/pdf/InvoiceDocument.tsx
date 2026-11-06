@@ -85,6 +85,9 @@ export interface InvoicePDFData {
 
   /** Public, unauthenticated "view + pay online" link for this invoice. */
   viewOnlineUrl?: string | null;
+  /** False when the org can't take online payments (no Stripe Connect): the
+   *  link is then labelled "View Online" instead of "View & Pay Online". */
+  payOnlineAvailable?: boolean;
 
   /** Only populated for the "statement" layout — account-activity context
    *  (previous balance, last payment, prior invoice) beyond this one invoice. */
@@ -362,7 +365,7 @@ function DefaultInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
       {/* ── view online ────────────────────────────────────────────── */}
       {invoice.viewOnlineUrl ? (
         <View style={S.notesSection}>
-          <Text style={S.notesLabel}>View &amp; Pay Online</Text>
+          <Text style={S.notesLabel}>{invoice.payOnlineAvailable === false ? "View Online" : "View & Pay Online"}</Text>
           <Link src={invoice.viewOnlineUrl} style={[S.notesText, { color: accentColor }]}>{invoice.viewOnlineUrl}</Link>
         </View>
       ) : null}
@@ -534,7 +537,7 @@ function CompactInvoiceLayout({ invoice, org }: { invoice: InvoicePDFData; org: 
 
       {invoice.viewOnlineUrl ? (
         <View style={SC.notes}>
-          <Text style={SC.notesLabel}>View &amp; Pay Online</Text>
+          <Text style={SC.notesLabel}>{invoice.payOnlineAvailable === false ? "View Online" : "View & Pay Online"}</Text>
           <Link src={invoice.viewOnlineUrl} style={{ color: accentColor }}>{invoice.viewOnlineUrl}</Link>
         </View>
       ) : null}

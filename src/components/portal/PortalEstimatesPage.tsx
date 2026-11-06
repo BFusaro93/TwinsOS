@@ -6,6 +6,7 @@ import { groupIntoSections, DEFAULT_DISPLAY_SETTINGS, type DisplaySettings } fro
 import { looksLikeHtml } from "@/lib/utils/sanitize-html";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
+import { deriveProposalTotals, proposalLineNet } from "@/lib/estimates/proposal-totals";
 
 function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -46,6 +47,12 @@ interface Estimate {
   /** Good/Better/Best estimate: the client accepts exactly one tier. */
   tiers_enabled?: boolean;
   tier_labels?: { basic: string; standard: string; premium: string };
+  /** Header discount / tax of the version shown — the Selected Total applies
+   *  them exactly as accepting does (lib/estimates/proposal-totals). */
+  discount_cents?: number | null;
+  discount_type?: "percent" | "flat" | null;
+  discount_value?: number | null;
+  tax_rate_bps?: number | null;
   line_items?: LineItem[];
 }
 
@@ -57,8 +64,11 @@ interface LineItem {
   description: string;
   quantity: number;
   unit_price_cents: number;
-  /** The line's real total (qty × rate × visits, after any line discount). */
+  /** The line's real total (qty × rate × visits), before its own discount. */
   total_cents: number;
+  /** The line's own discount, and its priced sub-items. */
+  discount_cents?: number | null;
+  subitem_total_cents?: number | null;
   visits?: number | null;
   status: string;
   row_type?: "item" | "section" | null;
@@ -79,7 +89,10 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const settings = estimate.display_settings ?? DEFAULT_DISPLAY_SETTINGS;
   const openRows = (estimate.line_items ?? []).filter((li) => li.status !== "lost" && li.status !== "draft");
-  const allItemRows = openRows.filter((li) => li.row_type !== "section");
+  // Lines accepted earlier ('won'): shown as already agreed, never offered
+  // again, and always part of the total (the stored total counts them).
+  const agreedRows = openRows.filter((li) => li.status === "won" && li.row_type !== "section");
+  const allItemRows = openRows.filter((li) => li.row_type !== "section" && li.status !== "won");
   // Tiered estimate: the client picks ONE package, and only untiered lines
   // plus that package's lines are offered (matching the public proposal page).
   const tiersEnabled = !!estimate.tiers_enabled && allItemRows.some((li) => li.tier != null);
@@ -103,18 +116,33 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
     });
   }
 
+  // What accepting records: each line's net (own discount, sub-items), plus
+  // the already-agreed lines, then the header discount and tax — the same
+  // rule as the public proposal page and recalcEstimateTotals.
+  const lineNet = (li: LineItem) =>
+    proposalLineNet({ totalCents: li.total_cents, discountCents: li.discount_cents, subitemTotalCents: li.subitem_total_cents });
+  const agreedNet = agreedRows.reduce((sum, li) => sum + lineNet(li), 0);
+  const totalsFor = (subtotal: number) =>
+    deriveProposalTotals(
+      {
+        discountCents: estimate.discount_cents ?? 0,
+        discountType: estimate.discount_type ?? null,
+        discountValue: estimate.discount_value ?? null,
+        taxRateBps: estimate.tax_rate_bps ?? 0,
+      },
+      agreedNet + subtotal,
+    ).totalCents;
+
   const tierTotal = (tier: Tier) =>
-    allItemRows.filter((li) => li.tier == null || li.tier === tier).reduce((sum, li) => sum + li.total_cents, 0);
+    totalsFor(allItemRows.filter((li) => li.tier == null || li.tier === tier).reduce((sum, li) => sum + lineNet(li), 0));
 
   const selectedTotal = hasLineItems
-    ? itemRows
-        .filter((li) => selectedIds.has(li.id))
-        .reduce((sum, li) => sum + li.total_cents, 0)
+    ? totalsFor(itemRows.filter((li) => selectedIds.has(li.id)).reduce((sum, li) => sum + lineNet(li), 0))
     : estimate.total_price_cents;
 
   const sections = groupIntoSections(
     openRows
-      .filter((li) => li.row_type === "section" || inTier(li))
+      .filter((li) => li.status !== "won" && (li.row_type === "section" || inTier(li)))
       // total_cents, not rate × qty: rate × qty ignored visits, so a 13-visit
       // mow at $55 read $55 (and the Selected Total followed) instead of $715.
       .map((li) => ({ ...li, totalCents: li.total_cents, rowType: li.row_type ?? "item", sectionName: li.section_name ?? null, estimateDesc: li.description, packageId: li.package_id ?? null })),
@@ -268,6 +296,24 @@ function SignDialog({ estimate, onClose, onAccepted }: SignDialogProps) {
                 )}
               </div>
             ))}
+            {agreedRows.length > 0 && (
+              <div className="border-t border-slate-200">
+                <div className="bg-slate-100 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Already agreed
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {agreedRows.map((li) => (
+                    <div key={li.id} className="flex items-start gap-2.5 px-3 py-2 text-slate-500">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                      <span className="flex-1 min-w-0">
+                        {looksLikeHtml(li.description) ? stripHtml(li.description) : li.description}
+                      </span>
+                      {settings.showLineTotals && <span className="shrink-0">{fmt(lineNet(li))}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2 font-semibold">
               <span className="text-slate-900">Selected Total</span>
               <span className="text-slate-900">{fmt(selectedTotal)}</span>

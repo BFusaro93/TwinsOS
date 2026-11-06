@@ -74,6 +74,38 @@ export function complexityFactor(bps: number | null | undefined): number {
 }
 
 /**
+ * The (qty, rate) an invoice line created from an estimate line carries, such
+ * that qty × rate == the line's total exactly. Invoice lines recompute
+ * total = round(qty × rate) on ANY edit (InvoiceDetail), so copying the
+ * estimate's qty / rate verbatim re-priced the line on the first unrelated
+ * change — the estimate total includes visits, the Adj Rate and complexity,
+ * none of which an invoice line has.
+ *
+ *   * per-unit lines (calc type 1): qty × visits units at the exact per-unit
+ *     rate the total works out to (adj rate and complexity included), when
+ *     that rate is a whole number of cents;
+ *   * otherwise — fixed lines (calc type 0, whose total IS the price) and
+ *     per-unit lines whose rate isn't whole cents — 1 × the line total.
+ * Mirrors ConvertToJobDialog's jobServicePricing for a one-visit job.
+ */
+export function invoiceLinePricingFromEstimateLine(
+  li: { qty: number; visits: number; calcType: number; totalCents: number }
+): { qty: number; rateCents: number } {
+  const total = li.totalCents;
+  if (li.calcType === 1) {
+    // Rounded to the column's precision so 0.1 × 3 doesn't become 0.30000000000000004.
+    const units = Math.round((li.qty || 0) * Math.max(1, li.visits || 1) * 10000) / 10000;
+    if (units > 0) {
+      const rate = total / units;
+      if (Number.isInteger(rate) && Math.round(units * rate) === total) {
+        return { qty: units, rateCents: rate };
+      }
+    }
+  }
+  return { qty: 1, rateCents: total };
+}
+
+/**
  * The hours a line ACTUALLY consumes: the stored, user-entered base hours
  * scaled by the line's complexity.
  *
@@ -221,9 +253,14 @@ export function computeLineItem(
     // line really does burn 25% more labour. Using the scaled local here is
     // what keeps cost moving with the slider now that the stored hours no
     // longer carry the factor themselves.
+    //
+    // Multiplied by visits for FIXED lines too: a fixed-price line with N
+    // visits is the same work repeated N times (its total price covers all of
+    // them), and totalBudgetedHours above already counts N × the hours. Costing
+    // only one occurrence understated a 3-visit fixed line's cost by 2/3 and
+    // inflated its margin.
     const perOccurrenceCostCents = Math.round(scaledBudgetedHours * breakevenRateCents);
-    totalCostCents =
-      item.calcType === 1 ? Math.round(perOccurrenceCostCents * item.visits) : perOccurrenceCostCents;
+    totalCostCents = Math.round(perOccurrenceCostCents * Math.max(1, item.visits || 1));
   } else {
     totalCostCents = Math.round(
       (item.calcType === 1 ? item.costCents * item.qty * item.visits : item.costCents) * factor
@@ -460,6 +497,69 @@ export function tierBasis(
 }
 
 /**
+ * The estimate-level discount the user ASKED for, before it is clamped to a
+ * subtotal. A percent discount is that % of `subtotalCents`. A flat discount's
+ * intended amount is discount_value (cents); discount_cents only holds what
+ * was actually applied to the basis subtotal, so reading the amount back from
+ * it lost the discount for good after one clamp (delete a line so the subtotal
+ * dips below the discount, add it back, and the discount stayed shrunk).
+ * Legacy rows with no discount_value fall back to discount_cents.
+ */
+export function intendedEstimateDiscountCents(
+  est: { discountType: string | null | undefined; discountValue: number | null | undefined; discountCents: number | null | undefined },
+  subtotalCents: number,
+): number {
+  if (est.discountType === "percent") return Math.round(subtotalCents * ((est.discountValue ?? 0) / 10000));
+  if (est.discountType === "flat" && est.discountValue != null) return Math.max(0, est.discountValue);
+  return Math.max(0, est.discountCents ?? 0);
+}
+
+/**
+ * Header discount / tax / total for a given subtotal (sub-items and line
+ * discounts already in it): the discount is clamped to the subtotal and tax is
+ * charged on the discounted amount. The single rule recalcEstimateTotals, the
+ * approval amount, the public proposal and the portal all use, so a tier or a
+ * partial selection prices the same everywhere.
+ */
+export function estimateTotalsForSubtotal(
+  est: { discountType: string | null | undefined; discountValue: number | null | undefined; discountCents: number | null | undefined; taxRateBps: number | null | undefined },
+  subtotalCents: number,
+): { subtotalCents: number; discountCents: number; taxCents: number; totalCents: number } {
+  const discountCents = Math.max(0, Math.min(intendedEstimateDiscountCents(est, subtotalCents), subtotalCents));
+  const taxCents = Math.round(((subtotalCents - discountCents) * (est.taxRateBps ?? 0)) / 10000);
+  return { subtotalCents, discountCents, taxCents, totalCents: subtotalCents - discountCents + taxCents };
+}
+
+/**
+ * The amount an estimate's approval has to cover. total_cents is the
+ * cheapest open Good/Better/Best tier until the client picks one (tierBasis),
+ * but the client can accept any tier — so while no tier is chosen this is the
+ * HIGHEST tier's total (its lines + untiered lines, each tier's discount
+ * clamped to that tier's own subtotal, tax on top). With tiers off, or once a
+ * tier is won, it's just `totalCents`. `lines` are the open (not lost/draft)
+ * lines with netCents = total − line discount (floored) + sub-items.
+ */
+export function estimateApprovalAmountCents(
+  tiersEnabled: boolean,
+  lines: { tier: string | null; status: string; netCents: number }[],
+  est: { discountType: string | null | undefined; discountValue: number | null | undefined; discountCents: number | null | undefined; taxRateBps: number | null | undefined },
+  totalCents: number,
+): number {
+  if (!tiersEnabled) return totalCents;
+  const open = lines.filter((l) => l.status !== "lost" && l.status !== "draft");
+  const tiers = [...new Set(open.map((l) => l.tier).filter((t): t is string => !!t))];
+  if (tiers.length === 0) return totalCents;
+  const wonTiers = new Set(open.filter((l) => l.tier && l.status === "won").map((l) => l.tier as string));
+  if (wonTiers.size === 1) return totalCents;
+  let max = totalCents;
+  for (const tier of tiers) {
+    const subtotal = open.filter((l) => !l.tier || l.tier === tier).reduce((s, l) => s + l.netCents, 0);
+    max = Math.max(max, estimateTotalsForSubtotal(est, subtotal).totalCents);
+  }
+  return max;
+}
+
+/**
  * Recomputes the estimate's subtotal/tax/total/profit rollups from the
  * currently-committed line items and direct costs (read fresh from the DB,
  * not from a caller's in-memory/cached estimate, which can be a render
@@ -531,19 +631,17 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // Good/Better/Best: only one tier is ever bought, so only one tier counts
   // (see tierBasis). Lines of the other open tiers — and their sub-items —
   // are left out of every sum below.
-  const basis = tierBasis(
-    !!est.tiers_enabled,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ((rawLineItems ?? []) as any[]).map((li) => ({
-      tier: li.tier ?? null,
-      status: li.status,
-      // Priced sub-items are part of what the tier costs the client, so the "starting at"
-      // comparison has to include them or a tier with big sub-items looks cheaper than it is.
-      netCents: Math.max(0, li.total_cents - (li.discount_cents ?? 0)) +
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ((rawSubitems ?? []) as any[]).filter((si) => si.line_item_id === li.id).reduce((a: number, si) => a + (si.total_cents ?? 0), 0),
-    })),
-  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tierLines = ((rawLineItems ?? []) as any[]).map((li) => ({
+    tier: (li.tier ?? null) as string | null,
+    status: li.status as string,
+    // Priced sub-items are part of what the tier costs the client, so the "starting at"
+    // comparison has to include them or a tier with big sub-items looks cheaper than it is.
+    netCents: Math.max(0, li.total_cents - (li.discount_cents ?? 0)) +
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((rawSubitems ?? []) as any[]).filter((si) => si.line_item_id === li.id).reduce((a: number, si) => a + (si.total_cents ?? 0), 0),
+  }));
+  const basis = tierBasis(!!est.tiers_enabled, tierLines);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lineItems = ((rawLineItems ?? []) as any[]).filter((li) => !basis || !li.tier || li.tier === basis);
   const countedLineIds = new Set(lineItems.map((li) => li.id as string));
@@ -609,16 +707,26 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // it stays in sync every time line items change, instead of trusting the
   // stored discount_cents snapshot (which only `applyNamedDiscount` in
   // EstimateSummaryPanel writes, and only at the moment a discount is picked).
-  const rawDiscountCents = est.discount_type === "percent"
-    ? Math.round(subtotalCents * ((est.discount_value ?? 0) / 10000))
-    : (est.discount_cents ?? 0);
+  // A flat discount's intended amount is discount_value (see
+  // intendedEstimateDiscountCents); discount_cents is written below as the
+  // APPLIED amount only.
   // Clamp to the subtotal — a flat discount larger than the subtotal (or a
   // stale percent snapshot) must never drive revenue/tax/total negative,
   // matching the line-item discount clamp in EstimateLineItemsGrid.
-  const discountCents = Math.max(0, Math.min(rawDiscountCents, subtotalCents));
+  const discountShape = {
+    discountType: est.discount_type as string | null,
+    discountValue: est.discount_value as number | null,
+    discountCents: est.discount_cents as number | null,
+    taxRateBps: est.tax_rate_bps as number | null,
+  };
+  const { discountCents, taxCents, totalCents } = estimateTotalsForSubtotal(discountShape, subtotalCents);
   const revenueCents = subtotalCents - discountCents;
-  const taxCents = Math.round((revenueCents * (est.tax_rate_bps ?? 0)) / 10000);
-  const totalCents = revenueCents + taxCents;
+  // A legacy flat discount (no discount_value) that is being clamped would
+  // otherwise lose its intended amount the moment discount_cents is
+  // overwritten — record the intent first.
+  const preserveFlatIntent =
+    est.discount_type !== "percent" && est.discount_value == null && (est.discount_cents ?? 0) > discountCents;
+  const approvalAmountCents = estimateApprovalAmountCents(!!est.tiers_enabled, tierLines, discountShape, totalCents);
 
   // Overhead must be based on the estimate's FULL cost base — line items'
   // own modeled cost (total_cost_cents) AND estimate_direct_costs rows —
@@ -654,6 +762,8 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
       discount_cents: discountCents,
       tax_cents: taxCents,
       total_cents: totalCents,
+      approval_amount_cents: approvalAmountCents,
+      ...(preserveFlatIntent ? { discount_type: "flat", discount_value: est.discount_cents } : {}),
       revenue_cents: revenueCents,
       overhead_cost_cents: overheadCostCents,
       gross_profit_cents: grossProfitCents,
