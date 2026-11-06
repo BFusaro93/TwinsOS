@@ -25,7 +25,7 @@ const STATUS_ROWS: [string, string, string][] = [
   ["Viewed", "Linear", "The client opened their invoice link. Only reachable once an invoice has actually been shared, so it never appears on an invoice still in Draft."],
   ["Partial", "Linear", "A payment was recorded against the invoice, but the balance is still greater than $0."],
   ["Paid", "Linear", "amount_paid_cents has covered the full total — balance is $0."],
-  ["Overdue", "Side state", "Not a stored status — computed on the fly from the due date whenever it's still displayed and unpaid. An invoice on Due on Receipt terms with no due date goes overdue the day after its invoice date. An invoice with a zero or negative balance is never overdue, and neither is one whose balance has been cleared. It disappears the moment the balance clears or you void the invoice, with no cron job flipping a column."],
+  ["Overdue", "Side state", "Not a stored status — computed on the fly from the due date whenever it's still displayed and unpaid. An invoice with no due date (whatever its terms) goes overdue the day after its invoice date — the same aging rule the A/R reports and the Invoice past due automation use. An invoice with a zero or negative balance is never overdue, and neither is one whose balance has been cleared. It disappears the moment the balance clears or you void the invoice, with no cron job flipping a column."],
   ["Void", "Side state", "Set by hand when an invoice should no longer count — a mistake, a client dispute you're not pursuing. Once void, the invoice is excluded from “overdue” and left alone by all the auto-status logic below."],
 ];
 
@@ -97,7 +97,10 @@ export function InvoicingGuide() {
             invoice&apos;s dated month forward by one. The amount comes from that contract&apos;s per-month
             override if one is set, otherwise its flat monthly amount. This is idempotent — it
             checks for an existing invoice on that contract for the billing month before creating
-            another.
+            another. A contract never bills before its start date, nor a billing cycle that began
+            before it (see the Contracts guide for mid-cycle starts and proration). A contract
+            entered or signed a few days after its billing day still has the current cycle billed,
+            with the invoice dated the day it&apos;s created and due from that date.
           </li>
           <li>
             <strong>Manual creation.</strong> You can always build one by hand from Accounting →
@@ -179,6 +182,15 @@ export function InvoicingGuide() {
             second completed visit lands on an already-open draft, the draft&apos;s tax is recomputed
             from all of its taxable lines at the invoice&apos;s rate &mdash; the appended visit is taxed
             too, not just the first one.
+          </li>
+          <li>
+            <strong>Batched invoice dates.</strong> For a client invoiced weekly or monthly, the
+            draft that collects the period&apos;s visits is dated the <em>last day of that period</em>{" "}
+            &mdash; the Sunday that ends the Monday&ndash;Sunday week, or the last day of the
+            month &mdash; and its due date counts the client&apos;s terms from that date. So a
+            monthly client on Net 30 whose first visit is Nov 3 gets a draft dated Nov 30, due
+            Dec 30, and it can&apos;t show as past due before the month it bills is even over.
+            Clients invoiced per visit (daily or upon completion) keep the visit&apos;s date.
           </li>
         </ul>
         <Callout>
@@ -706,7 +718,9 @@ export function InvoicingGuide() {
             To Charge queues, and Charge Saved, Charge All, and the pay links refuse it (&quot;This
             invoice has a payment dispute open. Resolve the chargeback before charging it
             again.&quot;). If the dispute is won the money comes back, so charging again in the
-            meantime would collect twice. The flag clears when the dispute closes.
+            meantime would collect twice. The flag clears when the dispute closes. When a won
+            dispute&apos;s money comes back and the invoice no longer owes it (it was paid another way
+            meanwhile), it shows as the client&apos;s account credit, ready to apply.
           </li>
           <li>
             <strong>Charge and Void buttons</strong> on the Invoices list, when disabled, show why

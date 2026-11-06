@@ -14,6 +14,19 @@ export interface AccountStatementActivityRow {
   balanceCents: number;
 }
 
+/** One account's section on a parent account's rolled-up statement. */
+export interface AccountStatementGroup {
+  clientId: string;
+  name: string;
+  /** Service address, to tell sub-accounts (often properties) apart. */
+  address: string | null;
+  /** The account the statement is for, as opposed to one of its sub-accounts. */
+  isMainAccount: boolean;
+  balanceForwardCents: number;
+  rows: AccountStatementActivityRow[];
+  endingBalanceCents: number;
+}
+
 export interface AccountStatementPDFData {
   statementDate: string;
   periodFrom: string;
@@ -29,6 +42,10 @@ export interface AccountStatementPDFData {
   rows: AccountStatementActivityRow[];
   endingBalanceCents: number;
   lastPayment: { amountCents: number; date: string; reference: string | null } | null;
+  /** A parent account's statement: one section per account (its own, then each
+   *  sub-account), each with its own balance; endingBalanceCents is their total.
+   *  Absent or a single group: the plain one-account layout. */
+  groups?: AccountStatementGroup[];
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -82,6 +99,9 @@ const S = StyleSheet.create({
   activityText: { fontSize: 7.5, color: "#334155" },
   activityTextBold: { fontSize: 7.5, color: "#1e293b", fontFamily: "Helvetica-Bold" },
 
+  groupHeaderRow: { flexDirection: "row", paddingVertical: 5, paddingHorizontal: 6, marginTop: 8, borderBottom: "1 solid #cbd5e1" },
+  groupHeaderText: { fontSize: 8, fontFamily: "Helvetica-Bold", color: "#1e293b" },
+  groupSubtotalRow: { flexDirection: "row", paddingVertical: 4, paddingHorizontal: 6, borderTop: "1 solid #cbd5e1" },
   endingRow: { flexDirection: "row", paddingVertical: 6, paddingHorizontal: 6, marginTop: 2 },
   endingLabel: { flex: 4.5, fontSize: 8.5, fontFamily: "Helvetica-Bold", color: "#ffffff" },
   endingValue: { flex: 1, fontSize: 8.5, fontFamily: "Helvetica-Bold", color: "#ffffff", textAlign: "right" },
@@ -103,6 +123,36 @@ function kindLabel(kind: AccountStatementActivityRow["kind"]): string {
   return "Payment";
 }
 
+/** Balance Forward plus the dated activity, with its running balance. */
+function ActivityRows({
+  periodFrom,
+  balanceForwardCents,
+  rows,
+}: {
+  periodFrom: string;
+  balanceForwardCents: number;
+  rows: AccountStatementActivityRow[];
+}) {
+  return (
+    <>
+      <View style={S.forwardRow}>
+        <View style={S.cellDate}><Text style={S.activityTextBold}>{formatDate(periodFrom)}</Text></View>
+        <View style={S.cellDesc}><Text style={S.activityTextBold}>Balance Forward</Text></View>
+        <View style={S.cellAmount} />
+        <View style={S.cellBalance}><Text style={S.activityTextBold}>{cents(balanceForwardCents)}</Text></View>
+      </View>
+      {rows.map((r, i) => (
+        <View key={i} style={S.activityRow}>
+          <View style={S.cellDate}><Text style={S.activityText}>{formatDate(r.date)}</Text></View>
+          <View style={S.cellDesc}><Text style={S.activityText}>{kindLabel(r.kind)} — {r.label}</Text></View>
+          <View style={S.cellAmount}><Text style={S.activityText}>{cents(r.amountCents)}</Text></View>
+          <View style={S.cellBalance}><Text style={S.activityText}>{cents(r.balanceCents)}</Text></View>
+        </View>
+      ))}
+    </>
+  );
+}
+
 export function AccountStatementDocument({
   statement,
   org,
@@ -115,6 +165,7 @@ export function AccountStatementDocument({
     .filter(Boolean)
     .join(", ");
   const orgAddressLine2 = [org.city, org.state, org.zip].filter(Boolean).join(", ");
+  const grouped = (statement.groups?.length ?? 0) > 1;
 
   return (
     <Document title={`Statement — ${statement.clientName ?? "Client"}`} author={org.name}>
@@ -180,24 +231,30 @@ export function AccountStatementDocument({
           <View style={S.cellBalance}><Text style={S.activityHeaderText}>Balance</Text></View>
         </View>
 
-        <View style={S.forwardRow}>
-          <View style={S.cellDate}><Text style={S.activityTextBold}>{formatDate(statement.periodFrom)}</Text></View>
-          <View style={S.cellDesc}><Text style={S.activityTextBold}>Balance Forward</Text></View>
-          <View style={S.cellAmount} />
-          <View style={S.cellBalance}><Text style={S.activityTextBold}>{cents(statement.balanceForwardCents)}</Text></View>
-        </View>
-
-        {statement.rows.map((r, i) => (
-          <View key={i} style={S.activityRow}>
-            <View style={S.cellDate}><Text style={S.activityText}>{formatDate(r.date)}</Text></View>
-            <View style={S.cellDesc}><Text style={S.activityText}>{kindLabel(r.kind)} — {r.label}</Text></View>
-            <View style={S.cellAmount}><Text style={S.activityText}>{cents(r.amountCents)}</Text></View>
-            <View style={S.cellBalance}><Text style={S.activityText}>{cents(r.balanceCents)}</Text></View>
-          </View>
-        ))}
+        {grouped ? (
+          statement.groups!.map((g) => (
+            <View key={g.clientId}>
+              <View style={S.groupHeaderRow} wrap={false}>
+                <Text style={S.groupHeaderText}>
+                  {g.isMainAccount ? "Main account" : "Sub-account"} — {g.name}
+                  {g.address ? ` · ${g.address}` : ""}
+                </Text>
+              </View>
+              <ActivityRows periodFrom={statement.periodFrom} balanceForwardCents={g.balanceForwardCents} rows={g.rows} />
+              <View style={S.groupSubtotalRow}>
+                <View style={S.cellDate} />
+                <View style={S.cellDesc}><Text style={S.activityTextBold}>Balance — {g.name}</Text></View>
+                <View style={S.cellAmount} />
+                <View style={S.cellBalance}><Text style={S.activityTextBold}>{cents(g.endingBalanceCents)}</Text></View>
+              </View>
+            </View>
+          ))
+        ) : (
+          <ActivityRows periodFrom={statement.periodFrom} balanceForwardCents={statement.balanceForwardCents} rows={statement.rows} />
+        )}
 
         <View style={[S.endingRow, { backgroundColor: accentColor }]}>
-          <Text style={S.endingLabel}>Ending Balance</Text>
+          <Text style={S.endingLabel}>{grouped ? "Total Amount Due — all accounts" : "Ending Balance"}</Text>
           <Text style={S.endingValue}>{cents(statement.endingBalanceCents)}</Text>
         </View>
 

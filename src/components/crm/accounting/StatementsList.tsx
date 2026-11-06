@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useFilteredClients } from "@/lib/hooks/use-clients";
+import { useStatementAccounts } from "@/lib/hooks/use-statement-accounts";
 import type { FilterRow } from "@/lib/client-filters";
 
 const STATEMENT_FILTERS: FilterRow[] = [
@@ -38,7 +39,11 @@ export function StatementsList() {
   // Any real account with money owed — inactive and cancelled clients with a
   // balance are exactly who a collections statement is for. Leads have never
   // been billed. Filtered server-side.
-  const { data: clients = [], isLoading } = useFilteredClients({ filters: STATEMENT_FILTERS });
+  const { data: clients = [], isLoading: clientsLoading } = useFilteredClients({ filters: STATEMENT_FILTERS });
+  // A parent account's statement includes its sub-accounts, so parents are listed with
+  // their sub-accounts' balances rolled in (even when the parent's own balance is zero).
+  const { rows: clientsWithBalance, isLoading: parentsLoading } = useStatementAccounts(clients);
+  const isLoading = clientsLoading || parentsLoading;
 
   const [statementDate, setStatementDate] = useState(() => todayInZone(orgTimeZone));
   const [periodFrom, setPeriodFrom] = useState(() => startOfYearISO(todayInZone(orgTimeZone)));
@@ -49,13 +54,6 @@ export function StatementsList() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [results, setResults] = useState<Record<string, SendStatus>>({});
-
-  const clientsWithBalance = useMemo(
-    () =>
-      [...clients]
-        .sort((a, b) => b.balanceOutstandingCents - a.balanceOutstandingCents),
-    [clients]
-  );
 
   const allSelected = clientsWithBalance.length > 0 && selectedIds.size === clientsWithBalance.length;
 
@@ -216,12 +214,19 @@ export function StatementsList() {
                   <td className="w-8 px-4 py-2">
                     <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => toggleOne(c.id)} />
                   </td>
-                  <td className="px-2 py-2 font-medium text-slate-800 dark:text-neutral-100">{c.displayName}</td>
+                  <td className="px-2 py-2 font-medium text-slate-800 dark:text-neutral-100">
+                    {c.displayName}
+                    {c.subAccountCount > 0 && (
+                      <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
+                        incl. {c.subAccountCount} sub-account{c.subAccountCount !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-2 py-2 text-muted-foreground">
                     {c.primaryEmail ?? <span className="text-red-500 dark:text-red-400">No email on file</span>}
                   </td>
                   <td className="px-2 py-2 text-right font-semibold text-slate-800 dark:text-neutral-100">
-                    {formatCurrency(c.balanceOutstandingCents)}
+                    {formatCurrency(c.balanceCents)}
                   </td>
                   <td className="px-2 py-2 text-right">
                     {status === "sent" && <Badge className="bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/40">Sent</Badge>}

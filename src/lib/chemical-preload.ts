@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { calcChemicalAndSolution } from "@/lib/chemical-mix-calc";
+import { calcChemicalAndSolution, concentrateUnitId, formatApplicationRateLabel } from "@/lib/chemical-mix-calc";
 import { buildChemicalAreaResolver, effectivePropertyId, fetchSinglePropertyByClient, type ChemicalArea } from "@/lib/chemical-area";
 import type { ChemicalApplicationRate, ChemicalLookupItem } from "@/types/chemical-tracking";
 
@@ -63,8 +63,17 @@ function mapRate(row: any): ChemicalApplicationRate {
  * start/end window, and pre-fills the estimated amounts when the org turned on
  * Default Chemical Quantity and the property's area is known — the same math
  * the load list uses. Returns how many rows it added.
+ *
+ * Each row carries the visit's org_id explicitly: the crew clock-in path runs this
+ * with the service role, where the column's my_org_id() default is NULL and every
+ * insert failed (silently — callers treat preload as best-effort). Pass
+ * `actingUserId` from a service-role caller so created_by still names the person.
  */
-export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, visitId: string): Promise<number> {
+export async function loadServiceChemicalsForVisit(
+  supabase: SupabaseClient,
+  visitId: string,
+  opts: { actingUserId?: string | null } = {}
+): Promise<number> {
   const { data: visit } = await supabase
     .from("crm_job_visits")
     .select(
@@ -127,7 +136,11 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
     // role, where an unscoped .maybeSingle() over every org's settings rows
     // errors out and silently dropped the estimated amounts.
     supabase.from("crm_chemical_lookup_items").select("*").eq("org_id", visitOrgId).is("deleted_at", null),
-    supabase.from("crm_chemical_settings").select("auto_calc_quantity, area_custom_field_id").eq("org_id", visitOrgId).maybeSingle(),
+    supabase
+      .from("crm_chemical_settings")
+      .select("auto_calc_quantity, area_custom_field_id, default_unit_of_measure_id")
+      .eq("org_id", visitOrgId)
+      .maybeSingle(),
   ]);
 
   const unitsById = new Map((unitRows ?? []).map((r) => [r.id, mapLookupItem(r)]));
@@ -161,12 +174,17 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
     }
   }
 
-  const { data: { user } } = await supabase.auth.getUser();
+  // A service-role client has no session to read the user from.
+  const createdBy =
+    opts.actingUserId !== undefined ? opts.actingUserId : (await supabase.auth.getUser()).data.user?.id ?? null;
+  const defaultUnitId = (settings as { default_unit_of_measure_id?: string | null } | null)?.default_unit_of_measure_id ?? null;
+  const unitName = (id: string) => unitsById.get(id)?.name ?? null;
   const rows = (products ?? []).map((p) => {
     const rate = rateByProduct.get(p.id);
     const area = areaByProduct.get(p.id);
     const computed = rate && area ? calcChemicalAndSolution(rate, area.value, unitsById, area.kind) : null;
     return {
+      org_id: visitOrgId,
       job_id: visit.job_id,
       visit_id: visitId,
       product_id: p.id,
@@ -175,7 +193,12 @@ export async function loadServiceChemicalsForVisit(supabase: SupabaseClient, vis
       re_entry_interval_snapshot: p.re_entry_interval ?? null,
       restricted_product_snapshot: p.restricted_product ?? false,
       application_method_id: rate?.applicationMethodId ?? null,
-      created_by: user?.id ?? null,
+      // The rate the plan was sized from, kept on the record (compliance reports print it).
+      application_rate_label: rate ? formatApplicationRateLabel(rate, unitName) : null,
+      // With no estimate the crew still enters an amount, so the row needs the unit
+      // it's in: the product's own (concentrate) unit from its rate, else the org default.
+      unit_of_measure_id: (rate ? concentrateUnitId(rate) : null) ?? defaultUnitId,
+      created_by: createdBy,
       ...(computed && {
         chemical_amount: Math.round(computed.chemicalAmount * 10000) / 10000,
         unit_of_measure_id: computed.chemicalUnitOfMeasureId,

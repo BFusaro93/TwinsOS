@@ -66,7 +66,10 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     description:
       "Shows every invoice line item in the period — what was billed, to whom, and for how much.",
     filters: [dateRangeFilterDef("Invoice Date", "this_month")],
-    notes: ["Excludes line items on draft and void invoices."],
+    notes: [
+      "Excludes line items on draft and void invoices.",
+      "Total is qty × rate; Net is after the line's own discount; Revenue (pre-tax) also takes the invoice-level discount off, spread across the invoice's lines in proportion to their net amounts.",
+    ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_invoice_line_items",
       columns: [
@@ -78,6 +81,9 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         "qty",
         "rate_cents",
         "total_cents",
+        "discount_cents",
+        "net_total_cents",
+        "revenue_ex_tax_cents",
         "invoice_status",
       ],
       filters: [
@@ -237,9 +243,9 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     key: "revenue-by-postal-code",
     section: "revenue",
     name: "Revenue by Postal Code",
-    description: "Totals invoiced revenue by billing postal code.",
+    description: "Totals invoiced revenue (pre-tax, after discounts) by billing postal code.",
     filters: [dateRangeFilterDef("Invoice Date", "this_year")],
-    notes: ["Excludes draft and void invoices."],
+    notes: ["Excludes draft and void invoices. Revenue is pre-tax and after discounts (invoice total − sales tax)."],
     analysis: (params, timeZone) => ({
       dataset: "rpt_invoices",
       columns: [],
@@ -249,11 +255,11 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       ],
       groupBy: ["billing_zip"],
       aggregates: [
+        { column: "revenue_ex_tax_cents", fn: "sum" },
         { column: "total_cents", fn: "sum" },
-        { column: "subtotal_cents", fn: "sum" },
         { column: "*", fn: "count" },
       ],
-      sortColumn: "sum_total_cents",
+      sortColumn: "sum_revenue_ex_tax_cents",
       sortDir: "desc",
     }),
   },
@@ -267,25 +273,23 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     run: async ({ supabase, params, timeZone }) => {
       const range = resolveDateRange(params, "this_year", timeZone);
       const { from, to, note: yearNote } = matrixYearWindow(range.from, range.to, timeZone);
-      // Rule A (issued invoices only) and the soft-delete guard are applied on
-      // the joined parent; `!inner` drops line items whose invoice fails them.
-      const data = await fetchAllRows<unknown>(() => {
-        let query = supabase
-          .from("crm_invoice_line_items")
-          .select("name, total_cents, crm_invoices:invoice_id!inner(invoice_date, status)")
-          .is("crm_invoices.deleted_at", null)
-          .in("crm_invoices.status", ISSUED_INVOICE_STATUSES);
-        if (from) query = query.gte("crm_invoices.invoice_date", from);
-        if (to) query = query.lte("crm_invoices.invoice_date", to);
-        return query.order("id");
-      });
-
+      // rpt_invoice_line_items skips soft-deleted invoices; is_issued is Rule A.
+      // revenue_ex_tax_cents = the line's share of the invoice's pre-tax,
+      // after-discount total, so line and invoice-level discounts come off.
       type Row = {
         name: string | null;
-        total_cents: number | null;
-        crm_invoices: { invoice_date: string | null; status: string | null } | null;
+        invoice_date: string | null;
+        revenue_ex_tax_cents: number | null;
       };
-      const lines = (data ?? []) as unknown as Row[];
+      const lines = await fetchAllRows<Row>(() => {
+        let query = supabase
+          .from("rpt_invoice_line_items")
+          .select("name, invoice_date, revenue_ex_tax_cents")
+          .eq("is_issued", true);
+        if (from) query = query.gte("invoice_date", from);
+        if (to) query = query.lte("invoice_date", to);
+        return query.order("id");
+      });
 
       interface ServiceTotals {
         months: number[];
@@ -296,9 +300,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         const name = line.name || "(unnamed)";
         const totals =
           byService.get(name) ?? { months: new Array<number>(12).fill(0), total_cents: 0 };
-        const amount = line.total_cents ?? 0;
-        const monthIndex =
-          parseInt((line.crm_invoices?.invoice_date ?? "").slice(5, 7), 10) - 1;
+        const amount = line.revenue_ex_tax_cents ?? 0;
+        const monthIndex = parseInt((line.invoice_date ?? "").slice(5, 7), 10) - 1;
         if (monthIndex >= 0 && monthIndex < 12) totals.months[monthIndex] += amount;
         totals.total_cents += amount;
         byService.set(name, totals);
@@ -321,7 +324,11 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
           col("total_cents", "Total", "money"),
         ],
         rows,
-        ["Revenue is reported on the invoice date. Draft and void invoices are excluded.", ...(yearNote ? [yearNote] : [])]
+        [
+          "Revenue is reported on the invoice date. Draft and void invoices are excluded.",
+          "Revenue is pre-tax and after discounts: each line net of its own discount, with the invoice-level discount spread across the invoice's lines in proportion to their amounts.",
+          ...(yearNote ? [yearNote] : []),
+        ]
       );
     },
   },
@@ -496,7 +503,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
 
       const rows = [
         {
-          metric: "Invoiced",
+          // Incl. tax on purpose: it is compared with cash collected, which includes the tax paid.
+          metric: "Invoiced (incl. tax)",
           ...Object.fromEntries(MONTH_KEYS.map((k, i) => [k, invoicedMonths[i]])),
           total_cents: invoicedMonths.reduce((a, b) => a + b, 0),
         },
@@ -515,7 +523,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         ],
         rows,
         [
-          "Invoiced reflects the invoice date and excludes draft and void invoices. Collected reflects the payment date and is cash only — excludes account credits and AR write-offs; net of refunds.",
+          "Invoiced reflects the invoice date, excludes draft and void invoices, and includes sales tax so it compares like-for-like with cash collected. Collected reflects the payment date and is cash only — excludes account credits and AR write-offs; net of refunds.",
           ...(yearNote ? [yearNote] : []),
         ]
       );
@@ -582,7 +590,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
     key: "sales-comparison-chart",
     section: "revenue",
     name: "Sales Comparison Chart",
-    description: "Compares invoiced revenue this year to last year, month by month.",
+    description: "Compares invoiced revenue (pre-tax) this year to last year, month by month.",
     filters: [],
     chartVisual: {
       type: "line",
@@ -598,7 +606,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       const data = await fetchAllRows<unknown>(() =>
         supabase
           .from("crm_invoices")
-          .select("invoice_date, total_cents")
+          .select("invoice_date, total_cents, tax_cents")
           .in("status", ISSUED_INVOICE_STATUSES)
           .is("deleted_at", null)
           .gte("invoice_date", `${lastYear}-01-01`)
@@ -608,13 +616,15 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
 
       const curTotals = new Array<number>(12).fill(0);
       const prevTotals = new Array<number>(12).fill(0);
-      for (const r of (data ?? []) as { invoice_date: string | null; total_cents: number | null }[]) {
+      for (const r of (data ?? []) as { invoice_date: string | null; total_cents: number | null; tax_cents: number | null }[]) {
         if (!r.invoice_date) continue;
         const year = parseInt(r.invoice_date.slice(0, 4), 10);
         const monthIndex = parseInt(r.invoice_date.slice(5, 7), 10) - 1;
         if (monthIndex < 0 || monthIndex > 11) continue;
-        if (year === thisYear) curTotals[monthIndex] += r.total_cents ?? 0;
-        else if (year === lastYear) prevTotals[monthIndex] += r.total_cents ?? 0;
+        // Revenue excludes sales tax (collected for the state).
+        const revenue = (r.total_cents ?? 0) - (r.tax_cents ?? 0);
+        if (year === thisYear) curTotals[monthIndex] += revenue;
+        else if (year === lastYear) prevTotals[monthIndex] += revenue;
       }
 
       const rows = MONTH_KEYS.map((_, i) => ({
@@ -630,7 +640,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
           col("last_year_total", `${lastYear} Total`, "money"),
         ],
         rows,
-        ["Reflects the invoice date. Excludes draft and void invoices."]
+        ["Reflects the invoice date. Excludes draft and void invoices. Revenue is pre-tax and after discounts (invoice total − sales tax)."]
       );
     },
   },
@@ -713,13 +723,13 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       const data = await fetchAllRows<unknown>(() =>
         supabase
           .from("crm_invoices")
-          .select("invoice_date, total_cents, client_id")
+          .select("invoice_date, total_cents, tax_cents, client_id")
           .in("status", ISSUED_INVOICE_STATUSES)
           .is("deleted_at", null)
           .order("id")
       );
 
-      type Row = { invoice_date: string | null; total_cents: number | null; client_id: string | null };
+      type Row = { invoice_date: string | null; total_cents: number | null; tax_cents: number | null; client_id: string | null };
       const rows = (data ?? []) as unknown as Row[];
 
       const revenueByYear = new Map<number, number>();
@@ -727,7 +737,8 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
       for (const r of rows) {
         if (!r.invoice_date || !r.client_id) continue;
         const year = parseInt(r.invoice_date.slice(0, 4), 10);
-        revenueByYear.set(year, (revenueByYear.get(year) ?? 0) + (r.total_cents ?? 0));
+        // Pre-tax: sales tax is collected for the state, not revenue.
+        revenueByYear.set(year, (revenueByYear.get(year) ?? 0) + (r.total_cents ?? 0) - (r.tax_cents ?? 0));
         const clients = clientsByYear.get(year) ?? new Set<string>();
         clients.add(r.client_id);
         clientsByYear.set(year, clients);
@@ -748,7 +759,7 @@ export const REVENUE_REPORTS: PrebuiltReportDef[] = [
         resultRows,
         [
           "Reflects the invoice date. Excludes draft and void invoices.",
-          "Avg = total invoiced revenue that year ÷ distinct clients invoiced that year.",
+          "Avg = total invoiced revenue that year (pre-tax, after discounts) ÷ distinct clients invoiced that year.",
         ]
       );
     },

@@ -8,6 +8,7 @@ import { processEnrollmentImmediately } from "@/lib/automations/sequence-process
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
+import { contractCoversServiceDay, type CoverageContractRow } from "@/lib/contract-billing";
 import {
   lineTotalCents,
   resolveAutoInvoiceTaxRateBps,
@@ -270,29 +271,24 @@ export async function applyVisitCompletionSideEffects(
   // Snow Invoicing page (per-inch/hourly rates this flat auto-invoice can't
   // compute).
   try {
-    // A contract-linked job only bills inside the contract price while that
-    // contract is still in force. Once it is cancelled / expired / switched
-    // inactive / deleted / past its end date, neither the contract cron nor this
-    // path would ever bill the visit, so it bills like normal per-visit work.
-    // Draft/sent contracts are NOT treated as ended: they may still be signed,
-    // and billing the visit now would double-bill once they are.
+    // A contract-linked job bills inside the contract price only for service
+    // the contract pays for (contractCoversServiceDay): inside its term while
+    // it is in force, and — once it is cancelled / expired / switched
+    // inactive — only inside a cycle it already billed (the cron has stopped,
+    // so anything later is billed like normal per-visit work; anything
+    // earlier must NOT be billed again). A visit before the start date is not
+    // covered. Draft/sent contracts count as in force: they may still be
+    // signed, and billing the visit now would double-bill once they are.
     let contractCoversVisit = false;
     if (j?.contract_id) {
       const { data: contractRow } = await supabase
         .from("crm_contracts")
-        .select("status, is_active, deleted_at, end_date")
+        .select("status, is_active, deleted_at, start_date, end_date, last_billed_date, billing_anchor_date, first_period_prorated_at, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at")
         .eq("id", j.contract_id)
         .maybeSingle();
-      const c = contractRow as { status: string; is_active: boolean | null; deleted_at: string | null; end_date: string | null } | null;
+      const c = contractRow as CoverageContractRow | null;
       const visitDay = visit.scheduled_date && visit.scheduled_date <= today ? visit.scheduled_date : today;
-      const ended =
-        !c ||
-        c.deleted_at != null ||
-        c.is_active === false ||
-        c.status === "cancelled" ||
-        c.status === "expired" ||
-        (c.end_date != null && c.end_date < visitDay);
-      contractCoversVisit = !ended;
+      contractCoversVisit = !!c && contractCoversServiceDay(c, visitDay);
     }
     if (!j) {
       result.invoiceSkipReason = "job_not_found";
@@ -661,7 +657,12 @@ export async function applyVisitCompletionSideEffects(
               j.clients?.default_terms,
               (orgTermsRow as { default_billing_terms: string | null } | null)?.default_billing_terms,
             );
-            const newInvoiceDate = visitDate ?? today;
+            // A weekly/monthly batch draft collects the whole period, so it is
+            // dated the period's last day (Sunday of the Mon–Sun week, or the
+            // month's last day) and its terms run from then — dating it on the
+            // first visit made it fall due (and show past due) before the
+            // period it bills had even ended. Per-visit invoices keep the visit date.
+            const newInvoiceDate = period ? period.end : (visitDate ?? today);
             const { data: newInvoice, error: invErr } = await supabase
               .from("crm_invoices")
               .insert({

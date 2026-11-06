@@ -252,8 +252,8 @@ export const REPORT_DATASETS: ReportDataset[] = [
     fields: [
       { key: "scheduled_date", label: "Scheduled Date", type: "date" },
       { key: "completed_at", label: "Completed At", type: "datetime" },
-      // The date a completed visit is reported under: completed_at as an
-      // Eastern-time calendar date, else scheduled_date. Costing reports
+      // The date a completed visit is reported under: completed_at as a
+      // calendar date in the org's time zone, else scheduled_date. Costing reports
       // (Job Cost Summary, the Job Costing page) all date visits by this.
       { key: "worked_date", label: "Worked Date", type: "date" },
       // crm_job_visits.status CHECK values ('dispatched' added 2026-08-24).
@@ -424,6 +424,12 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "qty", label: "Qty", type: "number" },
       { key: "rate_cents", label: "Rate", type: "money", totalable: false },
       { key: "total_cents", label: "Total", type: "money" },
+      { key: "discount_cents", label: "Line Discount", type: "money" },
+      { key: "net_total_cents", label: "Net (after line discount)", type: "money" },
+      // The line's share of the invoice's pre-tax, after-discount total
+      // (total − tax), split by the lines' net amounts — so the invoice-level
+      // discount is spread across lines. Sums to the invoice's revenue.
+      { key: "revenue_ex_tax_cents", label: "Revenue (pre-tax, after all discounts)", type: "money" },
       { key: "is_taxable", label: "Taxable", type: "boolean" },
       { key: "hours", label: "Hours", type: "hours" },
       { key: "men", label: "Men", type: "number" },
@@ -722,11 +728,12 @@ export const REPORT_DATASETS: ReportDataset[] = [
   {
     key: "rpt_sales_rep_month",
     label: "Sales Rep — Current Month",
-    description: "Each sales rep's invoiced revenue so far this month against their sales goal for the month.",
+    description: "Each sales rep's invoiced revenue (pre-tax, after discounts) so far this month against their sales goal for the month.",
     fields: [
       { key: "sales_rep", label: "Sales Rep", type: "text" },
       { key: "goal_cents", label: "Goal", type: "money" },
-      { key: "actual_cents", label: "Actual", type: "money" },
+      // Issued invoices dated this month: total − sales tax.
+      { key: "actual_cents", label: "Actual (pre-tax)", type: "money" },
     ],
   },
   {

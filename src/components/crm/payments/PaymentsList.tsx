@@ -21,6 +21,9 @@ import { guardStripeDialogDismiss, STRIPE_ELEMENT_MIN_HEIGHT } from "@/lib/strip
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { CurrencyInput } from "@/components/shared/CurrencyInput";
 import { exportCSV } from "@/lib/csv";
+import { AR_WRITE_OFF_METHOD } from "@/lib/reports/helpers";
+// Shared with Settings → Import / Export so both import the same columns.
+import { PAYMENT_REQUIRED_COLUMNS, PAYMENT_TEMPLATE_COLUMNS, paymentToCsvRow } from "@/lib/crm/import-export-columns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -947,9 +950,6 @@ interface Props {
   clientId?: string;
 }
 
-// accountNumber (optional) disambiguates clients that share a display name.
-const PAYMENT_TEMPLATE_COLUMNS = ["clientName", "accountNumber", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"];
-
 export function PaymentsList({ clientId }: Props) {
   const { can, isLoading: permissionsLoading } = usePermissions();
   // Any of the three keys grants access — the catalog doesn't split this one
@@ -1043,35 +1043,24 @@ export function PaymentsList({ clientId }: Props) {
                 entityLabel="Payments"
                 templateColumns={PAYMENT_TEMPLATE_COLUMNS}
                 templateFilename="payments-template.csv"
-                requiredColumns={["clientName", "amount"]}
-                onExport={() =>
-                  exportCSV(
-                    (payments ?? []).map((p) => ({
-                      clientName: p.clientName ?? "",
-                      amount: (p.amountCents / 100).toFixed(2),
-                      paymentDate: p.paymentDate,
-                      method: p.method,
-                      reference: p.reference ?? "",
-                      memo: p.memo ?? "",
-                      invoiceNumber: p.invoiceNumber != null ? String(p.invoiceNumber) : "",
-                    })),
-                    "payments-export.csv"
-                  )
-                }
+                requiredColumns={PAYMENT_REQUIRED_COLUMNS}
+                onExport={() => exportCSV((payments ?? []).map(paymentToCsvRow), "payments-export.csv")}
                 onImport={async (rows) => {
-                  const { created, skipped, failures } = await bulkImportPayments(rows);
-                  if (failures.length > 0) {
-                    const shown = failures.slice(0, 5).map((f) => `Row ${f.row}: ${f.reason}`).join("\n");
-                    const more = failures.length > 5 ? `\n…and ${failures.length - 5} more` : "";
+                  const result = await bulkImportPayments(rows);
+                  const { succeeded, failed, skipped = [], warnings = [] } = result;
+                  if (failed.length > 0 || skipped.length > 0 || warnings.length > 0) {
                     toast.warning(
-                      `Imported ${created} payment${created !== 1 ? "s" : ""}${skipped > 0 ? `, ${skipped} skipped` : ""}. ${failures.length} row${failures.length !== 1 ? "s" : ""} need attention:`,
-                      { description: shown + more, duration: 15000 }
+                      `Imported ${succeeded} payment${succeeded !== 1 ? "s" : ""}.` +
+                        (skipped.length > 0 ? ` ${skipped.length} already recorded (skipped).` : "") +
+                        (failed.length > 0 ? ` ${failed.length} not imported.` : "") +
+                        (warnings.length > 0 ? ` ${warnings.length} kept as account credit or need a look.` : "") +
+                        " See details."
                     );
-                  } else if (skipped > 0) {
-                    toast.warning(`Imported ${created} payment${created !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (unmatched client or missing amount).`);
                   } else {
-                    toast.success(`Successfully imported ${created} payment${created !== 1 ? "s" : ""}.`);
+                    toast.success(`Successfully imported ${succeeded} payment${succeeded !== 1 ? "s" : ""}.`);
                   }
+                  // Returned so the import dialog lists each row with its reason.
+                  return result;
                 }}
               />
               {canModify && (
@@ -1253,7 +1242,7 @@ export function PaymentsList({ clientId }: Props) {
                           Edit
                         </button>
                       )}
-                      {p.deletedAt == null && canRefund && (
+                      {p.deletedAt == null && canRefund && isRefundablePayment(p) && (
                         <button
                           className="rounded px-2 py-0.5 text-xs bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400"
                           onClick={(e) => { e.stopPropagation(); setRefundPayment(p); }}
@@ -1356,7 +1345,7 @@ export function PaymentsList({ clientId }: Props) {
             <Button size="sm" variant="outline" onClick={() => { setEditPayment(viewPayment); setViewPayment(null); }}>
               Edit
             </Button>
-            {canRefund && (
+            {canRefund && viewPayment && isRefundablePayment(viewPayment) && (
               <Button size="sm" variant="outline" className="text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/40"
                 onClick={() => { setRefundPayment(viewPayment); setViewPayment(null); }}>
                 Refund
@@ -1367,6 +1356,12 @@ export function PaymentsList({ clientId }: Props) {
       </Dialog>
     </div>
   );
+}
+
+/** An account credit or AR write-off isn't money the client paid — there is nothing to refund
+ *  (the refund route refuses it too). Edit the credit / write-off instead. */
+export function isRefundablePayment(p: CRMPayment): boolean {
+  return !p.isCredit && p.method !== AR_WRITE_OFF_METHOD;
 }
 
 // ── RefundDialog ───────────────────────────────────────────────────────────────

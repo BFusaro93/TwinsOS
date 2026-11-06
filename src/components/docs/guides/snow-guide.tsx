@@ -314,7 +314,9 @@ export function SnowGuide() {
           generating invoices twice never double-bills. A snow job linked to a contract is billed
           on the contract&apos;s cycle only while that contract is in force; once the contract is
           cancelled, expired, inactive or deleted, nothing else bills its visits, so they appear in
-          this queue like any other snow visit.
+          this queue like any other snow visit &mdash; except storms inside a billing cycle the
+          contract already invoiced (before it was cancelled, expired or switched off), which the
+          contract price already paid for and stay out of the queue.
         </p>
         <p>
           <strong>Storms outside the contract dates.</strong> A storm visit dated before the

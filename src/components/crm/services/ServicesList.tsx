@@ -9,15 +9,13 @@ import type { CRMService } from "@/types/crm-jobs";
 import { formatCurrency } from "@/lib/utils";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
+// Shared with Settings → Import / Export so both import the same columns.
+import { SERVICE_REQUIRED_COLUMNS, SERVICE_TEMPLATE_COLUMNS, serviceToCsvRow } from "@/lib/crm/import-export-columns";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { BulkServicePriceDialog } from "./BulkServicePriceDialog";
 import { SearchInput } from "@/components/shared/SearchInput";
-
-const SERVICE_TEMPLATE_COLUMNS = [
-  "name", "code", "category", "unit", "defaultRate", "productionRate", "isActive",
-];
 
 const MODE_LABEL: Record<string, string> = {
   flat_rate: "Flat Rate",
@@ -120,21 +118,8 @@ export function ServicesList({ onAdd, onEdit }: Props) {
             hideImport={!canAdd || !canEdit}
             templateColumns={SERVICE_TEMPLATE_COLUMNS}
             templateFilename="services-template.csv"
-            requiredColumns={["name"]}
-            onExport={() =>
-              exportCSV(
-                services.map((s) => ({
-                  name: s.name,
-                  code: s.code ?? "",
-                  category: s.category,
-                  unit: s.unit,
-                  defaultRate: s.defaultRateCents != null ? (s.defaultRateCents / 100).toFixed(2) : "",
-                  productionRate: s.productionRateSqftPerHr != null ? String(s.productionRateSqftPerHr) : "",
-                  isActive: s.isActive ? "yes" : "no",
-                })),
-                "services-export.csv"
-              )
-            }
+            requiredColumns={SERVICE_REQUIRED_COLUMNS}
+            onExport={() => exportCSV(services.map(serviceToCsvRow), "services-export.csv")}
             onImport={async (rows) => {
               const { created, updated, skipped, failed } = await bulkImportServices(rows);
               const parts = [`${created} created`];

@@ -61,7 +61,7 @@ export const KPI_CATALOG: KpiCatalogMetric[] = [
     auto: true,
     legacy: true,
     defaultTarget: null,
-    source: "Invoices: sum of issued (not draft/void) invoice totals dated in the year.",
+    source: "Invoices: sum of issued (not draft/void) invoice totals dated in the year, pre-tax (total − sales tax).",
   },
   {
     key: "gross_margin_ytd",
@@ -115,7 +115,7 @@ export const KPI_CATALOG: KpiCatalogMetric[] = [
     defaultTarget: 30,
     lowerIsBetter: true,
     source:
-      "Invoices: open issued balance ÷ (issued revenue in the year ÷ days elapsed in the year). Days-sales-outstanding.",
+      "Invoices: open issued balance as of today ÷ (issued invoice totals in the year ÷ days elapsed in the year). Days-sales-outstanding. Because the open balance is today's, it is left blank for past years.",
   },
   {
     key: "ap_days",
@@ -182,7 +182,7 @@ export const KPI_CATALOG: KpiCatalogMetric[] = [
     category: "financial",
     auto: true,
     defaultTarget: null,
-    source: "Invoices: average issued invoice total dated in the year.",
+    source: "Invoices: average issued invoice total dated in the year, pre-tax (total − sales tax).",
   },
   {
     key: "ar_outstanding",
@@ -204,7 +204,7 @@ export const KPI_CATALOG: KpiCatalogMetric[] = [
     snapshot: true,
     defaultTarget: 10,
     lowerIsBetter: true,
-    source: "Invoices: open balance more than 60 days overdue ÷ total open balance, as of today.",
+    source: "Invoices: open balance more than 60 days past due (past the due date, or the invoice date when there is none) ÷ total open balance, as of today.",
   },
   {
     key: "contract_mrr",

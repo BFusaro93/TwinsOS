@@ -28,6 +28,8 @@ type Recipient = {
   notOkToEmail: boolean;
   /** Hard bounce — a dead address, not a preference. Blocks BOTH purposes. */
   emailBouncedAt: string | null;
+  /** Another account with this same address is Do Not Market — opt-outs are per address. */
+  addressOptedOut: boolean;
 };
 
 // This is a one-to-many commercial send, so it is throttled the same way the
@@ -139,6 +141,21 @@ export function BulkEmailClientsDialog({
         }
         rows.push(...(data ?? []));
       }
+      // Opt-outs are per address: an address another (unselected) account opted
+      // out with is skipped for marketing too. The send route enforces it; this
+      // shows it up front. Best effort — a lookup failure just leaves the route to refuse.
+      const optedOutAddresses = new Set<string>();
+      const emails = rows.map((r) => r.primary_email as string | null).filter((e): e is string => !!e);
+      if (emails.length > 0) {
+        const { data: orgId } = await supabase.rpc("my_org_id");
+        if (orgId) {
+          for (const part of chunk(emails, 500)) {
+            const { data: suppressed } = await supabase.rpc("crm_marketing_suppressed_emails", { p_org_id: orgId as string, p_emails: part });
+            for (const e of (suppressed ?? []) as string[]) optedOutAddresses.add(e);
+          }
+        }
+        if (cancelled) return;
+      }
       setRecipients(
         rows.map((r) => ({
           id: r.id as string,
@@ -147,6 +164,7 @@ export function BulkEmailClientsDialog({
           doNotMarket: (r.do_not_market as boolean | null) ?? false,
           notOkToEmail: r.ok_to_email === false,
           emailBouncedAt: (r.email_bounced_at as string | null) ?? null,
+          addressOptedOut: !!r.primary_email && optedOutAddresses.has(String(r.primary_email).trim().toLowerCase()),
         }))
       );
       setLoading(false);
@@ -172,19 +190,29 @@ export function BulkEmailClientsDialog({
     [recipients]
   );
   const optedOut = useMemo(
-    () => recipients.filter((r) => !!r.email && !r.emailBouncedAt && (r.doNotMarket || r.notOkToEmail)),
+    () => recipients.filter((r) => !!r.email && !r.emailBouncedAt && (r.doNotMarket || r.notOkToEmail || r.addressOptedOut)),
     [recipients]
   );
-  const withEmail = useMemo(
-    () =>
-      recipients.filter(
-        (r) =>
-          !!r.email &&
-          !r.emailBouncedAt &&
-          (purpose === "service" || (!r.doNotMarket && !r.notOkToEmail))
-      ),
-    [recipients, purpose]
-  );
+  // One copy per address (case-insensitive): accounts sharing a mailbox — a second
+  // property, a property manager — used to get the same email once per account.
+  // The first selected account supplies the merge tags.
+  const { withEmail, sharedAddress } = useMemo(() => {
+    const eligible = recipients.filter(
+      (r) =>
+        !!r.email &&
+        !r.emailBouncedAt &&
+        (purpose === "service" || (!r.doNotMarket && !r.notOkToEmail && !r.addressOptedOut))
+    );
+    const seen = new Set<string>();
+    const unique: Recipient[] = [];
+    const shared: Recipient[] = [];
+    for (const r of eligible) {
+      const key = r.email!.trim().toLowerCase();
+      if (seen.has(key)) shared.push(r);
+      else { seen.add(key); unique.push(r); }
+    }
+    return { withEmail: unique, sharedAddress: shared };
+  }, [recipients, purpose]);
 
   function handleOpenChange(o: boolean) {
     if (!o) {
@@ -263,6 +291,11 @@ export function BulkEmailClientsDialog({
                   {withEmail.length} recipient{withEmail.length === 1 ? "" : "s"} will receive this email
                   {withEmail.length > 0 && `: ${withEmail.map((r) => r.name).join(", ")}`}
                 </p>
+                {sharedAddress.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {sharedAddress.length} share an email address with another selected client — one copy per address: {sharedAddress.map((r) => r.name).join(", ")}
+                  </p>
+                )}
                 {withoutEmail.length > 0 && (
                   <p className="text-xs text-amber-600 dark:text-amber-400">
                     {withoutEmail.length} skipped (no email on file): {withoutEmail.map((r) => r.name).join(", ")}
@@ -275,7 +308,7 @@ export function BulkEmailClientsDialog({
                 )}
                 {purpose === "marketing" && optedOut.length > 0 && (
                   <p className="text-xs text-amber-600 dark:text-amber-400">
-                    {optedOut.length} skipped (Do Not Market / Not OK to Email): {optedOut.map((r) => r.name).join(", ")}
+                    {optedOut.length} skipped (Do Not Market / Not OK to Email / address opted out on another account): {optedOut.map((r) => r.name).join(", ")}
                   </p>
                 )}
                 {purpose === "service" && optedOut.length > 0 && (

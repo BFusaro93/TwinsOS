@@ -2120,8 +2120,15 @@ export function useBulkImportCRMServices() {
       const supabase = createClient();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existing } = await (supabase as any).from("crm_services").select("id, code").is("deleted_at", null);
+      const { data: existing } = await (supabase as any).from("crm_services").select("id, code, name").is("deleted_at", null);
       const byCode = new Map((existing ?? []).filter((s: { code: string | null }) => s.code).map((s: { code: string; id: string }) => [s.code.trim().toLowerCase(), s.id]));
+      // A row with no code matches an existing service by name (case-insensitive) —
+      // re-importing a code-less list used to create every service a second time.
+      const byName = new Map<string, string>();
+      for (const s of (existing ?? []) as { id: string; name: string | null }[]) {
+        const key = (s.name ?? "").trim().toLowerCase();
+        if (key && !byName.has(key)) byName.set(key, s.id);
+      }
 
       let created = 0;
       let updated = 0;
@@ -2159,7 +2166,7 @@ export function useBulkImportCRMServices() {
           ...(r.isActive?.trim() ? { is_active: payload.is_active } : {}),
         };
 
-        const existingId = code ? byCode.get(code.toLowerCase()) : undefined;
+        const existingId = code ? byCode.get(code.toLowerCase()) : byName.get(name.toLowerCase());
         if (existingId) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { error } = await (supabase as any).from("crm_services").update(updatePayload).eq("id", existingId);
@@ -2175,6 +2182,7 @@ export function useBulkImportCRMServices() {
           const { data: inserted, error } = await (supabase as any).from("crm_services").insert(payload).select("id").single();
           if (error) { failed.push({ row: idx + 2, error: error.message }); continue; }
           if (code && inserted?.id) byCode.set(code.toLowerCase(), inserted.id);
+          if (inserted?.id && !byName.has(name.toLowerCase())) byName.set(name.toLowerCase(), inserted.id);
           created++;
         }
       }

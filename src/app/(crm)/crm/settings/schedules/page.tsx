@@ -10,6 +10,8 @@ import type { CRMSchedule } from "@/types/crm-jobs";
 import { Button } from "@/components/ui/button";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
+// Shared with Settings → Import / Export so both import the same columns.
+import { SCHEDULE_REQUIRED_COLUMNS, SCHEDULE_TEMPLATE_COLUMNS } from "@/lib/crm/import-export-columns";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { Switch } from "@/components/ui/switch";
@@ -827,9 +829,9 @@ function SchedulesPageContent() {
         <div className="flex flex-wrap items-center gap-2">
           <ImportExportMenu
             entityLabel="Schedules"
-            templateColumns={["name", "frequency", "dayOfWeek", "weekPattern", "anchorDate", "seasonStart", "seasonEnd", "weekOfMonth", "customDates", "excludedDates"]}
+            templateColumns={SCHEDULE_TEMPLATE_COLUMNS}
             templateFilename="schedules-template.csv"
-            requiredColumns={["name", "frequency"]}
+            requiredColumns={SCHEDULE_REQUIRED_COLUMNS}
             onExport={() =>
               exportCSV(
                 schedules.map((s) => ({

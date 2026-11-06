@@ -5,6 +5,7 @@ import { escapeHtml } from "@/lib/utils/escape-html";
 import { buildCanSpamFooter, orgEmailFrom } from "@/lib/email/send";
 import { getOrgReplyTo, isUsableReplyTo } from "@/lib/email/reply-to";
 import { partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
+import { findMarketingOptedOutAddresses } from "@/lib/email/marketing-opt-outs";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { buildInvoiceExtras, buildServiceExtras } from "./record-merge-vars";
@@ -129,6 +130,17 @@ export async function resolveEmailStepContent(
   for (const address of bounced) toByKey.delete(address.toLowerCase());
   if (toByKey.size === 0) {
     return { error: `every recipient address has hard-bounced (${bounced.join(", ")})` };
+  }
+
+  // Marketing opt-outs are per address: an address that a Do Not Market client
+  // in this org uses (say the same person on a second account) is dropped for
+  // marketing-category steps, the same way campaigns and bulk email skip it.
+  if (isMarketingEmailCategory(params.category)) {
+    const optedOut = await findMarketingOptedOutAddresses(params.orgId, Array.from(toByKey.values()));
+    for (const key of optedOut) toByKey.delete(key);
+    if (toByKey.size === 0) {
+      return { error: "every recipient address has opted out of marketing emails (on this or another client account)" };
+    }
   }
 
   const { data: orgRow } = await supabase

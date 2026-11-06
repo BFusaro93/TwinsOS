@@ -21,6 +21,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
+// Shared with Settings → Import / Export so both import the same columns.
+import { INVOICE_REQUIRED_COLUMNS, INVOICE_TEMPLATE_COLUMNS, invoiceToCsvRow } from "@/lib/crm/import-export-columns";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Plus, FileText, ChevronDown, X, RotateCcw, GitMerge, ArrowUpDown, ArrowUp, ArrowDown, Loader2, Clock } from "lucide-react";
 import { toast } from "sonner";
@@ -290,10 +292,6 @@ function applyQuickFilter(invoices: CRMInvoice[], filter: QuickFilter): CRMInvoi
 interface Props {
   clientId?: string;
 }
-
-const INVOICE_TEMPLATE_COLUMNS = [
-  "clientName", "service", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "discount", "taxAmount",
-];
 
 export function InvoicesList({ clientId }: Props) {
   const { can, isLoading: permissionsLoading } = usePermissions();
@@ -750,38 +748,22 @@ export function InvoicesList({ clientId }: Props) {
                   entityLabel="Invoices"
                   templateColumns={INVOICE_TEMPLATE_COLUMNS}
                   templateFilename="invoices-template.csv"
-                  requiredColumns={["clientName", "service", "description", "amount"]}
-                  onExport={() =>
-                    exportCSV(
-                      allInvoices.map((inv) => ({
-                        clientName: inv.clientName ?? "",
-                        description: inv.description,
-                        invoiceDate: inv.invoiceDate,
-                        dueDate: inv.dueDate ?? "",
-                        poNumber: inv.poNumber ?? "",
-                        status: inv.status,
-                        amount: (inv.subtotalCents / 100).toFixed(2),
-                        // Invoice-level discount — without it a re-import
-                        // overstated every discounted invoice's total.
-                        discount: (inv.discountCents / 100).toFixed(2),
-                        taxAmount: (inv.taxCents / 100).toFixed(2),
-                      })),
-                      "invoices-export.csv"
-                    )
-                  }
+                  requiredColumns={INVOICE_REQUIRED_COLUMNS}
+                  onExport={() => exportCSV(allInvoices.map(invoiceToCsvRow), "invoices-export.csv")}
                   onImport={async (rows) => {
-                    const { created, skipped, warnings } = await bulkImportInvoices(rows);
-                    if (warnings.length > 0) {
-                      toast.warning(`${warnings.length} imported row${warnings.length !== 1 ? "s" : ""} adjusted`, {
-                        description: warnings.slice(0, 5).map((w) => `Row ${w.row}: ${w.reason}`).join("\n") + (warnings.length > 5 ? `\n…and ${warnings.length - 5} more` : ""),
-                        duration: 15000,
-                      });
-                    }
-                    if (skipped > 0) {
-                      toast.warning(`Imported ${created} invoice${created !== 1 ? "s" : ""}. ${skipped} row${skipped !== 1 ? "s" : ""} skipped (unmatched client, missing description, or amount).`);
+                    const result = await bulkImportInvoices(rows);
+                    const { succeeded, failed, skipped = [] } = result;
+                    if (failed.length > 0 || skipped.length > 0) {
+                      toast.warning(
+                        `Imported ${succeeded} invoice${succeeded !== 1 ? "s" : ""}.` +
+                          (skipped.length > 0 ? ` ${skipped.length} already existed (skipped).` : "") +
+                          (failed.length > 0 ? ` ${failed.length} row${failed.length !== 1 ? "s" : ""} not imported — see details.` : "")
+                      );
                     } else {
-                      toast.success(`Successfully imported ${created} invoice${created !== 1 ? "s" : ""}.`);
+                      toast.success(`Successfully imported ${succeeded} invoice${succeeded !== 1 ? "s" : ""}.`);
                     }
+                    // Returned so the import dialog lists each failed, skipped or adjusted row.
+                    return result;
                   }}
                 />
                 <Button size="sm" onClick={() => setNewSheetOpen(true)}>

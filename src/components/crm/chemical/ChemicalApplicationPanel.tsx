@@ -32,6 +32,7 @@ import { useSelectableEmployees } from "@/lib/hooks/use-employees";
 import { SendApplicationNoticeDialog } from "./SendApplicationNoticeDialog";
 import { printAppliedNotice } from "@/lib/chemical/route-sheet";
 import { areaKindMismatchHint } from "@/lib/chemical-area";
+import { concentrateUnitId, formatApplicationRateLabel } from "@/lib/chemical-mix-calc";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { ChemicalApplication } from "@/types/chemical-tracking";
 import { toast } from "sonner";
@@ -106,6 +107,7 @@ function ApplicationRow({
   employees,
   fallbackStartTime,
   fallbackEndTime,
+  visitStarted,
   register,
 }: {
   application: ChemicalApplication;
@@ -120,6 +122,8 @@ function ApplicationRow({
   /** Crew clock-in/out, offered as the start/end time until one is entered. */
   fallbackStartTime: string | null;
   fallbackEndTime: string | null;
+  /** False while the visit hasn't been worked: saving then edits the plan, it doesn't confirm it. */
+  visitStarted: boolean;
   /** Lets the panel save every edited row at once (Save & Next in the Chemical Tracking dialog). */
   register?: (id: string, api: RowSaver | null) => void;
 }) {
@@ -164,6 +168,11 @@ function ApplicationRow({
     // save (including edits made long after the original application, e.g.
     // just fixing notes) silently overwrote the historical record if that
     // employee's license was renewed/changed/revoked in the meantime.
+    // An amount with no unit isn't a record of anything.
+    if (used && chemicalAmount.trim() !== "" && !unitOfMeasureId) {
+      toast.error(`Choose the unit for ${productName}'s amount`);
+      throw new Error("missing unit");
+    }
     const applicatorChanged = (applicatorEmployeeId || null) !== (application.applicatorEmployeeId ?? null);
     const employee = applicatorChanged ? employees.find((e) => e.id === applicatorEmployeeId) : null;
     try {
@@ -186,8 +195,9 @@ function ApplicationRow({
         applicationEndTime: fromLocalInput(endTime),
         ...(applicatorChanged && { applicatorLicenseNumber: employee?.applicatorLicense ?? null }),
         notes: notes || null,
-        // Saving the row is the office confirming what was actually used.
-        confirm: true,
+        // Saving the row is the office confirming what was actually used — once the visit has
+        // been worked. Before that, chemicals are the plan and the crew confirms them.
+        confirm: visitStarted,
       }
       );
     } catch {
@@ -432,9 +442,19 @@ export function ChemicalApplicationPanel({ jobId, visitId, registerSaver }: Prop
   const { data: confirmationWaived = false } = useChemicalConfirmationWaived(visitId);
   const waiveConfirmation = useWaiveChemicalConfirmation();
   const unconfirmed = applications.filter((a) => a.preloaded && !a.confirmedAt);
+  const visitStarted = !!clockTimes?.started;
   const [confirmingAll, setConfirmingAll] = useState(false);
 
   async function confirmAllAsPlanned() {
+    // A planned row with no amount or unit has nothing to confirm "as planned" — the office
+    // would be recording a blank (or unit-less) application.
+    const incomplete = unconfirmed.filter((a) => a.used && (a.chemicalAmount == null || !a.unitOfMeasureId));
+    if (incomplete.length > 0) {
+      toast.error(
+        `Enter the amount and unit for ${incomplete.map((a) => a.productName ?? "a chemical").join(", ")} first, then save ${incomplete.length === 1 ? "it" : "each one"}.`
+      );
+      return;
+    }
     setConfirmingAll(true);
     try {
       for (const a of unconfirmed) {
@@ -512,8 +532,14 @@ export function ChemicalApplicationPanel({ jobId, visitId, registerSaver }: Prop
     let solutionAmount: number | null | undefined;
     let solutionUnitOfMeasureId: string | null | undefined;
 
+    const defaultRate = addingProductRates.find((r) => r.isDefault) ?? addingProductRates[0];
+    // The rate the amount is sized from, kept on the record; and the unit the product itself is
+    // measured in, so a hand-entered amount isn't saved without one.
+    const applicationRateLabel = defaultRate ? formatApplicationRateLabel(defaultRate, (id) => unitsById.get(id)?.name) : null;
+    unitOfMeasureId = (defaultRate ? concentrateUnitId(defaultRate) : null) ?? settings?.defaultUnitOfMeasureId ?? undefined;
+    if (defaultRate) applicationMethodId = defaultRate.applicationMethodId;
+
     if (settings?.autoCalcQuantity) {
-      const defaultRate = addingProductRates.find((r) => r.isDefault) ?? addingProductRates[0];
       if (defaultRate && area) {
         const computed = calcChemicalAndSolution(defaultRate, area.value, unitsById, area.kind);
         const mismatch = computed == null ? areaKindMismatchHint(defaultRate, area, unitsById) : null;
@@ -539,6 +565,13 @@ export function ChemicalApplicationPanel({ jobId, visitId, registerSaver }: Prop
         epaNumberSnapshot: selectedProduct?.epaRegistrationNumber ?? null,
         reEntryIntervalSnapshot: selectedProduct?.reEntryInterval ?? null,
         restrictedProductSnapshot: selectedProduct?.restrictedProduct ?? false,
+        applicationRateLabel,
+        // On a visit nobody has worked yet this is the PLAN: the crew confirms what was actually
+        // applied, and until then it isn't in the compliance report, a notice, or stock.
+        ...(!visitStarted && {
+          preloaded: true,
+          ...(chemicalAmount != null && { budgetedConcentrateAmount: chemicalAmount }),
+        }),
         ...(chemicalAmount !== undefined && { chemicalAmount }),
         ...(unitOfMeasureId !== undefined && { unitOfMeasureId }),
         ...(applicationMethodId !== undefined && { applicationMethodId }),
@@ -678,6 +711,12 @@ export function ChemicalApplicationPanel({ jobId, visitId, registerSaver }: Prop
             in the compliance report or taken out of stock
             {confirmationWaived ? "." : ", and the visit can't be completed when the crew confirmation setting is on."}
           </p>
+          {!visitStarted && (
+            <p className="mt-0.5 text-amber-800 dark:text-amber-300">
+              This visit hasn&apos;t been worked yet, so these are the plan — the crew confirms what they apply.
+              Use Confirm all as planned only if the work was done without the crew app.
+            </p>
+          )}
           <div className="mt-2 flex flex-wrap gap-2">
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={confirmAllAsPlanned} disabled={confirmingAll}>
               {confirmingAll ? "Confirming…" : "Confirm all as planned"}
@@ -717,6 +756,7 @@ export function ChemicalApplicationPanel({ jobId, visitId, registerSaver }: Prop
           employees={employees}
           fallbackStartTime={clockTimes?.clockedInAt ?? null}
           fallbackEndTime={clockTimes?.clockedOutAt ?? null}
+          visitStarted={visitStarted}
           register={registerRow}
         />
       ))}
@@ -734,7 +774,8 @@ export function ChemicalApplicationPanel({ jobId, visitId, registerSaver }: Prop
               ))}
             </SelectContent>
           </Select>
-          <Button size="sm" className="h-8 text-xs" onClick={handleAdd} disabled={!addingProductId}>
+          {/* Waits for the visit's status: it decides whether the add is the plan or a record of what was applied. */}
+          <Button size="sm" className="h-8 text-xs" onClick={handleAdd} disabled={!addingProductId || !clockTimes}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Add Chemical
           </Button>
         </div>

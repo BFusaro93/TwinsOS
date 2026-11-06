@@ -17,10 +17,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Client } from "@/types/crm";
 
-const LEAD_TEMPLATE_COLUMNS = [
-  "displayName", "accountType", "primaryPhone", "primaryEmail",
-  "billingAddress", "billingCity", "billingState", "billingZip", "source",
-];
+// Shared with Settings → Import / Export so both import the same columns.
+import { LEAD_REQUIRED_COLUMNS, LEAD_TEMPLATE_COLUMNS, leadToCsvRow } from "@/lib/crm/import-export-columns";
 
 export default function LeadsPage() {
   const { can, isLoading: permissionsLoading } = usePermissions();
@@ -79,7 +77,7 @@ export default function LeadsPage() {
               entityLabel="Leads"
               templateColumns={LEAD_TEMPLATE_COLUMNS}
               templateFilename="leads-template.csv"
-              requiredColumns={["displayName"]}
+              requiredColumns={LEAD_REQUIRED_COLUMNS}
               onExport={async () => {
                 // Exports what the current search + filters match — fetched
                 // in full on demand, since the list itself is paged.
@@ -88,17 +86,7 @@ export default function LeadsPage() {
                 try {
                   const leads = await fetchFilteredClients(leadQueryParams({ search, filters: filterRows }));
                   exportCSV(
-                    leads.map((c) => ({
-                      displayName: c.displayName,
-                      accountType: c.accountType,
-                      primaryPhone: c.primaryPhone ?? "",
-                      primaryEmail: c.primaryEmail ?? "",
-                      billingAddress: c.billingAddress ?? "",
-                      billingCity: c.billingCity ?? "",
-                      billingState: c.billingState ?? "",
-                      billingZip: c.billingZip ?? "",
-                      source: c.source ?? "",
-                    })),
+                    leads.map(leadToCsvRow),
                     "leads-export.csv"
                   );
                 } catch {

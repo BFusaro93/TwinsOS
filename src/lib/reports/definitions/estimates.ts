@@ -155,7 +155,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       const data = await fetchAllRows<unknown>(() => {
         let query = supabase
           .from("estimates")
-          .select("id, estimate_number, estimate_date, total_cents, clients:client_id(display_name)")
+          .select("id, estimate_number, estimate_date, total_cents, tax_cents, clients:client_id(display_name)")
           .in("stage", ["accepted", "invoiced"])
           .is("deleted_at", null);
         if (from) query = query.gte("estimate_date", from);
@@ -168,6 +168,7 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
         estimate_number: number | null;
         estimate_date: string | null;
         total_cents: number | null;
+        tax_cents: number | null;
         clients: { display_name: string | null } | null;
       };
       const estimates = (data ?? []) as unknown as EstimateRow[];
@@ -180,6 +181,19 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
         const invData: unknown[] = [];
         for (let i = 0; i < ids.length; i += 200) {
           const idChunk = ids.slice(i, i + 200);
+          // Invoiced = pre-tax billed, incl. invoices later consolidated or
+          // merged into another invoice (rpt_invoice_link_billing).
+          const billed = await fetchAllRows<{ estimate_id: string | null; revenue_ex_tax_cents: number | null }>(() =>
+            supabase
+              .from("rpt_invoice_link_billing")
+              .select("estimate_id, revenue_ex_tax_cents")
+              .in("estimate_id", idChunk)
+              .order("invoice_id")
+          );
+          for (const b of billed) {
+            if (!b.estimate_id) continue;
+            invoicedByEstimate.set(b.estimate_id, (invoicedByEstimate.get(b.estimate_id) ?? 0) + (b.revenue_ex_tax_cents ?? 0));
+          }
           invData.push(
             ...(await fetchAllRows<unknown>(() =>
               supabase
@@ -201,10 +215,6 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
         };
         for (const inv of (invData ?? []) as unknown as InvoiceRow[]) {
           if (!inv.estimate_id) continue;
-          invoicedByEstimate.set(
-            inv.estimate_id,
-            (invoicedByEstimate.get(inv.estimate_id) ?? 0) + (inv.total_cents ?? 0)
-          );
           paidByEstimate.set(
             inv.estimate_id,
             (paidByEstimate.get(inv.estimate_id) ?? 0) + (inv.amount_paid_cents ?? 0)
@@ -213,7 +223,8 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
       }
 
       const rows = estimates.map((e) => {
-        const estimated = e.total_cents ?? 0;
+        // Pre-tax on both sides so tax never shows up as variance.
+        const estimated = (e.total_cents ?? 0) - (e.tax_cents ?? 0);
         const invoiced = invoicedByEstimate.get(e.id) ?? 0;
         return {
           estimate_number: e.estimate_number,
@@ -231,14 +242,14 @@ export const ESTIMATE_REPORTS: PrebuiltReportDef[] = [
           col("estimate_number", "Estimate #", "number", false),
           col("estimate_date", "Estimate Date", "date"),
           col("client_name", "Client"),
-          col("estimated_cents", "Estimated Value", "money"),
-          col("invoiced_cents", "Invoiced Value", "money"),
+          col("estimated_cents", "Estimated Value (pre-tax)", "money"),
+          col("invoiced_cents", "Invoiced Value (pre-tax)", "money"),
           col("paid_cents", "Paid", "money"),
           col("variance_cents", "Variance", "money"),
         ],
         rows,
         [
-          "Invoiced and paid values are summed across all non-void invoices linked to each accepted or invoiced estimate.",
+          "Invoiced and paid values are summed across the issued (not draft or void) invoices linked to each accepted or invoiced estimate. Estimated and Invoiced Value are pre-tax (after discounts); Invoiced Value also counts invoices that were later consolidated or merged into another invoice. Paid is the payments recorded on the estimate's own live invoices.",
         ]
       );
     },

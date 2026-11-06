@@ -442,6 +442,23 @@ export function AutomationsGuide() {
           Mail show as their own Unsubscribe button.
         </p>
         <p>
+          <strong>Two clients share one email address. Who gets marketing?</strong> Opt-outs work per
+          email address. Unsubscribing through one client&apos;s link marks every client in your
+          company with that same primary email Do Not Market (each gets a timeline note). Campaigns,
+          bulk marketing emails and marketing automation steps also skip any address that belongs to a
+          Do Not Market client, so a client added later with an unsubscribed address doesn&apos;t
+          start receiving marketing again. And when several selected clients share an address, a
+          campaign or bulk email sends <strong>one</strong> copy to it (the first client&apos;s merge
+          tags fill it in) and logs it on each of those clients&apos; timelines.
+        </p>
+        <p>
+          <strong>Can we turn Do Not Market back off?</strong> Not in bulk — Clients → Bulk Edit can
+          only turn it on, so a whole selection can&apos;t be re-subscribed by mistake. On a single
+          client you can untick it in Edit Client; if the client unsubscribed themselves (or reported
+          an email as spam) the form warns you first. Only do that when they have asked to hear from
+          you again.
+        </p>
+        <p>
           <strong>Do automation emails include an unsubscribe link?</strong> Yes. Emails sent by an
           automation get the same footer and one-click header as campaigns, and a client who is
           marked Do Not Market stops receiving them. Text-message steps never send before 8 AM or

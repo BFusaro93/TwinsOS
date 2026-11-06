@@ -466,7 +466,7 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
         let query = supabase
           .from("crm_contracts")
           .select(
-            "title, status, start_date, end_date, signed_at, created_at, billing_frequency, billing_day_of_month, bill_month_in_advance, monthly_amount_cents, monthly_amounts, is_active, clients:client_id(display_name)"
+            "title, status, start_date, end_date, signed_at, created_at, billing_frequency, billing_day_of_month, bill_month_in_advance, last_billed_date, billing_anchor_date, monthly_amount_cents, monthly_amounts, is_active, clients:client_id(display_name)"
           )
           .is("deleted_at", null);
         // "Active" = what the billing paths actually invoice: is_active AND a

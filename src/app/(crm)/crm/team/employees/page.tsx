@@ -10,6 +10,8 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
+// Shared with Settings → Import / Export so both import the same columns.
+import { EMPLOYEE_REQUIRED_COLUMNS, EMPLOYEE_TEMPLATE_COLUMNS } from "@/lib/crm/import-export-columns";
 import { useEmployees, useBulkImportEmployees } from "@/lib/hooks/use-employees";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { cn } from "@/lib/utils";
@@ -21,11 +23,6 @@ import {
   EmployeeDialog,
 } from "@/components/crm/employees/EmployeesList";
 import type { CRMEmployee } from "@/types/crm-employees";
-
-const EMPLOYEE_TEMPLATE_COLUMNS = [
-  "firstName", "lastName", "email", "phone", "cellPhone",
-  "address", "city", "state", "zip", "dateHired", "resourceCode", "hourlyRate",
-];
 
 export default function EmployeesPage() {
   const { can, isLoading: permissionsLoading } = usePermissions();
@@ -90,7 +87,7 @@ export default function EmployeesPage() {
               entityLabel="Employees"
               templateColumns={EMPLOYEE_TEMPLATE_COLUMNS}
               templateFilename="employees-template.csv"
-              requiredColumns={["firstName", "lastName"]}
+              requiredColumns={EMPLOYEE_REQUIRED_COLUMNS}
               onExport={() =>
                 exportCSV(
                   (employees ?? []).map((e) => ({

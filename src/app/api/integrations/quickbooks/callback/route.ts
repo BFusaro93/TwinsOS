@@ -38,16 +38,27 @@ export async function GET(request: Request) {
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
     // Connecting a different QuickBooks company than before: the old ids mean nothing there.
+    // Disconnecting keeps the row (tokens removed) so this still knows the previous company.
     const { data: existing } = await supabase
       .from("integrations")
-      .select("config")
+      .select("config, created_at")
       .eq("org_id", profile.org_id)
       .eq("provider", "quickbooks")
       .maybeSingle();
-    const previousRealm = (existing?.config as { realm_id?: string } | null)?.realm_id ?? null;
-    if (previousRealm && previousRealm !== realmId) {
+    const previous = (existing?.config as { realm_id?: string; connected_at?: string } | null) ?? null;
+    const previousRealm = previous?.realm_id ?? null;
+    const switchedCompany = !!previousRealm && previousRealm !== realmId;
+    if (switchedCompany) {
       await clearQuickBooksLinks(createServiceClient(), profile.org_id);
     }
+    // The sync cron only creates records made after this moment, so a newly connected company
+    // isn't backfilled with every invoice since the org first connected some other company.
+    // Reconnecting the SAME company keeps the original cut-off: anything made while disconnected
+    // is sent, and invoices it already has are matched by number instead of duplicated.
+    const connectedAt =
+      !existing || switchedCompany
+        ? new Date().toISOString()
+        : previous?.connected_at ?? (existing.created_at as string | null) ?? new Date().toISOString();
 
     const { error } = await supabase.from("integrations").upsert(
       {
@@ -59,6 +70,7 @@ export async function GET(request: Request) {
           realm_id: realmId,
           expires_at: expiresAt,
           environment,
+          connected_at: connectedAt,
         },
         enabled: true,
         last_sync_at: new Date().toISOString(),

@@ -33,7 +33,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
           panels: [
             {
               id: "invoiced-revenue-ytd",
-              title: "Invoiced Revenue (YTD)",
+              title: "Invoiced Revenue (YTD, pre-tax)",
               size: "third",
               visual: {
                 type: "gauge",
@@ -41,7 +41,8 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                 // annual gaugeMax means something.
                 useTabDateRange: false,
                 relativeDateFilter: "this_year",
-                kpiColumn: "sum_total_cents",
+                // Revenue excludes sales tax (total − tax), like every revenue figure.
+                kpiColumn: "sum_revenue_ex_tax_cents",
                 valueColumns: [],
                 gaugeMax: 400000000,
                 config: {
@@ -49,7 +50,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
                   columns: [],
                   filters: [...issuedInvoiceFilter()],
                   groupBy: [],
-                  aggregates: [{ column: "total_cents", fn: "sum" }],
+                  aggregates: [{ column: "revenue_ex_tax_cents", fn: "sum" }],
                   sortDir: "asc",
                 },
               },
@@ -748,20 +749,20 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
             },
             {
               id: "invoice-amount-by-sales-rep-pie",
-              title: "Sum of Invoice Amount by Sales Rep ($)",
+              title: "Sum of Invoice Amount by Sales Rep (pre-tax $)",
               size: "half",
               visual: {
                 type: "pie",
                 useTabDateRange: false,
                 labelColumn: "sales_rep",
-                valueColumns: ["sum_total_cents"],
+                valueColumns: ["sum_revenue_ex_tax_cents"],
                 config: {
                   dataset: "rpt_invoices",
                   columns: [],
                   filters: [...issuedInvoiceFilter()],
                   groupBy: ["sales_rep"],
-                  aggregates: [{ column: "total_cents", fn: "sum" }],
-                  sortColumn: "sum_total_cents",
+                  aggregates: [{ column: "revenue_ex_tax_cents", fn: "sum" }],
+                  sortColumn: "sum_revenue_ex_tax_cents",
                   sortDir: "desc",
                 },
               },
@@ -848,19 +849,19 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
             },
             {
               id: "total-invoiced",
-              title: "Total Invoiced",
+              title: "Total Invoiced (pre-tax)",
               size: "third",
               visual: {
                 type: "kpi",
                 useTabDateRange: true,
-                kpiColumn: "sum_total_cents",
+                kpiColumn: "sum_revenue_ex_tax_cents",
                 valueColumns: [],
                 config: {
                   dataset: "rpt_invoices",
                   columns: [],
                   filters: [...issuedInvoiceFilter()],
                   groupBy: [],
-                  aggregates: [{ column: "total_cents", fn: "sum" }],
+                  aggregates: [{ column: "revenue_ex_tax_cents", fn: "sum" }],
                   sortDir: "asc",
                 },
               },
@@ -1234,7 +1235,7 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
             },
             {
               id: "kpi-week-over-week",
-              title: "Key Performance Indicators (Month-to-Date)",
+              title: "Key Performance Indicators (Last 7 Days)",
               size: "full",
               reportKey: "kpi-week-over-week",
               visual: {
@@ -1246,20 +1247,21 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
             },
             {
               id: "invoiced-revenue-ytd",
-              title: "Invoiced Revenue (YTD)",
+              title: "Invoiced Revenue (YTD, pre-tax)",
               size: "third",
               visual: {
                 type: "gauge",
                 useTabDateRange: true,
-                kpiColumn: "sum_total_cents",
+                // Issued invoices only (drafts aren't revenue yet), pre-tax.
+                kpiColumn: "sum_revenue_ex_tax_cents",
                 valueColumns: [],
                 gaugeMax: 400000000,
                 config: {
                   dataset: "rpt_invoices",
                   columns: [],
-                  filters: [{ column: "status", op: "neq", value: "void" }],
+                  filters: [...issuedInvoiceFilter()],
                   groupBy: [],
-                  aggregates: [{ column: "total_cents", fn: "sum" }],
+                  aggregates: [{ column: "revenue_ex_tax_cents", fn: "sum" }],
                   sortDir: "asc",
                 },
               },
