@@ -251,7 +251,7 @@ export function TicketsGuide() {
             rep alone.
           </li>
           <li>
-            The rep works the ticket — adds comments (Comments &amp; History tab, backed by{" "}
+            The rep works the ticket — adds internal comments (Comments &amp; Messages tab, backed by{" "}
             <code>CommentsSection</code>), which notify the assignee if someone else comments, and
             sets status to <strong>Pending</strong> while they investigate.
           </li>
@@ -286,7 +286,7 @@ export function TicketsGuide() {
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li><strong>Details</strong> — status flow buttons, the client/category/assignee/dates meta grid, body text, and a Linked Records picker that can attach the ticket to an Estimate, Invoice, Job, Project or Damage Case (estimates, invoices and jobs must belong to the same client).</li>
-          <li><strong>Comments &amp; History</strong> — threaded comments via the shared <code>CommentsSection</code> (<code>recordType=&quot;ticket&quot;</code>).</li>
+          <li><strong>Comments &amp; Messages</strong> — two sections. <em>Internal comments</em> (staff only) use the shared <code>CommentsSection</code> (<code>recordType=&quot;ticket&quot;</code>). <em>Messages with the client</em> is the conversation the client sees in their portal: their replies (with photos) and yours. A staff reply emails the client; a client reply reopens a closed ticket and notifies the assignee. The ticket must have <em>Show in client portal</em> on.</li>
           <li><strong>Files</strong> — attachments via the shared <code>AttachmentsSection</code>.</li>
           <li><strong>Contributors</strong> — additional staff CC&apos;d on the ticket as participants, distinct from the single assignee. They get a notification when added and on every new comment (never for their own actions). Managed by <code>use-ticket-contributors.ts</code>.</li>
           <li><strong>Audit Trail</strong> — the shared <code>AuditTrailTab</code> change history.</li>
@@ -299,7 +299,11 @@ export function TicketsGuide() {
           it&apos;s assigned to. Turn it off at any time to hide it again.
         </p>
         <p>
-          The header also has a <strong>PDF</strong> button that opens a print-formatted view in a new
+          The ticket opens in a wide side panel. Under the subject, the status pill sits on the left
+          and the <strong>PDF</strong>, <strong>Email</strong>, <strong>Edit</strong> and delete
+          (trash) buttons sit together on the right edge. The tab bar (Details, Comments &amp;
+          History, Emails, Files, Contributors, Audit Trail) is sized to fit the panel without
+          scrolling sideways on a normal desktop screen. <strong>PDF</strong> opens a print-formatted view in a new
           window — all ticket fields are HTML-escaped before being written into that window, since
           subject/body/names can originate from an unsanitized public form submission.
         </p>

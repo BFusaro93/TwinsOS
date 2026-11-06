@@ -331,6 +331,13 @@ export function CrewAppGuide() {
           change inventory. The office sees the same list under the service on the job.
         </p>
         <p>
+          While a job is running, the timer shows how much of the stop&apos;s budgeted time is left (for
+          example &ldquo;1h 05m left&rdquo;), turning red as &ldquo;over budget&rdquo; once it runs past. Break time doesn&apos;t
+          count against it. A stop with no budgeted hours shows the plain elapsed time. When a crew stops a
+          job, a <strong>Time summary</strong> shows each person&apos;s start and finish and the total crew
+          time, so they can fix someone who arrived late or left early before tapping Done.
+        </p>
+        <p>
           Start Job and Stop Job apply to the <strong>whole stop</strong>. Skip is the exception —
           it&apos;s per service, so a crew can skip the hedges and still complete the mow at the same
           property. A leftover visit on a job that is On Hold or Cancelled isn&apos;t on the crew&apos;s
@@ -515,6 +522,12 @@ export function CrewAppGuide() {
           from the library) and attaches it to the visit.
           Before-and-afters, damage found on arrival, and anything a client might query later all
           belong here — they stay attached to the visit rather than living in someone&apos;s camera roll.
+          If your company turned on <strong>Require a Before photo to start a job</strong> or{" "}
+          <strong>Require an After photo to stop a job</strong> (Landscapt Settings, in the crew app
+          section), the Photos area shows Before and After buttons, and Start Job or Stop Job stays disabled
+          until a photo with that label is on the stop. A photo that is still uploading with no signal counts.
+        </p>
+        <p>
           Photos bigger than about 3 MB (typical for a recent phone camera) are shrunk on the phone
           before they upload (longest side 2,400 px, re-saved as a JPEG), so uploads don&apos;t fail
           on a weak connection; smaller photos go up untouched. If an upload fails you can pick the

@@ -8,6 +8,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { searchPickerProducts } from '@/lib/api';
 import { useOfflineQueue } from '@/lib/offline/queue-context';
 import type { PickerProduct } from '@/lib/types';
+import { t } from '@/lib/i18n';
 
 /**
  * Modal screen pushed from visit/[id].tsx's "Request Materials" button.
@@ -46,7 +47,7 @@ export default function RequestMaterialsScreen() {
           if (!cancelled) setResults(data);
         })
         .catch((err) => {
-          if (!cancelled) setSearchError(err instanceof Error ? err.message : 'Search failed');
+          if (!cancelled) setSearchError(err instanceof Error ? err.message : t('Search failed'));
         })
         .finally(() => {
           if (!cancelled) setIsSearching(false);
@@ -79,7 +80,7 @@ export default function RequestMaterialsScreen() {
       <ThemedView style={styles.container}>
         <View style={styles.form}>
           <ThemedText type="smallBold" themeColor="textSecondary">
-            ITEM
+            {t('ITEM')}
           </ThemedText>
           <View style={[styles.selectedCard, { backgroundColor: theme.backgroundElement }]}>
             <View style={{ flex: 1 }}>
@@ -91,12 +92,12 @@ export default function RequestMaterialsScreen() {
               ) : null}
             </View>
             <Pressable onPress={() => setSelected(null)} hitSlop={12}>
-              <ThemedText type="linkPrimary">Change</ThemedText>
+              <ThemedText type="linkPrimary">{t('Change')}</ThemedText>
             </Pressable>
           </View>
 
           <ThemedText type="smallBold" themeColor="textSecondary" style={styles.fieldLabel}>
-            QUANTITY
+            {t('QUANTITY')}
           </ThemedText>
           <TextInput
             style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
@@ -106,11 +107,11 @@ export default function RequestMaterialsScreen() {
           />
 
           <ThemedText type="smallBold" themeColor="textSecondary" style={styles.fieldLabel}>
-            NOTE (OPTIONAL)
+            {t('NOTE (OPTIONAL)')}
           </ThemedText>
           <TextInput
             style={[styles.input, styles.noteInput, { color: theme.text, borderColor: theme.backgroundSelected }]}
-            placeholder="Anything the office should know"
+            placeholder={t('Anything the office should know')}
             placeholderTextColor="#8a8a8a"
             value={note}
             onChangeText={setNote}
@@ -125,7 +126,7 @@ export default function RequestMaterialsScreen() {
             {isSubmitting ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
-              <ThemedText style={styles.submitButtonText}>Submit Request</ThemedText>
+              <ThemedText style={styles.submitButtonText}>{t('Submit Request')}</ThemedText>
             )}
           </Pressable>
         </View>
@@ -137,7 +138,7 @@ export default function RequestMaterialsScreen() {
     <ThemedView style={styles.container}>
       <TextInput
         style={[styles.searchInput, { color: theme.text, borderColor: theme.backgroundSelected }]}
-        placeholder="Search materials…"
+        placeholder={t('Search materials…')}
         placeholderTextColor="#8a8a8a"
         value={query}
         onChangeText={setQuery}
@@ -155,7 +156,7 @@ export default function RequestMaterialsScreen() {
         ListEmptyComponent={
           !isSearching ? (
             <ThemedText themeColor="textSecondary" style={styles.emptyText}>
-              No materials found.
+              {t('No materials found.')}
             </ThemedText>
           ) : null
         }

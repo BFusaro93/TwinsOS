@@ -12,7 +12,18 @@ function fmt(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
-function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: (outcome: PayOutcome) => void }) {
+/** What a bank debit that needs the customer to verify their account hands back. */
+type VerifyInfo = { url: string | null };
+
+function PayForm({
+  totalChargeCents,
+  onSuccess,
+  onNeedsVerification,
+}: {
+  totalChargeCents: number;
+  onSuccess: (outcome: PayOutcome) => void;
+  onNeedsVerification: (info: VerifyInfo) => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -32,7 +43,13 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
       return;
     }
     const outcome = payOutcome(paymentIntent);
-    if (outcome) {
+    if (outcome === "verify_microdeposits" && paymentIntent?.next_action?.type === "verify_with_microdeposits") {
+      // A bank account typed in by hand (rather than linked through the bank's
+      // own login) is verified with two tiny deposits first. That is a normal
+      // part of ACH, not a failure: Stripe emails the customer a link, and the
+      // payment goes through once they confirm the amounts.
+      onNeedsVerification({ url: paymentIntent.next_action.verify_with_microdeposits?.hosted_verification_url ?? null });
+    } else if (outcome) {
       onSuccess(outcome);
     } else {
       setError("Payment was not completed");
@@ -83,6 +100,7 @@ export function PayInvoiceDialog({
   const [paymentMethod, setPaymentMethod] = useState<"card" | "us_bank_account">("card");
   const [intent, setIntent] = useState<CreatePaymentIntentResult | null>(null);
   const [succeeded, setSucceeded] = useState<PayOutcome | null>(null);
+  const [verify, setVerify] = useState<VerifyInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [prepayInput, setPrepayInput] = useState("");
   const [prepayAccountId, setPrepayAccountId] = useState<string | undefined>(
@@ -103,6 +121,7 @@ export function PayInvoiceDialog({
     setPaymentMethod("card");
     setIntent(null);
     setSucceeded(null);
+    setVerify(null);
     setError(null);
     setPrepayInput("");
     onClose();
@@ -140,7 +159,30 @@ export function PayInvoiceDialog({
           </button>
         </div>
 
-        {succeeded ? (
+        {verify ? (
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <Check className="h-8 w-8 text-amber-500" />
+            <p className="text-sm font-medium text-slate-900">One more step: verify your bank account</p>
+            <p className="text-xs text-slate-500">
+              We&apos;ve started your bank transfer. Because the account was entered by hand, your bank will make two small
+              deposits in 1–2 business days (or you&apos;ll get an email from Stripe with a link). Confirm the amounts and the
+              payment will go through — nothing is charged until you do.
+            </p>
+            {verify.url && (
+              <a
+                href={verify.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 rounded-lg border border-brand-500 px-4 py-2 text-sm font-medium text-brand-700"
+              >
+                Verify my bank account
+              </a>
+            )}
+            <button onClick={handleClose} className="mt-1 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white">
+              Done
+            </button>
+          </div>
+        ) : succeeded ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <Check className="h-8 w-8 text-green-500" />
             <p className="text-sm font-medium text-slate-900">{payOutcomeTitle(succeeded)}</p>
@@ -251,7 +293,7 @@ export function PayInvoiceDialog({
               </div>
             </div>
             <Elements key={intent.clientSecret} stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
-              <PayForm totalChargeCents={intent.totalChargeCents} onSuccess={handleSuccess} />
+              <PayForm totalChargeCents={intent.totalChargeCents} onSuccess={handleSuccess} onNeedsVerification={setVerify} />
             </Elements>
           </div>
         )}

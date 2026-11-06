@@ -2047,6 +2047,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Yes. A client with a saved card has an Autopay switch on the portal Account page. Saving a card asks whether to use it for autopay (off by default), and removing the saved card turns autopay off.",
       },
       {
+        q: "Can a client pay several invoices at once or pay ahead from the portal?",
+        a: "Yes. On the portal Billing tab the client ticks the invoices to pay (or Select all unpaid) and pays them in one payment; invoices from different accounts, such as a property manager's sub-accounts, are paid separately. Make a prepayment lets them pay $1.00 to $25,000.00 ahead by card or bank transfer, and it becomes account credit that settles their next invoice. Payments & Credits on the same tab shows each payment and the invoices it covered. The emailed invoice link also offers Bank transfer (ACH) next to Card when bank transfer is enabled; it carries no card fee and takes a few business days to clear.",
+      },
+      {
+        q: "Can portal customers attach photos to a ticket?",
+        a: "Yes. The New Ticket form has an optional Photos field for up to 5 images, which appear on the ticket's attachments for staff. If a photo fails to upload the ticket is still filed and the customer is told which photos to send another way.",
+      },
+      {
         q: "Why does a contract show Inactive client when I click Create Invoices?",
         a: "Contracts don't bill clients marked Inactive, Lost or Cancelled. Reactivate the client to bill the contract. Create Invoices always says why it skipped a contract (already billed, draft, not started, $0 month, not a billing month, or inactive client).",
       },
@@ -2061,6 +2069,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Why can't my crew confirm chemicals yet?",
         a: "Chemicals can only be confirmed once the stop is running, so the application record has real start and end times. Tap Start Job first. Confirming records the crew foreman as the applicator, with their license number.",
+      },
+      {
+        q: "Can the crew record a chemical that wasn't preloaded on the stop?",
+        a: "Yes. On the stop (browser crew page or the iOS/Android crew app) tap Add a chemical, choose the product, and enter the amount and unit. It is saved already confirmed with the foreman as applicator, and it counts toward the compliance report and stock like any other. This also works when nothing was planned for the stop. If a planned chemical has no amount (no area or rate on file), the card says so and the crew enters what they measured. Each chemical also has a View label link with its EPA number, re-entry interval and label directions.",
+      },
+      {
+        q: "How do I record temperature and wind for chemical applications from the weather?",
+        a: "On the crew's stop, the Conditions box under the chemical list is filled in from the National Weather Service reading nearest the property (tap Update to refresh it) and can be corrected; if no reading is available, type the values. In the Dispatch Board's Chemical Tracking dialog, Fill from weather (on a visit's own Conditions box, and on Conditions, which applies one temperature, wind and pH to every visit in the list) uses the reading nearest the time the chemicals went on, when that is within the last week. You can edit the figures before saving.",
+      },
+      {
+        q: "Where do I keep chemical labels and Safety Data Sheets?",
+        a: "Open Reference Library in the Tools sidebar. Upload PDFs, images, Word or Excel files and give each a type (SDS, label, SOP, training, equipment, other), an optional revision date and the chemical products it covers. Documents linked to a product show on its page under Labels & Safety Data Sheets and open from View label on the crew's stop. Everything not marked office-only (untick Show to crews) is on the crew app's Reference screen. Anyone with a CRM seat can open the library; adding, editing and deleting needs the CRM Settings permission.",
       },
       {
         q: "Why is the QuickBooks invoice stuck on “name exists as a vendor or employee”?",
@@ -2331,6 +2351,14 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "On the Crew App's My Schedule screen, tap Start Day once and everyone on the crew's roster for that day is clocked in; tap End Day at the shop to clock everyone out (the app asks you to confirm if a job is still running). This is the paid shop-to-shop day that feeds payroll. Start Job and Stop Job separately clock the crew in and out of each stop for Job Costing. If nobody taps Start Day, starting the first job opens the day anyway and payroll flags it as 'Started at first job'. The Start Day button stays disabled if the crew has nobody on its roster (add people under Team > Crews > Team Assignments).",
       },
       {
+        q: "Can I require Before and After photos on a crew stop?",
+        a: "Yes. In Landscapt Settings, in the crew app section, tick 'Require a Before photo to start a job' and/or 'Require an After photo to stop a job'. The crew's Photos area then shows Before and After buttons, and Start Job or Stop Job stays disabled until a photo with that label is on the stop. A photo still uploading with no signal counts. The same setting applies in the browser crew page and the native crew app.",
+      },
+      {
+        q: "What is the countdown and Time summary on the crew's running job?",
+        a: "A running job's timer counts down the stop's budgeted hours (for example '1h 05m left') and turns red as 'over budget' once it passes; break time doesn't count against it, and a stop with no budget shows plain elapsed time. When the crew stops a job, a Time summary lists each person's start and finish and the total crew time so they can correct someone who arrived late or left early before tapping Done.",
+      },
+      {
         q: "What if someone is late, out today, or leaves early?",
         a: "On the Crew App's My Schedule screen tap Edit Crew. Mark 'Not working' for someone who is out (they're skipped by Start Day and Start Job), tap Clock In for a late arrival, 'Left for the day' for someone leaving early, and Back if they return the same day (the time away comes off as an unpaid break). The office can fix anything afterward on Report Center > Payroll, or with Edit Job Times on the Dispatch Board.",
       },
@@ -2453,7 +2481,7 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "Everything looks too big (or too small) — how do I change the display size?",
-        a: "Click the sun/moon Appearance button in the top bar and pick a Display size: 80% (compact, the default), 90%, or 100% (normal browser size). It scales the whole app — text, sidebars, dialogs, side panels and the pop-up notices in the bottom right — so you don't need to zoom your browser out. The choice is saved on that browser and applies on the home screen too. It only shows on a desktop or laptop screen with a mouse; phones and tablets always use 100%, and printed pages and PDFs are unaffected. The same menu has the Light / Dark / System theme.",
+        a: "Click the sun/moon Appearance button in the top bar and pick a Display size: 80% (compact, the default), 90%, or 100% (normal browser size). It scales the whole app — text, sidebars, dialogs, side panels and the pop-up notices in the bottom right — so you don't need to zoom your browser out. The choice is saved on that browser and applies on the home screen too. It only shows on a desktop or laptop screen with a mouse; phones and tablets always use 100%, and printed pages and PDFs are unaffected. The same menu has the Light / Dark / System theme. In dark mode, on/off switches show an ON switch as a white track and an OFF switch as a dark gray track, so you can tell them apart at a glance.",
       },
       {
         q: "Why does Settings → Clients say my next account number is too low?",

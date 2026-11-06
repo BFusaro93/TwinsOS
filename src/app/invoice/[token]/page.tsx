@@ -48,7 +48,15 @@ interface CreateIntentResult {
   totalChargeCents: number;
 }
 
-function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; onSuccess: (outcome: PayOutcome) => void }) {
+function PayForm({
+  totalChargeCents,
+  onSuccess,
+  onNeedsVerification,
+}: {
+  totalChargeCents: number;
+  onSuccess: (outcome: PayOutcome) => void;
+  onNeedsVerification: (url: string | null) => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -68,7 +76,11 @@ function PayForm({ totalChargeCents, onSuccess }: { totalChargeCents: number; on
       return;
     }
     const outcome = payOutcome(paymentIntent);
-    if (outcome) {
+    if (outcome === "verify_microdeposits" && paymentIntent?.next_action?.type === "verify_with_microdeposits") {
+      // A hand-entered bank account is verified with two small deposits first —
+      // normal for ACH, not a failure. The payment goes through once confirmed.
+      onNeedsVerification(paymentIntent.next_action.verify_with_microdeposits?.hosted_verification_url ?? null);
+    } else if (outcome) {
       onSuccess(outcome);
     } else {
       setError("Payment was not completed");
@@ -104,6 +116,8 @@ export default function PublicInvoicePage() {
   // A failed "start payment" is shown next to the button. It must NOT reuse
   // loadError, which replaces the whole page — the invoice itself loaded fine.
   const [payError, setPayError] = useState<string | null>(null);
+  // Set when a bank transfer needs the customer to verify their account.
+  const [verifyUrl, setVerifyUrl] = useState<{ url: string | null } | null>(null);
   const [payMethod, setPayMethod] = useState<"card" | "us_bank_account">("card");
 
   const loadInvoice = useCallback(() => {
@@ -277,7 +291,20 @@ export default function PublicInvoicePage() {
           </div>
         )}
 
-        {paySucceeded ? (
+        {verifyUrl ? (
+          <div className="mt-8 flex flex-col items-center gap-2 rounded-md border border-amber-200 bg-amber-50 py-6 px-4 text-center">
+            <p className="text-sm font-medium text-amber-900">One more step: verify your bank account</p>
+            <p className="text-xs text-amber-800">
+              Your bank will make two small deposits in 1–2 business days, or you&apos;ll get an email from Stripe with a link. Confirm the
+              amounts and the payment will go through — nothing is charged until you do.
+            </p>
+            {verifyUrl.url && (
+              <a href={verifyUrl.url} target="_blank" rel="noopener noreferrer" className="mt-1 rounded-md border border-amber-600 px-4 py-2 text-sm font-semibold text-amber-900">
+                Verify my bank account
+              </a>
+            )}
+          </div>
+        ) : paySucceeded ? (
           <div className="mt-8 flex flex-col items-center gap-2 rounded-md border border-green-200 bg-green-50 py-6 text-center">
             <CheckCircle2 className="h-8 w-8 text-green-600" />
             <p className="text-sm font-medium text-green-800">{payOutcomeTitle(paySucceeded)}</p>
@@ -325,7 +352,7 @@ export default function PublicInvoicePage() {
                 </p>
               )}
               <Elements stripe={stripeJs} options={{ clientSecret: intent.clientSecret }}>
-                <PayForm totalChargeCents={intent.totalChargeCents} onSuccess={setPaySucceeded} />
+                <PayForm totalChargeCents={intent.totalChargeCents} onSuccess={setPaySucceeded} onNeedsVerification={(url) => setVerifyUrl({ url })} />
               </Elements>
             </div>
           ) : null

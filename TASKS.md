@@ -184,3 +184,11 @@ Checked 2026-10-19: not built. Projects have `start_date`/`end_date` and billing
 - [ ] Decide the data model first: project phases/tasks (name, start, end, assignee/crew, % complete, dependencies) — a project's own start/end dates alone would only give one bar per project.
 - [ ] Gantt/timeline view on the project detail page (phase bars, today marker, billing milestones as diamonds on their `target_date`).
 - [ ] Optional: portfolio view across all open projects at [CRMProjectsList.tsx](src/components/crm/projects/CRMProjectsList.tsx), and link phases to scheduled job visits so progress updates itself.
+
+## Backlog — crew "Add service" in the field (SA Team app parity)
+Raised from the SA Team App guide review (2026-11). SA lets a crew add a service (and products) to a visit that is already on today's schedule. We only have "Suggest work" (an upsell ticket the office must quote). **Parked until users ask for it.**
+
+- [ ] Per-service opt-in so the office decides what a crew may add and bill on the spot — e.g. `crm_services.show_in_field_add` (needs a migration on TEST + PROD and a checkbox in the service editor). Without it every catalog service would be open to every crew. Refuse rate-matrix services (`rate_matrix_field`) — their price depends on property area, so a flat catalog rate would be wrong.
+- [ ] Server route (e.g. `POST /api/crm/crew/visits/[visitId]/add-service`): create a one-time job + `crm_job_services` row + a visit on the stop's property/crew for today. If the stop is already clocked in, create the visit already `in_progress` with `clocked_in_at` set, otherwise Clock Out would complete a visit that never started. Completion side effects (invoice line, timeline, automations) must run through the normal clock-out path.
+- [ ] Web crew stop page + native `visit/[id].tsx`: "Add service" with quantity; hide price when `crew_hide_pricing` is on.
+- [ ] Check what `useCreateClientJob` does that a server route must repeat (job number, `date_sold`, `man_count`, budgeted hours, rollback on partial failure).

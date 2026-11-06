@@ -598,3 +598,16 @@ export async function saveMemberTime(
     body: JSON.stringify({ crewMemberId, clockedInAt, clockedOutAt }),
   });
 }
+
+/** Translated copy of a note, from POST /api/crm/crew/translate (Google Cloud Translation, server-side). */
+export interface TranslatedNote {
+  translated: string;
+  sameLanguage: boolean;
+}
+
+export async function translateNote(text: string, target: 'en' | 'es'): Promise<TranslatedNote> {
+  return (await authedFetch('/api/crm/crew/translate', {
+    method: 'POST',
+    body: JSON.stringify({ text, target }),
+  })) as TranslatedNote;
+}

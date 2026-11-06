@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import type { CrewStop, CrewVisit, VisitStatus } from '@/lib/types';
 
 /** Formats a "HH:mm:ss" or "HH:mm" DB time string as "h:mm AM/PM". */
@@ -17,7 +18,7 @@ export function formatTimeWindow(visit: Pick<CrewVisit, 'startTime' | 'endTime'>
   const end = formatTime(visit.endTime);
   if (start && end) return `${start} – ${end}`;
   if (start) return start;
-  return 'Unscheduled';
+  return t('Unscheduled');
 }
 
 export function formatAddress(visit: CrewVisit): string | null {

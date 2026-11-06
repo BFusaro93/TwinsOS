@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Ticket, Plus, Loader2, CheckCircle2, Clock, AlertCircle, XCircle, ChevronDown, Paperclip, X } from "lucide-react";
 import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 import { downscaleImage } from "@/lib/utils/downscale-image";
+import { PortalTicketThread } from "@/components/portal/PortalTicketThread";
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -269,6 +270,8 @@ function NewTicketDialog({
 
 export default function PortalTicketsPage({ tickets: initialTickets, categories: categoriesProp, accounts }: Props) {
   const [tickets, setTickets] = useState(initialTickets);
+  const [openTicketId, setOpenTicketId] = useState<string | null>(null);
+  const openTicket = tickets.find((x) => x.id === openTicketId) ?? null;
   const categories = categoriesProp.length > 0 ? categoriesProp : DEFAULT_CATEGORIES;
 
   const open = tickets.filter((t) => t.status !== "closed");
@@ -280,7 +283,14 @@ export default function PortalTicketsPage({ tickets: initialTickets, categories:
         {list.map((t) => {
           const cfg = STATUS_CONFIG[t.status] ?? STATUS_CONFIG.open;
           return (
-            <li key={t.id} className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-start gap-3">
+            <li
+              key={t.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setOpenTicketId(t.id)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenTicketId(t.id); } }}
+              className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-start gap-3 cursor-pointer hover:border-slate-300 hover:shadow-sm transition"
+            >
               <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-slate-50 shrink-0 mt-0.5">
                 <Ticket className="h-4 w-4 text-slate-400" />
               </div>
@@ -291,12 +301,15 @@ export default function PortalTicketsPage({ tickets: initialTickets, categories:
                 </div>
                 <SubAccountLabel name={t.accountName} />
                 {t.category && (
-                  <p className="text-xs text-slate-500 mt-0.5">{t.category}</p>
+                  <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">
+                    <span className="text-slate-400">Category:</span>
+                    {t.category}
+                  </span>
                 )}
                 {t.body && (
                   <p className="text-xs text-slate-400 mt-1 line-clamp-2">{t.body}</p>
                 )}
-                <p className="text-xs text-slate-400 mt-1">{fmtDate(t.created_at)}</p>
+                <p className="text-xs text-slate-400 mt-1">Opened: {fmtDate(t.created_at)}</p>
               </div>
               <span className={`flex items-center gap-1 text-xs border rounded-full px-2 py-0.5 shrink-0 ${cfg.color}`}>
                 {cfg.icon}
@@ -348,6 +361,15 @@ export default function PortalTicketsPage({ tickets: initialTickets, categories:
             </section>
           )}
         </>
+      )}
+    {openTicket && (
+        <PortalTicketThread
+          ticket={openTicket}
+          onClose={() => setOpenTicketId(null)}
+          onReplied={(reopened) => {
+            if (reopened) setTickets((prev) => prev.map((x) => (x.id === openTicket.id ? { ...x, status: "open" } : x)));
+          }}
+        />
       )}
     </div>
   );

@@ -32,6 +32,7 @@ import {
   useRemoveTicketContributor,
 } from "@/lib/hooks/use-ticket-contributors";
 import { CommentsSection } from "@/components/shared/CommentsSection";
+import { ClientMessagesSection } from "@/components/crm/tickets/ClientMessagesSection";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -637,7 +638,7 @@ function PortalVisibilityToggle({ ticket }: { ticket: CRMTicket }) {
           </Label>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {hasClient
-              ? "The client sees the subject, category, status and notes — never comments, files or who it's assigned to."
+              ? "The client sees the subject, category, status and notes, plus anything you send from the Client Messages tab — never internal comments, files or who it's assigned to."
               : "Link a client to this ticket to share it in their portal."}
           </p>
         </div>
@@ -820,8 +821,22 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
     },
     {
       value: "comments",
-      label: "Comments & History",
-      content: <div className="p-6"><CommentsSection recordType="ticket" recordId={ticket.id} /></div>,
+      label: "Comments & Messages",
+      content: (
+        <div className="flex flex-col gap-6 p-6">
+          <section className="flex flex-col gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Internal comments</h3>
+              <p className="text-xs text-muted-foreground">Staff only — the client never sees these.</p>
+            </div>
+            <CommentsSection recordType="ticket" recordId={ticket.id} />
+          </section>
+          <section className="flex flex-col gap-3 border-t border-border pt-6">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-neutral-100">Messages with the client</h3>
+            <ClientMessagesSection ticketId={ticket.id} visibleToClient={!!ticket.visibleToClient} />
+          </section>
+        </div>
+      ),
     },
     {
       value: "emails",
@@ -848,7 +863,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
   return (
     <>
       <Sheet open={!!ticket} onOpenChange={(open) => { if (!open) { setEditing(false); onClose(); } }}>
-        <SheetContent className="w-full sm:max-w-[620px] md:w-[620px] flex flex-col gap-0 p-0 overflow-hidden">
+        <SheetContent className="w-full sm:max-w-[780px] md:w-[780px] flex flex-col gap-0 p-0 overflow-hidden">
 
           {/* Header — two rows: the title gets the full width (wrapping if it is
               long) and the status + actions sit under it, so neither is cramped.
@@ -864,6 +879,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
                 variant={TICKET_STATUS_VARIANT[ticket.status] as Parameters<typeof StatusBadge>[0]["variant"]}
                 label={TICKET_STATUS_LABEL[ticket.status]}
               />
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
               <Button variant="outline" size="sm" className="gap-1.5"
                 onClick={() => printTicket(ticket)}>
                 <Download className="h-3.5 w-3.5" />
@@ -892,6 +908,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
                   </Button>
                 </>
               )}
+              </div>
             </div>
           </div>
 

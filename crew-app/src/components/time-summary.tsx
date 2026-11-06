@@ -3,6 +3,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View
 
 import { fetchMemberTimes, saveMemberTime, type MemberTimeRow } from '@/lib/api';
 import { C } from '@/lib/colors';
+import { t } from '@/lib/i18n';
 
 // Native counterpart of the web crew page's Time Summary dialog
 // (src/components/crm/crew/TimeSummaryDialog.tsx): after a stop is finished,
@@ -92,7 +93,7 @@ export function TimeSummaryModal({
         );
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Couldn't load the times");
+        if (!cancelled) setError(err instanceof Error ? err.message : t('Couldn\'t load the times'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -122,7 +123,7 @@ export function TimeSummaryModal({
       }
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save the times");
+      setError(err instanceof Error ? err.message : t('Couldn\'t save the times'));
     } finally {
       setSaving(false);
     }
@@ -132,9 +133,9 @@ export function TimeSummaryModal({
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <ScrollView style={styles.sheet} contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Time summary</Text>
+          <Text style={styles.title}>{t('Time summary')}</Text>
           <Pressable onPress={onClose} hitSlop={12}>
-            <Text style={styles.close}>Close</Text>
+            <Text style={styles.close}>{t('Close')}</Text>
           </Pressable>
         </View>
 
@@ -142,11 +143,11 @@ export function TimeSummaryModal({
           <ActivityIndicator style={{ marginTop: 24 }} />
         ) : drafts.length === 0 ? (
           <Text style={styles.muted}>
-            {error ?? "No individual times are recorded yet. If you just finished, wait for the job to sync and try again."}
+            {error ?? t('No individual times are recorded yet. If you just finished, wait for the job to sync and try again.')}
           </Text>
         ) : (
           <>
-            <Text style={styles.muted}>Check each person&apos;s start and finish. Tap to change them if someone arrived late or left early.</Text>
+            <Text style={styles.muted}>{t('Check each person\'s start and finish. Tap to change them if someone arrived late or left early.')}</Text>
             {drafts.map((d, idx) => (
               <View key={d.crewMemberId} style={styles.card}>
                 <View style={styles.cardTop}>
@@ -156,7 +157,7 @@ export function TimeSummaryModal({
                   </Text>
                 </View>
                 {d.deductMinutes + pauseFor(d) > 0 && d.outMs > d.inMs ? (
-                  <Text style={styles.muted}>After {fmtMinutes(d.deductMinutes + pauseFor(d))} of breaks</Text>
+                  <Text style={styles.muted}>{t('After {time} of breaks', { time: fmtMinutes(d.deductMinutes + pauseFor(d)) })}</Text>
                 ) : null}
                 {(['inMs', 'outMs'] as const).map((field) => (
                   <View key={field} style={styles.row}>
@@ -175,13 +176,13 @@ export function TimeSummaryModal({
               </View>
             ))}
             <View style={styles.totalRow}>
-              <Text style={styles.muted}>Total crew time</Text>
+              <Text style={styles.muted}>{t('Total crew time')}</Text>
               <Text style={styles.name}>{fmtMinutes(total)}</Text>
             </View>
-            {invalid ? <Text style={styles.error}>A finish time must be after its start.</Text> : null}
+            {invalid ? <Text style={styles.error}>{t('A finish time must be after its start.')}</Text> : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <Pressable style={[styles.done, (saving || invalid) && { opacity: 0.5 }]} onPress={() => void save()} disabled={saving || invalid}>
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.doneText}>Done</Text>}
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.doneText}>{t('Done')}</Text>}
             </Pressable>
           </>
         )}

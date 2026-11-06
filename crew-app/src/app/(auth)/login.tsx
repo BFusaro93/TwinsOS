@@ -15,6 +15,8 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { ThemedText } from '@/components/themed-text';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
+import { t } from '@/lib/i18n';
+import { LanguageToggle } from '@/components/language-toggle';
 
 // Landscapt brand palette (src/components/shared/BrandMark.tsx, tailwind.config
 // brand.500/600, and (auth)/login/page.tsx on the web) — kept in sync by hand
@@ -29,7 +31,7 @@ const BRAND_LIME = '#b7d433';
 // — kept in sync by hand since this app doesn't share that component.
 function BrandMark() {
   return (
-    <Svg width={56} height={56} viewBox="0 0 48 48" role="img" aria-label="Brand mark">
+    <Svg width={56} height={56} viewBox="0 0 48 48" role="img" aria-label={t('Brand mark')}>
       <Rect x={1} y={1} width={46} height={46} rx={11} fill={BRAND_DARK_GREEN} />
       <Path d="M15,13 L15,32" stroke={BRAND_BLUE} strokeWidth={5.5} fill="none" strokeLinecap="round" />
       <Path
@@ -62,7 +64,7 @@ export default function LoginScreen() {
     setErrorMessage(null);
 
     if (!email.trim() || !password) {
-      setErrorMessage('Enter your email and password.');
+      setErrorMessage(t('Enter your email and password.'));
       return;
     }
 
@@ -91,14 +93,14 @@ export default function LoginScreen() {
       <View style={styles.container}>
         <View style={styles.brandBlock}>
           <BrandMark />
-          <Text style={styles.wordmark}>landscapt</Text>
-          <Text style={styles.tagline}>Sign in to your account</Text>
+          <Text style={styles.wordmark}>{t('landscapt')}</Text>
+          <Text style={styles.tagline}>{t('Sign in to your account')}</Text>
         </View>
 
         <View style={styles.card}>
           <TextInput
             style={styles.input}
-            placeholder="Email"
+            placeholder={t('Email')}
             placeholderTextColor="#8a8a8a"
             autoCapitalize="none"
             autoCorrect={false}
@@ -110,7 +112,7 @@ export default function LoginScreen() {
           />
           <TextInput
             style={styles.input}
-            placeholder="Password"
+            placeholder={t('Password')}
             placeholderTextColor="#8a8a8a"
             secureTextEntry
             textContentType="password"
@@ -136,9 +138,12 @@ export default function LoginScreen() {
             {isSubmitting ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
-              <Text style={styles.buttonText}>Sign In</Text>
+              <Text style={styles.buttonText}>{t('Sign In')}</Text>
             )}
           </Pressable>
+          <View style={{ alignItems: 'center', marginTop: 16 }}>
+            <LanguageToggle />
+          </View>
         </View>
       </View>
     </KeyboardAvoidingView>

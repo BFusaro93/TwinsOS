@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useOfflineQueue } from '@/lib/offline/queue-context';
 
 import { ThemedText } from './themed-text';
+import { t } from '@/lib/i18n';
 
 /**
  * Small honest-feedback chip for offline sync state — payroll-consequential
@@ -26,7 +27,7 @@ export function SyncStatusChip() {
     return (
       <View style={[styles.chip, { backgroundColor: '#208AEF22' }]}>
         <ActivityIndicator size="small" color="#208AEF" />
-        <ThemedText style={[styles.chipText, { color: '#208AEF' }]}>Syncing…</ThemedText>
+        <ThemedText style={[styles.chipText, { color: '#208AEF' }]}>{t('Syncing…')}</ThemedText>
       </View>
     );
   }
@@ -35,7 +36,7 @@ export function SyncStatusChip() {
     return <Chip color="#c98a1f" label={`${pendingCount} pending`} />;
   }
 
-  return <Chip color="#2fa84f" label="All synced" />;
+  return <Chip color="#2fa84f" label={t('All synced')} />;
 }
 
 function Chip({ color, label }: { color: string; label: string }) {

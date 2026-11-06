@@ -6,6 +6,7 @@ import { openReferenceDocument } from '@/components/chemical-crew';
 import { fetchReferenceDocuments } from '@/lib/api';
 import { C } from '@/lib/colors';
 import type { ReferenceDocument } from '@/lib/types';
+import { t } from '@/lib/i18n';
 
 const CATEGORIES: { value: ReferenceDocument['category'] | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -43,7 +44,7 @@ export default function ReferenceScreen() {
         },
         () => {
           if (cancelled) return;
-          setError("Couldn't load the library — check your connection.");
+          setError(t('Couldn\'t load the library — check your connection.'));
           setLoading(false);
         }
       );
@@ -71,7 +72,7 @@ export default function ReferenceScreen() {
           style={styles.search}
           value={search}
           onChangeText={setSearch}
-          placeholder="Search labels, SDS, procedures…"
+          placeholder={t('Search labels, SDS, procedures…')}
           placeholderTextColor={C.textFaint}
           autoCorrect={false}
         />
@@ -82,7 +83,7 @@ export default function ReferenceScreen() {
               onPress={() => setCategory(c.value)}
               style={[styles.chip, category === c.value && styles.chipOn]}
             >
-              <Text style={[styles.chipText, category === c.value && styles.chipTextOn]}>{c.label}</Text>
+              <Text style={[styles.chipText, category === c.value && styles.chipTextOn]}>{t(c.label)}</Text>
             </Pressable>
           ))}
         </View>
@@ -99,7 +100,7 @@ export default function ReferenceScreen() {
           contentContainerStyle={{ padding: 16, gap: 10 }}
           ListEmptyComponent={
             <Text style={styles.empty}>
-              {docs.length === 0 ? "Your office hasn't added any documents yet." : 'Nothing matches.'}
+              {docs.length === 0 ? t('Your office hasn\'t added any documents yet.') : t('Nothing matches.')}
             </Text>
           }
           renderItem={({ item }) => (
@@ -107,13 +108,13 @@ export default function ReferenceScreen() {
               style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
               onPress={() =>
                 void openReferenceDocument(item.id).then((ok) =>
-                  setOpenError(ok ? null : "Couldn't open the document — check your connection.")
+                  setOpenError(ok ? null : t('Couldn\'t open the document — check your connection.'))
                 )
               }
             >
               <Text style={styles.cardTitle}>{item.title}</Text>
               <Text style={styles.cardMeta}>
-                {CATEGORIES.find((c) => c.value === item.category)?.label ?? item.category}
+                {t(CATEGORIES.find((c) => c.value === item.category)?.label ?? item.category)}
                 {item.revisionDate ? ` · revised ${item.revisionDate}` : ''}
               </Text>
               {item.description ? <Text style={styles.cardMeta}>{item.description}</Text> : null}

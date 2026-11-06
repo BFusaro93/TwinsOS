@@ -22,6 +22,8 @@ import { applyDriveOverlay, applyStopQueueOverlay } from '@/lib/offline/overlay'
 import { useOfflineQueue } from '@/lib/offline/queue-context';
 import { unregisterPushToken } from '@/lib/notifications';
 import { notesToPlainText } from '@/lib/rich-notes';
+import { t } from '@/lib/i18n';
+import { LanguageToggle } from '@/components/language-toggle';
 
 const TODAY = todayLocalDate();
 
@@ -99,15 +101,16 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <View style={styles.headerTopRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.eyebrow}>Today</Text>
-            <Text style={styles.title}>{crewName ? crewName : session?.user.email ?? 'Crew'}</Text>
+            <Text style={styles.eyebrow}>{t('Today')}</Text>
+            <Text style={styles.title}>{crewName ? crewName : session?.user.email ?? t('Crew')}</Text>
           </View>
           <View style={{ alignItems: 'flex-end', gap: 8 }}>
             <Pressable onPress={() => router.push('/reference')} hitSlop={12}>
-              <Text style={styles.signOutLink}>Reference</Text>
+              <Text style={styles.signOutLink}>{t('Reference')}</Text>
             </Pressable>
+            <LanguageToggle />
             <Pressable onPress={handleSignOut} hitSlop={12}>
-              <Text style={styles.signOutLink}>Sign out</Text>
+              <Text style={styles.signOutLink}>{t('Sign out')}</Text>
             </Pressable>
           </View>
         </View>
@@ -120,7 +123,7 @@ export default function HomeScreen() {
           <View style={styles.progressBlock}>
             <View style={styles.progressLabelRow}>
               <Text style={styles.progressLabel}>
-                {completedCount} of {stops.length} complete
+                {t('{done} of {total} complete', { done: completedCount, total: stops.length })}
               </Text>
               <Text style={styles.progressLabel}>
                 {Math.round((completedCount / stops.length) * 100)}%
@@ -161,14 +164,14 @@ export default function HomeScreen() {
         <View style={styles.centered}>
           <Text style={styles.errorText}>{error}</Text>
           <Pressable style={styles.retryButton} onPress={() => void refetch()}>
-            <Text style={styles.retryButtonText}>Try again</Text>
+            <Text style={styles.retryButtonText}>{t('Try again')}</Text>
           </Pressable>
         </View>
       ) : stops.length === 0 ? (
         <View style={styles.centered}>
-          <Text style={styles.emptyTitle}>No jobs today</Text>
+          <Text style={styles.emptyTitle}>{t('No jobs today')}</Text>
           <Text style={styles.emptyBody}>
-            You&apos;re not scheduled for anything today. Pull down to refresh.
+            {t('You\'re not scheduled for anything today. Pull down to refresh.')}
           </Text>
         </View>
       ) : (
@@ -209,13 +212,13 @@ function DriveBanner({
         onPress={onEndDrive}
       >
         <View style={{ flex: 1 }}>
-          <Text style={styles.driveBannerTitle}>Driving</Text>
+          <Text style={styles.driveBannerTitle}>{t('Driving')}</Text>
           <Text style={styles.driveBannerSubtitle}>
             Since {elapsedSince(drive.openSegment.startedAt)}
           </Text>
         </View>
         <View style={styles.driveArrivedButton}>
-          <Text style={styles.driveArrivedButtonText}>Arrived</Text>
+          <Text style={styles.driveArrivedButtonText}>{t('Arrived')}</Text>
         </View>
       </Pressable>
     );
@@ -232,10 +235,10 @@ function DriveBanner({
         onPress={onStartDrive}
         disabled={disabled}
       >
-        <Text style={styles.driveStartButtonText}>Start Drive</Text>
+        <Text style={styles.driveStartButtonText}>{t('Start Drive')}</Text>
       </Pressable>
       {drive.totalMinutes > 0 ? (
-        <Text style={styles.driveTodayText}>Drive today: {drive.totalMinutes}m</Text>
+        <Text style={styles.driveTodayText}>{t('Drive today: {m}m', { m: drive.totalMinutes })}</Text>
       ) : null}
     </View>
   );
@@ -254,16 +257,16 @@ function StopCard({ stop, onPress }: { stop: ReturnType<typeof applyStopQueueOve
         <View style={{ flex: 1 }}>
           <View style={styles.cardNameRow}>
             <Text style={styles.cardClientName} numberOfLines={1}>
-              {stop.clientName ?? 'Unknown client'}
+              {stop.clientName ?? t('Unknown client')}
             </Text>
             {stop.visits.length > 1 ? (
               <View style={styles.serviceCountPill}>
-                <Text style={styles.serviceCountPillText}>{stop.visits.length} services</Text>
+                <Text style={styles.serviceCountPillText}>{t('{n} services', { n: stop.visits.length })}</Text>
               </View>
             ) : null}
           </View>
           {stop.partnerCrews && stop.partnerCrews.length > 0 ? (
-            <Text style={styles.cardPartner}>With {stop.partnerCrews.join(', ')}</Text>
+            <Text style={styles.cardPartner}>{t('With {names}', { names: stop.partnerCrews.join(', ') })}</Text>
           ) : null}
           <Text style={styles.cardMeta}>{formatStopTimeWindow(stop)}</Text>
           {formatStopAddress(stop) ? (
@@ -279,9 +282,9 @@ function StopCard({ stop, onPress }: { stop: ReturnType<typeof applyStopQueueOve
         </View>
         <View style={styles.cardStatusColumn}>
           <View style={[styles.statusPill, { backgroundColor: STOP_PROGRESS_COLOR[progress] }]}>
-            <Text style={styles.statusPillText}>{STOP_PROGRESS_LABEL[progress]}</Text>
+            <Text style={styles.statusPillText}>{t(STOP_PROGRESS_LABEL[progress])}</Text>
           </View>
-          {progress === 'on_break' ? <Text style={styles.onBreakText}>On Break</Text> : null}
+          {progress === 'on_break' ? <Text style={styles.onBreakText}>{t('On Break')}</Text> : null}
         </View>
       </View>
 
