@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DATE_WINDOWS } from "@/lib/reports/schedule-date-window";
 import { MONTHLY_MODES, SCHEDULE_FREQUENCIES } from "@/lib/reports/schedule-recurrence";
 
 // Request bodies for /api/crm/report-schedules (POST) and /[id] (PATCH).
@@ -34,8 +35,22 @@ const recurrenceFields = {
   endDate: ymdSchema.nullable(),
 };
 
-export const createReportScheduleSchema = z.object({
-  reportKey: z.string().min(1),
+/** Optional relative date window (custom analyses only; checked in the routes). */
+const dateWindowFields = {
+  dateFilterColumn: z
+    .string()
+    .regex(/^[a-z_][a-z0-9_]*$/)
+    .nullable()
+    .optional(),
+  dateWindow: z.enum(DATE_WINDOWS).nullable().optional(),
+};
+
+export const createReportScheduleSchema = z
+  .object({
+  /** Exactly one of reportKey (prebuilt) / customReportId (saved analysis). */
+  reportKey: z.string().min(1).optional(),
+  customReportId: z.string().uuid().optional(),
+  ...dateWindowFields,
   recipients: z.array(z.string().email()).min(1).max(50),
   hourLocal: recurrenceFields.hourLocal.default(7),
   frequency: recurrenceFields.frequency.default("daily"),
@@ -49,7 +64,10 @@ export const createReportScheduleSchema = z.object({
   format: z.enum(SCHEDULE_FORMATS).default("pdf"),
   emailSubject: optionalText(200, "Subject"),
   emailMessage: optionalText(5000, "Message"),
-});
+  })
+  .refine((v) => (v.reportKey ? 1 : 0) + (v.customReportId ? 1 : 0) === 1, {
+    message: "Pick exactly one report or saved analysis",
+  });
 export type CreateReportScheduleInput = z.input<typeof createReportScheduleSchema>;
 
 export const updateReportScheduleSchema = z.object({
@@ -65,6 +83,7 @@ export const updateReportScheduleSchema = z.object({
   startDate: recurrenceFields.startDate.optional(),
   endDate: recurrenceFields.endDate.optional(),
   format: z.enum(SCHEDULE_FORMATS).optional(),
+  ...dateWindowFields,
   emailSubject: optionalText(200, "Subject"),
   emailMessage: optionalText(5000, "Message"),
 });
@@ -73,7 +92,11 @@ export type UpdateReportScheduleInput = z.input<typeof updateReportScheduleSchem
 /** A schedule as the API returns it (DB row + computed fields). */
 export interface ReportScheduleRow {
   id: string;
-  report_key: string;
+  /** Prebuilt report key; null when the schedule targets a saved analysis. */
+  report_key: string | null;
+  custom_report_id: string | null;
+  date_filter_column: string | null;
+  date_window: string | null;
   recipients: string[];
   enabled: boolean;
   hour_local: number;
@@ -98,4 +121,4 @@ export interface ReportScheduleRow {
 
 /** Columns selected for ReportScheduleRow (minus the computed next_run_at). */
 export const REPORT_SCHEDULE_COLUMNS =
-  "id, report_key, recipients, enabled, hour_local, frequency, weekdays, monthly_mode, month_day, month_week, month_weekday, start_date, end_date, format, email_subject, email_message, last_run_at, last_run_status, last_run_error, created_at";
+  "id, report_key, custom_report_id, date_filter_column, date_window, recipients, enabled, hour_local, frequency, weekdays, monthly_mode, month_day, month_week, month_weekday, start_date, end_date, format, email_subject, email_message, last_run_at, last_run_status, last_run_error, created_at";

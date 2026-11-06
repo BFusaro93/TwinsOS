@@ -11,6 +11,7 @@ import {
   recurrenceToColumns,
   type ScheduleRecurrence,
 } from "@/lib/reports/schedule-recurrence";
+import { checkCallerCanScheduleAnalysis, dateWindowProblem } from "@/lib/reports/schedule-analysis-guard";
 import { withNextRun } from "@/lib/reports/schedule-rows";
 import { REPORT_SCHEDULE_COLUMNS, updateReportScheduleSchema } from "@/types/report-schedules";
 
@@ -62,10 +63,29 @@ export async function PATCH(
   // Changing recipients or turning a schedule back on re-sends its data, so the
   // editor must be able to view the report themselves (the cron sends with
   // the service role). Pausing, or changing timing/format/wording, stays open.
-  if (patch.recipients !== undefined || patch.enabled === true) {
-    if (!(await canAccessReportData(supabase, existing.report_key, timeZone))) {
+  let windowDataset: string | null = null;
+  if (existing.custom_report_id) {
+    const check = await checkCallerCanScheduleAnalysis(supabase, existing.custom_report_id);
+    if (!check.ok) {
+      // The analysis was deleted or became unschedulable: only allow pausing.
+      const pausing = patch.enabled === false && Object.keys(patch).length === 1;
+      if (!pausing) return NextResponse.json({ error: check.error }, { status: check.status });
+    } else {
+      windowDataset = check.config.dataset;
+    }
+  } else if (patch.recipients !== undefined || patch.enabled === true) {
+    if (!(await canAccessReportData(supabase, existing.report_key ?? "", timeZone))) {
       return NextResponse.json({ error: "Your role can't view this report" }, { status: 403 });
     }
+  }
+  const touchesWindow = patch.dateFilterColumn !== undefined || patch.dateWindow !== undefined;
+  if (touchesWindow) {
+    const windowError = dateWindowProblem(
+      windowDataset,
+      patch.dateFilterColumn !== undefined ? patch.dateFilterColumn : existing.date_filter_column,
+      patch.dateWindow !== undefined ? patch.dateWindow : existing.date_window
+    );
+    if (windowError) return NextResponse.json({ error: windowError }, { status: 400 });
   }
 
   // Validate the recurrence the row will END UP with, so a partial PATCH
@@ -121,6 +141,8 @@ export async function PATCH(
       ...(patch.recipients !== undefined ? { recipients: patch.recipients } : {}),
       ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
       ...(patch.format !== undefined ? { format: patch.format } : {}),
+      ...(patch.dateFilterColumn !== undefined ? { date_filter_column: patch.dateFilterColumn } : {}),
+      ...(patch.dateWindow !== undefined ? { date_window: patch.dateWindow } : {}),
       ...(patch.emailSubject !== undefined ? { email_subject: patch.emailSubject } : {}),
       ...(patch.emailMessage !== undefined ? { email_message: patch.emailMessage } : {}),
       updated_at: new Date().toISOString(),
