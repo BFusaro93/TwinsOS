@@ -788,8 +788,10 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
           <DialogTitle>{JOB_TYPE_TITLE[jobType]}</DialogTitle>
         </DialogHeader>
 
-        {/* Two-column layout: form left, costing panel right */}
-        <div className="flex gap-5 py-2">
+        {/* Top fields sit beside the costing panel; Services, Products and
+            Notes below use the full dialog width. */}
+        <div className="flex flex-col gap-4 py-2">
+          <div className="flex gap-5">
           <div className="flex flex-1 flex-col gap-4 min-w-0">
 
             {showTypeSelector && (
@@ -1102,6 +1104,40 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
               </div>
             )}
 
+          </div>
+
+          {/* ── Job costing side panel ── */}
+          <div className="w-52 shrink-0 flex flex-col gap-0 rounded-lg border overflow-hidden self-start">
+            <div className="px-3 py-2 text-xs font-semibold text-white" style={{ backgroundColor: brandColor }}>
+              Job Costing
+            </div>
+            <div className="flex flex-col divide-y text-xs">
+              {[
+                { label: "Income", value: formatCurrency(serviceTotalCents), bold: true },
+                { label: "Labor Cost", value: formatCurrency(laborCostCents) },
+                { label: "Gross Profit", value: formatCurrency(grossProfitCents), colored: true },
+                { label: "Margin", value: `${marginPct.toFixed(1)}%`, colored: true },
+                { label: "Budget Hrs", value: `${totalBudgetedHours.toFixed(2)} hrs` },
+              ].map((row) => (
+                <div key={row.label} className="flex items-center justify-between px-3 py-2">
+                  <span className="text-muted-foreground">{row.label}</span>
+                  <span className={
+                    row.colored
+                      ? grossProfitCents >= 0 ? "font-semibold text-green-600 dark:text-green-400" : "font-semibold text-red-600 dark:text-red-400"
+                      : row.bold ? "font-semibold text-slate-800 dark:text-neutral-100" : "text-slate-700 dark:text-neutral-300"
+                  }>
+                    {row.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t bg-slate-50 dark:bg-muted/40 px-3 py-2 text-[10px] text-slate-400 dark:text-neutral-500">
+              Labor rate from org settings
+            </div>
+          </div>
+          </div>
+
+          <div className="flex flex-col gap-4 min-w-0">
             {/* Services table */}
             <div>
               <div className="mb-1.5 flex items-center justify-between">
@@ -1304,36 +1340,6 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 placeholder={jobType === "package" && selectedPackage?.invoiceDescription ? selectedPackage.invoiceDescription : "Optional — overrides the service name on this job's invoices"}
                 rows={2}
               />
-            </div>
-          </div>
-
-          {/* ── Job costing side panel ── */}
-          <div className="w-52 shrink-0 flex flex-col gap-0 rounded-lg border overflow-hidden self-start">
-            <div className="px-3 py-2 text-xs font-semibold text-white" style={{ backgroundColor: brandColor }}>
-              Job Costing
-            </div>
-            <div className="flex flex-col divide-y text-xs">
-              {[
-                { label: "Income", value: formatCurrency(serviceTotalCents), bold: true },
-                { label: "Labor Cost", value: formatCurrency(laborCostCents) },
-                { label: "Gross Profit", value: formatCurrency(grossProfitCents), colored: true },
-                { label: "Margin", value: `${marginPct.toFixed(1)}%`, colored: true },
-                { label: "Budget Hrs", value: `${totalBudgetedHours.toFixed(2)} hrs` },
-              ].map((row) => (
-                <div key={row.label} className="flex items-center justify-between px-3 py-2">
-                  <span className="text-muted-foreground">{row.label}</span>
-                  <span className={
-                    row.colored
-                      ? grossProfitCents >= 0 ? "font-semibold text-green-600 dark:text-green-400" : "font-semibold text-red-600 dark:text-red-400"
-                      : row.bold ? "font-semibold text-slate-800 dark:text-neutral-100" : "text-slate-700 dark:text-neutral-300"
-                  }>
-                    {row.value}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="border-t bg-slate-50 dark:bg-muted/40 px-3 py-2 text-[10px] text-slate-400 dark:text-neutral-500">
-              Labor rate from org settings
             </div>
           </div>
         </div>

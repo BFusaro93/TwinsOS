@@ -1246,7 +1246,7 @@ function DetailsTab({
             }
           />
         )}
-        {project.notes && <MetaRow label="Notes" value={project.notes} />}
+        {project.notes && <MetaRow label="Notes" value={<span className="whitespace-pre-line break-words">{project.notes}</span>} />}
       </dl>
 
       <Separator />

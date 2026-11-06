@@ -310,7 +310,7 @@ function DetailsTab({
         )}
         <MetaRow label="Created" value={formatDate(req.createdAt)} />
         <MetaRow label="Updated" value={formatDate(req.updatedAt)} />
-        {req.notes && <MetaRow label="Notes" value={req.notes} />}
+        {req.notes && <MetaRow label="Notes" value={<span className="whitespace-pre-line break-words">{req.notes}</span>} />}
       </dl>
 
       <Separator />

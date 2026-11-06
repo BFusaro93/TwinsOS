@@ -97,7 +97,7 @@ function DetailsTab({
         />
         <MetaRow label="Received By" value={receipt.receivedByName} />
         <MetaRow label="Received At" value={formatDate(receipt.receivedAt)} />
-        {receipt.notes && <MetaRow label="Notes" value={receipt.notes} />}
+        {receipt.notes && <MetaRow label="Notes" value={<span className="whitespace-pre-line break-words">{receipt.notes}</span>} />}
       </dl>
 
       {hasMaintParts && (
