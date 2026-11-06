@@ -62,6 +62,8 @@ import { visitServices, isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-s
 import { budgetCountdown } from "@/lib/crew/budget-countdown";
 import { isPhaseCaption, phaseCaption } from "@/lib/crew/required-photos";
 import { TimeSummaryDialog } from "@/components/crm/crew/TimeSummaryDialog";
+import { TranslateNote } from "@/components/crm/crew/TranslateNote";
+import { notesToPlainText } from "@/lib/utils/rich-notes";
 import { useOrgSettings } from "@/lib/hooks/use-org-settings";
 import { openInMaps } from "@/lib/utils/maps";
 import { useConfirm } from "@/components/shared/useConfirm";
@@ -932,6 +934,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                   {t("Job Notes")}
                 </p>
                 <RichNotes value={stop.notesToCrew ?? ""} className="text-sm mt-1 text-slate-700 dark:text-neutral-300" />
+                <TranslateNote text={notesToPlainText(stop.notesToCrew)} />
               </div>
             </div>
             {!acknowledged && (

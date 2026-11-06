@@ -3,6 +3,11 @@
 // in English. Placeholders like {time} must be kept as written. The native crew
 // app keeps its own dictionary (crew-app/src/lib/i18n-es.ts) in the same voice.
 export const CREW_ES: Record<string, string> = {
+  "Translate to Spanish": "Traducir al español",
+  "Translate to English": "Traducir al inglés",
+  "Translated automatically": "Traducido automáticamente",
+  "Already in Spanish": "Ya está en español",
+  "Already in English": "Ya está en inglés",
   "({n} skipped)": "({n} omitidos)",
   "A finish time must be after its start.": "La hora de fin debe ser posterior a la de inicio.",
   "A job is still in progress. End the day anyway?": "Todavía hay un trabajo en curso. ¿Terminar el día de todos modos?",

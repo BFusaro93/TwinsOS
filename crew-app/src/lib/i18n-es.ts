@@ -2,6 +2,12 @@
 // Keyed by the exact English text used in t('…'); a key missing here simply
 // shows in English. Placeholders like {time} must be kept as written.
 export const ES: Record<string, string> = {
+  'Translate to Spanish': 'Traducir al español',
+  'Translate to English': 'Traducir al inglés',
+  'Translated automatically': 'Traducido automáticamente',
+  'Already in Spanish': 'Ya está en español',
+  'Already in English': 'Ya está en inglés',
+  "Couldn't translate this right now.": 'No se pudo traducir en este momento.',
   'A finish time must be after its start.': 'La hora de fin debe ser posterior a la de inicio.',
   'A job is still in progress': 'Todavía hay un trabajo en curso',
   Acknowledged: 'Leído',

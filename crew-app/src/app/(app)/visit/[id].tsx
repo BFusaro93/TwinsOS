@@ -28,6 +28,7 @@ import {
 } from '@/components/chemical-crew';
 import { SyncStatusChip } from '@/components/sync-status-chip';
 import { TimeSummaryModal } from '@/components/time-summary';
+import { TranslateNote } from '@/components/translate-note';
 import { ThemedText } from '@/components/themed-text';
 import {
   confirmChemicals,
@@ -622,6 +623,7 @@ export default function StopDetailScreen() {
         <View style={[styles.amberBox, acknowledged && styles.greenAckBox]}>
           <Text style={[styles.amberBoxTitle, acknowledged && styles.greenAckTitle]}>{t('Job Notes')}</Text>
           <Text style={styles.amberBoxText}>{notesToPlainText(stop.notesToCrew)}</Text>
+          <TranslateNote text={notesToPlainText(stop.notesToCrew)} />
           {!acknowledged ? (
             <>
               {notesChangedSinceAck ? (
