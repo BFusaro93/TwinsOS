@@ -161,6 +161,17 @@ export const REPORT_PERMISSION_KEYS: Record<string, string[]> = {
   "address-verification": ["crm_rpt_client_contact_list", "crm_rpt_client_phone_list", "sched_rpt_visits"],
   "skipped-visits": ["sched_rpt_visits"],
   "tickets-past-due": ["tickets_view_modify"],
+  // Service Autopilot parity reports (definitions/sa-parity.ts).
+  // Credit Report reads crm_payments directly (bespoke `run`, so no dataset
+  // gate): the Unapplied Payments key plus the payment-dataset keys.
+  "credit-report": ["acct_rpt_unapplied_payments", ...PAYMENT_DATASET_KEYS],
+  // Declarative over rpt_invoice_line_items — the same keys as that dataset.
+  "invoiced-products": ACCOUNTING_DATASET_KEYS,
+  // Its own catalog key, plus the sibling won-estimate line report's key.
+  "won-estimates-service-products": ["crm_rpt_won_estimates_service_products", "crm_rpt_won_estimates_by_service"],
+  // Punches, shifts and labor cost: the timesheet keys, or the Payroll tab's
+  // permission (which already shows the same shifts and hours).
+  "resource-time-utilization": [...TIMESHEET_DATASET_KEYS, "payroll_report"],
 };
 
 /**

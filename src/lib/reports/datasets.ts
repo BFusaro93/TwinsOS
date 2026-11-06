@@ -427,6 +427,10 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "is_taxable", label: "Taxable", type: "boolean" },
       { key: "hours", label: "Hours", type: "hours" },
       { key: "men", label: "Men", type: "number" },
+      // 20261226000100_rpt_invoice_line_items_product_and_rep.sql
+      { key: "is_product", label: "Product Line", type: "boolean" },
+      { key: "product_name", label: "Product", type: "text" },
+      { key: "sales_rep", label: "Sales Rep", type: "text" },
     ],
   },
   {

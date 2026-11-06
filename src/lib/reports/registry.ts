@@ -13,6 +13,7 @@ import { LEAD_REPORTS } from "@/lib/reports/definitions/lead";
 import { RECEIVABLES_REPORTS } from "@/lib/reports/definitions/receivables";
 import { REVENUE_REPORTS } from "@/lib/reports/definitions/revenue";
 import { SCHEDULE_LIST_REPORTS } from "@/lib/reports/definitions/schedule-lists";
+import { SA_PARITY_REPORTS } from "@/lib/reports/definitions/sa-parity";
 import { SERVICE_REPORTS } from "@/lib/reports/definitions/service-reports";
 import { TICKET_REPORTS } from "@/lib/reports/definitions/tickets";
 import { UPSELL_REPORTS } from "@/lib/reports/definitions/upsells";
@@ -35,6 +36,7 @@ export const ALL_REPORTS: PrebuiltReportDef[] = [
   ...TICKET_REPORTS,
   ...UPSELL_REPORTS,
   ...ADDITIONAL_REPORTS,
+  ...SA_PARITY_REPORTS,
 ];
 
 export const REPORT_MAP: Record<string, PrebuiltReportDef> = Object.fromEntries(
