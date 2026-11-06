@@ -79,8 +79,8 @@ import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 const STATUS_CLASS: Record<TicketStatus, string> = {
   open:    "border border-red-400 text-red-600 dark:text-red-400",
   on_hold: "border border-orange-400 text-orange-600 dark:text-orange-400",
-  pending: "bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
-  closed:  "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
+  pending: "border border-transparent bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-400",
+  closed:  "border border-transparent bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400",
 };
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
@@ -91,15 +91,15 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
 };
 
 const PRIORITY_CLASS: Record<TicketPriority, string> = {
-  urgent: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400",
-  high: "bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400",
-  normal: "bg-muted text-slate-600 dark:text-neutral-400",
-  low: "bg-slate-50 dark:bg-muted/40 text-slate-400 dark:text-neutral-500",
+  urgent: "border border-transparent bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400",
+  high: "border border-transparent bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400",
+  normal: "border border-transparent bg-muted text-slate-600 dark:text-neutral-400",
+  low: "border border-transparent bg-slate-50 dark:bg-muted/40 text-slate-400 dark:text-neutral-500",
 };
 
 function StatusBadge({ status }: { status: TicketStatus }) {
   return (
-    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase", STATUS_CLASS[status])}>
+    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] leading-4 font-semibold uppercase", STATUS_CLASS[status])}>
       {STATUS_LABEL[status] ?? status}
     </span>
   );
@@ -108,7 +108,7 @@ function StatusBadge({ status }: { status: TicketStatus }) {
 function PriorityBadge({ priority }: { priority: TicketPriority }) {
   if (priority !== "urgent" && priority !== "high") return null;
   return (
-    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", PRIORITY_CLASS[priority])}>
+    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] leading-4 font-semibold capitalize", PRIORITY_CLASS[priority])}>
       {priority}
     </span>
   );

@@ -98,7 +98,11 @@ export function JobsPackagesGuide() {
         </ul>
         <p>
           The <strong>client picker</strong> in Add Job is searchable — type part of a name or an
-          account number to find the account. Only clients appear in it:
+          account number to find the account. It has its own full-width row at the top of the dialog.
+          Once a client is picked, the Service Address picker spells out the actual address for each
+          choice (the client&apos;s main address, or each property), and a{" "}
+          <strong>Service address</strong> line under it shows where the crew will be sent, noting when
+          it fell back to the client&apos;s billing address. Only clients appear in the picker:
         </p>
         <Callout>
           <strong>Leads can&apos;t have jobs.</strong> Leads and lost leads are left out of the
@@ -199,7 +203,9 @@ export function JobsPackagesGuide() {
         <p>
           <strong>Per-service notes.</strong> Each service on a job can carry its own crew note,
           invoice description and internal note (they come over from the estimate line&apos;s Notes,
-          or are set on the service). A visit for one service shows the job note followed by that
+          or are set on the service). In Add Job, each service line has a <em>Service notes &amp; invoice
+          description</em> section you can expand; on an existing job, edit the service on its Services
+          tab to change all three. A visit for one service shows the job note followed by that
           service&apos;s note; a single visit that does the whole job shows the job note followed by
           every service&apos;s note, so a &quot;use black mulch&quot; line note reaches the crew however
           the job is scheduled (Add Job, Convert, Waiting List dispatch, Nearby or Add Visit). Editing

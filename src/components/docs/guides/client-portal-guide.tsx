@@ -13,7 +13,7 @@ const NAV_TABS: [string, string, string][] = [
   ["Billing", "/portal/billing", "Every invoice, split into Outstanding and History, with Pay and PDF-download actions. Always shown."],
   ["Services", "/portal/services", "Upcoming and completed job visits, with a live in-progress banner. Always shown."],
   ["Estimates", "/portal/estimates", "Open and past estimates, with Accept / Decline / Request Changes on open ones. Hidden if the org turns off “Show Estimates.”"],
-  ["Tickets", "/portal/tickets", "Tickets the client submitted from the portal, plus any ticket staff chose to share with them, and a New Ticket form. Hidden if the org turns off “Allow Tickets.”"],
+  ["Tickets", "/portal/tickets", "Tickets the client submitted from the portal, plus any ticket staff chose to share with them, and a New Ticket form (clients can attach up to 5 photos, which show on the ticket for staff). Hidden if the org turns off “Allow Tickets.”"],
   ["Documents", "/portal/documents", "A shared document library (same files for every client of that org), grouped by category, with separate View (opens in a tab, for files a browser can display) and Download buttons. Hidden if the org turns off “Document Library.”"],
   ["Account", "/portal/account", "Contact info, billing address, saved payment method, and additional contacts. Always shown."],
 ];
@@ -200,7 +200,15 @@ export function ClientPortalGuide() {
           The Billing tab lists every invoice split into <strong>Outstanding</strong> and{" "}
           <strong>History</strong>, with a running balance-due total and a PDF download for each invoice. A
           client with exactly one outstanding invoice gets a one-click <strong>Pay Now</strong>; with more than
-          one, they pay each invoice individually from its row.
+          one, they can pay one from its row or tick several (or <strong>Select all unpaid</strong>) and pay
+          them in a single payment. Invoices that belong to different accounts, such as a property
+          manager&apos;s sub-accounts, are paid separately.
+        </p>
+        <p>
+          Below the invoices, <strong>Payments &amp; Credits</strong> lists each payment, credit and
+          prepayment with the invoices it was applied to. A <strong>Make a prepayment</strong> button lets
+          the client pay ahead by card or bank transfer ($1.00 to $25,000.00). It lands as account credit
+          that settles their next invoice, the same as a prepayment you enter yourself.
         </p>
         <p>
           Payment runs through Stripe (via Stripe Elements/Payment Element), scoped to the org&apos;s connected
@@ -210,6 +218,11 @@ export function ClientPortalGuide() {
           a few seconds (the UI refreshes the page automatically). If the org has no Stripe publishable key
           configured, the dialog simply says online payments aren&apos;t available yet, in place of the payment
           form.
+        </p>
+        <p>
+          The public invoice link (the one in the invoice email, no login needed) also offers{" "}
+          <strong>Bank transfer (ACH)</strong> next to Card when bank transfer is enabled for the org. There
+          is no card fee on a bank transfer, and it takes a few business days to clear before the balance updates.
         </p>
         <p>
           A client can also save a payment method on their Account page for reuse, and remove it later; the
