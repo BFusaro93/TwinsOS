@@ -17,7 +17,13 @@
 -- and grants are kept. security_invoker stays on, so RLS on the newly joined
 -- product_items / crm_employees still applies to the caller.
 
-create or replace view public.rpt_invoice_line_items
+-- DROP + CREATE (not CREATE OR REPLACE): other migrations (20261224000500 revenue rules,
+-- the discount / net-total columns) add columns to this same view, and REPLACE cannot
+-- reorder or drop columns, so the final shape is written out in full here. Nothing depends
+-- on the view except crm_run_report at runtime; default grants are restored on create.
+drop view if exists public.rpt_invoice_line_items;
+
+create view public.rpt_invoice_line_items
 with (security_invoker = on) as
 SELECT li.id,
     i.invoice_number,
@@ -38,6 +44,12 @@ SELECT li.id,
     li.hours,
     li.men,
     (i.status <> ALL (ARRAY['draft'::text, 'void'::text])) AS is_issued,
+    li.discount_cents,
+    li.total_cents - li.discount_cents AS net_total_cents,
+        CASE
+            WHEN ns.net_sum > 0::numeric THEN round((i.total_cents - i.tax_cents)::numeric * GREATEST(li.total_cents - li.discount_cents, 0)::numeric / ns.net_sum)::bigint
+            ELSE 0::bigint
+        END AS revenue_ex_tax_cents,
     (li.product_id IS NOT NULL) AS is_product,
         CASE
             WHEN (li.product_id IS NOT NULL) THEN COALESCE(pi.name, li.name, li.description)
@@ -48,4 +60,5 @@ SELECT li.id,
      JOIN crm_invoices i ON (((i.id = li.invoice_id) AND (i.deleted_at IS NULL))))
      LEFT JOIN clients c ON ((c.id = i.client_id)))
      LEFT JOIN product_items pi ON ((pi.id = li.product_id)))
-     LEFT JOIN crm_employees sr ON ((sr.id = i.sales_rep_id)));
+     LEFT JOIN crm_employees sr ON ((sr.id = i.sales_rep_id)))
+     CROSS JOIN LATERAL ( SELECT COALESCE(sum(GREATEST(x.total_cents - x.discount_cents, 0)), 0::bigint)::numeric AS net_sum FROM crm_invoice_line_items x WHERE x.invoice_id = li.invoice_id) ns;

@@ -37,7 +37,7 @@ create or replace view public.rpt_invoices with (security_invoker = on) as
     c.billing_city,
     c.billing_zip,
         CASE
-            WHEN (i.status <> ALL (ARRAY['draft'::text, 'void'::text])) AND i.balance_cents > 0 AND i.due_date IS NOT NULL THEN GREATEST(0, (now() AT TIME ZONE org_timezone(i.org_id))::date - i.due_date)
+            WHEN (i.status <> ALL (ARRAY['draft'::text, 'void'::text])) AND i.balance_cents > 0 THEN GREATEST(0, (now() AT TIME ZONE org_timezone(i.org_id))::date - COALESCE(i.due_date, i.invoice_date))
             ELSE 0
         END AS days_overdue,
     i.created_at,
