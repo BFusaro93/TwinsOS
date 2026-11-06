@@ -12,14 +12,14 @@ import { GuideLink } from "@/components/docs/GuideLink";
 const SECTIONS: [string, number, string][] = [
   ["Service Reports", 14, "Visits Report, Backlog Services, Client Count by Service, Client Services Report, Package Summary Report, Skipped Visits Report, Daily Load List"],
   ["Client", 11, "Client Balance, Client Contact List, Client Referral, New Clients Report, Terminations Report, Cancellation Count Report"],
-  ["Revenue", 10, "Invoice Audit Summary, Payment Audit Summary, Revenue by Postal Code, Revenue by Service Summary, Daily Production, Sales Activity Summary"],
+  ["Revenue", 11, "Invoice Audit Summary, Payment Audit Summary, Invoiced Products Report, Revenue by Postal Code, Revenue by Service Summary, Daily Production, Sales Activity Summary"],
   ["Schedule Lists", 8, "Employee Directory, Vendor Contact List, Inventory Product List, Call Ahead Required, Service Price List"],
   ["Job Costing", 8, "Job Costing Report, Cost of Goods Sold Report, Job Cost Summary, Service Profitability Summary, Production Rate Accuracy, WIP Report"],
-  ["Financial", 6, "Invoiced Income by Client, Invoices with Balances, Pre-Payments, Profit / Loss (Accrual), Profit / Loss (Cash), Sales Tax Report"],
+  ["Financial", 7, "Credit Report, Invoiced Income by Client, Invoices with Balances, Pre-Payments, Profit / Loss (Accrual), Profit / Loss (Cash), Sales Tax Report"],
   ["Audits", 9, "Client Timeline Report, Lead Timeline Report, Income Not Invoiced, Visits — Client Has Balance Due, Unapplied Payments, Sales Commission Export, Audit Log, Security & Access Audit, Change Activity by User"],
   ["Lead", 5, "New Leads Report, Lead Aging Summary, Closed Leads Summary, Company Scorecard, Sales Summary by Source"],
-  ["Estimates", 4, "Estimates by Stage, Accepted Estimates by Service, Accepted Estimates — Estimated vs Invoiced Value"],
-  ["Job Hours", 3, "Job Hours Summary, Crew Hours Summary, Timesheet Detail"],
+  ["Estimates", 5, "Estimates by Stage, Accepted Estimates by Service, Won Estimates Service Products Report, Accepted Estimates — Estimated vs Invoiced Value"],
+  ["Job Hours", 4, "Job Hours Summary, Crew Hours Summary, Timesheet Detail, Resource Time Utilization"],
   ["Receivables", 2, "A/R Aging Report, A/R Aging Snapshot"],
   ["Forms", 1, "Forms Summary"],
 ];
