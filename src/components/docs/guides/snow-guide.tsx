@@ -249,7 +249,8 @@ export function SnowGuide() {
           </li>
           <li>
             <strong>Crew stats.</strong> <em>Show Crew Stats</em> opens a card per crew with stops,
-            done, left, and billable total.
+            done, left, and billable total. Skipped and cancelled stops show a dash in the Amt column
+            and are left out of the Totals row and the crew totals, since nothing is billed for them.
           </li>
           <li>
             <strong>Notes to crew.</strong> A column you edit in place: click the cell, type, Save.
