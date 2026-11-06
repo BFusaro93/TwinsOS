@@ -120,9 +120,24 @@ export function estimateToCsvRow(e: Estimate): Record<string, string> {
   };
 }
 
+/**
+ * The catalog service an exported invoice bills, so the file can be imported back
+ * (the invoice importer requires `service`). The importer brings an invoice in as one
+ * line, so this is the invoice's service when every line bills the same one, else the
+ * first line's (by sort order). Blank when the invoice has no service lines.
+ */
+function invoiceServiceName(inv: CRMInvoice): string {
+  const lines = [...(inv.lineItems ?? [])]
+    .filter((l) => !l.isOtherCharge)
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const names = lines.map((l) => (l.serviceName ?? "").trim()).filter(Boolean);
+  return names[0] ?? "";
+}
+
 export function invoiceToCsvRow(inv: CRMInvoice): Record<string, string> {
   return {
     clientName: inv.clientName ?? "",
+    service: invoiceServiceName(inv),
     description: inv.description,
     invoiceDate: inv.invoiceDate,
     dueDate: inv.dueDate ?? "",

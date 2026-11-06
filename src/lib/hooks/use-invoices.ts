@@ -152,6 +152,7 @@ function mapLineItem(row: any): InvoiceLineItem {
     men: row.men ?? null,
     visitId: row.visit_id ?? null,
     serviceId: row.service_id ?? null,
+    serviceName: row.crm_services?.name ?? null,
     isOtherCharge: !!row.is_other_charge,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -283,7 +284,7 @@ export function useInvoices(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, default_payment_method, balance_outstanding_cents, balance_prepay_cents, balance_credits_cents, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_contracts(billing_frequency), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, default_payment_method, balance_outstanding_cents, balance_prepay_cents, balance_credits_cents, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_contracts(billing_frequency), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable, service_id, sort_order, is_other_charge, crm_services(name))")
         .is("deleted_at", null)
         // `invoice_date` is a DATE, so batch-generated invoices tie in droves.
         // Without a tiebreaker Postgres returns tied rows in physical heap

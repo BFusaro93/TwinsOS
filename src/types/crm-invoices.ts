@@ -73,6 +73,8 @@ export interface InvoiceLineItem {
   visitId: string | null;
   /** The catalog service this line bills; drives P&L and commission. */
   serviceId: string | null;
+  /** That service's catalog name, when the query embedded it (invoice list / export). */
+  serviceName?: string | null;
   /** Added from the Other Charges catalog; exempt from the "every line bills a service" rule. */
   isOtherCharge: boolean;
   createdAt: string;

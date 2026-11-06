@@ -303,7 +303,10 @@ export function ImportExportGuide() {
             the name on the row (add an <code>accountNumber</code> column to say which one). Invoices
             and payments that already exist are skipped (see the duplicates table); estimates already
             on file for the same client, description and date are skipped too. Every row number in the
-            results is the line number in your file (the header is line 1).
+            results is the line number in your file (the header is line 1). An invoice export
+            includes the <code>service</code> column (the invoice&apos;s catalog service; for an
+            invoice with several services, its first one), so an exported file can be imported back
+            as is.
           </li>
           <li>
             <strong>Estimate import extras.</strong> <code>amount</code> adds one editable line,
