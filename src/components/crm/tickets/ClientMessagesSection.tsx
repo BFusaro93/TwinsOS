@@ -10,7 +10,7 @@ import { useTicketMessages, useReplyToTicketClient } from "@/lib/hooks/use-ticke
 
 /**
  * The conversation the CLIENT sees in their portal: their replies and ours.
- * Sits below the internal comments on the ticket Comments tab.
+ * Sits below the internal comments on the ticket Comments & Messages tab.
  */
 export function ClientMessagesSection({ ticketId, visibleToClient }: { ticketId: string; visibleToClient: boolean }) {
   const { data: messages = [], isLoading, error } = useTicketMessages(ticketId);

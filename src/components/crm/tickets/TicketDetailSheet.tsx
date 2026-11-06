@@ -821,7 +821,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
     },
     {
       value: "comments",
-      label: "Comments",
+      label: "Comments & Messages",
       content: (
         <div className="flex flex-col gap-6 p-6">
           <section className="flex flex-col gap-3">
