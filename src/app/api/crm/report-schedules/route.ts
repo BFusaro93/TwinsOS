@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getReport } from "@/lib/reports/registry";
 import { canAccessReportData } from "@/lib/reports/report-access";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { recurrenceProblem, recurrenceToColumns } from "@/lib/reports/schedule-recurrence";
+import { withNextRun } from "@/lib/reports/schedule-rows";
+import { createReportScheduleSchema, REPORT_SCHEDULE_COLUMNS } from "@/types/report-schedules";
 
-const createScheduleSchema = z.object({
-  reportKey: z.string().min(1),
-  recipients: z.array(z.string().email()).min(1),
-  /** Hour of day (America/New_York, 0-23) the cron should send this at. */
-  hourLocal: z.number().int().min(0).max(23).optional(),
-});
-
+/** GET — every live schedule in the caller's org (RLS scopes to my_org_id()),
+ *  for the Report Center's Scheduled tab and the per-report dialog. Same gate
+ *  as the Report Center itself; writing needs manage_report_center. */
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -21,17 +21,22 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!(await hasAnySettingsPermission(supabase, ["view_report_center"]))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { data, error } = await supabase
     .from("report_schedules")
-    .select("id, report_key, recipients, enabled, hour_local, last_run_at, last_run_status, last_run_error, created_at")
+    .select(REPORT_SCHEDULE_COLUMNS)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ schedules: data ?? [] });
+  const timeZone = await getMyTimeZone(supabase);
+  const now = new Date();
+  return NextResponse.json({ schedules: (data ?? []).map((row) => withNextRun(row, now, timeZone)) });
 }
 
 export async function POST(request: Request) {
@@ -45,11 +50,7 @@ export async function POST(request: Request) {
 
   // The UI hides these controls behind manage_report_center, but that is only a
   // hint — this is the boundary (view-only roles could otherwise edit/delete).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: canManage } = await (supabase.rpc as any)("has_settings_permission", {
-    p_key: "manage_report_center",
-  });
-  if (!canManage) {
+  if (!(await hasAnySettingsPermission(supabase, ["manage_report_center"]))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -60,37 +61,64 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const parsed = createScheduleSchema.safeParse(body);
+  const parsed = createScheduleParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: firstIssueMessage(parsed.error, "Invalid schedule") },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
+  const input = parsed.data;
 
-  const def = getReport(parsed.data.reportKey);
+  const def = getReport(input.reportKey);
   if (!def || !def.schedulable) {
     return NextResponse.json({ error: "This report can't be scheduled" }, { status: 400 });
   }
+  const timeZone = await getMyTimeZone(supabase);
   // The cron renders the report with the service role, so this is the only
   // place the caller's report/dataset keys are checked.
-  if (!(await canAccessReportData(supabase, parsed.data.reportKey, await getMyTimeZone(supabase)))) {
+  if (!(await canAccessReportData(supabase, input.reportKey, timeZone))) {
     return NextResponse.json({ error: "Your role can't view this report" }, { status: 403 });
+  }
+
+  const recurrence = {
+    frequency: input.frequency,
+    hourLocal: input.hourLocal,
+    weekdays: input.weekdays,
+    monthlyMode: input.monthlyMode,
+    monthDay: input.monthDay,
+    monthWeek: input.monthWeek,
+    monthWeekday: input.monthWeekday,
+    startDate: input.startDate,
+    endDate: input.endDate,
+  };
+  const problem = recurrenceProblem(recurrence);
+  if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+  // A one-off in the past would send the moment it's saved; say so instead.
+  if (input.frequency === "once" && input.startDate && input.startDate < todayInZone(timeZone)) {
+    return NextResponse.json({ error: "The send date is in the past." }, { status: 400 });
   }
 
   const { data, error } = await supabase
     .from("report_schedules")
     .insert({
-      report_key: parsed.data.reportKey,
-      recipients: parsed.data.recipients,
-      ...(parsed.data.hourLocal !== undefined ? { hour_local: parsed.data.hourLocal } : {}),
+      report_key: input.reportKey,
+      recipients: input.recipients,
+      ...recurrenceToColumns(recurrence),
+      format: input.format,
+      email_subject: input.emailSubject ?? null,
+      email_message: input.emailMessage ?? null,
       created_by: user.id,
     })
-    .select("id, report_key, recipients, enabled, hour_local, last_run_at, last_run_status, last_run_error, created_at")
+    .select(REPORT_SCHEDULE_COLUMNS)
     .single();
 
   if (error || !data) {
     return NextResponse.json({ error: error?.message ?? "Insert failed" }, { status: 500 });
   }
-  return NextResponse.json({ schedule: data }, { status: 201 });
+  return NextResponse.json({ schedule: withNextRun(data, new Date(), timeZone) }, { status: 201 });
+}
+
+function createScheduleParse(body: unknown) {
+  const parsed = createReportScheduleSchema.safeParse(body);
+  return parsed.success
+    ? ({ success: true, data: parsed.data } as const)
+    : ({ success: false, error: firstIssueMessage(parsed.error, "Invalid schedule") } as const);
 }

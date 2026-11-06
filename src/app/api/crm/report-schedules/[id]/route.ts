@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { canAccessReportData } from "@/lib/reports/report-access";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
+import { todayInZone } from "@/lib/time/zone";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
-
-const updateScheduleSchema = z.object({
-  recipients: z.array(z.string().email()).min(1).optional(),
-  enabled: z.boolean().optional(),
-  hourLocal: z.number().int().min(0).max(23).optional(),
-});
+import {
+  recurrenceFromRow,
+  recurrenceProblem,
+  recurrenceToColumns,
+  type ScheduleRecurrence,
+} from "@/lib/reports/schedule-recurrence";
+import { withNextRun } from "@/lib/reports/schedule-rows";
+import { REPORT_SCHEDULE_COLUMNS, updateReportScheduleSchema } from "@/types/report-schedules";
 
 export async function PATCH(
   request: Request,
@@ -26,11 +29,7 @@ export async function PATCH(
 
   // The UI hides these controls behind manage_report_center, but that is only a
   // hint — this is the boundary (view-only roles could otherwise edit/delete).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: canManage } = await (supabase.rpc as any)("has_settings_permission", {
-    p_key: "manage_report_center",
-  });
-  if (!canManage) {
+  if (!(await hasAnySettingsPermission(supabase, ["manage_report_center"]))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -41,45 +40,99 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const parsed = updateScheduleSchema.safeParse(body);
+  const parsed = updateReportScheduleSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: firstIssueMessage(parsed.error, "Invalid update") },
       { status: 400 }
     );
   }
+  const patch = parsed.data;
 
-  const { recipients, enabled, hourLocal } = parsed.data;
+  const { data: existing } = await supabase
+    .from("report_schedules")
+    .select(REPORT_SCHEDULE_COLUMNS)
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!existing) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+
+  const timeZone = await getMyTimeZone(supabase);
+
   // Changing recipients or turning a schedule back on re-sends its data, so the
   // editor must be able to view the report themselves (the cron sends with
-  // the service role). Pausing (enabled: false) or changing the hour stays open.
-  if (recipients !== undefined || enabled === true) {
-    const { data: existing } = await supabase
-      .from("report_schedules")
-      .select("report_key")
-      .eq("id", id)
-      .is("deleted_at", null)
-      .maybeSingle();
-    if (!existing) return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
-    if (!(await canAccessReportData(supabase, existing.report_key as string, await getMyTimeZone(supabase)))) {
+  // the service role). Pausing, or changing timing/format/wording, stays open.
+  if (patch.recipients !== undefined || patch.enabled === true) {
+    if (!(await canAccessReportData(supabase, existing.report_key, timeZone))) {
       return NextResponse.json({ error: "Your role can't view this report" }, { status: 403 });
     }
   }
+
+  // Validate the recurrence the row will END UP with, so a partial PATCH
+  // (e.g. frequency → weekly without weekdays) can't store an incomplete rule.
+  const current = recurrenceFromRow(existing);
+  const touchesRecurrence =
+    patch.frequency !== undefined ||
+    patch.hourLocal !== undefined ||
+    patch.weekdays !== undefined ||
+    patch.monthlyMode !== undefined ||
+    patch.monthDay !== undefined ||
+    patch.monthWeek !== undefined ||
+    patch.monthWeekday !== undefined ||
+    patch.startDate !== undefined ||
+    patch.endDate !== undefined;
+  let recurrenceColumns: ReturnType<typeof recurrenceToColumns> | Record<string, never> = {};
+  if (touchesRecurrence) {
+    const merged: ScheduleRecurrence = {
+      frequency: patch.frequency ?? current.frequency,
+      hourLocal: patch.hourLocal ?? current.hourLocal,
+      weekdays: patch.weekdays ?? current.weekdays,
+      monthlyMode: patch.monthlyMode !== undefined ? patch.monthlyMode : current.monthlyMode,
+      monthDay: patch.monthDay !== undefined ? patch.monthDay : current.monthDay,
+      monthWeek: patch.monthWeek !== undefined ? patch.monthWeek : current.monthWeek,
+      monthWeekday: patch.monthWeekday !== undefined ? patch.monthWeekday : current.monthWeekday,
+      startDate: patch.startDate !== undefined ? patch.startDate : current.startDate,
+      endDate: patch.endDate !== undefined ? patch.endDate : current.endDate,
+    };
+    const problem = recurrenceProblem(merged);
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+    recurrenceColumns = recurrenceToColumns(merged);
+  }
+
+  // A one-off whose date has passed would send the moment it's saved or
+  // resumed (the cron catches up missed one-offs) — make the user pick a date.
+  const finalFrequency = patch.frequency ?? current.frequency;
+  const finalStart = patch.startDate !== undefined ? patch.startDate : current.startDate;
+  const finalEnabled = patch.enabled ?? existing.enabled;
+  if (
+    finalFrequency === "once" &&
+    finalEnabled &&
+    (touchesRecurrence || patch.enabled === true) &&
+    finalStart !== null &&
+    finalStart < todayInZone(timeZone)
+  ) {
+    return NextResponse.json({ error: "The send date is in the past — pick a new date." }, { status: 400 });
+  }
+
   const { data, error } = await supabase
     .from("report_schedules")
     .update({
-      ...(recipients !== undefined ? { recipients } : {}),
-      ...(enabled !== undefined ? { enabled } : {}),
-      ...(hourLocal !== undefined ? { hour_local: hourLocal } : {}),
+      ...recurrenceColumns,
+      ...(patch.recipients !== undefined ? { recipients: patch.recipients } : {}),
+      ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+      ...(patch.format !== undefined ? { format: patch.format } : {}),
+      ...(patch.emailSubject !== undefined ? { email_subject: patch.emailSubject } : {}),
+      ...(patch.emailMessage !== undefined ? { email_message: patch.emailMessage } : {}),
+      updated_at: new Date().toISOString(),
     })
     .eq("id", id)
-    .select("id, report_key, recipients, enabled, hour_local, last_run_at, last_run_status, last_run_error, created_at")
+    .select(REPORT_SCHEDULE_COLUMNS)
     .single();
 
   if (error || !data) {
     return NextResponse.json({ error: error?.message ?? "Update failed" }, { status: 500 });
   }
-  return NextResponse.json({ schedule: data });
+  return NextResponse.json({ schedule: withNextRun(data, new Date(), timeZone) });
 }
 
 export async function DELETE(
@@ -97,11 +150,7 @@ export async function DELETE(
 
   // The UI hides these controls behind manage_report_center, but that is only a
   // hint — this is the boundary (view-only roles could otherwise edit/delete).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: canManage } = await (supabase.rpc as any)("has_settings_permission", {
-    p_key: "manage_report_center",
-  });
-  if (!canManage) {
+  if (!(await hasAnySettingsPermission(supabase, ["manage_report_center"]))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
