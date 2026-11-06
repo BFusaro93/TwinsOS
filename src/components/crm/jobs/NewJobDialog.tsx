@@ -257,6 +257,9 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setDateSold(today);
       setCrewId(null);
       setPropertyId(null);
+      // The client picker is only used when the dialog wasn't opened from a client page; without
+      // this the last job's client stayed selected the next time Add Job was opened.
+      setSelectedClientId("");
       setNotesToCrew("");
       setInternalNotes("");
       setInvoiceDescription("");

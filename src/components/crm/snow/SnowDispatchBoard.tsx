@@ -1143,6 +1143,9 @@ export function SnowDispatchBoard() {
   const amountByVisitId = useMemo(() => {
     const byGroup = new Map<string, CRMJobVisit[]>();
     for (const v of visits) {
+      // Skipped and cancelled stops are called off, not plowed — nothing is billed for them, so
+      // they get no amount (their row shows "—") and stay out of the totals and crew stats.
+      if (v.status === "skipped" || v.status === "cancelled") continue;
       const key = billingGroupKey(v);
       if (!byGroup.has(key)) byGroup.set(key, []);
       byGroup.get(key)!.push(v);
