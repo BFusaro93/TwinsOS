@@ -15438,7 +15438,10 @@ export type Database = {
           monthly_mode: string | null
           org_id: string
           recipients: string[]
-          report_key: string
+          report_key: string | null
+          custom_report_id: string | null
+          date_filter_column: string | null
+          date_window: string | null
           start_date: string | null
           updated_at: string
           weekdays: number[]
@@ -15464,7 +15467,10 @@ export type Database = {
           monthly_mode?: string | null
           org_id?: string
           recipients?: string[]
-          report_key: string
+          report_key?: string | null
+          custom_report_id?: string | null
+          date_filter_column?: string | null
+          date_window?: string | null
           start_date?: string | null
           updated_at?: string
           weekdays?: number[]
@@ -15490,7 +15496,10 @@ export type Database = {
           monthly_mode?: string | null
           org_id?: string
           recipients?: string[]
-          report_key?: string
+          report_key?: string | null
+          custom_report_id?: string | null
+          date_filter_column?: string | null
+          date_window?: string | null
           start_date?: string | null
           updated_at?: string
           weekdays?: number[]

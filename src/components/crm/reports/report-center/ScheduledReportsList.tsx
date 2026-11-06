@@ -30,6 +30,8 @@ import {
   useUpdateReportSchedule,
   type ReportSchedule,
 } from "@/lib/hooks/use-report-schedules";
+import { useCustomReports } from "@/lib/hooks/use-report-center";
+import { DATE_WINDOW_LABELS, isDateWindow } from "@/lib/reports/schedule-date-window";
 import { getReport } from "@/lib/reports/registry";
 import { describeRecurrence, recurrenceFromRow } from "@/lib/reports/schedule-recurrence";
 import { formatInZone, todayInZone } from "@/lib/time/zone";
@@ -58,6 +60,11 @@ export function ScheduledReportsList() {
   const { data: schedules = [], isLoading, error } = useReportSchedules();
   const updateSchedule = useUpdateReportSchedule();
   const deleteSchedule = useDeleteReportSchedule();
+  const { data: savedAnalyses = [] } = useCustomReports();
+  const scheduleName = (s: ReportSchedule): string =>
+    s.custom_report_id
+      ? (savedAnalyses.find((a) => a.id === s.custom_report_id)?.name ?? "Saved analysis (deleted)")
+      : (getReport(s.report_key ?? "")?.name ?? s.report_key ?? "");
   const [editing, setEditing] = useState<ReportSchedule | "new" | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ReportSchedule | null>(null);
 
@@ -137,8 +144,21 @@ export function ScheduledReportsList() {
                 const status = statusFor(s);
                 return (
                   <tr key={s.id} className="border-b last:border-0 align-top">
-                    <td className="px-3 py-2 font-medium">{getReport(s.report_key)?.name ?? s.report_key}</td>
-                    <td className="px-3 py-2">{describeRecurrence(recurrenceFromRow(s), today)}</td>
+                    <td className="px-3 py-2 font-medium">
+                      {scheduleName(s)}
+                      {s.custom_report_id && (
+                        <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">analysis</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {describeRecurrence(recurrenceFromRow(s), today)}
+                      {s.date_filter_column && isDateWindow(s.date_window) && (
+                        <div className="text-xs text-muted-foreground">Data: {DATE_WINDOW_LABELS[s.date_window]}</div>
+                      )}
+                      {s.last_run_status === "error" && s.last_run_error && (
+                        <div className="max-w-[240px] text-xs text-red-600 dark:text-red-400">{s.last_run_error}</div>
+                      )}
+                    </td>
                     <td className="max-w-[220px] px-3 py-2">
                       <span className="line-clamp-2 break-all text-xs text-slate-700 dark:text-neutral-300" title={s.recipients.join(", ")}>
                         {s.recipients.join(", ")}
@@ -217,7 +237,7 @@ export function ScheduledReportsList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this schedule?</AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingDelete ? getReport(pendingDelete.report_key)?.name ?? pendingDelete.report_key : ""} will
+              {pendingDelete ? scheduleName(pendingDelete) : ""} will
               stop emailing to {pendingDelete?.recipients.join(", ")}.
             </AlertDialogDescription>
           </AlertDialogHeader>

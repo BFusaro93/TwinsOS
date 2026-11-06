@@ -3,6 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import type { Database } from "@/types/supabase";
 import { getReport } from "@/lib/reports/registry";
+import { renderScheduledAnalysis } from "@/lib/reports/run-scheduled-analysis";
+import { analysisPermissionGroups } from "@/lib/reports/scheduled-analysis";
+import { isDateWindow } from "@/lib/reports/schedule-date-window";
+import { analysisConfigSchema } from "@/types/crm-reports";
 import { renderScheduledReport, type ScheduledReportFormat } from "@/lib/reports/run-scheduled";
 import { escapeHtml, orgEmailFrom, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -73,7 +77,7 @@ export async function GET(request: Request) {
   const { data: schedules, error } = await supabase
     .from("report_schedules")
     .select(
-      "id, org_id, report_key, recipients, hour_local, last_run_at, frequency, weekdays, monthly_mode, month_day, month_week, month_weekday, start_date, end_date, format, email_subject, email_message"
+      "id, org_id, report_key, custom_report_id, date_filter_column, date_window, created_by, recipients, hour_local, last_run_at, frequency, weekdays, monthly_mode, month_day, month_week, month_weekday, start_date, end_date, format, email_subject, email_message"
     )
     .eq("enabled", true)
     .is("deleted_at", null);
@@ -128,22 +132,97 @@ export async function GET(request: Request) {
       .select("id");
     if (!claimed?.length) continue;
 
-    const def = getReport(schedule.report_key);
-    if (!def || !def.schedulable || schedule.recipients.length === 0) {
+    const fail = async (message: string, extra: Record<string, unknown> = {}) => {
       failed++;
       await supabase
         .from("report_schedules")
         .update({
           last_run_at: new Date().toISOString(),
           last_run_status: "error",
-          last_run_error: !def
+          last_run_error: message,
+          ...extra,
+        })
+        .eq("id", schedule.id);
+    };
+
+    // What this schedule sends: a prebuilt report (catalog def) or a saved
+    // custom analysis. Both resolve to a name plus a render callback.
+    let targetName: string;
+    let render: (format: ScheduledReportFormat) => ReturnType<typeof renderScheduledReport>;
+    if (schedule.custom_report_id) {
+      // The config is ALWAYS re-read from the saved row (it can be edited or
+      // deleted after scheduling) and the creator's permissions are re-checked
+      // below, because this run uses the service role.
+      const { data: saved } = await supabase
+        .from("crm_custom_reports")
+        .select("name, config, org_id, deleted_at")
+        .eq("id", schedule.custom_report_id)
+        .maybeSingle();
+      if (!saved || saved.deleted_at || saved.org_id !== schedule.org_id) {
+        await fail("The saved analysis was deleted — schedule paused.", { enabled: false });
+        continue;
+      }
+      const parsedConfig = analysisConfigSchema.safeParse(saved.config);
+      if (!parsedConfig.success) {
+        await fail("The saved analysis is invalid.");
+        continue;
+      }
+      if (schedule.recipients.length === 0 || !schedule.created_by) {
+        await fail(schedule.recipients.length === 0 ? "No recipients configured" : "The schedule has no owner to run as.");
+        continue;
+      }
+      const userId = schedule.created_by;
+      const groups = [["view_report_center"], ...analysisPermissionGroups(parsedConfig.data)];
+      let allowed = true;
+      for (const keys of groups) {
+        let ok = false;
+        for (const key of keys) {
+          const { data } = await supabase.rpc("report_user_has_permission" as never, {
+            p_user_id: userId,
+            p_key: key,
+            p_org_id: schedule.org_id,
+          } as never);
+          if (data === true) {
+            ok = true;
+            break;
+          }
+        }
+        if (!ok) {
+          allowed = false;
+          break;
+        }
+      }
+      if (!allowed) {
+        await fail("The person who created this schedule no longer has permission to view this report. Nothing was sent.");
+        continue;
+      }
+      targetName = saved.name;
+      const windowOk = schedule.date_filter_column && isDateWindow(schedule.date_window);
+      render = (format) =>
+        renderScheduledAnalysis(supabase, {
+          name: saved.name,
+          config: parsedConfig.data,
+          orgId: schedule.org_id,
+          userId,
+          format,
+          dateColumn: windowOk ? schedule.date_filter_column : null,
+          dateWindow: windowOk && isDateWindow(schedule.date_window) ? schedule.date_window : null,
+          now,
+        });
+    } else {
+      const def = getReport(schedule.report_key ?? "");
+      if (!def || !def.schedulable || schedule.recipients.length === 0) {
+        await fail(
+          !def
             ? `Unknown report key: ${schedule.report_key}`
             : !def.schedulable
               ? `Report is not schedulable: ${schedule.report_key}`
-              : "No recipients configured",
-        })
-        .eq("id", schedule.id);
-      continue;
+              : "No recipients configured"
+        );
+        continue;
+      }
+      targetName = def.name;
+      render = (format) => renderScheduledReport(supabase, def, schedule.org_id, format);
     }
 
     const tz = await getOrgTimeZone(supabase, schedule.org_id);
@@ -153,9 +232,9 @@ export async function GET(request: Request) {
     const orgDateTime = now.toLocaleString("en-US", { timeZone: tz });
     const format: ScheduledReportFormat = schedule.format === "xlsx" ? "xlsx" : "pdf";
     try {
-      const rendered = await renderScheduledReport(supabase, def, schedule.org_id, format);
+      const rendered = await render(format);
       // Header-safe: no CR/LF from a stored custom subject.
-      const subject = (schedule.email_subject?.trim() || `${def.name} — ${orgDate}`).replace(/[\r\n]+/g, " ");
+      const subject = (schedule.email_subject?.trim() || `${targetName} — ${orgDate}`).replace(/[\r\n]+/g, " ");
       const partialNote = rendered.truncated
         ? `<p><em>Partial report — only the first ${rendered.rowCount.toLocaleString("en-US")}` +
           (rendered.totalCount !== undefined ? ` of ${rendered.totalCount.toLocaleString("en-US")}` : "") +
@@ -163,7 +242,7 @@ export async function GET(request: Request) {
         : "";
       const html =
         (schedule.email_message?.trim() ? messageToHtml(schedule.email_message.trim()) : "") +
-        `<p>Attached: <strong>${escapeHtml(def.name)}</strong> (${format === "xlsx" ? "Excel" : "PDF"}), generated ${escapeHtml(orgDateTime)}.</p>` +
+        `<p>Attached: <strong>${escapeHtml(targetName)}</strong> (${format === "xlsx" ? "Excel" : "PDF"}), generated ${escapeHtml(orgDateTime)}.</p>` +
         partialNote;
       const { error: sendErr } = await sendEmailRetryingRateLimit(resend, {
         from: orgEmailFrom(await orgName(schedule.org_id)),

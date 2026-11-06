@@ -7,6 +7,7 @@ import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
 import { recurrenceProblem, recurrenceToColumns } from "@/lib/reports/schedule-recurrence";
+import { checkCallerCanScheduleAnalysis, dateWindowProblem } from "@/lib/reports/schedule-analysis-guard";
 import { withNextRun } from "@/lib/reports/schedule-rows";
 import { createReportScheduleSchema, REPORT_SCHEDULE_COLUMNS } from "@/types/report-schedules";
 
@@ -67,16 +68,27 @@ export async function POST(request: Request) {
   }
   const input = parsed.data;
 
-  const def = getReport(input.reportKey);
-  if (!def || !def.schedulable) {
-    return NextResponse.json({ error: "This report can't be scheduled" }, { status: 400 });
-  }
   const timeZone = await getMyTimeZone(supabase);
-  // The cron renders the report with the service role, so this is the only
-  // place the caller's report/dataset keys are checked.
-  if (!(await canAccessReportData(supabase, input.reportKey, timeZone))) {
-    return NextResponse.json({ error: "Your role can't view this report" }, { status: 403 });
+  let windowDataset: string | null = null;
+  if (input.customReportId) {
+    // A saved analysis: the cron re-loads the config from the row at send time,
+    // so only existence, schedulability and the caller's access matter here.
+    const check = await checkCallerCanScheduleAnalysis(supabase, input.customReportId);
+    if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
+    windowDataset = check.config.dataset;
+  } else {
+    const def = getReport(input.reportKey ?? "");
+    if (!def || !def.schedulable) {
+      return NextResponse.json({ error: "This report can't be scheduled" }, { status: 400 });
+    }
+    // The cron renders the report with the service role, so this is the only
+    // place the caller's report/dataset keys are checked.
+    if (!(await canAccessReportData(supabase, input.reportKey as string, timeZone))) {
+      return NextResponse.json({ error: "Your role can't view this report" }, { status: 403 });
+    }
   }
+  const windowError = dateWindowProblem(windowDataset, input.dateFilterColumn ?? null, input.dateWindow ?? null);
+  if (windowError) return NextResponse.json({ error: windowError }, { status: 400 });
 
   const recurrence = {
     frequency: input.frequency,
@@ -99,7 +111,10 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from("report_schedules")
     .insert({
-      report_key: input.reportKey,
+      report_key: input.reportKey ?? null,
+      custom_report_id: input.customReportId ?? null,
+      date_filter_column: input.dateFilterColumn ?? null,
+      date_window: input.dateWindow ?? null,
       recipients: input.recipients,
       ...recurrenceToColumns(recurrence),
       format: input.format,

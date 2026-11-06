@@ -355,7 +355,10 @@ export async function runAnalysis(
   // Route handlers pass the ssr server client; typing loosely keeps this
   // compatible with the generated-Database client without fighting rpc typings.
   supabase: SupabaseClient<never, never, never> | SupabaseClient,
-  config: AnalysisConfig
+  config: AnalysisConfig,
+  /** Run through a different RPC with extra leading args — used only by the
+   *  scheduled-report cron (crm_run_report_for_org, org-scoped service role). */
+  rpcOverride?: { name: string; extraArgs: Record<string, unknown> }
 ): Promise<ReportResult> {
   const customFields = await loadCustomFieldDefs(supabase, config);
   const error = validateAnalysisConfig(config, customFields);
@@ -373,8 +376,9 @@ export async function runAnalysis(
   const baseKeys = columns.filter((c) => !formulaNames.has(c.key)).map((c) => c.key);
 
   const { data, error: rpcError } = await (supabase as SupabaseClient).rpc(
-    "crm_run_report",
+    rpcOverride?.name ?? "crm_run_report",
     {
+      ...(rpcOverride?.extraArgs ?? {}),
       p_dataset: config.dataset,
       // Subtotal mode is a plain-columns query — grouping is purely a
       // client-side display concern (divider headers + per-group subtotal

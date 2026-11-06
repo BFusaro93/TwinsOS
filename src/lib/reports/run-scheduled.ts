@@ -23,7 +23,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
  *  Differs on `datetime`: the date part is formatted in the org's zone too
  *  (utils.formatDate uses the host timezone, which is UTC on Vercel and would
  *  roll an evening timestamp onto the next day). */
-function formatCellValueServer(value: unknown, type: ReportFieldType, timeZone: string): string {
+export function formatCellValueServer(value: unknown, type: ReportFieldType, timeZone: string): string {
   if (value === null || value === undefined) return "—";
   switch (type) {
     case "money":
@@ -79,7 +79,7 @@ function chartFromResult(title: string, result: ReportResult, timeZone: string):
  *  numeric types stay real numbers (money cents → dollars) so the emailed
  *  spreadsheet sorts and sums; everything else is the org-zone display
  *  string. Must match the on-screen Excel button's output. */
-function exportCellValueServer(value: unknown, type: ReportFieldType, timeZone: string): string | number {
+export function exportCellValueServer(value: unknown, type: ReportFieldType, timeZone: string): string | number {
   if (value === null || value === undefined) return "";
   switch (type) {
     case "money":

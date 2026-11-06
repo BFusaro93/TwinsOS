@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useCustomReports } from "@/lib/hooks/use-report-center";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import {
   useCreateReportSchedule,
@@ -38,6 +39,8 @@ import {
   type ScheduleFrequency,
   type ScheduleRecurrence,
 } from "@/lib/reports/schedule-recurrence";
+import { DATE_WINDOWS, DATE_WINDOW_LABELS, isDateWindow } from "@/lib/reports/schedule-date-window";
+import { analysisScheduleProblem, dateWindowColumns } from "@/lib/reports/scheduled-analysis";
 import { todayInZone } from "@/lib/time/zone";
 import type { ScheduleFormat } from "@/types/report-schedules";
 
@@ -61,7 +64,13 @@ const FREQUENCY_LABELS: Record<ScheduleFrequency, string> = {
 const SCHEDULABLE_REPORTS = ALL_REPORTS.filter((r) => r.schedulable);
 
 interface FormState {
+  /** Prebuilt report key ("" when the target is a saved analysis). */
   reportKey: string;
+  /** Saved analysis id ("" when the target is a prebuilt report). */
+  customReportId: string;
+  /** Relative date window for an analysis ("" = none). */
+  dateColumn: string;
+  dateWindow: string;
   recipientsText: string;
   recurrence: ScheduleRecurrence;
   format: ScheduleFormat;
@@ -69,11 +78,19 @@ interface FormState {
   emailMessage: string;
 }
 
-function initialState(schedule: ReportSchedule | null, reportKey: string | null, today: string): FormState {
+function initialState(
+  schedule: ReportSchedule | null,
+  reportKey: string | null,
+  customReportId: string | null,
+  today: string
+): FormState {
   if (schedule) {
     const r = recurrenceFromRow(schedule);
     return {
-      reportKey: schedule.report_key,
+      reportKey: schedule.report_key ?? "",
+      customReportId: schedule.custom_report_id ?? "",
+      dateColumn: schedule.date_filter_column ?? "",
+      dateWindow: schedule.date_window ?? "",
       recipientsText: schedule.recipients.join(", "),
       recurrence: {
         ...r,
@@ -91,7 +108,10 @@ function initialState(schedule: ReportSchedule | null, reportKey: string | null,
     };
   }
   return {
-    reportKey: reportKey ?? SCHEDULABLE_REPORTS[0]?.key ?? "",
+    reportKey: customReportId ? "" : (reportKey ?? SCHEDULABLE_REPORTS[0]?.key ?? ""),
+    customReportId: customReportId ?? "",
+    dateColumn: "",
+    dateWindow: "",
     recipientsText: "",
     recurrence: {
       frequency: "daily",
@@ -126,6 +146,7 @@ export function ReportScheduleEditorDialog({
   onOpenChange,
   schedule,
   reportKey,
+  customReportId = null,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -133,10 +154,12 @@ export function ReportScheduleEditorDialog({
   schedule: ReportSchedule | null;
   /** Fixed report for a new schedule (null = let the user pick). */
   reportKey: string | null;
+  /** Fixed saved analysis for a new schedule. */
+  customReportId?: string | null;
 }) {
   const timeZone = useOrgTimeZone();
   const today = todayInZone(timeZone);
-  const [form, setForm] = useState<FormState>(() => initialState(schedule, reportKey, today));
+  const [form, setForm] = useState<FormState>(() => initialState(schedule, reportKey, customReportId, today));
   const createSchedule = useCreateReportSchedule();
   const updateSchedule = useUpdateReportSchedule();
   const saving = createSchedule.isPending || updateSchedule.isPending;
@@ -147,7 +170,12 @@ export function ReportScheduleEditorDialog({
   const normalized = useMemo(() => normalizeRecurrence(form.recurrence), [form.recurrence]);
   const problem = recurrenceProblem(normalized);
   const summary = problem ? null : describeRecurrence(normalized, today);
-  const reportName = getReport(form.reportKey)?.name ?? form.reportKey;
+  const { data: savedAnalyses = [] } = useCustomReports();
+  const analysis = form.customReportId ? savedAnalyses.find((a) => a.id === form.customReportId) : undefined;
+  const reportName = form.customReportId
+    ? (analysis?.name ?? "this analysis")
+    : (getReport(form.reportKey)?.name ?? form.reportKey);
+  const windowColumns = analysis ? dateWindowColumns(analysis.config.dataset) : [];
 
   const toggleWeekday = (day: number, checked: boolean) =>
     setRecurrence({
@@ -166,8 +194,12 @@ export function ReportScheduleEditorDialog({
       toast.error(problem);
       return;
     }
-    if (!form.reportKey) {
+    if (!form.reportKey && !form.customReportId) {
       toast.error("Pick a report.");
+      return;
+    }
+    if (form.customReportId && !!form.dateColumn !== !!form.dateWindow) {
+      toast.error("Pick both a date column and a date window, or neither.");
       return;
     }
     const payload = {
@@ -181,6 +213,12 @@ export function ReportScheduleEditorDialog({
       startDate: normalized.startDate,
       endDate: normalized.endDate,
       format: form.format,
+      ...(form.customReportId
+        ? {
+            dateFilterColumn: form.dateColumn || null,
+            dateWindow: isDateWindow(form.dateWindow) && form.dateColumn ? form.dateWindow : null,
+          }
+        : {}),
       emailSubject: form.emailSubject,
       emailMessage: form.emailMessage,
     };
@@ -200,7 +238,12 @@ export function ReportScheduleEditorDialog({
         callbacks
       );
     } else {
-      createSchedule.mutate({ reportKey: form.reportKey, recipients, ...payload }, callbacks);
+      createSchedule.mutate(
+        form.customReportId
+          ? { customReportId: form.customReportId, recipients, ...payload }
+          : { reportKey: form.reportKey, recipients, ...payload },
+        callbacks
+      );
     }
   };
 
@@ -217,19 +260,38 @@ export function ReportScheduleEditorDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {!schedule && !reportKey && (
+          {!schedule && !reportKey && !customReportId && (
             <div className="space-y-1.5">
               <Label className="text-xs">Report</Label>
-              <Select value={form.reportKey} onValueChange={(value) => setForm((f) => ({ ...f, reportKey: value }))}>
+              <Select
+                value={form.customReportId ? `c:${form.customReportId}` : form.reportKey ? `r:${form.reportKey}` : ""}
+                onValueChange={(value) =>
+                  setForm((f) => ({
+                    ...f,
+                    reportKey: value.startsWith("r:") ? value.slice(2) : "",
+                    customReportId: value.startsWith("c:") ? value.slice(2) : "",
+                    dateColumn: "",
+                    dateWindow: "",
+                  }))
+                }
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Pick a report" />
                 </SelectTrigger>
                 <SelectContent>
                   {SCHEDULABLE_REPORTS.map((def) => (
-                    <SelectItem key={def.key} value={def.key}>
+                    <SelectItem key={def.key} value={`r:${def.key}`}>
                       {def.name}
                     </SelectItem>
                   ))}
+                  {savedAnalyses.map((a) => {
+                    const problem = analysisScheduleProblem(a.config);
+                    return (
+                      <SelectItem key={a.id} value={`c:${a.id}`} disabled={!!problem}>
+                        {a.name} (saved analysis{problem ? " — not schedulable" : ""})
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -382,6 +444,51 @@ export function ReportScheduleEditorDialog({
           </div>
 
           <p className="text-xs text-muted-foreground">{summary ?? problem}</p>
+
+          {form.customReportId && (
+            <div className="space-y-1.5 rounded-md border p-3">
+              <Label className="text-xs">Date range (optional)</Label>
+              <p className="text-xs text-muted-foreground">
+                A saved analysis keeps fixed dates. Pick a column and a rolling window to refresh the range on
+                every send (computed on your company&apos;s calendar).
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <Select
+                  value={form.dateColumn || "none"}
+                  onValueChange={(value) => setForm((f) => ({ ...f, dateColumn: value === "none" ? "" : value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No date window</SelectItem>
+                    {windowColumns.map((c) => (
+                      <SelectItem key={c.key} value={c.key}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={form.dateWindow || "none"}
+                  disabled={!form.dateColumn}
+                  onValueChange={(value) => setForm((f) => ({ ...f, dateWindow: value === "none" ? "" : value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Pick a window</SelectItem>
+                    {DATE_WINDOWS.map((w) => (
+                      <SelectItem key={w} value={w}>
+                        {DATE_WINDOW_LABELS[w]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label className="text-xs">Format</Label>

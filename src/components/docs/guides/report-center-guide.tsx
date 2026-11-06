@@ -771,18 +771,36 @@ export function ReportCenterGuide() {
         <p>
           <strong>Scheduled delivery.</strong> Reports flagged as schedulable — currently the five
           fixed-window <em>Actual v. Budgeted Hours</em> reports (Today, Yesterday, Week to Date,
-          Last Week, Month to Date) — show a <strong>Schedule</strong> button in the viewer. It
-          sets up daily email delivery of that report as a PDF: enter one or more recipient
-          addresses and pick a <strong>Send time</strong> (an hour of the day, Eastern). An hourly
-          job delivers each schedule on the <strong>first run at or after its scheduled hour</strong>{" "}
-          — so a 7 AM schedule goes out on the 7 AM run, or the 8 AM run if the 7 AM one fired late
-          — and never twice in the same day. Times inside the PDF are formatted in Eastern. Creating
-          a schedule, changing its recipients or turning it back on needs Manage Report Center
-          <em> and</em> permission to view the report itself (for these, a job-costing report
-          permission), because the email goes out without checking the recipient&apos;s role.
-          If a scheduled report matches more rows than the report engine returns at once, the
-          emailed PDF says it is partial (&quot;only the first N of M rows&quot;) and leaves off the
-          totals row, since totals would cover only the rows included.
+          Last Week, Month to Date) — show a <strong>Schedule</strong> button in the viewer, and
+          the <strong>Scheduled</strong> tab lists every schedule. A schedule emails the report to
+          one or more recipients <strong>once</strong>, <strong>daily</strong>,{" "}
+          <strong>weekly</strong> (on the days you tick) or <strong>monthly</strong> (a day of the
+          month, or e.g. the last Friday), between an optional start and end date, as a{" "}
+          <strong>PDF</strong> or an <strong>Excel</strong> file, with an optional custom{" "}
+          <strong>subject</strong> and <strong>message</strong>. The send time is an hour of the
+          day on your company&apos;s clock. An hourly job delivers each schedule on the{" "}
+          <strong>first run at or after its scheduled hour</strong> — so a 7 AM schedule goes out
+          on the 7 AM run, or the 8 AM run if the 7 AM one fired late — and never twice in the same
+          day. Creating a schedule, changing its recipients or turning it back on needs Manage
+          Report Center <em>and</em> permission to view the report itself, because the email goes
+          out without checking the recipient&apos;s role. If a scheduled report matches more rows
+          than the report engine returns at once, the emailed file says it is partial
+          (&quot;only the first N of M rows&quot;) and leaves off the totals row.
+        </p>
+        <p>
+          <strong>Scheduling a saved custom analysis.</strong> In <em>My Reports</em>, choose{" "}
+          <strong>Schedule…</strong> on a saved analysis (or pick it in <em>New Schedule</em>).
+          For now only analyses on <em>Job Visits</em>, <em>Contract Service Usage</em>,{" "}
+          <em>Sales Rep by Month</em> and the <em>Audit Log</em> datasets, without joined
+          datasets, can be scheduled. Because a saved analysis stores fixed dates, you can add a{" "}
+          <strong>date window</strong>: pick a date column and a rolling range — Yesterday, Last 7
+          or 30 days (through yesterday), Month to date, This month, Last month, Year to date, This
+          year or Last year — and the range is recalculated on your company&apos;s calendar every
+          time it sends. Each send uses the analysis as it is saved <em>at that moment</em>, and
+          checks that the person who created the schedule still has Report Center access and
+          permission for the dataset; if not, or if the analysis was deleted, nothing is sent and
+          the schedule shows the reason in its last-run column (a deleted analysis pauses its
+          schedules).
         </p>
       </Section>
 

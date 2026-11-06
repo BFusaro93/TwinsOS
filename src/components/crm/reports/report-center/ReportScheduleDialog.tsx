@@ -12,12 +12,19 @@ import { ReportScheduleEditorDialog } from "./ReportScheduleEditorDialog";
  *  editor for a new delivery of this report, and links to the Report
  *  Center's Scheduled tab when the report already has schedules. Hidden from
  *  roles without manage_report_center (the API enforces it regardless). */
-export function ReportScheduleDialog({ reportKey }: { reportKey: string }) {
+export function ReportScheduleDialog({
+  reportKey,
+  customReportId,
+}: {
+  reportKey?: string;
+  /** Schedule a saved custom analysis instead of a prebuilt report. */
+  customReportId?: string;
+}) {
   const [open, setOpen] = useState(false);
   const { can, isLoading: permissionsLoading } = usePermissions();
   const canManage = !permissionsLoading && can("manage_report_center");
   const { data: allSchedules } = useReportSchedules({ enabled: canManage });
-  const existing = (allSchedules ?? []).filter((s) => s.report_key === reportKey).length;
+  const existing = (allSchedules ?? []).filter((s) => (customReportId ? s.custom_report_id === customReportId : s.report_key === reportKey)).length;
 
   if (!canManage) return null;
 
@@ -36,7 +43,13 @@ export function ReportScheduleDialog({ reportKey }: { reportKey: string }) {
         </Link>
       )}
       {open && (
-        <ReportScheduleEditorDialog open={open} onOpenChange={setOpen} schedule={null} reportKey={reportKey} />
+        <ReportScheduleEditorDialog
+          open={open}
+          onOpenChange={setOpen}
+          schedule={null}
+          reportKey={reportKey ?? null}
+          customReportId={customReportId ?? null}
+        />
       )}
     </>
   );
