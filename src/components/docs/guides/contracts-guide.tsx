@@ -266,7 +266,12 @@ export function ContractsGuide() {
           The same goes for a contract entered, signed or switched to Active a few days after its
           billing day (start Jan 1, billing day 1, entered Jan 3): the next run bills the current
           cycle, but the invoice is dated the day it&apos;s created (Jan 3) rather than back-dated to
-          the billing day, and its due date counts the client&apos;s terms from that date. A cycle is
+          the billing day, and its due date counts the client&apos;s terms from that date. When you
+          mark a contract <strong>Signed</strong> or <strong>Active</strong> (or save one that is) after
+          that cycle&apos;s billing day, the contract window asks first: <strong>Bill January now (dated
+          today)</strong> creates the invoice right away, and <strong>Start billing with February</strong>{" "}
+          skips the cycle &mdash; nothing is billed for it and the first invoice is the next cycle&apos;s.
+          Contracts activated another way (the API, an import) follow the rule above. A cycle is
           only ever billed once, whatever date its invoice carries &mdash; a later run or a Create
           Invoices click in the same period is skipped. Two exceptions are not back-billed: a client{" "}
           <strong>reactivated</strong> after the billing day (billing resumes at the next cycle), and

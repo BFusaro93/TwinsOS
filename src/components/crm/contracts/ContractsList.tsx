@@ -85,6 +85,7 @@ import {
   type ContractTemplate,
 } from "@/lib/hooks/use-contract-templates";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
+import { useLateCyclePrompt } from "@/components/crm/contracts/LateCyclePrompt";
 
 const CONTRACT_STATUSES: ContractStatus[] = ["draft", "sent", "signed", "active", "expired", "cancelled"];
 
@@ -1299,6 +1300,9 @@ export function ContractDialog({
   const { mutateAsync: acknowledgeChange, isPending: acknowledging } = useAcknowledgeContractChange();
   const { data: linkedJobs } = useJobsByContract(contract?.id);
   const [confirmEnd, confirmEndDialog] = useConfirm();
+  // Asks "bill this cycle now, or start with the next?" when a contract becomes
+  // billable after its current billing day has passed (see LateCyclePrompt).
+  const lateCycle = useLateCyclePrompt();
   const isPending = creating || updating;
 
   async function handleStatusChange(status: ContractStatus) {
@@ -1320,6 +1324,7 @@ export function ContractDialog({
     try {
       const result = await updateStatus({ id: contract.id, status });
       if (!result.skipped) toast.success(`Contract marked as ${status}`);
+      if (!result.skipped && (status === "signed" || status === "active")) await lateCycle.check(contract.id);
     } catch (err) {
       // Invalid state-machine transitions (e.g. cancelled -> active) throw a
       // descriptive Error from useUpdateContractStatus — surface that instead
@@ -1406,6 +1411,9 @@ export function ContractDialog({
           },
         });
         toast.success("Contract saved");
+        // A signed/active contract whose dates or billing settings now put a
+        // passed billing day in play: ask before the daily run bills it.
+        if (contract!.status === "signed" || contract!.status === "active") await lateCycle.check(contract!.id);
       }
       onOpenChange(false);
     } catch (err) { toast.error(mutationErrorMessage(err, "Failed to save contract")); }
@@ -1415,6 +1423,7 @@ export function ContractDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[85vh] w-full max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:p-0">
         {confirmEndDialog}
+        {lateCycle.element}
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <div className="flex items-center gap-3">
             <DialogTitle className="text-xl font-bold">

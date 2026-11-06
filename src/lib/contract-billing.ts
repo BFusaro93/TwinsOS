@@ -646,6 +646,90 @@ export function currentPeriodBillingDate(contract: BillingContractRow, today: Da
   return null;
 }
 
+/** The contract columns pendingLateCycle reads on top of the billing ones. */
+export interface LateCycleContractRow extends BillingContractRow {
+  status?: string | null;
+  is_active?: boolean | null;
+  auto_generate?: boolean | null;
+  end_date?: string | null;
+  monthly_amount_cents?: number | null;
+  monthly_amounts?: Record<string, number | null> | null;
+}
+
+/** A cycle whose billing day has already passed but that the next run would still bill. */
+export interface LateCycle {
+  frequency: BillingFrequency;
+  /** The cycle's window (YYYY-MM-DD, inclusive) — e.g. Jan 1 – Jan 31. */
+  periodStart: string;
+  periodEnd: string;
+  /** The day it would normally have been billed (YYYY-MM-DD). */
+  billingDay: string;
+  /** First day of the cycle after it (YYYY-MM-DD). */
+  nextCycleStart: string;
+  /**
+   * What to write on the contract to start billing with the NEXT cycle instead:
+   * last_billed_date inside this cycle (so the cron and catch-up treat it as
+   * billed), plus the quarterly/annual grid pin the billing paths would stamp.
+   */
+  skipUpdate: { last_billed_date: string; billing_anchor_date?: string };
+}
+
+/**
+ * The cycle the contract-invoices cron would bill LATE on its next run: the
+ * contract was entered, signed or activated after that cycle's billing day, so
+ * catch-up bills it dated the run day. The contract dialog asks whether to bill
+ * it now or start with the next cycle. Null when nothing is pending — not
+ * billable (status / active / auto-generate / term / $0 month), already billed,
+ * or today IS the billing day (a normal run, nothing to ask).
+ *
+ * The cron additionally skips a cycle whose billing day passed while the CLIENT
+ * was off service (audit trail); this helper can't see that, so callers that
+ * bill on the user's say-so go through Create Invoices, which bills on request.
+ */
+export function pendingLateCycle(contract: LateCycleContractRow, today: Date): LateCycle | null {
+  if (contract.status !== "signed" && contract.status !== "active") return null;
+  if (contract.is_active === false || contract.auto_generate === false) return null;
+  const frequency = normalizeBillingFrequency(contract.billing_frequency);
+  if (frequency === "one_time") return null;
+  if (!isBillingDueOn(contract, today)) return null;
+
+  const now = toYmd(today);
+  let billingDay: Ymd;
+  if (frequency === "weekly" || frequency === "biweekly") {
+    const step = frequency === "weekly" ? 7 : 14;
+    const elapsed = dayDiff(billingAnchor(contract, today), now);
+    if (elapsed % step === 0) return null; // today is the period's first day
+    billingDay = addDays(now, -(elapsed % step));
+  } else {
+    const g = monthGrid(contract, frequency, today);
+    const runDay = billingDayOf(g, monthIndex(now.y, now.m));
+    if (runDay.d === now.d) return null; // today is the billing day
+    billingDay = runDay.d < now.d ? runDay : billingDayOf(g, monthIndex(now.y, now.m) - 1);
+  }
+
+  const plan = planContractBilling(contract, today, { billNow: false });
+  if (!plan.periodStart || !plan.periodEnd) return null;
+  if (billedInPeriod(plan, contract.last_billed_date)) return null;
+  if (termSkipReason(plan, contract)) return null;
+  const override = contract.monthly_amounts?.[plan.monthKey];
+  const amount = override ?? contract.monthly_amount_cents ?? 0;
+  if (amount <= 0) return null;
+
+  const end = parseYmd(plan.periodEnd)!;
+  const anchorStamp = billingAnchorStamp(contract, plan);
+  return {
+    frequency,
+    periodStart: plan.periodStart,
+    periodEnd: plan.periodEnd,
+    billingDay: fmt(billingDay),
+    nextCycleStart: fmt(addDays(end, 1)),
+    skipUpdate: {
+      last_billed_date: plan.periodEnd,
+      ...(anchorStamp ? { billing_anchor_date: anchorStamp } : {}),
+    },
+  };
+}
+
 /** The contract columns contractCoversServiceDay reads. */
 export interface CoverageContractRow extends BillingContractRow {
   status?: string | null;
