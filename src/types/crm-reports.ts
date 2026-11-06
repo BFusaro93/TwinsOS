@@ -92,19 +92,41 @@ export const analysisFormulaSchema = z.object({
     .min(1)
     .max(60)
     .regex(/^[a-z][a-z0-9_]*$/i, "Must start with a letter; letters, numbers, underscores only"),
-  /** Left operand — must be an existing output column key (a plain selected
-   *  column or an aggregate alias), validated against the analysis's own
-   *  already-whitelisted output columns, not arbitrary text. */
+  /** Left operand — an existing output column key (a plain selected column or
+   *  an aggregate alias) or an EARLIER formula's name, validated against the
+   *  analysis's own output columns, not arbitrary text. */
   left: z.string().min(1),
   operator: formulaOperatorSchema,
-  /** Right operand — same constraint as `left`. */
-  right: z.string().min(1),
+  /** Right operand — same constraint as `left`. Exactly one of `right` and
+   *  `rightConst` is set (checked in validateAnalysisConfig). */
+  right: z.string().min(1).optional(),
+  /** Right operand as a fixed number instead of a column (e.g. ×100, ÷1000,
+   *  − 25). */
+  rightConst: z.number().finite().optional(),
   displayType: formulaDisplayTypeSchema.default("number"),
 });
 export type AnalysisFormula = z.infer<typeof analysisFormulaSchema>;
 
+/** A related dataset joined onto the base dataset. `alias` is a key of the
+ *  relation catalog (REPORT_RELATIONS in datasets.ts, mirrored in the
+ *  crm_run_report RPC); the related dataset's columns are then addressable as
+ *  "<alias>.<column>". Always a LEFT JOIN — base rows are never dropped. */
+export const analysisJoinSchema = z.object({
+  alias: z.string().regex(/^[a-z][a-z_]{0,30}$/),
+});
+export type AnalysisJoin = z.infer<typeof analysisJoinSchema>;
+
+/** One level of a multi-level sort. */
+export const analysisSortSchema = z.object({
+  column: z.string().min(1),
+  dir: z.enum(["asc", "desc"]).default("asc"),
+});
+export type AnalysisSort = z.infer<typeof analysisSortSchema>;
+
 export const analysisConfigSchema = z.object({
   dataset: z.string().min(1),
+  /** Related datasets joined on (see analysisJoinSchema). */
+  joins: z.array(analysisJoinSchema).optional(),
   columns: z.array(z.string()).default([]),
   filters: z.array(analysisFilterSchema).default([]),
   groupBy: z.array(z.string()).default([]),
@@ -122,6 +144,9 @@ export const analysisConfigSchema = z.object({
   formulas: z.array(analysisFormulaSchema).optional(),
   sortColumn: z.string().optional(),
   sortDir: z.enum(["asc", "desc"]).default("asc"),
+  /** Multi-level sort (first entry is the primary key). When present it wins
+   *  over sortColumn/sortDir, which stay for every existing saved analysis. */
+  sorts: z.array(analysisSortSchema).optional(),
   limit: z.number().int().positive().max(5000).optional(),
 });
 export type AnalysisConfig = z.infer<typeof analysisConfigSchema>;

@@ -8,6 +8,7 @@ import {
   getCrewRunnableScope,
   isCrewCaller,
 } from "@/lib/reports/crew-dashboard-access";
+import { REPORT_RELATIONS } from "@/lib/reports/datasets";
 import { DATASET_PERMISSION_KEYS } from "@/lib/reports/report-permissions";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
 
@@ -73,8 +74,18 @@ export async function POST(request: Request) {
   // of view_report_center (admins pass inside has_settings_permission).
   // This applies to crew logins too: a crew-visible dashboard can't be used
   // to launder payroll/invoice/audit data to a shared field account.
-  const datasetKeys = DATASET_PERMISSION_KEYS[parsed.data.dataset];
-  if (datasetKeys) {
+  // A joined relation exposes that dataset's columns too, so each join is
+  // gated by the related dataset's own keys — joining can't be used to read
+  // something the caller couldn't query directly. (Client custom fields hang
+  // off the base dataset, so its own gate already covers them.)
+  const gatedDatasets = new Set<string>([parsed.data.dataset]);
+  for (const join of parsed.data.joins ?? []) {
+    const rel = REPORT_RELATIONS[parsed.data.dataset]?.[join.alias];
+    if (rel) gatedDatasets.add(rel.dataset);
+  }
+  for (const dataset of gatedDatasets) {
+    const datasetKeys = DATASET_PERMISSION_KEYS[dataset];
+    if (!datasetKeys) continue;
     const checks = await Promise.all(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       datasetKeys.map((key) => (supabase.rpc as any)("has_settings_permission", { p_key: key }))

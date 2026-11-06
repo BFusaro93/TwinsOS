@@ -1,5 +1,12 @@
 import { useMemo, useState } from "react";
-import { DATASET_MAP } from "@/lib/reports/datasets";
+import { useCustomFieldDefs } from "@/lib/hooks/use-client-custom-fields";
+import {
+  CUSTOM_FIELD_DATASETS,
+  DATASET_MAP,
+  customFieldKey,
+  relationsFor,
+  resolveReportField,
+} from "@/lib/reports/datasets";
 import type { ReportDataset } from "@/types/crm-reports";
 import type {
   AggregateFn,
@@ -31,8 +38,38 @@ export interface BuilderFormula {
   name: string;
   left: string;
   operator: FormulaOperator;
+  /** Column to combine with; empty when `rightConst` is used instead. */
   right: string;
+  /** A fixed number typed as text ("" = unused) — e.g. 100 for "× 100". */
+  rightConst: string;
   displayType: FormulaDisplayType;
+}
+
+export interface BuilderSort {
+  column: string;
+  dir: "asc" | "desc";
+}
+
+/** Saved formula → builder row (right/rightConst are mutually exclusive). */
+function toBuilderFormula(f: NonNullable<AnalysisConfig["formulas"]>[number]): BuilderFormula {
+  return {
+    name: f.name,
+    left: f.left,
+    operator: f.operator,
+    right: f.right ?? "",
+    rightConst: f.rightConst !== undefined ? String(f.rightConst) : "",
+    displayType: f.displayType,
+  };
+}
+
+/** Builder row → saved formula, or null while it's still incomplete. */
+function toAnalysisFormula(f: BuilderFormula): NonNullable<AnalysisConfig["formulas"]>[number] | null {
+  if (!f.name || !f.left) return null;
+  const base = { name: f.name, left: f.left, operator: f.operator, displayType: f.displayType };
+  if (f.right) return { ...base, right: f.right };
+  const n = parseFloat(f.rightConst);
+  if (f.rightConst.trim() !== "" && Number.isFinite(n)) return { ...base, rightConst: n };
+  return null;
 }
 
 export const FORMULA_OPERATOR_OPTIONS: { value: FormulaOperator; label: string }[] = [
@@ -140,8 +177,22 @@ export interface AnalysisConfigBuilder {
   aggregates: BuilderAggregate[];
   subtotals: boolean;
   formulas: BuilderFormula[];
+  /** Joined relation aliases (e.g. "client"). */
+  joins: string[];
+  /** Extra sort levels after the first (sortColumn/sortDir is level 1). */
+  sorts: BuilderSort[];
   sortColumn: string;
   sortDir: "asc" | "desc";
+  setJoins: (v: string[] | ((prev: string[]) => string[])) => void;
+  /** Join on/off — turning one off also drops every column/filter/sort using it. */
+  toggleJoin: (alias: string, on: boolean) => void;
+  /** Relations this dataset can join to (empty when none). */
+  availableRelations: { alias: string; label: string; dataset: string }[];
+  /** The dataset's own columns only (no joined / custom). */
+  baseFields: DatasetField[];
+  /** Client custom fields exposed as columns for this dataset. */
+  customFields: DatasetField[];
+  setSorts: (v: BuilderSort[] | ((prev: BuilderSort[]) => BuilderSort[])) => void;
   setDataset: (v: string) => void;
   setColumns: (v: string[] | ((prev: string[]) => string[])) => void;
   setFilters: (v: BuilderFilter[] | ((prev: BuilderFilter[]) => BuilderFilter[])) => void;
@@ -161,6 +212,8 @@ export interface AnalysisConfigBuilder {
   grouped: boolean;
   /** True when Group By + "keep detail rows" subtotals are both on. */
   subtotalMode: boolean;
+  /** Output columns a formula may reference (excludes formulas themselves). */
+  outputOptions: { value: string; label: string }[];
   sortOptions: { value: string; label: string }[];
   canRun: boolean;
   buildConfig: () => AnalysisConfig | null;
@@ -179,8 +232,10 @@ export function useAnalysisConfigBuilder(
   const [columns, setColumns] = useState<string[]>(initial?.columns ?? []);
   const [filters, setFilters] = useState<BuilderFilter[]>(() =>
     (initial?.filters ?? []).map((f) => {
-      const field = DATASET_MAP[initial?.dataset ?? ""]?.fields.find(
-        (df) => df.key === f.column
+      const field = resolveReportField(
+        initial?.dataset ?? "",
+        f.column,
+        (initial?.joins ?? []).map((j) => j.alias)
       );
       let value = f.value === undefined ? "" : String(f.value);
       if (field?.type === "money" && typeof f.value === "number") {
@@ -195,19 +250,72 @@ export function useAnalysisConfigBuilder(
   );
   const [subtotals, setSubtotals] = useState(initial?.subtotals ?? false);
   const [formulas, setFormulas] = useState<BuilderFormula[]>(
-    (initial?.formulas ?? []).map((f) => ({
-      name: f.name,
-      left: f.left,
-      operator: f.operator,
-      right: f.right,
-      displayType: f.displayType,
-    }))
+    (initial?.formulas ?? []).map(toBuilderFormula)
   );
-  const [sortColumn, setSortColumn] = useState(initial?.sortColumn ?? "");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">(initial?.sortDir ?? "asc");
+  const [joins, setJoins] = useState<string[]>((initial?.joins ?? []).map((j) => j.alias));
+  const [sorts, setSorts] = useState<BuilderSort[]>(() => {
+    const saved = initial?.sorts ?? [];
+    return saved.length > 1 ? saved.slice(1).map((x) => ({ column: x.column, dir: x.dir })) : [];
+  });
+  const [sortColumn, setSortColumn] = useState(
+    initial?.sorts?.[0]?.column ?? initial?.sortColumn ?? ""
+  );
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(
+    initial?.sorts?.[0]?.dir ?? initial?.sortDir ?? "asc"
+  );
 
   const datasetDef = dataset ? DATASET_MAP[dataset] : undefined;
-  const fields = useMemo(() => datasetDef?.fields ?? [], [datasetDef]);
+  const baseFields = useMemo(() => datasetDef?.fields ?? [], [datasetDef]);
+  const { data: customFieldDefs } = useCustomFieldDefs();
+  const customFields = useMemo<DatasetField[]>(() => {
+    if (!CUSTOM_FIELD_DATASETS.has(dataset)) return [];
+    return (customFieldDefs ?? []).map((d) => ({
+      key: customFieldKey(d.id),
+      label: `Custom: ${d.name}`,
+      type: d.fieldType === "number" ? ("number" as const) : ("text" as const),
+      totalable: d.fieldType === "number",
+    }));
+  }, [dataset, customFieldDefs]);
+  const availableRelations = useMemo(
+    () => relationsFor(dataset).map(([alias, rel]) => ({ alias, label: rel.label, dataset: rel.dataset })),
+    [dataset]
+  );
+  const joinedFields = useMemo<DatasetField[]>(
+    () =>
+      joins.flatMap((alias) => {
+        const rel = relationsFor(dataset).find(([a]) => a === alias)?.[1];
+        const relDef = rel ? DATASET_MAP[rel.dataset] : undefined;
+        if (!rel || !relDef) return [];
+        return relDef.fields.map((f) => ({
+          key: `${alias}.${f.key}`,
+          label: `${rel.label}: ${f.label}`,
+          type: f.type,
+          totalable: false,
+          options: f.options,
+        }));
+      }),
+    [dataset, joins]
+  );
+  const fields = useMemo(
+    () => [...baseFields, ...customFields, ...joinedFields],
+    [baseFields, customFields, joinedFields]
+  );
+
+  const toggleJoin = (alias: string, on: boolean) => {
+    if (on) {
+      setJoins((prev) => (prev.includes(alias) ? prev : [...prev, alias]));
+      return;
+    }
+    const uses = (key: string) => key.startsWith(`${alias}.`);
+    setJoins((prev) => prev.filter((a) => a !== alias));
+    setColumns((prev) => prev.filter((k) => !uses(k)));
+    setFilters((prev) => prev.filter((f) => !uses(f.column)));
+    setGroupBy((prev) => prev.filter((k) => !uses(k)));
+    setAggregates((prev) => prev.filter((a) => !uses(a.column)));
+    setSorts((prev) => prev.filter((x) => !uses(x.column)));
+    setSortColumn((prev) => (uses(prev) ? "" : prev));
+    setFormulas((prev) => prev.filter((f) => !uses(f.left) && !uses(f.right)));
+  };
   // Subtotal mode keeps row-level detail (grouped under a divider header
   // with a per-group subtotal) instead of collapsing to one row per group —
   // it's a separate, plain-columns query, so it's excluded from `aggregated`.
@@ -219,7 +327,7 @@ export function useAnalysisConfigBuilder(
     [fields]
   );
 
-  const sortOptions = useMemo(() => {
+  const outputOptions = useMemo(() => {
     if (aggregated) {
       return [
         ...groupBy.map((key) => ({
@@ -237,6 +345,15 @@ export function useAnalysisConfigBuilder(
     }));
   }, [aggregated, groupBy, aggregates, columns, fields]);
 
+  // Formula columns can be sorted on too (applied after they're computed).
+  const sortOptions = useMemo(
+    () => [
+      ...outputOptions,
+      ...formulas.filter((f) => f.name).map((f) => ({ value: f.name, label: f.name })),
+    ],
+    [outputOptions, formulas]
+  );
+
   const handleDatasetChange = (next: string) => {
     setDataset(next);
     setColumns(DATASET_MAP[next]?.fields.map((f) => f.key) ?? []);
@@ -245,6 +362,8 @@ export function useAnalysisConfigBuilder(
     setAggregates([]);
     setSubtotals(false);
     setFormulas([]);
+    setJoins([]);
+    setSorts([]);
     setSortColumn("");
     onDatasetChange?.(next);
   };
@@ -260,9 +379,18 @@ export function useAnalysisConfigBuilder(
       groupBy,
       aggregates: aggregates.filter((a) => a.column),
       subtotals: subtotalMode,
-      formulas: formulas.filter((f) => f.name && f.left && f.right),
+      formulas: formulas
+        .map(toAnalysisFormula)
+        .filter((f): f is NonNullable<typeof f> => f !== null),
+      joins: joins.map((alias) => ({ alias })),
+      // Level 1 stays in sortColumn/sortDir (older readers); sorts carries the
+      // full ordered list only when there's more than one level.
       sortColumn: sortColumn || undefined,
       sortDir,
+      sorts:
+        sortColumn && sorts.some((x) => x.column)
+          ? [{ column: sortColumn, dir: sortDir }, ...sorts.filter((x) => x.column)]
+          : undefined,
       limit: 500,
     };
   };
@@ -283,6 +411,14 @@ export function useAnalysisConfigBuilder(
     aggregates,
     subtotals,
     formulas,
+    joins,
+    sorts,
+    setJoins,
+    setSorts,
+    toggleJoin,
+    availableRelations,
+    baseFields,
+    customFields,
     sortColumn,
     sortDir,
     setDataset,
@@ -300,6 +436,7 @@ export function useAnalysisConfigBuilder(
     numericFields,
     grouped: aggregated,
     subtotalMode,
+    outputOptions,
     sortOptions,
     canRun,
     buildConfig,
@@ -314,10 +451,10 @@ export function useAnalysisConfigBuilder(
 export function hydrateBuilder(builder: AnalysisConfigBuilder, cfg: AnalysisConfig) {
   builder.setDataset(cfg.dataset);
   builder.setColumns(cfg.columns ?? []);
-  const fields = DATASET_MAP[cfg.dataset]?.fields ?? [];
+  const joinAliases = (cfg.joins ?? []).map((j) => j.alias);
   builder.setFilters(
     (cfg.filters ?? []).map((f) => {
-      const field = fields.find((df) => df.key === f.column);
+      const field = resolveReportField(cfg.dataset, f.column, joinAliases);
       let value = f.value === undefined ? "" : String(f.value);
       if (field?.type === "money" && typeof f.value === "number") {
         value = String(f.value / 100);
@@ -328,15 +465,10 @@ export function hydrateBuilder(builder: AnalysisConfigBuilder, cfg: AnalysisConf
   builder.setGroupBy(cfg.groupBy ?? []);
   builder.setAggregates((cfg.aggregates ?? []).map((a) => ({ column: a.column, fn: a.fn })));
   builder.setSubtotals(cfg.subtotals ?? false);
-  builder.setFormulas(
-    (cfg.formulas ?? []).map((f) => ({
-      name: f.name,
-      left: f.left,
-      operator: f.operator,
-      right: f.right,
-      displayType: f.displayType,
-    }))
-  );
-  builder.setSortColumn(cfg.sortColumn ?? "");
-  builder.setSortDir(cfg.sortDir ?? "asc");
+  builder.setFormulas((cfg.formulas ?? []).map(toBuilderFormula));
+  builder.setJoins((cfg.joins ?? []).map((j) => j.alias));
+  const savedSorts = cfg.sorts ?? [];
+  builder.setSorts(savedSorts.slice(1).map((x) => ({ column: x.column, dir: x.dir })));
+  builder.setSortColumn(savedSorts[0]?.column ?? cfg.sortColumn ?? "");
+  builder.setSortDir(savedSorts[0]?.dir ?? cfg.sortDir ?? "asc");
 }
