@@ -40,6 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
+import { CardFeeLine, cardChargeTotalCents } from "@/components/crm/payments/CardFeeBreakdown";
 import { Plus, RotateCcw, X, Loader2, Check, CreditCard } from "lucide-react";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -1228,6 +1229,7 @@ export function PaymentsList({ clientId }: Props) {
                   )}
                   <td className="px-3 py-2.5 text-right font-medium text-slate-800 dark:text-neutral-100">
                     {formatCurrency(p.amountCents)}
+                    <CardFeeLine payment={p} />
                   </td>
                   <td className="px-3 py-2.5 text-right text-slate-600 dark:text-neutral-400">
                     {formatCurrency(p.unusedAmountCents)}
@@ -1314,6 +1316,18 @@ export function PaymentsList({ clientId }: Props) {
                 <span className="text-muted-foreground">Amount</span>
                 <span className="font-semibold text-slate-900 dark:text-neutral-100">{formatCurrency(viewPayment.amountCents)}</span>
               </div>
+              {viewPayment.processingFeeCents > 0 && (
+                <>
+                  <div className="flex justify-between py-1 border-b">
+                    <span className="text-muted-foreground">Card fee (paid by customer)</span>
+                    <span>{formatCurrency(viewPayment.processingFeeCents)}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b">
+                    <span className="text-muted-foreground">Total charged to card</span>
+                    <span className="font-medium">{formatCurrency(cardChargeTotalCents(viewPayment))}</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between py-1 border-b">
                 <span className="text-muted-foreground">Method</span>
                 <span>{viewPayment.method}</span>
