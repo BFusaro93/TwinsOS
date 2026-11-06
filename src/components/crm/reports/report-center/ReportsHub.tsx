@@ -13,8 +13,9 @@ import { MyReportsList } from "./MyReportsList";
 import { DashboardsList } from "./DashboardsList";
 import { GraphicsLibraryList } from "./GraphicsLibraryList";
 import { PayrollReport } from "./PayrollReport";
+import { ScheduledReportsList } from "./ScheduledReportsList";
 
-const TAB_KEYS = ["dashboard", "dashboards", "center", "custom", "graphics", "payroll"] as const;
+const TAB_KEYS = ["dashboard", "dashboards", "center", "custom", "schedules", "graphics", "payroll"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 export function ReportsHub() {
@@ -87,6 +88,12 @@ export function ReportsHub() {
             >
               My Reports
             </TabsTrigger>
+            <TabsTrigger
+              value="schedules"
+              className="rounded-none border-b-2 border-transparent px-4 data-[state=active]:border-brand-500 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+            >
+              Scheduled
+            </TabsTrigger>
             {canPayroll && (
               <TabsTrigger
                 value="payroll"
@@ -114,6 +121,9 @@ export function ReportsHub() {
         </TabsContent>
         <TabsContent value="custom" className="mt-4 flex-1 overflow-auto">
           <MyReportsList />
+        </TabsContent>
+        <TabsContent value="schedules" className="mt-4 flex-1 overflow-auto">
+          <ScheduledReportsList />
         </TabsContent>
         {canPayroll && (
           <TabsContent value="payroll" className="mt-4 flex-1 overflow-auto">
