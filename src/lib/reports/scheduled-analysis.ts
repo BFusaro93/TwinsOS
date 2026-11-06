@@ -4,25 +4,18 @@ import { DATASET_PERMISSION_KEYS } from "@/lib/reports/report-permissions";
 import { dateWindowRangeAt, type DateWindow } from "@/lib/reports/schedule-date-window";
 
 /**
- * Datasets a saved analysis may be scheduled on. The cron has no user session,
+ * A saved analysis may be scheduled on any dataset. The cron has no user session,
  * so RLS can't scope its queries; crm_run_report_for_org (migration
- * 20261226000200) scopes by an injected `org_id = <org>` filter, which needs
- * the view to HAVE an org_id column. Verified against information_schema:
- * only these four rpt_* views do. Keep in step with that migration's check.
+ * 20261226000200) scopes by an injected `org_id = <org>` filter, which needs the
+ * view to HAVE an org_id column — every rpt_* dataset does since migration
+ * 20261226000300, and the function refuses any dataset that doesn't. Joins stay
+ * unschedulable: a join key like invoice_number is only unique per org, so a
+ * join without its own org condition could pull in another org's columns.
  */
-export const SCHEDULABLE_ANALYSIS_DATASETS: readonly string[] = [
-  "rpt_audit_log",
-  "rpt_contract_service_usage",
-  "rpt_job_visits",
-  "rpt_sales_rep_month",
-];
 
 /** null when `config` can be scheduled, otherwise the reason it can't. */
 export function analysisScheduleProblem(config: AnalysisConfig): string | null {
-  if (!SCHEDULABLE_ANALYSIS_DATASETS.includes(config.dataset)) {
-    const label = getDataset(config.dataset)?.label ?? config.dataset;
-    return `Analyses on "${label}" can't be scheduled yet — only job visits, contract service usage, sales rep by month and the audit log can.`;
-  }
+  if (!getDataset(config.dataset)) return `Unknown dataset: ${config.dataset}`;
   if ((config.joins ?? []).length > 0) return "Analyses with joined datasets can't be scheduled.";
   return null;
 }

@@ -820,9 +820,7 @@ export function ReportCenterGuide() {
         <p>
           <strong>Scheduling a saved custom analysis.</strong> In <em>My Reports</em>, choose{" "}
           <strong>Schedule…</strong> on a saved analysis (or pick it in <em>New Schedule</em>).
-          For now only analyses on <em>Job Visits</em>, <em>Contract Service Usage</em>,{" "}
-          <em>Sales Rep by Month</em> and the <em>Audit Log</em> datasets, without joined
-          datasets, can be scheduled. Because a saved analysis stores fixed dates, you can add a{" "}
+          Analyses on any dataset can be scheduled, except ones that use joined datasets. Because a saved analysis stores fixed dates, you can add a{" "}
           <strong>date window</strong>: pick a date column and a rolling range — Yesterday, Last 7
           or 30 days (through yesterday), Month to date, This month, Last month, Year to date, This
           year or Last year — and the range is recalculated on your company&apos;s calendar every
