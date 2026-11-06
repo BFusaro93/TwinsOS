@@ -44,6 +44,7 @@ import { AlertTriangle, Plus, X } from "lucide-react";
 import { SnowRateTiersDraftEditor, parseTierDrafts, type DraftTier } from "@/components/crm/jobs/SnowRateTiersEditor";
 import { useSaveSnowRateTiers } from "@/lib/hooks/use-snow-rate-tiers";
 import { toast } from "sonner";
+import { snowServiceRule } from "@/lib/snow-billing";
 import { ServiceDialog } from "@/components/crm/services/ServiceDialog";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import type { JobType, BudgetMethod, CRMService } from "@/types/crm-jobs";
@@ -223,6 +224,29 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   // Interval billing (rate by inches), saved against the job right after it is created.
   const [tierDrafts, setTierDrafts] = useState<DraftTier[]>([]);
   const saveSnowTiers = useSaveSnowRateTiers();
+  // How this snow invoice type uses service rows (null = no restriction, e.g. non-snow jobs).
+  const snowRule = jobType === "snow" ? snowServiceRule(invoiceType) : null;
+  const serviceRateLocked = snowRule != null && !snowRule.servicePriceUsed;
+  const serviceLimitReached = snowRule?.maxServices != null && services.length >= snowRule.maxServices;
+
+  /** Picking an invoice type that takes one service (or ignores service prices) fixes up rows already entered. */
+  function changeInvoiceType(next: string) {
+    setInvoiceType(next);
+    const rule = snowServiceRule(next);
+    if (!rule) return;
+    let rows = services;
+    const notes: string[] = [];
+    if (rule.maxServices != null && rows.length > rule.maxServices) {
+      rows = rows.slice(0, rule.maxServices);
+      notes.push(`This invoice type takes one service per job, so only the first service was kept — create a separate job for each of the others.`);
+    }
+    if (!rule.servicePriceUsed && rows.some((r) => r.rateCents > 0)) {
+      rows = rows.map((r) => ({ ...r, rateCents: 0 }));
+      notes.push("Service prices were cleared — this invoice type doesn't bill from them.");
+    }
+    if (rows !== services) setServices(rows);
+    if (notes.length > 0) toast.info(notes.join(" "));
+  }
 
   useEffect(() => {
     if (open) {
@@ -465,7 +489,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     updateService(i, {
       serviceId: svc.id,
       serviceName: svc.name,
-      rateCents: typedRate > 0 ? typedRate : (svc.defaultRateCents ?? 0),
+      rateCents: serviceRateLocked ? 0 : typedRate > 0 ? typedRate : (svc.defaultRateCents ?? 0),
       budgetedHours: autoHoursPerPerson(svc, qty, services[i]?.teamSize ?? 1),
       budgetMethod: svc.budgetMethod,
     });
@@ -641,7 +665,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
   const brandColor = orgSettings?.brandColor ?? "#1e1e1e";
 
   // ── job costing calculations ──
-  const serviceTotalCents = services.reduce((s, r) => s + r.qty * r.rateCents, 0);
+  const serviceTotalCents = services.reduce((s, r) => s + (serviceRateLocked ? 0 : r.qty * r.rateCents), 0);
   const totalBudgetedHours = services.reduce((s, r) => s + r.budgetedHours * r.teamSize, 0);
   const laborRateCents = (orgSettings as { burdenedRateCents?: number } | undefined)?.burdenedRateCents
     ?? DEFAULT_LABOR_RATE * 100;
@@ -678,6 +702,15 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
     }
     if (jobType === "recurring" && recurrenceEnd && startDate && recurrenceEnd < startDate) {
       toast.error("End date cannot be before the start date");
+      return;
+    }
+
+    if (jobType === "snow" && invoiceType === "monthly_flat_rate" && !contractId) {
+      toast.error("Monthly Flat Rate bills through a contract — choose the client's contract above, or this job will never be invoiced.");
+      return;
+    }
+    if (snowRule?.maxServices != null && services.length > snowRule.maxServices) {
+      toast.error("This invoice type takes one service per job — remove the extra services, or make a separate job for each.");
       return;
     }
 
@@ -735,7 +768,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
           startRecurring: jobType === "recurring" ? startDate || null : null,
           assignedTo: null,
           qty: s.qty,
-          rateCents: s.rateCents,
+          // Billing never reads a service price on these snow invoice types; storing one only inflates the job's value.
+          rateCents: serviceRateLocked ? 0 : s.rateCents,
           budgetedHours: roundHours(s.budgetedHours),
           budgetMethod: s.budgetMethod,
           teamSize: s.teamSize,
@@ -1048,7 +1082,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <Label>Invoice Type</Label>
-                    <Select value={invoiceType ?? ""} onValueChange={setInvoiceType}>
+                    <Select value={invoiceType ?? ""} onValueChange={changeInvoiceType}>
                       <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="per_event">Per Event</SelectItem>
@@ -1108,8 +1142,8 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                 <Label>Services</Label>
                 <div className="flex items-center gap-1">
                   {bundles.length > 0 && (
-                    <Select value="" onValueChange={pickBundle}>
-                      <SelectTrigger className="h-6 w-40 text-xs">
+                    <Select value="" onValueChange={pickBundle} disabled={snowRule?.maxServices != null}>
+                      <SelectTrigger className="h-6 w-40 text-xs" title={snowRule?.maxServices != null ? "This invoice type takes one service per job" : undefined}>
                         <SelectValue placeholder="Apply bundle…" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1119,11 +1153,18 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       </SelectContent>
                     </Select>
                   )}
-                  <Button type="button" variant="ghost" size="sm" className="h-6 text-xs" onClick={addService}>
+                  <Button
+                    type="button" variant="ghost" size="sm" className="h-6 text-xs" onClick={addService}
+                    disabled={serviceLimitReached}
+                    title={serviceLimitReached ? "This invoice type takes one service per job — make a separate job for each service" : undefined}
+                  >
                     <Plus className="mr-1 h-3 w-3" /> Add Service
                   </Button>
                 </div>
               </div>
+              {snowRule && (
+                <p className="mb-1.5 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">{snowRule.note}</p>
+              )}
               <div className="rounded border overflow-hidden">
                 <div className="overflow-x-auto">
                 {/* Header — uses org brand color. Recurring jobs: no per-row Start Date (use header "Start Recurring") */}
@@ -1175,13 +1216,19 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     ) : (
                       <Input type="number" min="0" step="0.01" value={svc.qty} onChange={(e) => updateQty(i, parsePositiveQty(e.target.value))} className="h-7 text-xs" />
                     )}
-                    <DecimalInput
-                      min={0}
-                      className="h-7 text-xs"
-                      value={svc.rateCents / 100}
-                      selectOnFocus
-                      onCommit={(cost) => updateService(i, { rateCents: Math.round(cost * 100) })}
-                    />
+                    {serviceRateLocked ? (
+                      <span className="flex h-7 items-center rounded border border-dashed px-2 text-xs text-slate-400 dark:text-neutral-500" title={snowRule?.note}>
+                        Not used
+                      </span>
+                    ) : (
+                      <DecimalInput
+                        min={0}
+                        className="h-7 text-xs"
+                        value={svc.rateCents / 100}
+                        selectOnFocus
+                        onCommit={(cost) => updateService(i, { rateCents: Math.round(cost * 100) })}
+                      />
+                    )}
                     {rowIsAutoHrs(svc.serviceId) ? (
                       <span className="flex h-7 items-center justify-end pr-1 text-xs font-medium text-blue-600 dark:text-blue-400" title="Auto-calculated from production rate">
                         {svc.budgetedHours.toFixed(2)}
@@ -1196,7 +1243,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                       />
                     )}
                     <Input type="number" min="1" step="1" value={svc.teamSize} onChange={(e) => updateTeamSize(i, parseInt(e.target.value) || 1)} className="h-7 text-xs" />
-                    <span className="text-xs text-slate-700 dark:text-neutral-300 font-medium text-right pr-1">{formatCurrency(svc.qty * svc.rateCents)}</span>
+                    <span className="text-xs text-slate-700 dark:text-neutral-300 font-medium text-right pr-1">{serviceRateLocked ? "—" : formatCurrency(svc.qty * svc.rateCents)}</span>
                     <button type="button" onClick={() => removeService(i)} disabled={services.length === 1} className="flex h-6 w-6 items-center justify-center rounded text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400 disabled:opacity-30">
                       <X className="h-3.5 w-3.5" />
                     </button>

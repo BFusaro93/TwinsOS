@@ -106,22 +106,27 @@ export function SnowRateTierRows({
         {" "}instead of a flat rate per inch. Start each range where the last one ends; a depth exactly on a boundary (3&quot;) bills the lower range. Leave the last range&apos;s &quot;to&quot; blank for an open-ended top range billed per inch.
       </p>
       {tiers.length === 0 && (
-        <p className="text-xs italic text-slate-400 dark:text-neutral-500">No ranges — billed at the flat Rate Per Inch.</p>
+        <p className="text-xs italic text-slate-400 dark:text-neutral-500">
+          {perPush
+            ? "No ranges — each push bills Rate Per Inch × the depth recorded for it."
+            : "No ranges — each storm bills Rate Per Inch × its deepest recorded depth."}
+          {" "}A service price is not used.
+        </p>
       )}
       {tiers.map((t, i) => (
-        <div key={i} className="flex items-center gap-1.5">
+        <div key={i} className="flex flex-wrap items-center gap-1.5">
           <Input
             type="number" min="0" step="0.01" placeholder="From"
             value={t.minInches}
             onChange={(e) => updateTier(i, { minInches: e.target.value })}
-            className="h-7 w-16 text-xs"
+            className="h-8 w-24 px-2 text-sm"
           />
           <span className="text-xs text-slate-400 dark:text-neutral-500">to</span>
           <Input
             type="number" min="0" step="0.01" placeholder="∞"
             value={t.maxInches}
             onChange={(e) => updateTier(i, { maxInches: e.target.value })}
-            className="h-7 w-16 text-xs"
+            className="h-8 w-24 px-2 text-sm"
           />
           <span className="text-xs text-slate-400 dark:text-neutral-500">in.</span>
           {t.maxInches.trim() === "" ? (
@@ -131,7 +136,7 @@ export function SnowRateTierRows({
                 type="number" min="0" step="0.01" placeholder="0.00"
                 value={t.ratePerInchDollars}
                 onChange={(e) => updateTier(i, { ratePerInchDollars: e.target.value })}
-                className="h-7 w-20 text-xs"
+                className="h-8 w-28 px-2 text-sm"
               />
               <span className="text-xs text-slate-400 dark:text-neutral-500">/ in.</span>
             </>
@@ -142,7 +147,7 @@ export function SnowRateTierRows({
                 type="number" min="0" step="0.01" placeholder="0.00"
                 value={t.rateDollars}
                 onChange={(e) => updateTier(i, { rateDollars: e.target.value })}
-                className="h-7 w-20 text-xs"
+                className="h-8 w-28 px-2 text-sm"
               />
             </>
           )}

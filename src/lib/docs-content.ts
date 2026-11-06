@@ -937,7 +937,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Snow invoicing",
             detail:
-              "CRM > Accounting > Snow Invoicing groups a client's uninvoiced storm visits and computes the amount from the job's invoice type: a flat rate per event, a rate per inch of snowfall (per event or per push), or an hourly rate × actual hours logged.",
+              "CRM > Accounting > Snow Invoicing groups a client's uninvoiced storm visits and computes the amount from the job's invoice type: a flat rate per event, a rate per inch of snowfall (per event or per push), or an hourly rate × actual hours logged. Make one snow job per service: Per Event/Per Inch and Per Push jobs price from their depth ranges and take one service (the service price isn't used), Hourly takes one service whose rate is the hourly rate, and Monthly Flat Rate bills only through a linked contract.",
           },
           {
             step: "Full guides",
