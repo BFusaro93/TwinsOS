@@ -32,6 +32,7 @@ import {
   useRemoveTicketContributor,
 } from "@/lib/hooks/use-ticket-contributors";
 import { CommentsSection } from "@/components/shared/CommentsSection";
+import { ClientMessagesTab } from "@/components/crm/tickets/ClientMessagesTab";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -637,7 +638,7 @@ function PortalVisibilityToggle({ ticket }: { ticket: CRMTicket }) {
           </Label>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {hasClient
-              ? "The client sees the subject, category, status and notes — never comments, files or who it's assigned to."
+              ? "The client sees the subject, category, status and notes, plus anything you send from the Client Messages tab — never internal comments, files or who it's assigned to."
               : "Link a client to this ticket to share it in their portal."}
           </p>
         </div>
@@ -822,6 +823,11 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
       value: "comments",
       label: "Comments & History",
       content: <div className="p-6"><CommentsSection recordType="ticket" recordId={ticket.id} /></div>,
+    },
+    {
+      value: "client-messages",
+      label: "Client Messages",
+      content: <ClientMessagesTab ticketId={ticket.id} visibleToClient={!!ticket.visibleToClient} />,
     },
     {
       value: "emails",
