@@ -70,14 +70,22 @@ with (security_invoker = on) as
         END AS days_overdue,
     i.created_at,
     i.status <> ALL (ARRAY['draft'::text, 'void'::text]) AS is_issued,
-    i.total_cents - i.tax_cents AS revenue_ex_tax_cents
+    i.total_cents - i.tax_cents AS revenue_ex_tax_cents,
+    -- Appended by the Report Center SA-parity work (20261224000600), already live on
+    -- PROD/TEST before this migration: kept as the last column so CREATE OR REPLACE works.
+    i.client_id
    FROM crm_invoices i
      LEFT JOIN clients c ON c.id = i.client_id
      LEFT JOIN crm_employees sr ON sr.id = i.sales_rep_id
   WHERE i.deleted_at IS NULL;
 
 -- 2 ─────────────────────────────────────────────────────────────────────────────────────
-create or replace view public.rpt_invoice_line_items
+-- The Report Center SA-parity work appended is_product / product_name / sales_rep to this
+-- view on PROD (and after this migration's columns on TEST), so column positions differ
+-- between environments. Drop and recreate with every column, in one order, everywhere.
+-- Nothing depends on this view.
+drop view if exists public.rpt_invoice_line_items;
+create view public.rpt_invoice_line_items
 with (security_invoker = on) as
  SELECT li.id,
     i.invoice_number,
@@ -98,6 +106,12 @@ with (security_invoker = on) as
     li.hours,
     li.men,
     i.status <> ALL (ARRAY['draft'::text, 'void'::text]) AS is_issued,
+    li.product_id IS NOT NULL AS is_product,
+        CASE
+            WHEN li.product_id IS NOT NULL THEN COALESCE(pi.name, li.name, li.description)
+            ELSE NULL::text
+        END AS product_name,
+    NULLIF(TRIM(BOTH FROM concat(sr.first_name, ' ', sr.last_name)), ''::text) AS sales_rep,
     li.discount_cents,
     li.total_cents - li.discount_cents AS net_total_cents,
         CASE
@@ -107,10 +121,14 @@ with (security_invoker = on) as
    FROM crm_invoice_line_items li
      JOIN crm_invoices i ON i.id = li.invoice_id AND i.deleted_at IS NULL
      LEFT JOIN clients c ON c.id = i.client_id
+     LEFT JOIN product_items pi ON pi.id = li.product_id
+     LEFT JOIN crm_employees sr ON sr.id = i.sales_rep_id
      -- correlated (not a window function) so invoice_date / is_issued filters still push down
      CROSS JOIN LATERAL ( SELECT COALESCE(sum(GREATEST(x.total_cents - x.discount_cents, 0)), 0::bigint)::numeric AS net_sum
            FROM crm_invoice_line_items x
           WHERE x.invoice_id = li.invoice_id) ns;
+
+grant select on public.rpt_invoice_line_items to authenticated, service_role;
 
 -- 3 ─────────────────────────────────────────────────────────────────────────────────────
 create or replace view public.rpt_sales_rep_month
