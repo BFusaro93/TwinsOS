@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn, formatCurrency } from "@/lib/utils";
+import { CardFeeLine, cardChargeTotalCents } from "@/components/crm/payments/CardFeeBreakdown";
 import { CurrencyInput, parseCurrencyToCents } from "@/components/shared/CurrencyInput";
 import { Plus, Trash2, Save, DollarSign, CreditCard, ChevronDown, Mail, Printer, Lock, Unlock, Search, MoreVertical, Ban } from "lucide-react";
 import { toast } from "sonner";
@@ -679,6 +680,12 @@ function PaymentDetailDialog({ payment, open, onOpenChange }: {
         <DialogHeader><DialogTitle>Payment Detail</DialogTitle></DialogHeader>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm py-2">
           <dt className="text-slate-400 dark:text-neutral-500">Amount</dt><dd className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(payment.amountCents)}</dd>
+          {payment.processingFeeCents > 0 && (
+            <>
+              <dt className="text-slate-400 dark:text-neutral-500">Card fee (paid by customer)</dt><dd>{formatCurrency(payment.processingFeeCents)}</dd>
+              <dt className="text-slate-400 dark:text-neutral-500">Total charged to card</dt><dd className="font-medium">{formatCurrency(cardChargeTotalCents(payment))}</dd>
+            </>
+          )}
           <dt className="text-slate-400 dark:text-neutral-500">Date</dt><dd>{new Date(payment.paymentDate + "T12:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</dd>
           <dt className="text-slate-400 dark:text-neutral-500">Method</dt><dd className="capitalize">{payment.method}</dd>
           <dt className="text-slate-400 dark:text-neutral-500">Reference</dt><dd>{payment.reference ?? "—"}</dd>
@@ -1818,6 +1825,8 @@ export function InvoiceDetail({
                               {formatCurrency(displayAmount)}
                             </span>
                           </div>
+                          {/* A split payment's fee belongs to the whole payment, not this invoice's share. */}
+                          {!p.isSplitAllocation && <CardFeeLine payment={p} />}
                         </td>
                       </tr>
                     );

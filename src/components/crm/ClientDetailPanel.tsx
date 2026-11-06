@@ -518,6 +518,18 @@ function PaymentDetailDialog({
                 <span className="text-slate-400 dark:text-neutral-500">Amount</span>
                 <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(payment.amountCents)}</span>
               </div>
+              {payment.processingFeeCents > 0 && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 dark:text-neutral-500">Card fee (paid by customer)</span>
+                    <span>{formatCurrency(payment.processingFeeCents)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 dark:text-neutral-500">Total charged to card</span>
+                    <span className="font-medium">{formatCurrency(payment.amountCents + payment.processingFeeCents)}</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-400 dark:text-neutral-500">Date</span>
                 <span>{new Date(payment.paymentDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
