@@ -289,12 +289,15 @@ export default function PortalTicketsPage({ tickets: initialTickets, categories:
                 </div>
                 <SubAccountLabel name={t.accountName} />
                 {t.category && (
-                  <p className="text-xs text-slate-500 mt-0.5">{t.category}</p>
+                  <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">
+                    <span className="text-slate-400">Category:</span>
+                    {t.category}
+                  </span>
                 )}
                 {t.body && (
                   <p className="text-xs text-slate-400 mt-1 line-clamp-2">{t.body}</p>
                 )}
-                <p className="text-xs text-slate-400 mt-1">{fmtDate(t.created_at)}</p>
+                <p className="text-xs text-slate-400 mt-1">Opened: {fmtDate(t.created_at)}</p>
               </div>
               <span className={`flex items-center gap-1 text-xs border rounded-full px-2 py-0.5 shrink-0 ${cfg.color}`}>
                 {cfg.icon}
