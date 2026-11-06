@@ -302,7 +302,7 @@ export function TicketsGuide() {
           The ticket opens in a wide side panel. Under the subject, the status pill sits on the left
           and the <strong>PDF</strong>, <strong>Email</strong>, <strong>Edit</strong> and delete
           (trash) buttons sit together on the right edge. The tab bar (Details, Comments &amp;
-          History, Emails, Files, Contributors, Audit Trail) is sized to fit the panel without
+          Messages, Emails, Files, Contributors, Audit Trail) is sized to fit the panel without
           scrolling sideways on a normal desktop screen. <strong>PDF</strong> opens a print-formatted view in a new
           window — all ticket fields are HTML-escaped before being written into that window, since
           subject/body/names can originate from an unsanitized public form submission.

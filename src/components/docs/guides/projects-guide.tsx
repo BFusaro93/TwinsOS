@@ -230,12 +230,16 @@ export function ProjectsGuide() {
 
       <Section id="crm-view" title="The CRM view of a Project">
         <p>
-          Opening the same project from <strong>CRM &gt; Scheduling &gt; Projects</strong> does not
-          show the Purchasing tabs at all — it has its own, entirely separate set of six tabs:{" "}
-          <strong>Milestone</strong>, <strong>Change Orders</strong>, <strong>Billing</strong>,{" "}
-          <strong>Analysis</strong>, <strong>Notes &amp; Attachments</strong>, and{" "}
-          <strong>Audit Trail</strong>. Same underlying <code>projects</code> row, completely
-          different tab strip.
+          Opening the same project from <strong>CRM &gt; Scheduling &gt; Projects</strong> shows one
+          dialog with every tab: the Purchasing side (<strong>Details</strong>,{" "}
+          <strong>Materials</strong>, <strong>Other Costs</strong>, <strong>Tickets</strong>,{" "}
+          <strong>Notes</strong>, <strong>Files</strong>, <strong>Comments &amp; Audit Trail</strong>)
+          and the billing side (<strong>Milestone</strong>, <strong>Change Orders</strong>,{" "}
+          <strong>Warranties</strong> when the project has a client and you can view warranties,{" "}
+          <strong>Billing</strong>, <strong>Analysis</strong>). Details shows the same status flow,
+          hours, labor rates and contract / cost / net-profit summary as the Photos &gt; Projects
+          panel, and the project&apos;s total cost is computed the same way in both places. Same
+          underlying <code>projects</code> row either way.
         </p>
         <p>
           <strong>Milestone</strong> is a real, working billing-schedule editor, not a placeholder —

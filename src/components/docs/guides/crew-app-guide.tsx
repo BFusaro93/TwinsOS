@@ -64,6 +64,14 @@ export function CrewAppGuide() {
           them — no clients list, no invoices, no estimates, and no sidebar full of office screens.
         </p>
         <p>
+          <strong>Spanish.</strong> The crew pages in the browser and the native app can be switched
+          between English and Spanish with the <strong>Español / English</strong> link (it shows the
+          language you would switch to). The choice is remembered on that device, and dates and month
+          names follow the language. Job and visit notes written in English show a{" "}
+          <strong>Translate</strong> link underneath that shows the note in the crew member&apos;s
+          language; each note is translated once and kept on the device.
+        </p>
+        <p>
           The native app has the same crew tools as the browser version: Start Day and End Day, Edit
           Crew (per-person attendance), Suggest Work, and Request Materials. A shared stop shows who the
           other crew is (&quot;With &hellip;&quot;), and tapping a push notification for a new job or a
