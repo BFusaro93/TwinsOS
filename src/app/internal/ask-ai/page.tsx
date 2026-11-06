@@ -25,12 +25,12 @@ const FILTERS: { value: Filter; label: string }[] = [
 ];
 
 const OUTCOME_META: Record<AskAIOutcome, { label: string; className: string }> = {
-  full: { label: "Answered", className: "bg-emerald-100 text-emerald-700" },
-  partial: { label: "Partial", className: "bg-amber-100 text-amber-700" },
-  none: { label: "Not covered", className: "bg-red-100 text-red-700" },
-  unknown: { label: "Unrated", className: "bg-slate-100 text-slate-600" },
-  pending: { label: "Incomplete", className: "bg-slate-100 text-slate-600" },
-  error: { label: "Error", className: "bg-red-100 text-red-700" },
+  full: { label: "Answered", className: "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400" },
+  partial: { label: "Partial", className: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400" },
+  none: { label: "Not covered", className: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400" },
+  unknown: { label: "Unrated", className: "bg-muted text-slate-600 dark:text-neutral-400" },
+  pending: { label: "Incomplete", className: "bg-muted text-slate-600 dark:text-neutral-400" },
+  error: { label: "Error", className: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400" },
 };
 
 /** A new question the docs did not fully cover, or one the customer escalated. */
@@ -57,17 +57,17 @@ function QuestionCard({ item }: { item: StaffAskAIQuestion }) {
   }
 
   return (
-    <div className="rounded-lg border bg-white p-4 shadow-sm">
+    <div className="rounded-lg border bg-card p-4 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="outline" className={cn("border-transparent", meta.className)}>{meta.label}</Badge>
         {item.escalatedAt && (
-          <Badge variant="outline" className="border-transparent gap-1 bg-brand-50 text-brand-700">
+          <Badge variant="outline" className="border-transparent gap-1 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400">
             <LifeBuoy className="h-3 w-3" />
             Sent to support
           </Badge>
         )}
-        <span className="text-sm font-medium text-slate-800">{item.orgName}</span>
-        <span className="text-xs text-slate-500">
+        <span className="text-sm font-medium text-slate-800 dark:text-neutral-100">{item.orgName}</span>
+        <span className="text-xs text-muted-foreground">
           {item.askerName ?? item.askerEmail ?? "Unknown user"} · {new Date(item.createdAt).toLocaleString()}
         </span>
         {item.status !== "new" && (
@@ -77,28 +77,28 @@ function QuestionCard({ item }: { item: StaffAskAIQuestion }) {
         )}
       </div>
 
-      <p className="mt-3 whitespace-pre-wrap text-sm font-medium text-slate-900">{item.question}</p>
+      <p className="mt-3 whitespace-pre-wrap text-sm font-medium text-slate-900 dark:text-neutral-100">{item.question}</p>
 
       {item.answer && (
         <div className="mt-2">
           <button
             type="button"
             onClick={() => setShowReply((v) => !v)}
-            className="text-xs font-medium text-slate-500 hover:underline"
+            className="text-xs font-medium text-muted-foreground hover:underline"
           >
             {showReply ? "Hide" : "Show"} what Ask AI replied
           </button>
           {showReply && (
-            <p className="mt-1 whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-sm text-slate-700">{item.answer}</p>
+            <p className="mt-1 whitespace-pre-wrap rounded-md bg-slate-50 dark:bg-muted/40 p-3 text-sm text-slate-700 dark:text-neutral-300">{item.answer}</p>
           )}
         </div>
       )}
       {item.sourceTitles.length > 0 && (
-        <p className="mt-2 text-xs text-slate-400">Searched: {item.sourceTitles.join(" · ")}</p>
+        <p className="mt-2 text-xs text-slate-400 dark:text-neutral-500">Searched: {item.sourceTitles.join(" · ")}</p>
       )}
 
       <div className="mt-3 flex flex-col gap-2">
-        <label className="text-xs font-medium text-slate-600" htmlFor={`res-${item.id}`}>
+        <label className="text-xs font-medium text-slate-600 dark:text-neutral-400" htmlFor={`res-${item.id}`}>
           Correct answer (Ask AI reuses this for similar questions in every organization, so keep it generic: no customer, client, employee or company names)
         </label>
         <Textarea
@@ -145,8 +145,8 @@ export default function StaffAskAIPage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">Ask AI questions</h1>
-        <p className="text-sm text-slate-500">
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Ask AI questions</h1>
+        <p className="text-sm text-muted-foreground">
           Questions the in-app assistant couldn&apos;t fully answer from the help docs. Write the answer once and it
           answers the same question for everyone after. {needsCount} need an answer.
         </p>
@@ -158,7 +158,7 @@ export default function StaffAskAIPage() {
             onClick={() => setFilter(f.value)}
             className={cn(
               "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              filter === f.value ? "bg-brand-50 text-brand-700" : "text-slate-500 hover:bg-slate-100"
+              filter === f.value ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400" : "text-muted-foreground hover:bg-muted"
             )}
           >
             {f.label}
@@ -170,7 +170,7 @@ export default function StaffAskAIPage() {
       ) : isLoading ? (
         <Skeleton className="h-32 w-full" />
       ) : visible.length === 0 ? (
-        <p className="py-10 text-center text-sm text-slate-400">Nothing here.</p>
+        <p className="py-10 text-center text-sm text-slate-400 dark:text-neutral-500">Nothing here.</p>
       ) : (
         visible.map((item) => <QuestionCard key={item.id} item={item} />)
       )}

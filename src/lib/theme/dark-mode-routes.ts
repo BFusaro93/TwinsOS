@@ -45,6 +45,7 @@ export const DARK_MODE_ROUTE_PREFIXES: readonly string[] = [
   "/dashboards/twins-kpis",
   "/docs",
   "/equipt",
+  "/internal",
   "/operations",
   "/photos/field/damage-report",
   "/photos/field/injury-report",

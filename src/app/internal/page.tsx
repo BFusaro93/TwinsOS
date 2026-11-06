@@ -57,16 +57,16 @@ export default function InternalHomePage() {
 
   return (
     <div className="mx-auto flex max-w-lg flex-col gap-6">
-      <h1 className="text-lg font-semibold text-slate-900">Impersonate an organization</h1>
+      <h1 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Impersonate an organization</h1>
 
       {sessionLoading ? (
-        <p className="text-sm text-slate-500">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loading…</p>
       ) : session ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm text-slate-700">
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-4">
+          <p className="text-sm text-slate-700 dark:text-neutral-300">
             Currently impersonating <strong>{session.targetOrgName}</strong>.
           </p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Started {new Date(session.startedAt).toLocaleTimeString()} · expires{" "}
             {new Date(session.expiresAt).toLocaleTimeString()}
             {session.reason && <> · reason: {session.reason}</>}
@@ -81,7 +81,7 @@ export default function InternalHomePage() {
           </Button>
         </div>
       ) : (
-        <div className="flex flex-col gap-4 rounded-lg border bg-white p-4">
+        <div className="flex flex-col gap-4 rounded-lg border bg-card p-4">
           <div className="flex flex-col gap-1.5">
             <Label>Organization</Label>
             <Select value={targetOrgId} onValueChange={setTargetOrgId}>

@@ -15,9 +15,9 @@ import {
 } from "@/lib/hooks/use-staff-feedback";
 
 const CATEGORY_META = {
-  bug: { label: "Bug", icon: Bug, className: "bg-red-100 text-red-700" },
-  idea: { label: "Idea", icon: Lightbulb, className: "bg-amber-100 text-amber-700" },
-  other: { label: "Other", icon: MessageSquare, className: "bg-slate-100 text-slate-600" },
+  bug: { label: "Bug", icon: Bug, className: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400" },
+  idea: { label: "Idea", icon: Lightbulb, className: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400" },
+  other: { label: "Other", icon: MessageSquare, className: "bg-muted text-slate-600 dark:text-neutral-400" },
 } as const;
 
 const STATUS_LABELS: Record<FeedbackStatus, string> = { new: "New", reviewed: "Reviewed", closed: "Closed" };
@@ -32,7 +32,7 @@ const FILTERS: { value: FeedbackStatus | "all"; label: string }[] = [
 function Screenshot({ path }: { path: string }) {
   const { data: url, isLoading } = useFeedbackScreenshotUrl(path);
   if (isLoading) return <Skeleton className="h-40 w-full max-w-sm" />;
-  if (!url) return <p className="text-xs text-slate-400">Screenshot unavailable</p>;
+  if (!url) return <p className="text-xs text-slate-400 dark:text-neutral-500">Screenshot unavailable</p>;
   return (
     <a href={url} target="_blank" rel="noreferrer">
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -47,20 +47,20 @@ function FeedbackCard({ item }: { item: StaffFeedbackItem }) {
   const Icon = meta.icon;
 
   return (
-    <div className="rounded-lg border bg-white p-4 shadow-sm">
+    <div className="rounded-lg border bg-card p-4 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="outline" className={cn("border-transparent", "gap-1", meta.className)}>
           <Icon className="h-3 w-3" />
           {meta.label}
         </Badge>
-        <span className="text-sm font-medium text-slate-800">{item.orgName}</span>
-        <span className="text-xs text-slate-500">
+        <span className="text-sm font-medium text-slate-800 dark:text-neutral-100">{item.orgName}</span>
+        <span className="text-xs text-muted-foreground">
           {item.submitterName ?? item.submitterEmail ?? "Unknown user"} · {new Date(item.createdAt).toLocaleString()}
         </span>
         <Badge variant="outline" className="ml-auto">{STATUS_LABELS[item.status]}</Badge>
       </div>
-      <p className="mt-3 whitespace-pre-wrap text-sm text-slate-800">{item.message}</p>
-      {item.pageUrl && <p className="mt-2 font-mono text-xs text-slate-400">{item.pageUrl}</p>}
+      <p className="mt-3 whitespace-pre-wrap text-sm text-slate-800 dark:text-neutral-100">{item.message}</p>
+      {item.pageUrl && <p className="mt-2 font-mono text-xs text-slate-400 dark:text-neutral-500">{item.pageUrl}</p>}
       {item.screenshotPath && <div className="mt-3"><Screenshot path={item.screenshotPath} /></div>}
       <div className="mt-3 flex flex-wrap gap-2">
         {(["new", "reviewed", "closed"] as const)
@@ -91,8 +91,8 @@ export default function StaffFeedbackPage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">Bug reports &amp; ideas</h1>
-        <p className="text-sm text-slate-500">Submitted from the feedback button in every org. {newCount} new.</p>
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-neutral-100">Bug reports &amp; ideas</h1>
+        <p className="text-sm text-muted-foreground">Submitted from the feedback button in every org. {newCount} new.</p>
       </div>
       <div className="flex gap-1">
         {FILTERS.map((f) => (
@@ -101,7 +101,7 @@ export default function StaffFeedbackPage() {
             onClick={() => setFilter(f.value)}
             className={cn(
               "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              filter === f.value ? "bg-brand-50 text-brand-700" : "text-slate-500 hover:bg-slate-100",
+              filter === f.value ? "bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400" : "text-muted-foreground hover:bg-muted",
             )}
           >
             {f.label}
@@ -113,7 +113,7 @@ export default function StaffFeedbackPage() {
       ) : isLoading ? (
         <Skeleton className="h-32 w-full" />
       ) : visible.length === 0 ? (
-        <p className="py-10 text-center text-sm text-slate-400">Nothing here.</p>
+        <p className="py-10 text-center text-sm text-slate-400 dark:text-neutral-500">Nothing here.</p>
       ) : (
         visible.map((item) => <FeedbackCard key={item.id} item={item} />)
       )}
