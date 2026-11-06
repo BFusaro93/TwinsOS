@@ -651,7 +651,7 @@ async function handleDisputeEvent(
 
   const { data: payment } = await db
     .from("crm_payments")
-    .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, stripe_dispute_id, dispute_status")
+    .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, processing_fee_cents, stripe_dispute_id, dispute_status")
     .eq("stripe_payment_intent_id", paymentIntentId)
     .maybeSingle();
   if (!payment || !(await eventAccountOwnedByOrg(db, payment.org_id, eventAccount))) return "ok";
@@ -743,7 +743,10 @@ async function handleDisputeEvent(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: applied, error: reconcileErr } = await (db.rpc as any)("reconcile_stripe_payment_reversal", {
       p_payment_id: payment.id,
-      p_target_reversed_cents: refundedAtStripe + dispute.amount,
+      // Stripe's refunded total and the disputed amount are both GROSS (they include any card
+      // surcharge); the ledger tracks the net. Scale like charge.refunded does, or a partial
+      // refund on a surcharged card over-reverses by the fee's share.
+      p_target_reversed_cents: grossToNetRefundCents(refundedAtStripe + dispute.amount, payment.amount_cents ?? 0, payment.processing_fee_cents ?? 0),
     });
     if (reconcileErr) {
       log.error("failed to reverse a disputed payment", { error: reconcileErr, paymentId: payment.id, disputeId: dispute.id });
@@ -794,7 +797,9 @@ async function handleDisputeEvent(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: restored, error: reinstateErr } = await (db.rpc as any)("reinstate_stripe_payment_reversal", {
         p_payment_id: payment.id,
-        p_target_reversed_cents: refundedAtStripe,
+        // Net, like the withdrawal: after a partial refund of a surcharged charge, Stripe's gross
+        // refunded total would leave the reinstated payment short by the fee's share.
+        p_target_reversed_cents: grossToNetRefundCents(refundedAtStripe, payment.amount_cents ?? 0, payment.processing_fee_cents ?? 0),
       });
       if (reinstateErr) {
         log.error("failed to reinstate a won-dispute payment", { error: reinstateErr, paymentId: payment.id, disputeId: dispute.id });

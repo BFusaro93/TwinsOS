@@ -55,10 +55,13 @@ function toReading(o: Observation): ConditionsReading | null {
   const kmh = o.windSpeed?.value;
   const deg = o.windDirection?.value;
   if (c == null && kmh == null) return null;
+  const mph = kmh != null ? round(kmh / 1.609344) : null;
   return {
     temperatureF: c != null ? round(c * 1.8 + 32) : null,
-    windMph: kmh != null ? round(kmh / 1.609344) : null,
-    windDirection: deg != null ? degreesToCompass(deg) : null,
+    windMph: mph,
+    // Calm air has no direction: NWS reports 0 degrees ("N") with a 0 speed, which put
+    // "wind 0 mph N" on the application record.
+    windDirection: deg != null && mph !== 0 ? degreesToCompass(deg) : null,
     description: o.textDescription?.trim() || null,
     observedAt: o.timestamp,
     source: "observation",
@@ -114,10 +117,11 @@ export async function fetchConditions(lat: number, lng: number, at?: string): Pr
     const p = periods.find((x) => new Date(x.startTime).getTime() <= when && when < new Date(x.endTime).getTime()) ?? periods[0];
     if (p) {
       const speeds = (p.windSpeed.match(/\d+/g) ?? []).map(Number);
+      const mph = speeds.length ? Math.max(...speeds) : null;
       return {
         temperatureF: p.temperatureUnit === "C" ? round(p.temperature * 1.8 + 32) : p.temperature,
-        windMph: speeds.length ? Math.max(...speeds) : null,
-        windDirection: p.windDirection || null,
+        windMph: mph,
+        windDirection: mph !== 0 ? p.windDirection || null : null,
         description: p.shortForecast || null,
         observedAt: p.startTime,
         source: "forecast",

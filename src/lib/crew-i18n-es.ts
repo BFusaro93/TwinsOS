@@ -3,6 +3,11 @@
 // in English. Placeholders like {time} must be kept as written. The native crew
 // app keeps its own dictionary (crew-app/src/lib/i18n-es.ts) in the same voice.
 export const CREW_ES: Record<string, string> = {
+  "Concentrate used": "Concentrado usado",
+  "Save chemical": "Guardar químico",
+  "Choose the unit for {p}": "Elige la unidad para {p}",
+  "the chemical": "el químico",
+  "The product itself, before mixing — not the finished spray.": "El producto en sí, antes de mezclar — no la mezcla lista para rociar.",
   "Translate to Spanish": "Traducir al español",
   "Translate to English": "Traducir al inglés",
   "Translated automatically": "Traducido automáticamente",

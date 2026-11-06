@@ -227,6 +227,8 @@ export interface CRMContract {
   salesRepId: string | null;
   saleType: "new" | "renewal" | null;
   lastBilledDate: string | null;
+  /** Start of the first quarterly/annual cycle billed — pins the cycle grid (see contract-billing.ts monthGrid). */
+  billingAnchorDate: string | null;
   /** How a mid-cycle start bills its first stub — see src/lib/contract-billing.ts. */
   startBillingMode: "first_full_cycle" | "prorate_first_period";
   firstPeriodProratedAt: string | null;

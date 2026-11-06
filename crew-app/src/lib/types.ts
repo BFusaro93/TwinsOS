@@ -163,6 +163,9 @@ export interface VisitChemicalApplication {
   productName: string | null;
   used: boolean;
   chemicalAmount: number | null;
+  /** Null when the office planned it with no unit (no rate on file): the crew picks one.
+   *  Optional so an older server that doesn't send it reads as "has a unit". */
+  unitOfMeasureId?: string | null;
   unitName: string | null;
   solutionAmount: number | null;
   solutionUnitName: string | null;
@@ -188,6 +191,8 @@ export interface ChemicalConfirmItem {
   id: string;
   used: boolean;
   chemicalAmount?: number;
+  /** Required when the planned row has no unit. */
+  unitOfMeasureId?: string;
   applicationMethodId?: string | null;
   targetIds?: string[];
   areasTreatedIds?: string[];

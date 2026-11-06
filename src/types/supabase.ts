@@ -3457,6 +3457,7 @@ export type Database = {
           auto_generate: boolean
           auto_renew: boolean
           bill_month_in_advance: boolean
+          billing_anchor_date: string | null
           billing_day_of_month: number
           billing_frequency: string
           changed_since_signed_at: string | null
@@ -3497,6 +3498,7 @@ export type Database = {
           auto_generate?: boolean
           auto_renew?: boolean
           bill_month_in_advance?: boolean
+          billing_anchor_date?: string | null
           billing_day_of_month?: number
           billing_frequency?: string
           changed_since_signed_at?: string | null
@@ -3537,6 +3539,7 @@ export type Database = {
           auto_generate?: boolean
           auto_renew?: boolean
           bill_month_in_advance?: boolean
+          billing_anchor_date?: string | null
           billing_day_of_month?: number
           billing_frequency?: string
           changed_since_signed_at?: string | null
@@ -17269,6 +17272,7 @@ export type Database = {
         Row: {
           client_name: string | null
           description: string | null
+          discount_cents: number | null
           hours: number | null
           id: string | null
           invoice_date: string | null
@@ -17278,10 +17282,26 @@ export type Database = {
           is_taxable: boolean | null
           men: number | null
           name: string | null
+          net_total_cents: number | null
           qty: number | null
           rate_cents: number | null
+          revenue_ex_tax_cents: number | null
           service_date: string | null
           total_cents: number | null
+        }
+        Relationships: []
+      }
+      rpt_invoice_link_billing: {
+        Row: {
+          billed_invoice_id: string | null
+          contract_id: string | null
+          estimate_id: string | null
+          invoice_date: string | null
+          invoice_id: string | null
+          is_consolidated_source: boolean | null
+          org_id: string | null
+          project_id: string | null
+          revenue_ex_tax_cents: number | null
         }
         Relationships: []
       }
@@ -18247,6 +18267,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      crm_marketing_suppressed_emails: {
+        Args: { p_emails: string[]; p_org_id: string }
+        Returns: string[]
       }
       crm_merge_invoices: {
         Args: {

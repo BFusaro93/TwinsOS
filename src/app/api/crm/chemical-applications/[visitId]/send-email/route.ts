@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { getOrgReplyTo } from "@/lib/email/reply-to";
+import { findMarketingOptedOutAddresses } from "@/lib/email/marketing-opt-outs";
 import { buildCanSpamFooter, buildClientMergeVars, orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { MERGE_CLIENT_COLUMNS, MERGE_PROPERTY_COLUMNS, clientMergeInput, employeeName, orgMergeInput } from "@/lib/email/merge-inputs";
 import { resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
@@ -12,6 +13,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { DEFAULT_TIME_ZONE } from "@/lib/time/zone";
 import { renderChemicalNoticePdf } from "@/lib/chemical/notice-pdf";
 import { loadChemicalNoticeData, loadInvoiceTemplateBranding, noticeOrgFromRow, renderChemicalNoticeHtml } from "@/lib/chemical/application-notice";
+import { visitHasStarted } from "@/lib/chemical/visit-started";
 
 export async function POST(
   req: NextRequest,
@@ -71,7 +73,7 @@ export async function POST(
   const { data: visit, error: visitErr } = await (supabase as any)
     .from("crm_job_visits")
     .select(
-      `id, client_id, scheduled_date, clients(${MERGE_CLIENT_COLUMNS}, email_bounced_at, do_not_market, ok_to_email, unsubscribe_token, ` +
+      `id, client_id, scheduled_date, status, clocked_in_at, clients(${MERGE_CLIENT_COLUMNS}, email_bounced_at, do_not_market, ok_to_email, unsubscribe_token, ` +
       "sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)), " +
       `crm_jobs!crm_job_visits_job_id_fkey(property:client_properties!crm_jobs_property_id_fkey(${MERGE_PROPERTY_COLUMNS}))`,
     )
@@ -80,6 +82,11 @@ export async function POST(
 
   if (visitErr || !visit) {
     return NextResponse.json({ error: "Visit not found" }, { status: 404 });
+  }
+  // A Notice of Treatment reports an application that happened. Chemicals on a visit the
+  // crew hasn't started are only the plan (and a skipped/cancelled visit never happened).
+  if (kind === "chemical" && !visitHasStarted(visit)) {
+    return NextResponse.json({ error: "This visit hasn't been worked yet — send the notice after the application." }, { status: 422 });
   }
 
   const clientEmail = visit.clients?.primary_email as string | null;
@@ -117,6 +124,16 @@ export async function POST(
   // Fetch org
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile?.org_id;
+  // Opt-outs are per address: the same email on another, opted-out client account blocks marketing here too.
+  if (isMarketing && effOrgId) {
+    try {
+      if ((await findMarketingOptedOutAddresses(effOrgId, [clientEmail])).size > 0) {
+        return NextResponse.json({ error: "This email address opted out of marketing on another client account" }, { status: 422 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Could not check marketing opt-outs — try again" }, { status: 503 });
+    }
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: org } = effOrgId
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

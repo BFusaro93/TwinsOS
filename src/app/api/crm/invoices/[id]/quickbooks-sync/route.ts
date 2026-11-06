@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { createClient } from "@/lib/supabase/server";
 import { pushInvoiceToQuickBooks } from "@/lib/integrations/quickbooks";
+import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 /**
  * POST /api/crm/invoices/[id]/quickbooks-sync — pushes this invoice to
@@ -21,6 +22,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
   if (!profile) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // A staff member impersonating an org syncs THAT org's invoice.
+  const effOrgId = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
 
   // Also fired automatically after send/record — accept the keys for those
   // actions as well as the explicit resync permission.
@@ -30,6 +33,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const { id } = await params;
   const onlyIfSynced = new URL(req.url).searchParams.get("onlyIfSynced") === "1";
-  const result = await pushInvoiceToQuickBooks(supabase, profile.org_id, id, { onlyIfSynced });
+  const result = await pushInvoiceToQuickBooks(supabase, effOrgId, id, { onlyIfSynced });
   return NextResponse.json(result);
 }

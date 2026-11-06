@@ -305,6 +305,12 @@ export async function addCrewChemical(input: {
   productId: string;
   chemicalAmount: number;
   unitOfMeasureId: string;
+  /** How it was applied; the product's default method is used when left out. */
+  applicationMethodId?: string | null;
+  targetIds?: string[];
+  areasTreatedIds?: string[];
+  /** Conditions at the stop — the row is saved already confirmed, so this is the only chance. */
+  conditions?: ChemicalConditionsInput;
 }): Promise<{ id: string }> {
   return authedFetch(`/api/crm/crew/chemicals/add`, {
     method: 'POST',

@@ -19,7 +19,8 @@ import type {
   TicketBreakdown,
 } from "@/types/company-report";
 import { runAnalysis } from "@/lib/reports/engine";
-import { daysBetweenYmd, isoInZone, shiftYmd, todayInZone, ymd, zoneDateParts } from "@/lib/time/zone";
+import { isoInZone, shiftYmd, todayInZone, ymd, zoneDateParts } from "@/lib/time/zone";
+import { invoiceDaysPastDue } from "@/lib/invoice-status";
 import { logger } from "@/lib/logger";
 
 // ============================================================
@@ -583,6 +584,7 @@ async function computeOperations(supabase: Client, months: MonthWindow[], now: D
 // ── Collections / A/R section ────────────────────────────────────────────────
 
 interface InvoiceAgingRow {
+  client_id: string | null;
   due_date: string | null;
   invoice_date: string | null;
   balance_cents: number | null;
@@ -606,7 +608,7 @@ async function computeCollections(supabase: Client, timeZone: string): Promise<C
   const rows = await fetchAll<InvoiceAgingRow>((from, to) =>
     supabase
       .from("crm_invoices")
-      .select("due_date, invoice_date, balance_cents, status, clients:client_id(display_name)")
+      .select("client_id, due_date, invoice_date, balance_cents, status, clients:client_id(display_name)")
       .gt("balance_cents", 0)
       .is("deleted_at", null)
       .in("status", ISSUED_INVOICE_STATUSES)
@@ -630,11 +632,14 @@ async function computeCollections(supabase: Client, timeZone: string): Promise<C
 
   for (const r of rows) {
     const balance = r.balance_cents ?? 0;
-    const anchor = r.due_date ?? r.invoice_date;
-    const daysPastDue = anchor ? daysBetweenYmd(anchor.slice(0, 10), orgToday) : 0;
+    // Shared aging rule (due date, else invoice date) — same as A/R Aging.
+    const daysPastDue = invoiceDaysPastDue({ dueDate: r.due_date, invoiceDate: r.invoice_date }, orgToday);
     const name = r.clients?.display_name ?? "(unknown)";
+    // Keyed by client id (display names aren't unique — two clients with the
+    // same name were folded into one row); the name is only for display.
+    const clientKey = r.client_id ?? name;
     const existing =
-      byClient.get(name) ??
+      byClient.get(clientKey) ??
       ({ name, currentCents: 0, d1_30Cents: 0, d31_60Cents: 0, d61_90Cents: 0, d90PlusCents: 0, totalCents: 0 } as AgingBucketTotals & {
         name: string;
       });
@@ -657,7 +662,7 @@ async function computeCollections(supabase: Client, timeZone: string): Promise<C
     }
     buckets.totalCents += balance;
     existing.totalCents += balance;
-    byClient.set(name, existing);
+    byClient.set(clientKey, existing);
   }
 
   const topBalances: ClientBalanceRow[] = [...byClient.values()]
@@ -677,7 +682,7 @@ async function computeCollections(supabase: Client, timeZone: string): Promise<C
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 export async function computeCompanyReport(supabase: Client, timeZone: string, now = new Date()): Promise<CompanyReportData> {
-  // E-16: "as of" dates are the Eastern-time calendar date, never the UTC one.
+  // E-16: "as of" dates are the org's calendar date (its time zone), never the UTC one.
   const nowStr = isoInZone(now, timeZone);
   const { year } = zoneDateParts(now, timeZone);
   const ytdFrom = ymd(year, 0, 1);

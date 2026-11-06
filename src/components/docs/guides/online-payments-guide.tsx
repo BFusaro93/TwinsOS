@@ -192,6 +192,11 @@ export function OnlinePaymentsGuide() {
             then updates the invoice record once Stripe confirms it went through.
           </li>
           <li>
+            <strong>Account credits and AR write-offs can&apos;t be refunded.</strong> Neither is money the
+            client paid, so the Refund button doesn&apos;t appear on them. Edit the credit or write-off
+            instead.
+          </li>
+          <li>
             <strong>Proposal deposits are charged here too.</strong> An estimate with a Deposit
             Required amount can take it by card as part of the client accepting the proposal. It runs
             through the same connected account as everything else — card or bank transfer, with your

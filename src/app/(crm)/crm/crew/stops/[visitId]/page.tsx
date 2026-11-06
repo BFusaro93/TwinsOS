@@ -210,7 +210,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   );
   const { data: chemConfirmStatus } = useChemicalConfirmationStatus(stopVisitIds);
   const confirmChemicals = useConfirmChemicals();
-  const [chemEdits, setChemEdits] = useState<Record<string, { amount: string; notUsed: boolean }>>({});
+  const [chemEdits, setChemEdits] = useState<Record<string, { amount: string; notUsed: boolean; unitId?: string }>>({});
   const [chemConditions, setChemConditions] = useState<ConditionsDraft>(EMPTY_CONDITIONS);
   const [chemApply, setChemApply] = useState<Record<string, ChemApplyEdit>>({});
   // The visit a crew-added chemical is recorded against: the one that already carries the
@@ -240,7 +240,7 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
   const chemBlocked =
     (chemConfirmStatus?.mode ?? "crew_required") === "crew_required" &&
     unconfirmedChemicals.some((c) => !waived.has(c.visitId));
-  function chemEditFor(c: { id: string; chemicalAmount: number | null }) {
+  function chemEditFor(c: { id: string; chemicalAmount: number | null }): { amount: string; notUsed: boolean; unitId?: string } {
     return chemEdits[c.id] ?? { amount: c.chemicalAmount != null ? String(c.chemicalAmount) : "", notUsed: false };
   }
   async function handleConfirmChemicals() {
@@ -256,12 +256,18 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
         toast.error(`Enter how much ${c.productName ?? "chemical"} was used, or mark it Not used`);
         return;
       }
+      // Planned with no unit (no rate on file): an amount is meaningless without one.
+      if (!c.unitOfMeasureId && !e.unitId) {
+        toast.error(t("Choose the unit for {p}", { p: c.productName ?? t("the chemical") }));
+        return;
+      }
       // Only what the crew actually changed is sent; the rest stays as the office planned it.
       const apply = chemApply[c.id];
       items.push({
         id: c.id,
         used: true,
         chemicalAmount: amount,
+        ...(!c.unitOfMeasureId && e.unitId ? { unitOfMeasureId: e.unitId } : {}),
         ...(apply?.methodId !== undefined ? { applicationMethodId: apply.methodId } : {}),
         ...(apply?.targetIds !== undefined ? { targetIds: apply.targetIds } : {}),
         ...(apply?.areasTreatedIds !== undefined ? { areasTreatedIds: apply.areasTreatedIds } : {}),
@@ -820,7 +826,20 @@ export default function CrewStopDetailPage({ params }: { params: Promise<{ visit
                         placeholder={t("Amount used")}
                         className="h-11 w-32 text-base"
                       />
-                      <span className="text-sm text-muted-foreground">{c.unitName ?? ""}</span>
+                      {c.unitOfMeasureId ? (
+                        <span className="text-sm text-muted-foreground">{c.unitName ?? ""}</span>
+                      ) : (
+                        <select
+                          aria-label={t("Unit")}
+                          value={e.unitId ?? ""}
+                          disabled={e.notUsed}
+                          onChange={(ev) => setChemEdits((prev) => ({ ...prev, [c.id]: { ...e, unitId: ev.target.value || undefined } }))}
+                          className="h-11 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-base"
+                        >
+                          <option value="">{t("Unit")}</option>
+                          {(chemCatalog?.units ?? []).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                        </select>
+                      )}
                       <label className="ml-auto flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"

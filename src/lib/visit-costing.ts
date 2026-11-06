@@ -10,7 +10,7 @@
 //   revenue    = rpt_job_visits.revenue_cents (authoritative per-visit revenue:
 //                per-service visit → its own rate, else Σ included service
 //                lines, else the job rate — see the view migration)
-//   date       = rpt_job_visits.worked_date (completed_at in Eastern time,
+//   date       = rpt_job_visits.worked_date (completed_at in the org's time zone,
 //                else scheduled_date) — the same basis Job Cost Summary uses
 //   man-hours  = rpt_job_visits.man_hours (already person × hours — never
 //                multiply by men_count again)
@@ -68,7 +68,7 @@ export interface CostedVisit {
   serviceNames: string;
   crewName: string | null;
   completedAt: string;
-  /** "YYYY-MM-DD" the work is reported under: completed_at in Eastern time, else scheduled_date. */
+  /** "YYYY-MM-DD" the work is reported under: completed_at in the org's time zone, else scheduled_date. */
   workedDate: string;
   menCount: number;
   /** Budgeted MAN-hours for the visit. */
