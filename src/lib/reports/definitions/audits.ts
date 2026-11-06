@@ -276,12 +276,15 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
     section: "audits",
     name: "Sales Commission Export",
     description:
-      "Shows finalized invoices by sales rep for commission calculations, excluding sales tax.",
+      "Shows finalized invoices by sales rep for commission calculations: revenue after discounts, excluding sales tax.",
     filters: [
       dateRangeFilterDef("Invoice Date", "this_month"),
       { key: "sales_rep", label: "Sales Rep", type: "select", optionsSource: "salesReps" },
     ],
-    notes: ["Rows appear once an invoice is finalized (not draft or void), regardless of payment status. Amounts exclude sales tax."],
+    notes: [
+      "Rows appear once an invoice is finalized (not draft or void), regardless of payment status. Revenue is after invoice discounts and excludes sales tax — the same figure the Commissions page pays on.",
+      "The sales rep is the one credited when the invoice was issued (from the invoice, job, contract, estimate or client).",
+    ],
     analysis: (params, timeZone) => ({
       dataset: "rpt_invoices",
       columns: [
@@ -289,7 +292,7 @@ export const AUDIT_REPORTS: PrebuiltReportDef[] = [
         "invoice_date",
         "client_name",
         "sales_rep",
-        "subtotal_cents",
+        "revenue_ex_tax_cents",
         "amount_paid_cents",
         "under_contract",
       ],

@@ -1776,7 +1776,7 @@ function AccountingTab() {
 
   return (
     <div className="rounded-lg border bg-card shadow-sm">
-      <AccordionSection title="Sales Tax" defaultOpen description="One rate for the whole company: the default on new invoices and estimates here and on new POs and requisitions in Equipt (the same setting as Settings → Organization). Can be overridden per client or record.">
+      <AccordionSection title="Sales Tax" defaultOpen description="One rate for the whole company (the same setting as Settings → Organization). Each new client starts with it as their tax rate, and new POs and requisitions in Equipt use it. Can be changed per client or record.">
         <div className="space-y-4 p-4">
           <div className="flex items-end gap-3">
             <div className="flex flex-col gap-1.5 w-48">
@@ -1800,7 +1800,7 @@ function AccountingTab() {
             </Button>
           </div>
           <p className="text-xs text-slate-400 dark:text-neutral-500">
-            This rate is used as the default for new invoices. Each client can have their own tax rate set on their profile — that takes priority over this org default.
+            New clients get this rate as their own tax rate when they&apos;re created (tax-exempt clients stay at 0%); their estimates, invoices and automatic invoices then use the client&apos;s rate. Changing it here doesn&apos;t change existing clients — edit a client&apos;s tax rate on their profile.
           </p>
         </div>
       </AccordionSection>

@@ -8,6 +8,10 @@ import { getOrCreateInvoiceShareToken, buildInvoiceViewUrl } from "@/lib/invoice
 import { loadInvoicePhotosForPdf } from "@/lib/invoices/photos";
 import { loadInvoiceChemicalsForPdf } from "@/lib/invoices/chemical-applications";
 import { loadInvoiceVisitNotes, combineInvoiceNotes } from "@/lib/invoices/visit-notes";
+import { mapWithConcurrency } from "@/lib/utils/map-with-concurrency";
+
+/** Per-invoice PDF builds in flight at once for a combined print. */
+const PDF_BUILD_CONCURRENCY = 5;
 
 // Shared by the single-invoice and bulk PDF routes — extracted from the
 // route handler so both can build the same per-invoice data shape and only
@@ -194,12 +198,18 @@ export async function renderInvoicesPDF(
   invoiceIds: string[],
   orgId: string,
   userId: string | null
-): Promise<Buffer | null> {
-  const items = (
-    await Promise.all(invoiceIds.map((id) => buildInvoicePDFData(supabase, id, orgId, userId, false)))
-  ).filter((x): x is { invoice: InvoicePDFData; org: OrgPDFData; layoutKey: InvoicePDFLayoutKey } => x !== null);
-  if (items.length === 0) return null;
+): Promise<{ buffer: Buffer; renderedIds: string[] } | null> {
+  // Each build is about a dozen queries; a few at a time instead of all at once, so a
+  // large selection doesn't open hundreds of requests and run the route out of time.
+  const built = await mapWithConcurrency(invoiceIds, PDF_BUILD_CONCURRENCY, async (id) => {
+    const data = await buildInvoicePDFData(supabase, id, orgId, userId, false);
+    return data ? { id, data } : null;
+  });
+  const ok = built.filter((x): x is NonNullable<typeof x> => x !== null);
+  if (ok.length === 0) return null;
+  const items = ok.map((x) => x.data);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buffer = await renderToBuffer(createElement(InvoiceDocumentMulti as any, { items }) as any);
-  return buffer as unknown as Buffer;
+  // The caller marks printed/locked only what is actually in the PDF.
+  return { buffer: buffer as unknown as Buffer, renderedIds: ok.map((x) => x.id) };
 }

@@ -285,17 +285,19 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     filters: [dateRangeFilterDef("Cancelled Between", "this_year")],
     run: async ({ supabase, params, timeZone }) => {
       const { from, to } = resolveDateRange(params, "this_year", timeZone);
-      let query = supabase
-        .from("clients")
-        .select("cancellation_reason, source, billing_zip, closed_at, sales_rep_id, sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
-        .eq("status", "cancelled")
-        .is("deleted_at", null);
       // closed_at is a timestamptz — bound it by the org's own midnights.
       const bounds = orgDayRangeBounds(from, to, timeZone);
-      if (bounds.gte) query = query.gte("closed_at", bounds.gte);
-      if (bounds.lt) query = query.lt("closed_at", bounds.lt);
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
+      // Paged: an all-time range for a large org passes the 1,000-row response cap.
+      const data = await fetchAllRows<unknown>(() => {
+        let query = supabase
+          .from("clients")
+          .select("cancellation_reason, source, billing_zip, closed_at, sales_rep_id, sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
+          .eq("status", "cancelled")
+          .is("deleted_at", null);
+        if (bounds.gte) query = query.gte("closed_at", bounds.gte);
+        if (bounds.lt) query = query.lt("closed_at", bounds.lt);
+        return query;
+      });
 
       type Row = {
         cancellation_reason: string | null;
@@ -354,15 +356,18 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     filters: [dateRangeFilterDef("Client Since", "this_year")],
     run: async ({ supabase, params, timeZone }) => {
       const { from, to } = resolveDateRange(params, "this_year", timeZone);
-      let query = supabase
-        .from("clients")
-        .select("source, billing_zip, client_since, sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
-        .in("status", [...CLIENT_STATUSES])
-        .is("deleted_at", null);
-      if (from) query = query.gte("client_since", from);
-      if (to) query = query.lte("client_since", to);
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
+      // Paged: an import gives every client a client_since, so one year can pass the
+      // 1,000-row response cap and the zip/source/rep counts came out low.
+      const data = await fetchAllRows<unknown>(() => {
+        let query = supabase
+          .from("clients")
+          .select("source, billing_zip, client_since, sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)")
+          .in("status", [...CLIENT_STATUSES])
+          .is("deleted_at", null);
+        if (from) query = query.gte("client_since", from);
+        if (to) query = query.lte("client_since", to);
+        return query;
+      });
 
       type Row = {
         source: string | null;
@@ -456,21 +461,23 @@ export const CLIENT_REPORTS: PrebuiltReportDef[] = [
     ],
     run: async ({ supabase, params, timeZone }) => {
       const { from, to } = resolveDateRange(params, "all_time", timeZone);
-      let query = supabase
-        .from("crm_contracts")
-        .select(
-          "title, status, start_date, end_date, signed_at, created_at, billing_frequency, billing_day_of_month, bill_month_in_advance, monthly_amount_cents, monthly_amounts, is_active, clients:client_id(display_name)"
-        )
-        .is("deleted_at", null);
-      // "Active" = what the billing paths actually invoice: is_active AND a
-      // signed/active status (a draft or cancelled contract never bills).
-      if (params.active_only !== "false") {
-        query = query.eq("is_active", true).in("status", BILLABLE_CONTRACT_STATUSES);
-      }
-      if (from) query = query.gte("start_date", from);
-      if (to) query = query.lte("start_date", to);
-      const { data, error } = await query.order("start_date", { ascending: false });
-      if (error) throw new Error(error.message);
+      // Paged past the 1,000-row response cap.
+      const data = await fetchAllRows<unknown>(() => {
+        let query = supabase
+          .from("crm_contracts")
+          .select(
+            "title, status, start_date, end_date, signed_at, created_at, billing_frequency, billing_day_of_month, bill_month_in_advance, monthly_amount_cents, monthly_amounts, is_active, clients:client_id(display_name)"
+          )
+          .is("deleted_at", null);
+        // "Active" = what the billing paths actually invoice: is_active AND a
+        // signed/active status (a draft or cancelled contract never bills).
+        if (params.active_only !== "false") {
+          query = query.eq("is_active", true).in("status", BILLABLE_CONTRACT_STATUSES);
+        }
+        if (from) query = query.gte("start_date", from);
+        if (to) query = query.lte("start_date", to);
+        return query.order("start_date", { ascending: false });
+      });
 
       type Row = ContractScheduleRow & {
         title: string | null;

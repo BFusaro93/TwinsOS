@@ -1,18 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { z } from "zod";
+import { BULK_PRINT_MAX } from "@/lib/bulk-print";
 import { renderEstimatesPDF } from "@/lib/estimate-pdf";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
+export const maxDuration = 300;
+
+const BodySchema = z.object({ ids: z.array(z.string().min(1)).min(1).max(BULK_PRINT_MAX) });
+
 // Combines several estimates into one PDF for the Estimates list's "Print
 // Selected" bulk action — same auth/org-scoping shape as the single-estimate
-// route, just taking ?ids=a,b,c instead of a path param.
-export async function GET(req: NextRequest) {
-  const idsParam = req.nextUrl.searchParams.get("ids") ?? "";
-  const ids = idsParam.split(",").map((s) => s.trim()).filter(Boolean);
-  if (ids.length === 0) {
-    return NextResponse.json({ error: "No estimate ids given" }, { status: 400 });
+// route. Ids come in a POST body (a GET with a few hundred ids in the query
+// string ran past the URL limit).
+export async function POST(req: NextRequest) {
+  const parsed = BodySchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: `Choose between 1 and ${BULK_PRINT_MAX} estimates` }, { status: 400 });
   }
+  const ids = Array.from(new Set(parsed.data.ids));
 
   const cookieStore = await cookies();
 

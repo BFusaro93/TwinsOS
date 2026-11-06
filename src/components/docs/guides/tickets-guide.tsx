@@ -205,7 +205,14 @@ export function TicketsGuide() {
           resolved from the assignee-picker&apos;s selected employee). Both are set together whenever
           the UI&apos;s Assigned To dropdown is used — in the New Ticket dialog, the edit form, or the
           list&apos;s bulk <strong>Reassign</strong> action (select one or more rows → Actions →
-          Reassign).
+          Reassign). A bulk reassign sends the new assignee one summary notice for the whole batch,
+          not one per ticket.
+        </p>
+        <p>
+          <strong>Who can see tickets.</strong> Roles with <strong>View/Modify Tickets</strong> (and
+          admins) see all of the company&apos;s tickets. Everyone else, crew logins included, sees only
+          tickets they created or that are assigned to them — so a crew sees its own upsell
+          suggestions but not the office&apos;s complaints or billing disputes.
         </p>
         <Callout>
           <code>resolveAssigneeId()</code> in <code>src/lib/ticket-notify.ts</code> turns that{" "}

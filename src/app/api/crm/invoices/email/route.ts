@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { escapeHtml } from "@/lib/utils/escape-html";
+import { safeHexColor } from "@/lib/utils/safe-color";
+import { buildInvoiceGridHtml } from "@/lib/invoices/invoice-grid-html";
 import { createClient as createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
 import { renderToBuffer } from "@react-pdf/renderer";
@@ -238,7 +241,14 @@ export async function POST(req: NextRequest) {
     pdfTemplate = defaultTemplate ?? null;
   }
   const layoutKey: InvoicePDFLayoutKey = (pdfTemplate?.layout_key as InvoicePDFLayoutKey) ?? "default";
-  const brandColor = (pdfTemplate?.accent_color as string) || (org?.brand_color as string) || "#60ab45";
+  // Template accent / brand colour are org-editable text interpolated into a
+  // style attribute: only a plain hex value is used (anything else could inject
+  // markup into every client's invoice email).
+  const brandColor = safeHexColor(
+    (pdfTemplate?.accent_color as string | null) || (org?.brand_color as string | null),
+    safeHexColor(org?.brand_color as string | null, "#60ab45"),
+  );
+  const orgNameHtml = escapeHtml(orgName);
 
   const lineItems: { name: string | null; description: string; qty: number; rate_cents: number; total_cents: number; discount_cents?: number | null; sort_order: number }[] =
     (inv.crm_invoice_line_items ?? []).sort((a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order);
@@ -342,8 +352,12 @@ export async function POST(req: NextRequest) {
     "[salesrepname]":       salesRepName,
     "[viewinvoiceonline]":  viewOnlineUrl ?? "",
     "[paymentlink]":        paymentLinkHtml,
-    "[invoicelogo]":        invoiceLogoUrl ? `<img src="${invoiceLogoUrl}" alt="${orgName}" style="max-height:48px" />` : "",
-    "[invoicegrid]":        "",
+    // Only an https or inline image URL, escaped — the template's logo URL is free text.
+    "[invoicelogo]":        invoiceLogoUrl && /^(https:\/\/|data:image\/(png|jpe?g|gif|webp);base64,)/i.test(invoiceLogoUrl)
+      ? `<img src="${escapeHtml(invoiceLogoUrl)}" alt="${orgNameHtml}" style="max-height:48px" />`
+      : "",
+    // Was always "" while the Documents picker and preview offered it.
+    "[invoicegrid]":        buildInvoiceGridHtml(lineItems),
   };
 
   const resolvedSubject = resolveSubjectMergeTags(body.subject?.trim() || DEFAULT_SUBJECT, mergeVars);
@@ -363,7 +377,7 @@ export async function POST(req: NextRequest) {
 <body style="font-family:Arial,sans-serif;color:#1e293b;margin:0;padding:0;background:#f8fafc">
 <div style="max-width:600px;margin:24px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1)">
   <div style="background:${brandColor};padding:24px 32px">
-    <h1 style="color:#fff;margin:0;font-size:22px">${orgName}</h1>
+    <h1 style="color:#fff;margin:0;font-size:22px">${orgNameHtml}</h1>
     <p style="color:rgba(255,255,255,.8);margin:4px 0 0;font-size:14px">Invoice #${inv.invoice_number ?? "—"}</p>
   </div>
   <div style="padding:28px 32px;font-size:14px;line-height:1.6">${resolvedBodyContent}</div>
@@ -372,7 +386,7 @@ export async function POST(req: NextRequest) {
     <a href="${viewOnlineUrl}" style="display:inline-block;background:${brandColor};color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:14px;font-weight:600">View &amp; Pay Invoice Online</a>
   </div>` : ""}
   <div style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;text-align:center">
-    <p style="margin:0;font-size:11px;color:#94a3b8">${orgName}</p>
+    <p style="margin:0;font-size:11px;color:#94a3b8">${orgNameHtml}</p>
   </div>
 </div>
 </body>

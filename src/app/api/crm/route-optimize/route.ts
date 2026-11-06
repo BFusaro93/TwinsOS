@@ -8,6 +8,7 @@ import { logger } from "@/lib/logger";
 import { resolveGoogleMapsKey } from "@/lib/google-maps-key";
 import { embeddedOne, formatStopAddress, resolveStopAddress } from "@/lib/utils/stop-address";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 interface DistanceMatrixRow {
   elements: { status: string; duration?: { value: number } }[];
@@ -182,7 +183,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       // Surface the actual problem — a 61-stop request used to be told it
       // needed "at least 2 visits".
-      { error: parsed.error.issues[0]?.message ?? "Invalid route optimization request" },
+      { error: firstIssueMessage(parsed.error, "Invalid route optimization request") },
       { status: 400 }
     );
   }

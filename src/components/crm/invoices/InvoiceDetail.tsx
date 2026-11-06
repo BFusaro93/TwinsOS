@@ -770,16 +770,11 @@ export function InvoiceDetail({
 
   useEffect(() => {
     if (!invoice) return;
-    const orgDefaultBps = Math.round((orgSettings?.taxRatePercent ?? 0) * 100);
-    // A tax-exempt client's invoice stays at 0 — the fallbacks re-taxed it on first Save.
-    const resolved = invoice.taxRateBps > 0
-      ? invoice.taxRateBps
-      : invoice.clientIsTaxable === false
-        ? 0
-        : (invoice.clientDefaultTaxRateBps ?? 0) > 0
-          ? (invoice.clientDefaultTaxRateBps ?? 0)
-          : orgDefaultBps;
-    setTaxRateBps(resolved);
+    // The stored rate is the invoice's rate — including 0. A new blank invoice
+    // gets its rate when it is created (useCreateInvoice); falling back to the
+    // client/company default here re-taxed an invoice whose tax was turned off,
+    // or an untaxed auto-invoice, on its next Save.
+    setTaxRateBps(invoice.clientIsTaxable === false ? 0 : invoice.taxRateBps);
     const resolvedTerms = invoice.terms ?? invoice.clientDefaultTerms ?? "due_on_receipt";
     setTerms(resolvedTerms);
     setInvoiceDate(invoice.invoiceDate ?? "");
@@ -1473,12 +1468,19 @@ export function InvoiceDetail({
                     </td>
                   </tr>
                   <tr className="border-b border-slate-50 dark:border-neutral-800">
-                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium">Sales Rep</td>
+                    <td
+                      className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium"
+                      title="Commission goes to the rep credited when the invoice is issued. After that only someone who manages commissions can change it."
+                    >
+                      Sales Rep
+                    </td>
                     <td className="py-2">
+                      {/* Locked at issue: the DB refuses the change without commission_manage
+                          (and while the invoice's commission is on a statement). */}
                       <Select
                         value={invoice.salesRepId ?? ""}
                         onValueChange={(v) => updateHeader({ id: invoice.id, patch: { sales_rep_id: v || null } })}
-                        disabled={readOnly}
+                        disabled={readOnly || (invoice.status !== "draft" && !can("commission_manage"))}
                       >
                         <SelectTrigger className="h-7 text-xs w-44 border border-border shadow-none disabled:opacity-60 disabled:cursor-not-allowed">
                           <SelectValue placeholder="Assign sales rep…" />
@@ -1499,12 +1501,12 @@ export function InvoiceDetail({
                     </td>
                   </tr>
                   <tr className="border-b border-slate-50 dark:border-neutral-800">
-                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium" title="Decides which commission rate applies. Blank uses the job / contract / estimate, then new sale.">Sale Type</td>
+                    <td className="py-2 pr-4 text-slate-400 dark:text-neutral-500 font-medium" title="Decides which commission rate applies. Blank uses the job / contract / estimate, then new sale; it is fixed when the invoice is issued.">Sale Type</td>
                     <td className="py-2">
                       <SaleTypeSelect
                         className="h-7 w-44 text-xs"
                         value={invoice.saleType}
-                        disabled={readOnly}
+                        disabled={readOnly || (invoice.status !== "draft" && !can("commission_manage"))}
                         onChange={(v) => updateHeader({ id: invoice.id, patch: { sale_type: v } })}
                       />
                     </td>

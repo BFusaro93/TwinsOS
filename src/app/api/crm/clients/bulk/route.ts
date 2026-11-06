@@ -8,6 +8,7 @@ import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { logger } from "@/lib/logger";
 import { chunk } from "@/lib/utils/chunk";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 export const maxDuration = 300;
 
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
 
   const parsed = Body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 });
+    return NextResponse.json({ error: firstIssueMessage(parsed.error, "Invalid request") }, { status: 400 });
   }
   const body = parsed.data;
 

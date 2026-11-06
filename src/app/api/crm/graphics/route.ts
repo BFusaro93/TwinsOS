@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { savedGraphicInputSchema } from "@/types/crm-reports";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 interface SavedGraphicRow {
   id: string;
@@ -88,7 +89,7 @@ export async function POST(request: Request) {
   const parsed = savedGraphicInputSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid graphic" },
+      { error: firstIssueMessage(parsed.error, "Invalid graphic") },
       { status: 400 }
     );
   }

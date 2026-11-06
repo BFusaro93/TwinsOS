@@ -32,6 +32,8 @@ export const maxDuration = 300;
  */
 
 const LOOKAHEAD_DAYS = 14;
+/** Stop starting new orgs after this long, leaving room before maxDuration. */
+const RUN_BUDGET_MS = 270_000;
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -96,7 +98,17 @@ export async function GET(request: Request) {
     else jobsByOrg.set(k, [job]);
   }
   const result = { planned: 0, inserted: 0, errors: [] as unknown[] };
-  for (const [orgId, orgJobs] of jobsByOrg) {
+  // Start at a different org each day and stop before maxDuration: one org with thousands of
+  // package programs could use the whole run, and the orgs after it in a fixed order were never
+  // topped up. Visits are generated LOOKAHEAD_DAYS ahead, so an org skipped once is caught up
+  // the next day.
+  const startedAt = Date.now();
+  let stoppedEarly = false;
+  const orgIds = [...jobsByOrg.keys()].sort();
+  const offset = orgIds.length ? Math.floor(startedAt / 86_400_000) % orgIds.length : 0;
+  for (const orgId of [...orgIds.slice(offset), ...orgIds.slice(0, offset)]) {
+    if (Date.now() - startedAt > RUN_BUDGET_MS) { stoppedEarly = true; break; }
+    const orgJobs = jobsByOrg.get(orgId) ?? [];
     try {
       const r = await generateVisitsForJobs(supabase, orgJobs, {
         horizonDays: LOOKAHEAD_DAYS,
@@ -115,6 +127,7 @@ export async function GET(request: Request) {
   if (result.errors.length > 0) {
     log.error("visit generation errors", { errors: result.errors.slice(0, 10), count: result.errors.length });
   }
+  if (stoppedEarly) log.warn("recurring visits stopped at the time budget; remaining orgs run first tomorrow", { orgs: orgIds.length });
   log.info("recurring visits generated", {
     jobs: jobs.length,
     orgCalendars: orgToday.size,
@@ -126,5 +139,6 @@ export async function GET(request: Request) {
     generated: result.inserted,
     planned: result.planned,
     errors: result.errors.length,
+    stoppedEarly,
   }, { status: result.errors.length > 0 && result.inserted === 0 ? 500 : 200 });
 }

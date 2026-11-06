@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getReport } from "@/lib/reports/registry";
 import { canAccessReportData } from "@/lib/reports/report-access";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const createScheduleSchema = z.object({
   reportKey: z.string().min(1),
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
   const parsed = createScheduleSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid schedule" },
+      { error: firstIssueMessage(parsed.error, "Invalid schedule") },
       { status: 400 }
     );
   }

@@ -12,6 +12,7 @@ import { isAreaZone, isLinearZone, sumLinearFt, sumZoneSqft } from "@/lib/proper
 import type { AddressVerdict } from "@/types/address-verification";
 import { logger } from "@/lib/logger";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import { IN_FILTER_CHUNK } from "@/lib/utils/chunk";
 import type { BulkImportResult } from "@/lib/csv";
 import type { FilterRow } from "@/lib/client-filters";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
@@ -366,8 +367,8 @@ export function useFilteredClients(params: ClientQueryParams) {
 export async function fetchClientAccountNumbers(ids: string[]): Promise<Map<string, string>> {
   const supabase = createClient();
   const out = new Map<string, string>();
-  for (let i = 0; i < ids.length; i += 200) {
-    const { data, error } = await supabase.from("clients").select("id, account_number").in("id", ids.slice(i, i + 200));
+  for (let i = 0; i < ids.length; i += IN_FILTER_CHUNK) {
+    const { data, error } = await supabase.from("clients").select("id, account_number").in("id", ids.slice(i, i + IN_FILTER_CHUNK));
     if (error) throw error;
     for (const r of data ?? []) out.set(r.id, r.account_number ?? "");
   }
@@ -443,7 +444,7 @@ export function useClientCount(params: ClientQueryParams, opts: ClientCountOptio
       if (!opts.ids) return countOne();
       // Chunked so a large hand-picked audience doesn't overflow the URL.
       let total = 0;
-      for (let i = 0; i < opts.ids.length; i += 200) total += await countOne(opts.ids.slice(i, i + 200));
+      for (let i = 0; i < opts.ids.length; i += IN_FILTER_CHUNK) total += await countOne(opts.ids.slice(i, i + IN_FILTER_CHUNK));
       return total;
     },
     enabled,

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { canAccessReportData } from "@/lib/reports/report-access";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const updateScheduleSchema = z.object({
   recipients: z.array(z.string().email()).min(1).optional(),
@@ -43,7 +44,7 @@ export async function PATCH(
   const parsed = updateScheduleSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid update" },
+      { error: firstIssueMessage(parsed.error, "Invalid update") },
       { status: 400 }
     );
   }

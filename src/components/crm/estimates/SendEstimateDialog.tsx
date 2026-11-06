@@ -157,21 +157,43 @@ export function SendEstimateDialog({
     : `<span style="${estimateLinkButtonStyle};cursor:default" title="The proposal link is generated when this email is sent">View Your Proposal →</span>`
       + `<div style="margin-top:6px;font-size:11px;color:#64748b">Link placeholder — the client's unique proposal URL is generated when you send.</div>`;
 
+  // The estimate's real merge values (client, property, company, estimate tags) —
+  // the same loader the send route's vocabulary is built from, so every tag the
+  // Documents picker offers previews as it will send.
+  const { data: serverVars } = useQuery<Record<string, string>>({
+    queryKey: ["estimate-merge-vars", estimateId],
+    enabled: open,
+    queryFn: async () => {
+      const res = await fetch(`/api/crm/estimates/${estimateId}/merge-vars`);
+      if (!res.ok) return {};
+      return ((await res.json()) as { vars: Record<string, string> }).vars ?? {};
+    },
+  });
+
   function previewResolve(text: string) {
     const estimateDateVal = estimateDate ? new Date(`${estimateDate.slice(0, 10)}T12:00:00`) : new Date();
     const estimateTotal = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
       .format((totalCents ?? 0) / 100);
+    const fallback: Record<string, string> = {
+      "[clientfirstname]": clientName?.split(" ")[0] ?? "Client",
+      "[clientlastname]": clientName?.split(" ").slice(1).join(" ") ?? "",
+      "[clientfullname]": clientName ?? "Client",
+      "[companyname]": orgName,
+      "[estimatenumber]": String(estimateNumber).padStart(5, "0"),
+      "[estimatedate]": estimateDateVal.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+      "[estimatetotal]": estimateTotal,
+      "[salesrepname]": salesRepName?.trim() || orgName,
+      "[companyphonenumber]": orgPhone,
+    };
     return text
-      .replace(/\[clientfirstname\]/gi,    () => escapeHtml(clientName?.split(" ")[0] ?? "Client"))
-      .replace(/\[clientlastname\]/gi,     () => escapeHtml(clientName?.split(" ").slice(1).join(" ") ?? ""))
-      .replace(/\[clientfullname\]/gi,     () => escapeHtml(clientName ?? "Client"))
-      .replace(/\[companyname\]/gi,        () => escapeHtml(orgName))
-      .replace(/\[estimatelink\]/gi,       () => estimateLinkPreviewHtml)
-      .replace(/\[estimatenumber\]/gi,     () => escapeHtml(String(estimateNumber).padStart(5, "0")))
-      .replace(/\[estimatedate\]/gi,       () => escapeHtml(estimateDateVal.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })))
-      .replace(/\[estimatetotal\]/gi,      () => escapeHtml(estimateTotal))
-      .replace(/\[salesrepname\]/gi,       () => escapeHtml(salesRepName?.trim() || orgName))
-      .replace(/\[companyphonenumber\]/gi, () => escapeHtml(orgPhone));
+      .replace(/\[estimatelink\]/gi, () => estimateLinkPreviewHtml)
+      // [estimategrid] is a server-built table the send route fills in.
+      .replace(/\[estimategrid\]/gi, () => escapeHtml("(line items table)"))
+      .replace(/\[(\w+)\]/g, (m) => {
+        const key = m.toLowerCase();
+        const value = serverVars?.[key] ?? fallback[key];
+        return value === undefined ? m : escapeHtml(value);
+      });
   }
 
   async function handleSend() {

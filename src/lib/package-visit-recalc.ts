@@ -233,3 +233,23 @@ export async function overridePackageMinDays(
   const { error } = await supabase.rpc("crm_override_package_min_days", { p_visit_id: visitId, p_scheduled_date: date });
   return error ? error.message : null;
 }
+
+/**
+ * Undo Min Days override moves when the rest of the edit then failed: the override
+ * RPC commits its date move on its own, so a refused invoiced-lock override or a
+ * failed field update used to answer with an error while the visit(s) stayed moved.
+ * Moves each visit back to its previous date (through the same RPC, so the Min Days
+ * trigger doesn't refuse the restore). Best-effort; returns the first error.
+ */
+export async function revertPackageMinDaysOverrides(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  moves: { visitId: string; previousDate: string }[]
+): Promise<string | null> {
+  let firstError: string | null = null;
+  for (const m of moves) {
+    const err = await overridePackageMinDays(supabase, m.visitId, m.previousDate);
+    if (err && !firstError) firstError = err;
+  }
+  return firstError;
+}

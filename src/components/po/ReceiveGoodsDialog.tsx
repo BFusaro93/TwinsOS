@@ -41,7 +41,7 @@ import { useCreateGoodsReceipt, useDeleteGoodsReceipt, useGoodsReceipts } from "
 import { formatCurrency } from "@/lib/utils";
 import type { PurchaseOrder, LineItem } from "@/types";
 import { computeReceiptTotals } from "@/lib/utils/receipt-totals";
-import { correctPartReceipt, correctProductReceipt, logReceiptWithoutStock } from "@/lib/inventory/part-stock";
+import { correctPartReceipt, correctProductReceipt, logReceiptWithoutStock, setWOPartStock } from "@/lib/inventory/part-stock";
 
 function errMsg(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -237,6 +237,17 @@ export function ReceiveGoodsDialog({
 
     const linesToReceive = lines.filter((l) => l.quantityReceived > 0);
 
+    // A stock line with no catalog product can't be received; refuse before anything
+    // is recorded rather than failing part-way and rolling back.
+    const unmatched = linesToReceive.find((l) => {
+      const li = po.lineItems.find((x) => x.id === l.lineItemId);
+      return !li?.projectId && !(li ? matchProductForLine(li) : null);
+    });
+    if (unmatched) {
+      toast.error(`No catalog product found for "${unmatched.productItemName}" — fix the PO line before receiving.`);
+      return;
+    }
+
     // Persist the receipt record FIRST, then apply inventory — "already
     // received" tracking (alreadyReceivedMap above) is derived entirely from
     // goods_receipts rows, so if inventory were applied first and this insert
@@ -286,7 +297,11 @@ export function ReceiveGoodsDialog({
     // increments live with no receipt surviving to account for them, and a
     // retry would double-increment inventory.
     type AppliedStep =
-      | { kind: "part"; partId: string; quantity: number; unitCost: number }
+      | {
+          kind: "part"; partId: string; quantity: number; unitCost: number;
+          /** Work-order shortfalls this receipt settled, to reopen on rollback. */
+          settled: { woPartId: string; previousDeducted: number }[];
+        }
       | { kind: "product"; productId: string; quantity: number; unitCost: number };
     const applied: AppliedStep[] = [];
     try {
@@ -330,7 +345,7 @@ export function ReceiveGoodsDialog({
           const linkedPart = parts.find((pt) => pt.productItemId === matchedProduct.id) ??
             (line.partNumber ? parts.find((pt) => pt.partNumber === line.partNumber) : null);
           if (linkedPart) {
-            await receivePartLayer({
+            const { settled } = await receivePartLayer({
               partId: linkedPart.id,
               quantity: line.quantityReceived,
               unitCost: line.unitCost,
@@ -338,7 +353,7 @@ export function ReceiveGoodsDialog({
               poNumber: po.poNumber,
               poLineItemId: line.lineItemId,
             });
-            applied.push({ kind: "part", partId: linkedPart.id, quantity: line.quantityReceived, unitCost: line.unitCost });
+            applied.push({ kind: "part", partId: linkedPart.id, quantity: line.quantityReceived, unitCost: line.unitCost, settled });
             receivedPartId = linkedPart.id;
           }
         }
@@ -367,6 +382,12 @@ export function ReceiveGoodsDialog({
         for (const step of [...applied].reverse()) {
           try {
             if (step.kind === "part") {
+              // Reopen the work-order shortfalls the receipt settled first (this puts
+              // those units back on hand), so removing the receipt below leaves both
+              // stock and the WO lines exactly as they were.
+              for (const s of [...step.settled].reverse()) {
+                await setWOPartStock(supabase, s.woPartId, s.previousDeducted);
+              }
               await correctPartReceipt(supabase, {
                 orgId: po.orgId,
                 partId: step.partId,

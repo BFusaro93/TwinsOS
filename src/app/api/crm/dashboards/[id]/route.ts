@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { dashboardInputSchema } from "@/types/crm-reports";
 import { isCrewCaller } from "@/lib/reports/crew-dashboard-access";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 interface DashboardRow {
   id: string;
@@ -105,7 +106,7 @@ export async function PATCH(
   const parsed = dashboardInputSchema.partial().safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid dashboard" },
+      { error: firstIssueMessage(parsed.error, "Invalid dashboard") },
       { status: 400 }
     );
   }

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { adminClient, authenticateZapierRequest, blankToUndefined, checkZapierRateLimit } from "@/lib/integrations/zapier";
 import { createCrmJob } from "@/lib/integrations/create-crm-job";
 import { logger } from "@/lib/logger";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const log = logger.child("zapier-action");
 
@@ -55,9 +56,7 @@ export async function POST(request: Request) {
 
   const parsed = createJobSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const message = issue ? `${issue.path.join(".") || "input"}: ${issue.message}` : "Invalid input";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json({ error: firstIssueMessage(parsed.error) }, { status: 400 });
   }
 
   const result = await createCrmJob(db, auth.orgId, parsed.data, {

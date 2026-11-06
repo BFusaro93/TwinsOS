@@ -232,6 +232,59 @@ export async function notifyTicketAssigned(
   });
 }
 
+/** Several tickets assigned at once (bulk reassign) — one summary to the assignee
+ *  instead of one notice per ticket. A single ticket falls back to notifyTicketAssigned. */
+export async function notifyTicketsAssignedBulk(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  params: {
+    orgId: string;
+    tickets: { ticketId: string; ticketNumber: number; subject: string | null }[];
+    assignedToId: string | null;
+    assignedToName: string | null;
+    assignedByUserId: string | null;
+  }
+) {
+  const { orgId, tickets, assignedToId, assignedToName, assignedByUserId } = params;
+  if (!tickets.length) return;
+  if (tickets.length === 1) {
+    const t = tickets[0];
+    await notifyTicketAssigned(supabase, { orgId, ...t, assignedToId, assignedToName, assignedByUserId });
+    return;
+  }
+  const assigneeId = await resolveAssigneeId(supabase, orgId, assignedToId, assignedToName);
+  if (!assigneeId || assigneeId === assignedByUserId) return;
+
+  const { data: assignee } = await supabase
+    .from("profiles")
+    .select("id, email, name, notification_prefs")
+    .eq("id", assigneeId)
+    .neq("status", "inactive")
+    .maybeSingle();
+  if (!assignee) return;
+
+  const shown = tickets.slice(0, 10).map((t) => ticketLabel(t.subject, t.ticketNumber));
+  const more = tickets.length - shown.length;
+  const title = `${tickets.length} Tickets Assigned`;
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://landscapt.com";
+  await sendToRecipients(supabase, [assignee], {
+    orgId,
+    // The in-app row links somewhere: the first ticket of the batch.
+    ticketId: tickets[0].ticketId,
+    notifType: "ticket_assigned",
+    inAppPrefKey: "inAppTicketAssigned", emailPrefKey: "emailTicketAssigned",
+    title,
+    message: `You were assigned ${tickets.length} tickets: ${shown.slice(0, 3).join(", ")}${tickets.length > 3 ? ", …" : ""}`,
+    emailHtml: (name) => `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+    <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">Tickets Assigned to You</h2>
+    <p style="margin:0 0 4px;color:#475569">Hi ${name ? escapeHtml(name) : "there"},</p>
+    <p style="margin:0 0 12px;color:#475569">You were assigned ${tickets.length} tickets:</p>
+    <ul style="margin:0 0 16px;padding-left:20px;color:#475569">${shown.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}${more > 0 ? `<li>and ${more} more</li>` : ""}</ul>
+    <a href="${siteUrl}/crm/tickets" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;margin-top:16px">View Tickets</a>
+  </div>`,
+  });
+}
+
 /** Contributor added — tells the person they were CC'd on the ticket, the same way an
  *  assignee hears about an assignment (and reusing its preference keys). Never notifies
  *  the person who added them, and won't repeat within the notify window so a double

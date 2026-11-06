@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
+import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 import { adminClient } from "@/lib/api/auth";
 import { logger } from "@/lib/logger";
 import { validateImageUpload } from "@/lib/utils/image-upload";
@@ -281,6 +282,18 @@ export async function POST(
     logger.error("[crew/upsell] notify failed, suggestion kept", {
       ticketId: ticket.id,
       error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // "Ticket was created" automations (category Upsell) run for crew suggestions too.
+  // Service role for the same reason as the notification above; best-effort.
+  if (visit.client_id) {
+    await fireServerTrigger(adminClient(), {
+      orgId: visit.org_id,
+      clientId: visit.client_id,
+      ticketId: ticket.id,
+      triggerType: "ticket_created",
+      matchValues: [UPSELL_CATEGORY],
     });
   }
 

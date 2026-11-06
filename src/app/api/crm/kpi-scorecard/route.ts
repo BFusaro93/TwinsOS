@@ -9,6 +9,7 @@ import {
   type KpiScorecardConfig,
 } from "@/types/crm-kpi-scorecard";
 import { DEFAULT_KPI_SCORECARD_CONFIG } from "@/lib/kpi/landscapt-kpi-catalog";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const log = logger.child("api/crm/kpi-scorecard");
 
@@ -115,7 +116,7 @@ export async function PUT(request: Request) {
   const parsed = kpiScorecardInputSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid scorecard" },
+      { error: firstIssueMessage(parsed.error, "Invalid scorecard") },
       { status: 400 }
     );
   }

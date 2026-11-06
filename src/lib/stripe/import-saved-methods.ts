@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
+import { mapWithConcurrency } from "@/lib/utils/map-with-concurrency";
 
 /**
  * Importing already-saved cards/bank accounts from a Stripe account the org
@@ -84,19 +85,6 @@ function pickMethod(
   }
   const usable = all.map(toMethod).filter((m): m is NonNullable<typeof m> => m !== null);
   return usable.find((m) => !m.expired) ?? usable[0] ?? null;
-}
-
-async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let next = 0;
-  async function worker() {
-    while (next < items.length) {
-      const i = next++;
-      out[i] = await fn(items[i]);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return out;
 }
 
 /** Resolves the importable method for one customer on the connected account.

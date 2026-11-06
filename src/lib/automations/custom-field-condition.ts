@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ConditionOperator } from "@/types/crm-automations";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 /**
  * "Custom field" automation conditions point at one of the org's client
@@ -144,7 +145,7 @@ export const conditionRowSchema = z
 export function validateConditionRows(rows: { field: string; operator: string; value: string | null | undefined }[]): string | null {
   for (const row of rows) {
     const res = conditionRowSchema.safeParse(row);
-    if (!res.success) return res.error.issues[0]?.message ?? "Invalid condition.";
+    if (!res.success) return firstIssueMessage(res.error, "Invalid condition.");
   }
   return null;
 }

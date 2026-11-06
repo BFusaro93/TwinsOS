@@ -261,6 +261,16 @@ export function DocumentsGuide() {
             Automations guide.
           </li>
           <li>
+            <strong>Every listed tag works on every send.</strong> Estimate emails, the online proposal and
+            its PDF, the acceptance confirmation and chemical notices all fill in the full client, billing,
+            property and company tags, not just the client name. On a document about a specific property
+            (an estimate with a property, a visit&apos;s Notice of Treatment), the property tags
+            (<code>[physicaladdress1]</code>, takeoffs, gate code) come from that property rather than the
+            client&apos;s main service address. <code>[salesperson]</code> and <code>[salesrepname]</code>{" "}
+            name the estimate&apos;s own sales rep (the company name only when none is set), and{" "}
+            <code>[invoicegrid]</code> prints the invoice&apos;s lines as a table.
+          </li>
+          <li>
             <strong>Empty tags.</strong> A tag that has no value for this client or record is left blank in
             the sent email rather than showing the bracket text.
           </li>

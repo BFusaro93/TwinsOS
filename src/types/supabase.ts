@@ -17294,6 +17294,7 @@ export type Database = {
           is_issued: boolean | null
           payment_method: string | null
           po_number: string | null
+          revenue_ex_tax_cents: number | null
           sales_rep: string | null
           service_address: string | null
           status: string | null
@@ -18022,7 +18023,12 @@ export type Database = {
         Returns: string
       }
       crm_commission_lines: {
-        Args: { p_employee_id?: string; p_from: string; p_to: string }
+        Args: {
+          p_employee_id?: string
+          p_from: string
+          p_include_earlier?: boolean
+          p_to: string
+        }
         Returns: {
           basis_cents: number
           category: string

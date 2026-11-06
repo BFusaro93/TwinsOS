@@ -105,7 +105,8 @@ export function WarrantiesGuide() {
         <p>
           <strong>Renew</strong> creates a new warranty of the same length. If the old one hasn&apos;t
           ended yet, the new one starts the day after it ends so there&apos;s no gap and no overlap; if
-          it has ended, it starts today. The old warranty is kept as history.{" "}
+          it has ended, it starts today. The old warranty is kept as history. A warranty can be
+          renewed once: after that its Renew button is gone (void the renewal to renew it again).{" "}
           <strong>Void</strong> removes a warranty from coverage without deleting it, and{" "}
           <strong>Delete</strong> removes it from the lists entirely.
         </p>
@@ -137,7 +138,9 @@ export function WarrantiesGuide() {
           organization admins get the in-app notification and the email instead, so the reminder is
           never dropped. Canceled organizations get no automated reminders.
           Turn either channel off under <strong>Settings → Notifications → Warranty Expiring Soon</strong>.
-          Renewing a warranty gives it a new end date, which re-arms the reminder.
+          A warranty that has already been renewed gets no reminder; the renewal gets its own when it
+          nears its end. Warranties are visible to roles with <strong>View Warranties</strong> or{" "}
+          <strong>Add/Edit/Void Warranties</strong> (and admins).
         </p>
       </Section>
 

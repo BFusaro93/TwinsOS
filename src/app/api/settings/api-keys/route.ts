@@ -5,6 +5,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { generateApiKey } from "@/lib/api/auth";
 import { isKnownScope } from "@/lib/api/scopes";
 import { orgHasAddon } from "@/lib/stripe/addon-access";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const log = logger.child("settings-api-keys");
 
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
 
   const parsed = createKeySchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+    return NextResponse.json({ error: firstIssueMessage(parsed.error, "Invalid input") }, { status: 400 });
   }
   const { name, scopes } = parsed.data;
 

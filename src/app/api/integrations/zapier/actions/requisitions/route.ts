@@ -4,6 +4,7 @@ import { adminClient, authenticateZapierRequest, blankToUndefined, checkZapierRa
 import { createRequisitionRecord } from "@/lib/requisitions/create-requisition";
 import { REQUISITION_SELECT, shapeRequisition } from "@/app/api/v1/requisitions/shape";
 import { logger } from "@/lib/logger";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const log = logger.child("zapier-action");
 
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
 
   const parsed = createRequisitionSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+    return NextResponse.json({ error: firstIssueMessage(parsed.error, "Invalid input") }, { status: 400 });
   }
   const body = parsed.data;
 

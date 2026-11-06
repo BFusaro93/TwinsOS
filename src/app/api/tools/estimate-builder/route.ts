@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { logger } from "@/lib/logger";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -173,7 +174,7 @@ export async function POST(req: NextRequest) {
   const parsed = requestSchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid request body" },
+      { error: firstIssueMessage(parsed.error, "Invalid request body") },
       { status: 400 }
     );
   }

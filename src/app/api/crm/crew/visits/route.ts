@@ -6,6 +6,7 @@ import {
   crewVisitComparator,
   effectiveVisitCrewId,
   fetchRememberedRouteOrder,
+  isWaitingPackagePlaceholder,
   selectCarriedOverClockedInVisits,
   selectEffectiveCrewVisits,
   type VisitCrewRow,
@@ -156,6 +157,8 @@ export async function GET(request: Request) {
   // need to clock out of. Filtered here rather than with an !inner join so a
   // visit whose job row RLS hides from the crew still shows, as before.
   const rows = (data as Record<string, unknown>[]).filter((row) => {
+    // Undispatched package steps wait on the Waiting List, as on the dispatch board.
+    if (isWaitingPackagePlaceholder(row)) return false;
     const jobStatus = (row.crm_jobs as { status?: string | null } | null)?.status;
     if (jobStatus !== "cancelled" && jobStatus !== "hold") return true;
     return !!row.clocked_in_at && !row.clocked_out_at;

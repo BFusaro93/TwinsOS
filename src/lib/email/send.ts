@@ -110,7 +110,7 @@ export async function sendEmailRetryingRateLimit(
   }
 }
 
-interface ClientForMergeVars {
+export interface ClientForMergeVars {
   displayName: string | null;
   balanceOutstandingCents?: number | null;
   firstName?: string | null;
@@ -141,7 +141,7 @@ interface ClientForMergeVars {
   referringClientName?: string | null;
 }
 
-interface OrgForMergeVars {
+export interface OrgForMergeVars {
   name: string | null;
   addressPhone?: string | null;
   addressStreet?: string | null;

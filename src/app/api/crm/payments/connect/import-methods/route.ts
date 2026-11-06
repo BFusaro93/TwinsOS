@@ -11,6 +11,7 @@ import {
 import { stripeErrorResponse } from "@/lib/stripe/errors";
 import { rejectIfImpersonating } from "@/lib/auth/impersonation-guard";
 import { logger } from "@/lib/logger";
+import { chunk } from "@/lib/utils/chunk";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
 const log = logger.child("stripe import saved methods");
@@ -154,23 +155,35 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Each client and each Stripe customer can only be linked once per import." }, { status: 400 });
   }
 
-  const { data: clientRows, error: clientErr } = await supabase
-    .from("clients")
-    .select("id, saved_payment_method_id")
-    .in("id", clientIds)
-    .eq("org_id", orgId)
-    .is("deleted_at", null);
-  if (clientErr) return NextResponse.json({ error: "Failed to load clients" }, { status: 500 });
-  const clientById = new Map((clientRows ?? []).map((c) => [c.id, c]));
+  // Both reads put their id lists in the URL; a few hundred ids exceed the gateway's URL
+  // limit and the whole import failed, so they run in chunks.
+  const clientRows: { id: string; saved_payment_method_id: string | null }[] = [];
+  for (const ids of chunk(clientIds)) {
+    const { data, error: clientErr } = await supabase
+      .from("clients")
+      .select("id, saved_payment_method_id")
+      .in("id", ids)
+      .eq("org_id", orgId)
+      .is("deleted_at", null);
+    if (clientErr) return NextResponse.json({ error: "Failed to load clients" }, { status: 500 });
+    clientRows.push(...(data ?? []));
+  }
+  const clientById = new Map(clientRows.map((c) => [c.id, c]));
 
   // A Stripe customer already tied to a different client here would end up shared by two records.
-  const { data: inUse } = await supabase
-    .from("clients")
-    .select("id, stripe_customer_id")
-    .eq("org_id", orgId)
-    .is("deleted_at", null)
-    .in("stripe_customer_id", customerIds);
-  const customerOwner = new Map((inUse ?? []).map((c) => [c.stripe_customer_id as string, c.id]));
+  // If this read fails the guard can't run, so the import stops rather than linking blind.
+  const inUse: { id: string; stripe_customer_id: string | null }[] = [];
+  for (const ids of chunk(customerIds)) {
+    const { data, error: inUseErr } = await supabase
+      .from("clients")
+      .select("id, stripe_customer_id")
+      .eq("org_id", orgId)
+      .is("deleted_at", null)
+      .in("stripe_customer_id", ids);
+    if (inUseErr) return NextResponse.json({ error: "Failed to check existing Stripe links" }, { status: 500 });
+    inUse.push(...(data ?? []));
+  }
+  const customerOwner = new Map(inUse.map((c) => [c.stripe_customer_id as string, c.id]));
 
   const stripe = getStripeForOrg(livemode);
   const service = createServiceClient();

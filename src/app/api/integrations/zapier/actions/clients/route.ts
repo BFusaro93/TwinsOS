@@ -3,6 +3,7 @@ import { z } from "zod";
 import { adminClient, authenticateZapierRequest, blankToUndefined, checkZapierRateLimit } from "@/lib/integrations/zapier";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { logger } from "@/lib/logger";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const log = logger.child("zapier-action");
 
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
 
   const parsed = createClientSchema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+    return NextResponse.json({ error: firstIssueMessage(parsed.error, "Invalid input") }, { status: 400 });
   }
   const body = parsed.data;
 

@@ -29,8 +29,8 @@ export function useProjects(includeArchived = false) {
         .from("projects")
         .select(`
           *,
-          po_line_items(quantity, unit_cost, total_cost, taxable, purchase_orders(tax_rate_percent, shipping_cost, subtotal, discount_cost, discount_reduces_tax, status, deleted_at, po_line_items(total_cost, taxable))),
-          requisition_line_items(quantity, unit_cost, total_cost, requisitions(tax_rate_percent, status, converted_po_id, deleted_at)),
+          po_line_items(quantity, unit_cost, total_cost, taxable, product_item_id, purchase_orders(tax_rate_percent, shipping_cost, subtotal, discount_cost, discount_reduces_tax, status, deleted_at, requisition_id, po_line_items(total_cost, taxable))),
+          requisition_line_items(quantity, unit_cost, total_cost, product_item_id, requisition_id, requisitions(tax_rate_percent, status, converted_po_id, deleted_at)),
           project_direct_items(quantity, unit_cost, deleted_at),
           project_subcontract_costs(amount, deleted_at)
         `)
@@ -51,12 +51,13 @@ export function useProjects(includeArchived = false) {
         type PoRef = {
           tax_rate_percent: number; shipping_cost: number; subtotal: number;
           discount_cost: number | null; discount_reduces_tax: boolean | null;
-          status: string; deleted_at: string | null;
+          status: string; deleted_at: string | null; requisition_id: string | null;
           po_line_items: { total_cost: number; taxable: boolean | null }[] | null;
         };
         // Canceled/rejected POs never get spent, so they drop out too.
         const poLines: {
           quantity: number; unit_cost: number; total_cost: number; taxable: boolean | null;
+          product_item_id: string | null;
           purchase_orders: PoRef | null;
         }[] = (row.po_line_items ?? []).filter(
           (li: { purchase_orders: PoRef | null }) =>
@@ -69,6 +70,7 @@ export function useProjects(includeArchived = false) {
         // Rejected/closed requisitions are dead — no pending cost.
         const reqLines: {
           quantity: number; unit_cost: number; total_cost: number;
+          product_item_id: string | null; requisition_id: string;
           requisitions: { tax_rate_percent: number; status: string; converted_po_id: string | null; deleted_at: string | null } | null;
         }[] = (row.requisition_line_items ?? []).filter(
           (li: { requisitions: { deleted_at: string | null; status: string } | null }) =>
@@ -112,9 +114,19 @@ export function useProjects(includeArchived = false) {
         const lineItemTotal = poLines.reduce((sum, li) => sum + (li.total_cost ?? 0), 0);
 
         // Skip REQ line items whose requisition was already converted to a PO —
-        // that cost is already counted via po_line_items above.
+        // that cost is already counted via po_line_items above. A requisition split
+        // by vendor stays approved until every vendor's PO exists, so also skip a
+        // line once a PO from that requisition carries the same product here
+        // (same rule as rpt_projects_wip).
+        const splitKeys = new Set(
+          poLines
+            .filter((li) => li.purchase_orders?.requisition_id)
+            .map((li) => `${li.purchase_orders!.requisition_id}:${li.product_item_id ?? ""}`)
+        );
         const pendingReqLines = reqLines.filter(
-          (li) => !(li.requisitions?.status === "ordered" && li.requisitions?.converted_po_id)
+          (li) =>
+            !(li.requisitions?.status === "ordered" && li.requisitions?.converted_po_id) &&
+            !splitKeys.has(`${li.requisition_id}:${li.product_item_id ?? ""}`)
         );
         const reqTotal = pendingReqLines.reduce((sum, li) => sum + (li.total_cost ?? 0), 0);
         const reqTax = pendingReqLines.reduce((sum, li) => {

@@ -3,11 +3,13 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { getOrgReplyTo } from "@/lib/email/reply-to";
-import { buildCanSpamFooter, orgEmailFrom, mapSendError } from "@/lib/email/send";
+import { buildCanSpamFooter, buildClientMergeVars, orgEmailFrom, mapSendError } from "@/lib/email/send";
+import { MERGE_CLIENT_COLUMNS, MERGE_PROPERTY_COLUMNS, clientMergeInput, employeeName, orgMergeInput } from "@/lib/email/merge-inputs";
 import { resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { DEFAULT_TIME_ZONE } from "@/lib/time/zone";
 import { renderChemicalNoticePdf } from "@/lib/chemical/notice-pdf";
 import { loadChemicalNoticeData, loadInvoiceTemplateBranding, noticeOrgFromRow, renderChemicalNoticeHtml } from "@/lib/chemical/application-notice";
 
@@ -68,7 +70,11 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: visit, error: visitErr } = await (supabase as any)
     .from("crm_job_visits")
-    .select("id, client_id, scheduled_date, clients(display_name, primary_email, email_bounced_at, do_not_market, ok_to_email, unsubscribe_token)")
+    .select(
+      `id, client_id, scheduled_date, clients(${MERGE_CLIENT_COLUMNS}, email_bounced_at, do_not_market, ok_to_email, unsubscribe_token, ` +
+      "sales_rep:crm_employees!clients_sales_rep_id_fkey(first_name,last_name)), " +
+      `crm_jobs!crm_job_visits_job_id_fkey(property:client_properties!crm_jobs_property_id_fkey(${MERGE_PROPERTY_COLUMNS}))`,
+    )
     .eq("id", visitId)
     .single();
 
@@ -145,7 +151,6 @@ export async function POST(
   }
 
   const clientDisplayName = (visit.clients?.display_name as string) ?? "";
-  const firstName = clientDisplayName.split(" ")[0] ?? clientDisplayName;
   // The day it was actually applied (in the company's timezone), not the day it was scheduled.
   const first = applied.find((a) => a.application_start_time) ?? applied[0] ?? {};
   const orgTz = effOrgId ? await getOrgTimeZone(supabase, effOrgId) : undefined;
@@ -219,19 +224,27 @@ export async function POST(
     }
   }
 
+  // The full client/property/company vocabulary (raw — resolveMergeTags escapes),
+  // then the chemical tags. Only 11 tags used to be set here, so [clientname],
+  // [companyphone], [physicaladdress1] (the treated property) etc. went out blank.
   const mergeVars: Record<string, string> = {
+    ...buildClientMergeVars(
+      clientMergeInput(visit.clients, {
+        property: visit.crm_jobs?.property ?? null,
+        salesRepName: employeeName(visit.clients?.sales_rep),
+      }),
+      orgMergeInput(org, orgTz ?? DEFAULT_TIME_ZONE),
+      { escape: false },
+    ),
     "[chemicalnotice]":     chemicalNotice,
-    "[clientfirstname]":    firstName,
-    "[clientfullname]":     clientDisplayName,
-    "[companyname]":        orgName,
     "[applicationdate]":    applicationDate,
     "[applicatorname]":     applicatorName,
     "[applicatorlicense]":  applicatorLicense,
     "[products]":           products,
     "[conditions]":         conditions,
     "[careinstructions]":   careInstructions,
-    "[companyphonenumber]": orgPhone,
   };
+  if (!mergeVars["[companyphonenumber]"]) mergeVars["[companyphonenumber]"] = orgPhone;
 
   const resolvedSubject = resolveSubjectMergeTags(body.subject, mergeVars);
   let resolvedBody      = resolveMergeTags(body.bodyHtml, mergeVars);

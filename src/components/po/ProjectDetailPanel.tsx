@@ -161,12 +161,25 @@ function MaterialsTab({ project }: { project: Project }) {
 
   // REQ + PO line items (from linked documents)
   const linkedItems: ProjectLineItem[] = [];
+  // A requisition split by vendor stays approved until every vendor's PO exists;
+  // once a live PO from it carries the same product for this project, that line is
+  // already counted on the PO (same rule as use-projects and rpt_projects_wip).
+  const splitKeys = new Set(
+    (purchaseOrders ?? [])
+      .filter((po) => po.requisitionId && po.status !== "canceled" && po.status !== "rejected")
+      .flatMap((po) =>
+        po.lineItems
+          .filter((li) => li.projectId === project.id)
+          .map((li) => `${po.requisitionId}:${li.productItemId ?? ""}`)
+      )
+  );
   (requisitions ?? []).forEach((req) => {
     if (req.convertedPoId && req.status === "ordered") return;
-    // Rejected/closed requisitions carry no pending cost (mirrors use-projects).
-    if (req.status === "rejected" || req.status === "closed") return;
+    // Draft/rejected/closed requisitions carry no pending cost (mirrors use-projects
+    // and the WIP report).
+    if (req.status === "rejected" || req.status === "closed" || req.status === "draft") return;
     req.lineItems
-      .filter((li) => li.projectId === project.id)
+      .filter((li) => li.projectId === project.id && !splitKeys.has(`${req.id}:${li.productItemId ?? ""}`))
       .forEach((li) => {
         linkedItems.push({
           id: li.id,

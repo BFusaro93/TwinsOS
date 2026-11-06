@@ -273,7 +273,9 @@ export function useBulkImportTickets() {
 export function useUpdateTicket() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, updates }: { id: string; updates: Partial<NewTicketFormValues> }) => {
+    // skipAssignNotify: a bulk reassign announces the whole batch once
+    // (/api/crm/tickets/notify-assigned) instead of one notice per ticket.
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<NewTicketFormValues>; skipAssignNotify?: boolean }) => {
       const supabase = createClient();
 
       let wasReopened = false;
@@ -381,9 +383,9 @@ export function useUpdateTicket() {
       }
       return { wasReopened, wasClosed, clientId, effectiveCategory, assigneeChanged };
     },
-    onSuccess: (result, { id, updates }) => {
+    onSuccess: (result, { id, updates, skipAssignNotify }) => {
       qc.invalidateQueries({ queryKey: ["crm-tickets"] });
-      if (result?.assigneeChanged && updates.assignedTo) {
+      if (result?.assigneeChanged && updates.assignedTo && !skipAssignNotify) {
         fetch(`/api/crm/tickets/${id}/notify`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

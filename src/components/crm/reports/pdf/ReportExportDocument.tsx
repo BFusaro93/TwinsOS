@@ -27,6 +27,8 @@ export interface ReportExportData {
   generatedAt: string;
   sections: ReportExportSection[];
   charts?: ReportExportChart[];
+  /** Shown under the title, e.g. that the result is partial. */
+  notice?: string;
 }
 
 // react-pdf hyphenates by default ("Shrews-bury", "Chem-ical"), which chops
@@ -77,6 +79,7 @@ const styles = StyleSheet.create({
   page: { padding: 28, fontSize: 8, fontFamily: "Helvetica" },
   title: { fontSize: 16, fontWeight: 700, marginBottom: 2 },
   generatedAt: { fontSize: 8, color: "#64748b", marginBottom: 14 },
+  notice: { fontSize: 9, color: "#92400e", backgroundColor: "#fef3c7", padding: 6, marginTop: -8, marginBottom: 14 },
   sectionHeading: { fontSize: 11, fontWeight: 700, marginTop: 14, marginBottom: 6, color: "#1e293b" },
   table: { display: "flex", width: "100%", borderWidth: 1, borderColor: "#e2e8f0" },
   headerRow: { flexDirection: "row", backgroundColor: "#f1f5f9" },
@@ -118,12 +121,13 @@ function ExportBarChart({ chart, color }: { chart: ReportExportChart; color: str
   );
 }
 
-export function ReportExportDocument({ title, generatedAt, sections, charts }: ReportExportData) {
+export function ReportExportDocument({ title, generatedAt, sections, charts, notice }: ReportExportData) {
   return (
     <Document>
       <Page size="LETTER" orientation={sections.some((s) => s.columns.length > 6) ? "landscape" : "portrait"} style={styles.page}>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.generatedAt}>Generated {generatedAt}</Text>
+        {notice && <Text style={styles.notice}>{notice}</Text>}
         {charts && charts.length > 0 && (
           <View style={styles.chartsRow}>
             {charts.map((chart, ci) => (

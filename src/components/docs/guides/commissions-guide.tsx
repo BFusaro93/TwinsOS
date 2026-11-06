@@ -105,9 +105,18 @@ export function CommissionsGuide() {
       <Section id="earnings" title="How earnings are calculated">
         <p>
           Commission is worked out per invoice <strong>line</strong>, so each service earns at its own
-          rate. The rep is the one on the invoice, falling back to the job, contract, estimate, then the
-          client&apos;s rep. Revenue is pre-tax: a line&apos;s share of the invoice total, after line discounts
+          rate. Revenue is pre-tax: a line&apos;s share of the invoice total, after line discounts
           (invoice-level discounts are spread across the lines).
+        </p>
+        <p>
+          <strong>Who earns it.</strong> The rep is fixed when the invoice is <em>issued</em> (printed, sent
+          or paid): the invoice&apos;s own Sales Rep, else the job&apos;s, contract&apos;s, estimate&apos;s, then the
+          client&apos;s rep at that moment, and the sale type is fixed the same way. Reassigning the client
+          later only affects invoices issued after that. Once an invoice is issued, its Sales Rep and Sale
+          Type can be changed only by someone with <strong>Manage</strong>, and not at all while any of its
+          commission is on a statement — void that statement first. Consolidating or merging invoices that are
+          credited to different reps or sale types is refused while your company has an active commission
+          plan, because it would move earnings between reps.
         </p>
         <p>
           For rules earned <em>when paid</em>, each payment applied to the invoice earns its share on the
@@ -126,7 +135,11 @@ export function CommissionsGuide() {
         <p>
           On the Earnings tab, <strong>Create statement</strong> freezes a rep&apos;s unclaimed earnings for the
           period. Each earning line can be on only one live statement, so nothing is ever paid twice, even
-          when periods overlap. A statement moves Draft → Approved → Paid. <strong>Void</strong> releases its
+          when periods overlap or the rep changes. A statement also picks up earlier earnings that no
+          statement has claimed yet — a check dated last quarter but entered after last quarter&apos;s statement,
+          a deposit applied later, or a draft issued after its period closed. They show as <strong>Earlier
+          period</strong> on the Earnings tab and on the statement, and the rep&apos;s card says <em>Plus $X from
+          earlier periods</em>. A statement moves Draft → Approved → Paid. <strong>Void</strong> releases its
           lines so they can go on another statement; a paid statement can&apos;t be voided. The period and
           totals are fixed once created, and <strong>View</strong> shows every line behind the total.
         </p>
@@ -154,7 +167,7 @@ export function CommissionsGuide() {
           results (for example an NOI target) are not calculated here; track those in your accounting system.
           Three permissions under Commission Access in Settings → Roles control who sees what:{" "}
           <strong>View My Own Commissions</strong> shows a rep a &quot;My Commissions&quot; page with only their own
-          earnings and statements (the Sales / Account Mgr role has it); <strong>View All Reps&apos;</strong> shows
+          earnings and their approved or paid statements — drafts you are still preparing stay hidden (the Sales / Account Mgr role has it); <strong>View All Reps&apos;</strong> shows
           everyone&apos;s earnings and statements; <strong>Manage</strong> adds creating and approving statements and
           the plans, rules and assignments in Settings → Commissions. Plans and rules are visible only to Manage —
           a rep or a view-only manager can never see another rep&apos;s plan.

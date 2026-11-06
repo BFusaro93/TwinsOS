@@ -116,17 +116,26 @@ export async function renderScheduledReportPdf(
   });
 
   const grouped = buildGroupedPdfSection(result, (v, t) => formatCellValueServer(v, t, timeZone)) ?? undefined;
+  // The report engine stops at its row cap. The emailed PDF used to look complete and
+  // carried a totals row computed from only the returned rows; say it's partial instead
+  // and leave the misleading flat totals off.
+  const partialNotice = result.truncated
+    ? `Partial report — only the first ${result.rowCount.toLocaleString("en-US")}` +
+      (result.totalCount !== undefined ? ` of ${result.totalCount.toLocaleString("en-US")}` : "") +
+      " matching rows are included, so any totals cover those rows only. Open the report in the app with a narrower range for the full result."
+    : undefined;
   const buffer = await renderToBuffer(
     createElement(ReportExportDocument, {
       title: def.name,
       generatedAt,
+      notice: partialNotice,
       charts,
       sections: [
         {
           heading: "",
           columns: grouped ? grouped.columns : result.columns.map((c) => c.label),
           rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => formatCellValueServer(row[c.key], c.type, timeZone))),
-          totals: grouped ? undefined : buildTotalsRow(result, (v, t) => formatCellValueServer(v, t, timeZone)) ?? undefined,
+          totals: grouped || result.truncated ? undefined : buildTotalsRow(result, (v, t) => formatCellValueServer(v, t, timeZone)) ?? undefined,
           grouped,
         },
       ],

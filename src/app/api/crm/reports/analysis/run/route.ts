@@ -9,6 +9,7 @@ import {
   isCrewCaller,
 } from "@/lib/reports/crew-dashboard-access";
 import { DATASET_PERMISSION_KEYS } from "@/lib/reports/report-permissions";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 /**
  * Executes an ad-hoc custom analysis (the Custom Analysis builder's
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
   const parsed = analysisConfigSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid analysis config" },
+      { error: firstIssueMessage(parsed.error, "Invalid analysis config") },
       { status: 400 }
     );
   }

@@ -1,4 +1,6 @@
 import { buildClientMergeVars } from "@/lib/email/send";
+import { MERGE_CLIENT_COLUMNS, MERGE_PROPERTY_COLUMNS, clientMergeInput, employeeName, orgMergeInput } from "@/lib/email/merge-inputs";
+import { estimateMergeTags } from "@/lib/estimates/estimate-merge-tags";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { proposalUrlFor } from "@/lib/estimates/share-token";
 import { escapeHtml } from "@/lib/utils/escape-html";
@@ -24,6 +26,26 @@ function fmtCents(cents: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
+/** [installmentcount]/[installmentamount] — same rule as the estimate email: an
+ *  even plan splits the balance after deposit; a milestone plan averages them. */
+function installmentSummary(
+  totalCents: number | null,
+  planType: string | null,
+  numInstallments: number | null,
+  depositCents: number | null,
+  milestoneCents: number[],
+): { count: number; amountCents: number } {
+  const total = totalCents ?? 0;
+  if (planType === "milestones") {
+    if (milestoneCents.length === 0) return { count: 1, amountCents: total };
+    const sum = milestoneCents.reduce((s, c) => s + c, 0);
+    return { count: milestoneCents.length, amountCents: Math.round(sum / milestoneCents.length) };
+  }
+  const n = numInstallments ?? 1;
+  if (n <= 1) return { count: 1, amountCents: total };
+  return { count: n, amountCents: Math.floor(Math.max(0, total - (depositCents ?? 0)) / n) };
+}
+
 /**
  * Company / client / estimate merge values for an estimate's document.
  * Values are RAW (unescaped); resolveMergeTags escapes them at substitution.
@@ -45,7 +67,11 @@ export async function loadEstimateDocumentMergeVars(
       .from("estimates")
       .select(
         "org_id, estimate_number, estimate_date, created_at, valid_until_date, notes, subtotal_cents, total_cents, discount_cents, " +
-        "clients(display_name, first_name, last_name, primary_email, account_number)",
+        "payment_plan_type, num_installments, deposit_required_cents, " +
+        `clients(${MERGE_CLIENT_COLUMNS}), ` +
+        `property:client_properties!estimates_property_id_fkey(${MERGE_PROPERTY_COLUMNS}), ` +
+        "sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name), " +
+        "estimate_milestones(amount_cents, deleted_at)",
       )
       .eq("id", estimateId)
       .maybeSingle();
@@ -55,48 +81,40 @@ export async function loadEstimateDocumentMergeVars(
       .select("name, brand_color, address, customizations")
       .eq("id", est.org_id)
       .maybeSingle();
-    const addr = ((org?.address as Record<string, string> | null) ?? {});
     const orgName = (org?.name as string | null) ?? "Your Service Provider";
     const timeZone = await getOrgTimeZone(supabase, est.org_id as string);
-    const client = est.clients as {
-      display_name: string | null; first_name: string | null; last_name: string | null;
-      primary_email: string | null; account_number: string | null;
-    } | null;
+    const salesRepName = employeeName(est.sales_rep);
 
-    const dateOpts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric", year: "numeric" };
-    const quoteDate = est.estimate_date
-      ? new Date(`${est.estimate_date as string}T12:00:00`).toLocaleDateString("en-US", dateOpts)
-      : new Date(est.created_at as string).toLocaleDateString("en-US", { ...dateOpts, timeZone });
-    const validUntil = opts.content ? opts.content.validUntil : (est.valid_until_date as string | null);
-    const subtotal = opts.content ? opts.content.subtotalCents : ((est.subtotal_cents as number) ?? 0);
-    const total = opts.content ? opts.content.totalCents : ((est.total_cents as number) ?? 0);
-    const discount = opts.content ? opts.content.discountCents : ((est.discount_cents as number) ?? 0);
-    const notes = opts.content ? opts.content.notes : (est.notes as string | null);
+    // Money, valid-until and notes come from the version the client was sent.
+    const source = opts.content
+      ? {
+          ...est,
+          valid_until_date: opts.content.validUntil,
+          subtotal_cents: opts.content.subtotalCents,
+          total_cents: opts.content.totalCents,
+          discount_cents: opts.content.discountCents,
+          notes: opts.content.notes,
+        }
+      : est;
+    const installments = installmentSummary(
+      source.total_cents as number | null,
+      est.payment_plan_type as string | null,
+      est.num_installments as number | null,
+      est.deposit_required_cents as number | null,
+      ((est.estimate_milestones ?? []) as { amount_cents: number | null; deleted_at: string | null }[])
+        .filter((m) => !m.deleted_at)
+        .map((m) => m.amount_cents ?? 0),
+    );
 
     const vars: Record<string, string> = {
       ...buildClientMergeVars(
-        {
-          displayName: client?.display_name ?? null,
-          firstName: client?.first_name ?? null,
-          lastName: client?.last_name ?? null,
-          primaryEmail: client?.primary_email ?? null,
-          accountNumber: client?.account_number ?? null,
-        },
-        {
-          name: orgName,
-          addressPhone: addr.phone, addressStreet: addr.street, addressCity: addr.city,
-          addressState: addr.state, addressZip: addr.zip, timeZone,
-        },
+        clientMergeInput(est.clients, { property: est.property, salesRepName }),
+        orgMergeInput(org, timeZone),
         { escape: false },
       ),
-      "[estimatenumber]": String(est.estimate_number).padStart(5, "0"),
-      "[estimatedate]": quoteDate,
-      "[estimatevaliduntil]": validUntil ? new Date(`${validUntil.slice(0, 10)}T12:00:00`).toLocaleDateString("en-US", dateOpts) : "",
-      "[estimatesubtotal]": fmtCents(subtotal),
-      "[estimatetotal]": fmtCents(total),
-      "[estimatediscountamt]": fmtCents(discount),
-      "[estimatenotes]": notes ?? "",
-      "[salesrepname]": orgName,
+      ...estimateMergeTags(source, { timeZone, salesRepName, orgName }),
+      "[installmentcount]": String(installments.count),
+      "[installmentamount]": fmtCents(installments.amountCents),
       "[estimategrid]": "",
       "[estimatelink]": "",
       "[estimatelogo]": "",

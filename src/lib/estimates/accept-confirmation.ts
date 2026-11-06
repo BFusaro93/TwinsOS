@@ -2,8 +2,11 @@ import { Resend } from "resend";
 import { buildEstimatePDFData, renderEstimatePDF } from "@/lib/estimate-pdf";
 import { buildEstimateGridHtml } from "@/lib/estimates/estimate-grid-html";
 import { buildClientMergeVars, orgEmailFrom, sendEmailRetryingRateLimit } from "@/lib/email/send";
+import { MERGE_CLIENT_COLUMNS, MERGE_PROPERTY_COLUMNS, clientMergeInput, employeeName, orgMergeInput } from "@/lib/email/merge-inputs";
+import { estimateMergeTags } from "@/lib/estimates/estimate-merge-tags";
+import { safeHexColor } from "@/lib/utils/safe-color";
 import { replyToFromCustomizations } from "@/lib/email/reply-to";
-import { addParagraphSpacing, renderBlocksToHtml, resolveMergeTags, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
+import { addParagraphSpacing, renderBlocksToHtml, resolveSubjectMergeTags } from "@/lib/utils/document-template-renderer";
 import type { RenderableBlock } from "@/lib/utils/document-template-renderer";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { proposalUrlFor } from "@/lib/estimates/share-token";
@@ -16,10 +19,6 @@ const log = logger.child("proposal-accept-confirmation");
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabase = any;
-
-function fmtCents(cents: number): string {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
-}
 
 /**
  * Sends the org's configured "estimate accepted" confirmation document.
@@ -37,8 +36,10 @@ export async function sendConfiguredAcceptanceConfirmation(
     const { data: est } = await supabase
       .from("estimates")
       .select(
-        "org_id, client_id, estimate_number, estimate_date, created_at, valid_until_date, notes, subtotal_cents, total_cents, " +
-        "clients(display_name, first_name, last_name, primary_email, billing_email, account_number)",
+        "org_id, client_id, estimate_number, estimate_date, created_at, valid_until_date, notes, subtotal_cents, total_cents, discount_cents, " +
+        `clients(${MERGE_CLIENT_COLUMNS}), ` +
+        `property:client_properties!estimates_property_id_fkey(${MERGE_PROPERTY_COLUMNS}), ` +
+        "sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name)",
       )
       .eq("id", args.estimateId)
       .single();
@@ -117,52 +118,29 @@ export async function sendConfiguredAcceptanceConfirmation(
       return "failed";
     }
 
-    const addr = (org.address as Record<string, string>) ?? {};
     const orgName = (org.name as string | null) ?? "Your Service Provider";
-    const brandColor = (org.brand_color as string | null) ?? "#60ab45";
+    const brandColor = safeHexColor(org.brand_color as string | null, "#60ab45");
     const timeZone = await getOrgTimeZone(supabase, est.org_id as string);
 
     const proposalUrl = proposalUrlFor(args.shareToken);
     const linkButton =
       `<a href="${proposalUrl}" style="color:#fff;background:${brandColor};padding:10px 20px;border-radius:4px;text-decoration:none;font-weight:600;display:inline-block">View Your Proposal →</a>`;
-    const dateOpts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric", year: "numeric" };
-    const quoteDate = est.estimate_date
-      ? new Date(`${est.estimate_date as string}T12:00:00`).toLocaleDateString("en-US", dateOpts)
-      : new Date(est.created_at as string).toLocaleDateString("en-US", { ...dateOpts, timeZone });
-
     // Same table the Send Estimate email prints; "" when there are no lines, so
     // the renderer drops a grid-only paragraph rather than leaving a gap.
     const pdfData = await buildEstimatePDFData(supabase, args.estimateId, est.org_id as string).catch(() => null);
     const gridHtml = buildEstimateGridHtml(pdfData?.estimate.lineItems ?? [], pdfData?.estimate.displaySettings);
 
+    const salesRepName = employeeName(est.sales_rep);
     const mergeVars: Record<string, string> = {
       ...buildClientMergeVars(
-        {
-          displayName: client?.display_name ?? null,
-          firstName: client?.first_name ?? null,
-          lastName: client?.last_name ?? null,
-          primaryEmail: client?.primary_email ?? null,
-          accountNumber: client?.account_number ?? null,
-        },
-        {
-          name: orgName,
-          addressPhone: addr.phone, addressStreet: addr.street, addressCity: addr.city,
-          addressState: addr.state, addressZip: addr.zip, timeZone,
-        },
+        clientMergeInput(est.clients, { property: est.property, salesRepName }),
+        orgMergeInput(org, timeZone),
         { escape: false },
       ),
-      "[estimatenumber]": String(est.estimate_number).padStart(5, "0"),
-      "[estimatedate]": quoteDate,
-      "[estimatevaliduntil]": est.valid_until_date
-        ? new Date(`${est.valid_until_date as string}T12:00:00`).toLocaleDateString("en-US", dateOpts)
-        : "",
-      "[estimatesubtotal]": fmtCents((est.subtotal_cents as number) ?? 0),
-      "[estimatetotal]": fmtCents((est.total_cents as number) ?? 0),
-      "[estimatenotes]": (est.notes as string | null) ?? "",
+      ...estimateMergeTags(est, { timeZone, salesRepName, orgName }),
       "[estimatelink]": linkButton,
       "[estimatelinkurl]": proposalUrl,
       "[estimategrid]": gridHtml,
-      "[salesrepname]": orgName,
     };
 
     const renderable: RenderableBlock[] = (blocks ?? []).map((b: Record<string, unknown>) => ({
@@ -170,7 +148,10 @@ export async function sendConfiguredAcceptanceConfirmation(
       content: (b.content as string | null) ?? null,
       settings: (b.settings as Record<string, unknown> | null) ?? null,
     }));
-    const html = addParagraphSpacing(resolveMergeTags(renderBlocksToHtml(renderable, mergeVars), mergeVars));
+    // renderBlocksToHtml already substitutes the tags. A second resolveMergeTags
+    // pass re-expanded any tag text sitting inside a substituted value (a note
+    // or name containing "[estimatelinkurl]"), so resolve exactly once.
+    const html = addParagraphSpacing(renderBlocksToHtml(renderable, mergeVars));
     const subject = resolveSubjectMergeTags(
       (doc.subject as string | null) || `Your estimate #${mergeVars["[estimatenumber]"]} was accepted`,
       mergeVars,

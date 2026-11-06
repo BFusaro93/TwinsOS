@@ -3,6 +3,7 @@ import { adminClient, authenticateApiRequest } from "@/lib/api/auth";
 import { jsonError, jsonServerError, parsePagination } from "@/lib/api/route-helpers";
 import { WORK_ORDER_SELECT, shapeWorkOrder } from "./shape";
 import { createWorkOrderSchema } from "./validation";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 /** GET /api/v1/work-orders — list the org's work orders. Requires scope "work_orders:read". */
 export async function GET(request: Request) {
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
   if (!auth.ok) return jsonError(auth.error, auth.status);
 
   const parsed = createWorkOrderSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return jsonError(parsed.error.issues[0]?.message ?? "Invalid input", 400);
+  if (!parsed.success) return jsonError(firstIssueMessage(parsed.error, "Invalid input"), 400);
   const body = parsed.data;
 
   let assetName: string | null = null;

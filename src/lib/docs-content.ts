@@ -974,7 +974,7 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "Sale type on an invoice",
             detail:
-              "Sale Type (New sale or Renewal / existing account) sits next to the Sales Rep and decides which commission rate applies. Blank uses the job's, contract's or estimate's sale type, then counts as a new sale.",
+              "Sale Type (New sale or Renewal / existing account) sits next to the Sales Rep and decides which commission rate applies. Blank uses the job's, contract's or estimate's sale type, then counts as a new sale. Both are fixed when the invoice is issued; after that only someone who manages commissions can change them.",
           },
           {
             step: "Photos on an invoice",
@@ -1292,17 +1292,17 @@ export const DOC_SECTIONS: DocSection[] = [
           {
             step: "How earnings are calculated",
             detail:
-              "Per invoice line, on pre-tax revenue. The rep is the one on the invoice, falling back to the job, contract, estimate, then the client's rep. 'When paid' rules earn on each payment applied (net of refunds); 'when invoiced' rules earn on the invoice date. Every line needs a service — lines without one only earn under an All services rule.",
+              "Per invoice line, on pre-tax revenue after discounts. The rep (and sale type) is fixed when the invoice is issued: the invoice's own, else the job's, contract's, estimate's, then the client's rep at that moment — reassigning a client later only affects later invoices. After issue only Manage can change an invoice's Sales Rep or Sale Type, and not while its commission is on a statement. 'When paid' rules earn on each payment applied (net of refunds); 'when invoiced' rules earn on the invoice date. Every line needs a service — lines without one only earn under an All services rule.",
           },
           {
             step: "Statements",
             detail:
-              "Create statement on the Earnings tab locks a rep's unclaimed earnings for a period. Each earning line can be on only one live statement, so nothing is paid twice. Draft → Approved → Paid; Void releases the lines (not allowed once paid). If a payment is refunded or deleted, or an invoice is voided or edited down after it was statemented, the rep's next statement gets a negative Adjustment line for the difference (once per change, at the original rate; a reversed refund adds back a positive one).",
+              "Create statement on the Earnings tab locks a rep's unclaimed earnings for a period, plus any earlier earnings no statement has claimed yet (a payment entered late, a deposit applied later), marked 'Earlier period'. Each earning line can be on only one live statement, whoever the rep, so nothing is paid twice. Draft → Approved → Paid; Void releases the lines (not allowed once paid). If a payment is refunded or deleted, or an invoice is voided or edited down after it was statemented, the rep's next statement gets a negative Adjustment line for the difference (once per change, at the original rate; a reversed refund adds back a positive one).",
           },
           {
             step: "Not covered",
             detail:
-              "Percentages only (no flat per-job amounts), and annual bonuses tied to company results aren't calculated here. Permissions under Commission Access in Settings > Roles: View My Own Commissions (a rep sees only their own earnings and statements), View All Reps', and Manage (statements plus plans, rules and assignments in Settings > Commissions). Plans are visible only to Manage.",
+              "Percentages only (no flat per-job amounts), and annual bonuses tied to company results aren't calculated here. Permissions under Commission Access in Settings > Roles: View My Own Commissions (a rep sees only their own earnings and their approved or paid statements), View All Reps', and Manage (statements plus plans, rules and assignments in Settings > Commissions). Plans are visible only to Manage.",
           },
           {
             step: "Full guide",
@@ -2097,6 +2097,18 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       {
         q: "Why won't a merge tag insert in my email template?",
         a: "Click into a text block first (Header, Paragraph, List, Signature or a Columns column), then click the tag in the Merge Tags panel and it is inserted at your cursor. If no text block is active, the tag is copied to your clipboard instead and a notice says so. Two tags with nothing between them run together, so add your own space or comma.",
+      },
+      {
+        q: "A merge tag came out blank in an estimate email or proposal. Why?",
+        a: "A tag is blank only when that client or record has no value for it — for example [physicaladdress1] on an estimate with no property and no service address on the client, or [estimatevaliduntil] when the estimate has no Valid Until date. Estimate emails, the online proposal and PDF, acceptance confirmations and chemical notices all fill in every tag the Merge Tags panel offers. Property tags use the estimate's or visit's own property when it has one, and [salesrepname] is the estimate's sales rep (the company name when none is set). The Send Estimate preview shows the estimate's real values, so check it before sending.",
+      },
+      {
+        q: "Who can change invoice templates, rate-matrix prices and services?",
+        a: "Invoice templates (Settings > Accounting > Invoice Templates) need the Accounting Settings permission. Rate-matrix prices need Scheduling Settings or Edit Services; the Bulk Prices permission can also change matrix and service prices, but nothing else on a service. The Delete Services permission can delete a service without being able to edit it. Everyone with Landscapt access can still read them, so estimates, invoices and the dispatch board price correctly.",
+      },
+      {
+        q: "How does the company Default Tax Rate apply to clients and invoices?",
+        a: "Settings > Accounting > Sales Tax sets one company rate. Each new client starts with it as their own tax rate (a client marked tax-exempt stays at 0%), and that client's estimates, invoices and automatic invoices use the client's rate. Changing the company rate later doesn't change existing clients; edit a client's rate on their profile. An invoice keeps the rate it was saved with — an invoice set to no tax stays untaxed when you edit and save it again.",
       },
       {
         q: "How do I make a button in an email template link to something?",

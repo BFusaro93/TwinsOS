@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import type { Database } from "@/types/supabase";
 import { GOOGLE_FAILURE_STATUSES, resolveGoogleMapsKey } from "@/lib/google-maps-key";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { chunk } from "@/lib/utils/chunk";
 
 /**
  * POST /api/crm/jobs/geocode — resolves lat/lng for a batch of the org's jobs
@@ -115,15 +116,20 @@ export async function POST(request: Request) {
   }
   const apiKey = keyResult.apiKey;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: jobsData, error: jobsError } = await (sb as any)
-    .from("crm_jobs")
-    .select("id, lat, lng, property_id, client_id, service_address, service_city, service_state, service_zip")
-    .in("id", jobIds)
-    .eq("org_id", profile.org_id)
-    .is("deleted_at", null);
-  if (jobsError) return NextResponse.json({ error: jobsError.message }, { status: 500 });
-  const jobs = (jobsData ?? []) as JobRow[];
+  // The id lists below go in the URL; 200 UUIDs sit right at the gateway's limit, so
+  // every lookup runs in chunks of 100.
+  const jobs: JobRow[] = [];
+  for (const ids of chunk(jobIds)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: jobsData, error: jobsError } = await (sb as any)
+      .from("crm_jobs")
+      .select("id, lat, lng, property_id, client_id, service_address, service_city, service_state, service_zip")
+      .in("id", ids)
+      .eq("org_id", profile.org_id)
+      .is("deleted_at", null);
+    if (jobsError) return NextResponse.json({ error: jobsError.message }, { status: 500 });
+    jobs.push(...((jobsData ?? []) as JobRow[]));
+  }
 
   // Fallback sources, fetched in bulk. lat/lng on clients / client_properties
   // arrive with migration 20260906190001 — select("*")-free explicit lists
@@ -133,23 +139,23 @@ export async function POST(request: Request) {
   const clientIds = Array.from(new Set(jobs.map((j) => j.client_id).filter(Boolean)));
 
   const propertiesById = new Map<string, PropertyRow>();
-  if (propertyIds.length > 0) {
+  for (const ids of chunk(propertyIds)) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (sb as any)
       .from("client_properties")
       .select("*")
-      .in("id", propertyIds)
+      .in("id", ids)
       .eq("org_id", profile.org_id)
       .is("deleted_at", null);
     for (const p of (data ?? []) as PropertyRow[]) propertiesById.set(p.id, p);
   }
   const clientsById = new Map<string, ClientRow>();
-  if (clientIds.length > 0) {
+  for (const ids of chunk(clientIds)) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (sb as any)
       .from("clients")
       .select("*")
-      .in("id", clientIds)
+      .in("id", ids)
       .eq("org_id", profile.org_id)
       .is("deleted_at", null);
     for (const c of (data ?? []) as ClientRow[]) clientsById.set(c.id, c);

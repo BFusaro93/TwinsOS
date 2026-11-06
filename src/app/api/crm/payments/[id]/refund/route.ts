@@ -9,6 +9,7 @@ import { chargeIdempotencyKey, refundIdempotencyKey } from "@/lib/stripe/idempot
 import { logger } from "@/lib/logger";
 import { syncEstimateDepositWithPayment } from "@/lib/stripe/record-estimate-deposit";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 const log = logger.child("crm payments refund");
 
@@ -75,7 +76,7 @@ export async function POST(
   }
 
   const parsed = RefundSchema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: firstIssueMessage(parsed.error, "Invalid input") }, { status: 400 });
   const { refundAmountCents, idempotencyToken } = parsed.data;
 
   const db = adminClient();

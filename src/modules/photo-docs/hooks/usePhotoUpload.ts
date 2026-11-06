@@ -19,6 +19,7 @@ import {
 } from "../lib/fileType";
 import { logger } from "@/lib/logger";
 import type { PhotoUploadInput, PhotoUploadProgress } from "../types/photo.types";
+import { getStorageOrgPrefix } from "@/lib/supabase/storage-org-prefix";
 
 // Re-exported so existing imports keep working; the source of truth (and the
 // extension-based MIME fallback) lives in ../lib/fileType.ts.
@@ -49,14 +50,13 @@ export function usePhotoUpload(projectId: string) {
 
       const supabase = createClient();
 
-      // Get org_id from profile
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("org_id")
-        .eq("id", currentUser.id)
-        .single();
-      const orgId = profile?.org_id;
-      if (!orgId) {
+      // The session's effective org (my_org_id), not profiles.org_id, so staff
+      // impersonating a company upload into that company — the job_photos RLS and
+      // the storage policies both check my_org_id().
+      let orgId: string;
+      try {
+        orgId = await getStorageOrgPrefix(supabase);
+      } catch {
         setUploading(false);
         throw new Error("No org_id found");
       }

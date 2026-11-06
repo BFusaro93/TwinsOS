@@ -91,7 +91,10 @@ export async function GET(request: Request) {
     const orgTriggers = await fetchOrgTriggers(supabase, orgId, "ticket_past_due");
 
     const orgToday = todayInZone(await getOrgTimeZone(supabase, orgId));
-    for (const ticket of rows) {
+    // Rows come back id-ordered; start at a different row each day too, so an org with more
+    // rows than one run can handle doesn't skip the same tail every day.
+    const rowOffset = rows.length ? Math.floor(startedAt / 86_400_000) % rows.length : 0;
+    for (const ticket of [...rows.slice(rowOffset), ...rows.slice(0, rowOffset)]) {
       if (Date.now() - startedAt > 270_000) { stoppedEarly = true; break outer; }
       // Re-check on the owning org's calendar: a row due today is not past
       // due, and the UTC-bounded query above may have included one.

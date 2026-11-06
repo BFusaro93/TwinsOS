@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import type { PortalSettingsRow } from "@/lib/portal/portal-db";
+import { firstIssueMessage } from "@/lib/utils/zod-message";
 
 async function getOrgId(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: { user } } = await supabase.auth.getUser();
@@ -47,7 +48,7 @@ export async function PUT(req: Request) {
 
   const parsedBody = SettingsSchema.safeParse(await req.json().catch(() => null));
   if (!parsedBody.success) {
-    return NextResponse.json({ error: parsedBody.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
+    return NextResponse.json({ error: firstIssueMessage(parsedBody.error, "Invalid input") }, { status: 400 });
   }
   const body = parsedBody.data;
 

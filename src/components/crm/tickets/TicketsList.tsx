@@ -626,10 +626,20 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
       ids.map((id) => updateTicket.mutateAsync({
         id,
         updates: { assignedTo: user.name, assignedToId: user.id },
+        skipAssignNotify: true,
       }))
     );
     const succeeded = results.filter((r) => r.status === "fulfilled").length;
     const failed = results.length - succeeded;
+    // One summary notice for the batch instead of one per ticket (best-effort).
+    const reassignedIds = ids.filter((_, i) => results[i].status === "fulfilled");
+    if (reassignedIds.length > 0) {
+      fetch("/api/crm/tickets/notify-assigned", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticketIds: reassignedIds }),
+      }).catch(() => {});
+    }
     if (succeeded > 0) toast.success(`${succeeded} ticket${succeeded !== 1 ? "s" : ""} reassigned to ${user.name}`);
     if (failed > 0) toast.error(`Failed to reassign ${failed} ticket${failed !== 1 ? "s" : ""}`);
     setSelectedIds(new Set());

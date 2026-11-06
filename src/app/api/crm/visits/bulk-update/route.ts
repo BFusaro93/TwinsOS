@@ -4,7 +4,7 @@ import { isVisitInProgress, reopenClearsClockStamps, CLEARED_CLOCK_STAMPS, GUARD
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { checkPackageMinDaysViolation, overridePackageMinDays, PACKAGE_MIN_DAYS_CODE } from "@/lib/package-visit-recalc";
+import { checkPackageMinDaysViolation, overridePackageMinDays, PACKAGE_MIN_DAYS_CODE, revertPackageMinDaysOverrides } from "@/lib/package-visit-recalc";
 import { VISIT_STATUS_VALUES, reopenOneTimeJobsForVisits } from "@/lib/visits/reopen-job";
 import { formatMonthDay } from "@/lib/utils";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
@@ -156,14 +156,31 @@ export async function POST(request: Request) {
     }
   }
 
+  // Min Days: every violation is found BEFORE anything moves. With the override, every
+  // date-changing row then moves through it — not just the violators — because each
+  // move changes its siblings' spacing, and a row that passed against the old dates
+  // could trip the DB rule in the plain update below and 500 after some rows moved.
+  // Override moves commit on their own, so they are undone if a later step fails.
+  const overrideMoves: { visitId: string; previousDate: string }[] = [];
+  const undoOverrides = () => revertPackageMinDaysOverrides(supabase, overrideMoves);
   if (updates.scheduled_date) {
-    for (const row of before) {
-      if (row.scheduled_date === updates.scheduled_date) continue;
+    const moving = before.filter((row) => row.scheduled_date !== updates.scheduled_date);
+    let anyViolation = false;
+    for (const row of moving) {
       const violation = await checkPackageMinDaysViolation(supabase, row.id, updates.scheduled_date);
       if (violation) {
         if (!overrideMinDays) return NextResponse.json({ error: violation, code: PACKAGE_MIN_DAYS_CODE }, { status: 409 });
+        anyViolation = true;
+      }
+    }
+    if (anyViolation) {
+      for (const row of moving) {
         const overrideErr = await overridePackageMinDays(supabase, row.id, updates.scheduled_date);
-        if (overrideErr) return NextResponse.json({ error: overrideErr }, { status: 500 });
+        if (overrideErr) {
+          await undoOverrides();
+          return NextResponse.json({ error: overrideErr }, { status: 500 });
+        }
+        overrideMoves.push({ visitId: row.id, previousDate: row.scheduled_date });
       }
     }
   }
@@ -172,7 +189,10 @@ export async function POST(request: Request) {
   // override RPC first; the plain update below then sees no change for them.
   for (const id of locked) {
     const res = await overrideInvoicedVisit(supabase, id, change);
-    if (res.error) return NextResponse.json({ error: res.error }, { status: res.forbidden ? 403 : 500 });
+    if (res.error) {
+      await undoOverrides();
+      return NextResponse.json({ error: res.error }, { status: res.forbidden ? 403 : 500 });
+    }
   }
 
   const patch = {
@@ -201,6 +221,7 @@ export async function POST(request: Request) {
   }
 
   if (error) {
+    await undoOverrides();
     const isLocked = (error as { hint?: string }).hint === INVOICED_VISIT_LOCKED_CODE;
     return NextResponse.json(
       { error: error.message, ...(isLocked ? { code: INVOICED_VISIT_LOCKED_CODE } : {}) },

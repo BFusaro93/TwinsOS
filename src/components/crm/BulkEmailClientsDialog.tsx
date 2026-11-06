@@ -15,6 +15,7 @@ import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import { GENERAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
 import Link from "next/link";
 import { toast } from "sonner";
+import { chunk } from "@/lib/utils/chunk";
 
 type EmailPurpose = "marketing" | "service";
 
@@ -118,15 +119,26 @@ export function BulkEmailClientsDialog({
     setLoading(true);
     (async () => {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("clients")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .select("id, display_name, primary_email, do_not_market, ok_to_email, email_bounced_at" as any)
-        .in("id", ids)
-        .is("deleted_at", null);
-      if (cancelled) return;
+      // In chunks: a select-all on the board or waiting list puts hundreds of ids in the URL,
+      // which the gateway refused — and the ignored error showed the dialog with no recipients.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows = (data ?? []) as any[];
+      const rows: any[] = [];
+      for (const part of chunk(ids)) {
+        const { data, error } = await supabase
+          .from("clients")
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .select("id, display_name, primary_email, do_not_market, ok_to_email, email_bounced_at" as any)
+          .in("id", part)
+          .is("deleted_at", null);
+        if (cancelled) return;
+        if (error) {
+          toast.error("Couldn't load the selected clients. Try again.");
+          setRecipients([]);
+          setLoading(false);
+          return;
+        }
+        rows.push(...(data ?? []));
+      }
       setRecipients(
         rows.map((r) => ({
           id: r.id as string,

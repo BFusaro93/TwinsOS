@@ -293,11 +293,13 @@ export function PurchaseOrdersGuide() {
           already used 3 of leaves quantity on hand at 0, not 3.
         </p>
         <Callout>
-          <strong>A partially-failed receipt can still update some inventory.</strong> If a
-          multi-line receipt fails to match a catalog product on, say, its third line, the first two
-          lines&apos; inventory increases already happened and are not rolled back — even though the
-          receipt record itself is never created. If a receipt fails, check inventory counts before
-          re-submitting to avoid double-counting.
+          <strong>A receipt is all or nothing.</strong> Every line must match a catalog product
+          before anything is recorded. If a line still fails part-way, the lines already added
+          come back off stock, Work Order usage they settled goes back to &ldquo;used before
+          received&rdquo;, and the receipt is not kept — so you can simply try again. Each receipt
+          line can only be added to stock once, the part or product must be the one on the PO line,
+          its cost comes from the PO line, and project or Track-inventory-off lines never go into
+          stock.
         </Callout>
         <p>
           The status changes the moment the receipt is recorded — you don&apos;t have to click Done
