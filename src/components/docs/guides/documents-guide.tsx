@@ -354,6 +354,8 @@ export function DocumentsGuide() {
           <li>
             <strong>Preview</strong> shows the template with sample data (a sample client, sample
             amounts, and your company name). It does not use a real client, so tags show sample values.
+            Date tags show real dates: today for [today], [estimatedate] and [invoicedate], and 30 days
+            out for [invoiceduedate] and [duedate] (test emails and PDFs use your company&apos;s timezone).
             Switch between desktop and mobile width. <strong>Back to Editor</strong> returns you.
           </li>
           <li>

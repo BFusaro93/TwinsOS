@@ -863,7 +863,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
   return (
     <>
       <Sheet open={!!ticket} onOpenChange={(open) => { if (!open) { setEditing(false); onClose(); } }}>
-        <SheetContent className="w-full sm:max-w-[620px] md:w-[620px] flex flex-col gap-0 p-0 overflow-hidden">
+        <SheetContent className="w-full sm:max-w-[780px] md:w-[780px] flex flex-col gap-0 p-0 overflow-hidden">
 
           {/* Header — two rows: the title gets the full width (wrapping if it is
               long) and the status + actions sit under it, so neither is cramped.
@@ -879,6 +879,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
                 variant={TICKET_STATUS_VARIANT[ticket.status] as Parameters<typeof StatusBadge>[0]["variant"]}
                 label={TICKET_STATUS_LABEL[ticket.status]}
               />
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
               <Button variant="outline" size="sm" className="gap-1.5"
                 onClick={() => printTicket(ticket)}>
                 <Download className="h-3.5 w-3.5" />
@@ -907,6 +908,7 @@ export function TicketDetailSheet({ ticket, onClose }: TicketDetailSheetProps) {
                   </Button>
                 </>
               )}
+              </div>
             </div>
           </div>
 

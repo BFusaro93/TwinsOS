@@ -87,7 +87,9 @@ export function DispatchBoardGuide() {
           The <strong>List / Calendar</strong> toggle at the top right switches between this daily
           table and a week-at-a-glance <a href="#calendar-view" className="underline">calendar</a>;
           the <strong>Crew Board</strong> button next to it opens the{" "}
-          <a href="#crew-board" className="underline">shop-TV crew assignment board</a>.
+          <a href="#crew-board" className="underline">shop-TV crew assignment board</a>. In the list
+          view, <strong>Team Assign</strong> sits in this same header row, between the toggle and
+          Crew Board.
         </p>
         <Callout>
           &quot;Today&quot; is the org&apos;s day, not the browser&apos;s. The default date is derived
@@ -587,7 +589,9 @@ export function DispatchBoardGuide() {
             the list with every stop in view, numbered in route order and coloured by crew; click a
             pin for the client, address, crew and status. It follows the filters and any new order
             or optimize result. Stops with no resolvable address are left off, and the panel says
-            how many are missing. It uses the Google Maps key under Settings &gt; Integrations.
+            how many are missing. While the map is open, the map, the count bar and the visit table
+            scroll together as one area, so you can still reach every row. It uses the Google Maps key
+            under Settings &gt; Integrations.
           </li>
           <li>
             <strong>Weather</strong> — a chip in the count bar shows the National Weather Service
@@ -919,7 +923,8 @@ export function DispatchBoardGuide() {
             this day only and is tagged &quot;today only&quot; — dropping them back on their own crew
             clears it), or drag a job card to another crew to reassign it. Jobs with no crew sit in an{" "}
             <strong>Unassigned jobs</strong> column. On a touch screen, tap to pick up and tap to place
-            instead of dragging.
+            instead of dragging. On a phone or portrait tablet the board stacks into one column that
+            scrolls down, with the equipment yard at the bottom, instead of crews side by side.
           </li>
           <li>
             <strong>Equipment.</strong> The <strong>Equipment yard</strong> on the left lists everything
