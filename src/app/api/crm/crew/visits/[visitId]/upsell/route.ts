@@ -47,7 +47,7 @@ export async function POST(
 
   const formData = await request.formData();
   const serviceId = formData.get("serviceId") as string | null;
-  const note = ((formData.get("note") as string | null) ?? "").trim();
+  const note = ((formData.get("note") as string | null) ?? "").trim().slice(0, 4000);
   const file = formData.get("file") as File | null;
 
   if (!serviceId) {

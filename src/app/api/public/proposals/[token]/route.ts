@@ -12,6 +12,12 @@ const serviceClient = () =>
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
+function stripPricingInternals<T extends { adjRateCents?: unknown; complexityBps?: unknown }>(li: T): Omit<T, "adjRateCents" | "complexityBps"> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { adjRateCents, complexityBps, ...rest } = li;
+  return rest;
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -210,8 +216,10 @@ export async function GET(
     // clear "pay by card instead" error if it isn't really available.
     achDepositAvailable: !!org?.ach_payments_enabled,
 
-    lineItems: content.lineItems,
-    agreedLineItems: content.agreedLineItems ?? [],
+    // Complexity-multiplier internals are staff-side pricing inputs, not part
+    // of the client's proposal.
+    lineItems: content.lineItems.map(stripPricingInternals),
+    agreedLineItems: (content.agreedLineItems ?? []).map(stripPricingInternals),
     photos,
   });
 }

@@ -137,6 +137,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "invalid_grant" }, { status: 400 });
     }
 
+    // Same check the refresh grant makes: the admin who approved consent up
+    // to 10 minutes ago must still be an active admin of that org, or no
+    // token pair is minted from their code.
+    const { data: approver } = await db
+      .from("profiles")
+      .select("role, status, org_id")
+      .eq("id", authCode.user_id)
+      .maybeSingle();
+    if (!approver || approver.status !== "active" || approver.role !== "admin" || approver.org_id !== authCode.org_id) {
+      return NextResponse.json({ error: "invalid_grant" }, { status: 400 });
+    }
+
     const tokens = await issueTokenPair(db, {
       clientId,
       userId: authCode.user_id,

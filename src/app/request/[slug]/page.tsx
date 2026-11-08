@@ -46,10 +46,15 @@ export default async function RequestPortalSlugPage({ params }: PageProps) {
     .filter((c) => c.enabled)
     .map((c) => c.label);
 
-  const [{ data: assets }, { data: vehicles }] = await Promise.all([
-    supabase.from("assets").select("id, name").eq("org_id", org.id).eq("status", "active").is("deleted_at", null),
-    supabase.from("vehicles").select("id, name").eq("org_id", org.id).eq("status", "active").is("deleted_at", null),
-  ]);
+  // Service-role reads: only fetch the equipment list when the portal is on.
+  // With it off the form renders a "not accepting requests" notice, and the
+  // org's full asset/vehicle names must not ride along in the RSC payload.
+  const [{ data: assets }, { data: vehicles }] = org.portal_enabled
+    ? await Promise.all([
+        supabase.from("assets").select("id, name").eq("org_id", org.id).eq("status", "active").is("deleted_at", null),
+        supabase.from("vehicles").select("id, name").eq("org_id", org.id).eq("status", "active").is("deleted_at", null),
+      ])
+    : [{ data: [] }, { data: [] }];
   const equipmentOptions = [...(assets ?? []), ...(vehicles ?? [])]
     .sort((a, b) => a.name.localeCompare(b.name));
 

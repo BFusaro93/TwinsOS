@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Every call spends paid AI credits.
-  if (!(await checkAuthRateLimit(`estimate-builder:${user.id}`, 20, 3600))) {
+  if (!(await checkAuthRateLimit(`estimate-builder:${user.id}`, 20, 3600, { failClosed: true }))) {
     return NextResponse.json({ error: "Too many requests — try again later" }, { status: 429 });
   }
 

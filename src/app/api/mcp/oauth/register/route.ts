@@ -16,7 +16,7 @@ const log = logger.child("mcp-oauth-register");
  */
 export async function POST(request: Request) {
   // Public + unauthenticated insert — cap registrations per IP.
-  if (!(await checkAuthRateLimit(`mcp-register:ip:${getClientIp(request)}`, 20, 3600))) {
+  if (!(await checkAuthRateLimit(`mcp-register:ip:${getClientIp(request)}`, 20, 3600, { failClosed: true }))) {
     return NextResponse.json({ error: "temporarily_unavailable", error_description: "Too many registrations" }, { status: 429 });
   }
 

@@ -45,12 +45,54 @@ const nextConfig: NextConfig = {
   // crawlers outright not to index anything served under *.vercel.app. The
   // host regex also covers per-branch preview URLs. landscapt.com is
   // unaffected: it never matches this `has` condition.
+  //
+  // Security headers. Vercel already sends Strict-Transport-Security on custom
+  // domains; everything else below was missing (no X-Frame-Options, no
+  // frame-ancestors, no nosniff, no Referrer-Policy, no Permissions-Policy).
+  //
+  // /forms/<slug> is the one surface customers embed in an <iframe> on their
+  // own websites (see EmbedDialog.tsx), so it is excluded from the
+  // frame-ancestors / X-Frame-Options set and must stay embeddable from any
+  // origin. Every other page — the staff app, portal, proposal and invoice
+  // links — may only be framed by itself (the statement preview and the
+  // CRM-report page frame same-origin API routes).
   async headers() {
+    const baseSecurityHeaders = [
+      // Browsers must not sniff a response into a different type (an uploaded
+      // "image" served as HTML, a JSON API answer rendered as a page).
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      // Full URL on same-origin navigations, origin only cross-origin: a
+      // proposal/invoice token or ?redirectTo= path never reaches a third
+      // party (Stripe, Google Maps, a link a client clicks) in the Referer.
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      // Camera is used by the barcode scanner and crew photo capture,
+      // geolocation by the crew app. Nothing uses the microphone, payment
+      // handler API, USB, or sensors — deny them so an injected script can't
+      // ask either.
+      {
+        key: "Permissions-Policy",
+        value:
+          "camera=(self), geolocation=(self), microphone=(), payment=(self \"https://js.stripe.com\"), usb=(), magnetometer=(), gyroscope=(), accelerometer=()",
+      },
+      { key: "X-DNS-Prefetch-Control", value: "on" },
+    ];
     return [
       {
         source: "/:path*",
         has: [{ type: "host", value: ".*\\.vercel\\.app" }],
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+      {
+        source: "/:path*",
+        headers: baseSecurityHeaders,
+      },
+      {
+        // Everything except the embeddable public forms: same-origin framing only.
+        source: "/((?!forms/).*)",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+        ],
       },
     ];
   },

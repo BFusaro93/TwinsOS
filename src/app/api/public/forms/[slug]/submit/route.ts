@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { submitFormResponse } from "@/lib/forms/submit-form-response";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { checkAuthRateLimit, getClientIp } from "@/lib/auth/rate-limit";
@@ -15,9 +15,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   if (!(await checkAuthRateLimit(`form:${slug}:${getClientIp(req)}`, 10, 600))) {
     return NextResponse.json({ error: "Too many submissions. Please try again in a few minutes." }, { status: 429 });
   }
-  const supabase = await createClient();
+  // Service role: the anon read policy on crm_forms is gone (20261227000100);
+  // the slug + published + not-deleted filters below are the whole gate.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any;
+  const db = createServiceClient() as any;
 
   // Load the form with account management settings
   const { data: form, error: formError } = await db
@@ -78,5 +79,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const result = await submitFormResponse(createServiceClient(), form, formData, typeof body.referer === "string" ? body.referer : undefined);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status ?? 500 });
 
-  return NextResponse.json({ ok: true, result: result.result });
+  // Only `ok`: the matching outcome ("Account Created" vs "Account Updated")
+  // told an anonymous caller whether that email/phone is already a client.
+  return NextResponse.json({ ok: true });
 }

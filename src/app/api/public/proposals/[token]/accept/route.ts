@@ -31,7 +31,7 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
-  const body = await req.json() as {
+  const body = (await req.json().catch(() => null)) as null | {
     acceptedByName: string;
     signatureData?: string;
     acceptedLineItemIds?: string[];  // line item ids the client checked
@@ -41,6 +41,7 @@ export async function POST(
     depositNotes?: string;
     depositAmount?: number;          // cents
   };
+  if (!body || typeof body !== "object") return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 
   if (!body.acceptedByName?.trim()) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
@@ -191,7 +192,7 @@ export async function POST(
     .from("estimate_share_tokens")
     .update({
       accepted_at: now,
-      accepted_by_name: body.acceptedByName.trim(),
+      accepted_by_name: body.acceptedByName.trim().slice(0, 200),
       signature_data: signature,
       ip_address: ipAddress,
     })
@@ -422,7 +423,7 @@ export async function POST(
     }
   }
 
-  await recordAcceptedVersion(supabase, shareToken.estimate_id, body.acceptedByName.trim(), "proposal_link");
+  await recordAcceptedVersion(supabase, shareToken.estimate_id, body.acceptedByName.trim().slice(0, 200), "proposal_link");
 
   // 4. Log to client_activity
   const { data: est } = await supabase
@@ -438,7 +439,7 @@ export async function POST(
       estimateNumber: est.estimate_number as number,
       salesRepId: (est.sales_rep_id as string | null) ?? null,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      clientName: ((est.clients as any)?.display_name as string | undefined) ?? body.acceptedByName.trim(),
+      clientName: ((est.clients as any)?.display_name as string | undefined) ?? body.acceptedByName.trim().slice(0, 200),
       decision: "accepted",
     });
   }
@@ -456,7 +457,7 @@ export async function POST(
       client_id: est.client_id,
       activity_type: "estimate",
       subject: `Estimate #${est.estimate_number} accepted online`,
-      body: `Accepted by ${body.acceptedByName.trim()} via View My Proposal portal.${tierNote}`,
+      body: `Accepted by ${body.acceptedByName.trim().slice(0, 200)} via View My Proposal portal.${tierNote}`,
       ref_id: shareToken.estimate_id,
       ref_table: "estimates",
       occurred_at: now,

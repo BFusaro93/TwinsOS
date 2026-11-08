@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { renderInvoicePDF } from "@/lib/invoices/pdf-data";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 
 export async function GET(
   _req: NextRequest,
@@ -18,6 +19,12 @@ export async function GET(
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Same gate the invoice list/photos routes use: RLS is org-wide, so without
+  // this any org login (a crew account included) could download every invoice.
+  if (!(await hasAnySettingsPermission(supabase, ["acct_view_invoice_list", "acct_add_modify_invoices", "acct_send_invoices"]))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   // Explicit org filter as defense-in-depth alongside RLS — per CLAUDE.md,
   // org_id must always be scoped from the session, not implicit trust in a

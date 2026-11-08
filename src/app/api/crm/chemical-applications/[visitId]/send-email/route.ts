@@ -52,6 +52,12 @@ export async function POST(
     resend?: boolean;
   };
   const kind = body.kind ?? "chemical";
+  const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+  const ccEmails = (Array.isArray(body.ccEmails) ? body.ccEmails : []).map((e) => String(e).trim()).slice(0, 20);
+  if (ccEmails.some((e) => !isValidEmail(e))) {
+    return NextResponse.json({ error: "Invalid CC email address" }, { status: 400 });
+  }
+
   if (kind !== "chemical" && kind !== "chemical_recommendation" && kind !== "chemical_upsell") {
     return NextResponse.json({ error: "Unknown email type" }, { status: 400 });
   }
@@ -264,7 +270,7 @@ export async function POST(
     subject: resolvedSubject,
     html: resolvedBody,
     ...(replyTo ? { replyTo } : {}),
-    ...(body.ccEmails && body.ccEmails.length > 0 ? { cc: body.ccEmails } : {}),
+    ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
     ...(pdfAttachment ? { attachments: [pdfAttachment] } : {}),
     ...(unsubscribeUrl
       ? { headers: { "List-Unsubscribe": `<${unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } }

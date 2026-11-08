@@ -24,11 +24,11 @@ export async function POST(request: Request) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("org_id, role")
+    .select("org_id, role, status")
     .eq("id", user.id)
     .single();
   if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 403 });
-  if (profile.role !== "admin") {
+  if (profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Only admins can manage billing" }, { status: 403 });
   }
   // Billing acts on profiles.org_id (the HOME org). While staff impersonate,

@@ -7,6 +7,7 @@
  */
 
 import type { FinancialPeriodData, OperatingExpenses } from "@/lib/hooks/use-financial-periods";
+import { openPdf } from "@/lib/utils/pdfjs-loader";
 
 // ── Dollar string → cents ────────────────────────────────────────────────────
 
@@ -40,17 +41,8 @@ function extractLine(text: string, pattern: RegExp): number {
 // ── Extract text from PDF ─────────────────────────────────────────────────────
 
 async function extractPdfText(file: File): Promise<string> {
-  const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist");
-
-  // Use CDN worker to avoid bundling complexity in Next.js
-  if (!GlobalWorkerOptions.workerSrc) {
-    const { version } = await import("pdfjs-dist");
-    GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${version}/pdf.worker.min.mjs`;
-  }
-
   const arrayBuffer = await file.arrayBuffer();
-  const loadingTask = getDocument({ data: arrayBuffer });
-  const pdf = await loadingTask.promise;
+  const pdf = await openPdf(arrayBuffer);
 
   const pages: string[] = [];
   for (let i = 1; i <= pdf.numPages; i++) {

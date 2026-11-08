@@ -25,6 +25,8 @@ export async function GET() {
     .single();
   if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
+  const denied = await rejectWithoutFormsPermission(supabase, "view");
+  if (denied) return denied;
 
   // Fetch forms + response counts
   const { data: forms, error } = await db

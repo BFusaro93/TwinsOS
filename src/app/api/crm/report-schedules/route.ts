@@ -5,6 +5,7 @@ import { getReport } from "@/lib/reports/registry";
 import { canAccessReportData } from "@/lib/reports/report-access";
 import { getMyTimeZone } from "@/lib/time/org-timezone";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 
 const createScheduleSchema = z.object({
   reportKey: z.string().min(1),
@@ -20,6 +21,11 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Schedules carry recipient lists; reading them is a Report Center action
+  // like the writers below (which require manage_report_center).
+  if (!(await hasAnySettingsPermission(supabase, ["view_report_center", "manage_report_center"]))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { data, error } = await supabase
