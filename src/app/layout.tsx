@@ -1,11 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import { Analytics } from "@vercel/analytics/next";
 import { Providers } from "@/components/providers";
 import { SITE_NAME, SITE_URL, DEFAULT_OG_IMAGE } from "@/lib/seo";
 import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
 
 const ORGANIZATION_JSON_LD = {
   "@context": "https://schema.org",
