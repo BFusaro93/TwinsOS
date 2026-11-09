@@ -44,6 +44,21 @@ export interface PayrollRow {
   /** Shift never ended — hours are understated until End Day or an override. */
   openShift: boolean;
   openPunches: number;
+  /** The shift exactly as recorded (before any office correction), so the UI can show what a correction changes. */
+  recordedStart: string | null;
+  recordedEnd: string | null;
+  recordedBreakMinutes: number;
+  /**
+   * Stretches the person was marked "left for the day" and then put back on it. Each one is
+   * added to the shift's break when they return, so this is where a long break came from.
+   */
+  breakGaps: PayrollBreakGap[];
+}
+
+export interface PayrollBreakGap {
+  from: string;
+  to: string;
+  minutes: number;
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -116,11 +131,14 @@ export async function computePayroll(
 
   // The date-ranged lists are paged: the Report Center's Resource Time
   // Utilization runs this over up to a year, past PostgREST's 1000-row cap.
-  const [{ data: members }, { data: crews }, overrides, adjustments] = await Promise.all([
+  const [{ data: members }, { data: crews }, overrides, adjustments, absences] = await Promise.all([
     supabase.from("crm_crew_members").select("id, name, crew_id").eq("org_id", orgId),
     supabase.from("crm_crews").select("id, name").eq("org_id", orgId),
     fetchAllRows<unknown>(() => supabase.from("crm_crew_daily_members").select("member_id, crew_id, work_date").eq("org_id", orgId).gte("work_date", from).lte("work_date", to)),
     fetchAllRows<unknown>(() => supabase.from("crm_payroll_adjustments").select("crew_member_id, work_date, hours_override, extra_hours, note, start_override, end_override, break_override").eq("org_id", orgId).is("deleted_at", null).gte("work_date", from).lte("work_date", to)),
+    // Soft-deleted rows are the ones that matter: an absence is cleared (deleted_at = the
+    // return time) when the person is put back on the day, which is what turns the gap into break.
+    fetchAllRows<unknown>(() => supabase.from("crm_crew_day_absences").select("crew_member_id, work_date, created_at, deleted_at").eq("org_id", orgId).gte("work_date", from).lte("work_date", to)),
   ]);
 
   const memberById = new Map<string, { name: string; crewId: string | null }>(
@@ -134,6 +152,16 @@ export async function computePayroll(
     ((adjustments ?? []) as { crew_member_id: string; work_date: string; hours_override: number | null; extra_hours: number; note: string | null; start_override: string | null; end_override: string | null; break_override: number | null }[])
       .map((a) => [`${a.crew_member_id}|${a.work_date}`, a])
   );
+  const gapsByKey = new Map<string, PayrollBreakGap[]>();
+  for (const a of (absences ?? []) as { crew_member_id: string; work_date: string; created_at: string; deleted_at: string | null }[]) {
+    if (!a.deleted_at) continue; // still out = the day ended, not a break
+    const minutes = Math.round(hoursBetween(a.created_at, a.deleted_at) * 60);
+    if (minutes < 1) continue;
+    const k = `${a.crew_member_id}|${a.work_date}`;
+    const list = gapsByKey.get(k) ?? [];
+    list.push({ from: a.created_at, to: a.deleted_at, minutes });
+    gapsByKey.set(k, list);
+  }
   const shiftByKey = new Map<string, ShiftRow>(shifts.map((s) => [`${s.crew_member_id}|${s.work_date}`, s]));
 
   // A punch belongs to the shift it happened inside, even when that shift
@@ -212,9 +240,8 @@ export async function computePayroll(
     // The office's corrected break is the day's total time off the clock (the input shows the
     // combined figure as its placeholder) and REPLACES it. Adding the job-punch breaks on top
     // counted a recorded lunch twice: typing 45 over "30 min off" saved 75 and under-paid.
-    const breakMinutes = adj?.break_override != null
-      ? Number(adj.break_override)
-      : Number(shift?.break_minutes ?? 0) + job.offClockMinutes;
+    const recordedBreakMinutes = Number(shift?.break_minutes ?? 0) + job.offClockMinutes;
+    const breakMinutes = adj?.break_override != null ? Number(adj.break_override) : recordedBreakMinutes;
     const hasDay = !!start;
     const openShift = hasDay && !end;
     const shiftHours = start && end
@@ -251,6 +278,10 @@ export async function computePayroll(
       autoStart: !adj?.start_override && shift?.source === "auto_first_job",
       openShift,
       openPunches: job.open,
+      recordedStart: shift?.started_at ?? null,
+      recordedEnd: shift?.ended_at ?? null,
+      recordedBreakMinutes,
+      breakGaps: (gapsByKey.get(k) ?? []).sort((a, b) => a.from.localeCompare(b.from)),
     });
   }
   return rows.sort((a, b) => a.memberName.localeCompare(b.memberName) || a.workDate.localeCompare(b.workDate));
