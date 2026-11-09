@@ -40,6 +40,20 @@ function isTransientNetworkError(error: { message?: string; code?: string }): bo
   return !error.code && /load failed|failed to fetch|networkerror|network request failed/i.test(error.message ?? "");
 }
 
+/**
+ * A 401 on this request is almost always a refresh race, not a bad session:
+ * supabase-js fired it with an access token that expired moments earlier and
+ * the refresh landed right after (PROD edge logs show the 401 followed by a
+ * 200 for the same user within half a second). PostgREST reports that as
+ * PGRST301 "JWT expired"; the gateway's own rejection says "Invalid JWT" with
+ * no code. Either way onAuthStateChange(TOKEN_REFRESHED) re-runs the sync, so
+ * there is nothing to retry here and nothing for Sentry to act on.
+ */
+function isExpiredTokenError(error: { message?: string; code?: string }): boolean {
+  if (error.code === "PGRST301" || error.code === "PGRST302" || error.code === "PGRST303") return true;
+  return !error.code && /\bjwt\b/i.test(error.message ?? "");
+}
+
 const NETWORK_RETRY_DELAY_MS = 1500;
 
 /**
@@ -64,8 +78,24 @@ export function useSyncCurrentUser() {
   useEffect(() => {
     const supabase = createClient();
     let cancelled = false;
+    // getSession() and the INITIAL_SESSION auth event both resolve on mount,
+    // so without this the profile is fetched twice back to back (and a 401
+    // from a refresh race was reported twice). Safe to drop the duplicate:
+    // loadProfile handles the refresh race itself rather than relying on the
+    // TOKEN_REFRESHED event that this guard might swallow.
+    let inFlightUserId: string | null = null;
 
     async function syncFromUserId(userId: string) {
+      if (inFlightUserId === userId) return;
+      inFlightUserId = userId;
+      try {
+        await loadProfile(userId);
+      } finally {
+        if (inFlightUserId === userId) inFlightUserId = null;
+      }
+    }
+
+    async function loadProfile(userId: string) {
       // maybeSingle(), not single(): zero rows is a state to report on its
       // own terms, not a PostgREST error indistinguishable from a real
       // query failure.
@@ -81,6 +111,18 @@ export function useSyncCurrentUser() {
         ({ data, error } = await fetchProfile());
       }
 
+      // Expired token: the refresh is already under way (supabase-js starts
+      // it the moment it sees the expiry), and getSession() waits on that
+      // in-flight refresh, so one retry after it lands has the new token. Done
+      // here rather than left to onAuthStateChange(TOKEN_REFRESHED), because
+      // that event can fire while this request is still pending, and the
+      // in-flight guard in syncFromUserId would then drop it.
+      if (error && isExpiredTokenError(error) && !cancelled) {
+        await supabase.auth.getSession();
+        if (cancelled) return;
+        ({ data, error } = await fetchProfile());
+      }
+
       // Unmounted (or signed out) mid-request: the pending fetch aborting is
       // expected, so bail before logging anything.
       if (cancelled) return;
@@ -91,6 +133,13 @@ export function useSyncCurrentUser() {
         // re-runs the sync, so there is nothing for Sentry to act on.
         if (isTransientNetworkError(error)) {
           log.warn("profile lookup failed: network unreachable", { error, userId });
+          return;
+        }
+        // Still 401 after the refresh landed: the session itself is dead
+        // (revoked, signed out elsewhere) and the middleware will bounce the
+        // next navigation. Not a profile problem, so not an error.
+        if (isExpiredTokenError(error)) {
+          log.warn("profile lookup unauthorized after token refresh", { error, userId });
           return;
         }
         log.error("failed to load profile for current user", { error, userId });

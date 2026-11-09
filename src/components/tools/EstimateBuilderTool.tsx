@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type ChangeEvent } from "react";
+import { copyToClipboard } from "@/lib/utils/clipboard";
 import { Copy, Check, Loader2, Sparkles, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,9 +41,11 @@ export function EstimateBuilderTool() {
 
   function handleCopy() {
     if (!generateProposal.data) return;
-    navigator.clipboard.writeText(generateProposal.data);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    void copyToClipboard(generateProposal.data).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }
 
   function handleClear() {

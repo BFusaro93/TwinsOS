@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { copyToClipboard } from "@/lib/utils/clipboard";
 import { ArrowRight } from "lucide-react";
 import { useApiKeys, useCreateApiKey, useRevokeApiKey, useDeleteApiKey } from "@/lib/hooks/use-api-keys";
 import { API_SCOPE_RESOURCES, isKnownScope, scopeString, tierLabel } from "@/lib/api/scopes";
@@ -50,10 +51,12 @@ export function ApiKeysCard() {
 
   const mcpUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? (typeof window !== "undefined" ? window.location.origin : "")}/api/mcp`;
 
-  function copyToClipboard(text: string) {
-    navigator.clipboard.writeText(text);
-    setCopied(text);
-    setTimeout(() => setCopied((c) => (c === text ? null : c)), 2000);
+  function copyKey(text: string) {
+    void copyToClipboard(text).then((ok) => {
+      if (!ok) return;
+      setCopied(text);
+      setTimeout(() => setCopied((c) => (c === text ? null : c)), 2000);
+    });
   }
 
   function toggleScope(scope: string) {
@@ -121,7 +124,7 @@ export function ApiKeysCard() {
           <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 font-mono text-xs text-slate-700 dark:text-neutral-300">
             {mcpUrl}
           </code>
-          <Button size="sm" variant="outline" onClick={() => copyToClipboard(mcpUrl)}>
+          <Button size="sm" variant="outline" onClick={() => copyKey(mcpUrl)}>
             {copied === mcpUrl ? "Copied" : "Copy"}
           </Button>
         </div>
@@ -297,7 +300,7 @@ export function ApiKeysCard() {
                       size="sm"
                       variant="outline"
                       className="absolute right-2 top-2 bg-card"
-                      onClick={() => copyToClipboard(mcpCliCommand)}
+                      onClick={() => copyKey(mcpCliCommand)}
                     >
                       Copy
                     </Button>
@@ -318,7 +321,7 @@ export function ApiKeysCard() {
                       size="sm"
                       variant="outline"
                       className="absolute right-2 top-2 bg-card"
-                      onClick={() => copyToClipboard(mcpConfigJson)}
+                      onClick={() => copyKey(mcpConfigJson)}
                     >
                       Copy
                     </Button>
