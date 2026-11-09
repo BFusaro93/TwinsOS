@@ -21,6 +21,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
+// Shared with Settings → Import / Export so both import the same columns.
+import { TICKET_REQUIRED_COLUMNS, TICKET_TEMPLATE_COLUMNS } from "@/lib/crm/import-export-columns";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Input } from "@/components/ui/input";
 import {
@@ -422,8 +424,6 @@ interface Props {
   description?: string;
 }
 
-const TICKET_TEMPLATE_COLUMNS = ["subject", "clientName", "type", "status", "priority", "category", "body", "dueDate"];
-
 // useSearchParams (for the ?open= deep-link) requires a Suspense boundary
 // around anything reading it during prerendering — wrap the real component
 // here so every call site (tickets page, calls page, quick-add, client
@@ -669,7 +669,7 @@ function TicketsListInner({ clientId, typeFilter, title = "Tickets", description
               entityLabel={title}
               templateColumns={TICKET_TEMPLATE_COLUMNS}
               templateFilename="tickets-template.csv"
-              requiredColumns={["subject"]}
+              requiredColumns={TICKET_REQUIRED_COLUMNS}
               onExport={() =>
                 exportCSV(
                   all.map((t) => ({

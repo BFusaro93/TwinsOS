@@ -750,6 +750,29 @@ function isQboInvoiceVoided(inv: Record<string, unknown>): boolean {
   return Number(inv.TotalAmt ?? 0) === 0 && /void/i.test(String(inv.PrivateNote ?? ""));
 }
 
+/**
+ * An invoice QuickBooks already has under this number for this customer (not voided). QuickBooks
+ * doesn't force unique invoice numbers, and a number shared with ANOTHER customer is an unrelated
+ * invoice, so only a same-customer match counts.
+ */
+async function findQboInvoiceByNumber(
+  conn: QuickBooksConnection,
+  docNumber: string,
+  customerId: string
+): Promise<{ status: "none" } | { status: "ambiguous" } | { status: "match"; id: string; totalCents: number }> {
+  const rows = (await qboQuery(
+    conn,
+    `SELECT Id, CustomerRef, TotalAmt, PrivateNote FROM Invoice WHERE DocNumber = '${escapeQboString(docNumber)}'`,
+    "Invoice"
+  )) as Record<string, unknown>[];
+  const same = rows.filter(
+    (r) => String((r.CustomerRef as { value?: string } | undefined)?.value ?? "") === customerId && !isQboInvoiceVoided(r)
+  );
+  if (same.length === 0) return { status: "none" };
+  if (same.length > 1) return { status: "ambiguous" };
+  return { status: "match", id: String(same[0].Id), totalCents: Math.round(Number(same[0].TotalAmt ?? 0) * 100) };
+}
+
 /** A stale SyncToken (another edit landed between our read and write) is QBO error 5010. */
 function isStaleSyncToken(err: unknown): boolean {
   return err instanceof Error && /\b5010\b|stale object/i.test(err.message);
@@ -1176,12 +1199,56 @@ export async function pushInvoiceToQuickBooks(
         return { status: "error", reason: "voided_in_quickbooks", qboInvoiceId };
       }
       const updateInput = await buildInvoicePushInput(db, conn, orgId, invoice, resolved.customerId);
+      // A lowered total moved payments off this invoice: shrink/void those in QuickBooks first.
+      await reconcileInvoicePaymentLinks(db, orgId, invoiceId);
       const updated = await updateInvoice(conn, qboInvoiceId, updateInput);
       await markOk(driftMessage(updateInput, updated));
       return { status: "updated", qboInvoiceId };
     }
 
-    // ── not yet in QuickBooks: create it ──
+    // ── not yet linked: QuickBooks may already have it (sent before a disconnect/reconnect, or
+    //    entered there by hand) — match by invoice number + customer before creating a copy ──
+    if (invoice.invoice_number != null) {
+      const docNumber = String(invoice.invoice_number);
+      const existing = await findQboInvoiceByNumber(conn, docNumber, resolved.customerId);
+      if (existing.status === "ambiguous") {
+        const message = `QuickBooks has more than one open invoice #${docNumber} for this customer — void the extra one there, then Retry.`;
+        await recordSyncResult(db, orgId, "error");
+        await db.from("crm_invoices").update({ qbo_sync_error: message, qbo_sync_attempted_at: attemptedAt }).eq("id", invoiceId);
+        return { status: "error", reason: "ambiguous_invoice_match" };
+      }
+      if (existing.status === "match") {
+        const service = createServiceClient();
+        const { data: taken } = await service
+          .from("crm_invoices")
+          .select("id")
+          .eq("org_id", orgId)
+          .eq("qbo_invoice_id", existing.id)
+          .neq("id", invoiceId)
+          .limit(1);
+        if (!taken || taken.length === 0) {
+          const { error: linkErr } = await service
+            .from("crm_invoices")
+            .update({ qbo_invoice_id: existing.id, qbo_sync_error: null, qbo_sync_attempted_at: attemptedAt })
+            .eq("id", invoiceId)
+            .eq("org_id", orgId);
+          if (linkErr) throw new Error(`Matched QuickBooks invoice #${docNumber} but the link could not be saved: ${linkErr.message}`);
+          const expected = invoice.total_cents as number | null;
+          if (expected != null && Math.abs(existing.totalCents - expected) > 1) {
+            // Landscapt is the source of truth (one-way sync): bring the matched invoice in line,
+            // exactly as an edit here would.
+            const matchInput = await buildInvoicePushInput(db, conn, orgId, invoice, resolved.customerId);
+            const updated = await updateInvoice(conn, existing.id, matchInput);
+            await markOk(driftMessage(matchInput, updated));
+            return { status: "updated", qboInvoiceId: existing.id, reason: "matched_existing" };
+          }
+          await recordSyncResult(db, orgId, "ok");
+          return { status: "pushed", qboInvoiceId: existing.id, reason: "matched_existing" };
+        }
+      }
+    }
+
+    // ── not in QuickBooks: create it ──
     const createInput = await buildInvoicePushInput(db, conn, orgId, invoice, resolved.customerId);
     const created = await createInvoice(conn, createInput, `inv-${invoiceId}`);
     const qboInvoiceId = created.id;
@@ -1311,7 +1378,10 @@ export async function pushPaymentToQuickBooks(
       if (fresh?.qbo_payment_id) continue;
 
       // The allocation id is the QuickBooks requestid, so two racing callers that
-      // both reach this point still get ONE QBO transaction back.
+      // both reach this point still get ONE QBO transaction back. A credit memo's
+      // id also carries the amount: when an applied credit's amount changes, the
+      // old memo is voided and a new one created for the same allocation, and
+      // reusing the old requestid would hand back the voided memo.
       const qboPaymentId = asCreditMemo
         ? await createCreditMemoApplied(conn, {
             customerId: resolved.customerId,
@@ -1319,7 +1389,7 @@ export async function pushPaymentToQuickBooks(
             amountCents: alloc.amount_cents,
             txnDate: payment.payment_date,
             note: isWriteOff ? "AR write-off" : "Account credit",
-            requestId: alloc.id,
+            requestId: `${String(alloc.id).replace(/-/g, "")}-${alloc.amount_cents}`,
           })
         : await createPayment(conn, {
             customerId: resolved.customerId,
@@ -1330,11 +1400,25 @@ export async function pushPaymentToQuickBooks(
             requestId: alloc.id,
           });
       // Only the first writer's id lands; a concurrent writer gets the same QBO id back via requestid.
-      await db
+      // The link is written as the service role: a user session may only record the sync outcome
+      // (qbo_sync_error / qbo_sync_attempted_at — DB guard 20261224000310).
+      const { error: linkErr } = await createServiceClient()
         .from("crm_payment_allocations")
         .update({ qbo_payment_id: qboPaymentId, qbo_sync_error: null, qbo_sync_attempted_at: attemptedAt })
         .eq("id", alloc.id)
+        .eq("org_id", orgId)
         .is("qbo_payment_id", null);
+      if (linkErr) {
+        // It exists in QuickBooks but we failed to remember its id. Say so on the allocation
+        // (the requestid makes the next attempt return the same QuickBooks payment, not a new one).
+        log.error("QuickBooks payment created but the link could not be stored", { err: linkErr, paymentId, allocationId: alloc.id, orgId, qboPaymentId });
+        anyError = true;
+        await db
+          .from("crm_payment_allocations")
+          .update({ qbo_sync_error: `Created in QuickBooks as #${qboPaymentId} but the link could not be saved: ${linkErr.message}`, qbo_sync_attempted_at: attemptedAt })
+          .eq("id", alloc.id);
+        continue;
+      }
       pushed++;
     } catch (err) {
       log.error("QuickBooks payment push failed", { err, paymentId, allocationId: alloc.id, orgId });
@@ -1466,6 +1550,17 @@ async function voidCreditMemoLink(conn: QuickBooksConnection, link: string): Pro
   await qboPost(conn, "creditmemo", { Id: creditMemoId, SyncToken: cur.SyncToken }, { operation: "void" });
 }
 
+/** What a credit-memo link's memo totals in QuickBooks, in cents. */
+async function getQboCreditMemoCents(conn: QuickBooksConnection, link: string): Promise<number> {
+  const { creditMemoId } = parseCreditMemoLink(link);
+  const res = await fetch(`${conn.baseUrl}/v3/company/${conn.realmId}/creditmemo/${encodeURIComponent(creditMemoId)}`, {
+    headers: { Authorization: `Bearer ${conn.accessToken}`, Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`QuickBooks credit memo lookup failed (${res.status})`);
+  const memo = (await res.json()).CreditMemo as Record<string, unknown>;
+  return Math.round(Number(memo.TotalAmt ?? 0) * 100);
+}
+
 /** Voids the QuickBooks side of an allocation that no longer exists (a credit memo or a cash Payment). */
 async function voidRemovedQboPayment(conn: QuickBooksConnection, qboPaymentId: string): Promise<void> {
   if (isCreditMemoLink(qboPaymentId)) {
@@ -1481,24 +1576,30 @@ async function voidRemovedQboPayment(conn: QuickBooksConnection, qboPaymentId: s
 }
 
 /**
- * Retries voids that failed when a payment was refunded in full (see crm_qbo_pending_voids).
+ * Voids QuickBooks payments whose allocation no longer exists (see crm_qbo_pending_voids): a
+ * refund in full whose void failed, a payment edit that removed an invoice from the split, or a
+ * lowered invoice total that moved the payment off it. Pass `paymentId` to do just one payment's.
+ * The queue is service-role only, so this always reads and writes it as the service role.
  * Never throws.
  */
 export async function retryPendingQuickBooksVoids(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
+  _db: any,
   orgId: string,
-  limit = 10
+  limit = 10,
+  paymentId?: string
 ): Promise<{ ok: number; failed: number }> {
   const outcome = { ok: 0, failed: 0 };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createServiceClient() as any;
   try {
-    const { data: pending } = await db
+    let query = db
       .from("crm_qbo_pending_voids")
       .select("id, qbo_payment_id")
       .eq("org_id", orgId)
-      .is("resolved_at", null)
-      .order("created_at", { ascending: true })
-      .limit(limit);
+      .is("resolved_at", null);
+    if (paymentId) query = query.eq("payment_id", paymentId);
+    const { data: pending } = await query.order("created_at", { ascending: true }).limit(limit);
     const rows = (pending ?? []) as { id: string; qbo_payment_id: string }[];
     if (rows.length === 0) return outcome;
     const conn = await getValidConnection(db, orgId);
@@ -1548,40 +1649,68 @@ export async function mirrorPaymentReversalToQuickBooks(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ((remaining ?? []) as any[]).map((r) => [r.id, r])
     );
+    // Date and reference too, so an edited payment matches in QuickBooks.
+    const { data: header } = await db
+      .from("crm_payments")
+      .select("payment_date, reference")
+      .eq("id", paymentId)
+      .maybeSingle();
+    const paymentDate: string | null = header?.payment_date ?? null;
+    const refNum: string | null = header?.reference?.trim() ? String(header.reference).trim().slice(0, 21) : null;
+    // Pending-void rows and links are service-role-only (RLS / DB guard).
+    const service = createServiceClient();
+    const resolvePendingVoid = async (qboPaymentId: string) => {
+      await service
+        .from("crm_qbo_pending_voids")
+        .update({ resolved_at: new Date().toISOString() })
+        .eq("org_id", orgId)
+        .eq("qbo_payment_id", qboPaymentId)
+        .is("resolved_at", null);
+    };
 
     for (const link of links) {
       try {
         if (isCreditMemoLink(link.qboPaymentId)) {
           // A credit memo is not cash: a refund/chargeback shouldn't touch it. If the
-          // allocation is gone (reversed in full), unwind the credit; otherwise leave it.
-          if (!byId.has(link.allocationId)) {
+          // allocation is gone (reversed in full), unwind the credit.
+          const row = byId.get(link.allocationId);
+          if (!row) {
             await voidRemovedQboPayment(conn, link.qboPaymentId);
-            await db
-              .from("crm_qbo_pending_voids")
-              .update({ resolved_at: new Date().toISOString() })
-              .eq("org_id", orgId)
-              .eq("qbo_payment_id", link.qboPaymentId)
-              .is("resolved_at", null);
+            await resolvePendingVoid(link.qboPaymentId);
+          } else if (row.amount_cents !== (await getQboCreditMemoCents(conn, link.qboPaymentId))) {
+            // The applied credit's amount was edited (or the invoice total lowered): a credit
+            // memo can't simply be resized while applied, so unwind it and forget the link —
+            // the payment push that follows creates one for the new amount.
+            await voidCreditMemoLink(conn, link.qboPaymentId);
+            await service
+              .from("crm_payment_allocations")
+              .update({ qbo_payment_id: null, qbo_sync_error: null, qbo_sync_attempted_at: new Date().toISOString() })
+              .eq("id", link.allocationId)
+              .eq("qbo_payment_id", link.qboPaymentId);
+            outcome.ok++;
+            continue;
           }
+          await db
+            .from("crm_payment_allocations")
+            .update({ qbo_sync_error: null, qbo_sync_attempted_at: new Date().toISOString() })
+            .eq("id", link.allocationId)
+            .not("qbo_sync_error", "is", null);
           outcome.ok++;
           continue;
         }
         const row = byId.get(link.allocationId);
         if (!row) {
           await voidRemovedQboPayment(conn, link.qboPaymentId);
-          await db
-            .from("crm_qbo_pending_voids")
-            .update({ resolved_at: new Date().toISOString() })
-            .eq("org_id", orgId)
-            .eq("qbo_payment_id", link.qboPaymentId)
-            .is("resolved_at", null);
+          await resolvePendingVoid(link.qboPaymentId);
           outcome.ok++;
           continue;
         }
         const current = await getQboPayment(conn, link.qboPaymentId);
         const qboCents = Math.round(Number(current.TotalAmt ?? 0) * 100);
         const invoiceId = row.crm_invoices?.qbo_invoice_id;
-        if (row.amount_cents !== qboCents && invoiceId) {
+        const dateChanged = !!paymentDate && String(current.TxnDate ?? "") !== paymentDate;
+        const refChanged = (current.PaymentRefNum ? String(current.PaymentRefNum) : null) !== refNum;
+        if ((row.amount_cents !== qboCents || dateChanged || refChanged) && invoiceId) {
           const amount = centsToDollars(row.amount_cents);
           await withFreshSyncToken(
             () => getQboPayment(conn, link.qboPaymentId),
@@ -1593,6 +1722,8 @@ export async function mirrorPaymentReversalToQuickBooks(
                 // QuickBooks rejects a payment update without the customer, even a sparse one.
                 CustomerRef: cur.CustomerRef,
                 TotalAmt: amount,
+                ...(paymentDate ? { TxnDate: paymentDate } : {}),
+                ...(refNum != null || current.PaymentRefNum ? { PaymentRefNum: refNum ?? "" } : {}),
                 Line: [{ Amount: amount, LinkedTxn: [{ TxnId: invoiceId, TxnType: "Invoice" }] }],
               })
           );
@@ -1615,7 +1746,7 @@ export async function mirrorPaymentReversalToQuickBooks(
         // An allocation refunded in full is gone, so the row above matched nothing: keep the
         // QuickBooks id where the cron can retry the void.
         if (!byId.has(link.allocationId)) {
-          await db
+          await service
             .from("crm_qbo_pending_voids")
             .upsert(
               { org_id: orgId, payment_id: paymentId, qbo_payment_id: link.qboPaymentId, last_error: errorMessage(err), attempted_at: attemptedAt, resolved_at: null },
@@ -1630,4 +1761,63 @@ export async function mirrorPaymentReversalToQuickBooks(
     log.error("QuickBooks payment reversal mirror failed", { err, paymentId, orgId });
   }
   return outcome;
+}
+
+/**
+ * Brings everything QuickBooks holds for one payment in line with Landscapt, in the order
+ * QuickBooks needs: (1) payments already linked are updated to their current amount, date and
+ * reference (an edit, a lowered invoice total, a refund) — or voided when their allocation is
+ * gone; (2) links queued for voiding when an edit removed an invoice from the split are voided;
+ * (3) allocations not in QuickBooks yet are pushed. Used by the payment sync route (after a
+ * payment is recorded, edited or has credit applied) and by the cron. Never throws.
+ */
+export async function syncPaymentToQuickBooks(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  paymentId: string
+): Promise<PushPaymentResult> {
+  let reconciled = { ok: 0, failed: 0 };
+  try {
+    const links = await snapshotQuickBooksPaymentLinks(db, paymentId);
+    if (links.length > 0) reconciled = await mirrorPaymentReversalToQuickBooks(db, orgId, paymentId, links);
+    const voided = await retryPendingQuickBooksVoids(db, orgId, 25, paymentId);
+    reconciled = { ok: reconciled.ok + voided.ok, failed: reconciled.failed + voided.failed };
+  } catch (err) {
+    log.error("QuickBooks payment reconcile failed", { err, paymentId, orgId });
+  }
+  const result = await pushPaymentToQuickBooks(db, orgId, paymentId);
+  if (reconciled.failed > 0) return { ...result, status: "error" };
+  if (result.status === "skipped" && reconciled.ok > 0) return { ...result, status: "pushed", pushedAllocations: reconciled.ok };
+  return result;
+}
+
+/**
+ * Before a QuickBooks invoice is updated: payments that Landscapt moved off it (a lowered total
+ * shrinks or removes their allocations — crm_reconcile_invoice_payments flags or queues them)
+ * must shrink or be voided in QuickBooks first, or QuickBooks keeps more applied than the
+ * invoice now totals. Best-effort; never throws.
+ */
+async function reconcileInvoicePaymentLinks(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  orgId: string,
+  invoiceId: string
+): Promise<void> {
+  try {
+    await retryPendingQuickBooksVoids(db, orgId, 25);
+    const { data: flagged } = await db
+      .from("crm_payment_allocations")
+      .select("payment_id")
+      .eq("invoice_id", invoiceId)
+      .not("qbo_payment_id", "is", null)
+      .not("qbo_sync_error", "is", null);
+    const paymentIds = [...new Set(((flagged ?? []) as { payment_id: string }[]).map((r) => r.payment_id))];
+    for (const pid of paymentIds) {
+      const links = await snapshotQuickBooksPaymentLinks(db, pid);
+      await mirrorPaymentReversalToQuickBooks(db, orgId, pid, links);
+    }
+  } catch (err) {
+    log.error("QuickBooks invoice payment reconcile failed", { err, invoiceId, orgId });
+  }
 }

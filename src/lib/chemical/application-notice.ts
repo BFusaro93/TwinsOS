@@ -73,6 +73,7 @@ type AppRow = {
   chemical_amount: number | null;
   solution_amount: number | null;
   unit_of_measure_id: string | null;
+  solution_unit_of_measure_id: string | null;
   target_ids: string[] | null;
   areas_treated_ids: string[] | null;
   application_method_id: string | null;
@@ -133,7 +134,7 @@ export async function loadChemicalNoticeData(
   let appsQuery = supabase
     .from("crm_chemical_applications")
     .select(
-      "visit_id, chemical_amount, solution_amount, unit_of_measure_id, target_ids, areas_treated_ids, application_method_id, application_rate_label, epa_number_snapshot, re_entry_interval_snapshot, applicator_employee_id, applicator_license_number, application_start_time, application_end_time, temperature, wind_speed, wind_direction, ph_level, used, preloaded, confirmed_at, product_id"
+      "visit_id, chemical_amount, solution_amount, unit_of_measure_id, solution_unit_of_measure_id, target_ids, areas_treated_ids, application_method_id, application_rate_label, epa_number_snapshot, re_entry_interval_snapshot, applicator_employee_id, applicator_license_number, application_start_time, application_end_time, temperature, wind_speed, wind_direction, ph_level, used, preloaded, confirmed_at, product_id"
     )
     .in("visit_id", ids)
     .is("deleted_at", null);
@@ -149,7 +150,7 @@ export async function loadChemicalNoticeData(
   const lookupIds = [
     ...new Set(
       rows
-        .flatMap((a) => [a.unit_of_measure_id, a.application_method_id, ...(a.target_ids ?? []), ...(a.areas_treated_ids ?? [])])
+        .flatMap((a) => [a.unit_of_measure_id, a.solution_unit_of_measure_id, a.application_method_id, ...(a.target_ids ?? []), ...(a.areas_treated_ids ?? [])])
         .filter(Boolean)
     ),
   ] as string[];
@@ -246,7 +247,8 @@ export async function loadChemicalNoticeData(
           // a later EPA # correction must not rewrite what the client was told.
           epaNumber: a.epa_number_snapshot || p?.epa_registration_number || null,
           amount: joinAmount(a.chemical_amount, a.unit_of_measure_id ? lookupName.get(a.unit_of_measure_id) ?? null : null),
-          solutionAmount: a.solution_amount != null ? String(Number(a.solution_amount)) : null,
+          // With its unit: "12" alone on the route sheet left the crew guessing gallons or quarts.
+          solutionAmount: joinAmount(a.solution_amount, a.solution_unit_of_measure_id ? lookupName.get(a.solution_unit_of_measure_id) ?? null : null),
           method: a.application_method_id ? lookupName.get(a.application_method_id) ?? null : null,
           rate: a.application_rate_label || null,
           targets: names(a.target_ids),

@@ -8,6 +8,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEstimates, useBulkImportEstimates } from "@/lib/hooks/use-estimates";
 import { ImportExportMenu } from "@/components/shared/ImportExportMenu";
 import { exportCSV } from "@/lib/csv";
+// Shared with Settings → Import / Export so both import the same columns.
+import { ESTIMATE_REQUIRED_COLUMNS, ESTIMATE_TEMPLATE_COLUMNS, estimateToCsvRow } from "@/lib/crm/import-export-columns";
 import { NewEstimateDialog } from "./NewEstimateDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -109,12 +111,6 @@ function formatDate(d: string): string {
 interface Props {
   clientId?: string;
 }
-
-const ESTIMATE_TEMPLATE_COLUMNS = [
-  "clientName", "description", "estimateDate", "validUntilDate", "poNumber", "stage",
-  // Optional: carry a source system's estimate over with its total, rep and probability.
-  "amount", "salesperson", "probability", "externalRef",
-];
 
 export function EstimatesList({ clientId }: Props) {
   const router = useRouter();
@@ -380,20 +376,8 @@ export function EstimatesList({ clientId }: Props) {
                 hideImport={!canAdd}
                 templateColumns={ESTIMATE_TEMPLATE_COLUMNS}
                 templateFilename="estimates-template.csv"
-                requiredColumns={["clientName", "description"]}
-                onExport={() =>
-                  exportCSV(
-                    allEstimates.map((e) => ({
-                      clientName: e.clientName ?? "",
-                      description: e.description,
-                      estimateDate: e.estimateDate,
-                      validUntilDate: e.validUntilDate ?? "",
-                      poNumber: e.poNumber ?? "",
-                      stage: e.stage,
-                    })),
-                    "estimates-export.csv"
-                  )
-                }
+                requiredColumns={ESTIMATE_REQUIRED_COLUMNS}
+                onExport={() => exportCSV(allEstimates.map(estimateToCsvRow), "estimates-export.csv")}
                 onImport={async (rows) => {
                   const { created, skipped, duplicates, linesAdded } = await bulkImportEstimates(rows);
                   if (skipped > 0 || duplicates > 0) {

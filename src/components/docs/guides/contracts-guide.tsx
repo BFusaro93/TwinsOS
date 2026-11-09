@@ -175,19 +175,35 @@ export function ContractsGuide() {
           </li>
         </ul>
         <p>
-          <strong>Starting mid-cycle.</strong> Each contract has an <em>If Start Is Mid-Cycle</em>{" "}
-          setting. <em>Start on first full cycle</em> (the default) simply begins at the next
-          regular billing day. <em>Prorate first period</em> also bills the partial stretch from
-          the start date to the day before that first billing day, as its own invoice: the
+          <strong>Starting mid-cycle.</strong> A contract never bills before its start date: no
+          invoice is dated before it, and no invoice pays for a billing cycle that began before it
+          (a contract starting Jan 15 that bills on the 1st is not invoiced for the cycle that began
+          Jan 1). What happens to the days between the start date and the first full cycle follows
+          the contract&apos;s <em>If Start Is Mid-Cycle</em>{" "}
+          setting. <em>Start on first full cycle</em> (the default) leaves them unbilled and starts
+          at the first cycle that begins on or after the start date &mdash; a monthly contract
+          running Jan 15 to Jan 14 with billing day 1 bills twelve times, Feb 1 through Jan 1.
+          Quarterly and annual cycles start on the first billing day on or after the start date
+          and repeat every 3 or 12 months from there: an annual contract starting Mar 15 with
+          billing day 1 bills on Apr 1 each year, and a quarterly one starting Jan 15 bills Feb 1,
+          May 1, Aug 1 and Nov 1. Once a contract has started billing its months are fixed, so
+          editing its start date later never moves them (contracts already billing before this
+          rule keep the months they have always billed in).{" "}
+          <em>Prorate first period</em> also bills the partial stretch from
+          the start date to the day before that first cycle, as its own invoice: the
           period&apos;s amount &times; days in the stub &divide; days in the full cycle, rounded to the
           cent (a contract at $1,000 a month starting Oct 20 with billing day 1 bills $387.10 for
           Oct 20&ndash;31, then $1,000 from Nov 1). The invoice line names the stub period and shows
           the formula. It&apos;s generated once &mdash; by the cron or Create Invoices, whichever
           comes first &mdash; and applies to Monthly, Quarterly and Annual contracts (a contract
           starting exactly on a billing day has no stub, and weekly, biweekly and one-time contracts
-          never prorate). A monthly contract that starts <em>before</em> its billing day (say Oct 20
-          with billing day 25) bills Oct 20&ndash;24 as the stub; quarterly and annual contracts
-          starting before their billing day simply bill their first full cycle on that day. Turning
+          never prorate). A contract that starts <em>before</em> its billing day (say Oct 20
+          with billing day 25) bills Oct 20&ndash;24 as the stub and its first full cycle on Oct 25
+          &mdash; monthly, quarterly and annual alike. An annual contract starting Mar 15 with
+          billing day 1 bills Mar 15&ndash;31 as the stub (17 of 365 days), then the full year from
+          Apr 1. The last cycle that starts on or before the end date is billed in full &mdash; that
+          same contract ending Mar 14 the next year bills only the one Apr 1 invoice, covering
+          through Mar 31. Turning
           proration on for a contract that has already started regular billing doesn&apos;t bill a
           stub after the fact. The stub uses the starting month&apos;s entry in the monthly-amounts
           grid when there is one, otherwise the flat amount. The stub invoice is dated no later than the last
@@ -198,7 +214,14 @@ export function ContractsGuide() {
           <strong>Billing in advance with a mid-month start.</strong> With Bill 1 Month in Advance on, a
           contract that starts after this month&apos;s billing day (billing day 1, start Oct 20) is picked up
           on the next run for the month it covers, so its first full month (November) is invoiced instead of
-          being skipped until the following billing day.
+          being skipped until the following billing day. One signed before its start but after the
+          advance run for its first cycle (start Oct 20, billing day 25, signed Oct 5 &mdash; the
+          Sep 25 run predates it) gets that first cycle (Oct 25) invoiced as soon as it&apos;s signed,
+          and the Oct 25 run then bills November as usual. In prorate mode the stub and the first
+          advance invoice meet with no gap; the stub is still billed even though the first cycle
+          was invoiced before the start date. Quarterly and annual contracts billed in advance keep
+          the same cycle months; each cycle is just invoiced a month before it starts (start Jan 1,
+          quarterly, billing day 1: the Jan 1 cycle is invoiced on Dec 1, the Apr 1 cycle on Mar 1).
         </p>
         <Callout>
           <strong>Why bill a month in advance?</strong> For recurring service, invoicing after the
@@ -226,9 +249,9 @@ export function ContractsGuide() {
         <p>
           For any frequency other than Monthly, the twelve-month grid is replaced by one{" "}
           <strong>Amount per invoice</strong> field and a line saying when the contract will bill:
-          the months for Quarterly and Annual (&quot;Invoices in Jan, Apr, Jul, Oct&quot;, counted
-          from the start date &mdash; or the signed or created date when there&apos;s no start
-          date), the 7- or 14-day cadence for Weekly and Every 2 weeks, and the first date for One
+          the months for Quarterly and Annual (&quot;Invoices in Feb, May, Aug, Nov&quot;, starting
+          from the first billing day on or after the start date &mdash; or the signed or created date
+          when there&apos;s no start date &mdash; and fixed once the contract has billed), the 7- or 14-day cadence for Weekly and Every 2 weeks, and the first date for One
           time. Settings that don&apos;t apply are hidden: Weekly and Every 2 weeks have no Billing Day
           of Month, Bill 1 Month in Advance or mid-cycle proration, and One time has no Billing Day
           of Month or proration. Switching frequency carries the amount across (a flat monthly grid
@@ -239,11 +262,23 @@ export function ContractsGuide() {
         <p>
           If a billing day is missed (an outage, or the cron failing that morning), the contract is
           billed later in the same period rather than skipped &mdash; for Weekly, Biweekly, Monthly,
-          Quarterly and Annual contracts alike, as long as that period hasn&apos;t already been invoiced and the
-          contract existed on its billing day. A contract whose client is{" "}
-          <strong>cancelled</strong>, <strong>inactive</strong> or <strong>lost</strong> (or deleted)
-          stops billing, matching the visits, which also stop; reactivating the client resumes billing
-          on the next cycle.
+          Quarterly and Annual contracts alike, as long as that period hasn&apos;t already been invoiced.
+          The same goes for a contract entered, signed or switched to Active a few days after its
+          billing day (start Jan 1, billing day 1, entered Jan 3): the next run bills the current
+          cycle, but the invoice is dated the day it&apos;s created (Jan 3) rather than back-dated to
+          the billing day, and its due date counts the client&apos;s terms from that date. When you
+          mark a contract <strong>Signed</strong> or <strong>Active</strong> (or save one that is) after
+          that cycle&apos;s billing day, the contract window asks first: <strong>Bill January now (dated
+          today)</strong> creates the invoice right away, and <strong>Start billing with February</strong>{" "}
+          skips the cycle &mdash; nothing is billed for it and the first invoice is the next cycle&apos;s.
+          Contracts activated another way (the API, an import) follow the rule above. A cycle is
+          only ever billed once, whatever date its invoice carries &mdash; a later run or a Create
+          Invoices click in the same period is skipped. Two exceptions are not back-billed: a client{" "}
+          <strong>reactivated</strong> after the billing day (billing resumes at the next cycle), and
+          an imported contract, which is marked as billed for the period in progress. A contract whose client is{" "}
+          <strong>cancelled</strong>, <strong>inactive</strong>, <strong>lost</strong> or still a{" "}
+          <strong>lead</strong> (or deleted) stops billing, matching the visits, which also stop;
+          reactivating the client (or converting the lead) resumes billing on the next cycle.
         </p>
         <Table>
           <thead>
@@ -291,9 +326,12 @@ export function ContractsGuide() {
       <Section id="ending-contracts" title="Ending or cancelling a contract">
         <p>
           While a contract is Signed/Active its jobs&apos; visits are billed inside the contract
-          price and don&apos;t auto-invoice. Once the contract is Cancelled, Expired, switched
-          inactive or past its end date, completed visits on its linked jobs bill like normal
-          per-visit work, on the client&apos;s usual invoicing frequency. When you cancel or end a
+          price and don&apos;t auto-invoice &mdash; from the start date on (a visit dated before the
+          start date bills per visit), and past the end date through the last billing cycle the
+          contract invoiced in full. Once the contract is Cancelled, Expired or switched
+          inactive, a completed visit still counts as covered if it falls inside a billing cycle
+          the contract already invoiced, so it isn&apos;t billed twice; visits after that
+          cycle bill like normal per-visit work, on the client&apos;s usual invoicing frequency. When you cancel or end a
           contract that has linked jobs, the app tells you how many will now bill per visit before
           you confirm.
         </p>
@@ -310,7 +348,8 @@ export function ContractsGuide() {
           and end dates. With <strong>Bill per event</strong> (the default), a storm visit dated
           before the start date or after the end date is billed per event in Snow Invoicing. With{" "}
           <strong>Included in the contract</strong>, those storms are covered by the contract price
-          too (a cancelled, expired or inactive contract still covers nothing).
+          too. A cancelled, expired or inactive contract covers only storms inside a billing cycle
+          it already invoiced; later storms bill per event.
         </p>
       </Section>
 

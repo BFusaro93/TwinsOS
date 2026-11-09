@@ -2,6 +2,8 @@ import type { BillingFrequency } from "@/types/crm-invoices";
 import {
   MONTH_KEYS,
   billingAnchor,
+  billingAnchorStamp,
+  cycleStartMonths,
   isBillingDueOn,
   normalizeBillingFrequency,
   planContractBilling,
@@ -138,18 +140,28 @@ export function scheduledContractInvoices(
   }
 
   const out: ScheduledInvoice[] = [];
+  // last_billed_date rolls forward as the simulated runs bill, like the cron
+  // stamping it: with "bill 1 month in advance" a new contract's first cycle
+  // can be billed on top of the regular run (see resolveMonthTarget), which
+  // depends on what has been billed so far.
+  let row: ContractScheduleRow = contract;
+  const billedDates = new Set<string>();
   for (const date of candidates) {
-    if (!isBillingDueOn(contract, date)) continue;
-    const plan = planContractBilling(contract, date, { billNow: false });
-    if (termSkipReason(plan, contract)) continue;
-    const amountCents = amountFor(contract, plan.monthKey);
-    if (amountCents <= 0) continue;
-    out.push({
-      runDate: ymdString(date.getFullYear(), date.getMonth() + 1, date.getDate()),
-      invoiceDate: plan.invoiceDate,
-      monthKey: plan.monthKey,
-      amountCents,
-    });
+    for (let pass = 0; pass < 2; pass += 1) {
+      if (!isBillingDueOn(row, date)) break;
+      const plan = planContractBilling(row, date, { billNow: false });
+      if (billedDates.has(plan.invoiceDate) || termSkipReason(plan, row)) break;
+      billedDates.add(plan.invoiceDate);
+      const amountCents = amountFor(row, plan.monthKey);
+      if (amountCents <= 0) continue; // the cron skips a $0 month without stamping it
+      row = { ...row, last_billed_date: plan.invoiceDate, billing_anchor_date: row.billing_anchor_date ?? billingAnchorStamp(row, plan) };
+      out.push({
+        runDate: ymdString(date.getFullYear(), date.getMonth() + 1, date.getDate()),
+        invoiceDate: plan.invoiceDate,
+        monthKey: plan.monthKey,
+        amountCents,
+      });
+    }
   }
   return out;
 }
@@ -197,9 +209,9 @@ export function annualBillingProfile(
     return profile;
   }
 
-  const span = frequency === "quarterly" ? 3 : 12;
-  for (let k = 0; k < 12 / span; k += 1) {
-    const key = MONTH_KEYS[(anchorMonth + k * span) % 12];
+  // Quarterly/annual: the months its cycles start (and are dated) in.
+  for (const m of cycleStartMonths(contract, new Date(year, 0, 1))) {
+    const key = MONTH_KEYS[m - 1];
     profile[key] = amountFor(contract, key);
   }
   return profile;

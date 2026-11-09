@@ -414,8 +414,8 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
   {
     key: "kpi-week-over-week",
     section: "lead",
-    name: "Key Performance Indicators (Month-to-Date)",
-    description: "Compares this week to last week across leads, clients, estimates, calls, and payments.",
+    name: "Key Performance Indicators (Last 7 Days)",
+    description: "Compares the last 7 days to the 7 days before across leads, clients, estimates, calls, payments, and invoicing.",
     filters: [],
     run: async ({ supabase, timeZone }) => {
       // Week edges on the org's calendar — toISOString() dates are UTC, so
@@ -485,18 +485,19 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
         return data.reduce((sum, r) => sum + netPaymentCents(r), 0);
       }
 
+      // Pre-tax (total − sales tax): sales tax is not revenue.
       async function sumInvoiced(start: string, end: string) {
-        const data = await fetchAllRows<{ total_cents: number | null }>(() =>
+        const data = await fetchAllRows<{ total_cents: number | null; tax_cents: number | null }>(() =>
           supabase
             .from("crm_invoices")
-            .select("total_cents")
+            .select("total_cents, tax_cents")
             .is("deleted_at", null)
             .neq("status", "draft")
             .neq("status", "void")
             .gte("invoice_date", start)
             .lte("invoice_date", end)
         );
-        return data.reduce((sum, r) => sum + (r.total_cents ?? 0), 0);
+        return data.reduce((sum, r) => sum + (r.total_cents ?? 0) - (r.tax_cents ?? 0), 0);
       }
 
       const [
@@ -533,42 +534,42 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
       const rows = [
         {
           indicator: "New Leads",
-          period: "This Week vs Last Week",
+          period: "Last 7 Days vs Prior 7 Days",
           current: newLeadsCur,
           previous: newLeadsPrev,
           change_pct: pctChange(newLeadsCur, newLeadsPrev),
         },
         {
           indicator: "Payments Received ($)",
-          period: "This Week vs Last Week",
+          period: "Last 7 Days vs Prior 7 Days",
           current: Math.round(paymentsCur) / 100,
           previous: Math.round(paymentsPrev) / 100,
           change_pct: pctChange(paymentsCur, paymentsPrev),
         },
         {
-          indicator: "Invoiced Total ($)",
-          period: "This Week vs Last Week",
+          indicator: "Invoiced, pre-tax ($)",
+          period: "Last 7 Days vs Prior 7 Days",
           current: Math.round(invoicedCur) / 100,
           previous: Math.round(invoicedPrev) / 100,
           change_pct: pctChange(invoicedCur, invoicedPrev),
         },
         {
           indicator: "New Clients",
-          period: "This Week vs Last Week",
+          period: "Last 7 Days vs Prior 7 Days",
           current: newClientsCur,
           previous: newClientsPrev,
           change_pct: pctChange(newClientsCur, newClientsPrev),
         },
         {
           indicator: "New Estimates",
-          period: "This Week vs Last Week",
+          period: "Last 7 Days vs Prior 7 Days",
           current: newEstimatesCur,
           previous: newEstimatesPrev,
           change_pct: pctChange(newEstimatesCur, newEstimatesPrev),
         },
         {
           indicator: "New Calls",
-          period: "This Week vs Last Week",
+          period: "Last 7 Days vs Prior 7 Days",
           current: newCallsCur,
           previous: newCallsPrev,
           change_pct: pctChange(newCallsCur, newCallsPrev),
@@ -585,7 +586,8 @@ export const LEAD_REPORTS: PrebuiltReportDef[] = [
         ],
         rows,
         [
-          "Payments Received and Invoiced Total are shown in dollars; all other indicators are counts.",
+          "Current = the last 7 days including today; Previous = the 7 days before that.",
+          "Payments Received and Invoiced are shown in dollars (Invoiced is pre-tax, after discounts; excludes draft and void invoices); all other indicators are counts.",
         ]
       );
     },

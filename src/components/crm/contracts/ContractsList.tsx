@@ -85,6 +85,7 @@ import {
   type ContractTemplate,
 } from "@/lib/hooks/use-contract-templates";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
+import { useLateCyclePrompt } from "@/components/crm/contracts/LateCyclePrompt";
 
 const CONTRACT_STATUSES: ContractStatus[] = ["draft", "sent", "signed", "active", "expired", "cancelled"];
 
@@ -317,6 +318,8 @@ function ContractDetailsTab({
   hideClient,
   signedAt,
   createdAt,
+  lastBilledDate,
+  billingAnchorDate,
   hadMonthOverrides,
   coversSnow,
 }: {
@@ -326,6 +329,9 @@ function ContractDetailsTab({
   /** Fall back after the start date for the cadence anchor, as the billing engine does. */
   signedAt?: string | null;
   createdAt?: string | null;
+  /** Once a contract has billed, its quarterly/annual cycle months are pinned (contract-billing.ts monthGrid). */
+  lastBilledDate?: string | null;
+  billingAnchorDate?: string | null;
   /** A non-monthly contract (set via API/import) whose per-month amounts differ from its flat amount. */
   hadMonthOverrides?: boolean;
   /** The contract covers snow (a linked snow job) — shows the storms-outside-dates setting. */
@@ -336,10 +342,14 @@ function ContractDetailsTab({
   const scheduleRow = {
     billing_frequency: state.billingFrequency,
     bill_month_in_advance: state.billMonthInAdvance,
+    billing_day_of_month: state.billingDayOfMonth,
     start_date: state.startDate || null,
     signed_at: signedAt ?? null,
     created_at: createdAt ?? null,
+    last_billed_date: lastBilledDate ?? null,
+    billing_anchor_date: billingAnchorDate ?? null,
   };
+  const gridPinned = !!(lastBilledDate || billingAnchorDate);
   const anchorLabel = fmtAnchor(billingAnchor(scheduleRow, new Date()));
   const anchorSource = state.startDate ? "the start date" : signedAt ? "the signed date" : createdAt ? "the date it was created" : "today (no start date set)";
 
@@ -532,8 +542,10 @@ function ContractDetailsTab({
                 {state.billingFrequency === "quarterly" || state.billingFrequency === "annual" ? (
                   <>
                     Invoices in <strong>{formatBillingMonths(contractBillingMonths(scheduleRow))}</strong>
-                    {" "}— counted from {anchorSource} ({anchorLabel})
-                    {state.billMonthInAdvance ? ", one month in advance" : ""}.
+                    {gridPinned
+                      ? " — the months it is already billing on"
+                      : ` — cycles start on the first billing day on or after ${anchorSource} (${anchorLabel})`}
+                    {state.billMonthInAdvance ? ", each invoiced one month in advance" : ""}.
                   </>
                 ) : state.billingFrequency === "one_time" ? (
                   <>Invoices once, on or after {anchorSource} ({anchorLabel}).</>
@@ -1288,6 +1300,9 @@ export function ContractDialog({
   const { mutateAsync: acknowledgeChange, isPending: acknowledging } = useAcknowledgeContractChange();
   const { data: linkedJobs } = useJobsByContract(contract?.id);
   const [confirmEnd, confirmEndDialog] = useConfirm();
+  // Asks "bill this cycle now, or start with the next?" when a contract becomes
+  // billable after its current billing day has passed (see LateCyclePrompt).
+  const lateCycle = useLateCyclePrompt();
   const isPending = creating || updating;
 
   async function handleStatusChange(status: ContractStatus) {
@@ -1309,6 +1324,7 @@ export function ContractDialog({
     try {
       const result = await updateStatus({ id: contract.id, status });
       if (!result.skipped) toast.success(`Contract marked as ${status}`);
+      if (!result.skipped && (status === "signed" || status === "active")) await lateCycle.check(contract.id);
     } catch (err) {
       // Invalid state-machine transitions (e.g. cancelled -> active) throw a
       // descriptive Error from useUpdateContractStatus — surface that instead
@@ -1395,6 +1411,9 @@ export function ContractDialog({
           },
         });
         toast.success("Contract saved");
+        // A signed/active contract whose dates or billing settings now put a
+        // passed billing day in play: ask before the daily run bills it.
+        if (contract!.status === "signed" || contract!.status === "active") await lateCycle.check(contract!.id);
       }
       onOpenChange(false);
     } catch (err) { toast.error(mutationErrorMessage(err, "Failed to save contract")); }
@@ -1404,6 +1423,7 @@ export function ContractDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[85vh] w-full max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:p-0">
         {confirmEndDialog}
+        {lateCycle.element}
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <div className="flex items-center gap-3">
             <DialogTitle className="text-xl font-bold">
@@ -1501,6 +1521,8 @@ export function ContractDialog({
               hideClient={!!defaultClientId}
               signedAt={contract?.signedAt}
               createdAt={contract?.createdAt}
+              lastBilledDate={contract?.lastBilledDate}
+              billingAnchorDate={contract?.billingAnchorDate}
               coversSnow={(linkedJobs ?? []).some((j) => j.jobType === "snow")}
               hadMonthOverrides={
                 !!contract &&

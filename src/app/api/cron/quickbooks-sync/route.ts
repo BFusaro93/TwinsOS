@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
-import { pushInvoiceToQuickBooks, pushPaymentToQuickBooks, retryPendingQuickBooksVoids, QBO_DUPLICATE_NAME_MESSAGE } from "@/lib/integrations/quickbooks";
+import { pushInvoiceToQuickBooks, pushPaymentToQuickBooks, syncPaymentToQuickBooks, retryPendingQuickBooksVoids, QBO_DUPLICATE_NAME_MESSAGE } from "@/lib/integrations/quickbooks";
 import { logger } from "@/lib/logger";
 import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 
@@ -20,7 +20,11 @@ const log = logger.child("quickbooks sync cron");
  *
  * Deliberately NOT a backfill: only records created after the org connected are
  * created in QuickBooks — an org's pre-existing invoices are usually already in
- * its books, and pushing them again would duplicate them.
+ * its books, and pushing them again would duplicate them. "Connected" is the
+ * connection's own start (config.connected_at — reset when the org switches to a
+ * different QuickBooks company), falling back to the row's created_at. A payment
+ * counts by when it was APPLIED (allocation created_at), so a prepayment taken
+ * before connecting but applied to an invoice afterwards is still sent.
  *
  * Anything touched in the last 10 minutes is left alone so this never races the
  * immediate triggers into creating the same invoice twice. A "changed" invoice
@@ -56,7 +60,7 @@ export async function GET(request: Request) {
 
   const { data: integrations, error } = await db
     .from("integrations")
-    .select("org_id, created_at")
+    .select("org_id, created_at, connected_at:config->>connected_at")
     .eq("provider", "quickbooks")
     .eq("enabled", true);
   if (error) {
@@ -74,7 +78,7 @@ export async function GET(request: Request) {
 
   // Rotate the starting org every run: with a fixed order, one org's backlog could use up the
   // whole run every time and the orgs after it were never synced.
-  const list = ((integrations ?? []) as { org_id: string; created_at: string }[]).sort((a, b) => a.org_id.localeCompare(b.org_id));
+  const list = ((integrations ?? []) as { org_id: string; created_at: string; connected_at: string | null }[]).sort((a, b) => a.org_id.localeCompare(b.org_id));
   const offset = list.length ? Math.floor(now / (15 * 60 * 1000)) % list.length : 0;
   const ordered = [...list.slice(offset), ...list.slice(0, offset)];
 
@@ -83,7 +87,7 @@ export async function GET(request: Request) {
     const orgId = integration.org_id;
     // A canceled or expired-trial org is read-only; its books are not pushed meanwhile.
     if (await orgInactive(orgId)) continue;
-    const connectedAt = integration.created_at;
+    const connectedAt = integration.connected_at || integration.created_at;
     const counts = { created: 0, updated: 0, payments: 0 };
     summary[orgId] = counts;
 
@@ -159,16 +163,18 @@ export async function GET(request: Request) {
         if (result.reason === "not_connected") break;
       }
 
-      // 3. Payments recorded since connecting whose invoice is in QuickBooks but which aren't.
+      // 3. Payments applied since connecting whose invoice is in QuickBooks but which aren't.
+      //    By allocation date: a prepayment recorded before connecting but applied afterwards
+      //    is new to QuickBooks.
       const { data: allocations } = await db
         .from("crm_payment_allocations")
-        .select("payment_id, qbo_sync_attempted_at, crm_invoices!inner(qbo_invoice_id), crm_payments!inner(deleted_at, created_at, is_credit)")
+        .select("payment_id, qbo_sync_attempted_at, crm_invoices!inner(qbo_invoice_id), crm_payments!inner(deleted_at, is_credit)")
         .eq("org_id", orgId)
         .is("qbo_payment_id", null)
         .not("crm_invoices.qbo_invoice_id", "is", null)
         .is("crm_payments.deleted_at", null)
-        .gte("crm_payments.created_at", connectedAt)
-        .lt("crm_payments.created_at", settledBefore)
+        .gte("created_at", connectedAt)
+        .lt("created_at", settledBefore)
         // Never-attempted first, then the longest-waiting: an unordered limit kept returning the
         // same rows, so the rest were never reached.
         .order("qbo_sync_attempted_at", { ascending: true, nullsFirst: true })
@@ -186,8 +192,32 @@ export async function GET(request: Request) {
         if (result.reason === "not_connected") break;
       }
 
-      // 4. Voids that failed when a payment was refunded in full (its allocation, and the
-      //    QuickBooks id with it, is gone).
+      // 3b. Payments already in QuickBooks that changed here since (an edited amount, date or
+      //     reference, a lowered invoice total, a failed refund update): update them there.
+      const { data: flaggedLinks } = await db
+        .from("crm_payment_allocations")
+        .select("payment_id, qbo_sync_attempted_at")
+        .eq("org_id", orgId)
+        .not("qbo_payment_id", "is", null)
+        .not("qbo_sync_error", "is", null)
+        .or(`qbo_sync_attempted_at.is.null,qbo_sync_attempted_at.lt.${retryBefore}`)
+        .order("qbo_sync_attempted_at", { ascending: true, nullsFirst: true })
+        .limit(MAX_PAYMENTS * 3);
+      const changedPaymentIds = new Set<string>();
+      for (const a of (flaggedLinks ?? []) as { payment_id: string }[]) {
+        if (paymentIds.has(a.payment_id)) continue;
+        changedPaymentIds.add(a.payment_id);
+        if (changedPaymentIds.size >= MAX_PAYMENTS) break;
+      }
+      for (const paymentId of changedPaymentIds) {
+        if (overBudget()) { stoppedEarly = true; break; }
+        const result = await syncPaymentToQuickBooks(db, orgId, paymentId);
+        if (result.status === "pushed") counts.payments++;
+        if (result.reason === "not_connected") break;
+      }
+
+      // 4. Voids queued when an allocation in QuickBooks went away here: a refund in full whose
+      //    void failed, an edit that moved a payment to another invoice, a lowered invoice total.
       if (!overBudget()) await retryPendingQuickBooksVoids(db, orgId);
     } catch (err) {
       log.error("QuickBooks sync sweep failed for org", { err, orgId });

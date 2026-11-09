@@ -20,12 +20,12 @@ const EQUIPT_ENTITIES: [string, string, string][] = [
 ];
 
 const LANDSCAPT_ENTITIES: [string, string, string][] = [
-  ["Clients", "displayName", "firstName, lastName, accountType, status (active, lead, inactive, cancelled, lost; anything else imports as active with a warning), clientSince, primaryPhone, primaryEmail, billingEmail, billingAddress/City/State/Zip, serviceAddress/City/State/Zip, source, accountNumber, parentAccountNumber (links the row as a sub-account of that account), tags (separate with |), notesToCrew"],
+  ["Clients", "displayName", "firstName, lastName, accountType, status (active, lead, inactive, cancelled, lost; anything else imports as active with a warning), clientSince, primaryPhone, primaryEmail, billingEmail, billingAddress/City/State/Zip, serviceAddress/City/State/Zip, source, accountNumber, parentAccountNumber (links the row as a sub-account of that account), tags (separate with |), notesToCrew. A cell holding several addresses (\"a@x.com; b@x.com\", as Service Autopilot exports them) imports the first, with a warning. Settings → Import / Export and the Clients page import the same columns."],
   ["Leads", "displayName", "accountType, primaryPhone, primaryEmail, billingAddress/City/State/Zip, source"],
   ["Estimates", "clientName, description", "estimateDate, validUntilDate, poNumber, stage, amount, salesperson, probability, externalRef"],
-  ["Invoices", "clientName, service, description, amount", "invoiceDate, dueDate, poNumber, status, taxAmount"],
-  ["Contracts", "clientName, title", "status, startDate, endDate, monthlyAmount, billingFrequency, billingDayOfMonth, billMonthInAdvance, paymentType, poNumber, autoGenerate, isActive, includeSubProperties, defaultService, invoiceLineItems (separate lines with |), janAmount … decAmount (optional seasonal amounts)"],
-  ["Payments", "clientName, amount", "paymentDate, method, reference, memo, invoiceNumber"],
+  ["Invoices", "clientName, service, description, amount", "invoiceDate, dueDate, poNumber, status, discount (invoice-level), taxAmount, invoiceNumber (only used to recognise invoices that already exist)"],
+  ["Contracts", "clientName, title", "status, startDate, endDate, monthlyAmount, billingFrequency, billingDayOfMonth, billMonthInAdvance, paymentType, poNumber, autoGenerate, isActive, includeSubProperties, defaultService, invoiceLineItems (separate lines with |), janAmount … decAmount (optional seasonal amounts — once any month is filled in, a blank month bills $0), lastBilledDate"],
+  ["Payments", "clientName, amount", "accountNumber (says which client when two share a name), paymentDate, method, reference, memo, invoiceNumber"],
   ["Tickets", "subject", "clientName, type, status, priority, category, body, dueDate"],
   ["Services", "name", "code, category, unit, defaultRate, productionRate, isActive. Rates may include $ and commas (\"$1,200.50\"). Units accept common wording (\"Sq Ft\", \"hour\", \"each\") and anything unrecognised falls back to \"visit\". A row with a production rate sets the service to budget by production rate; a blank production rate on a re-import leaves the saved one alone."],
   ["Schedules", "name, frequency (weekly, bi_weekly, every_3_weeks, every_4_weeks, monthly, custom)", "dayOfWeek (required except for custom), weekPattern, anchorDate, seasonStart, seasonEnd, weekOfMonth, customDates (required for custom), excludedDates — date lists are separated with | , e.g. 2026-07-06 | 2026-07-20"],
@@ -39,11 +39,13 @@ const DEDUPE_BEHAVIOR: [string, string, string][] = [
   ["Assets", "assetTag", "Existing asset is updated with only the cells the CSV filled in (make, model, year, serial, location, purchase details, asset type when a type is given). Blank cells never wipe saved values and a blank status keeps the current status."],
   ["Vehicles", "assetTag (looked up first, so a repeat import never creates a second copy)", "Existing vehicle is updated with only the cells the CSV filled in. A blank status keeps the current one, and a VIN that belongs to another vehicle is reported as a failed row."],
   ["Work Orders", "workOrderNumber", "Existing work order is updated with only the columns the CSV carries (title always). A completed work order is not reopened by a file that has no status column, and blank descriptions, assets or due dates don\u2019t erase saved ones."],
-  ["Clients", "accountNumber when the row supplies one; otherwise primaryEmail or primaryPhone; a row with none of those is matched on name plus service street", "A matching account number updates the existing client with the row's contact and address fields. A row whose account number is blank or new but whose email or phone matches an existing client is skipped as a duplicate and listed in the skipped rows. Everything else inserts as a new client; a row without an account number gets the next one from Settings (prefix, next number, suffix), and numbers your file already gave to other clients are skipped, so imported numbers never block later new clients."],
+  ["Clients", "accountNumber when the row supplies one; otherwise primaryEmail or primaryPhone; a row with none of those is matched on name plus service street", "A matching account number updates the existing client with the row's contact and address fields. A row with no account number whose email or phone matches an existing client is skipped as a duplicate and listed in the skipped rows; its tags and parent account are still applied to that client, so re-running a file that stopped part-way finishes the job. A row with a NEW account number is always created as its own account, even when its email or phone matches another client (a second property, a family member), with a warning naming that client so you can merge them if they are the same customer. A Status of active on a re-import converts a lead (it gets a client-since date and a timeline entry, but no automations run); cancelled or lost records get a closed date. Everything else inserts as a new client; a row without an account number gets the next one from Settings (prefix, next number, suffix), and numbers your file already gave to other clients are skipped, so imported numbers never block later new clients."],
   ["Leads", "primaryEmail or primaryPhone against every existing non-deleted client", "No new record is created. Instead the matched client is tagged “imported-lead” and the row is counted separately as “matched,” not “created.”"],
-  ["Services", "code when the row has one; otherwise the row is added as a new service", "A matched service is updated with only the columns the file fills in, so a file without category, unit, rate or active columns leaves those alone. Rows without a code create a new service every import, so give services a code if you plan to re-import. A row that fails is listed with its line number; the rest still import."],
+  ["Services", "code when the row has one; otherwise the service name (not case-sensitive)", "A matched service is updated with only the columns the file fills in, so a file without category, unit, rate or active columns leaves those alone. A row without a code updates the service with the same name instead of creating a second copy. A row that fails is listed with its line number; the rest still import."],
+  ["Invoices", "client + invoice date + total + description; or, when the file has an invoiceNumber column, client + invoice number + total", "The row is skipped and listed as already existing, so re-running a file (after an error, or by mistake) doesn't bill anyone twice. Each existing invoice absorbs one row, so a file that really contains two identical invoices still imports both the first time. If an invoice's line can't be saved, the half-made invoice is removed and the row is listed as failed; the rest of the file still imports."],
+  ["Payments", "client + amount + payment date + reference / check #", "The row is skipped and listed as already recorded. Each existing payment absorbs one row, so two genuinely identical payments in one file both import the first time."],
   ["Employees", "email; rows with no email are matched on full name", "A matched employee is updated with only the cells your file filled in: blank phone, address or hourly rate cells never erase saved values. An employee with no email whose first and last name already exist is skipped as a duplicate. Hourly rate accepts $ and thousands separators."],
-  ["Contracts", "client + contract name + start date", "The row is skipped with a note — an existing contract is never overwritten. Clients are matched by exact name; a name shared by two clients, or not found, skips the row. Status defaults to draft, so set it to active in the file for contracts that should bill. Imports don\u2019t fire automations."],
+  ["Contracts", "client + contract name + start date", "The row is skipped with a note — an existing contract is never overwritten. Clients are matched by exact name; a name shared by two clients, or not found, skips the row. Status defaults to draft, so set it to active in the file for contracts that should bill. A contract whose start date has already passed is treated as billed for the period in progress (by the system it came from), so its first invoice here is the next cycle; put a lastBilledDate in the file to set that yourself. Imports don\u2019t fire automations."],
   ["Purchase Orders", "po_number (derived as PO-{year}-{csv PO #})", "The PO is skipped and listed in the failed-rows summary (\u201calready exists\u201d) — not merged, not counted as imported. Existing POs are never overwritten by a re-import."],
 ];
 
@@ -282,7 +284,10 @@ export function ImportExportGuide() {
             <strong>Results summary.</strong> When some rows import and others fail, the dialog says
             so (for example &ldquo;12 imported, 3 failed&rdquo;) and lists the failing rows with the
             reason, rather than reporting success. Rows deliberately not imported because they match
-            an existing record are listed separately as skipped (duplicates), not as failures.
+            an existing record are listed separately as skipped (duplicates), not as failures, and rows
+            that imported with something to check (a warning) keep the dialog open so you can read
+            them. The Settings → Import / Export tiles show the same summary as the list pages&apos;
+            Import / Export menus, and use the same columns.
           </li>
           <li>
             <strong>Vendors, Assets and Vehicles</strong> also report row by row: a row with a
@@ -295,8 +300,13 @@ export function ImportExportGuide() {
             the way Excel or QuickBooks writes them (<code>$1,234.50</code>), and dates can be{" "}
             <code>YYYY-MM-DD</code> or <code>M/D/YYYY</code>. A row is skipped, with the reason shown,
             if its amount or date can&apos;t be read, if no client matches, or if two clients share
-            the name on the row (add an <code>accountNumber</code> column to say which one). Re-importing
-            the same file creates the records again, so import each file once.
+            the name on the row (add an <code>accountNumber</code> column to say which one). Invoices
+            and payments that already exist are skipped (see the duplicates table); estimates already
+            on file for the same client, description and date are skipped too. Every row number in the
+            results is the line number in your file (the header is line 1). An invoice export
+            includes the <code>service</code> column (the invoice&apos;s catalog service; for an
+            invoice with several services, its first one), so an exported file can be imported back
+            as is.
           </li>
           <li>
             <strong>Estimate import extras.</strong> <code>amount</code> adds one editable line,

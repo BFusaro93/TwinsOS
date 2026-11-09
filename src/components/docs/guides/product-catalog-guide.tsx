@@ -131,9 +131,31 @@ export function ProductCatalogGuide() {
           choose <strong>Crew</strong> (the default) &mdash; the crew enters the amounts on the stop,
           and can&apos;t Stop Job until they do &mdash; or <strong>Office adds amounts later</strong>,
           which removes that requirement. The office can confirm from the visit&apos;s Chemicals tab
-          (<strong>Confirm all as planned</strong>, or edit and Save a row), and an admin can click{" "}
-          <strong>Allow completing without confirmation</strong> for a single visit. Chemicals added
-          by hand are recorded as entered and don&apos;t need confirming.
+          (<strong>Confirm all as planned</strong>, or edit and Save a row once the visit has been
+          worked), and an admin can click{" "}
+          <strong>Allow completing without confirmation</strong> for a single visit (only an admin can
+          do that). <strong>Confirm all as planned</strong> refuses a chemical that has no amount or no
+          unit; enter them and Save that row instead. Every amount needs a unit: the planned row is
+          given the unit the product itself is measured in (from its Application Rate, or the
+          company&apos;s default unit), and the crew is asked to pick one when there is none.
+        </p>
+        <p>
+          <strong>Chemicals added by the office.</strong> On a visit nobody has worked yet (still
+          scheduled or dispatched, never clocked in), a chemical you add on the Chemicals tab is the{" "}
+          <em>plan</em>: it shows as Planned &mdash; unconfirmed, the crew confirms what they actually
+          apply, and until then it isn&apos;t in the compliance report, on a Notice of Treatment or taken
+          out of stock. Saving its row there edits the plan without confirming it; use{" "}
+          <strong>Confirm all as planned</strong> only when the work was done without the crew app.
+          Added to a visit that
+          has been worked (in progress or completed), it is recorded as applied, as entered. Adding,
+          editing or removing chemical usage needs the <strong>Chemical &gt; Add | Edit Usage</strong>{" "}
+          role permission; crew logins record chemicals only through the crew app.
+        </p>
+        <p>
+          <strong>Application rate on the record.</strong> Each application keeps the rate it was
+          planned from (for example &ldquo;2 Fluid Ounces per 1,000 Sq Ft&rdquo;), so the compliance
+          report and the notice still show the rate used after the product&apos;s rate is changed. A
+          product can have only one <strong>Default rate</strong>.
         </p>
         <p>
           <strong>Estimated amounts.</strong> With <strong>Settings &gt; Chemical Tracking &gt;
@@ -178,7 +200,14 @@ export function ProductCatalogGuide() {
           one, and &ldquo;Track inventory quantity&rdquo; on). Changing the amount, marking it Not
           used, deleting it, or reopening the visit puts the stock back, and a deduction never takes
           the quantity below zero or blocks completing the job. Stock quantities on a product can
-          have decimals.
+          have decimals (two places); a small application below a hundredth is carried over and taken
+          out with the next one, so many small applications still add up.
+        </p>
+        <p>
+          <strong>Deleting a worked visit or job.</strong> A visit that was worked, or a job with such a
+          visit, can&apos;t be deleted while it has chemical applications on record &mdash; deleting it
+          would drop them from the compliance report and put the product back in stock. Remove the
+          applications on the visit&apos;s Chemicals tab first if the record really is wrong.
         </p>
         <p>
           <strong>Notice of Treatment (the leave-behind).</strong> Everything recorded on a visit
@@ -206,7 +235,9 @@ export function ProductCatalogGuide() {
           <strong>Chemical &ndash; Client Instruction</strong>, <strong>Chemical &ndash;
           Recommendation</strong> or <strong>Chemical &ndash; Upsale</strong> as the type; each email
           type offers only its own templates. A Recommendation or Upsale can be sent on any visit,
-          even one with no chemicals recorded.
+          even one with no chemicals recorded. A Client Instruction can only be sent for a visit that
+          has been worked (and has a confirmed application); bulk sends list the others under{" "}
+          <em>no confirmed application</em>.
         </p>
         <p>
           <strong>Reference Library (labels and Safety Data Sheets).</strong> Open{" "}
@@ -254,8 +285,8 @@ export function ProductCatalogGuide() {
           <strong>Printed chemical route sheets.</strong> On the Dispatch Board choose{" "}
           <strong>Print &gt; Chemical sheets</strong> (or <strong>Print route sheets</strong> in the
           Chemical Tracking wizard). Each chemical stop prints two landscape pages: the
-          crew&apos;s copy (planned amounts, label instructions, blanks for time, weather and what
-          was actually used), then a full-width notice for the customer with the amounts and weather
+          crew&apos;s copy (planned amounts and finished-mix volumes with their units, label
+          instructions, blanks for time, weather and what was actually used), then a full-width notice for the customer with the amounts and weather
           left blank to write in, so the page can be handed over or torn off cleanly.
         </p>
         <p>

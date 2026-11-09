@@ -17,6 +17,7 @@ import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { isoInZone, ymd, zoneDateParts, zoneWallClockToInstant } from "@/lib/time/zone";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
+import { invoiceAgingAnchor } from "@/lib/invoice-status";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -123,13 +124,14 @@ export function useReportData(options: { enabled?: boolean } = {}) {
         fetchAllRows<{
           id: string;
           total_cents: number;
+          tax_cents: number | null;
           balance_cents: number | null;
           invoice_date: string | null;
           due_date: string | null;
           terms: string | null;
           status: string;
         }>(() =>
-          sb.from("crm_invoices").select("id, total_cents, balance_cents, invoice_date, due_date, terms, status").is("deleted_at", null)
+          sb.from("crm_invoices").select("id, total_cents, tax_cents, balance_cents, invoice_date, due_date, terms, status").is("deleted_at", null)
         ),
         // crm_jobs.status CHECK: scheduled | in_progress | completed |
         // cancelled | skipped | hold. "Scheduled" here = on the board or underway.
@@ -167,11 +169,12 @@ export function useReportData(options: { enabled?: boolean } = {}) {
         (i: { invoice_date: string | null }) =>
           !!i.invoice_date && i.invoice_date >= ytdStartDate && i.invoice_date <= todayDate
       );
-      // Revenue = invoiced total (recognized revenue), not just cash collected —
-      // outstanding/overdue AR are subsets of this, so it should never be smaller
-      // than either (absent prior-year AR still outstanding this year).
+      // Revenue = invoiced (recognized revenue), not just cash collected, and
+      // pre-tax: sales tax is collected for the state, so it is not revenue —
+      // the same total − tax the Report Center and KPI scorecard use.
       const revenueYTD = ytdInvoices.reduce(
-        (sum: number, i: { total_cents: number }) => sum + (i.total_cents ?? 0),
+        (sum: number, i: { total_cents: number; tax_cents: number | null }) =>
+          sum + (i.total_cents ?? 0) - (i.tax_cents ?? 0),
         0
       );
       const outstanding = issuedInvoices.filter(
@@ -181,14 +184,14 @@ export function useReportData(options: { enabled?: boolean } = {}) {
         (sum: number, i: { balance_cents: number | null }) => sum + (i.balance_cents ?? 0),
         0
       );
-      // Same effective due date as isInvoiceOverdue() (the Invoices list's
-      // Past Due tab this card links to): a due-on-receipt invoice with no
-      // due_date is due on its invoice date. Checking due_date alone left
-      // every such invoice out of Overdue AR.
+      // The shared aging rule (invoiceAgingAnchor — also behind the Invoices
+      // list's Past Due tab this card links to, and A/R Aging): an invoice is
+      // past due once its due date, or its invoice date when it has none, is
+      // behind the org's today.
       const overdueAR = outstanding
-        .filter((i: { due_date: string | null; terms: string | null; invoice_date: string | null }) => {
-          const due = i.due_date ?? (i.terms === "due_on_receipt" ? i.invoice_date : null);
-          return !!due && due < todayDate;
+        .filter((i: { due_date: string | null; invoice_date: string | null }) => {
+          const anchor = invoiceAgingAnchor({ dueDate: i.due_date, invoiceDate: i.invoice_date });
+          return !!anchor && anchor < todayDate;
         })
         .reduce(
           (sum: number, i: { balance_cents: number | null }) => sum + (i.balance_cents ?? 0),
@@ -340,7 +343,7 @@ export function RevenueSnapshot() {
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <KPICard
           icon={DollarSign}
-          label="Revenue YTD"
+          label="Revenue YTD (pre-tax)"
           href={links.revenue}
           value={formatCurrency(data.revenueYTD)}
           sub={`${data.invoiceCountYTD} invoices`}

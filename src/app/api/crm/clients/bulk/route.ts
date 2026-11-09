@@ -21,7 +21,8 @@ const ids = z.array(z.string().uuid()).min(1).max(MAX_BULK_CLIENTS, `At most ${M
 const reason = z.string().trim().max(500);
 
 /** The Bulk Edit dialog's fields. Status is "inactive" only: cancel / lost /
- *  activate carry side effects and have their own actions. */
+ *  activate carry side effects and have their own actions. Do Not Market can
+ *  only be turned ON in bulk (see the refine below). */
 const Patch = z
   .object({
     status: z.literal("inactive"),
@@ -33,7 +34,14 @@ const Patch = z
   })
   .partial()
   .strict()
-  .refine((p) => Object.keys(p).length > 0, "Choose a field to update");
+  .refine((p) => Object.keys(p).length > 0, "Choose a field to update")
+  // Do Not Market is how an unsubscribe is recorded. Clearing it for a whole
+  // selection would re-subscribe people who opted out; only a single client's
+  // edit (with its own confirmation) may turn it off.
+  .refine(
+    (p) => p.do_not_market !== false,
+    "Do Not Market can't be turned off in bulk — clients who unsubscribed must not be re-subscribed. Edit the client individually if they asked to hear from you again."
+  );
 
 const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("add_tag"), clientIds: ids, tag: z.string().trim().min(1).max(100) }),
@@ -179,16 +187,25 @@ async function runAction(
 
     case "update": {
       const updated = new Set<string>();
-      for (const batch of chunk(ownedIds)) {
-        const { data, error } = await db
-          .from("clients")
-          .update(body.patch)
-          .eq("org_id", orgId)
-          .is("deleted_at", null)
-          .in("id", batch)
-          .select("id");
-        if (error) throw error;
-        for (const r of data ?? []) updated.add(r.id);
+      // "Inactive" means a former client: a lead or lost lead never was one, so
+      // the status part skips them (they keep any other field in the patch).
+      const { status: newStatus, ...otherFields } = body.patch;
+      const writes: { patch: Record<string, unknown>; skipLeads: boolean }[] = [];
+      if (newStatus) writes.push({ patch: { status: newStatus }, skipLeads: true });
+      if (Object.keys(otherFields).length > 0) writes.push({ patch: otherFields, skipLeads: false });
+      for (const write of writes) {
+        for (const batch of chunk(ownedIds)) {
+          let q = db
+            .from("clients")
+            .update(write.patch)
+            .eq("org_id", orgId)
+            .is("deleted_at", null)
+            .in("id", batch);
+          if (write.skipLeads) q = q.not("status", "in", "(lead,lost)");
+          const { data, error } = await q.select("id");
+          if (error) throw error;
+          for (const r of data ?? []) updated.add(r.id);
+        }
       }
       // The single-client edit fires client_source_updated / has_opted_in_emails
       // when those values actually change, so compare against the prior values.

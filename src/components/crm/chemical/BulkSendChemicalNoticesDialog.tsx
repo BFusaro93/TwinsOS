@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
+import { visitHasStarted } from "@/lib/chemical/visit-started";
 import { useDocumentTemplates, useDocumentTemplate } from "@/lib/hooks/use-crm-documents";
 import { renderBlocksToHtml } from "@/lib/utils/document-template-renderer";
 import { CHEMICAL_EMAIL_MERGE_TAGS } from "@/types/crm-proposals";
@@ -62,19 +63,22 @@ export function BulkSendChemicalNoticesDialog({ open, onClose, visits, dateLabel
       const sent = new Set<string>();
       for (const ids of chunks) {
         const [vRes, aRes, eRes] = await Promise.all([
-          supabase.from("crm_job_visits").select("id, clients(primary_email, email_bounced_at)").in("id", ids),
+          supabase.from("crm_job_visits").select("id, status, clocked_in_at, clients(primary_email, email_bounced_at)").in("id", ids),
           supabase.from("crm_chemical_applications").select("visit_id, used, preloaded, confirmed_at").in("visit_id", ids).is("deleted_at", null),
           supabase.from("crm_chemical_application_emails").select("visit_id").in("visit_id", ids).eq("email_type", "chemical_application"),
         ]);
         if (vRes.error) throw vRes.error;
         if (aRes.error) throw aRes.error;
         if (eRes.error) throw eRes.error;
+        const happened = new Set<string>();
         for (const v of vRes.data ?? []) {
           clients.set(v.id, { email: v.clients?.primary_email ?? null, bounced: v.clients?.email_bounced_at ?? null });
+          if (visitHasStarted(v)) happened.add(v.id);
         }
         for (const a of aRes.data ?? []) {
-          // The notice only reports what was actually applied: used, and confirmed if it was a planned preload.
-          if (a.visit_id && a.used && (!a.preloaded || a.confirmed_at)) usable.add(a.visit_id);
+          // The notice only reports what was actually applied: used, and confirmed if it was a planned
+          // preload — on a visit that actually happened (the send route refuses the others).
+          if (a.visit_id && happened.has(a.visit_id) && a.used && (!a.preloaded || a.confirmed_at)) usable.add(a.visit_id);
         }
         for (const e of eRes.data ?? []) if (e.visit_id) sent.add(e.visit_id);
       }

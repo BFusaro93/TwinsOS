@@ -2,6 +2,11 @@
 // Keyed by the exact English text used in t('…'); a key missing here simply
 // shows in English. Placeholders like {time} must be kept as written.
 export const ES: Record<string, string> = {
+  'Concentrate used': 'Concentrado usado',
+  '+ Add a chemical': '+ Agregar un químico',
+  'Choose a unit.': 'Elige una unidad.',
+  'Choose the unit for {name}.': 'Elige la unidad para {name}.',
+  'The product itself, before mixing — not the finished spray.': 'El producto en sí, antes de mezclar — no la mezcla lista para rociar.',
   'Translate to Spanish': 'Traducir al español',
   'Translate to English': 'Traducir al inglés',
   'Translated automatically': 'Traducido automáticamente',

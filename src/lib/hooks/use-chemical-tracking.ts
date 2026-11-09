@@ -4,7 +4,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { loadServiceChemicalsForVisit } from "@/lib/chemical-preload";
-import { buildChemicalAreaResolver, effectivePropertyId, fetchSinglePropertyByClient, type ChemicalArea } from "@/lib/chemical-area";
+import { visitHasStarted } from "@/lib/chemical/visit-started";
+import { buildChemicalAreaResolver, effectivePropertyId, fetchServiceAreaKinds, fetchSinglePropertyByClient, type ChemicalArea } from "@/lib/chemical-area";
+import type { AreaKind } from "@/lib/chemical-mix-calc";
 import type {
   ChemicalApplication,
   ChemicalApplicationRate,
@@ -499,6 +501,8 @@ export function useSaveChemicalApplication() {
         ...(input.applicationMethodId !== undefined && { application_method_id: input.applicationMethodId }),
         ...(input.applicationRateLabel !== undefined && { application_rate_label: input.applicationRateLabel }),
         ...(input.used !== undefined && { used: input.used }),
+        // Office-added chemicals on a visit nobody has worked yet are a plan (see ChemicalApplicationPanel).
+        ...(input.preloaded !== undefined && { preloaded: input.preloaded }),
         ...(input.applicatorEmployeeId !== undefined && { applicator_employee_id: input.applicatorEmployeeId }),
         ...(input.applicatorLicenseNumber !== undefined && {
           applicator_license_number: input.applicatorLicenseNumber,
@@ -660,6 +664,18 @@ export function useChemicalJobAreaValue(
   });
 }
 
+/** service_id -> whether a job service's treated area is square or linear feet (see fetchServiceAreaKinds). */
+export function useServiceTreatedAreaKinds(serviceIds: (string | null | undefined)[]) {
+  const { data: settings } = useChemicalSettings();
+  const ids = [...new Set(serviceIds.filter((v): v is string => !!v))].sort();
+  return useQuery({
+    queryKey: ["chemical-service-area-kinds", settings?.areaCustomFieldId ?? null, ids],
+    queryFn: (): Promise<Map<string, AreaKind>> => fetchServiceAreaKinds(createClient(), settings?.areaCustomFieldId ?? null, ids),
+    enabled: ids.length > 0 && settings !== undefined,
+    staleTime: 5 * 60_000,
+  });
+}
+
 /** Hook wrapper around loadServiceChemicalsForVisit (see src/lib/chemical-preload.ts). */
 export function useLoadServiceChemicals() {
   const qc = useQueryClient();
@@ -676,18 +692,23 @@ export function useLoadServiceChemicals() {
   });
 }
 
-/** Crew clock-in/out of a visit — used to pre-fill a chemical application's start/end time. */
+/** Crew clock-in/out of a visit — used to pre-fill a chemical application's start/end time —
+ *  and whether the visit has been worked at all (see visitHasStarted). */
 export function useVisitClockTimes(visitId: string | undefined) {
   return useQuery({
     queryKey: ["chemical-visit-clock-times", visitId],
-    queryFn: async (): Promise<{ clockedInAt: string | null; clockedOutAt: string | null }> => {
+    queryFn: async (): Promise<{ clockedInAt: string | null; clockedOutAt: string | null; started: boolean }> => {
       const supabase = createClient();
       const { data } = await supabase
         .from("crm_job_visits")
-        .select("clocked_in_at, clocked_out_at")
+        .select("status, clocked_in_at, clocked_out_at")
         .eq("id", visitId!)
         .maybeSingle();
-      return { clockedInAt: data?.clocked_in_at ?? null, clockedOutAt: data?.clocked_out_at ?? null };
+      return {
+        clockedInAt: data?.clocked_in_at ?? null,
+        clockedOutAt: data?.clocked_out_at ?? null,
+        started: visitHasStarted(data),
+      };
     },
     enabled: !!visitId,
   });

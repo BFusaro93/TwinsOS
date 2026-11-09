@@ -404,3 +404,44 @@ export function createQuantityAccumulator(unitsById: Map<string, ChemicalLookupI
     },
   };
 }
+
+// ── rate labelling ───────────────────────────────────────────────────────────
+
+type RateUnitFields = Pick<
+  ChemicalApplicationRate,
+  "rateQty" | "unitOfMeasureId" | "areaQty" | "areaUnitId" | "mixType" | "dilutionChemicalUnitId" | "mixProductAmountUnitId"
+>;
+
+/**
+ * The unit the crew measures the PRODUCT itself in for this rate — the
+ * concentrate, not the finished spray. A rate stated as finished mix ("1 gal
+ * per 1,000 sq ft") carries the concentrate's unit on the chemical side of its
+ * recipe; a rate with no recipe is already in the product's own unit.
+ */
+export function concentrateUnitId(rate: RateUnitFields): string | null {
+  if (rate.mixType === "water" && rate.dilutionChemicalUnitId) return rate.dilutionChemicalUnitId;
+  if (rate.mixType === "product" && rate.mixProductAmountUnitId) return rate.mixProductAmountUnitId;
+  return rate.unitOfMeasureId ?? null;
+}
+
+function fmtRateNumber(n: number): string {
+  return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+}
+
+/**
+ * The rate as the label states it — "2 Fluid Ounces per 1,000 Sq Ft" — snapshotted
+ * onto each application record so the compliance report keeps the rate that was
+ * used even after the catalog rate is edited. `unitName` resolves lookup ids.
+ * Null when the rate is missing its amount or area.
+ */
+export function formatApplicationRateLabel(
+  rate: RateUnitFields,
+  unitName: (id: string) => string | null | undefined
+): string | null {
+  if (rate.rateQty == null || !rate.areaQty) return null;
+  const qtyUnit = rate.unitOfMeasureId ? unitName(rate.unitOfMeasureId) ?? "" : "";
+  const areaUnit = rate.areaUnitId ? unitName(rate.areaUnitId) ?? "" : "";
+  // "per 1 Acre" reads as "per Acre"; "per 1,000 of Sq Ft" stays "per 1,000 Sq Ft".
+  const area = rate.areaQty === 1 && areaUnit ? areaUnit : [fmtRateNumber(rate.areaQty), areaUnit].filter(Boolean).join(" ");
+  return `${[fmtRateNumber(rate.rateQty), qtyUnit].filter(Boolean).join(" ")} per ${area}`.trim();
+}

@@ -239,7 +239,10 @@ export function ZapierGuide() {
       <p className="text-sm text-[#4a4a46] dark:text-neutral-300">
         Zap-created records behave like ones made in the app: a client created by{" "}
         <strong>Create Client</strong> is a new lead that enrolls in your &ldquo;Lead created&rdquo;
-        automations, and a job from <strong>Create Job</strong> enrolls in &ldquo;Job was
+        automations. Like a web form, Create Client first looks for an existing client with the same
+        email (client, billing or contact email) or phone; if exactly one matches, that client is
+        returned unchanged (with <code>existing: true</code>) instead of creating a duplicate, and no
+        &ldquo;Lead created&rdquo; automation runs. A job from <strong>Create Job</strong> enrolls in &ldquo;Job was
         created&rdquo; automations. Actions ignore clients, vendors, work orders and products that have
         been deleted. Each company can keep up to 100 active Zapier webhook subscriptions.
       </p>

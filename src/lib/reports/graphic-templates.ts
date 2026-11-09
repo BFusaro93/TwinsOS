@@ -229,13 +229,13 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
   {
     key: "invoiced-revenue-ytd-gauge",
     name: "Invoiced Revenue YTD",
-    description: "Gauge of invoiced revenue against a yearly goal (excludes draft and void invoices).",
+    description: "Gauge of invoiced revenue (pre-tax, after discounts) against a yearly goal (excludes draft and void invoices).",
     category: "Accounts Receivable",
     visual: {
       type: "gauge",
       useTabDateRange: false,
       relativeDateFilter: "this_year",
-      kpiColumn: "sum_total_cents",
+      kpiColumn: "sum_revenue_ex_tax_cents",
       valueColumns: [],
       gaugeMax: 400000000,
       config: {
@@ -243,7 +243,7 @@ export const GRAPHIC_TEMPLATES: GraphicTemplate[] = [
         columns: [],
         filters: [...issuedInvoiceFilter()],
         groupBy: [],
-        aggregates: [{ column: "total_cents", fn: "sum" }],
+        aggregates: [{ column: "revenue_ex_tax_cents", fn: "sum" }],
         sortDir: "asc",
       },
     },

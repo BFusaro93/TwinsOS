@@ -75,6 +75,7 @@ const SECTIONS: ReportSection[] = [
         notes: [
           "Budgeted to Date sums the contract's monthly amounts from the start month through today (or the contract end).",
           "Over / (Under) is invoiced-to-date minus budgeted-to-date.",
+          "Invoiced to Date is pre-tax (invoice total − sales tax) and includes contract invoices that were later consolidated or merged into another invoice. Paid to Date is the payments recorded on the contract's own live invoices.",
           "A contract that starts mid-month is still credited a full month's budget for that first month.",
         ],
       },
@@ -90,7 +91,7 @@ const SECTIONS: ReportSection[] = [
         name: "Revenue and Budgeted Hours Projection",
         description: "Projects budgeted man hours and revenue for the next 12 months from currently scheduled visits.",
         notes: [
-          "Based on visits currently in Scheduled or Dispatched status from today through the next 365 days (Eastern calendar dates).",
+          "Based on visits currently in Scheduled or Dispatched status from today through the next 365 days (calendar dates in your company's time zone).",
           "Budgeted Man-Hours are duration × number of men.",
         ],
       },
@@ -229,7 +230,10 @@ const SECTIONS: ReportSection[] = [
         name: "Invoice Audit Summary",
         description: "Shows every invoice line item in the period — what was billed, to whom, and for how much.",
         filters: "Invoice Date",
-        notes: ["Excludes line items on draft and void invoices."],
+        notes: [
+          "Excludes line items on draft and void invoices.",
+          "Total is qty × rate; Net is after the line's own discount; Revenue (pre-tax) also takes the invoice-level discount off, spread across the invoice's lines in proportion to their net amounts.",
+        ],
       },
       {
         name: "Payment Audit Summary",
@@ -259,15 +263,18 @@ const SECTIONS: ReportSection[] = [
       },
       {
         name: "Revenue by Postal Code",
-        description: "Totals invoiced revenue by billing postal code.",
+        description: "Totals invoiced revenue (pre-tax, after discounts) by billing postal code.",
         filters: "Invoice Date",
-        notes: ["Excludes draft and void invoices."],
+        notes: ["Excludes draft and void invoices. Revenue is pre-tax and after discounts (invoice total − sales tax)."],
       },
       {
         name: "Revenue by Service Summary",
         description: "Shows invoiced revenue per service line item, broken out by month.",
         filters: "Invoice Date",
-        notes: ["Revenue is reported on the invoice date. Draft and void invoices are excluded."],
+        notes: [
+          "Revenue is reported on the invoice date. Draft and void invoices are excluded.",
+          "Revenue is pre-tax and after discounts: each line net of its own discount, with the invoice-level discount spread across the invoice's lines in proportion to their amounts.",
+        ],
       },
       {
         name: "Daily Production",
@@ -299,7 +306,7 @@ const SECTIONS: ReportSection[] = [
         name: "Invoices and Payments",
         description: "Compares invoiced revenue to payments collected, month by month.",
         filters: "Date Range",
-        notes: ["Invoiced reflects the invoice date and excludes draft and void invoices. Collected reflects the payment date and is cash only — excludes account credits and AR write-offs; net of refunds."],
+        notes: ["Invoiced reflects the invoice date, excludes draft and void invoices, and includes sales tax so it compares like-for-like with cash collected. Collected reflects the payment date and is cash only — excludes account credits and AR write-offs; net of refunds."],
       },
       {
         name: "Credit Card Charges",
@@ -375,7 +382,10 @@ const SECTIONS: ReportSection[] = [
         name: "Job Cost Summary",
         description: "Shows completed visits with budgeted vs actual man-hours, revenue, and labor cost per visit.",
         filters: "Completed Between, Crew",
-        notes: ["Budgeted and Actual Man-Hours are both duration × number of men."],
+        notes: [
+          "Budgeted and Actual Man-Hours are both duration × number of men.",
+          "Visits are included by when they were completed (Completed Between, in your company's time zone); a visit marked complete without a completion time is not listed. Worked Date is that completion date in your company's time zone.",
+        ],
       },
       {
         name: "Service Profitability Summary",
@@ -401,7 +411,7 @@ const SECTIONS: ReportSection[] = [
           "% Complete is cost-to-date ÷ EAC (estimated cost at completion) — not the manual progress field on the project.",
           "Over/(Under) Billed is billed to date minus earned revenue. Positive means billings are ahead of the work (healthy); negative means the work is ahead of billing (you're financing the job).",
           "EAC is seeded from the linked estimate when a job is converted, then re-forecastable on the project — projects with no EAC set show 0% complete.",
-          "Cost to Date counts purchase orders actually placed (ordered, partly or fully received) — each project line after its share of the PO's discount, tax and shipping — plus direct items and subcontract costs. POs still requested or awaiting approval and open requisitions show under Committed (Not Yet Ordered) instead and don't move % complete; Cost to Date + Committed is the project's total on the Projects list. Billed to Date counts issued (not draft or void) invoices, before tax.",
+          "Cost to Date counts purchase orders actually placed (ordered, partly or fully received) — each project line after its share of the PO's discount, tax and shipping — plus direct items and subcontract costs. POs still requested or awaiting approval and open requisitions show under Committed (Not Yet Ordered) instead and don't move % complete; Cost to Date + Committed is the project's total on the Projects list. Billed to Date counts issued (not draft or void) invoices, before tax — including invoices that were later consolidated or merged into another invoice, as long as that invoice is issued.",
         ],
       },
     ],
@@ -422,7 +432,7 @@ const SECTIONS: ReportSection[] = [
       },
       {
         name: "Invoiced Income by Client",
-        description: "Totals invoiced income per client — subtotal, tax, total, and amount paid.",
+        description: "Totals invoiced income per client — subtotal, tax, total, pre-tax revenue (after discounts), and amount paid.",
         filters: "Invoice Date",
         notes: ["Excludes draft and void invoices."],
       },
@@ -430,7 +440,10 @@ const SECTIONS: ReportSection[] = [
         name: "Invoices with Balances",
         description: "Shows every open invoice with a balance due and how many days overdue it is.",
         filters: "Invoice Date",
-        notes: ["Excludes draft and void invoices — only issued invoices are receivables."],
+        notes: [
+          "Excludes draft and void invoices — only issued invoices are receivables.",
+          "Days Overdue counts from the due date, or from the invoice date when the invoice has no due date — the same rule as A/R Aging.",
+        ],
       },
       {
         name: "Pre-Payments",
@@ -444,7 +457,8 @@ const SECTIONS: ReportSection[] = [
         filters: "Date Range",
         notes: [
           "Accrual basis: income is counted on the invoice date regardless of when payment is received. Draft and void invoices are excluded.",
-          "Expenses include job material costs (by purchase date) and field labor costs (by visit completion). Overhead and non-job expenses are not included.",
+          "Income is pre-tax and after discounts: each line's amount net of its own discount, with the invoice-level discount spread across the invoice's lines in proportion to their amounts. Sales tax is not income.",
+          "Expenses include job material costs and catalog products recorded as used on jobs (by the date they were logged) and field labor costs (by visit completion). Overhead and non-job expenses are not included.",
         ],
       },
       {
@@ -454,7 +468,7 @@ const SECTIONS: ReportSection[] = [
         notes: [
           "Cash basis: income is counted when payment is received, not when work is invoiced. Cash only: excludes account credits and AR write-offs; net of refunds.",
           "Credit card processing fees are the surcharge collected from clients on card payments (never on ACH) — separate from the invoice amount itself.",
-          "Expenses include job material costs (by purchase date) and field labor costs (by visit completion). Overhead and non-job expenses are not included.",
+          "Expenses include job material costs and catalog products recorded as used on jobs (by the date they were logged) and field labor costs (by visit completion). Overhead and non-job expenses are not included.",
         ],
       },
       {
@@ -607,7 +621,7 @@ const SECTIONS: ReportSection[] = [
         name: "Accepted Estimates — Estimated vs Invoiced Value",
         description: "Compares each accepted estimate's value against what was actually invoiced and paid.",
         filters: "Estimate Date",
-        notes: ["Invoiced and paid values are summed across all non-void invoices linked to each accepted or invoiced estimate."],
+        notes: ["Invoiced and paid values are summed across the issued (not draft or void) invoices linked to each accepted or invoiced estimate. Estimated and Invoiced Value are pre-tax (after discounts); Invoiced Value also counts invoices that were later consolidated or merged into another invoice. Paid is the payments recorded on the estimate's own live invoices."],
       },
       {
         name: "Close Ratios by Sales Rep",
@@ -691,6 +705,7 @@ const SECTIONS: ReportSection[] = [
         notes: [
           "Reflects invoices open today — not a point-in-time snapshot.",
           "Excludes draft and void invoices — only issued invoices are receivables.",
+          "Days past due count from the due date, or from the invoice date when the invoice has no due date. The same rule drives Invoices with Balances, Financials, the Company Report, the KPI scorecard, the home Overdue AR card, and the Invoices list's Past Due tab.",
         ],
       },
       {
@@ -709,7 +724,7 @@ const SECTIONS: ReportSection[] = [
         name: "Forms Summary",
         description: "Shows forms and the number of responses received in any given time frame.",
         filters: "Responses Between",
-        notes: ["Responses marked Spam or Ignored are not counted. Date bounds are calendar days in Eastern time."],
+        notes: ["Responses marked Spam or Ignored are not counted. Date bounds are calendar days in your company's time zone."],
       },
     ],
   },

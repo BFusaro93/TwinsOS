@@ -21,6 +21,7 @@ import {
   ChemicalConditionsFields,
   ChemicalLabel,
   EMPTY_CONDITIONS,
+  UnitPicker,
   conditionsFromReading,
   conditionsPayload,
   type ChemApplyEdit,
@@ -148,7 +149,7 @@ export default function StopDetailScreen() {
     mode: 'crew_required',
     waivedVisitIds: [],
   });
-  const [chemEdits, setChemEdits] = useState<Record<string, { amount: string; notUsed: boolean }>>({});
+  const [chemEdits, setChemEdits] = useState<Record<string, { amount: string; notUsed: boolean; unitId?: string }>>({});
   const [chemCatalog, setChemCatalog] = useState<ChemicalCatalog | null>(null);
   const [chemApply, setChemApply] = useState<Record<string, ChemApplyEdit>>({});
   const [chemConditions, setChemConditions] = useState<ConditionsDraft>(EMPTY_CONDITIONS);
@@ -411,7 +412,7 @@ export default function StopDetailScreen() {
     }
   };
 
-  const chemEditFor = (c: { id: string; chemicalAmount: number | null }) =>
+  const chemEditFor = (c: { id: string; chemicalAmount: number | null }): { amount: string; notUsed: boolean; unitId?: string } =>
     chemEdits[c.id] ?? { amount: c.chemicalAmount != null ? String(c.chemicalAmount) : '', notUsed: false };
 
   const handleConfirmChemicals = async () => {
@@ -427,12 +428,18 @@ export default function StopDetailScreen() {
         setChemError(t('Enter how much {name} was used, or mark it Not used.', { name: c.productName ?? t('chemical') }));
         return;
       }
+      // Planned with no unit (no rate on file): an amount means nothing without one.
+      if (c.unitOfMeasureId === null && !e.unitId) {
+        setChemError(t('Choose the unit for {name}.', { name: c.productName ?? t('chemical') }));
+        return;
+      }
       // Only what the crew actually changed is sent; the rest stays as the office planned it.
       const apply = chemApply[c.id];
       items.push({
         id: c.id,
         used: true,
         chemicalAmount: amount,
+        ...(c.unitOfMeasureId === null && e.unitId ? { unitOfMeasureId: e.unitId } : {}),
         ...(apply?.methodId !== undefined ? { applicationMethodId: apply.methodId } : {}),
         ...(apply?.targetIds !== undefined ? { targetIds: apply.targetIds } : {}),
         ...(apply?.areasTreatedIds !== undefined ? { areasTreatedIds: apply.areasTreatedIds } : {}),
@@ -695,6 +702,7 @@ export default function StopDetailScreen() {
 
       <ChemicalsSection
         chemicals={activeChemicals}
+        weather={chemWeather}
         catalog={chemCatalog}
         refDocs={refDocs}
         showAdd={unconfirmedChemicals.length === 0}
@@ -953,8 +961,8 @@ function ConfirmChemicalsCard({
   onAdded,
 }: {
   chemicals: VisitChemicalApplication[];
-  editFor: (c: VisitChemicalApplication) => { amount: string; notUsed: boolean };
-  onChange: (id: string, next: { amount: string; notUsed: boolean }) => void;
+  editFor: (c: VisitChemicalApplication) => { amount: string; notUsed: boolean; unitId?: string };
+  onChange: (id: string, next: { amount: string; notUsed: boolean; unitId?: string }) => void;
   onConfirm: () => void;
   isConfirming: boolean;
   error: string | null;
@@ -1017,7 +1025,7 @@ function ConfirmChemicalsCard({
                   placeholder={t('0')}
                   placeholderTextColor="#94a3b8"
                 />
-                <Text style={styles.chemicalAmountText}>{c.unitName ?? ''}</Text>
+                {c.unitOfMeasureId !== null ? <Text style={styles.chemicalAmountText}>{c.unitName ?? ''}</Text> : null}
                 <Pressable
                   onPress={() => onChange(c.id, { ...e, notUsed: !e.notUsed })}
                   hitSlop={8}
@@ -1028,6 +1036,9 @@ function ConfirmChemicalsCard({
                   </Text>
                 </Pressable>
               </View>
+              {c.unitOfMeasureId === null && !e.notUsed ? (
+                <UnitPicker catalog={catalog} selected={e.unitId} onSelect={(unitId) => onChange(c.id, { ...e, unitId })} />
+              ) : null}
             </View>
           );
         })}
@@ -1039,7 +1050,13 @@ function ConfirmChemicalsCard({
           onUseReading={weather ? () => onConditionsChange(conditionsFromReading(weather, conditions)) : undefined}
         />
         {addVisitId ? (
-          <AddChemicalForm visitId={addVisitId} catalog={catalog} disabled={!canAdd} onAdded={onAdded} />
+          <AddChemicalForm
+            visitId={addVisitId}
+            catalog={catalog}
+            disabled={!canAdd}
+            onAdded={onAdded}
+            sharedConditions={conditions}
+          />
         ) : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
         <Pressable
@@ -1456,6 +1473,7 @@ function ServicesSection({
  */
 function ChemicalsSection({
   chemicals,
+  weather,
   catalog,
   refDocs,
   showAdd,
@@ -1464,6 +1482,8 @@ function ChemicalsSection({
   onAdded,
 }: {
   chemicals: VisitChemicalApplication[];
+  /** Weather near the stop, to fill the add form's conditions. */
+  weather: ConditionsReading | null;
   catalog: ChemicalCatalog | null;
   refDocs: ReferenceDocument[];
   /** The confirm card carries the add button while chemicals are still unconfirmed. */
@@ -1508,7 +1528,7 @@ function ChemicalsSection({
           </View>
         ))}
         {showAdd && addVisitId ? (
-          <AddChemicalForm visitId={addVisitId} catalog={catalog} disabled={!canAdd} onAdded={onAdded} />
+          <AddChemicalForm visitId={addVisitId} catalog={catalog} disabled={!canAdd} onAdded={onAdded} weather={weather} />
         ) : null}
       </View>
     </View>

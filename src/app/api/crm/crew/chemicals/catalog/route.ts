@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { adminClient } from "@/lib/api/auth";
+import { loadProductRateInfo } from "@/lib/chemical/rate-info";
 
 /**
  * GET ?visitId=… — what the crew needs to add a chemical at a stop: the org's chemical
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
       .eq("is_active", true)
       .is("deleted_at", null)
       .order("sort_order");
-  const [products, units, settings, rates, methods, targets, areas] = await Promise.all([
+  const [products, units, settings, methods, targets, areas] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (db as any)
       .from("product_items")
@@ -58,17 +59,23 @@ export async function GET(request: Request) {
       .order("sort_order"),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (db as any).from("crm_chemical_settings").select("conditions_display, default_unit_of_measure_id").eq("org_id", visit.org_id).maybeSingle(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (db as any).from("crm_chemical_application_rates").select("product_id, unit_of_measure_id").eq("org_id", visit.org_id).eq("is_default", true),
     lookup("application_method"),
     lookup("target"),
     lookup("areas_treated"),
   ]);
   if (products.error) return NextResponse.json({ error: products.error.message }, { status: 500 });
 
-  const unitByProduct = new Map<string, string>(
+  // The unit the crew measures the product in: its rate's CONCENTRATE unit. A rate stated as
+  // finished spray ("1 gal per 1,000 sq ft") defaulted the form to gallons, so a crew logging
+  // 3 oz of concentrate saved "3 gallons".
+  const rateInfo = await loadProductRateInfo(
+    db,
+    visit.org_id,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ((rates.data ?? []) as any[]).filter((r) => r.unit_of_measure_id).map((r) => [r.product_id, r.unit_of_measure_id])
+    ((products.data ?? []) as any[]).map((p) => p.id as string)
+  );
+  const unitByProduct = new Map<string, string>(
+    [...rateInfo].filter(([, r]) => r.concentrateUnitId).map(([id, r]) => [id, r.concentrateUnitId as string])
   );
   return NextResponse.json({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

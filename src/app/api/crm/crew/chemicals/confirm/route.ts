@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { adminClient } from "@/lib/api/auth";
+import { loadProductRateInfo } from "@/lib/chemical/rate-info";
 
 /**
  * Crew confirmation of the chemicals applied at a stop.
@@ -21,6 +22,9 @@ const Item = z.object({
   used: z.boolean(),
   /** Concentrate amount actually used, in the row's existing unit. Required when used. */
   chemicalAmount: z.number().positive().max(1_000_000).optional(),
+  /** Unit of that amount. Required when the planned row has no unit yet (nothing was
+   *  estimated); a row that already has one keeps it. */
+  unitOfMeasureId: z.string().uuid().optional(),
   /** How it was actually applied, when the crew changed it from what the office planned. */
   applicationMethodId: z.string().uuid().nullable().optional(),
   targetIds: z.array(z.string().uuid()).max(30).optional(),
@@ -53,7 +57,7 @@ export async function POST(request: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rows, error: rowsError } = await (db as any)
     .from("crm_chemical_applications")
-    .select("id, org_id, visit_id, application_start_time, application_end_time, chemical_amount, solution_amount, applicator_employee_id, applicator_license_number, confirmed_at")
+    .select("id, org_id, visit_id, product_id, unit_of_measure_id, application_rate_label, application_start_time, application_end_time, chemical_amount, solution_amount, applicator_employee_id, applicator_license_number, confirmed_at")
     .in("id", items.map((i) => i.id))
     .is("deleted_at", null);
   if (rowsError) return NextResponse.json({ error: rowsError.message }, { status: 500 });
@@ -63,19 +67,38 @@ export async function POST(request: Request) {
   // A confirmed row is the compliance record of what was applied. The crew records it once;
   // after that only the office can correct it (Application panel, which the audit trail logs).
   // Rewriting it here re-stamped the record and re-ran the inventory sync after the Notice of
-  // Treatment had already gone out.
-  if ((rows as { confirmed_at: string | null }[]).some((r) => r.confirmed_at)) {
-    return NextResponse.json(
-      { error: "These chemicals were already confirmed. Ask the office to correct the record." },
-      { status: 409 }
-    );
+  // Treatment had already gone out. Rows already confirmed (a second phone, a retried tap) are
+  // skipped rather than failing the whole set, so the rest still get recorded.
+  const alreadyConfirmed = (rows as { confirmed_at: string | null }[]).filter((r) => r.confirmed_at).length;
+
+  // An amount with no unit is not a record of anything: a row planned without an estimate
+  // has no unit, so the crew has to say which one they measured in.
+  const rowById = new Map((rows as { id: string; unit_of_measure_id: string | null; confirmed_at: string | null }[]).map((r) => [r.id, r]));
+  if (items.some((i) => i.used && !rowById.get(i.id)?.confirmed_at && !rowById.get(i.id)?.unit_of_measure_id && !i.unitOfMeasureId)) {
+    return NextResponse.json({ error: "Choose the unit for each amount used" }, { status: 400 });
+  }
+
+  const orgIds = [...new Set((rows as { org_id: string }[]).map((r) => r.org_id))];
+  // A unit must be a volume/weight unit of the same company (the write uses the service role).
+  const unitIds = [...new Set(items.map((i) => i.unitOfMeasureId).filter((v): v is string => !!v))];
+  if (unitIds.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: foundUnits } = await (db as any)
+      .from("crm_chemical_lookup_items")
+      .select("id")
+      .in("id", unitIds)
+      .in("org_id", orgIds)
+      .eq("list_type", "volume_unit")
+      .is("deleted_at", null);
+    if ((foundUnits ?? []).length !== unitIds.length) {
+      return NextResponse.json({ error: "Unknown unit" }, { status: 400 });
+    }
   }
 
   // Method/target/area ids come from the client and the write below uses the service role, so
   // make sure every one is a lookup item of the same company as the rows being confirmed.
   const lookupIds = [...new Set(items.flatMap((i) => [i.applicationMethodId ?? null, ...(i.targetIds ?? []), ...(i.areasTreatedIds ?? [])]).filter((v): v is string => !!v))];
   if (lookupIds.length > 0) {
-    const orgIds = [...new Set((rows as { org_id: string }[]).map((r) => r.org_id))];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: found } = await (db as any)
       .from("crm_chemical_lookup_items")
@@ -158,14 +181,29 @@ export async function POST(request: Request) {
     applicatorByVisit.set(visitId, { employeeId: foreman.employee_id, license: emp?.applicator_license ?? null });
   }
 
+  // The rate the amount was planned from, for rows planned before the label was snapshotted
+  // (the compliance report prints it).
+  const unlabelled = (rows as { org_id: string; product_id: string | null; application_rate_label: string | null; confirmed_at: string | null }[])
+    .filter((r) => !r.confirmed_at && !r.application_rate_label && r.product_id);
+  const rateInfoByOrg = new Map<string, Awaited<ReturnType<typeof loadProductRateInfo>>>();
+  for (const orgId of [...new Set(unlabelled.map((r) => r.org_id))]) {
+    rateInfoByOrg.set(orgId, await loadProductRateInfo(db, orgId, unlabelled.filter((r) => r.org_id === orgId).map((r) => r.product_id as string)));
+  }
+
   const nowIso = new Date().toISOString();
   const itemById = new Map(items.map((i) => [i.id, i]));
+  let confirmed = 0;
   for (const row of rows as {
-    id: string; visit_id: string | null; application_start_time: string | null; application_end_time: string | null;
+    id: string; org_id: string; visit_id: string | null; product_id: string | null; unit_of_measure_id: string | null;
+    application_rate_label: string | null; application_start_time: string | null; application_end_time: string | null;
     chemical_amount: number | null; solution_amount: number | null;
-    applicator_employee_id: string | null; applicator_license_number: string | null;
+    applicator_employee_id: string | null; applicator_license_number: string | null; confirmed_at: string | null;
   }[]) {
+    if (row.confirmed_at) continue;
     const it = itemById.get(row.id)!;
+    const rateLabel = !row.application_rate_label && row.product_id
+      ? rateInfoByOrg.get(row.org_id)?.get(row.product_id)?.rateLabel ?? null
+      : null;
     const visit = row.visit_id ? visitById.get(row.visit_id) : undefined;
     const applicator = row.visit_id ? applicatorByVisit.get(row.visit_id) : undefined;
     // The finished-mix volume was planned for the planned concentrate; keep it in proportion
@@ -176,11 +214,13 @@ export async function POST(request: Request) {
       ? Math.round(row.solution_amount * (it.chemicalAmount! / row.chemical_amount!) * 100) / 100
       : undefined;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (db as any)
+    const { data: updated, error } = await (db as any)
       .from("crm_chemical_applications")
       .update({
         used: it.used,
         ...(it.used && it.chemicalAmount !== undefined ? { chemical_amount: it.chemicalAmount } : {}),
+        ...(it.used && !row.unit_of_measure_id && it.unitOfMeasureId ? { unit_of_measure_id: it.unitOfMeasureId } : {}),
+        ...(rateLabel ? { application_rate_label: rateLabel } : {}),
         ...(scaledSolution !== undefined ? { solution_amount: scaledSolution } : {}),
         ...(it.used && !row.applicator_employee_id && applicator
           ? { applicator_employee_id: applicator.employeeId, applicator_license_number: row.applicator_license_number ?? applicator.license }
@@ -202,11 +242,15 @@ export async function POST(request: Request) {
         confirmed_at: nowIso,
         confirmed_by: user.id,
       })
-      .eq("id", row.id);
+      .eq("id", row.id)
+      // A concurrent confirm (another phone) that landed first wins; this one skips the row.
+      .is("confirmed_at", null)
+      .select("id");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    confirmed += (updated ?? []).length;
   }
 
-  return NextResponse.json({ confirmed: items.length });
+  return NextResponse.json({ confirmed, alreadyConfirmed: alreadyConfirmed + (items.length - alreadyConfirmed - confirmed) });
 }
 
 /**

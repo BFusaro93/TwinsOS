@@ -259,26 +259,55 @@ export function ChemicalConditionsFields({
   );
 }
 
-/** Record a chemical the office didn't preload — an extra spot treatment, a substitute product. */
+/** Unit chips for a planned chemical that has no unit yet (nothing was estimated). */
+export function UnitPicker({
+  catalog,
+  selected,
+  onSelect,
+}: {
+  catalog: ChemicalCatalog | null;
+  selected: string | undefined;
+  onSelect: (id: string) => void;
+}) {
+  if (!catalog) return null;
+  return <Chips label={t('Unit')} options={catalog.units} selected={selected ? [selected] : []} onToggle={onSelect} />;
+}
+
+/** Record a chemical the office didn't preload — an extra spot treatment, a substitute product.
+ *  Records the same things the web crew form does: how it was applied and the conditions. Inside
+ *  the confirm card the crew has already filled the stop's conditions — pass them as
+ *  `sharedConditions`; otherwise the form shows its own, filled from `weather`. */
 export function AddChemicalForm({
   visitId,
   catalog,
   disabled,
   onAdded,
+  sharedConditions,
+  weather,
 }: {
   visitId: string;
   catalog: ChemicalCatalog | null;
   disabled?: boolean;
   onAdded: () => void;
+  sharedConditions?: ConditionsDraft;
+  weather?: ConditionsReading | null;
 }) {
   const [open, setOpen] = useState(false);
   const [productId, setProductId] = useState('');
   const [unitId, setUnitId] = useState('');
   const [amount, setAmount] = useState('');
+  const [apply, setApply] = useState<ChemApplyEdit | undefined>(undefined);
+  const [ownConditions, setOwnConditions] = useState<ConditionsDraft>(EMPTY_CONDITIONS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!catalog || catalog.products.length === 0) return null;
+
+  function openForm() {
+    // Weather near the stop fills the conditions once, so the crew corrects rather than types.
+    if (!sharedConditions && weather) setOwnConditions((prev) => conditionsFromReading(weather, prev));
+    setOpen(true);
+  }
 
   function pickProduct(id: string) {
     setProductId(id);
@@ -289,14 +318,24 @@ export function AddChemicalForm({
   async function submit() {
     const n = parseFloat(amount);
     if (!productId) return setError(t('Choose the product.'));
-    if (!unitId) return setError('Choose a unit.');
+    if (!unitId) return setError(t('Choose a unit.'));
     if (!Number.isFinite(n) || n <= 0) return setError(t('Enter how much was used.'));
     setError(null);
     setBusy(true);
     try {
-      await addCrewChemical({ visitId, productId, chemicalAmount: n, unitOfMeasureId: unitId });
+      await addCrewChemical({
+        visitId,
+        productId,
+        chemicalAmount: n,
+        unitOfMeasureId: unitId,
+        ...(apply?.methodId !== undefined ? { applicationMethodId: apply.methodId } : {}),
+        ...(apply?.targetIds !== undefined ? { targetIds: apply.targetIds } : {}),
+        ...(apply?.areasTreatedIds !== undefined ? { areasTreatedIds: apply.areasTreatedIds } : {}),
+        conditions: conditionsPayload(sharedConditions ?? ownConditions),
+      });
       setProductId('');
       setAmount('');
+      setApply(undefined);
       setOpen(false);
       onAdded();
     } catch (err) {
@@ -310,10 +349,10 @@ export function AddChemicalForm({
     return (
       <Pressable
         disabled={disabled}
-        onPress={() => setOpen(true)}
+        onPress={openForm}
         style={({ pressed }) => [styles.addButton, disabled && styles.disabled, pressed && styles.pressed]}
       >
-        <Text style={styles.addButtonText}>+ Add a chemical</Text>
+        <Text style={styles.addButtonText}>{t('+ Add a chemical')}</Text>
       </Pressable>
     );
   }
@@ -328,7 +367,7 @@ export function AddChemicalForm({
       />
       <View style={styles.condRow}>
         <View style={styles.condField}>
-          <Text style={styles.chipLabel}>{t('Amount used')}</Text>
+          <Text style={styles.chipLabel}>{t('Concentrate used')}</Text>
           <TextInput
             style={styles.input}
             keyboardType="decimal-pad"
@@ -340,6 +379,22 @@ export function AddChemicalForm({
         </View>
       </View>
       <Chips label={t('Unit')} options={catalog.units} selected={unitId ? [unitId] : []} onToggle={setUnitId} />
+      <Text style={styles.chipLabel}>{t('The product itself, before mixing — not the finished spray.')}</Text>
+      <ChemicalApplyFields
+        chemical={{ applicationMethodId: null, targetIds: [], areasTreatedIds: [] }}
+        catalog={catalog}
+        edit={apply}
+        onChange={setApply}
+      />
+      {!sharedConditions ? (
+        <ChemicalConditionsFields
+          display={catalog.conditionsDisplay}
+          value={ownConditions}
+          onChange={setOwnConditions}
+          reading={weather}
+          onUseReading={weather ? () => setOwnConditions((prev) => conditionsFromReading(weather, prev)) : undefined}
+        />
+      ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.buttonRow}>
         <Pressable onPress={() => setOpen(false)} style={styles.cancelButton}>
