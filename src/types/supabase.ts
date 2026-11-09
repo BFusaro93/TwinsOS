@@ -15421,46 +15421,88 @@ export type Database = {
           created_at: string
           created_by: string | null
           deleted_at: string | null
+          email_message: string | null
+          email_subject: string | null
           enabled: boolean
+          end_date: string | null
+          format: string
+          frequency: string
           hour_local: number
           id: string
           last_run_at: string | null
           last_run_error: string | null
           last_run_status: string | null
+          month_day: number | null
+          month_week: number | null
+          month_weekday: number | null
+          monthly_mode: string | null
           org_id: string
           recipients: string[]
-          report_key: string
+          report_key: string | null
+          custom_report_id: string | null
+          date_filter_column: string | null
+          date_window: string | null
+          start_date: string | null
           updated_at: string
+          weekdays: number[]
         }
         Insert: {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          email_message?: string | null
+          email_subject?: string | null
           enabled?: boolean
+          end_date?: string | null
+          format?: string
+          frequency?: string
           hour_local?: number
           id?: string
           last_run_at?: string | null
           last_run_error?: string | null
           last_run_status?: string | null
+          month_day?: number | null
+          month_week?: number | null
+          month_weekday?: number | null
+          monthly_mode?: string | null
           org_id?: string
           recipients?: string[]
-          report_key: string
+          report_key?: string | null
+          custom_report_id?: string | null
+          date_filter_column?: string | null
+          date_window?: string | null
+          start_date?: string | null
           updated_at?: string
+          weekdays?: number[]
         }
         Update: {
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
+          email_message?: string | null
+          email_subject?: string | null
           enabled?: boolean
+          end_date?: string | null
+          format?: string
+          frequency?: string
           hour_local?: number
           id?: string
           last_run_at?: string | null
           last_run_error?: string | null
           last_run_status?: string | null
+          month_day?: number | null
+          month_week?: number | null
+          month_weekday?: number | null
+          monthly_mode?: string | null
           org_id?: string
           recipients?: string[]
-          report_key?: string
+          report_key?: string | null
+          custom_report_id?: string | null
+          date_filter_column?: string | null
+          date_window?: string | null
+          start_date?: string | null
           updated_at?: string
+          weekdays?: number[]
         }
         Relationships: [
           {

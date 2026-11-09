@@ -7,7 +7,51 @@ import type {
   ReportResult,
   ReportResultRow,
 } from "@/types/crm-reports";
-import { getDataset, getDatasetField } from "@/lib/reports/datasets";
+import {
+  getDataset,
+  isCustomFieldKey,
+  relationsFor,
+  resolveReportField,
+  type ResolvedField,
+} from "@/lib/reports/datasets";
+
+/** The org's client custom-field defs keyed by lowercase def id — only needed
+ *  to label/type "cf:<id>" columns. */
+export type CustomFieldDefs = Map<string, { name: string; type: "text" | "number" }>;
+
+/** Every column key an analysis refers to (outside formulas), for custom-field lookup. */
+function referencedKeys(config: AnalysisConfig): string[] {
+  return [
+    ...config.columns,
+    ...config.groupBy,
+    ...config.aggregates.map((a) => a.column),
+    ...config.filters.map((f) => f.column),
+    ...(config.sorts ?? []).map((x) => x.column),
+    ...(config.sortColumn ? [config.sortColumn] : []),
+  ];
+}
+
+async function loadCustomFieldDefs(
+  supabase: SupabaseClient<never, never, never> | SupabaseClient,
+  config: AnalysisConfig
+): Promise<CustomFieldDefs | undefined> {
+  const ids = [...new Set(referencedKeys(config).filter(isCustomFieldKey).map((k) => k.slice(3).toLowerCase()))];
+  if (ids.length === 0) return undefined;
+  const { data } = await (supabase as SupabaseClient)
+    .from("crm_custom_field_defs")
+    .select("id, name, field_type")
+    .in("id", ids)
+    .is("deleted_at", null);
+  const map: CustomFieldDefs = new Map();
+  for (const row of (data ?? []) as { id: string; name: string; field_type: string }[]) {
+    map.set(row.id.toLowerCase(), { name: row.name, type: row.field_type === "number" ? "number" : "text" });
+  }
+  return map;
+}
+
+function joinAliases(config: AnalysisConfig): string[] {
+  return (config.joins ?? []).map((j) => j.alias);
+}
 
 // ============================================================
 // Report engine — validates analysis configs against the dataset
@@ -34,11 +78,18 @@ export function isSubtotalMode(config: AnalysisConfig): boolean {
   return !!config.subtotals && config.groupBy.length > 0;
 }
 
-export function validateAnalysisConfig(config: AnalysisConfig): string | null {
+export function validateAnalysisConfig(config: AnalysisConfig, customFields?: CustomFieldDefs): string | null {
   const dataset = getDataset(config.dataset);
   if (!dataset) return `Unknown dataset: ${config.dataset}`;
 
-  const fieldKeys = new Set(dataset.fields.map((f) => f.key));
+  const aliases = joinAliases(config);
+  const allowedAliases = new Set(relationsFor(config.dataset).map(([alias]) => alias));
+  for (const alias of aliases) {
+    if (!allowedAliases.has(alias)) return `"${alias}" can't be joined to ${dataset.label}.`;
+  }
+  if (new Set(aliases).size !== aliases.length) return "A related dataset can only be joined once.";
+  const known = (key: string) => !!resolveReportField(config.dataset, key, aliases, customFields);
+
   // "Aggregated" mode covers both grouped rollup queries (one or more Group
   // By columns) and ungrouped grand-total queries (aggregates with zero
   // Group By columns — Postgres treats the whole filtered set as one group).
@@ -51,13 +102,13 @@ export function validateAnalysisConfig(config: AnalysisConfig): string | null {
     return "Select at least one column.";
   }
   for (const col of config.columns) {
-    if (!fieldKeys.has(col)) return `Unknown column: ${col}`;
+    if (!known(col)) return `Unknown column: ${col}`;
   }
   for (const col of config.groupBy) {
-    if (!fieldKeys.has(col)) return `Unknown group column: ${col}`;
+    if (!known(col)) return `Unknown group column: ${col}`;
   }
   for (const agg of config.aggregates) {
-    if (agg.column !== "*" && !fieldKeys.has(agg.column)) {
+    if (agg.column !== "*" && !known(agg.column)) {
       return `Unknown aggregate column: ${agg.column}`;
     }
     if (agg.column === "*" && agg.fn !== "count") {
@@ -65,7 +116,7 @@ export function validateAnalysisConfig(config: AnalysisConfig): string | null {
     }
   }
   for (const filter of config.filters) {
-    if (!fieldKeys.has(filter.column)) {
+    if (!known(filter.column)) {
       return `Unknown filter column: ${filter.column}`;
     }
     if (
@@ -77,19 +128,33 @@ export function validateAnalysisConfig(config: AnalysisConfig): string | null {
     }
   }
 
-  const baseColumnKeys = new Set(baseColumnsForAnalysis(config).map((c) => c.key));
-  const formulaNames = new Set<string>();
+  const baseColumnKeys = new Set(baseColumnsForAnalysis(config, customFields).map((c) => c.key));
+  // A formula may build on the base columns and on any formula defined ABOVE it
+  // (chaining), never on itself or a later one.
+  const available = new Set(baseColumnKeys);
   for (const formula of config.formulas ?? []) {
-    if (baseColumnKeys.has(formula.name) || formulaNames.has(formula.name)) {
+    if (baseColumnKeys.has(formula.name) || (config.formulas ?? []).filter((f) => f.name === formula.name).length > 1) {
       return `Formula name "${formula.name}" conflicts with an existing column.`;
     }
-    if (!baseColumnKeys.has(formula.left)) {
+    if (!available.has(formula.left)) {
       return `Unknown formula column: ${formula.left}`;
     }
-    if (!baseColumnKeys.has(formula.right)) {
+    const hasRight = formula.right !== undefined && formula.right !== "";
+    const hasConst = formula.rightConst !== undefined;
+    if (hasRight === hasConst) {
+      return `Formula "${formula.name}" needs either a column or a number on the right.`;
+    }
+    if (hasRight && !available.has(formula.right as string)) {
       return `Unknown formula column: ${formula.right}`;
     }
-    formulaNames.add(formula.name);
+    if (hasConst && formula.operator === "/" && formula.rightConst === 0) {
+      return `Formula "${formula.name}" divides by zero.`;
+    }
+    available.add(formula.name);
+  }
+  const outputKeys = new Set([...available]);
+  for (const sort of config.sorts ?? []) {
+    if (!outputKeys.has(sort.column)) return `Unknown sort column: ${sort.column}`;
   }
   return null;
 }
@@ -100,40 +165,57 @@ export function aggregateAlias(fn: string, column: string): string {
 
 const FORMULA_LABELS: Record<string, string> = { "+": "+", "-": "−", "*": "×", "/": "÷" };
 
-/** Formula columns to append, resolved against the analysis's own base
- *  output columns (so a formula can only ever reference a real, already-
- *  whitelisted column/aggregate — never arbitrary text). */
+/** Formula columns to append, resolved in order against the analysis's own base
+ *  output columns plus the formulas above them (so a formula can only ever
+ *  reference a real, already-whitelisted column/aggregate or an earlier
+ *  formula — never arbitrary text). */
 function formulaColumnsFor(
   config: AnalysisConfig,
   baseColumns: ReportColumnDef[]
 ): ReportColumnDef[] {
-  const baseByKey = new Map(baseColumns.map((c) => [c.key, c]));
-  return (config.formulas ?? [])
-    .filter((f) => baseByKey.has(f.left) && baseByKey.has(f.right))
-    .map((f) => ({
+  const byKey = new Map(baseColumns.map((c) => [c.key, c]));
+  const out: ReportColumnDef[] = [];
+  for (const f of config.formulas ?? []) {
+    const hasRight = f.right !== undefined && f.right !== "";
+    if (!byKey.has(f.left) || (hasRight ? !byKey.has(f.right as string) : f.rightConst === undefined)) continue;
+    const leftLabel = byKey.get(f.left)?.label ?? f.left;
+    const rightLabel = hasRight ? (byKey.get(f.right as string)?.label ?? (f.right as string)) : String(f.rightConst);
+    const col: ReportColumnDef = {
       key: f.name,
-      label: `${baseByKey.get(f.left)?.label ?? f.left} ${FORMULA_LABELS[f.operator]} ${baseByKey.get(f.right)?.label ?? f.right}`,
+      label: `${leftLabel} ${FORMULA_LABELS[f.operator]} ${rightLabel}`,
       type: f.displayType,
-      // Only additive formulas (a sum/difference of two totalable-ish
-      // quantities) can be summed down a totals row; a product or ratio
-      // (rate, margin, per-hour) summed across rows is meaningless.
-      totalable: (f.operator === "+" || f.operator === "-") && f.displayType !== "percent",
-    }));
+      // Only additive column-with-column formulas (a sum/difference of two
+      // totalable-ish quantities) can be summed down a totals row; a product,
+      // ratio, or anything with a fixed number in it (rate, margin, per-hour,
+      // "plus 25") summed across rows is meaningless.
+      totalable: hasRight && (f.operator === "+" || f.operator === "-") && f.displayType !== "percent",
+    };
+    byKey.set(col.key, col);
+    out.push(col);
+  }
+  return out;
 }
 
-/** Evaluate one formula against a row. A `/` formula displayed as a percent
- *  is scaled ×100 here because the "percent" field type is already-scaled
- *  0–100 everywhere else (formatCellValue appends "%" without scaling). */
+/** Evaluate one formula against a row (which already holds every earlier
+ *  formula's value, so formulas chain). A `/` formula displayed as a percent is
+ *  scaled ×100 here because the "percent" field type is already-scaled 0–100
+ *  everywhere else (formatCellValue appends "%" without scaling). */
 function evaluateFormula(formula: AnalysisFormula, row: ReportResultRow): number | null {
   // Number(null) is 0 — a missing operand must stay missing (blank), not
   // silently become 0 / "0%".
   const rawLeft = row[formula.left];
-  const rawRight = row[formula.right];
   if (rawLeft === null || rawLeft === undefined || rawLeft === "") return null;
-  if (rawRight === null || rawRight === undefined || rawRight === "") return null;
   const left = Number(rawLeft);
-  const right = Number(rawRight);
-  if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
+  if (!Number.isFinite(left)) return null;
+  let right: number;
+  if (formula.rightConst !== undefined) {
+    right = formula.rightConst;
+  } else {
+    const rawRight = row[formula.right ?? ""];
+    if (rawRight === null || rawRight === undefined || rawRight === "") return null;
+    right = Number(rawRight);
+    if (!Number.isFinite(right)) return null;
+  }
   switch (formula.operator) {
     case "+":
       return left + right;
@@ -149,55 +231,69 @@ function evaluateFormula(formula: AnalysisFormula, row: ReportResultRow): number
   }
 }
 
-/** Client-side sort used when `sortColumn` names a formula column — the RPC
- *  only sorts by its own output columns and silently ignores anything else,
- *  so a formula sort has to happen after formulas are computed. Nulls last
- *  regardless of direction (matching the RPC's `nulls last`). */
-function sortRowsBy(rows: ReportResultRow[], key: string, dir: "asc" | "desc"): ReportResultRow[] {
-  const sign = dir === "desc" ? -1 : 1;
+/** Client-side multi-level sort — used when any sort key is a formula column
+ *  (the RPC only sorts by its own output columns and silently ignores anything
+ *  else, so a formula sort has to happen after formulas are computed). Nulls
+ *  last regardless of direction (matching the RPC's `nulls last`). */
+function sortRowsBy(rows: ReportResultRow[], sorts: { column: string; dir: "asc" | "desc" }[]): ReportResultRow[] {
   return [...rows].sort((a, b) => {
-    const av = a[key];
-    const bv = b[key];
-    const aNull = av === null || av === undefined;
-    const bNull = bv === null || bv === undefined;
-    if (aNull && bNull) return 0;
-    if (aNull) return 1;
-    if (bNull) return -1;
-    if (typeof av === "number" && typeof bv === "number") return sign * (av - bv);
-    return sign * String(av).localeCompare(String(bv));
+    for (const { column, dir } of sorts) {
+      const sign = dir === "desc" ? -1 : 1;
+      const av = a[column];
+      const bv = b[column];
+      const aNull = av === null || av === undefined;
+      const bNull = bv === null || bv === undefined;
+      if (aNull && bNull) continue;
+      if (aNull) return 1;
+      if (bNull) return -1;
+      const cmp =
+        typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
+      if (cmp !== 0) return sign * cmp;
+    }
+    return 0;
   });
+}
+
+/** The analysis's effective sort keys: the multi-level `sorts` when set, else
+ *  the single legacy sortColumn/sortDir. */
+function effectiveSorts(config: AnalysisConfig): { column: string; dir: "asc" | "desc" }[] {
+  if (config.sorts && config.sorts.length > 0) return config.sorts;
+  return config.sortColumn ? [{ column: config.sortColumn, dir: config.sortDir }] : [];
+}
+
+function toColumnDef(field: ResolvedField | undefined, key: string): ReportColumnDef {
+  return {
+    key,
+    label: field?.label ?? key,
+    type: field?.type ?? "text",
+    totalable: field?.totalable ?? (field?.type === "money" || field?.type === "hours"),
+  };
 }
 
 /** Output column defs for an analysis config's base query — excludes
  *  formula columns (used both as the real output shape before formulas are
  *  appended, and as the whitelist formulas may reference). */
-function baseColumnsForAnalysis(config: AnalysisConfig): ReportColumnDef[] {
+function baseColumnsForAnalysis(config: AnalysisConfig, customFields?: CustomFieldDefs): ReportColumnDef[] {
+  const aliases = joinAliases(config);
+  const field = (key: string) => resolveReportField(config.dataset, key, aliases, customFields);
   const subtotalMode = isSubtotalMode(config);
   const aggregated = !subtotalMode && (config.groupBy.length > 0 || config.aggregates.length > 0);
   if (!aggregated) {
     const columns = subtotalMode && !config.columns.includes(config.groupBy[0])
       ? [config.groupBy[0], ...config.columns]
       : config.columns;
-    return columns.map((key) => {
-      const field = getDatasetField(config.dataset, key);
-      return {
-        key,
-        label: field?.label ?? key,
-        type: field?.type ?? "text",
-        totalable: field?.totalable ?? (field?.type === "money" || field?.type === "hours"),
-      };
-    });
+    return columns.map((key) => toColumnDef(field(key), key));
   }
-  const groupCols: ReportColumnDef[] = config.groupBy.map((key) => {
-    const field = getDatasetField(config.dataset, key);
-    return { key, label: field?.label ?? key, type: field?.type ?? "text", totalable: false };
-  });
+  const groupCols: ReportColumnDef[] = config.groupBy.map((key) => ({
+    ...toColumnDef(field(key), key),
+    totalable: false,
+  }));
   const aggCols: ReportColumnDef[] = config.aggregates.map((agg) => {
     if (agg.column === "*") {
       return { key: "count_all", label: "Count", type: "number" as const, totalable: true };
     }
-    const field = getDatasetField(config.dataset, agg.column);
-    const fieldType: ReportFieldType = field?.type ?? "text";
+    const resolved = field(agg.column);
+    const fieldType: ReportFieldType = resolved?.type ?? "text";
     const type: ReportFieldType =
       agg.fn === "count"
         ? "number"
@@ -211,10 +307,11 @@ function baseColumnsForAnalysis(config: AnalysisConfig): ReportColumnDef[] {
             : "number";
     return {
       key: aggregateAlias(agg.fn, agg.column),
-      label: `${AGG_LABELS[agg.fn]} ${field?.label ?? agg.column}`,
+      label: `${AGG_LABELS[agg.fn]} ${resolved?.label ?? agg.column}`,
       type,
-      // averages/mins/maxes shouldn't be summed in a totals row
-      totalable: agg.fn === "sum" || agg.fn === "count",
+      // averages/mins/maxes shouldn't be summed in a totals row; a joined
+      // column repeats per base row, so its sum would double count.
+      totalable: (agg.fn === "sum" || agg.fn === "count") && resolved?.source !== "joined",
     };
   });
   return [...groupCols, ...aggCols];
@@ -222,8 +319,8 @@ function baseColumnsForAnalysis(config: AnalysisConfig): ReportColumnDef[] {
 
 /** Output column defs for an analysis config (drives table rendering + CSV)
  *  — base columns plus any calculated formula columns appended at the end. */
-export function columnsForAnalysis(config: AnalysisConfig): ReportColumnDef[] {
-  const base = baseColumnsForAnalysis(config);
+export function columnsForAnalysis(config: AnalysisConfig, customFields?: CustomFieldDefs): ReportColumnDef[] {
+  const base = baseColumnsForAnalysis(config, customFields);
   return [...base, ...formulaColumnsFor(config, base)];
 }
 
@@ -258,23 +355,36 @@ export async function runAnalysis(
   // Route handlers pass the ssr server client; typing loosely keeps this
   // compatible with the generated-Database client without fighting rpc typings.
   supabase: SupabaseClient<never, never, never> | SupabaseClient,
-  config: AnalysisConfig
+  config: AnalysisConfig,
+  /** Run through a different RPC with extra leading args — used only by the
+   *  scheduled-report cron (crm_run_report_for_org, org-scoped service role). */
+  rpcOverride?: { name: string; extraArgs: Record<string, unknown> }
 ): Promise<ReportResult> {
-  const error = validateAnalysisConfig(config);
+  const customFields = await loadCustomFieldDefs(supabase, config);
+  const error = validateAnalysisConfig(config, customFields);
   if (error) throw new Error(error);
 
   const subtotalMode = isSubtotalMode(config);
   const aggregated = !subtotalMode && (config.groupBy.length > 0 || config.aggregates.length > 0);
-  const columns = columnsForAnalysis(config);
+  const columns = columnsForAnalysis(config, customFields);
+  const formulas = config.formulas ?? [];
+  const formulaNames = new Set(formulas.map((f) => f.name));
+  const sorts = effectiveSorts(config);
+  // Sort keys that are formula columns can't be ordered by the RPC.
+  const sortsOnFormula = sorts.some((x) => formulaNames.has(x.column));
+  // Plain-column query keys only: the RPC doesn't know the formula columns.
+  const baseKeys = columns.filter((c) => !formulaNames.has(c.key)).map((c) => c.key);
+
   const { data, error: rpcError } = await (supabase as SupabaseClient).rpc(
-    "crm_run_report",
+    rpcOverride?.name ?? "crm_run_report",
     {
+      ...(rpcOverride?.extraArgs ?? {}),
       p_dataset: config.dataset,
       // Subtotal mode is a plain-columns query — grouping is purely a
       // client-side display concern (divider headers + per-group subtotal
       // rows), so p_group_by/p_aggregates are omitted just like the
       // ungrouped case; only true rollup mode sends them to the RPC.
-      p_columns: aggregated ? [] : columns.map((c) => c.key),
+      p_columns: aggregated ? [] : baseKeys,
       p_filters: config.filters.map((f) => ({
         column: f.column,
         op: f.op,
@@ -282,8 +392,10 @@ export async function runAnalysis(
       })),
       p_group_by: aggregated ? config.groupBy : null,
       p_aggregates: aggregated ? config.aggregates.map((a) => ({ column: a.column, fn: a.fn })) : [],
-      p_sort_column: config.sortColumn ?? null,
+      p_sort_column: config.sortColumn && !formulaNames.has(config.sortColumn) ? config.sortColumn : null,
       p_sort_dir: config.sortDir,
+      p_sorts: sorts.length > 0 && !sortsOnFormula ? sorts : null,
+      p_joins: (config.joins ?? []).map((j) => ({ alias: j.alias })),
       // Default to the RPC's own hard cap (it clamps to 5000 anyway) so a
       // report isn't silently cut at 1000 rows with no indication.
       p_limit: config.limit ?? RPC_ROW_CAP,
@@ -310,22 +422,21 @@ export async function runAnalysis(
     totalCount !== undefined ? totalCount > rows.length : rows.length >= requestedLimit;
 
   // Calculated columns — computed here (never sent into the crm_run_report
-  // RPC's dynamic SQL) from two of the query's own already-whitelisted
-  // output columns, validated in validateAnalysisConfig above.
-  const formulas = config.formulas ?? [];
+  // RPC's dynamic SQL) from the query's own already-whitelisted output columns
+  // and earlier formulas, validated in validateAnalysisConfig above. Each
+  // formula sees the previous ones' results because they're written onto the
+  // same row object in order.
   if (formulas.length > 0) {
     rows = rows.map((row) => {
       const next: ReportResultRow = { ...row };
       for (const formula of formulas) {
-        next[formula.name] = evaluateFormula(formula, row);
+        next[formula.name] = evaluateFormula(formula, next);
       }
       return next;
     });
-    // The RPC can't sort by a column it doesn't know about (it drops the
-    // ORDER BY silently), so a formula sort is applied here instead.
-    if (config.sortColumn && formulas.some((f) => f.name === config.sortColumn)) {
-      rows = sortRowsBy(rows, config.sortColumn, config.sortDir);
-    }
+    // A formula sort is applied here instead, over the whole key list so mixed
+    // base/formula multi-level sorts keep their order.
+    if (sortsOnFormula) rows = sortRowsBy(rows, sorts);
   }
 
   // Stable secondary sort by the group column so same-group rows sit
