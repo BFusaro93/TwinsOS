@@ -5677,6 +5677,7 @@ export type Database = {
       crm_invoices: {
         Row: {
           amount_paid_cents: number
+          auto_bill_period_start: string | null
           applied_discount_id: string | null
           balance_cents: number
           client_id: string
@@ -5726,6 +5727,7 @@ export type Database = {
         }
         Insert: {
           amount_paid_cents?: number
+          auto_bill_period_start?: string | null
           applied_discount_id?: string | null
           balance_cents?: number
           client_id: string
@@ -5775,6 +5777,7 @@ export type Database = {
         }
         Update: {
           amount_paid_cents?: number
+          auto_bill_period_start?: string | null
           applied_discount_id?: string | null
           balance_cents?: number
           client_id?: string

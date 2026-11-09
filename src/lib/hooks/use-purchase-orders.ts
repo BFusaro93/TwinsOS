@@ -6,6 +6,7 @@ import { mapPurchaseOrder } from "@/lib/supabase/mappers";
 import { submitEntityForApproval } from "@/lib/hooks/use-approval-requests";
 import type { PurchaseOrder, POStatus, LineItem } from "@/types";
 import type { BulkImportResult, BulkImportRowError } from "@/lib/csv";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { correctPartReceipt, clampProductReduction, shortfallMessage } from "@/lib/inventory/part-stock";
 
 /**
@@ -63,12 +64,11 @@ export function usePurchaseOrders() {
     queryKey: ["purchase-orders"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("purchase_orders")
-        .select(PO_SELECT)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
+      // Paged: a bare select stops at PostgREST's 1000-row cap, so past 1000 rows the oldest silently vanish from the list.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await fetchAllRows<any>(() =>
+        supabase.from("purchase_orders").select(PO_SELECT).is("deleted_at", null).order("created_at", { ascending: false })
+      );
       return (data.map(mapPurchaseOrder)) as PurchaseOrder[];
     },
   });

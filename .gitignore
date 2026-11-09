@@ -43,3 +43,8 @@ supabase/.temp
 .claude/worktrees/
 .env.local.test
 .claude/settings.local.json
+
+# stress sweep: generated fixtures (contain a generated password) and run output
+scripts/stress/fixtures.json
+scripts/stress/results.json
+scripts/stress/*.log

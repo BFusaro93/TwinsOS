@@ -595,8 +595,10 @@ export async function applyVisitCompletionSideEffects(
             existingInvoice = (openInvoice as { id: string } | null) ?? null;
           }
 
-          if (existingInvoice) {
-            const invoiceId = existingInvoice.id;
+          // Appends this visit's lines to an open period draft. A closure because two paths
+          // need it: the normal "an open draft already exists" case, and the race-loser case
+          // below (another completion created the period's draft between our lookup and insert).
+          const appendToDraft = async (invoiceId: string) => {
             const { count: existingItemCount } = await supabase
               .from("crm_invoice_line_items")
               .select("id", { count: "exact", head: true })
@@ -647,6 +649,10 @@ export async function applyVisitCompletionSideEffects(
             }
             result.invoiced = true;
             result.invoiceId = invoiceId;
+          };
+
+          if (existingInvoice) {
+            await appendToDraft(existingInvoice.id);
           } else {
             const { data: orgTermsRow } = await supabase
               .from("organizations")
@@ -663,6 +669,13 @@ export async function applyVisitCompletionSideEffects(
             // first visit made it fall due (and show past due) before the
             // period it bills had even ended. Per-visit invoices keep the visit date.
             const newInvoiceDate = period ? period.end : (visitDate ?? today);
+            // Weekly/monthly clients: crm_invoices_auto_period_draft_unique allows ONE open auto draft
+            // per client + period + tax rate, so two completions that both found "no draft yet" cannot
+            // both create one. The header starts at zero and every visit's lines (this one included)
+            // are added through increment_invoice_totals, which row-locks the invoice and re-derives
+            // tax from ALL its lines — so the totals are right whichever visit's lines land first.
+            const zeroHeader = !!period;
+            let lostRace = false;
             const { data: newInvoice, error: invErr } = await supabase
               .from("crm_invoices")
               .insert({
@@ -675,17 +688,40 @@ export async function applyVisitCompletionSideEffects(
                 terms: invoiceTerms,
                 due_date: computeDueDate(newInvoiceDate, invoiceTerms),
                 status: "draft",
-                subtotal_cents: subtotal,
+                subtotal_cents: zeroHeader ? 0 : subtotal,
                 tax_rate_bps: taxRateBps,
-                tax_cents: taxCents,
-                total_cents: subtotal + taxCents,
-                balance_cents: subtotal + taxCents,
+                tax_cents: zeroHeader ? 0 : taxCents,
+                total_cents: zeroHeader ? 0 : subtotal + taxCents,
+                balance_cents: zeroHeader ? 0 : subtotal + taxCents,
                 amount_paid_cents: 0,
                 po_number: j.po_number ?? null,
+                auto_bill_period_start: period ? period.start : null,
               })
               .select("id, invoice_number")
               .single();
-            if (invErr) throw invErr;
+            if (invErr) {
+              if (period && (invErr as { code?: string }).code === "23505") {
+                // Lost the race: another completion's draft for this period committed first. Join it.
+                const { data: winner } = await supabase
+                  .from("crm_invoices")
+                  .select("id")
+                  .eq("org_id", orgId)
+                  .eq("client_id", j.client_id)
+                  .eq("status", "draft")
+                  .eq("locked", false)
+                  .is("deleted_at", null)
+                  .eq("auto_bill_period_start", period.start)
+                  .eq("tax_rate_bps", taxRateBps)
+                  .limit(1)
+                  .maybeSingle();
+                if (!winner) throw invErr;
+                await appendToDraft((winner as { id: string }).id);
+                lostRace = true;
+              } else {
+                throw invErr;
+              }
+            }
+            if (!lostRace) {
             const newInvoiceId = (newInvoice as { id: string }).id;
             let newInvoiceCreated = true;
 
@@ -711,6 +747,19 @@ export async function applyVisitCompletionSideEffects(
                   throw lineErr;
                 }
               } else {
+                if (zeroHeader) {
+                  const { error: incErr } = await supabase.rpc("increment_invoice_totals", {
+                    p_invoice_id: newInvoiceId,
+                    p_delta_cents: subtotal,
+                  });
+                  if (incErr) {
+                    // Same rollback as the append path: no line-less/total-less draft left behind.
+                    const insertedIds = ((insertedLines ?? []) as { id: string }[]).map((l) => l.id);
+                    if (insertedIds.length > 0) await supabase.from("crm_invoice_line_items").delete().in("id", insertedIds);
+                    await supabase.from("crm_invoices").update({ deleted_at: new Date().toISOString() }).eq("id", newInvoiceId);
+                    throw incErr;
+                  }
+                }
                 await linkProductLines(insertedLines as { id: string }[] | null);
               }
             }
@@ -745,6 +794,7 @@ export async function applyVisitCompletionSideEffects(
             if (newInvoiceCreated) {
               result.invoiced = true;
               result.invoiceId = newInvoiceId;
+            }
             }
           }
         }

@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
@@ -99,21 +100,33 @@ export async function POST(req: Request) {
     .eq("slug", slug)
     .is("deleted_at", null)
     .maybeSingle();
-  if (existing) slug = `${slug}-${Date.now().toString(36)}`;
+  if (existing) slug = `${slug}-${randomBytes(3).toString("hex")}`;
 
-  const { data, error } = await db
-    .from("crm_forms")
-    .insert({
-      org_id: profile.org_id,
-      name,
-      slug,
-      description: description || null,
-      status,
-      created_by: user.id,
-    })
-    .select()
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data, { status: 201 });
+  // Check-then-insert: two admins (or one double-click) creating the same name at
+  // once both see the slug free, and the loser hits crm_forms_org_id_slug_key
+  // (23505). Re-suffix and retry rather than returning the raw constraint error.
+  const baseSlug = toSlug(name || "form");
+  for (let attempt = 0; ; attempt++) {
+    const { data, error } = await db
+      .from("crm_forms")
+      .insert({
+        org_id: profile.org_id,
+        name,
+        slug,
+        description: description || null,
+        status,
+        created_by: user.id,
+      })
+      .select()
+      .single();
+    if (!error) return NextResponse.json(data, { status: 201 });
+    if (error.code === "23505" && attempt < 3) {
+      slug = `${baseSlug}-${randomBytes(3).toString("hex")}`;
+      continue;
+    }
+    if (error.code === "23505") {
+      return NextResponse.json({ error: "A form with that name already exists. Try a different name." }, { status: 409 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
