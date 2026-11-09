@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapProject } from "@/lib/supabase/mappers";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { Project } from "@/types";
 
 function patchProjectCache(queryClient: ReturnType<typeof useQueryClient>, id: string, patch: Partial<Project>) {
@@ -24,21 +25,24 @@ export function useProjects(includeArchived = false) {
     queryKey: ["projects", { includeArchived }],
     queryFn: async () => {
       const supabase = createClient();
+      // Paged: a bare select stops at PostgREST's 1000-row cap, so past 1000 rows the oldest silently vanish from the list.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q = (supabase as any)
-        .from("projects")
-        .select(`
-          *,
-          po_line_items(quantity, unit_cost, total_cost, taxable, product_item_id, purchase_orders(tax_rate_percent, shipping_cost, subtotal, discount_cost, discount_reduces_tax, status, deleted_at, requisition_id, po_line_items(total_cost, taxable))),
-          requisition_line_items(quantity, unit_cost, total_cost, product_item_id, requisition_id, requisitions(tax_rate_percent, status, converted_po_id, deleted_at)),
-          project_direct_items(quantity, unit_cost, deleted_at),
-          project_subcontract_costs(amount, deleted_at)
-        `)
-        .is("deleted_at", null)
-        .order("name");
-      if (!includeArchived) q = q.eq("is_archived", false);
-      const { data, error } = await q;
-      if (error) throw error;
+      const data = await fetchAllRows<any>(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q = (supabase as any)
+          .from("projects")
+          .select(`
+            *,
+            po_line_items(quantity, unit_cost, total_cost, taxable, product_item_id, purchase_orders(tax_rate_percent, shipping_cost, subtotal, discount_cost, discount_reduces_tax, status, deleted_at, requisition_id, po_line_items(total_cost, taxable))),
+            requisition_line_items(quantity, unit_cost, total_cost, product_item_id, requisition_id, requisitions(tax_rate_percent, status, converted_po_id, deleted_at)),
+            project_direct_items(quantity, unit_cost, deleted_at),
+            project_subcontract_costs(amount, deleted_at)
+          `)
+          .is("deleted_at", null)
+          .order("name");
+        if (!includeArchived) q = q.eq("is_archived", false);
+        return q;
+      });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return data.map((row: any) => {
         // Mirrors the Materials tab (ProjectDetailPanel) so the list total and the

@@ -5,6 +5,7 @@ import { mapPart } from "@/lib/supabase/mappers";
 import { setParts } from "@/lib/hooks/cost-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { Part } from "@/types/cmms";
 
 /**
@@ -36,12 +37,11 @@ export function useParts() {
     queryKey: ["parts"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("parts")
-        .select("*")
-        .is("deleted_at", null)
-        .order("name");
-      if (error) throw error;
+      // Paged: a bare select stops at PostgREST's 1000-row cap, so past 1000 rows the oldest silently vanish from the list.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await fetchAllRows<any>(() =>
+        supabase.from("parts").select("*").is("deleted_at", null).order("name")
+      );
       const parts = data.map(mapPart);
       setParts(parts);
       return parts;

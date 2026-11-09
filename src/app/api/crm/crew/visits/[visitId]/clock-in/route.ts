@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRouteAuth, assertCallerOwnsVisit } from "@/lib/supabase/route-auth";
 import { isNotesAcknowledgmentCurrent } from "@/lib/utils/visit-stops";
+import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { isoInZone } from "@/lib/time/zone";
 
 /** Visits a crew can no longer start. Same set the stop clock-in excludes. */
 const TERMINAL_STATUSES = ["completed", "cancelled", "skipped"];
@@ -36,7 +38,7 @@ export async function POST(
   const { data: existing } = await (supabase as any)
     .from("crm_job_visits")
     .select(`
-      clocked_in_at, org_id, crew_id, crew_unassigned, status,
+      clocked_in_at, org_id, crew_id, crew_unassigned, status, scheduled_date,
       notes_to_crew, notes_to_crew_updated_at, acknowledged_notes_at,
       crm_jobs(crew_id, notes_to_crew, notes_to_crew_updated_at)
     `)
@@ -46,6 +48,11 @@ export async function POST(
   if (!existing) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
   if (!(await assertCallerOwnsVisit(supabase, user.id, existing.org_id, existing))) {
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
+  }
+  // Same rule as the stop clock-in: a future-dated visit drops off the crew list once started, stranding the clock-out.
+  const orgToday = isoInZone(new Date(), await getOrgTimeZone(supabase, existing.org_id));
+  if (!existing?.clocked_in_at && existing.scheduled_date > orgToday) {
+    return NextResponse.json({ error: "This visit was moved to another day, so it can't be started now. Refresh your list." }, { status: 409 });
   }
   if (existing?.clocked_in_at) {
     return NextResponse.json({ error: "Already clocked in" }, { status: 409 });
@@ -97,6 +104,8 @@ export async function POST(
     .is("clocked_in_at", null)
     // Re-checked in the write: the office may complete it between the read above and here.
     .not("status", "in", TERMINAL_STATUS_FILTER)
+    // Not moved to a later day since the check above (see the stop clock-in route).
+    .lte("scheduled_date", orgToday)
     .select()
     .maybeSingle();
 

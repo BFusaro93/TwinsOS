@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { mapRequisition } from "@/lib/supabase/mappers";
 import { submitEntityForApproval } from "@/lib/hooks/use-approval-requests";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { ApprovalStatus, LineItem, Requisition } from "@/types";
 
 /**
@@ -51,13 +52,12 @@ export function useRequisitions() {
     queryKey: ["requisitions"],
     queryFn: async () => {
       const supabase = createClient();
+      // Paged: a bare select stops at PostgREST's 1000-row cap, so past 1000 rows the oldest silently vanish from the list.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("requisitions")
-        .select(REQ_SELECT)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
+      const data = await fetchAllRows<any>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any).from("requisitions").select(REQ_SELECT).is("deleted_at", null).order("created_at", { ascending: false })
+      );
       return (data.map(mapRequisition)) as Requisition[];
     },
   });

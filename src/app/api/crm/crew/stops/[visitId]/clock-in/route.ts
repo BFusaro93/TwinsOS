@@ -126,6 +126,19 @@ export async function POST(
     return NextResponse.json({ error: "Not assigned to this visit" }, { status: 403 });
   }
 
+  // A visit dated in the future can't be started. The crew list shows today's visits plus clocked-in
+  // visits from BEFORE today, so a clocked-in future-dated visit drops off the list mid-stop and the
+  // crew can't clock out (the same stranding the office PATCH route guards against). The race: the
+  // dispatcher moves the stop to another day while a crew tablet still shows it, and the tap
+  // succeeded (16 of 25 under a simultaneous test, 2026-11-08).
+  const orgToday = isoInZone(new Date(), await getOrgTimeZone(supabase, anchor.org_id));
+  if (anchor.scheduled_date > orgToday) {
+    return NextResponse.json(
+      { error: "This visit was moved to another day, so it can't be started now. Refresh your list." },
+      { status: 409 }
+    );
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const candidateQuery = (supabase as any)
     .from("crm_job_visits")
@@ -229,6 +242,9 @@ export async function POST(
     // or re-open a visit that's already finished.
     .is("clocked_in_at", null)
     .not("status", "in", TERMINAL_STATUS_FILTER)
+    // And not moved to a later day since the check above: the dispatcher's date move can commit
+    // between our read and this write, which stranded a clocked-in visit on tomorrow's date.
+    .lte("scheduled_date", orgToday)
     .select();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -239,6 +255,12 @@ export async function POST(
   // request's own timestamp, which moved every member's punch-in off the real
   // clock-in instant.
   if (!data || (data as unknown[]).length === 0) {
+    // Zero rows is either "already clocked in" or "just moved to another day" (the date condition above).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: nowRow } = await (supabase as any).from("crm_job_visits").select("scheduled_date, clocked_in_at").eq("id", anchorVisitId).maybeSingle();
+    if (nowRow && !nowRow.clocked_in_at && nowRow.scheduled_date > orgToday) {
+      return NextResponse.json({ error: "This visit was moved to another day, so it can't be started now. Refresh your list." }, { status: 409 });
+    }
     return NextResponse.json({ visitIds: siblingIds, visits: [], alreadyClockedIn: true });
   }
 

@@ -162,6 +162,9 @@ export async function PATCH(
     }
   }
 
+  const guardStatus =
+    !!prev && !needsOverride &&
+    (patch.status !== undefined || patch.scheduled_date !== undefined || patch.crew_id !== undefined || patch.crew_unassigned !== undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from("crm_job_visits")
@@ -177,8 +180,23 @@ export async function PATCH(
       updated_at: new Date().toISOString(),
     })
     .eq("id", visitId)
+    // Optimistic concurrency. The in-progress guards above read `prev` earlier in this request;
+    // if the crew clocks in (which moves the status to in_progress) between that read and this
+    // write, a stale "dispatched"/"scheduled" status, date move or re-crew would overwrite a
+    // visit the crew is working: it ended clocked-in but showing as not started (3 of 25 under a
+    // simultaneous test, 2026-11-08). Matching the status we validated against makes the write
+    // fail instead. Skipped when the admin override RPC already changed the status.
+    .match(guardStatus ? { status: prev!.status } : {})
     .select()
     .single();
+
+  if (error && guardStatus && (error as { code?: string }).code === "PGRST116") {
+    await undoOverride();
+    return NextResponse.json(
+      { error: "This visit just changed (the crew may have clocked in), so your edit was not applied. Refresh the board and try again." },
+      { status: 409 }
+    );
+  }
 
   if (error) {
     await undoOverride();

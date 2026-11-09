@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mapGoodsReceipt } from "@/lib/supabase/mappers";
 import type { GoodsReceipt, GoodsReceiptLine } from "@/types/receiving";
 import { computeReceiptTotals } from "@/lib/utils/receipt-totals";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { correctPartReceipt, clampProductReduction, shortfallMessage } from "@/lib/inventory/part-stock";
 
 function errMsg(err: unknown): string {
@@ -29,12 +30,11 @@ export function useGoodsReceipts() {
     queryKey: ["goods-receipts"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("goods_receipts")
-        .select("*, goods_receipt_lines (*)")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
+      // Paged: a bare select stops at PostgREST's 1000-row cap, so past 1000 rows the oldest silently vanish from the list.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await fetchAllRows<any>(() =>
+        supabase.from("goods_receipts").select("*, goods_receipt_lines (*)").is("deleted_at", null).order("created_at", { ascending: false })
+      );
       return (data.map(mapGoodsReceipt)) as GoodsReceipt[];
     },
   });
