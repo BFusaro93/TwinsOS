@@ -35,6 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
 import { resultCellColors } from "@/lib/reports/cell-colors";
+import { aggregateExportRows, type ViewAggregateFn } from "@/lib/reports/table-view";
 import { exportReportPDF } from "@/lib/reports/export-pdf";
 import type { ReportExportChartInput } from "@/lib/reports/export-pdf";
 import {
@@ -276,13 +277,20 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     router.push("/crm/admin/reports?tab=custom");
   };
 
+  // Column summaries picked in the table's header menu, computed over the full
+  // result and appended to every export.
+  const [tableAggregates, setTableAggregates] = useState<Record<string, ViewAggregateFn>>({});
+
   const handleExport = () => {
     const result = runAnalysis.data;
     if (!result) return;
     downloadCSV(
       `${name.trim() || "analysis"}.csv`,
       result.columns.map((c) => c.label),
-      result.rows.map((row) => result.columns.map((c) => csvCellValue(row[c.key], c.type)))
+      [
+        ...result.rows.map((row) => result.columns.map((c) => csvCellValue(row[c.key], c.type))),
+        ...aggregateExportRows(result.columns, result.rows, tableAggregates, csvCellValue),
+      ]
     );
   };
 
@@ -294,7 +302,10 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
         {
           name: name.trim() || "Analysis",
           headers: result.columns.map((c) => c.label),
-          rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+          rows: [
+            ...result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+            ...aggregateExportRows(result.columns, result.rows, tableAggregates, exportCellValue),
+          ],
           cellColors: resultCellColors(result, formatRules, colorSpectrumColumns),
         },
       ]);
@@ -322,6 +333,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
             columns: result.columns.map((c) => c.label),
             rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
             cellColors: resultCellColors(result, formatRules, colorSpectrumColumns),
+            footers: aggregateExportRows(result.columns, result.rows, tableAggregates, formatCellValue),
           },
         ],
         charts.length > 0 ? charts : undefined
@@ -772,6 +784,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
               result={runAnalysis.data}
               formatRules={formatRules}
               colorSpectrumColumns={colorSpectrumColumns}
+              onAggregatesChange={setTableAggregates}
             />
           ) : visualSpec ? (
             <Card>

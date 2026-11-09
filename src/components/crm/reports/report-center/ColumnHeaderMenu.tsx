@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
+  aggregateFnsFor,
   filterOpsFor,
   isNumericType,
   type TableViewState,
@@ -133,6 +134,34 @@ export function ColumnHeaderMenu({
             <DropdownMenuItem onSelect={() => setFilter(null)}>Clear filter</DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>Aggregate{view.aggregates[col.key] ? " (on)" : ""}</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-48">
+              {aggregateFnsFor(col.type).map((f) => (
+                <DropdownMenuItem
+                  key={f.value}
+                  onSelect={() => onChange({ ...view, aggregates: { ...view.aggregates, [col.key]: f.value } })}
+                >
+                  {f.label}
+                  {view.aggregates[col.key] === f.value ? " ✓" : ""}
+                </DropdownMenuItem>
+              ))}
+              {view.aggregates[col.key] && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      const aggregates = { ...view.aggregates };
+                      delete aggregates[col.key];
+                      onChange({ ...view, aggregates });
+                    }}
+                  >
+                    None
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>Format</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="w-52">

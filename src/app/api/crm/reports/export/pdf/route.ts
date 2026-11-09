@@ -33,6 +33,8 @@ const exportRequestSchema = z.object({
         grouped: groupedSchema.optional(),
         /** Conditional-format / spectrum colors aligned to `rows`. */
         cellColors: z.array(z.array(cellColorSchema.nullable())).optional(),
+        /** Column-summary rows rendered bold after the totals row. */
+        footers: z.array(z.array(z.string())).optional(),
       })
     )
     .min(1),

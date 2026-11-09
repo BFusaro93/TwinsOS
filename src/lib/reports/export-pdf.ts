@@ -23,6 +23,8 @@ export interface ReportExportSectionInput {
   grouped?: ReportExportGroupedInput;
   /** Conditional-format / spectrum colors aligned to `rows` (null = none). */
   cellColors?: (ReportExportCellColor | null)[][];
+  /** Column-summary rows (Average, Count, ...) rendered bold after the totals row. */
+  footers?: string[][];
 }
 
 export interface ReportExportChartInput {

@@ -23,6 +23,8 @@ export interface ReportExportSection {
   grouped?: ReportExportGrouped;
   /** Conditional-format / spectrum colors aligned to `rows` (null = none). */
   cellColors?: (ReportExportCellColor | null)[][];
+  /** Column-summary rows rendered bold after the totals row. */
+  footers?: string[][];
 }
 
 export interface ReportExportChart {
@@ -146,7 +148,7 @@ export function ReportExportDocument({ title, generatedAt, sections, charts, not
         {sections.map((section, si) => {
           const bodyRows = section.grouped
             ? [section.grouped.grandTotal, ...section.grouped.groups.flatMap((g) => [g.subtotal, ...g.rows])]
-            : [...section.rows, ...(section.totals ? [section.totals] : [])];
+            : [...section.rows, ...(section.totals ? [section.totals] : []), ...(section.footers ?? [])];
           const layout = layoutColumns(section.columns, bodyRows);
           const cellStyle = (base: Style, ci: number): Style | Style[] =>
             layout ? [base, { flex: layout.weights[ci] ?? 1, fontSize: layout.fontSize }] : base;
@@ -232,6 +234,14 @@ export function ReportExportDocument({ title, generatedAt, sections, charts, not
                       ))}
                     </View>
                   )}
+                  {section.rows.length > 0 &&
+                    (section.footers ?? []).map((footer, fi) => (
+                      <View key={`f${fi}`} style={styles.subtotalRow} wrap={false}>
+                        {footer.map((cell, ci) => (
+                          <Text key={ci} style={cellStyle(styles.cellBold, ci)}>{cell}</Text>
+                        ))}
+                      </View>
+                    ))}
                 </>
               )}
             </View>

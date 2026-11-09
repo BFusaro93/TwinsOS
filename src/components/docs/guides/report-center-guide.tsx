@@ -368,11 +368,16 @@ export function ReportCenterGuide() {
         </ul>
         <p>
           Every report table also has a menu on each column header: <strong>sort</strong>,{" "}
-          <strong>filter</strong>, <strong>format</strong> (alignment, number, currency, percent,
+          <strong>filter</strong>, <strong>aggregate</strong> (Sum, Average, Standard Deviation,
+          Count, Distinct Count, Maximum, Minimum — shown as a footer row under the Totals row),{" "}
+          <strong>format</strong> (alignment, number, currency, percent,
           timespan, true/false, color spectrum, bar gauges), <strong>merge duplicate cells</strong>{" "}
           and <strong>hide column</strong>. These change only what&apos;s on screen — exports and the
           saved report stay as run, so a color spectrum or bar gauge picked here isn&apos;t in
-          downloads — and <em>Reset view</em> undoes them. Filters apply to the rows
+          downloads — and <em>Reset view</em> undoes them. The exception is <strong>aggregate</strong>{" "}
+          footers: on the report page and the analysis builder, CSV, Excel and PDF downloads add
+          the same summary rows, computed over the whole result rather than the filtered view
+          (not on dashboards, or in scheduled sends). Filters apply to the rows
           already loaded, and the totals row follows them.
         </p>
         <p>

@@ -8,11 +8,14 @@ import { computeTotals } from "@/lib/reports/engine";
 import { TOTALS_LABEL, totalsLabelIndex } from "@/lib/reports/export-rows";
 import {
   EMPTY_VIEW,
+  aggregateFooters,
   applyRowView,
+  formatAggregateValue,
   formatWithView,
   isViewActive,
   numericRange,
   type TableViewState,
+  type ViewAggregateFn,
 } from "@/lib/reports/table-view";
 import { ColumnHeaderMenu } from "./ColumnHeaderMenu";
 import { computeSpectrumRanges, matchFormatRule, spectrumColorFor } from "@/lib/reports/cell-colors";
@@ -160,10 +163,14 @@ export function ReportTable({
   result,
   formatRules,
   colorSpectrumColumns,
+  onAggregatesChange,
 }: {
   result: ReportResult;
   formatRules?: FormatRule[];
   colorSpectrumColumns?: string[];
+  /** Reports the footer summaries picked in the header menu, so the page can
+   *  carry them into its CSV/Excel/PDF exports. */
+  onAggregatesChange?: (aggregates: Record<string, ViewAggregateFn>) => void;
 }) {
   const [page, setPage] = useState(0);
   // Header-menu view (sort / filter / hide / format / merge). Display-only:
@@ -177,6 +184,10 @@ export function ReportTable({
   useEffect(() => {
     setPage(0);
   }, [view]);
+  useEffect(() => {
+    onAggregatesChange?.(view.aggregates);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.aggregates]);
 
   const subtotalMode = !!result.groupSubtotals;
   const viewRows = useMemo(
@@ -246,6 +257,13 @@ export function ReportTable({
   // overwriting that column's total.
   const totalsLabelIdx = totalsLabelIndex(displayColumns, sectionKey);
 
+  // Header-menu "Aggregate" footers follow the filter (like the Totals row);
+  // exports compute theirs over the full result.
+  const footers = useMemo(
+    () => aggregateFooters(displayColumns, viewRows, view.aggregates),
+    [displayColumns, viewRows, view.aggregates]
+  );
+
   const truncated = !!result.truncated;
 
   return (
@@ -258,7 +276,7 @@ export function ReportTable({
                 ? `Showing ${viewRows.length.toLocaleString()} of ${result.rows.length.toLocaleString()} rows. `
                 : ""}
               {view.hidden.length > 0 ? `${view.hidden.length} column${view.hidden.length === 1 ? "" : "s"} hidden. ` : ""}
-              Table view only — exports use the full report.
+              Table view only — exports use the full report{onAggregatesChange && view.aggregates && Object.keys(view.aggregates).length > 0 ? ", plus your column summaries" : ""}.
             </span>
             <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={() => setView(EMPTY_VIEW)}>
               <RotateCcw className="h-3 w-3" />
@@ -471,8 +489,9 @@ export function ReportTable({
                   );
                 })}
               </tbody>
-              {shownTotals && !result.groupSubtotals && (
+              {((shownTotals && !result.groupSubtotals) || footers.length > 0) && (
                 <tfoot>
+                  {shownTotals && !result.groupSubtotals && (
                   <tr className="border-t bg-slate-50 dark:bg-muted/40 font-medium text-slate-800 dark:text-neutral-100">
                     {displayColumns.map((col, i) => {
                       const total = shownTotals?.[col.key];
@@ -496,6 +515,37 @@ export function ReportTable({
                       );
                     })}
                   </tr>
+                  )}
+                  {footers.map((footer) => {
+                    const labelIdx = displayColumns.findIndex((c) => footer.values[c.key] === undefined);
+                    return (
+                      <tr
+                        key={footer.fn}
+                        className="border-t bg-slate-50 dark:bg-muted/40 text-slate-700 dark:text-neutral-200"
+                      >
+                        {displayColumns.map((col, i) => {
+                          const v = footer.values[col.key];
+                          const text = formatAggregateValue(v ?? null, footer.fn, col.type, formatCellValue);
+                          return (
+                            <td
+                              key={col.key}
+                              className={cn(
+                                "px-3 py-2",
+                                alignClass(col, view),
+                                NUMERIC_TYPES.includes(col.type) && "tabular-nums"
+                              )}
+                            >
+                              {i === labelIdx
+                                ? footer.label
+                                : labelIdx === -1 && i === 0
+                                  ? `${footer.label} ${text}`.trim()
+                                  : text}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </tfoot>
               )}
             </table>
