@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { copyToClipboard } from "@/lib/utils/clipboard";
 import { ArrowRight } from "lucide-react";
 import { useIntegration } from "@/lib/hooks/use-integrations";
 import { Button } from "@/components/ui/button";
@@ -116,7 +117,7 @@ export function ZapierIntegrationCard() {
               type="button"
               size="sm"
               variant="outline"
-              onClick={() => { void navigator.clipboard?.writeText(newKey); }}
+              onClick={() => { void copyToClipboard(newKey); }}
             >
               Copy key
             </Button>

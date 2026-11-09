@@ -1,6 +1,7 @@
 "use client";
 
 import { isBuiltInAreaKey } from "@/lib/chemical-area";
+import { copyToClipboard } from "@/lib/utils/clipboard";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -4556,7 +4557,7 @@ function PortalInviteDialog({
                 className="flex-1 h-9 rounded-md border border-border bg-slate-50 dark:bg-muted/40 px-3 text-xs font-mono text-slate-700 dark:text-neutral-300"
               />
               <button
-                onClick={() => { navigator.clipboard.writeText(result.url); toast.success("Link copied"); }}
+                onClick={() => { void copyToClipboard(result.url).then((ok) => (ok ? toast.success("Link copied") : toast.error("Couldn't copy — select the link above and copy it by hand"))); }}
                 className="h-9 px-3 rounded-md bg-brand-500 text-white text-xs font-medium hover:bg-brand-600"
               >
                 Copy

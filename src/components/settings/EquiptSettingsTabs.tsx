@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { copyToClipboard } from "@/lib/utils/clipboard";
 import {
   Building2,
   Check,
@@ -190,7 +191,8 @@ function RequestPortalTab() {
               className="h-8 shrink-0 gap-1.5 text-xs"
               onClick={() => {
                 const url = `${window.location.origin}/request/${remoteSettings?.slug ?? ""}`;
-                navigator.clipboard.writeText(url).then(() => {
+                void copyToClipboard(url).then((ok) => {
+                  if (!ok) return;
                   setCopied(true);
                   setTimeout(() => setCopied(false), 2000);
                 });

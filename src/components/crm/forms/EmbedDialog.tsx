@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { copyToClipboard } from "@/lib/utils/clipboard";
 import {
   Dialog,
   DialogContent,
@@ -59,7 +60,8 @@ export function EmbedDialog({ formName, slug, publicUrl, open, onOpenChange }: P
   };
 
   function copyCode() {
-    navigator.clipboard.writeText(code[tab]).then(() => {
+    void copyToClipboard(code[tab]).then((ok) => {
+      if (!ok) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
