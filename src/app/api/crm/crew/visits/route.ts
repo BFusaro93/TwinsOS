@@ -163,6 +163,9 @@ export async function GET(request: Request) {
   // visit whose job row RLS hides from the crew still shows, as before.
   const rows = (data as Record<string, unknown>[]).filter((row) => {
     // Undispatched package steps wait on the Waiting List, as on the dispatch board.
+    // A cancelled visit (the office's Cancel on the dispatch board) disappears from the crew's
+    // day too, unless they are clocked into it right now and still need to clock out.
+    if (row.status === "cancelled" && !(row.clocked_in_at && !row.clocked_out_at)) return false;
     if (isWaitingPackagePlaceholder(row)) return false;
     const jobStatus = (row.crm_jobs as { status?: string | null } | null)?.status;
     if (jobStatus !== "cancelled" && jobStatus !== "hold") return true;

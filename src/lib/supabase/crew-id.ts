@@ -178,6 +178,9 @@ export async function selectCarriedOverClockedInVisits(
     filter(q)
       .is("deleted_at", null)
       .lt("scheduled_date", beforeDate)
+      // A forgotten clock-in (nobody clocked out or closed it) used to follow the crew forever:
+      // a Nov 6 visit was still on the crew's phone on Nov 9. Two days covers a real overnight run.
+      .gte("scheduled_date", shiftYmd(beforeDate, -CARRY_OVER_MAX_DAYS))
       .not("clocked_in_at", "is", null)
       .is("clocked_out_at", null)
       .not("status", "in", "(completed,cancelled,skipped)")
@@ -200,6 +203,9 @@ export async function selectCarriedOverClockedInVisits(
   const seen = new Set(clockedIn.data.map((r) => r.id as string));
   return { data: [...clockedIn.data, ...yesterday.data.filter((r) => !seen.has(r.id as string))], error: null };
 }
+
+/** How many days back a still-clocked-in visit stays on the crew's list. */
+export const CARRY_OVER_MAX_DAYS = 2;
 
 /** Org-local hour (0-23) until which yesterday's unfinished stops stay on the crew's list. */
 export const LATE_NIGHT_CARRY_OVER_END_HOUR = 6;

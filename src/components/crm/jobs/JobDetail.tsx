@@ -109,6 +109,7 @@ import { DAY_INDEX, parseLegacySchedule } from "@/lib/visits/recurrence";
 import { JobCostingTab } from "@/components/crm/jobs/JobCostingTab";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
+import { JobVisitPhotos } from "@/components/crm/jobs/JobVisitPhotos";
 import { SnowRateTiersEditor } from "@/components/crm/jobs/SnowRateTiersEditor";
 import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBillingLink";
 import { PermissionGate } from "@/components/shared/PermissionGate";
@@ -2200,6 +2201,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
           {tab === "attachments" && (
             <div className="rounded-lg border bg-card p-4 shadow-sm">
+              <JobVisitPhotos jobId={job.id} />
               <AttachmentsSection recordType="job" recordId={job.id} />
             </div>
           )}

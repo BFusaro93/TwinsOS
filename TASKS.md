@@ -218,3 +218,9 @@ The Payroll tab (#466) shows marked-out gaps with start/end times, but lunch, br
 - [ ] Store each lunch / break / pause interval (start + end) when the crew app starts and ends it (e.g. a `crm_crew_break_intervals` table keyed by punch or visit), keeping the existing minute totals in step so payroll and job costing are unchanged.
 - [ ] Show the intervals on the Payroll day row and in the Break Times export column next to the marked-out gaps.
 - [ ] Decide whether the office can edit an interval (it feeds the same "min off" total payroll already lets them override).
+
+## Backlog — Harborscapes round 2 (2026-11-09) items not done
+- [ ] **One card per job on the crew app.** Visits group into one crew stop by client + date + crew + address (`stopKeyForVisit`, `src/lib/utils/visit-stops.ts`, deliberately without `job_id`). Adding `jobId` to the key splits them, but one punch owner per stop is assumed by the clock-in/out, pause, break-paid and `resolvePunchOwnerVisitId` paths, so two jobs at one address would need separate punches without double-counting hours ((out-in-breaks) x men). Do it behind an org setting and test with a two-job stop.
+- [ ] **Crew sees only dispatched jobs (org setting, default off).** Crews currently see `scheduled` and `dispatched`; recurring visits are generated `scheduled`, so making dispatched-only the default would empty crews' days unless someone clicks Dispatch All.
+- [ ] **Package "season ends / needs renewal" badge + reminder.** Packages are per season and renew by hand (`Renew for next season`, bulk Renew Packages); nothing reminds anyone, and a contract link can drop on renewal.
+- [ ] **Equipment on the office dispatch sheet / client Activity:** crew photos are now on the job's Attachments tab only.

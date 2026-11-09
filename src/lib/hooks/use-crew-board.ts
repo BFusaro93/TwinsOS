@@ -6,6 +6,7 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { useAssets } from "@/lib/hooks/use-assets";
 import { useVehicles } from "@/lib/hooks/use-vehicles";
+import { equipmentRank } from "@/lib/equipment-order";
 
 // ── equipment = CMMS assets + CMMS vehicles ───────────────────────────────────
 // Vehicles (trucks) live in their own table, so every equipment row points at
@@ -41,8 +42,7 @@ export interface EquipmentItem {
 
 function toItem(kind: EquipmentKind, row: { id: string; name: string; assetTag?: string | null; assetType?: string | null; photoUrl?: string | null; status: string; make?: string | null; model?: string | null }): EquipmentItem {
   const type = row.assetType ?? null;
-  const trailer = /trailer/i.test(type ?? "");
-  const truck = kind === "vehicle" || /truck|\bvan\b|pickup/i.test(type ?? "");
+  const { isVehicle, rank } = equipmentRank(kind, type);
   return {
     key: equipKey({ kind, id: row.id }),
     kind,
@@ -53,8 +53,8 @@ function toItem(kind: EquipmentKind, row: { id: string; name: string; assetTag?:
     photoUrl: row.photoUrl ?? null,
     status: row.status,
     search: [row.name, row.assetTag, type, row.make, row.model].filter(Boolean).join(" ").toLowerCase(),
-    isVehicle: truck || trailer,
-    rank: truck ? 0 : trailer ? 1 : 2,
+    isVehicle,
+    rank,
   };
 }
 
