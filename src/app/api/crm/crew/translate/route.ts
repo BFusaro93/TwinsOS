@@ -17,11 +17,21 @@ const Body = z.object({
  * showing an identical copy.
  */
 export async function POST(request: Request) {
-  const { user } = await getRouteAuth(request);
+  const { supabase, user } = await getRouteAuth(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Per-user cap: each call is a billable request to Google.
-  if (!(await checkAuthRateLimit(`crew-translate:${user.id}`, 60, 600))) {
+  // Any Supabase login passed the check above — including client-portal
+  // accounts and fresh trial signups, which have no business proxying text to
+  // Google on the platform key. Require a staff/crew profile (RLS: a user can
+  // always read their own row).
+  const { data: profile } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
+  if (!profile) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  // Per-user cap: each call is a billable request to Google. The limiter
+  // fails OPEN on a DB error for the auth routes it was built for (so a
+  // hiccup can't lock everyone out of login); for a cost-bearing proxy fail
+  // CLOSED instead.
+  if (!(await checkAuthRateLimit(`crew-translate:${user.id}`, 60, 600, { failClosed: true }))) {
     return NextResponse.json({ error: "Too many translations. Try again in a few minutes." }, { status: 429 });
   }
 

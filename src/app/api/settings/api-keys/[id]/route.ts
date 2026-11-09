@@ -21,8 +21,8 @@ export async function PATCH(_request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: profile } = await supabase.from("profiles").select("org_id, role").eq("id", user.id).single();
-  if (!profile || profile.role !== "admin") {
+  const { data: profile } = await supabase.from("profiles").select("org_id, role, status").eq("id", user.id).single();
+  if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
 
@@ -65,8 +65,8 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: profile } = await supabase.from("profiles").select("org_id, role").eq("id", user.id).single();
-  if (!profile || profile.role !== "admin") {
+  const { data: profile } = await supabase.from("profiles").select("org_id, role, status").eq("id", user.id).single();
+  if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Admin role required" }, { status: 403 });
   }
 

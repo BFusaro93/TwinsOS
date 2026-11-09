@@ -13,6 +13,20 @@ import { logger } from "@/lib/logger";
 
 const log = logger.child("mcp-oauth-authorize");
 
+function isSameOriginFormPost(request: Request): boolean {
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") return false;
+  const origin = request.headers.get("origin");
+  if (!origin) return false;
+  // Behind Vercel the request URL's host is the public host; compare origins
+  // rather than full URLs so a port/scheme mismatch in dev fails closed too.
+  try {
+    return new URL(origin).origin === new URL(request.url).origin;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The "approve"/"deny" submit from the consent form rendered at
  * /oauth/authorize (see that page for the GET half of this flow). Under
@@ -21,6 +35,16 @@ const log = logger.child("mcp-oauth-authorize");
  * middleware's.
  */
 export async function POST(request: Request) {
+  // CSRF: this POST mints an org-wide authorization code from whatever
+  // client_id / redirect_uri / scopes the form carries, and client
+  // registration is open. Until now only the session cookie's SameSite=Lax
+  // stood between a cross-site auto-submitted form and a token for the
+  // victim admin's org. A browser form post always carries Origin (and
+  // Sec-Fetch-Site); require them to say same-origin before reading the form.
+  if (!isSameOriginFormPost(request)) {
+    return NextResponse.json({ error: "invalid_request", error_description: "Cross-site consent submission rejected" }, { status: 403 });
+  }
+
   const form = await request.formData();
   const clientId = form.get("client_id")?.toString();
   const redirectUri = form.get("redirect_uri")?.toString();

@@ -52,7 +52,8 @@ export async function POST(
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
-  const caption = formData.get("caption") as string | null;
+  const rawCaption = formData.get("caption");
+  const caption = typeof rawCaption === "string" ? rawCaption.slice(0, 1000) : null;
   // Optional client-generated id (the crew-app offline queue's item id) —
   // when present it's used to key the storage path so a retried upload
   // (after a flaky partial-success) overwrites the same object and reuses

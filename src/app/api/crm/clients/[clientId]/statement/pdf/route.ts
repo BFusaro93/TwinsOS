@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hasAnySettingsPermission } from "@/lib/auth/settings-permission";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { renderToBuffer } from "@react-pdf/renderer";
@@ -34,6 +35,12 @@ export async function GET(
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Same gate the invoice list/photos routes use: RLS is org-wide, so without
+  // this any org login (a crew account included) could download every client's account statement.
+  if (!(await hasAnySettingsPermission(supabase, ["acct_view_invoice_list", "acct_add_modify_invoices", "acct_send_invoices"]))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const searchParams = req.nextUrl.searchParams;
   const today = await todayISO(supabase);

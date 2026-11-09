@@ -29,8 +29,8 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(`${settingsUrl}&quickbooks=error`);
 
-  const { data: profile } = await supabase.from("profiles").select("org_id, role").eq("id", user.id).single();
-  if (!profile || profile.role !== "admin") return NextResponse.redirect(`${settingsUrl}&quickbooks=error`);
+  const { data: profile } = await supabase.from("profiles").select("org_id, role, status").eq("id", user.id).single();
+  if (!profile || profile.role !== "admin" || profile.status === "inactive") return NextResponse.redirect(`${settingsUrl}&quickbooks=error`);
 
   try {
     const environment = resolveQuickBooksEnvironment(profile.org_id);

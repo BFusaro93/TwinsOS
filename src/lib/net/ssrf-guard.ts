@@ -81,6 +81,14 @@ function isPrivateOrReservedIpv6(address: string): boolean {
   if (mapped) return isPrivateOrReservedIpv4(mapped[1]);
 
   if (normalized === "::1" || normalized === "::") return true; // loopback / unspecified
+  // IPv4-compatible (::a.b.c.d, deprecated but still parsed) — check the embedded v4.
+  const compat = normalized.match(/^::(\d+\.\d+\.\d+\.\d+)$/);
+  if (compat) return isPrivateOrReservedIpv4(compat[1]);
+  if (normalized.startsWith("64:ff9b:")) return true; // 64:ff9b::/96 NAT64 and 64:ff9b:1::/48 local-use NAT64
+  if (normalized.startsWith("2002:")) return true; // 2002::/16 6to4 (embeds an arbitrary IPv4)
+  if (normalized.startsWith("2001:0:") || normalized.startsWith("2001::")) return true; // 2001::/32 Teredo
+  if (normalized.startsWith("2001:db8:")) return true; // 2001:db8::/32 documentation
+  if (normalized.startsWith("100::")) return true; // 100::/64 discard-only
   if (normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb")) return true; // fe80::/10 link-local
   if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true; // fc00::/7 unique local
   if (normalized.startsWith("ff")) return true; // ff00::/8 multicast

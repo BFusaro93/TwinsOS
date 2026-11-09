@@ -70,8 +70,8 @@ async function requireOrgAdmin(supabase: Awaited<ReturnType<typeof createServerC
   } = await supabase.auth.getUser();
   if (authErr || !user) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) } as const;
 
-  const { data: profile } = await supabase.from("profiles").select("org_id, role").eq("id", user.id).single();
-  if (!profile || profile.role !== "admin") {
+  const { data: profile } = await supabase.from("profiles").select("org_id, role, status").eq("id", user.id).single();
+  if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return { error: NextResponse.json({ error: "Admin role required" }, { status: 403 }) } as const;
   }
   return { userId: user.id, orgId: profile.org_id } as const;

@@ -5,6 +5,9 @@ import { notifyStaffOfNewTicket } from "@/lib/ticket-notify";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
 import { processEnrollmentImmediately } from "@/lib/automations/sequence-processor";
 import { createServiceClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/logger";
+
+const log = logger.child("form-submit");
 import { escapeHtml } from "@/lib/utils/escape-html";
 import { EMAIL_REGEX, computeVisitedPages, ruleConditionMatches, type PageWalkRule } from "@/lib/forms/form-logic";
 
@@ -903,7 +906,9 @@ export async function submitFormResponse(
   });
 
   if (insertError) {
-    return { ok: false, error: insertError.message };
+    // Anonymous caller: never echo Postgres text (constraint/column names).
+    log.error("form response insert failed", { formId: form.id, error: insertError.message });
+    return { ok: false, error: "Could not save your submission. Please try again." };
   }
 
   // Enrollments from this submission. Their first due step (e.g. a speed-to-lead reply)

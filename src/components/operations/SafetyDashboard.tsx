@@ -76,27 +76,11 @@ function parseLabelFromFilename(filename: string): { label: string; weekEnd: str
 }
 
 // ── XLSX parser (loads xlsx from CDN on first use) ────────────────────────────
-type XlsxLib = {
-  read: (data: string, opts: { type: string; cellDates: boolean }) => {
-    SheetNames: string[];
-    Sheets: Record<string, unknown>;
-  };
-  utils: {
-    sheet_to_json: (ws: unknown, opts: { defval: string }) => Record<string, unknown>[];
-  };
-};
-
 async function parseSamsaraXlsx(file: File, excludeVehicles: Set<string>): Promise<DriverData[]> {
-  if (!(window as { XLSX?: unknown }).XLSX) {
-    await new Promise<void>((res, rej) => {
-      const s = document.createElement("script");
-      s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-      s.onload = () => res();
-      s.onerror = rej;
-      document.head.appendChild(s);
-    });
-  }
-  const lib = (window as { XLSX?: XlsxLib }).XLSX!;
+  // Bundled SheetJS (same package xlsx-export.ts uses) — this used to load
+  // xlsx 0.18.5 from cdnjs at runtime, a build with known prototype-pollution
+  // and ReDoS bugs, executed inside a signed-in staff session.
+  const lib = await import("@e965/xlsx");
   const binary = await new Promise<string>((res, rej) => {
     const r = new FileReader();
     r.onload = e => res(e.target!.result as string);
@@ -105,7 +89,7 @@ async function parseSamsaraXlsx(file: File, excludeVehicles: Set<string>): Promi
   });
   const wb = lib.read(binary, { type: "binary", cellDates: false });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = lib.utils.sheet_to_json(ws, { defval: "" });
+  const rows = lib.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
 
   const col = (row: Record<string, unknown>, candidates: string[]): unknown => {
     const keys = Object.keys(row);

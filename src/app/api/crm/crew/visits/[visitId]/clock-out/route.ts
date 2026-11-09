@@ -17,7 +17,7 @@ import { instantToZoneWallClock, isoInZone } from "@/lib/time/zone";
 const log = logger.child("crew/clock-out");
 
 const Body = z.object({
-  notes: z.string().optional(),
+  notes: z.string().max(4000).optional(),
   // HH:mm in the crew member's local time — the server (Vercel) runs in UTC,
   // so the actual local time-of-day must come from the client's browser clock.
   localTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),

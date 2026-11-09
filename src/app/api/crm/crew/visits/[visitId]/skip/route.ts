@@ -10,7 +10,7 @@ import { fireVisitTriggers } from "@/lib/automations/fire-visit-triggers";
 
 const log = logger.child("crew/skip");
 
-const Body = z.object({ reason: z.string().min(1, "Reason is required") });
+const Body = z.object({ reason: z.string().min(1, "Reason is required").max(2000) });
 
 export async function POST(
   request: Request,
