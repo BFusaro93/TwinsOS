@@ -47,10 +47,15 @@ export async function GET(
   // edited since — the header tells staff their edits aren't visible yet.
   const published = await getPublishedProposal(supabase, estimateId);
   const changedSinceSent = await isChangedSinceSent(supabase, estimateId);
+  // The token IS the client's credential for the public proposal page, so it
+  // is only handed to users who may send the estimate (same estimate_send
+  // gate as POST / send-email). Everyone else still gets the version info.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: canSend } = await (supabase.rpc as any)("has_settings_permission", { p_key: "estimate_send" });
   return NextResponse.json(
-    live
+    live && canSend
       ? { url: proposalUrlFor(live.token), token: live.token, expiresAt: live.expiresAt, publishedVersion: published?.versionNumber ?? null, changedSinceSent }
-      : { url: null, publishedVersion: published?.versionNumber ?? null, changedSinceSent },
+      : { url: null, hasLiveLink: !!live, publishedVersion: published?.versionNumber ?? null, changedSinceSent },
   );
 }
 

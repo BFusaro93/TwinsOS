@@ -28,6 +28,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "path is required" }, { status: 400 });
   }
 
+  // Storage keys are literal (no `..` normalization), but only sign the shape
+  // the submit route writes: <form uuid>/<safe segments>. Anything else 400s.
+  if (!/^[0-9a-f-]{36}(\/[A-Za-z0-9._-]+){1,4}$/.test(path) || path.includes("..")) {
+    return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+  }
   const formId = path.split("/")[0];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: form } = await (supabase as any)

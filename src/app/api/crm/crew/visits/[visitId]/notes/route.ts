@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 
 const log = logger.child("crew/notes");
 
-const Body = z.object({ note: z.string().min(1) });
+const Body = z.object({ note: z.string().min(1).max(4000) });
 
 // Accepts either the web app's cookie session or crew-app's bearer token —
 // see getRouteAuth().

@@ -130,6 +130,17 @@ export async function PATCH(
   const undoOverride = async () => {
     if (overrideMovedFrom) await revertPackageMinDaysOverrides(supabase, [{ visitId, previousDate: overrideMovedFrom }]);
   };
+  // crm_crews has no org-scoped FK from crm_job_visits, so RLS on the visit
+  // alone would let a foreign crew_id through (and the note push below would
+  // then go to another org's crew phone). Resolve it through the caller's
+  // RLS-scoped client, same as bulk-update does — a foreign id comes back empty.
+  if (patch.crew_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: crewRow } = await (supabase as any)
+      .from("crm_crews").select("id").eq("id", patch.crew_id).is("deleted_at", null).maybeSingle();
+    if (!crewRow) return NextResponse.json({ error: "Crew not found" }, { status: 404 });
+  }
+
   if (patch.scheduled_date && patch.scheduled_date !== prev?.scheduled_date) {
     const violation = await checkPackageMinDaysViolation(supabase, visitId, patch.scheduled_date);
     if (violation) {

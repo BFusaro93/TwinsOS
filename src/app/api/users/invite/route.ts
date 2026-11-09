@@ -118,12 +118,12 @@ export async function POST(request: Request) {
         email,
       });
       if (secondTry.error || !secondTry.data) {
-        console.error("generateLink (recovery) error:", secondTry.error);
+        log.error("generateLink (recovery) error", { error: secondTry.error });
         return NextResponse.json({ error: "Failed to generate invite link" }, { status: 500 });
       }
       linkData = secondTry.data;
     } else {
-      console.error("generateLink error:", firstTry.error);
+      log.error("generateLink error", { error: firstTry.error });
       return NextResponse.json({ error: "Failed to generate invite link" }, { status: 500 });
     }
   } else {
@@ -200,7 +200,7 @@ export async function POST(request: Request) {
   });
 
   if (emailErr) {
-    console.error("Resend error:", emailErr);
+    log.error("Resend error", { error: emailErr });
     return NextResponse.json({ error: "Failed to send invite email" }, { status: 500 });
   }
 
@@ -224,7 +224,7 @@ export async function POST(request: Request) {
       { onConflict: "id" }
     );
     if (profileUpsertErr) {
-      console.error("profile upsert error:", profileUpsertErr);
+      log.error("profile upsert error", { error: profileUpsertErr });
       return NextResponse.json({ error: "Invite sent but the user record could not be created" }, { status: 500 });
     }
   }

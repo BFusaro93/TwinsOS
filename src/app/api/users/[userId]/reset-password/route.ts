@@ -9,9 +9,10 @@ const log = logger.child("users-reset-password");
 
 /**
  * POST /api/users/[userId]/reset-password
- * Admin-only. Directly sets a new password for a user via the service role
- * Admin API — needed for crew accounts, which use fake @crew.landscapt.com
- * addresses and can't receive a normal password-reset email.
+ * Admin-only. Directly sets a new password for a CREW login via the service
+ * role Admin API — needed because crew accounts use fake @crew.landscapt.com
+ * addresses and can't receive a normal password-reset email. Any other role is
+ * refused (403): those users reset through the emailed link themselves.
  * Body: { password: string }
  */
 export async function POST(
@@ -66,11 +67,16 @@ export async function POST(
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  // Least privilege while impersonating: a password reset on a real person's
-  // login is an account takeover, so staff may only reset shared crew logins.
-  if (impersonatedOrgId && targetProfile.role !== "crew") {
+  // Shared crew logins only. Every other user has a real mailbox and resets
+  // through the normal "Forgot password" email, which only the account's owner
+  // can complete. Letting an admin type a new password for another person's
+  // login is silent account takeover (no email to the target, no re-auth), and
+  // it was reachable by any admin — or a hijacked admin session — even though
+  // the Users page only ever offered it for crew rows. This also covers the
+  // impersonation case, so staff get the same rule.
+  if (targetProfile.role !== "crew") {
     return NextResponse.json(
-      { error: "While impersonating, staff can reset passwords for shared crew logins only. Ask the organization's admin to reset other users' passwords." },
+      { error: "Admins can set passwords for shared crew logins only. Other users can reset their own password from the sign-in page with Forgot password." },
       { status: 403 }
     );
   }
@@ -99,9 +105,8 @@ export async function POST(
     return NextResponse.json({ error: "Failed to reset password" }, { status: 500 });
   }
 
-  if (impersonatedOrgId) {
-    log.info("staff reset crew password during impersonation", { staffId: user.id, orgId: impersonatedOrgId, targetId: userId });
-  }
+  // Audit trail: who set which crew login's password (impersonating staff included).
+  log.info("crew password set by admin", { actorId: user.id, orgId: effectiveOrgId, targetId: userId, impersonating: !!impersonatedOrgId });
 
   return NextResponse.json({ success: true });
 }

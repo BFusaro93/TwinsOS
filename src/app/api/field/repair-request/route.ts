@@ -40,8 +40,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const requestedBy = (body.requestedBy as string | undefined)?.trim();
-  const title = (body.title as string | undefined)?.trim();
+  const cap = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : undefined);
+  const requestedBy = cap(body.requestedBy, 200);
+  const title = cap(body.title, 200);
   if (!requestedBy) return NextResponse.json({ error: "requestedBy is required" }, { status: 400 });
   if (!title) return NextResponse.json({ error: "title is required" }, { status: 400 });
 
@@ -52,9 +53,9 @@ export async function POST(req: NextRequest) {
       {
         requestedBy,
         title,
-        description: body.description as string | undefined,
+        description: cap(body.description, 5000),
         priority: body.priority as string | undefined,
-        equipment: body.equipment as string | undefined,
+        equipment: cap(body.equipment, 200),
         assetId: body.assetId as string | undefined,
         equipmentType: body.equipmentType as string | undefined,
         repairCategory: body.repairCategory as string | undefined,

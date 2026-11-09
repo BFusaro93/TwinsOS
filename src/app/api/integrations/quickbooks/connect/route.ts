@@ -13,8 +13,8 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data: profile } = await supabase.from("profiles").select("org_id, role").eq("id", user.id).single();
-  if (!profile || profile.role !== "admin") {
+  const { data: profile } = await supabase.from("profiles").select("org_id, role, status").eq("id", user.id).single();
+  if (!profile || profile.role !== "admin" || profile.status === "inactive") {
     return NextResponse.json({ error: "Only admins can connect QuickBooks" }, { status: 403 });
   }
 

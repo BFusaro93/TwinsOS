@@ -11,12 +11,15 @@ const log = logger.child("auth-rate-limit");
  * incremented via UPSERT so concurrent requests can't race past the limit.
  *
  * Fails open (returns true) if the check itself errors, so a DB hiccup
- * degrades to "no rate limiting" rather than locking everyone out.
+ * degrades to "no rate limiting" rather than locking everyone out. Pass
+ * `{ failClosed: true }` for paths where a missing limit costs money (paid
+ * third-party API proxies) rather than availability.
  */
 export async function checkAuthRateLimit(
   key: string,
   limit: number,
-  windowSeconds: number
+  windowSeconds: number,
+  opts: { failClosed?: boolean } = {}
 ): Promise<boolean> {
   const windowMs = windowSeconds * 1000;
   const windowStart = new Date(Math.floor(Date.now() / windowMs) * windowMs).toISOString();
@@ -29,8 +32,8 @@ export async function checkAuthRateLimit(
   });
 
   if (error) {
-    log.error("rate limit check failed — failing open", { error, key });
-    return true;
+    log.error(`rate limit check failed — failing ${opts.failClosed ? "closed" : "open"}`, { error, key });
+    return !opts.failClosed;
   }
 
   return data === true;

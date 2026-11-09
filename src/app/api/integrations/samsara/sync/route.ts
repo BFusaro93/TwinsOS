@@ -55,10 +55,10 @@ async function handleSync(request: Request) {
     }
     const { data: profile } = await userClient
       .from("profiles")
-      .select("org_id, role")
+      .select("org_id, role, status")
       .eq("id", user.id)
       .single();
-    if (!profile || profile.role !== "admin") {
+    if (!profile || profile.role !== "admin" || profile.status === "inactive") {
       return NextResponse.json({ error: "Admin role required" }, { status: 403 });
     }
     callerOrgId = profile.org_id;

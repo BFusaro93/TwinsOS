@@ -31,7 +31,7 @@ const PENDING_ORG_REUSE_MS = 24 * 60 * 60 * 1000;
 export async function POST(request: Request) {
   // Unauthenticated + service-role insert: throttle per IP so it can't be
   // used to mass-create tenants.
-  const allowed = await checkAuthRateLimit(`org-create:ip:${getClientIp(request)}`, 5, 3600);
+  const allowed = await checkAuthRateLimit(`org-create:ip:${getClientIp(request)}`, 5, 3600, { failClosed: true });
   if (!allowed) {
     return NextResponse.json({ error: "Too many attempts. Please try again later." }, { status: 429 });
   }

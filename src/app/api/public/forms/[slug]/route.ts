@@ -15,36 +15,20 @@ function publicSettings(settings: unknown): Record<string, unknown> {
   return out;
 }
 
-// GET /api/public/forms/[slug] — fetch published form + fields (no auth)
+// GET /api/public/forms/[slug] — fetch published form + fields (no auth).
+// Goes through the get_public_form() SECURITY DEFINER RPC (migration
+// 20261227000100): the anon table policies that used to back this read exposed
+// whole crm_forms rows (settings, org_id) to anyone with the anon key.
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const supabase = await createClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any;
-
-  const { data: form, error } = await db
-    .from("crm_forms")
-    .select("id, name, slug, description, settings")
-    .eq("slug", slug)
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .single();
-
+  const { data, error } = await (supabase.rpc as any)("get_public_form", { p_slug: slug });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const form = data as { id: string; name: string; slug: string; description: string | null; settings: unknown; fields: any[]; rules: any[] } | null;
   if (error || !form) return NextResponse.json({ error: "Form not found" }, { status: 404 });
-
-  const { data: fields } = await db
-    .from("crm_form_fields")
-    .select("id, field_type, label, placeholder, description, required, sort_order, page_number, options, config")
-    .eq("form_id", form.id)
-    .is("deleted_at", null)
-    .order("sort_order", { ascending: true });
-
-  const { data: rules } = await db
-    .from("crm_form_rules")
-    .select("id, source_field_id, operator, operand, action, action_value, sort_order")
-    .eq("form_id", form.id)
-    .is("deleted_at", null)
-    .order("sort_order", { ascending: true });
+  const fields = form.fields;
+  const rules = form.rules;
 
   return NextResponse.json({
     id: form.id,

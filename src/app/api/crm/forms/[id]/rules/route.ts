@@ -16,6 +16,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .from("profiles").select("org_id").eq("id", user.id).single();
   if (profile) profile.org_id = (await getEffectiveOrgId(supabase)) ?? profile.org_id;
   if (!profile) return NextResponse.json({ error: "No profile" }, { status: 403 });
+  const denied = await rejectWithoutFormsPermission(supabase, "view");
+  if (denied) return denied;
 
   // Verify org ownership via the form
   const { data: form } = await db

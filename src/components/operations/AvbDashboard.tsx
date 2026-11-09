@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { openPdf } from "@/lib/utils/pdfjs-loader";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -224,33 +225,9 @@ async function parseAvbPdf(
   file: File,
   knownCrewCodes: string[] = [],
 ): Promise<Record<string, {budgeted:number;actual:number;revenue:number}>> {
-  type PdfLib = {
-    GlobalWorkerOptions: { workerSrc: string };
-    getDocument: (o: {data: ArrayBuffer}) => {
-      promise: Promise<{
-        numPages: number;
-        getPage: (n: number) => Promise<{
-          getTextContent: () => Promise<{items: {transform: number[]; str: string}[]}>
-        }>
-      }>
-    }
-  };
-  if (!(window as {pdfjsLib?: unknown}).pdfjsLib) {
-    await new Promise<void>((res, rej) => {
-      const s = document.createElement("script");
-      s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-      s.onload = () => {
-        ((window as {pdfjsLib?: PdfLib}).pdfjsLib!).GlobalWorkerOptions.workerSrc =
-          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-        res();
-      };
-      s.onerror = rej;
-      document.head.appendChild(s);
-    });
-  }
-  const lib = (window as {pdfjsLib?: PdfLib}).pdfjsLib!;
   const buf = await file.arrayBuffer();
-  const pdf = await lib.getDocument({data: buf}).promise;
+  // Bundled pdf.js (see pdfjs-loader.ts) — this used to load pdf.js 3.11 from cdnjs.
+  const pdf = await openPdf(buf);
 
   // Build lines preserving X positions per item so we can identify the
   // rightmost column (revenue) vs leftmost columns (budgeted, actual).
