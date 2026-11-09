@@ -360,8 +360,10 @@ export function ImportExportGuide() {
           <li>
             Rows are split by <code>Line Type</code>: <code>PART</code> lines become PO line items and
             drive the subtotal; <code>PERCENT_TAXABLE</code> lines set the tax rate (parsed out of the
-            line name, e.g. &quot;CT Sales Tax (6.35%)&quot;) and tax amount; <code>AMOUNT_TAXABLE</code>{" "}
-            lines are summed into shipping cost. The PO&apos;s <code>po_number</code> is generated as{" "}
+            line name, e.g. &quot;CT Sales Tax (6.35%)&quot;); <code>AMOUNT_TAXABLE</code>{" "}
+            lines are summed into shipping cost. The tax amount itself is then calculated from that
+            rate and the imported lines, the same as for any PO, so it can differ by a few cents from
+            the export&apos;s tax line (and won&apos;t include tax the source system charged on shipping). The PO&apos;s <code>po_number</code> is generated as{" "}
             <code>PO-{"{year}"}-{"{csv PO #}"}</code>, where the year comes from the CSV&apos;s Created
             On date, not today&apos;s date.
           </li>

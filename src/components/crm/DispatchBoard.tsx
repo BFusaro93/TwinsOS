@@ -18,7 +18,8 @@ import {
   useReturnVisitToWaitingList,
   useDrivingCrewIds,
 } from "@/lib/hooks/use-crm-jobs";
-import { useCreateInvoiceFromJob, useInvoiceForVisit } from "@/lib/hooks/use-invoices";
+import { useCreateInvoiceFromJob, useInvoiceBlockReason, useInvoiceForVisit } from "@/lib/hooks/use-invoices";
+import { billableJobProductStatusesForVisit, visitLineAmount, type InvoiceFromJobLine } from "@/lib/invoices/create-from-job";
 import { useOrgTags, useClient } from "@/lib/hooks/use-clients";
 import { BulkTagDialog } from "@/components/crm/BulkTagDialog";
 import {
@@ -730,11 +731,14 @@ function exportCellValue(
     }
     case "men":      return visit.menCount ?? null;
     case "qty":      return visit.qty ?? null;
-    // Rate and Amt render the same value on the board (see VisitRow) — kept
-    // as two columns here so the export's shape matches the board's.
-    case "rate":
-    case "amt": {
+    // Rate and Amt match VisitRow's cells: Amt is Rate × Qty when the visit
+    // has its own rate (what its invoice bills).
+    case "rate": {
       const cents = visitEffectiveRateCents(visit);
+      return cents != null ? cents / 100 : null;
+    }
+    case "amt": {
+      const cents = visitBilledAmountCents(visit);
       return cents != null ? cents / 100 : null;
     }
     // The icon strip, written out — the note and comment TEXT gets its own
@@ -825,6 +829,13 @@ function JobDetailSheet({
   const router = useRouter();
   const { mutateAsync: createInvoice, isPending: invoicing } = useCreateInvoiceFromJob();
   const { data: existingInvoice } = useInvoiceForVisit(visit.id);
+  // Contract-covered visits, project jobs and snow jobs are never invoiced
+  // per visit (completion skips them on purpose), so no Invoice button.
+  const { data: invoiceBlockReason } = useInvoiceBlockReason(
+    visit.jobId,
+    visit.id,
+    visit.status === "completed" && !existingInvoice,
+  );
   const { currentUser } = useCurrentUserStore();
   const { can, isAdmin } = usePermissions();
   const [confirm, confirmDialog] = useConfirm();
@@ -1085,7 +1096,8 @@ function JobDetailSheet({
   }
 
   const effectiveRate = visit.rateCents ?? rateFallbackCents;
-  const amt = visit.rateCents ?? rateFallbackCents ?? 0;
+  // What this visit bills — the same figure the Amt column and the invoice use.
+  const amt = visitAmountCents(visit);
 
   async function handleSave() {
     // A blank/invalid men-count parses to NaN, and `NaN || 0` would silently
@@ -1230,6 +1242,8 @@ function JobDetailSheet({
       return;
     }
     try {
+      // Lines keep the visit's service date; the invoice itself is dated the
+      // day it is created (createInvoiceFromJob defaults it to the org's today).
       const serviceDate = visit.scheduledDate ?? orgToday();
       // invoiceDescription is authored via a rich-text editor on the Service
       // (and carried down onto the job/visit) — stripHtml() it before it
@@ -1240,8 +1254,15 @@ function JobDetailSheet({
       // A visit linked to one service (per-service split / package step)
       // bills only that service — same as the server auto-invoice — or every
       // sibling visit would re-bill the whole job.
-      const billedServices = linkedService ? [linkedService] : services;
-      const svcLineItems = billedServices.map((s) => ({
+      // A whole-job visit never bills a stopped service (included = false:
+      // removed from the job, kept for its history); a visit linked to one does.
+      const billedServices = linkedService ? [linkedService] : services.filter((s) => s.included !== false);
+      // The Rate × Qty set on this visit (Save first) is what it bills, as
+      // in the visit auto-invoice — only when it bills a single line.
+      const visitOverride = billedServices.length <= 1 ? { rate_cents: visit.rateCents, qty: visit.qty } : null;
+      const svcLineItems: InvoiceFromJobLine[] = billedServices.map((s) => {
+        const amount = visitLineAmount(visitOverride, { rateCents: s.rateCents ?? 0, qty: s.qty ?? 1 });
+        return {
         name: s.serviceName,
         // The server auto-invoice's precedence: this visit's override, the service's own
         // description (from the estimate line), the job override, the catalog default, the name.
@@ -1251,18 +1272,26 @@ function JobDetailSheet({
           || jobDescription
           || stripHtml(s.serviceInvoiceDescription || "")
           || s.serviceName,
-        qty: s.qty ?? 1,
-        rateCents: s.rateCents ?? 0,
-        totalCents: lineTotalCents(s.rateCents ?? 0, s.qty ?? 1),
+        qty: amount.qty,
+        rateCents: amount.rateCents,
+        totalCents: amount.totalCents,
         serviceDate,
         jobServiceId: s.id,
-      }));
-      // Sweep in unresolved (pending, or crew-recorded 'used') Products/materials too — mirrors
-      // JobDetail.tsx's buildPendingProductLineItems(), which this popup's
-      // invoice creation was missing, silently leaving materials off the
-      // invoice and stuck on "Pending" forever.
+        };
+      });
+      // A job with no services bills the visit's own rate, else the job rate.
+      if (services.length === 0 && (visit.rateCents ?? job?.rateCents)) {
+        const amount = visitLineAmount({ rate_cents: visit.rateCents, qty: visit.qty }, { rateCents: job?.rateCents ?? 0, qty: 1 });
+        const label = visitDescription ?? jobDescription ?? "Service";
+        svcLineItems.push({ name: label, description: label, qty: amount.qty, rateCents: amount.rateCents, totalCents: amount.totalCents, serviceDate, jobServiceId: null });
+      }
+      // Sweep in unresolved Products/materials too — mirrors the visit
+      // auto-invoice: pending or crew-recorded 'used' on one-time jobs, only
+      // 'used' on recurring/package jobs (their pending rows are the
+      // season's plan and stay pending).
+      const billableStatuses = billableJobProductStatusesForVisit(job?.jobType);
       const productLineItems = jobProducts
-        .filter((p) => (p.status === "pending" || p.status === "used") && !p.invoiceLineItemId && !p.jobServiceSubitemId)
+        .filter((p) => billableStatuses.includes(p.status) && !p.invoiceLineItemId && !p.jobServiceSubitemId)
         .map((p) => {
           const billedQty = p.invoiceQty ?? p.qty;
           return {
@@ -1285,7 +1314,6 @@ function JobDetailSheet({
         visitId: visit.id,
         clientId: visit.clientId,
         description: visitDescription ?? jobDescription ?? serviceName,
-        invoiceDate: visit.scheduledDate ?? orgToday(),
         lineItems,
       });
       toast.success(invoice.alreadyInvoiced ? "This visit is already invoiced" : "Invoice created");
@@ -1371,7 +1399,7 @@ function JobDetailSheet({
                 </Button>
               )}
               {visit.status === "completed" && visit.clientId && !visit.crewGroupSecondary
-                && (existingInvoice || can("acct_add_modify_invoices")) && (
+                && (existingInvoice || (can("acct_add_modify_invoices") && invoiceBlockReason === null)) && (
                 <Button
                   size="sm"
                   className="h-7 text-xs bg-brand-500 hover:bg-brand-600 text-white px-3"
@@ -3449,6 +3477,7 @@ function VisitRow({
   // same reasoning as the sheet (C-03). Shared with the Totals row and the
   // Export so all three price a visit identically.
   const effectiveRate = visitEffectiveRateCents(visit);
+  const billedAmount = visitBilledAmountCents(visit);
   const visitCrewId = effectiveCrewId(visit);
   const effectiveCrewName = visit.crewUnassigned ? null : (visit.crewName ?? job?.crewName ?? null);
   const effectiveCrew = (visitCrewId && crewCodeById.get(visitCrewId)) || effectiveCrewName;
@@ -3998,10 +4027,10 @@ function VisitRow({
         </td>
       )}
 
-      {/* Amt */}
+      {/* Amt — Rate × Qty when a per-visit rate is set (what the invoice bills) */}
       {isVisible("amt") && (
         <td className="px-2 py-2 text-right font-medium text-slate-700 dark:text-neutral-300">
-          {effectiveRate != null ? formatCurrency(effectiveRate) : "—"}
+          {billedAmount != null ? formatCurrency(billedAmount) : "—"}
         </td>
       )}
 
@@ -4100,7 +4129,23 @@ function VisitRow({
 // silently contribute $0, understating the total by whatever fraction of
 // visits price this way (the common case).
 function visitAmountCents(visit: CRMJobVisit): number {
-  return visitEffectiveRateCents(visit) ?? 0;
+  return visitBilledAmountCents(visit) ?? 0;
+}
+
+/** What the visit bills (the Amt column): a per-visit Rate set on the sheet
+ *  times the visit's Qty (blank/0 = 1) — exactly what its invoice line and
+ *  rpt_job_visits count — when the visit bills a single line (its own
+ *  service, the job's only service, or the job rate); otherwise the same
+ *  service-based figure as the Rate column. */
+function visitBilledAmountCents(visit: CRMJobVisit): number | null {
+  const services = (visit.job?.services ?? []).filter((s) => s.included !== false);
+  const singleLine = !!visit.jobServiceId || services.length <= 1;
+  if (visit.rateCents != null && singleLine) {
+    return visitLineAmount({ rate_cents: visit.rateCents, qty: visit.qty }, { rateCents: 0, qty: 1 }).totalCents;
+  }
+  return visit.rateCents != null && !singleLine
+    ? services.reduce((s, svc) => s + (svc.rateCents ?? 0) * (svc.qty ?? 1), 0)
+    : visitEffectiveRateCents(visit);
 }
 
 /** The exact value VisitRow's Rate/Amt cells render — null (an em dash on the
@@ -4493,7 +4538,7 @@ export function DispatchBoard() {
         if (summary.failed.length > 0) throw new Error("One or more updates failed");
         if ((summary.billingErrors?.length ?? 0) > 0) {
           toast.warning(
-            `${summary.billingErrors!.length} visit${summary.billingErrors!.length > 1 ? "s were" : " was"} completed but could not be invoiced. Mark ${summary.billingErrors!.length > 1 ? "them" : "it"} complete again to retry billing.`
+            `${summary.billingErrors!.length} visit${summary.billingErrors!.length > 1 ? "s were" : " was"} completed but could not be invoiced. Open ${summary.billingErrors!.length > 1 ? "each one" : "it"} and use its Invoice button to bill ${summary.billingErrors!.length > 1 ? "them" : "it"}.`
           );
         }
       } else {

@@ -184,6 +184,12 @@ export function PMSchedulesGuide() {
           </li>
         </ul>
         <p>
+          A part can be listed once on the schedule&apos;s Parts tab and once per asset (the Add
+          Part pickers hide parts already added). On a single-asset schedule, a part that is on both
+          the Parts tab and the asset&apos;s parts becomes one line on the work order with the two
+          quantities added together.
+        </p>
+        <p>
           Every generated work order is <strong>due on the schedule&apos;s Next Due Date</strong> —
           the date this PM was actually due, which is what on-time vs. late is judged against. The
           moment work orders are generated, Next Due moves to the next date on the schedule&apos;s

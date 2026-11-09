@@ -47,6 +47,11 @@ const Body = z.object({
   schedule: z.string().max(200).nullable().optional(),
   scheduleDays: z.array(z.string().max(20)).max(7).optional(),
   recurrenceStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  /** reschedule only: the job's start date BEFORE this edit. New Job copies the
+   *  start onto each service's start_recurring; services still on that old
+   *  start follow the job to its new one (otherwise an earlier start date
+   *  would generate nothing before the old one). */
+  previousStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 });
 
 export async function POST(request: Request) {
@@ -127,6 +132,23 @@ export async function POST(request: Request) {
       if (scope) {
         const ids = await findUntouchedFutureVisits(supabase, jobId, scope);
         removed = await pruneVisits(supabase, ids, scope.statuses);
+      }
+      const previousStart = parsed.data.previousStart;
+      const newStart = j.recurrence_start ?? j.scheduled_date ?? null;
+      if (scheduleChanged && previousStart && previousStart !== newStart) {
+        const { error: startErr } = await supabase
+          .from("crm_job_services")
+          .update({ start_recurring: newStart })
+          .eq("job_id", jobId)
+          .eq("start_recurring", previousStart);
+        if (startErr) throw new Error(startErr.message);
+      }
+      // A schedule change replaces the visits, so a Settings → Schedules
+      // "Keep existing visits" floor no longer applies.
+      if (scheduleChanged && j.generate_visits_after) {
+        const { error: floorErr } = await supabase.from("crm_jobs").update({ generate_visits_after: null }).eq("id", jobId);
+        if (floorErr) throw new Error(floorErr.message);
+        j.generate_visits_after = null;
       }
     } catch (e) {
       return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to remove old visits" }, { status: 500 });

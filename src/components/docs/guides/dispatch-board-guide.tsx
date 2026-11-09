@@ -32,7 +32,7 @@ const COLUMNS: [string, string][] = [
   ["Actual Hrs", "See the dedicated section below — this is the number that matters most for job costing. Shown to two decimals."],
   ["Hr Variance", "Actual minus budgeted, colored red when over and green when under."],
   ["Men", "Crew headcount used in the actual-hours fallback calculation. A value you set here is kept — editing the visit's times only fills Men in when it was blank."],
-  ["Qty, Rate, AMT", "Billing quantity, unit rate, and the job's value — the sum of the job's included service lines, the same figure the visit sheet and the client's Jobs card show."],
+  ["Qty, Rate, AMT", "Billing quantity, unit rate, and the visit's value — the sum of the job's included service lines, the same figure the visit sheet and the client's Jobs card show. When you set a Rate on the visit itself (visit popup), AMT is that Rate × Qty (blank Qty = 1), and that is exactly what the visit's invoice bills."],
   ["Notes/Icons", "Call-ahead flags, comments, and other at-a-glance indicators."],
 ];
 
@@ -667,8 +667,10 @@ export function DispatchBoardGuide() {
           <strong>Completing visits in bulk (or one at a time from the status menu)</strong> also
           creates each visit&apos;s draft invoice. If an invoice can&apos;t be created, the visit
           still completes, and you see a warning &mdash; &ldquo;N visits were completed but could
-          not be invoiced&rdquo; &mdash; instead of it passing silently. Mark those visits complete
-          again to retry billing; it never double-bills a visit that already has an invoice.
+          not be invoiced&rdquo; &mdash; instead of it passing silently. Open each one and use its{" "}
+          <strong>Invoice</strong> button to bill it. Bulk Mark Completed skips visits that were
+          already completed, so including one in a selection never bills it again; it never
+          double-bills a visit that already has an invoice.
         </p>
         <p>
           <strong>Change Status &gt; Dispatched in bulk</strong> does what dispatching one visit

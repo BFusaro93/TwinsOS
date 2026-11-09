@@ -12,7 +12,14 @@ import {
   useConvertLeadToClient,
   useCloseLeadAsLost,
   useBulkCloseLeadsAsLost,
+  previewOpenEstimatesLost,
+  markOpenEstimatesLost,
+  openEstimatesConfirmOptions,
 } from "@/lib/hooks/use-clients";
+import { LEAD_LOST_REASONS } from "@/lib/hooks/use-cancellation-reasons";
+import { useConfirm } from "@/components/shared/useConfirm";
+import { useQueryClient } from "@tanstack/react-query";
+import { DuplicateClientsWarning, useDuplicateClientCheck } from "@/components/crm/clients/DuplicateClientsWarning";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/shared/PhoneInput";
@@ -131,7 +138,34 @@ export function LeadRevenuePotential({ leadId, className, hideEmpty }: { leadId:
   return <span className={cn("font-medium text-green-700 dark:text-green-400", className)}>{formatCurrency(total)}</span>;
 }
 
-const CLOSE_REASONS = ["Price", "No response", "Went with competitor", "Not ready", "Out of service area", "Other"];
+const CLOSE_REASONS = LEAD_LOST_REASONS;
+
+/** "Mark the N open estimates as Lost?" — asked before closing leads as lost (only of a
+ *  login that may edit estimates). Resolves true when the answer is Yes. */
+async function askMarkOpenEstimates(
+  leadIds: string[],
+  canEditEstimates: boolean,
+  askConfirm: ReturnType<typeof useConfirm>[0],
+): Promise<boolean> {
+  if (!canEditEstimates || leadIds.length === 0) return false;
+  try {
+    const n = await previewOpenEstimatesLost(leadIds);
+    return n > 0 ? await askConfirm(openEstimatesConfirmOptions(n)) : false;
+  } catch {
+    toast.warning("Couldn't check open estimates — they were left as they are.");
+    return false;
+  }
+}
+
+/** Marks the open estimates lost after the leads were closed; never throws. */
+async function markEstimatesAfterClose(leadIds: string[], reason: string): Promise<void> {
+  try {
+    const marked = await markOpenEstimatesLost(leadIds, reason);
+    if (marked > 0) toast.success(`${marked} open estimate${marked !== 1 ? "s" : ""} marked lost`);
+  } catch {
+    toast.error("The open estimates couldn't be marked lost — change them from the Estimates page.");
+  }
+}
 
 // ── New lead dialog ───────────────────────────────────────────────────────────
 
@@ -146,6 +180,7 @@ export function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   // Settings → Required Fields → Clients applies to leads too (same clients table); the New Client and
   // Edit Client dialogs already enforce it.
   const rf = useRequiredFields("client");
+  const dup = useDuplicateClientCheck();
 
   const EMPTY_FORM = {
     displayName: "", accountType: "residential", primaryPhone: "", primaryEmail: "", source: "",
@@ -153,8 +188,11 @@ export function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   };
   const [form, setForm] = useState(EMPTY_FORM);
 
-  function patch(k: keyof typeof form, v: string) { setForm((p) => ({ ...p, [k]: v })); }
-  function reset() { setForm(EMPTY_FORM); }
+  function patch(k: keyof typeof form, v: string) {
+    setForm((p) => ({ ...p, [k]: v }));
+    if (k === "primaryEmail" || k === "primaryPhone") dup.reset();
+  }
+  function reset() { setForm(EMPTY_FORM); dup.reset(); }
 
   async function submit() {
     if (isPending) return;
@@ -164,6 +202,8 @@ export function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     if (form.primaryEmail.trim() && !isValidEmail(form.primaryEmail)) { toast.error("Enter a valid email address"); return; }
     if (rf.isRequired("source") && !form.source.trim()) { toast.error("Source is required"); return; }
     if (rf.isRequired("service_address") && !form.serviceAddress.trim()) { toast.error("Service address is required"); return; }
+    // Same email or phone as an existing client/lead: show the matches and wait for "Create anyway".
+    if (!(await dup.check(form.primaryEmail, form.primaryPhone))) return;
     try {
       const lead = await createLead({
         displayName: form.displayName.trim(),
@@ -231,10 +271,11 @@ export function NewLeadDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               </div>
             </div>
           )}
+          <DuplicateClientsWarning matches={dup.matches} onCreateAnyway={() => void submit()} creating={isPending} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => { reset(); onOpenChange(false); }}>Cancel</Button>
-          <Button onClick={() => void submit()} disabled={isPending}>
+          <Button onClick={() => void submit()} disabled={isPending || dup.checking}>
             {isPending ? "Creating…" : "Save & Add Details →"}
           </Button>
         </DialogFooter>
@@ -288,6 +329,9 @@ function ConvertDialog({ lead, open, onOpenChange }: { lead: Client; open: boole
 
 function CloseLeadDialog({ lead, open, onOpenChange }: { lead: Client; open: boolean; onOpenChange: (o: boolean) => void }) {
   const { mutateAsync: close, isPending } = useCloseLeadAsLost();
+  const [askConfirm, askConfirmDialog] = useConfirm();
+  const { can } = usePermissions();
+  const qc = useQueryClient();
   const [reason, setReason] = useState("");
   const [custom, setCustom] = useState("");
 
@@ -295,13 +339,20 @@ function CloseLeadDialog({ lead, open, onOpenChange }: { lead: Client; open: boo
     const finalReason = reason === "__custom__" ? custom.trim() : reason;
     if (!finalReason) { toast.error("Select a reason"); return; }
     try {
+      const markEstimates = await askMarkOpenEstimates([lead.id], can("estimate_edit"), askConfirm);
       await close({ clientId: lead.id, reason: finalReason });
+      if (markEstimates) {
+        await markEstimatesAfterClose([lead.id], finalReason);
+        await qc.invalidateQueries({ queryKey: ["estimates"] });
+      }
       toast.success(`${lead.displayName} closed as lost`);
       onOpenChange(false);
     } catch { toast.error("Failed to close lead"); }
   }
 
   return (
+    <>
+    {askConfirmDialog}
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Close Lead — Lost</DialogTitle></DialogHeader>
@@ -329,6 +380,7 @@ function CloseLeadDialog({ lead, open, onOpenChange }: { lead: Client; open: boo
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -406,12 +458,15 @@ export function LeadsList({
 }: LeadsListProps) {
   const router = useRouter();
   const { mutateAsync: bulkClose } = useBulkCloseLeadsAsLost();
+  const [askConfirm, askConfirmDialog] = useConfirm();
+  const qc = useQueryClient();
   const { can } = usePermissions();
   // lead_allow_delete doubles as the gate for this app's closest equivalent
   // to deleting a lead — closing it as lost — since there's no actual
   // delete action anywhere for leads (same reasoning as client_allow_delete
   // on ClientsTable.tsx).
-  const canCloseLead = can("lead_allow_delete");
+  // Either lead key closes a lead (the clients status trigger accepts both).
+  const canCloseLead = can("lead_allow_delete") || can("lead_convert_close");
   const canConvertLead = can("lead_convert_close");
   const { fields: FILTER_FIELDS } = useLeadFilterFields();
   const [internalDialogOpen, setInternalDialogOpen] = useState(false);
@@ -722,11 +777,17 @@ export function LeadsList({
         open={bulkCloseOpen}
         onOpenChange={(o) => { setBulkCloseOpen(o); if (!o) clearSelection(); }}
         onConfirm={async (reason) => {
-          await bulkClose({ clientIds: selectedLeadIds, reason });
-          toast.success(`${selectedCount} lead${selectedCount !== 1 ? "s" : ""} closed as lost`);
+          const markEstimates = await askMarkOpenEstimates(selectedLeadIds, can("estimate_edit"), askConfirm);
+          const r = await bulkClose({ clientIds: selectedLeadIds, reason });
+          if (markEstimates) {
+            await markEstimatesAfterClose(selectedLeadIds, reason);
+            await qc.invalidateQueries({ queryKey: ["estimates"] });
+          }
+          toast.success(`${r.affected} lead${r.affected !== 1 ? "s" : ""} closed as lost`);
           clearSelection();
         }}
       />
+      {askConfirmDialog}
     </div>
   );
 }

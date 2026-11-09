@@ -122,7 +122,18 @@ export function JobsPackagesGuide() {
             run; a job whose End Date has already passed generates nothing. If nothing could be
             generated (for example the schedule can&apos;t be read, the start date is past the end or the
             horizon, or the client or contract is inactive), the button says so instead of reporting that
-            everything is up to date.
+            everything is up to date. The <strong>Start Date</strong> and <strong>End Date</strong> can
+            be changed later on the job&apos;s Job Settings (Edit): like a schedule change, you&apos;re
+            shown how many untouched upcoming visits the new dates drop, those are removed, and the
+            new dates are filled in. A recurring job has no separate Scheduled Date to edit — its Start
+            Date is what the schedule runs from.
+          </li>
+          <li>
+            <strong>Visit caps and skipped visits.</strong> A service converted from an estimate line
+            priced over a number of visits (say 30 mows) is capped at that many visits. Only
+            scheduled, dispatched, in-progress and completed visits count toward the cap: a visit
+            that is skipped, cancelled or deleted is made up — the generator adds another visit later
+            in the season, within the job&apos;s End Date.
           </li>
           <li>
             <strong>Schedules need to be set up first.</strong> A recurring job&apos;s schedule is picked from
@@ -173,9 +184,26 @@ export function JobsPackagesGuide() {
           three can no longer drift apart.
         </p>
         <p>
-          Removing a service from a job also removes that service&apos;s upcoming visits (scheduled
-          or dispatched, not yet started). Completed visits stay, since they&apos;re already
-          invoiced.
+          <strong>Removing a service</strong> (the trash icon on the Services tab) removes that
+          service&apos;s upcoming visits — today onward, scheduled or dispatched, not started and not
+          invoiced. What happens to the service itself depends on its history:
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            With no other visits and no products on record, the service is deleted.
+          </li>
+          <li>
+            With past, completed, skipped or in-progress visits (or products) on record, it is{" "}
+            <strong>Stopped</strong> instead: it stays on the Services tab, greyed out with a Stopped
+            badge, no new visits are scheduled for it, and it no longer counts toward the job&apos;s
+            price, total or budgeted hours. Its past visits stay linked to it, so reopening or
+            re-completing one still bills only that service — never the whole job. Removing it again
+            once those visits are gone deletes it. On a job that has already been invoiced, stopping
+            a service needs permission to modify invoices.
+          </li>
+        </ul>
+        <p>
+          The job&apos;s other services keep their visits and keep generating as before.
         </p>
       </Section>
 
@@ -326,6 +354,15 @@ export function JobsPackagesGuide() {
           <code>scheduled</code>. A single skipped or cancelled visit doesn&apos;t change the
           job&apos;s status — the job only reflects its own state, not a rollup of every visit.
         </Callout>
+        <p>
+          <strong>Completing a recurring or package job ends it.</strong> Setting its status to
+          Completed in Job Settings works like cancelling: you&apos;re asked{" "}
+          <strong>&quot;Remove the N upcoming visits?&quot;</strong>, and those that haven&apos;t been
+          started or invoiced are removed (started, completed and invoiced visits stay); no new
+          visits are generated. Saying no leaves the job unchanged. A job completed through the API
+          or Zapier removes them the same way, without asking. Setting it back to an active status
+          regenerates its upcoming visits.
+        </p>
         <p>
           A job in the <code>hold</code> job status pauses future scheduling on that job without
           cancelling it outright — the CRM Client record itself has a related but separate{" "}
@@ -646,9 +683,13 @@ export function JobsPackagesGuide() {
             scheduled, not dispatched, not clocked in, not invoiced and not dragged to another day by
             hand) and adds visits for the new dates. If nothing needs removing, the new dates are
             simply added. In-progress, completed, dispatched and hand-moved visits are never removed.
-            Choose Keep existing visits to leave them; new visits still follow the new schedule.
-            Editing one job&apos;s schedule, start date or end date on its Job Detail works the same
-            way.
+            Choose <strong>Keep existing visits</strong> to leave every visit already on the calendar
+            where it is: each job on the schedule then generates new-schedule visits only{" "}
+            <em>after</em> its last existing visit, so no week ends up with a visit on the old day and
+            another on the new one. The job&apos;s Job Settings shows the date as{" "}
+            <strong>New visits after</strong>; a later schedule update that replaces visits (or
+            changing that job&apos;s schedule or start date) clears it. Editing one job&apos;s
+            schedule, start date or end date on its Job Detail works like Update visits.
           </li>
           <li>
             <strong>Names are unique, and Active means active.</strong> Two live schedules can&apos;t
@@ -681,6 +722,9 @@ export function JobsPackagesGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Complete waits for open visits.</strong> The job&apos;s <strong>Complete</strong> button refuses while the job still has scheduled, dispatched or in-progress visits, and says how many. Complete, skip or cancel them on the Visits tab first; each completed visit invoices itself, so the job isn&apos;t billed for work not done or billed twice.
+          </li>
+          <li>
+            <strong>Where the Invoice button appears.</strong> Job Detail&apos;s <strong>Invoice</strong> button is for one-time and waiting-list jobs. Recurring and package jobs invoice visit by visit, snow jobs bill through Snow Invoicing, and project jobs bill through their milestones, so the button isn&apos;t shown on those.
           </li>
           <li>
             <strong>Inactive and lost clients get no new visits.</strong> Recurring and package visits stop being generated for a client marked Inactive, Lost or Cancelled (and for deleted clients). Reactivating the client resumes generation on the next run.

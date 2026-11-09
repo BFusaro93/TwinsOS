@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapAsset } from "@/lib/supabase/mappers";
 import { normalizeCsvDate } from "@/lib/hooks/use-invoices";
 import { parseCsvDollarsToCents, type BulkImportResult } from "@/lib/csv";
@@ -17,9 +18,11 @@ export function useAssets() {
     queryKey: ["assets"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("assets").select("*").is("deleted_at", null).order("name");
-      if (error) throw error;
+      // Every page, not just the first: PostgREST caps a response at 1,000
+      // rows, and a capped list silently hid records past it.
+      const data = await fetchAllRows<Parameters<typeof mapAsset>[0]>(() =>
+        supabase.from("assets").select("*").is("deleted_at", null).order("name")
+      );
       return (data.map(mapAsset)) as Asset[];
     },
   });

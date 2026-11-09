@@ -346,13 +346,17 @@ export function MaterialsTab({ project }: { project: Project }) {
           const rawId = i.productKey.replace(/^(product:|part:)/, "");
           const unitCostCents = Math.round(i.unitCost * 100);
           runningSubtotal += i.quantity * unitCostCents;
+          // Whole cents for the integer columns — a fractional quantity
+          // made the raw subtotal fractional (22P02).
+          const subtotalCents = Math.round(runningSubtotal);
           const salesTax = computeSalesTax({
-            taxableSubtotal: runningSubtotal,
+            taxableSubtotal: subtotalCents,
+            subtotal: subtotalCents,
             taxRatePercent: req.taxRatePercent,
             discountCost: req.discountCost,
             discountReducesTax: req.discountReducesTax,
           });
-          const grandTotal = runningSubtotal - req.discountCost + salesTax + req.shippingCost;
+          const grandTotal = subtotalCents - req.discountCost + salesTax + req.shippingCost;
           await addReqLineItem({
             requisitionId: req.id,
             lineItem: {
@@ -364,14 +368,14 @@ export function MaterialsTab({ project }: { project: Project }) {
               partNumber: i.partNumber,
               quantity: i.quantity,
               unitCost: unitCostCents,
-              totalCost: i.quantity * unitCostCents,
+              totalCost: Math.round(i.quantity * unitCostCents),
               // Parts are always maintenance_part — never carry a project_id
               // (CLAUDE.md: only project_material/stocked_material may).
               projectId: isPart ? null : project.id,
               notes: null,
               taxable: true,
             },
-            newSubtotal: runningSubtotal,
+            newSubtotal: subtotalCents,
             newSalesTax: salesTax,
             newGrandTotal: grandTotal,
           });
@@ -400,7 +404,7 @@ export function MaterialsTab({ project }: { project: Project }) {
             partNumber: i.partNumber,
             quantity: i.quantity,
             unitCost: unitCostCents,
-            totalCost: i.quantity * unitCostCents,
+            totalCost: Math.round(i.quantity * unitCostCents),
             // Parts are always maintenance_part — never carry a project_id
             // (CLAUDE.md: only project_material/stocked_material may).
             projectId: isPart ? null : project.id,
@@ -412,6 +416,7 @@ export function MaterialsTab({ project }: { project: Project }) {
           const taxableSubtotal = Math.round(items.filter((li) => li.taxable !== false).reduce((s, li) => s + li.quantity * li.unitCost, 0));
           const salesTax = computeSalesTax({
             taxableSubtotal,
+            subtotal,
             taxRatePercent: po.taxRatePercent,
             discountCost: po.discountCost,
             discountReducesTax: po.discountReducesTax,

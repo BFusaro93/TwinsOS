@@ -858,6 +858,17 @@ export function ReportCenterGuide() {
           the schedule shows the reason in its last-run column (a deleted analysis pauses its
           schedules).
         </p>
+        <p>
+          <strong>When the creator is deactivated.</strong> Every schedule runs as the person who
+          created it. When that person is deactivated, their schedules are paused right away (the
+          Scheduled tab shows &quot;Paused: the person who created this schedule was
+          deactivated&quot; and &quot;Created by … (deactivated)&quot;), and their own email address is
+          removed from those schedules&apos; recipients. Nothing is sent while it is paused. An Admin
+          can choose <strong>Take over &amp; resume</strong> from the schedule&apos;s menu: the Admin
+          becomes the schedule&apos;s owner and it starts sending again. If no recipients are left, the
+          schedule is taken over but stays paused and the editor opens so you can add some first.
+          Other roles see Resume disabled until an Admin takes the schedule over.
+        </p>
       </Section>
 
       <Section id="permissions" title="Permissions and gating">

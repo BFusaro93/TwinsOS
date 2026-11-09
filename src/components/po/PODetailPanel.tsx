@@ -33,10 +33,10 @@ import { useProducts } from "@/lib/hooks/use-products";
 import { useParts } from "@/lib/hooks/use-parts";
 import { useVendors } from "@/lib/hooks/use-vendors";
 import { useProjects } from "@/lib/hooks/use-projects";
-import { useGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
+import { usePOGoodsReceipts } from "@/lib/hooks/use-goods-receipts";
 import { PartDetailSheet } from "@/components/cmms/PartDetailSheet";
 import { useSubmitForApproval } from "@/lib/hooks/use-approval-requests";
-import { usePurchaseOrders, useUpdatePurchaseOrderStatus, useDeletePurchaseOrder, useAddPOLineItem, useUpdatePOLineItem, useDeletePOLineItem } from "@/lib/hooks/use-purchase-orders";
+import { usePurchaseOrders, useUpdatePurchaseOrderStatus, useDeletePurchaseOrder, useAddPOLineItem, useUpdatePOLineItem, useDeletePOLineItem, useRefreshPOStatus } from "@/lib/hooks/use-purchase-orders";
 import { useCurrentUserStore, usePOStore } from "@/stores";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { ProjectDetailSheet } from "./ProjectDetailSheet";
@@ -116,6 +116,7 @@ function DetailsTab({
     const taxableSubtotal = Math.round(newItems.filter((li) => li.taxable !== false).reduce((s, li) => s + li.quantity * li.unitCost, 0));
     const salesTax = computeSalesTax({
       taxableSubtotal,
+      subtotal,
       taxRatePercent: po.taxRatePercent,
       discountCost: po.discountCost,
       discountReducesTax: po.discountReducesTax,
@@ -135,6 +136,7 @@ function DetailsTab({
   const grandTotalForSubmit =
     subtotalForSubmit - po.discountCost + computeSalesTax({
       taxableSubtotal: taxableSubtotalForSubmit,
+      subtotal: subtotalForSubmit,
       taxRatePercent: po.taxRatePercent,
       discountCost: po.discountCost,
       discountReducesTax: po.discountReducesTax,
@@ -144,10 +146,9 @@ function DetailsTab({
   const { data: parts = [] } = useParts();
   const { data: vendors = [] } = useVendors();
   const { data: allPOs = [] } = usePurchaseOrders();
-  const { data: allReceipts = [] } = useGoodsReceipts();
+  const { data: poReceipts = [] } = usePOGoodsReceipts(po.id);
 
   // Build received-qty map from all goods receipts for this PO
-  const poReceipts = allReceipts.filter((r) => r.purchaseOrderId === po.id);
   const receivedQtyByLineItemId = poReceipts.length > 0
     ? poReceipts.reduce((map, receipt) => {
         for (const line of receipt.lines) {
@@ -182,6 +183,7 @@ function DetailsTab({
   const taxableSubtotal = Math.round(lineItems.filter((li) => li.taxable !== false).reduce((sum, li) => sum + li.quantity * li.unitCost, 0));
   const salesTax = computeSalesTax({
     taxableSubtotal,
+    subtotal,
     taxRatePercent: po.taxRatePercent,
     discountCost: po.discountCost,
     discountReducesTax: po.discountReducesTax,
@@ -452,15 +454,19 @@ export function PODetailPanel({ po, onEditClick }: PODetailPanelProps) {
   const { data: projects = [] } = useProjects(true);
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const { data: comments = [] } = useComments("po", po.id);
-  const { mutate: syncStatus } = useUpdatePurchaseOrderStatus();
+  const { mutate: refreshStatus } = useRefreshPOStatus();
   const { mutate: deletePO, isPending: deleting } = useDeletePurchaseOrder();
   const { setSelectedPOId } = usePOStore();
   const { canWriteEquipt } = useRoleCapabilities();
 
-  function handleReceiptSubmit(fullyReceived: boolean) {
-    const newStatus: POStatus = fullyReceived ? "completed" : "partially_fulfilled";
-    setStatus(newStatus);
-    syncStatus({ id: po.id, status: newStatus });
+  // The database sets ordered / partially fulfilled / completed from the
+  // receipts themselves; read it back rather than writing one from the
+  // dialog's snapshot.
+  function handleReceiptSubmit() {
+    refreshStatus(
+      { id: po.id, previousStatus: status },
+      { onSuccess: ({ status: serverStatus }) => setStatus(serverStatus) }
+    );
   }
 
   return (

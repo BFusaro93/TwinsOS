@@ -144,6 +144,11 @@ export function ApiKeysCard() {
                 <div>
                   <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">{key.name}</p>
                   <p className="font-mono text-xs text-muted-foreground">{key.keyPrefix}…</p>
+                  {key.createdByInactive && (
+                    <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                      Created by {key.createdByName ?? "a user"} (deactivated) — still works until revoked
+                    </p>
+                  )}
                   {(() => {
                     // A key created before a scope was removed from the
                     // catalog (e.g. the write:sensitive tiers PR #81 dropped)

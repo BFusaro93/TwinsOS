@@ -369,7 +369,15 @@ export function UsersRolesGuide() {
             is already registered elsewhere in the system, a password-reset link is sent instead so
             they land on the same set-password screen. If the email belongs to a different type of
             account, such as a client portal login, or to a user in another organization, the invite
-            is refused with a message; use a different email.
+            is refused with a message; use a different email. Inviting someone who is already an active
+            member of your team is refused too (&quot;already an active member&quot;) — change their role in
+            the table instead. If the invitee&apos;s employee record already has a different Landscapt role,
+            that role is kept and the invite says so; change it under Team → Employees.
+          </li>
+          <li>
+            Invite links are single-use and expire for security. If a link no longer works, an Admin can
+            resend the invite. Opening an invite link again after the account is set up says
+            &quot;You&apos;re already set up&quot; with a link to sign in.
           </li>
           <li>
             An Admin can resend a pending invite, change a user&apos;s role, or deactivate them at
@@ -380,7 +388,23 @@ export function UsersRolesGuide() {
             <strong>Inactive</strong> badge and a reactivate icon in place of the trash icon;
             clicking it restores their login immediately, with their role and any CRM employee link
             untouched. A deactivated user can&apos;t be re-invited (use Reactivate instead), and a
-            deactivated admin can&apos;t use the invite, reset-password or deactivate actions. Marking the user&apos;s CRM employee record inactive has the same effect on permissions: a deactivated employee keeps no CRM or role permissions until reactivated. Setting an employee&apos;s Employment Status to <strong>Terminated</strong> does the same as deactivating them (and moving them back out of Terminated reactivates them). Deactivating or terminating an employee also takes them off every crew roster, so Start Day and Start Job no longer clock them in, payroll no longer carries them and the crew&apos;s headcount drops. Reactivating does not put them back on a crew; add them to a crew again (a Schedule Jobs Directly person gets their one-person crew back automatically). For a shared crew login, this only affects sign-in — to take the crew itself
+            deactivated admin can&apos;t use the invite, reset-password or deactivate actions. The last
+            active Admin can&apos;t be deactivated or changed to another role — the role change or
+            deactivation is refused with &quot;This is the last active admin — promote another admin
+            first&quot;.
+          </li>
+          <li>
+            <strong>A login and its employee record stay in sync.</strong> Deactivating a user on the
+            Users page also deactivates their employee record under Team → Employees, and reactivating
+            the user reactivates it. It works the other way too: deactivating (or terminating) an
+            employee who has a login deactivates that login, and activating the employee restores the
+            login. Because it changes the login, only an Admin can deactivate or activate an employee
+            who has one. The deactivate dialog lists any API keys the person created, with{" "}
+            <strong>Revoke these keys</strong> checked by default (deactivating from the Employees page
+            revokes them as well); a key that is kept shows &quot;Created by … (deactivated)&quot; in the
+            API keys list and keeps working until revoked. Report schedules the person created are
+            paused and their own address is removed from those schedules&apos; recipients — see Report
+            Center → Scheduled to take one over. Marking the user&apos;s CRM employee record inactive has the same effect on permissions: a deactivated employee keeps no CRM or role permissions until reactivated. Setting an employee&apos;s Employment Status to <strong>Terminated</strong> does the same as deactivating them (and moving them back out of Terminated reactivates them). Deactivating or terminating an employee also takes them off every crew roster, so Start Day and Start Job no longer clock them in, payroll no longer carries them and the crew&apos;s headcount drops. Reactivating does not put them back on a crew; add them to a crew again (a Schedule Jobs Directly person gets their one-person crew back automatically). For a shared crew login, this only affects sign-in — to take the crew itself
             off the Dispatch Board, turn it off under Team → Crews instead.
           </li>
         </ol>

@@ -109,7 +109,7 @@ export async function createRequisitionRecord(
   // Shared helper, not `base * (rate / 100)`: dividing the rate first picks up
   // float error that can put a half-cent on the wrong side, drifting a cent
   // from the same requisition built in the app.
-  const salesTax = computeSalesTax({ taxableSubtotal: subtotal, taxRatePercent, discountCost, discountReducesTax });
+  const salesTax = computeSalesTax({ taxableSubtotal: subtotal, subtotal, taxRatePercent, discountCost, discountReducesTax });
   const shippingCost = input.shippingCostCents ?? 0;
   const grandTotal = subtotal - discountCost + salesTax + shippingCost;
   // Atomic per-org/year counter, not Date.now() — two requests in the same

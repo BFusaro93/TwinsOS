@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapOrgUser } from "@/lib/supabase/mappers";
@@ -54,22 +55,41 @@ export function useUpdateUserRole() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
+    // Say why: the DB refuses to demote the last active admin ("This is the
+    // last active admin — promote another admin first"). Without this the
+    // global handler showed a generic "could not be saved".
+    onError: (err) => {
+      const msg = (err as { message?: string } | null)?.message;
+      toast.error(msg ? `Role not changed: ${msg}` : "Role not changed. Please try again.");
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
   });
 }
 
+/** Deactivates a login (and its linked employee record — see the route).
+ *  `revokeApiKeys` also revokes the API keys the person created. */
 export function useDeactivateUser() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (userId: string) => {
-      const res = await fetch(`/api/users/${userId}/deactivate`, { method: "POST" });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error ?? "Failed to deactivate user");
-      }
+    mutationFn: async ({ userId, revokeApiKeys = false }: { userId: string; revokeApiKeys?: boolean }) => {
+      const res = await fetch(`/api/users/${userId}/deactivate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ revokeApiKeys }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string; warning?: string; revokedKeys?: number };
+      if (!res.ok) throw new Error(body.error ?? "Failed to deactivate user");
+      return body;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["crm-employees"] });
+      queryClient.invalidateQueries({ queryKey: ["crm-crews"] });
+      queryClient.invalidateQueries({ queryKey: ["api-keys"] });
+      queryClient.invalidateQueries({ queryKey: ["report-schedules"] });
     },
+    // The caller shows the route's message (e.g. the last-active-admin guard).
+    onError: () => {},
   });
 }
 
@@ -78,14 +98,17 @@ export function useReactivateUser() {
   return useMutation({
     mutationFn: async (userId: string) => {
       const res = await fetch(`/api/users/${userId}/reactivate`, { method: "POST" });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error ?? "Failed to reactivate user");
-      }
+      const body = (await res.json().catch(() => ({}))) as { error?: string; warning?: string };
+      if (!res.ok) throw new Error(body.error ?? "Failed to reactivate user");
+      return body;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["crm-employees"] });
+      queryClient.invalidateQueries({ queryKey: ["crm-crews"] });
     },
+    // The caller shows the route's message.
+    onError: () => {},
   });
 }
 

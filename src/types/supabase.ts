@@ -6780,6 +6780,7 @@ export type Database = {
           end_date_window: string | null
           end_time: string | null
           estimate_id: string | null
+          generate_visits_after: string | null
           id: string
           inch_trigger: number | null
           invoice_description: string | null
@@ -6859,6 +6860,7 @@ export type Database = {
           end_date_window?: string | null
           end_time?: string | null
           estimate_id?: string | null
+          generate_visits_after?: string | null
           id?: string
           inch_trigger?: number | null
           invoice_description?: string | null
@@ -6938,6 +6940,7 @@ export type Database = {
           end_date_window?: string | null
           end_time?: string | null
           estimate_id?: string | null
+          generate_visits_after?: string | null
           id?: string
           inch_trigger?: number | null
           invoice_description?: string | null
@@ -10097,6 +10100,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      cron_cursors: {
+        Row: {
+          cursor: string | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          cursor?: string | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          cursor?: string | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       damage_case_counters: {
         Row: {
@@ -18089,6 +18110,10 @@ export type Database = {
         Returns: string
       }
       crm_client_filter_options: { Args: never; Returns: Json }
+      crm_clients_never_converted: {
+        Args: { p_client_ids: string[] }
+        Returns: string[]
+      }
       crm_commission_create_statement: {
         Args: { p_employee_id: string; p_from: string; p_to: string }
         Returns: string
@@ -18172,6 +18197,17 @@ export type Database = {
       crm_employee_hourly_rate_cents: {
         Args: { p_employee_id: string }
         Returns: number
+      }
+      crm_find_duplicate_clients: {
+        Args: { p_email: string | null; p_phone: string | null }
+        Returns: {
+          display_name: string
+          id: string
+          matched_on: string
+          primary_email: string | null
+          primary_phone: string | null
+          status: string
+        }[]
       }
       crm_insert_sequence_event: {
         Args: {
@@ -18310,9 +18346,21 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      crm_mark_client_open_estimates_lost: {
+        Args: { p_apply?: boolean; p_client_ids: string[]; p_reason?: string | null }
+        Returns: number
+      }
       crm_marketing_suppressed_emails: {
         Args: { p_emails: string[]; p_org_id: string }
         Returns: string[]
+      }
+      crm_merge_clients: {
+        Args: { p_keep: string; p_merge: string }
+        Returns: Json
+      }
+      crm_merge_clients_preview: {
+        Args: { p_keep: string; p_merge: string }
+        Returns: Json
       }
       crm_merge_invoices: {
         Args: {

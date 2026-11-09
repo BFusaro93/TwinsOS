@@ -26,6 +26,10 @@ import {
   useCancelClient,
   useActivateClient,
   useClientSelfOptOut,
+  useCanBeLead,
+  previewOpenEstimatesLost,
+  markOpenEstimatesLost,
+  openEstimatesConfirmOptions,
 } from "@/lib/hooks/use-clients";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { TagEditor } from "@/components/crm/TagEditor";
@@ -148,13 +152,16 @@ import {
   Search,
   CreditCard,
   MessageSquareText,
+  GitMerge,
 } from "lucide-react";
+import { MergeClientsDialog } from "@/components/crm/clients/MergeClientsDialog";
 import type { Client, ClientContact, ClientProperty, ContactPhone, PhoneType } from "@/types/crm";
 import { useVerifyAddress } from "@/lib/hooks/use-verify-address";
 import { AddressSuggestion } from "@/components/shared/AddressSuggestion";
 import type { CRMJob, CRMJobVisit, CRMJobService } from "@/types/crm-jobs";
 import { useConfirm } from "@/components/shared/useConfirm";
 import { previewClientVisits, cancelClientVisitsRemote, clientVisitsConfirmOptions } from "@/lib/client-visits-api";
+import { useCancellationReasonOptions, LEAD_LOST_REASONS } from "@/lib/hooks/use-cancellation-reasons";
 import { SearchInput } from "@/components/shared/SearchInput";
 import { summarizeContractAmount } from "@/lib/utils/contract-frequency";
 
@@ -591,14 +598,18 @@ function PaymentDetailDialog({
 
 // ── CancelClientDialog ────────────────────────────────────────────────────────
 
-const CANCEL_REASONS = ["Price", "Moved", "Unhappy with service", "No longer needs service", "Other"];
-
-function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
-  clientId: string; clientName: string; open: boolean; onOpenChange: (o: boolean) => void;
+/** Cancel a client, or — for a lead, which never became a client — close it as Lost.
+ *  Asks about the account's upcoming visits and open estimates first. */
+function CancelClientDialog({ clientId, clientName, isLead = false, open, onOpenChange }: {
+  clientId: string; clientName: string; isLead?: boolean; open: boolean; onOpenChange: (o: boolean) => void;
 }) {
   const { mutateAsync: cancel, isPending } = useCancelClient();
   const [askConfirm, askConfirmDialog] = useConfirm();
   const qc = useQueryClient();
+  const { can } = usePermissions();
+  // Built-ins plus the org's own list (Settings → Lists), same as the bulk Cancel dialog.
+  const cancellationReasons = useCancellationReasonOptions();
+  const reasons = isLead ? LEAD_LOST_REASONS : cancellationReasons;
   const [reason, setReason] = useState("");
   const [custom, setCustom] = useState("");
 
@@ -615,17 +626,39 @@ function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
 
   async function confirm() {
     const finalReason = reason === "Other" ? custom.trim() : reason;
-    if (!finalReason) { toast.error("Select a cancellation reason"); return; }
+    if (!finalReason) { toast.error(isLead ? "Select a reason" : "Select a cancellation reason"); return; }
     try {
       // Ask about their upcoming visits first (count computed server-side), act
-      // on the answer only once the client itself is cancelled.
+      // on the answer only once the client itself is cancelled. A lead can't be
+      // scheduled, so it has none to ask about.
       let cancelVisits = false;
-      try {
-        const n = await previewClientVisits([clientId]);
-        if (n > 0) cancelVisits = await askConfirm(clientVisitsConfirmOptions(n));
-      } catch { toast.warning("Couldn't check this client's upcoming visits — they were left as they are."); }
-      await cancel({ clientId, reason: finalReason });
-      if (cancelVisits) {
+      if (!isLead) {
+        try {
+          const n = await previewClientVisits([clientId]);
+          if (n > 0) cancelVisits = await askConfirm(clientVisitsConfirmOptions(n));
+        } catch { toast.warning("Couldn't check this client's upcoming visits — they were left as they are."); }
+      }
+      // Then their open estimates (only asked of a login that may edit estimates).
+      let markEstimates = false;
+      if (can("estimate_edit")) {
+        try {
+          const m = await previewOpenEstimatesLost([clientId]);
+          if (m > 0) markEstimates = await askConfirm(openEstimatesConfirmOptions(m));
+        } catch { toast.warning("Couldn't check open estimates — they were left as they are."); }
+      }
+      const result = await cancel({ clientId, reason: finalReason });
+      if (markEstimates && result.changed) {
+        try {
+          const marked = await markOpenEstimatesLost([clientId], finalReason);
+          if (marked > 0) toast.success(`${marked} open estimate${marked !== 1 ? "s" : ""} marked lost`);
+        } catch {
+          toast.error("The estimates couldn't be marked lost — change them from the Estimates tab.");
+        }
+        await qc.invalidateQueries({ queryKey: ["estimates"] });
+      }
+      if (isLead) {
+        toast.success(`${clientName} closed as lost`);
+      } else if (cancelVisits) {
         try {
           const done = await cancelClientVisitsRemote([clientId]);
           toast.success(`${clientName} cancelled — ${done} upcoming visit${done !== 1 ? "s" : ""} cancelled`);
@@ -638,7 +671,7 @@ function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
         toast.success(`${clientName} cancelled`);
       }
       onOpenChange(false);
-    } catch { toast.error("Failed to cancel client"); }
+    } catch { toast.error(isLead ? "Failed to close lead" : "Failed to cancel client"); }
   }
 
   return (
@@ -646,9 +679,13 @@ function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
     {askConfirmDialog}
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Cancel Client</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{isLead ? "Close Lead — Lost" : "Cancel Client"}</DialogTitle></DialogHeader>
         <p className="text-sm text-slate-600 dark:text-neutral-400">
-          Cancel <span className="font-medium">{clientName}</span>? A cancellation reason is required for reporting.
+          {isLead ? (
+            <>Close <span className="font-medium">{clientName}</span> as lost? They never became a client, so they&rsquo;re marked &ldquo;Lost&rdquo;, not cancelled. A reason is required for reporting.</>
+          ) : (
+            <>Cancel <span className="font-medium">{clientName}</span>? A cancellation reason is required for reporting.</>
+          )}
         </p>
         <div className="space-y-3">
           <div>
@@ -656,7 +693,7 @@ function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
             <Select value={reason} onValueChange={setReason}>
               <SelectTrigger className="mt-1"><SelectValue placeholder="Select reason…" /></SelectTrigger>
               <SelectContent>
-                {CANCEL_REASONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                {reasons.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -672,7 +709,7 @@ function CancelClientDialog({ clientId, clientName, open, onOpenChange }: {
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Back</Button>
           <Button variant="destructive" onClick={() => void confirm()} disabled={isPending}>
-            {isPending ? "Cancelling…" : "Cancel Client"}
+            {isPending ? (isLead ? "Closing…" : "Cancelling…") : isLead ? "Close as Lost" : "Cancel Client"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -769,6 +806,11 @@ function ClientCombobox({
 
 function EditClientDialog({ client, open, onOpenChange }: { client: Client; open: boolean; onOpenChange: (o: boolean) => void }) {
   const { mutateAsync: update, isPending } = useUpdateClient();
+  const [askConfirm, askConfirmDialog] = useConfirm();
+  const qc = useQueryClient();
+  // Whether "Lead" may be offered: not for an account that is Active or was ever a
+  // client (client_since, jobs or invoices) — the status trigger refuses it.
+  const { data: canBeLead = false } = useCanBeLead(client, open);
   const rf = useRequiredFields("client");
   const svcAddr = useVerifyAddress();
   const { data: fieldDefs = [] } = useCustomFieldDefs();
@@ -964,6 +1006,20 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   }
 
   async function handleSave() {
+    // Settings → Required Fields applies to edits the same as to New Client / New Lead,
+    // or a required field could be cleared after creation.
+    if (rf.isRequired("primary_phone") && !clientPhones.some((p) => p.phone.trim())) {
+      toast.error("Phone is required");
+      return;
+    }
+    if (rf.isRequired("primary_email") && !form.primaryEmail.trim()) {
+      toast.error("Email is required");
+      return;
+    }
+    if (rf.isRequired("service_address") && !form.serviceAddress.trim()) {
+      toast.error("Service address is required");
+      return;
+    }
     if (rf.isRequired("source") && !form.source.trim()) {
       toast.error("Source is required");
       return;
@@ -975,6 +1031,18 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
     if (form.billingEmail.trim() && !isValidEmail(form.billingEmail)) {
       toast.error("Enter a valid billing email address");
       return;
+    }
+    // Setting a client Inactive asks the same "Cancel their N upcoming visits?" question
+    // as Cancel (a lead can't be scheduled, so it has none). Answered before saving,
+    // acted on only once the status change has saved.
+    const goingInactive = form.status === "inactive" && client.status !== "inactive"
+      && client.status !== "lead" && client.status !== "lost";
+    let cancelVisits = false;
+    if (goingInactive) {
+      try {
+        const n = await previewClientVisits([client.id]);
+        if (n > 0) cancelVisits = await askConfirm(clientVisitsConfirmOptions(n));
+      } catch { toast.warning("Couldn't check this client's upcoming visits — they were left as they are."); }
     }
     try {
       const serviceAddr = {
@@ -1039,9 +1107,23 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
           yardsOfMulch: form.yardsOfMulch !== "" ? parseFloat(form.yardsOfMulch) : null,
         },
       });
-    } catch {
-      toast.error("Failed to update client");
+    } catch (err) {
+      // The status trigger's refusals (missing permission, an ex-client set back to Lead)
+      // explain themselves; anything else stays generic.
+      const message = (err as { message?: string } | null)?.message ?? "";
+      toast.error(/permission|been a client/i.test(message) ? message : "Failed to update client");
       return;
+    }
+
+    if (cancelVisits) {
+      try {
+        const done = await cancelClientVisitsRemote([client.id]);
+        toast.success(`${done} upcoming visit${done !== 1 ? "s" : ""} cancelled`);
+      } catch {
+        toast.error("Client set Inactive, but their upcoming visits couldn't be cancelled — remove them from the dispatch board.");
+      }
+      await qc.invalidateQueries({ queryKey: ["crm-job-visits"] });
+      await qc.invalidateQueries({ queryKey: ["crm-jobs"] });
     }
 
     // The main client fields already committed above — a failure here is a
@@ -1074,16 +1156,29 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
 
   // Cancelled must keep going through the More → Cancel Client flow (it
   // records a cancellation reason); reactivation is More → Activate Client.
-  const statusLocked = client.status === "cancelled";
-  const statusOptions: { value: string; label: string }[] = [
-    { value: "lead", label: "Lead" },
-    { value: "active", label: "Active" },
-    { value: "inactive", label: "Inactive" },
-  ];
+  // Status changes need the same keys as those actions (the clients status
+  // trigger enforces them): a lead's status needs the lead Convert/Close keys,
+  // a client's the Activate/Deactivate keys.
+  const leadSide = client.status === "lead" || client.status === "lost";
+  const canChangeStatus = leadSide
+    ? canEdit("lead_convert_close") || canEdit("lead_allow_delete")
+    : canEdit("client_activate_deactivate") || canEdit("client_allow_delete");
+  const statusLocked = client.status === "cancelled" || !canChangeStatus;
+  const statusOptions: { value: string; label: string }[] = [];
+  // An account that is Active or was ever a client can't go back to Lead.
+  if (client.status === "lead" || canBeLead) statusOptions.push({ value: "lead", label: "Lead" });
+  // Converting a lead needs Convert/Close, not just Allow Close as Lost.
+  if (!leadSide || canEdit("lead_convert_close")) statusOptions.push({ value: "active", label: "Active" });
+  statusOptions.push({ value: "inactive", label: "Inactive" });
   if (form.status === "lost") statusOptions.push({ value: "lost", label: "Lost" });
   if (form.status === "cancelled") statusOptions.push({ value: "cancelled", label: "Cancelled" });
+  if (!statusOptions.some((o) => o.value === form.status)) {
+    statusOptions.unshift({ value: form.status, label: form.status.charAt(0).toUpperCase() + form.status.slice(1) });
+  }
 
   return (
+    <>
+    {askConfirmDialog}
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-w-2xl h-[85vh] flex flex-col p-0 sm:p-0"
@@ -1129,7 +1224,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
               </div>
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
-                  <Label>Phone Numbers</Label>
+                  <Label>Phone Numbers{rf.req("primary_phone")}</Label>
                   <button
                     type="button"
                     onClick={addClientPhone}
@@ -1179,13 +1274,13 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Email</Label>
+                <Label>Email{rf.req("primary_email")}</Label>
                 <Input type="email" value={form.primaryEmail} onChange={(e) => patch("primaryEmail", e.target.value)} />
               </div>
 
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-neutral-500 pt-1">Service Address</p>
               <div className="flex flex-col gap-1.5">
-                <Label>Street</Label>
+                <Label>Street{rf.req("service_address")}</Label>
                 <Input
                   value={form.serviceAddress}
                   onChange={(e) => patch("serviceAddress", e.target.value)}
@@ -1312,9 +1407,13 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-slate-400 dark:text-neutral-500">
-                    {statusLocked
-                      ? "Cancelled accounts are reactivated from More → Activate Client."
-                      : "To cancel this account use More → Cancel Client (records a reason)."}
+                    {!canChangeStatus
+                      ? "You don't have permission to change this account's status."
+                      : statusLocked
+                        ? "Cancelled accounts are reactivated from More → Activate Client."
+                        : leadSide
+                          ? "To close this lead use More → Close as Lost (records a reason)."
+                          : "To cancel this account use More → Cancel Client (records a reason)."}
                   </p>
                 </div>
                 <div className="flex flex-col gap-1.5">
@@ -1586,6 +1685,7 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
         </Tabs>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
 
@@ -2122,7 +2222,11 @@ function LinkParentDialog({
       await setParent({ id: clientId, parentClientId: selectedId || null });
       toast.success(selectedId ? "Parent account linked" : "Parent link removed");
       onOpenChange(false);
-    } catch (err) { toast.error(err instanceof Error && err.message ? err.message : "Failed to update parent link"); }
+    } catch (err) {
+      // Supabase errors aren't Error instances; the hierarchy trigger's message says what's wrong.
+      const message = (err as { message?: string } | null)?.message;
+      toast.error(message || "Failed to update parent link");
+    }
   }
 
   return (
@@ -3539,6 +3643,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const [editProperty, setEditProperty] = useState<ClientProperty | null>(null);
   const [aerialMeasurementOpen, setAerialMeasurementOpen] = useState(false);
   const [linkParentOpen, setLinkParentOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [openTicketId, setOpenTicketId] = useState<string | null>(null);
   const [openPaymentId, setOpenPaymentId] = useState<string | null>(null);
@@ -3559,6 +3664,9 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
   const { data: openPayment } = usePayment(openPaymentId ?? undefined);
   const router = useRouter();
   const isLead = client?.status === "lead";
+  // Same keys the clients status trigger checks (admins pass inside can()).
+  const canChangeClientStatus = can("client_activate_deactivate") || can("client_allow_delete");
+  const canCloseLead = can("lead_allow_delete") || can("lead_convert_close");
   // A closed-lost lead never became a client either — keep the same simplified
   // lead layout (no Jobs/Accounting/Contracts) rather than the full client view.
   const isLeadLike = isLead || client?.status === "lost";
@@ -3821,6 +3929,11 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                     <DropdownMenuItem onClick={() => setLinkParentOpen(true)}>
                       <Building2 className="mr-2 h-3.5 w-3.5" /> {client.parentClientId ? "Change Parent Account" : "Link Parent Account"}
                     </DropdownMenuItem>
+                    {can("client_allow_delete") && (
+                      <DropdownMenuItem onClick={() => setMergeOpen(true)}>
+                        <GitMerge className="mr-2 h-3.5 w-3.5" /> Merge Clients
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem onClick={() => setNewTicketOpen(true)}>
                       <Ticket className="mr-2 h-3.5 w-3.5" /> Add Ticket
                     </DropdownMenuItem>
@@ -3836,15 +3949,24 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
                         <ClipboardList className="mr-2 h-3.5 w-3.5" /> Account Statement
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuSeparator />
-                    {client.status === "cancelled" ? (
-                      <DropdownMenuItem onClick={async () => { try { await activate(clientId); toast.success("Client reactivated"); } catch { toast.error("Failed to activate"); } }}>
-                        <CheckCircle className="mr-2 h-3.5 w-3.5 text-green-600 dark:text-green-400" /> Activate Client
-                      </DropdownMenuItem>
-                    ) : (
-                      <DropdownMenuItem className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400" onClick={() => setCancelOpen(true)}>
-                        <Ban className="mr-2 h-3.5 w-3.5" /> Cancel Client
-                      </DropdownMenuItem>
+                    {/* Status actions carry the same keys the clients status trigger checks:
+                        a lead is closed as Lost (it never became a client), a client is
+                        cancelled / reactivated. A lost lead is reopened from Edit → Status. */}
+                    {client.status === "cancelled" && canChangeClientStatus && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={async () => { try { const r = await activate(clientId); if (r.changed) toast.success(r.wasLead ? "Converted to an active client" : "Client reactivated"); } catch { toast.error("Failed to activate"); } }}>
+                          <CheckCircle className="mr-2 h-3.5 w-3.5 text-green-600 dark:text-green-400" /> Activate Client
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {(isLead ? canCloseLead : client.status !== "cancelled" && client.status !== "lost" && canChangeClientStatus) && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400" onClick={() => setCancelOpen(true)}>
+                          <Ban className="mr-2 h-3.5 w-3.5" /> {isLead ? "Close as Lost" : "Cancel Client"}
+                        </DropdownMenuItem>
+                      </>
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -4323,6 +4445,7 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
       <CancelClientDialog
         clientId={clientId}
         clientName={client.displayName}
+        isLead={isLead}
         open={cancelOpen}
         onOpenChange={setCancelOpen}
       />
@@ -4375,6 +4498,10 @@ export function ClientDetailPanel({ clientId, expanded = false, onExpandChange }
         open={linkParentOpen}
         onOpenChange={setLinkParentOpen}
       />
+
+      {can("client_allow_delete") && (
+        <MergeClientsDialog clientId={clientId} open={mergeOpen} onOpenChange={setMergeOpen} />
+      )}
 
       <TicketDetailSheet
         ticket={openTicket ?? null}

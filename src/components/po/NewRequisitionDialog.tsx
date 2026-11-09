@@ -331,6 +331,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
       const discountCents = clampDiscount(initialData.subtotal);
       const salesTaxCents = computeSalesTax({
         taxableSubtotal: initialData.subtotal,
+        subtotal: initialData.subtotal,
         taxRatePercent: taxRate,
         discountCost: discountCents,
         discountReducesTax,
@@ -360,6 +361,7 @@ export function NewRequisitionDialog({ open, onOpenChange, initialData, prefillD
     const discountCents = clampDiscount(subtotalCents);
     const salesTaxCents = computeSalesTax({
       taxableSubtotal: subtotalCents,
+      subtotal: subtotalCents,
       taxRatePercent: taxRate,
       discountCost: discountCents,
       discountReducesTax,

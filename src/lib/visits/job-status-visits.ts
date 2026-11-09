@@ -9,9 +9,10 @@ import {
  * What a job status change does to the job's visits. The single rule set for
  * useUpdateJobStatus (status buttons) and JobDetail's edit form.
  *
- *   * recurring / package — their visits are GENERATED. Hold or cancel prunes
- *     the untouched future ones (released occurrences, see prune.ts); resuming
- *     (hold/cancelled → an active status) regenerates them over the full
+ *   * recurring / package — their visits are GENERATED. Hold, cancel or
+ *     completed (ending the job early) prunes the untouched future ones
+ *     (released occurrences, see prune.ts); resuming
+ *     (hold/cancelled/completed → an active status) regenerates them over the full
  *     horizon via /api/crm/jobs/generate-visits, the same call the Generate
  *     Visits button makes. The per-job route regenerates every dated package
  *     step (no cron window), so pruned package steps come back too.
@@ -30,6 +31,10 @@ type AnyClient = any;
 export const GENERATED_VISIT_JOB_TYPES = ["recurring", "package"];
 
 const PAUSED_STATUSES = ["hold", "cancelled"];
+/** Statuses that end a generated (recurring / package) job's visits: the
+ *  paused ones, and completed — setting a recurring or package job to
+ *  Completed ends it the same way cancelling does. */
+const GENERATED_ENDED_STATUSES = [...PAUSED_STATUSES, "completed"];
 
 export interface JobStatusVisitEffect {
   pruned: number;
@@ -101,7 +106,7 @@ export async function applyJobStatusToVisits(
   if (previousStatus === newStatus) return out;
   const generated = !!jobType && GENERATED_VISIT_JOB_TYPES.includes(jobType);
 
-  if ((generated && PAUSED_STATUSES.includes(newStatus)) || (!generated && newStatus === "cancelled")) {
+  if ((generated && GENERATED_ENDED_STATUSES.includes(newStatus)) || (!generated && newStatus === "cancelled")) {
     const target = await findJobVisitsToRemove(supabase, { jobId, jobType, today });
     if (target.mode === "prune") out.pruned = await removeJobVisits(supabase, target);
     else out.cancelled = await removeJobVisits(supabase, target);
@@ -111,7 +116,7 @@ export async function applyJobStatusToVisits(
   if (
     generated &&
     previousStatus != null &&
-    PAUSED_STATUSES.includes(previousStatus) &&
+    GENERATED_ENDED_STATUSES.includes(previousStatus) &&
     !NON_GENERATING_JOB_STATUSES.includes(newStatus)
   ) {
     out.regenerate = true;

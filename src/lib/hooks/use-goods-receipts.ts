@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapGoodsReceipt } from "@/lib/supabase/mappers";
 import type { GoodsReceipt, GoodsReceiptLine } from "@/types/receiving";
 import { computeReceiptTotals } from "@/lib/utils/receipt-totals";
@@ -29,14 +30,37 @@ export function useGoodsReceipts() {
     queryKey: ["goods-receipts"],
     queryFn: async () => {
       const supabase = createClient();
+      // Every page, not just the first: PostgREST caps a response at 1,000
+      // rows, and a capped list silently hid records past it.
+      const data = await fetchAllRows<Parameters<typeof mapGoodsReceipt>[0]>(() =>
+        supabase
+          .from("goods_receipts")
+          .select("*, goods_receipt_lines (*)")
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+      );
+      return (data.map(mapGoodsReceipt)) as GoodsReceipt[];
+    },
+  });
+}
+
+/** One PO's live goods receipts — what receiving needs to know how much of
+ *  each line is already in, without depending on the org-wide receipts list. */
+export function usePOGoodsReceipts(purchaseOrderId: string) {
+  return useQuery({
+    queryKey: ["goods-receipts", "po", purchaseOrderId],
+    queryFn: async () => {
+      const supabase = createClient();
       const { data, error } = await supabase
         .from("goods_receipts")
         .select("*, goods_receipt_lines (*)")
+        .eq("purchase_order_id", purchaseOrderId)
         .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data.map(mapGoodsReceipt)) as GoodsReceipt[];
     },
+    enabled: !!purchaseOrderId,
   });
 }
 
@@ -100,7 +124,12 @@ export function useCreateGoodsReceipt() {
         }));
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: linesError } = await (supabase as any).from("goods_receipt_lines").insert(lineInserts);
-        if (linesError) throw linesError;
+        if (linesError) {
+          // e.g. the over-receipt guard refused a duplicate submission — don't
+          // leave an empty receipt header behind.
+          await supabase.from("goods_receipts").delete().eq("id", header.id);
+          throw linesError;
+        }
       }
 
       const { data: full, error: fetchError } = await supabase
@@ -263,15 +292,44 @@ export function useUpdateGoodsReceipt() {
           ? await supabase.from("po_line_items").select("id, product_item_id, project_id").in("id", poLineItemIds)
           : { data: [] as { id: string; product_item_id: string | null; project_id: string | null }[] };
 
-        const { data: products } = await supabase
-          .from("product_items")
-          .select("id, name, part_number, quantity_on_hand, category, is_inventory")
-          .is("deleted_at", null);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: parts } = await (supabase as any)
-          .from("parts")
-          .select("id, part_number, product_item_id")
-          .is("deleted_at", null);
+        // Targeted lookups, not the whole catalog: an unfiltered select is
+        // capped at 1,000 rows, so in a big catalog the matching product or
+        // part could be missing and the stock correction skipped.
+        type ProductRow = { id: string; name: string; part_number: string; quantity_on_hand: number; category: string; is_inventory: boolean | null };
+        type PartRow = { id: string; part_number: string; product_item_id: string | null };
+        const productSelect = "id, name, part_number, quantity_on_hand, category, is_inventory";
+        const lineProductIds = [...new Set((poLineItems ?? []).map((pli) => pli.product_item_id).filter((v): v is string => !!v))];
+        const changePartNumbers = [...new Set(qtyChanges.map((c) => c.partNumber).filter((v): v is string => !!v))];
+        const changeNames = [...new Set(qtyChanges.map((c) => c.name).filter((v): v is string => !!v))];
+        const [productsById, productsByPartNumber, productsByName] = await Promise.all([
+          lineProductIds.length > 0
+            ? supabase.from("product_items").select(productSelect).in("id", lineProductIds).is("deleted_at", null)
+            : Promise.resolve({ data: [] as ProductRow[] }),
+          changePartNumbers.length > 0
+            ? supabase.from("product_items").select(productSelect).in("part_number", changePartNumbers).is("deleted_at", null)
+            : Promise.resolve({ data: [] as ProductRow[] }),
+          changeNames.length > 0
+            ? supabase.from("product_items").select(productSelect).in("name", changeNames).is("deleted_at", null)
+            : Promise.resolve({ data: [] as ProductRow[] }),
+        ]);
+        const products: ProductRow[] = [
+          ...((productsById.data ?? []) as ProductRow[]),
+          ...((productsByPartNumber.data ?? []) as ProductRow[]),
+          ...((productsByName.data ?? []) as ProductRow[]),
+        ];
+        const candidateProductIds = [...new Set(products.map((p) => p.id))];
+        const [partsByProduct, partsByPartNumber] = await Promise.all([
+          candidateProductIds.length > 0
+            ? supabase.from("parts").select("id, part_number, product_item_id").in("product_item_id", candidateProductIds).is("deleted_at", null)
+            : Promise.resolve({ data: [] as PartRow[] }),
+          changePartNumbers.length > 0
+            ? supabase.from("parts").select("id, part_number, product_item_id").in("part_number", changePartNumbers).is("deleted_at", null)
+            : Promise.resolve({ data: [] as PartRow[] }),
+        ]);
+        const parts: PartRow[] = [
+          ...((partsByProduct.data ?? []) as PartRow[]),
+          ...((partsByPartNumber.data ?? []) as PartRow[]),
+        ];
 
         // Resolve EVERY line's catalog product before moving any stock, so a
         // missing match on a later line can't leave earlier lines' inventory
@@ -282,9 +340,9 @@ export function useUpdateGoodsReceipt() {
           // never entered stock, so correcting their quantity moves nothing.
           if (poLineItem?.project_id) return [];
           const matchedProduct =
-            (poLineItem?.product_item_id ? products?.find((p) => p.id === poLineItem.product_item_id) : null) ??
-            (chg.partNumber ? products?.find((p) => p.part_number === chg.partNumber) : null) ??
-            (chg.name ? products?.find((p) => p.name === chg.name) : null);
+            (poLineItem?.product_item_id ? products.find((p) => p.id === poLineItem.product_item_id) : null) ??
+            (chg.partNumber ? products.find((p) => p.part_number === chg.partNumber) : null) ??
+            (chg.name ? products.find((p) => p.name === chg.name) : null);
           if (!matchedProduct) {
             throw new Error(`Could not find a catalog product for "${chg.name}" — inventory was not adjusted, receipt not saved.`);
           }
@@ -294,11 +352,10 @@ export function useUpdateGoodsReceipt() {
         });
 
         for (const { chg, matchedProduct } of resolved) {
+          let partCorrected = false;
           if (chg.isMaintPart) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const linkedPart = parts?.find((pt: any) => pt.product_item_id === matchedProduct.id) ??
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (chg.partNumber ? parts?.find((pt: any) => pt.part_number === chg.partNumber) : null);
+            const linkedPart = parts.find((pt) => pt.product_item_id === matchedProduct.id) ??
+              (chg.partNumber ? parts.find((pt) => pt.part_number === chg.partNumber) : null);
             if (linkedPart) {
               // Moves the receipt's cost layer with the quantity, and for a
               // reduction removes only what's still on hand (units already
@@ -321,8 +378,14 @@ export function useUpdateGoodsReceipt() {
                   poNumber: (currentReceipt.po_number as string | null) ?? "",
                 });
               });
+              // sync_part_stock_to_product mirrors the part's new quantity
+              // onto the product it's linked to. When that is this line's
+              // product, it has already moved — adjusting it again below
+              // moved it twice.
+              partCorrected = linkedPart.product_item_id === matchedProduct.id;
             }
           }
+          if (partCorrected) continue;
 
           // Atomic (row-locked, DB-side add) rather than a JS
           // read-modify-write off `matchedProduct.quantity_on_hand`, which

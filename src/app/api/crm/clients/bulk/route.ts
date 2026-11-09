@@ -54,15 +54,26 @@ const Body = z.discriminatedUnion("action", [
 type BulkBody = z.infer<typeof Body>;
 
 /** The UI gate for each action, re-checked here (admins pass inside has_settings_permission).
- *  Tags have no key of their own, same as the single-client tag editor. */
+ *  Tags have no key of their own, same as the single-client tag editor. The clients status
+ *  trigger (enforce_client_status_transition) checks the same keys per row. */
 const ACTION_KEYS: Record<BulkBody["action"], string[] | null> = {
   add_tag: null,
   remove_tag: null,
   update: ["client_bulk_edit"],
   cancel: ["client_activate_deactivate", "client_allow_delete"],
   activate: ["client_activate_deactivate", "client_allow_delete"],
-  close_lost: ["lead_allow_delete"],
+  close_lost: ["lead_allow_delete", "lead_convert_close"],
 };
+
+/** A status change in Bulk Edit (to Inactive) also needs the activate/deactivate keys. */
+const STATUS_KEYS = ["client_activate_deactivate", "client_allow_delete"];
+/** Closing a lead (as Lost) — what Cancel does to the leads in a selection. */
+const LEAD_CLOSE_KEYS = ["lead_allow_delete", "lead_convert_close"];
+/** Converting a lead / lost lead to an active client. */
+const LEAD_CONVERT_KEYS = ["lead_convert_close"];
+
+type OwnedClient = { id: string; status: string | null; source: string | null; ok_to_email: boolean | null };
+const isLeadStatus = (st: string | null) => st === "lead" || st === "lost";
 
 /**
  * POST /api/crm/clients/bulk — the Clients / Leads list bulk actions (tags,
@@ -97,12 +108,21 @@ export async function POST(request: Request) {
   if (keys && !(await hasAnySettingsPermission(supabase, keys))) {
     return NextResponse.json({ error: "You do not have permission to do this" }, { status: 403 });
   }
+  if (body.action === "update" && body.patch.status && !(await hasAnySettingsPermission(supabase, STATUS_KEYS))) {
+    return NextResponse.json({ error: "You do not have permission to change client status" }, { status: 403 });
+  }
+  // Leads in a Cancel / Activate selection need the lead keys; without them they are skipped
+  // (and counted) rather than failing the whole selection on the status trigger.
+  const leadKeys = {
+    close: body.action === "cancel" ? await hasAnySettingsPermission(supabase, LEAD_CLOSE_KEYS) : false,
+    convert: body.action === "activate" ? await hasAnySettingsPermission(supabase, LEAD_CONVERT_KEYS) : false,
+  };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any;
 
   // The selection, re-read under the session org: foreign and deleted ids drop out.
-  const owned: { id: string; status: string | null; source: string | null; ok_to_email: boolean | null }[] = [];
+  const owned: OwnedClient[] = [];
   for (const batch of chunk([...new Set(body.clientIds)])) {
     const { data, error } = await db
       .from("clients")
@@ -115,14 +135,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runAction(db, orgId, body, owned);
+    const result = await runAction(db, orgId, body, owned, leadKeys);
     const triggers = await dispatchClientTriggers(supabase, createServiceClient(), {
       orgId,
       userId: user.id,
       events: result.events,
     });
     await logActivities(db, user.id, result.activity);
-    return NextResponse.json({ ok: true, affected: result.affected, ...triggers });
+    return NextResponse.json({ ok: true, affected: result.affected, skipped: result.skipped ?? 0, ...triggers });
   } catch (err) {
     return serverError(`${body.action} failed`, err);
   }
@@ -130,6 +150,8 @@ export async function POST(request: Request) {
 
 interface ActionResult {
   affected: number;
+  /** Selected rows left alone because the caller lacks the lead keys for them. */
+  skipped?: number;
   events: ClientTriggerEvent[];
   /** Timeline rows: one subject for a list of clients. */
   activity: { subject: string; clientIds: string[] }[];
@@ -140,7 +162,8 @@ async function runAction(
   db: any,
   orgId: string,
   body: BulkBody,
-  owned: { id: string; status: string | null; source: string | null; ok_to_email: boolean | null }[]
+  owned: OwnedClient[],
+  leadKeys: { close: boolean; convert: boolean }
 ): Promise<ActionResult> {
   const ownedIds = owned.map((c) => c.id);
 
@@ -227,49 +250,75 @@ async function runAction(
 
     case "cancel": {
       // Records already cancelled/lost are left alone so their original reason isn't overwritten.
-      const targets = owned.filter((c) => c.status !== "cancelled" && c.status !== "lost");
+      // A lead never became a client, so "cancelling" it closes it as Lost — a cancelled
+      // lead used to count as a churned client (and a later Activate skipped conversion).
       const closedAt = new Date().toISOString();
-      const changed = new Set<string>();
-      for (const batch of chunk(targets.map((t) => t.id))) {
+      const leadTargets = owned.filter((c) => c.status === "lead");
+      const leadsAllowed = leadKeys.close ? leadTargets : [];
+      const clientTargets = owned.filter((c) => c.status !== "cancelled" && !isLeadStatus(c.status));
+      const lost: string[] = [];
+      for (const batch of chunk(leadsAllowed.map((t) => t.id))) {
+        const { data, error } = await db
+          .from("clients")
+          .update({ status: "lost", cancellation_reason: body.reason, closed_at: closedAt })
+          .eq("org_id", orgId)
+          .in("id", batch)
+          .eq("status", "lead")
+          .select("id");
+        if (error) throw error;
+        lost.push(...(data ?? []).map((r: { id: string }) => r.id));
+      }
+      const cancelled: string[] = [];
+      for (const batch of chunk(clientTargets.map((t) => t.id))) {
         const { data, error } = await db
           .from("clients")
           .update({ status: "cancelled", cancellation_reason: body.reason, closed_at: closedAt })
           .eq("org_id", orgId)
           .in("id", batch)
-          .not("status", "in", "(cancelled,lost)")
+          .not("status", "in", "(cancelled,lost,lead)")
           .select("id");
         if (error) throw error;
-        for (const r of data ?? []) changed.add(r.id);
+        cancelled.push(...(data ?? []).map((r: { id: string }) => r.id));
       }
-      const done = targets.filter((t) => changed.has(t.id));
       return {
-        affected: done.length,
+        affected: lost.length + cancelled.length,
+        skipped: leadTargets.length - leadsAllowed.length,
         events: [
-          { triggerType: "lead_cancelled", clientIds: done.filter((c) => c.status === "lead").map((c) => c.id) },
-          { triggerType: "client_cancelled", clientIds: done.filter((c) => c.status !== "lead").map((c) => c.id) },
+          { triggerType: "lead_cancelled", clientIds: lost },
+          { triggerType: "client_cancelled", clientIds: cancelled },
         ],
         // The reason is cleared from the row on reactivation, so the timeline is its record.
-        activity: [{ subject: `Client cancelled${body.reason ? `: ${body.reason}` : ""}`, clientIds: done.map((c) => c.id) }],
+        activity: [
+          { subject: `Lead closed as lost${body.reason ? `: ${body.reason}` : ""}`, clientIds: lost },
+          { subject: `Client cancelled${body.reason ? `: ${body.reason}` : ""}`, clientIds: cancelled },
+        ],
       };
     }
 
     case "activate": {
-      // Leads and lost leads never became clients: activating them is a conversion.
-      const isLead = (st: string | null) => st === "lead" || st === "lost";
+      // An account that was never a client (no client_since, job or invoice — a lead, a lost
+      // lead, or a lead once set Inactive) converts: client_since is stamped and
+      // lead_converted_to_client fires. Anything else is a reactivation.
       const today = todayInZone(await getOrgTimeZone(db, orgId));
       const leadIds: string[] = [];
       const otherIds: string[] = [];
-      const inactive = owned.filter((c) => c.status !== "active");
-      for (const batch of chunk(inactive)) {
-        const leads = batch.filter((c) => isLead(c.status)).map((c) => c.id);
-        const others = batch.filter((c) => !isLead(c.status)).map((c) => c.id);
-        if (leads.length > 0) {
+      const notActive = owned.filter((c) => c.status !== "active");
+      // Converting a lead / lost lead needs lead_convert_close; without it those rows are skipped.
+      const allowed = notActive.filter((c) => !isLeadStatus(c.status) || leadKeys.convert);
+      for (const batch of chunk(allowed)) {
+        const { data: neverData, error: neverErr } = await db.rpc("crm_clients_never_converted", { p_client_ids: batch.map((c) => c.id) });
+        if (neverErr) throw neverErr;
+        const never = new Set<string>((neverData ?? []) as string[]);
+        const converting = batch.filter((c) => never.has(c.id)).map((c) => c.id);
+        const others = batch.filter((c) => !never.has(c.id)).map((c) => c.id);
+        if (converting.length > 0) {
           const { data, error } = await db
             .from("clients")
             .update({ status: "active", cancellation_reason: null, closed_at: null, client_since: today })
             .eq("org_id", orgId)
-            .in("id", leads)
-            .in("status", ["lead", "lost"])
+            .in("id", converting)
+            .neq("status", "active")
+            .is("client_since", null)
             .select("id");
           if (error) throw error;
           leadIds.push(...(data ?? []).map((r: { id: string }) => r.id));
@@ -280,7 +329,7 @@ async function runAction(
             .update({ status: "active", cancellation_reason: null, closed_at: null })
             .eq("org_id", orgId)
             .in("id", others)
-            .not("status", "in", "(lead,lost,active)")
+            .neq("status", "active")
             .select("id");
           if (error) throw error;
           otherIds.push(...(data ?? []).map((r: { id: string }) => r.id));
@@ -288,6 +337,7 @@ async function runAction(
       }
       return {
         affected: leadIds.length + otherIds.length,
+        skipped: notActive.length - allowed.length,
         events: [
           { triggerType: "lead_converted_to_client", clientIds: leadIds },
           { triggerType: "client_reactivated", clientIds: otherIds },

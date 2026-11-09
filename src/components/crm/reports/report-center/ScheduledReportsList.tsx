@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useCurrentUserStore } from "@/stores";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import {
   useDeleteReportSchedule,
@@ -55,6 +56,7 @@ const DATE_TIME: Intl.DateTimeFormatOptions = {
 export function ScheduledReportsList() {
   const { can } = usePermissions();
   const canManage = can("manage_report_center");
+  const isAdmin = useCurrentUserStore().currentUser.role === "admin";
   const timeZone = useOrgTimeZone();
   const today = todayInZone(timeZone);
   const { data: schedules = [], isLoading, error } = useReportSchedules();
@@ -76,6 +78,28 @@ export function ScheduledReportsList() {
         onError: (err) => toast.error(err instanceof Error ? err.message : "Update failed"),
       }
     );
+
+  // A schedule runs as its creator; once that person is deactivated it is
+  // paused until an admin takes it over (becomes the owner) and resumes it.
+  // With no recipients left (the creator's own address is removed when they
+  // are deactivated) it is taken over but left paused, and the editor opens.
+  const takeOver = (s: ReportSchedule) => {
+    const resume = s.recipients.length > 0;
+    updateSchedule.mutate(
+      { id: s.id, takeOver: true, ...(resume ? { enabled: true } : {}) },
+      {
+        onSuccess: (updated) => {
+          if (resume) {
+            toast.success("You now own this schedule, and it has resumed.");
+          } else {
+            toast.success("You now own this schedule. Add recipients, then resume it.");
+            setEditing(updated);
+          }
+        },
+        onError: (err) => toast.error(err instanceof Error ? err.message : "Update failed"),
+      }
+    );
+  };
 
   const statusFor = (s: ReportSchedule): { label: string; tone: "default" | "secondary" | "outline" } => {
     if (s.enabled) return { label: "Active", tone: "default" };
@@ -149,6 +173,11 @@ export function ScheduledReportsList() {
                       {s.custom_report_id && (
                         <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">analysis</span>
                       )}
+                      {s.creator_inactive && (
+                        <div className="text-xs font-normal text-amber-700 dark:text-amber-400">
+                          Created by {s.creator_name ?? "a user"} (deactivated)
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       {describeRecurrence(recurrenceFromRow(s), today)}
@@ -157,6 +186,9 @@ export function ScheduledReportsList() {
                       )}
                       {s.last_run_status === "error" && s.last_run_error && (
                         <div className="max-w-[240px] text-xs text-red-600 dark:text-red-400">{s.last_run_error}</div>
+                      )}
+                      {s.last_run_status === "paused" && s.last_run_error && (
+                        <div className="max-w-[240px] text-xs text-amber-700 dark:text-amber-400">{s.last_run_error}</div>
                       )}
                     </td>
                     <td className="max-w-[220px] px-3 py-2">
@@ -171,11 +203,17 @@ export function ScheduledReportsList() {
                           <span>{formatInZone(s.last_run_at, timeZone, DATE_TIME)}</span>
                           {s.last_run_status && (
                             <Badge
-                              variant={s.last_run_status === "success" ? "secondary" : "destructive"}
+                              variant={
+                                s.last_run_status === "success"
+                                  ? "secondary"
+                                  : s.last_run_status === "paused"
+                                    ? "outline"
+                                    : "destructive"
+                              }
                               className="w-fit text-[10px]"
                               title={s.last_run_error ?? undefined}
                             >
-                              {s.last_run_status === "success" ? "Sent OK" : "Failed"}
+                              {s.last_run_status === "success" ? "Sent OK" : s.last_run_status === "paused" ? "Paused" : "Failed"}
                             </Badge>
                           )}
                         </div>
@@ -199,9 +237,17 @@ export function ScheduledReportsList() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => setEditing(s)}>Edit</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setEnabled(s, !s.enabled)}>
-                              {s.enabled ? "Pause" : "Resume"}
-                            </DropdownMenuItem>
+                            {s.creator_inactive && !s.enabled ? (
+                              isAdmin ? (
+                                <DropdownMenuItem onClick={() => takeOver(s)}>Take over &amp; resume</DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem disabled>Resume (an admin must take it over)</DropdownMenuItem>
+                              )
+                            ) : (
+                              <DropdownMenuItem onClick={() => setEnabled(s, !s.enabled)}>
+                                {s.enabled ? "Pause" : "Resume"}
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               className="text-red-600 dark:text-red-400"
                               onClick={() => setPendingDelete(s)}

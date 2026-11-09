@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapPart } from "@/lib/supabase/mappers";
 import { setParts } from "@/lib/hooks/cost-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -31,17 +32,50 @@ async function adjustPartQuantity(
   if (error) throw error;
 }
 
+/**
+ * The Parts record that holds a maintenance part's stock: the part linked to
+ * the catalog product, else (older data) a part with the same part number.
+ * A targeted query rather than a search of useParts(), so receiving finds the
+ * part however large the parts list is.
+ */
+export async function findLinkedPart(
+  supabase: ReturnType<typeof createClient>,
+  productItemId: string,
+  partNumber: string | null | undefined
+): Promise<{ id: string } | null> {
+  const { data: linked, error } = await supabase
+    .from("parts")
+    .select("id")
+    .eq("product_item_id", productItemId)
+    .is("deleted_at", null)
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (linked) return { id: linked.id as string };
+  if (!partNumber) return null;
+  const { data: byNumber, error: numErr } = await supabase
+    .from("parts")
+    .select("id")
+    .eq("part_number", partNumber)
+    .is("deleted_at", null)
+    .order("created_at")
+    .limit(1)
+    .maybeSingle();
+  if (numErr) throw numErr;
+  return byNumber ? { id: byNumber.id as string } : null;
+}
+
 export function useParts() {
   return useQuery({
     queryKey: ["parts"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("parts")
-        .select("*")
-        .is("deleted_at", null)
-        .order("name");
-      if (error) throw error;
+      // Every page, not just the first: PostgREST caps a response at 1,000
+      // rows, and a capped list silently hid records past it.
+      const data = await fetchAllRows<Parameters<typeof mapPart>[0]>(() =>
+        supabase.from("parts").select("*").is("deleted_at", null).order("name")
+      );
       const parts = data.map(mapPart);
       setParts(parts);
       return parts;

@@ -1331,23 +1331,33 @@ export function EmployeesTable({
   });
 
   async function handleDeactivate(id: string, name: string) {
+    const hasLogin = !!employees?.find((e) => e.id === id)?.userId;
     if (!(await confirm({
       title: `Deactivate ${name}?`,
-      description: "They stop appearing on crew and assignment lists. Historical data is preserved.",
+      description: hasLogin
+        ? "They stop appearing on crew and assignment lists, and their login is deactivated too (they can't sign in; API keys they created are revoked). Historical data is preserved. Activating them again restores the login."
+        : "They stop appearing on crew and assignment lists. Historical data is preserved.",
       confirmLabel: "Deactivate",
       destructive: true,
     }))) return;
     try {
-      await deactivate(id);
+      const result = await deactivate(id);
       toast.success(`${name} deactivated`);
-    } catch { toast.error("Failed to deactivate"); }
+      if (result.warning) toast.warning(result.warning);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to deactivate");
+    }
   }
 
   async function handleActivate(id: string, name: string) {
+    const hasLogin = !!employees?.find((e) => e.id === id)?.userId;
     try {
-      await activate(id);
-      toast.success(`${name} activated`);
-    } catch { toast.error("Failed to activate"); }
+      const result = await activate(id);
+      toast.success(hasLogin ? `${name} activated — their login works again too` : `${name} activated`);
+      if (result.warning) toast.warning(result.warning);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to activate");
+    }
   }
 
   return (

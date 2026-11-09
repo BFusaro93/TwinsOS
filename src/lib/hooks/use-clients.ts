@@ -1470,9 +1470,9 @@ export function useUpdateClient() {
 
       // Fetch the "before" values for fields whose automation trigger only
       // fires on an actual change, not on every generic profile-edit save.
-      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null; payment_method: string | null; sms_opt_in: boolean | null; status: string | null; primary_phone: string | null } | null = null;
+      let before: { source: string | null; ok_to_email: boolean | null; referred_by_client_id: string | null; payment_method: string | null; sms_opt_in: boolean | null; status: string | null; primary_phone: string | null; client_since: string | null } | null = null;
       if (updates.source !== undefined || updates.okToEmail !== undefined || updates.referredByClientId !== undefined || updates.paymentMethod !== undefined || updates.smsOptIn !== undefined || updates.status !== undefined || updates.primaryPhone !== undefined) {
-        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id, payment_method, sms_opt_in, status, primary_phone").eq("id", id).single();
+        const { data } = await supabase.from("clients").select("source, ok_to_email, referred_by_client_id, payment_method, sms_opt_in, status, primary_phone, client_since").eq("id", id).single();
         before = data;
       }
 
@@ -1500,11 +1500,14 @@ export function useUpdateClient() {
       }
 
       const smsOptInJustEnabled = updates.smsOptIn === true && before && before.sms_opt_in !== true;
-      // Status is editable from the Edit Client → Details tab; a lead moved to
-      // active there is the same business event as the "Convert" button, so
-      // stamp client_since (the conversion date) if the form left it blank.
-      // A lead closed as lost never became a client either, so reactivating it is a conversion.
-      const leadConverting = updates.status === "active" && (before?.status === "lead" || before?.status === "lost");
+      // Status is editable from the Edit Client → Details tab; moving an account
+      // that was never a client (a lead, a lost lead, or a lead once set
+      // Inactive — no client_since, jobs or invoices) to active is the same
+      // business event as the "Convert" button, so stamp client_since (the
+      // conversion date) if the form left it blank. Anything else is a reactivation.
+      const movingToActive = updates.status === "active" && !!before && before.status !== "active";
+      const leadConverting = movingToActive && !before?.client_since
+        && (await fetchNeverConvertedClientIds(supabase, [id])).has(id);
       // Text consent was given for the old number, not the new one.
       const phoneChanged = updates.primaryPhone !== undefined && before
         && (updates.primaryPhone ?? "").replace(/\D/g, "").slice(-10) !== (before.primary_phone ?? "").replace(/\D/g, "").slice(-10);
@@ -1637,7 +1640,8 @@ export function useUpdateClient() {
       // active there is the same business event as the "Convert" button, so
       // fire the same automation trigger and leave a timeline entry.
       const statusChanged = updates.status !== undefined && before && updates.status !== before.status;
-      const leadConverted = !!statusChanged && (before?.status === "lead" || before?.status === "lost") && updates.status === "active";
+      const leadConverted = !!statusChanged && leadConverting;
+      const reactivated = !!statusChanged && movingToActive && !leadConverting;
       if (statusChanged) {
         await logClientActivity(supabase, id, `Status changed: ${before?.status ?? "—"} → ${updates.status}`);
       }
@@ -1651,6 +1655,7 @@ export function useUpdateClient() {
         newPaymentMethod: updates.paymentMethod ?? null,
         statusChanged,
         leadConverted,
+        reactivated,
       };
     },
     onSuccess: (result, { id }) => {
@@ -1661,6 +1666,8 @@ export function useUpdateClient() {
       }
       if (result?.leadConverted) {
         fireAutomationTrigger({ triggerType: "lead_converted_to_client", clientId: id });
+      } else if (result?.reactivated) {
+        fireAutomationTrigger({ triggerType: "client_reactivated", clientId: id });
       }
       if (result?.sourceChanged) {
         fireAutomationTrigger({
@@ -2383,18 +2390,24 @@ export function useRemoveClientTag() {
   return useMutation({
     mutationFn: async ({ clientId, tag }: { clientId: string; tag: string }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      // .select() returns the rows actually deleted: removing a tag the client no
+      // longer has (a stale chip, a double-click) must not log "Tag removed" or
+      // fire tag_removed again — same as useAddClientTag's no-op check.
+      const { data, error } = await supabase
         .from("client_tags")
         .delete()
         .eq("client_id", clientId)
-        .eq("tag", tag);
+        .eq("tag", tag)
+        .select("tag");
       if (error) throw error;
-      await logClientActivity(supabase, clientId, `Tag removed: ${tag}`);
+      const removed = (data ?? []).length > 0;
+      if (removed) await logClientActivity(supabase, clientId, `Tag removed: ${tag}`);
+      return { removed };
     },
-    onSuccess: (_d, { clientId, tag }) => {
+    onSuccess: (result, { clientId, tag }) => {
       invalidateClientRecord(qc, clientId);
       qc.invalidateQueries({ queryKey: ["clients", clientId, "activity"] });
-      fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
+      if (result?.removed) fireAutomationTrigger({ triggerType: "tag_removed", clientId, matchValues: [tag] });
     },
     onError: () => {
       toast.error("Failed to remove tag");
@@ -2409,15 +2422,15 @@ export function useRemoveClientTag() {
  */
 async function postBulkClientAction(
   body: Record<string, unknown>
-): Promise<{ affected: number; fired: number; queued: number }> {
+): Promise<{ affected: number; fired: number; queued: number; skipped: number }> {
   const res = await fetch("/api/crm/clients/bulk", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const json = (await res.json().catch(() => ({}))) as { error?: string; affected?: number; fired?: number; queued?: number };
+  const json = (await res.json().catch(() => ({}))) as { error?: string; affected?: number; fired?: number; queued?: number; skipped?: number };
   if (!res.ok) throw new Error(json.error ?? "The bulk action failed");
-  return { affected: json.affected ?? 0, fired: json.fired ?? 0, queued: json.queued ?? 0 };
+  return { affected: json.affected ?? 0, fired: json.fired ?? 0, queued: json.queued ?? 0, skipped: json.skipped ?? 0 };
 }
 
 /** Add a tag to many clients at once (skips clients that already have it). */
@@ -2440,26 +2453,152 @@ export function useBulkRemoveTag() {
   });
 }
 
-/** Cancel a single client — sets status + cancellation_reason. */
+// ── lifecycle helpers ─────────────────────────────────────────────────────────
+
+/**
+ * The ids (of those given) that were never a client: no client_since date and
+ * no job or invoice. Moving one of them to Active is a lead CONVERSION
+ * (client_since stamped, lead_converted_to_client); moving any other account to
+ * Active is a reactivation. Same rule as the clients status trigger.
+ */
+export async function fetchNeverConvertedClientIds(
+  supabase: ReturnType<typeof createClient>,
+  clientIds: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let i = 0; i < clientIds.length; i += 500) {
+    const { data, error } = await supabase.rpc("crm_clients_never_converted", { p_client_ids: clientIds.slice(i, i + 500) });
+    if (error) throw error;
+    for (const id of (data ?? []) as string[]) out.add(id);
+  }
+  return out;
+}
+
+/** Whether an account can still be set (back) to Lead: a lead / lost lead always can;
+ *  an account that is Active, or was ever a client, can't (the status trigger refuses it). */
+export function useCanBeLead(client: Pick<Client, "id" | "status" | "clientSince"> | null | undefined, enabled = true) {
+  const leadSide = client?.status === "lead" || client?.status === "lost";
+  return useQuery({
+    queryKey: ["clients", client?.id, "can-be-lead"],
+    queryFn: async () => {
+      if (!client || leadSide) return true;
+      if (client.status === "active" || client.clientSince) return false;
+      const never = await fetchNeverConvertedClientIds(createClient(), [client.id]);
+      return never.has(client.id);
+    },
+    enabled: !!client && enabled,
+    staleTime: 30_000,
+  });
+}
+
+/** Open estimates (not accepted / lost / invoiced, no live job or invoice) the given clients have. */
+export async function previewOpenEstimatesLost(clientIds: string[]): Promise<number> {
+  const supabase = createClient();
+  let total = 0;
+  for (let i = 0; i < clientIds.length; i += 500) {
+    const { data, error } = await supabase.rpc("crm_mark_client_open_estimates_lost", {
+      p_client_ids: clientIds.slice(i, i + 500),
+      p_apply: false,
+    });
+    if (error) throw error;
+    total += (data as number | null) ?? 0;
+  }
+  return total;
+}
+
+/** Marks those open estimates Lost (with the close reason); returns how many changed. */
+export async function markOpenEstimatesLost(clientIds: string[], reason: string | null): Promise<number> {
+  const supabase = createClient();
+  let total = 0;
+  for (let i = 0; i < clientIds.length; i += 500) {
+    const { data, error } = await supabase.rpc("crm_mark_client_open_estimates_lost", {
+      p_client_ids: clientIds.slice(i, i + 500),
+      p_apply: true,
+      p_reason: reason,
+    });
+    if (error) throw error;
+    total += (data as number | null) ?? 0;
+  }
+  return total;
+}
+
+/** The "Mark the N open estimates as Lost?" question. Yes is the default answer. */
+export function openEstimatesConfirmOptions(count: number) {
+  return {
+    title: `Mark the ${count} open estimate${count !== 1 ? "s" : ""} as Lost?`,
+    description:
+      `${count} estimate${count !== 1 ? "s" : ""} not yet accepted, lost or invoiced will be moved to Lost, with this reason. ` +
+      "Choose No to leave them open.",
+    confirmLabel: "Yes, mark lost",
+    cancelLabel: "No, keep open",
+  };
+}
+
+export interface DuplicateClientMatch {
+  id: string;
+  displayName: string;
+  status: string;
+  primaryEmail: string | null;
+  primaryPhone: string | null;
+  matchedOn: "email" | "phone";
+}
+
+/** Existing (non-deleted) clients / leads in the org with the same email or phone
+ *  (email trimmed + lower-cased; phone compared on its last 10 digits). */
+export async function findDuplicateClients(email: string | null | undefined, phone: string | null | undefined): Promise<DuplicateClientMatch[]> {
+  const e = (email ?? "").trim();
+  const p = phoneDedupeKey(phone);
+  if (!e && !p) return [];
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("crm_find_duplicate_clients", { p_email: e || null, p_phone: p });
+  if (error) throw error;
+  return ((data ?? []) as { id: string; display_name: string; status: string; primary_email: string | null; primary_phone: string | null; matched_on: string }[])
+    .map((r) => ({
+      id: r.id,
+      displayName: r.display_name,
+      status: r.status,
+      primaryEmail: r.primary_email,
+      primaryPhone: r.primary_phone,
+      matchedOn: r.matched_on === "email" ? "email" : "phone",
+    }));
+}
+
+/** Cancel a single client — sets status + cancellation_reason. A lead (never a
+ *  client) is closed as Lost instead: cancelling it would count a prospect who
+ *  never bought as a churned client. */
 export function useCancelClient() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ clientId, reason }: { clientId: string; reason: string }) => {
       const supabase = createClient();
       const { data: before } = await supabase.from("clients").select("status").eq("id", clientId).single();
+      const wasLead = before?.status === "lead";
       // Already cancelled/lost records are left alone: re-cancelling would
       // overwrite the original reason (a lost lead's reason, in particular).
-      const { data: updated, error } = await supabase
-        .from("clients")
-        .update({ status: "cancelled", cancellation_reason: reason, closed_at: new Date().toISOString() })
-        .eq("id", clientId)
-        .not("status", "in", "(cancelled,lost)")
-        .select("id");
+      const { data: updated, error } = wasLead
+        ? await supabase
+            .from("clients")
+            .update({ status: "lost", cancellation_reason: reason, closed_at: new Date().toISOString() })
+            .eq("id", clientId)
+            .eq("status", "lead")
+            .select("id")
+        : await supabase
+            .from("clients")
+            .update({ status: "cancelled", cancellation_reason: reason, closed_at: new Date().toISOString() })
+            .eq("id", clientId)
+            .not("status", "in", "(cancelled,lost)")
+            .select("id");
       if (error) throw error;
       const changed = (updated?.length ?? 0) > 0;
       // The reason is cleared from the row on reactivation, so the timeline is its record.
-      if (changed) await logClientActivity(supabase, clientId, `Client cancelled${reason ? `: ${reason}` : ""}`);
-      return { changed, wasLead: before?.status === "lead" };
+      if (changed) {
+        await logClientActivity(
+          supabase,
+          clientId,
+          wasLead ? `Lead closed as lost${reason ? `: ${reason}` : ""}` : `Client cancelled${reason ? `: ${reason}` : ""}`,
+        );
+      }
+      return { changed, wasLead };
     },
     onSuccess: (result, { clientId }) => {
       invalidateClientRecord(qc, clientId);
@@ -2470,8 +2609,9 @@ export function useCancelClient() {
   });
 }
 
-/** Activate a single client — sets status = active. A lead moved to active is
- *  a conversion (same as useConvertLeadToClient): stamp client_since. */
+/** Activate a single client — sets status = active. An account that was never a
+ *  client (a lead, a lost lead, or a lead set Inactive) moved to active is a
+ *  conversion (same as useConvertLeadToClient): stamp client_since. */
 export function useActivateClient() {
   const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
@@ -2480,8 +2620,9 @@ export function useActivateClient() {
       const supabase = createClient();
       const { data: before } = await supabase.from("clients").select("status").eq("id", clientId).maybeSingle();
       if (!before || before.status === "active") return { changed: false, wasLead: false };
-      // A lost lead never became a client, so bringing it back is a conversion too.
-      const wasLead = before.status === "lead" || before.status === "lost";
+      // "Never a client" (no client_since, jobs or invoices), whatever the status
+      // says — a lead set Inactive and then Active is still a conversion.
+      const wasLead = (await fetchNeverConvertedClientIds(supabase, [clientId])).has(clientId);
       const { data: updated, error } = await supabase
         .from("clients")
         .update({
@@ -2560,7 +2701,7 @@ export function useBulkUpdateClients() {
   });
 }
 
-/** Bulk cancel many clients with a shared reason. */
+/** Bulk cancel many clients with a shared reason. Leads in the selection are closed as Lost. */
 export function useBulkCancelClients() {
   const qc = useQueryClient();
   return useMutation({
@@ -2570,7 +2711,8 @@ export function useBulkCancelClients() {
   });
 }
 
-/** Bulk activate many clients. Leads convert (client_since stamped); already-active rows are skipped. */
+/** Bulk activate many clients. Accounts that were never a client convert (client_since stamped);
+ *  already-active rows are skipped. */
 export function useBulkActivateClients() {
   const qc = useQueryClient();
   return useMutation({

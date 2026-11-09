@@ -99,6 +99,29 @@ export async function POST(request: Request) {
     if (!chosenRole.is_active) return NextResponse.json({ error: "That Landscapt role is inactive. Activate it or pick another role." }, { status: 400 });
   }
 
+  // Already an active member of this org: nothing to invite them to. Saying
+  // "You've been invited as {role}" to a current teammate (and resetting
+  // their password link) was confusing, and silently changed nothing.
+  const alreadyMemberResponse = () =>
+    NextResponse.json(
+      {
+        error: `${email} is already an active member of your team. Change their role on the Users page instead of inviting them again.`,
+        code: "already_member",
+      },
+      { status: 409 }
+    );
+  {
+    const { data: sameEmail } = await adminClient
+      .from("profiles")
+      .select("id, status")
+      .eq("org_id", callerProfile.org_id)
+      // Case-insensitive exact match: `_` / `%` in an address are not wildcards.
+      .ilike("email", email.replace(/[%_\\]/g, (c) => `\\${c}`))
+      .eq("status", "active")
+      .limit(1);
+    if ((sameEmail ?? []).length > 0) return alreadyMemberResponse();
+  }
+
   let linkData: Awaited<ReturnType<typeof adminClient.auth.admin.generateLink>>["data"];
   let linkType: "invite" | "recovery" = "invite";
 
@@ -170,13 +193,18 @@ export async function POST(request: Request) {
         { status: 409 }
       );
     }
+    // Their profile email differs from the sign-in email, so the check above missed them.
+    if (existingStatus === "active") return alreadyMemberResponse();
   }
 
   // Build the URL directly so the user lands on /reset-password without
   // needing Supabase's redirect allowlist.
   const hashedToken = linkData.properties?.hashed_token;
+  // `invite=1&uid=` lets the page tell an already-used invite link from an
+  // expired one: opened again after the person has set up their account it
+  // says "You're already set up — sign in" (see /api/auth/invite-status).
   const inviteUrl = hashedToken
-    ? `${siteUrl}/reset-password?token_hash=${hashedToken}&type=${linkType}`
+    ? `${siteUrl}/reset-password?token_hash=${hashedToken}&type=${linkType}&invite=1${linkData.user ? `&uid=${linkData.user.id}` : ""}`
     : linkData.properties?.action_link ?? "";
 
   // 4. Send the invite email via Resend's HTTP API (not SMTP).
@@ -194,7 +222,7 @@ export async function POST(request: Request) {
         <h2 style="margin:0 0 8px;font-size:20px;color:#0f172a">You've been invited to ${orgName ? escapeHtml(orgName) + " on " : ""}Landscapt</h2>
         <p style="margin:0 0 24px;color:#475569">Hi ${escapeHtml(name)}, you've been added as a <strong>${escapeHtml(role)}</strong> on ${orgName ? escapeHtml(orgName) + "'s" : "your team's"} Landscapt account.</p>
         <a href="${inviteUrl}" style="display:inline-block;padding:12px 24px;background:#60ab45;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Accept Invitation</a>
-        <p style="margin:24px 0 0;font-size:12px;color:#94a3b8">This link expires in 24 hours. If you weren't expecting this, you can ignore this email.</p>
+        <p style="margin:24px 0 0;font-size:12px;color:#94a3b8">For security this link expires soon — if it has, ask your admin to send a new invite. If you weren't expecting this, you can ignore this email.</p>
       </div>
     `,
   });
@@ -236,9 +264,19 @@ export async function POST(request: Request) {
       .from("crm_roles").select("id").eq("id", crmRoleId).eq("org_id", callerProfile.org_id).is("deleted_at", null).maybeSingle();
     if (roleRow) {
       const { data: linked } = await adminClient
-        .from("crm_employees").select("id").eq("org_id", callerProfile.org_id).eq("user_id", linkData.user.id).is("deleted_at", null).maybeSingle();
+        .from("crm_employees").select("id, crm_role_id").eq("org_id", callerProfile.org_id).eq("user_id", linkData.user.id).is("deleted_at", null).maybeSingle();
       if (linked) {
-        await adminClient.from("crm_employees").update({ crm_role_id: crmRoleId }).eq("id", linked.id);
+        // Never silently replace a role the employee record already has — the
+        // invite dialog's choice only fills an empty one.
+        if (!linked.crm_role_id) {
+          const { error: roleErr } = await adminClient.from("crm_employees").update({ crm_role_id: crmRoleId }).eq("id", linked.id);
+          if (roleErr) {
+            log.error("invite: employee role update failed", { error: roleErr.message });
+            return NextResponse.json({ success: true, warning: "Invite sent, but the Landscapt role could not be set — set it under Team → Employees." }, { status: 200 });
+          }
+        } else if (linked.crm_role_id !== crmRoleId) {
+          return NextResponse.json({ success: true, warning: "Invite sent. Their employee record already has a different Landscapt role, which was kept — change it under Team → Employees if needed." }, { status: 200 });
+        }
       } else {
         const { data: byEmail } = await adminClient
           .from("crm_employees").select("id").eq("org_id", callerProfile.org_id).is("user_id", null).is("deleted_at", null)
@@ -247,7 +285,11 @@ export async function POST(request: Request) {
         if (byEmail) {
           // A re-hired (inactive) employee record linked here must be active again, or
           // has_crm_access() still refuses the login.
-          await adminClient.from("crm_employees").update({ user_id: linkData.user.id, crm_role_id: crmRoleId, is_active: true }).eq("id", byEmail.id);
+          const { error: linkErr } = await adminClient.from("crm_employees").update({ user_id: linkData.user.id, crm_role_id: crmRoleId, is_active: true }).eq("id", byEmail.id);
+          if (linkErr) {
+            log.error("invite: employee link failed", { error: linkErr.message });
+            return NextResponse.json({ success: true, warning: "Invite sent, but the employee record could not be linked — link them under Team → Employees." }, { status: 200 });
+          }
         } else {
           const parts = name.trim().split(/\s+/);
           const firstName = parts[0];

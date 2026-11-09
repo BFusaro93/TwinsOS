@@ -359,6 +359,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
       const discountCents = clampDiscount(initialData.subtotal);
       const salesTaxCents = computeSalesTax({
         taxableSubtotal: taxableSubtotalCents,
+        subtotal: initialData.subtotal,
         taxRatePercent: taxRate,
         discountCost: discountCents,
         discountReducesTax,
@@ -393,6 +394,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
     const discountCents = clampDiscount(subtotalCents);
     const salesTaxCents = computeSalesTax({
       taxableSubtotal: taxableSubtotalCents,
+      subtotal: subtotalCents,
       taxRatePercent: taxRate,
       discountCost: discountCents,
       discountReducesTax,
@@ -824,6 +826,7 @@ export function NewPODialog({ open, onOpenChange, initialData, prefillData, onCr
                 const discountCents = Math.min(Math.round(Math.max(parseFloat(discountCost) || 0, 0) * 100), Math.max(0, subtotalCents));
                 const taxCents = computeSalesTax({
                   taxableSubtotal: taxableSubtotalCents,
+                  subtotal: subtotalCents,
                   taxRatePercent: taxRate,
                   discountCost: discountCents,
                   discountReducesTax,

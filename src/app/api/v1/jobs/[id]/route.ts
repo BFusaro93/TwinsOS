@@ -93,8 +93,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (error) return jsonServerError("PATCH /api/v1/jobs/[id]", error);
   if (!data) return jsonError("Job not found", 404);
 
-  // Same visit rules as the app (src/lib/visits/*). The job row is already
-  // saved, so a failure here is logged, not surfaced as a failed update.
+  // Same visit rules as the app (src/lib/visits/*): hold, cancel — and, for a
+  // recurring or package job, completed — removes the untouched upcoming
+  // visits (no prompt here). The job row is already saved, so a failure here
+  // is logged, not surfaced as a failed update.
   try {
     const today = todayInZone(await getOrgTimeZone(db, auth.orgId));
 
@@ -112,7 +114,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         today,
       });
       if (effect.regenerate) {
-        // Resumed from hold / cancelled: regenerate the season, as the app's
+        // Resumed from hold / cancelled / completed: regenerate the season, as the app's
         // resume does (365-day horizon, the same generator as the cron).
         const { data: genJob } = await db
           .from("crm_jobs")

@@ -132,6 +132,8 @@ export interface CRMJob {
   recurrenceRule: string | null;
   recurrenceStart: string | null;
   recurrenceEnd: string | null;
+  /** Recurring: new visits are generated only after this date (Settings → Schedules "Keep existing visits"). */
+  generateVisitsAfter?: string | null;
   packageId: string | null;
   packageStep: number | null;
   packageTotalSteps: number | null;

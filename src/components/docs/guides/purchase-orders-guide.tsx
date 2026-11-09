@@ -198,6 +198,14 @@ export function PurchaseOrdersGuide() {
           defaults to taxable regardless.
         </p>
         <p>
+          <strong>Discount reduces tax.</strong> When this box is ticked the discount comes off
+          before tax, spread across the taxable and non-taxable lines by their share of the
+          subtotal &mdash; only the taxable lines&apos; share lowers the amount taxed. Example: a
+          $1,000 PO with $800 of taxable lines and a $100 discount taxes $800 &minus; $80 = $720.
+          With the box unticked, the full taxable amount is taxed and the discount comes off the
+          total afterward. The PO screen, the PDF and the saved totals all use this same rule.
+        </p>
+        <p>
           The New Purchase Order form also shows a read-only <strong>Part #</strong> column beside
           each line&apos;s item, filled in from the catalog entry (a dash if it has none), so you
           can check the part number without leaving the form. The New PO and Receive Goods dialogs
@@ -260,6 +268,14 @@ export function PurchaseOrdersGuide() {
             of turn is rejected server-side with &ldquo;It&apos;s not your turn to approve this yet
             — an earlier step is still pending.&rdquo;
           </li>
+          <li>
+            <strong>Approval thresholds use the total the system calculates.</strong> A
+            requisition&apos;s or PO&apos;s subtotal, sales tax and grand total are always worked out
+            from its line items, tax rate, shipping and discount &mdash; whenever a line or one of
+            those fields changes, and again at the moment it&apos;s submitted. A total typed or sent
+            from anywhere else is replaced, so a record can&apos;t slip under a threshold its lines
+            are actually over.
+          </li>
         </ul>
       </Section>
 
@@ -277,6 +293,14 @@ export function PurchaseOrdersGuide() {
           discount are prorated onto each partial receipt proportionally, so a discount isn&apos;t
           double-counted across multiple receipts. You must pick a <strong>Received By</strong>{" "}
           person before recording.
+        </p>
+        <p>
+          A PO line can never be received past what was ordered in total. Clicking Record twice,
+          or receiving the same PO in two tabs, is refused with &ldquo;&hellip; would be received in
+          total but only &hellip; was ordered &mdash; check for a duplicate submission&rdquo; instead
+          of creating a second receipt. A Maintenance Part with a Parts record is always received
+          into that part (the product&apos;s count follows it); the system refuses to add the units
+          to the product alone.
         </p>
         <p>
           Recording a receipt does two things, in order: first, inventory updates — quantity on hand
@@ -308,7 +332,10 @@ export function PurchaseOrdersGuide() {
           <strong>Partially Fulfilled</strong> instead. You can correct a receipt you already
           recorded by editing its quantities — the system applies the difference to inventory rather
           than re-receiving from scratch, so lowering a quantity by mistake correctly pulls the stock
-          back down too.
+          back down too. The PO&apos;s status is worked out from its receipts, so it follows a
+          correction as well: lowering a receipt on a Completed PO moves it back to Partially
+          Fulfilled (or to Ordered if nothing is left received). That includes a PO you marked
+          complete by hand &mdash; any later receipt change re-checks it against what was received.
         </p>
       </Section>
 

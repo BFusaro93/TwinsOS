@@ -33,8 +33,17 @@ export type CompleteVisitResult =
 export async function completeVisit(
   supabase: AnyClient,
   userId: string,
-  visitId: string
+  visitId: string,
+  opts: {
+    /** Default true (the single-visit route). Bulk "Mark Completed" passes
+     * false: a selection that happens to include visits completed earlier
+     * must not re-run their side effects (re-billing them after a line or
+     * invoice was removed). Repairing one visit stays an explicit,
+     * single-visit action. */
+    repairIfCompleted?: boolean;
+  } = {}
 ): Promise<CompleteVisitResult> {
+  const repairIfCompleted = opts.repairIfCompleted ?? true;
   const { data: profile } = await supabase
     .from("profiles")
     .select("org_id")
@@ -75,7 +84,7 @@ export async function completeVisit(
   const REPAIR_MIN_AGE_MS = 2 * 60 * 1000;
   if (priorStatus === "completed") {
     const completedAgo = priorCompletedAt ? Date.now() - new Date(priorCompletedAt).getTime() : Number.POSITIVE_INFINITY;
-    if (!orgId || completedAgo < REPAIR_MIN_AGE_MS) {
+    if (!repairIfCompleted || !orgId || completedAgo < REPAIR_MIN_AGE_MS) {
       return { ok: true, jobId: v.job_id, clientId: v.client_id, alreadyCompleted: true };
     }
     const repair = await applyVisitCompletionSideEffects({

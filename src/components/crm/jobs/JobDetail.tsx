@@ -52,7 +52,7 @@ import {
 import { cn, formatCurrency, formatHours } from "@/lib/utils";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { createClient } from "@/lib/supabase/client";
-import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
+import { GENERATED_VISIT_JOB_TYPES, applyJobStatusToVisits, findJobVisitsToRemove, resumeJobVisits } from "@/lib/visits/job-status-visits";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { stripHtml } from "@/lib/utils/strip-html";
 import { useServiceTreatedAreaKinds } from "@/lib/hooks/use-chemical-tracking";
@@ -289,6 +289,14 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       ["schedule", "schedule_days", "recurrence_rule", "recurrence_start"].some((k) => k in edits);
     const endChanged = job.jobType === "recurring" && "recurrence_end" in edits;
     const reschedule = scheduleChanged || endChanged;
+    if (job.jobType === "recurring" && ("recurrence_start" in edits || "recurrence_end" in edits)) {
+      const start = ("recurrence_start" in edits ? (edits.recurrence_start as string | null) : job.recurrenceStart) ?? job.scheduledDate ?? null;
+      const end = "recurrence_end" in edits ? (edits.recurrence_end as string | null) : job.recurrenceEnd;
+      if (start && end && end < start) {
+        toast.error("The end date can't be before the start date");
+        return;
+      }
+    }
     if (reschedule) {
       try {
         const res = await fetch("/api/crm/jobs/generate-visits", {
@@ -325,6 +333,29 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
       }
     }
 
+    // Completing a recurring / package job ends it the way cancelling does:
+    // its untouched upcoming visits are removed (applyJobStatusToVisits, after
+    // the save). Started, completed and invoiced visits stay. Ask first.
+    const effectiveJobType = (typeof edits.job_type === "string" ? edits.job_type : null) ?? job.jobType;
+    if (edits.status === "completed" && job.status !== "completed" && GENERATED_VISIT_JOB_TYPES.includes(effectiveJobType)) {
+      try {
+        const target = await findJobVisitsToRemove(createClient(), { jobId: job.id, jobType: effectiveJobType, today: orgToday() });
+        const n = target.ids.length;
+        if (n > 0) {
+          const ok = await confirm({
+            title: `Remove the ${n} upcoming visit${n !== 1 ? "s" : ""}?`,
+            description: `Completing this job ends it: no more visits are generated, and its ${n} upcoming visit${n !== 1 ? "s" : ""} that ${n !== 1 ? "haven't" : "hasn't"} been started or invoiced will be removed. Started, completed and invoiced visits stay on the job.`,
+            confirmLabel: "Remove visits and complete",
+            destructive: true,
+          });
+          if (!ok) return;
+        }
+      } catch (e) {
+        toast.error(mutationErrorMessage(e, e instanceof Error ? e.message : "Failed to check upcoming visits"));
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       await updateJob.mutateAsync({ id: job.id, patch: edits });
@@ -333,7 +364,14 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
         const res = await fetch("/api/crm/jobs/generate-visits", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jobId: job.id, action: "reschedule", scheduleChanged, lookaheadDays: 365 }),
+          body: JSON.stringify({
+            jobId: job.id,
+            action: "reschedule",
+            scheduleChanged,
+            lookaheadDays: 365,
+            // Services still on the old start follow the job to its new one.
+            ...("recurrence_start" in edits ? { previousStart: job.recurrenceStart ?? job.scheduledDate ?? null } : {}),
+          }),
         });
         const out = await res.json().catch(() => ({})) as { removed?: number; generated?: number; error?: string };
         if (!res.ok) toast.error(out.error ?? "Job saved, but its visits could not be rescheduled — use Generate Visits");
@@ -647,8 +685,15 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
   async function handleDeleteSvc(id: string) {
     try {
-      await deleteJobService.mutateAsync({ id });
-      toast.success("Service removed");
+      const out = await deleteJobService.mutateAsync({ id });
+      const retired = out.retired > 0 ? ` ${out.retired} upcoming visit${out.retired !== 1 ? "s" : ""} removed.` : "";
+      if (out.outcome === "stopped") {
+        toast.success(
+          `Service stopped — no new visits will be scheduled for it.${retired} It stays on the job because it has past visits or products on record (${out.keptVisits} visit${out.keptVisits !== 1 ? "s" : ""}), which keep billing only this service.`
+        );
+      } else {
+        toast.success(`Service removed.${retired}`);
+      }
     } catch (err) {
       toast.error(mutationErrorMessage(err, "Failed to remove service"));
     }
@@ -668,7 +713,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     try {
       const today = orgToday();
       const serviceDate = job.scheduledDate ?? today;
-      const services = job.services ?? [];
+      // A stopped service (removed, kept for its visit history) is not billed.
+      const services = (job.services ?? []).filter((s) => s.included !== false);
       const productLineItems = buildPendingProductLineItems(serviceDate);
       const svcLineItems = services.length > 0
         ? services.map((s) => ({
@@ -727,6 +773,10 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   }
 
   const services = job.services ?? [];
+  // Services still in effect: a stopped one (removed while it had visit
+  // history — see src/lib/visits/job-service-removal.ts) stays listed but no
+  // longer counts toward the job's price.
+  const activeServices = services.filter((s) => s.included !== false);
   // How this snow invoice type uses service rows (uses the type being edited, so the note follows an unsaved change).
   const snowRule = job.jobType === "snow" ? snowServiceRule((edits.invoice_type as string | undefined) ?? job.invoiceType) : null;
   const svcRateLocked = snowRule != null && !snowRule.servicePriceUsed;
@@ -736,7 +786,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   // 'scheduled' state, mirroring the Waiting List's own definition of "still
   // needs scheduling" (see useWaitingListJobs).
   const pendingServiceIds = new Set(
-    services
+    activeServices
       .filter((s) => !visits.some((v) => v.jobServiceId === s.id && !v.deletedAt && v.status !== "scheduled"))
       .map((s) => s.id)
   );
@@ -750,8 +800,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
     && job.waitingListEnd < today
     && job.status !== "completed"
     && job.status !== "cancelled";
-  const jobValueCents = services.length > 0
-    ? services.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0)
+  const jobValueCents = activeServices.length > 0
+    ? activeServices.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0)
     : (job.rateCents ?? 0);
   // A Waiting List job keeps job_type='waiting_list' even after a visit is
   // dispatched (a job can have multiple line-item visits scheduled out
@@ -877,7 +927,9 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
               </Button>
             </PermissionGate>
           )}
-          {job.jobType !== "recurring" && job.jobType !== "package" && can("acct_add_modify_invoices") && (
+          {/* Recurring / package visits invoice themselves; snow jobs bill through Snow
+              Invoicing and project jobs through their milestones — never this button. */}
+          {!["recurring", "package", "snow", "project"].includes(job.jobType) && can("acct_add_modify_invoices") && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
               disabled={invoicing}
               onClick={handleInvoice}>
@@ -1048,15 +1100,42 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                 </div>
                 {editing ? (
                   <>
-                    <div className="flex flex-col gap-1">
-                      <Label className="text-xs text-muted-foreground">Scheduled Date</Label>
-                      <Input
-                        type="date"
-                        defaultValue={job.scheduledDate ?? ""}
-                        onChange={(e) => patch("scheduled_date", e.target.value || null)}
-                        className="text-sm"
-                      />
-                    </div>
+                    {job.jobType === "recurring" ? (
+                      // A recurring job's dates are its season: the visit generator runs from
+                      // the start date (Scheduled Date only stood in for it when no start was
+                      // set) to the end date. Saving a change previews, prunes and regenerates
+                      // the upcoming visits like a schedule change.
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-xs text-muted-foreground">Start Date</Label>
+                          <Input
+                            type="date"
+                            defaultValue={job.recurrenceStart ?? job.scheduledDate ?? ""}
+                            onChange={(e) => patch("recurrence_start", e.target.value || null)}
+                            className="text-sm"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-xs text-muted-foreground">End Date</Label>
+                          <Input
+                            type="date"
+                            defaultValue={job.recurrenceEnd ?? ""}
+                            onChange={(e) => patch("recurrence_end", e.target.value || null)}
+                            className="text-sm"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">Scheduled Date</Label>
+                        <Input
+                          type="date"
+                          defaultValue={job.scheduledDate ?? ""}
+                          onChange={(e) => patch("scheduled_date", e.target.value || null)}
+                          className="text-sm"
+                        />
+                      </div>
+                    )}
                     <div className="flex flex-col gap-1">
                       <Label className="text-xs text-muted-foreground">Budgeted Hours</Label>
                       <p className="text-sm text-muted-foreground py-1.5">
@@ -1360,14 +1439,43 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                   </>
                 ) : (
                   <dl className="flex flex-col gap-2 text-sm">
-                    <div className="flex justify-between">
-                      <dt className="text-xs text-muted-foreground">Date</dt>
-                      <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">
-                        {job.scheduledDate
-                          ? new Date(job.scheduledDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                          : "—"}
-                      </dd>
-                    </div>
+                    {job.jobType === "recurring" ? (
+                      <>
+                        <div className="flex justify-between">
+                          <dt className="text-xs text-muted-foreground">Start Date</dt>
+                          <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">
+                            {(job.recurrenceStart ?? job.scheduledDate)
+                              ? new Date((job.recurrenceStart ?? job.scheduledDate) + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                              : "—"}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between">
+                          <dt className="text-xs text-muted-foreground">End Date</dt>
+                          <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">
+                            {job.recurrenceEnd
+                              ? new Date(job.recurrenceEnd + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                              : <span className="text-slate-400 dark:text-neutral-500 italic">No end date</span>}
+                          </dd>
+                        </div>
+                        {job.generateVisitsAfter && job.generateVisitsAfter >= today && (
+                          <div className="flex justify-between" title="Set when a schedule change kept the visits already on the calendar: new visits are only generated after the last of them. Changing this job's schedule or start date clears it.">
+                            <dt className="text-xs text-muted-foreground">New visits after</dt>
+                            <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">
+                              {new Date(job.generateVisitsAfter + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            </dd>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex justify-between">
+                        <dt className="text-xs text-muted-foreground">Date</dt>
+                        <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100">
+                          {job.scheduledDate
+                            ? new Date(job.scheduledDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                            : "—"}
+                        </dd>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <dt className="text-xs text-muted-foreground">Crew</dt>
                       <dd className="text-xs font-medium text-slate-800 dark:text-neutral-100" title={crewSummaryTitle}>{crewSummary}</dd>
@@ -1622,9 +1730,18 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       </tr>
                     )}
                     {services.map((s) => (
-                      <tr key={s.id} className="group border-b last:border-0">
+                      <tr key={s.id} className={cn("group border-b last:border-0", s.included === false && "opacity-60")}>
                         <td className="px-4 py-3 font-medium text-slate-800 dark:text-neutral-100">
                           {s.serviceName}
+                          {s.included === false && (
+                            <Badge
+                              variant="outline"
+                              className="ml-2 text-[10px] font-normal"
+                              title="Removed from the job while it had visits on record. No new visits are scheduled for it and it isn't billed; its past visits stay linked to it."
+                            >
+                              Stopped
+                            </Badge>
+                          )}
                           {editingSvcId === s.id ? (
                             <label className="mt-1 flex items-center gap-1.5 text-xs font-normal text-slate-500 dark:text-neutral-400">
                               Treated area
@@ -1846,7 +1963,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                       <tr className="border-t bg-slate-50 dark:bg-muted/40">
                         <td colSpan={3} className="px-4 py-2 text-right text-xs font-semibold text-muted-foreground">Total</td>
                         <td className="px-4 py-2 text-right font-bold text-slate-800 dark:text-neutral-100">
-                          {svcRateLocked ? "—" : formatCurrency(services.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0))}
+                          {svcRateLocked ? "—" : formatCurrency(activeServices.reduce((s, sv) => s + (sv.rateCents ?? 0) * (sv.qty ?? 1), 0))}
                         </td>
                         <td />
                       </tr>

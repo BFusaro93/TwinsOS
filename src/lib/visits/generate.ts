@@ -31,6 +31,10 @@ import {
  * into an invoice for all of the job's services, so it also counts toward
  * every capped service's max_visits.
  *
+ * max_visits counts only live visits that are scheduled, dispatched, in
+ * progress or completed (COUNTED_VISIT_STATUSES). A skipped or cancelled
+ * visit — or one deleted from the calendar — is made up later in the season.
+ *
  * Every read is paginated (PostgREST caps a response at 1000 rows): a
  * truncated read silently re-created visits that existed and under-counted
  * max_visits usage, overbilling the client.
@@ -45,7 +49,7 @@ const log = logger.child("visits/generate");
 type AnyClient = any;
 
 export const GENERATOR_JOB_COLUMNS =
-  "id, org_id, client_id, crew_id, job_type, status, schedule, schedule_days, recurrence_start, recurrence_end, scheduled_date, start_date_window, package_total_steps, priority, notes_to_crew, man_count";
+  "id, org_id, client_id, crew_id, job_type, status, schedule, schedule_days, recurrence_start, recurrence_end, scheduled_date, start_date_window, package_total_steps, priority, notes_to_crew, man_count, generate_visits_after";
 
 export interface GeneratorJob {
   id: string;
@@ -64,6 +68,9 @@ export interface GeneratorJob {
   priority: number | null;
   notes_to_crew: string | null;
   man_count: number | null;
+  /** Recurring: generate only on dates strictly after this one (Settings →
+   *  Schedules "Keep existing visits"); null = no floor. */
+  generate_visits_after?: string | null;
 }
 
 interface GeneratorService {
@@ -103,6 +110,10 @@ export interface VisitInsert {
   notes_to_crew: string | null;
 }
 
+/** Visit statuses that use up a service's max_visits. Skipped / cancelled
+ *  visits (and deleted ones) don't: the client still gets that visit later. */
+export const COUNTED_VISIT_STATUSES = ["scheduled", "dispatched", "in_progress", "completed"];
+
 /** Job statuses that never get new visits. */
 export const NON_GENERATING_JOB_STATUSES = ["hold", "cancelled", "completed"];
 
@@ -122,9 +133,8 @@ export interface PlanArgs {
   /** org_id to stamp when the job row has none (session org). */
   fallbackOrgId?: string | null;
   /** Per job_service_id: ALL-TIME visits already counting toward max_visits
-   *  (live rows, plus soft-deleted rows that still hold an occurrence_date —
-   *  a moved/deleted occurrence consumed its slot; rows a system prune
-   *  cleared don't), including the job's UNLINKED visits. Required for
+   *  (live rows in COUNTED_VISIT_STATUSES — skipped, cancelled and deleted
+   *  visits are made up), including the job's UNLINKED visits. Required for
    *  services with max_visits set. */
   usedVisitsByService?: Map<string, number>;
   /** ALL-TIME live (non-deleted) visit count for the job — what
@@ -218,7 +228,10 @@ export function planVisitsForJob(args: PlanArgs): VisitInsert[] {
   if (job.job_type !== "recurring") return out;
 
   // ── recurring ─────────────────────────────────────────────────────────────
-  const dates = recurringDatesForJob(job, schedulesByName, today, horizonEnd);
+  // "Keep existing visits" floor: the visits already on the calendar stay,
+  // and the new rules only fill in after the last of them.
+  const floor = job.generate_visits_after ?? null;
+  const dates = recurringDatesForJob(job, schedulesByName, today, horizonEnd).filter((d) => !floor || d > floor);
   if (dates.length === 0) return out;
 
   // Service rows exist but all are excluded: nothing billable to generate.
@@ -453,12 +466,11 @@ export async function generateVisitsForJobs(
   }
 
   // All-time usage for services with a visit budget — the window-limited
-  // `existing` fetch above can't see past visits, which still count. A row
-  // counts while live, or soft-deleted but still holding its occurrence
-  // (moved/deleted by a user); a system prune's released rows don't.
+  // `existing` fetch above can't see past visits, which still count. Only
+  // live visits that were (or will be) done count: skipped, cancelled and
+  // deleted ones are made up (COUNTED_VISIT_STATUSES).
   const usedVisitsByService = new Map<string, number>();
   const cappedServices = services.filter((s) => s.max_visits != null);
-  const countsFilter = "deleted_at.is.null,occurrence_date.not.is.null";
   for (const ids of chunk(cappedServices.map((s) => s.id), 100)) {
     const { rows, error } = await selectAllRows<{ job_service_id: string }>(() => supabase
       .from("crm_job_visits")
@@ -466,7 +478,8 @@ export async function generateVisitsForJobs(
       .in("job_service_id", ids)
       // A multi-crew stop is ONE visit against the budget.
       .eq("crew_group_secondary", false)
-      .or(countsFilter));
+      .is("deleted_at", null)
+      .in("status", COUNTED_VISIT_STATUSES));
     if (error) { result.errors.push(error); return result; }
     for (const v of rows) {
       usedVisitsByService.set(v.job_service_id, (usedVisitsByService.get(v.job_service_id) ?? 0) + 1);
@@ -483,7 +496,8 @@ export async function generateVisitsForJobs(
       .in("job_id", ids)
       .is("job_service_id", null)
       .eq("crew_group_secondary", false)
-      .or(countsFilter));
+      .is("deleted_at", null)
+      .in("status", COUNTED_VISIT_STATUSES));
     if (error) { result.errors.push(error); return result; }
     for (const v of rows) unlinkedByJob.set(v.job_id, (unlinkedByJob.get(v.job_id) ?? 0) + 1);
   }

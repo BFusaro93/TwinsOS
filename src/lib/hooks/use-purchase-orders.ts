@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapPurchaseOrder } from "@/lib/supabase/mappers";
 import { submitEntityForApproval } from "@/lib/hooks/use-approval-requests";
 import type { PurchaseOrder, POStatus, LineItem } from "@/types";
@@ -63,12 +64,15 @@ export function usePurchaseOrders() {
     queryKey: ["purchase-orders"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("purchase_orders")
-        .select(PO_SELECT)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
+      // Every page, not just the first: PostgREST caps a response at 1,000
+      // rows, and a capped list silently hid records past it.
+      const data = await fetchAllRows<Parameters<typeof mapPurchaseOrder>[0]>(() =>
+        supabase
+          .from("purchase_orders")
+          .select(PO_SELECT)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+      );
       return (data.map(mapPurchaseOrder)) as PurchaseOrder[];
     },
   });
@@ -153,7 +157,7 @@ export function useCreatePurchaseOrder() {
               part_number: li.partNumber,
               quantity: li.quantity,
               unit_cost: li.unitCost,
-              total_cost: li.totalCost,
+              total_cost: Math.round(li.totalCost),
               project_id: li.projectId ?? null,
               notes: li.notes ?? null,
               taxable: li.taxable,
@@ -820,6 +824,41 @@ export function useUpdatePurchaseOrderStatus() {
   });
 }
 
+/**
+ * After a goods receipt, the database moves the PO between ordered / partially
+ * fulfilled / completed from its receipts (po_refresh_receipt_status). Read the
+ * result back instead of writing a status worked out from the receiving
+ * dialog's snapshot, which could be stale (another receipt, another tab) and
+ * was never corrected when a receipt was later edited. Fires the
+ * po_status_change automations when the status moved.
+ */
+export function useRefreshPOStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, previousStatus }: { id: string; previousStatus: POStatus }) => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("purchase_orders")
+        .select("status")
+        .eq("id", id)
+        .single();
+      if (error) throw error;
+      return { status: data.status as POStatus, previousStatus };
+    },
+    onSuccess: ({ status, previousStatus }, { id }) => {
+      patchPOCache(queryClient, id, { status });
+      queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+      if (status === previousStatus) return;
+      fetch("/api/automations/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventTrigger: "po_status_change", toStatus: status, purchaseOrderId: id }),
+      }).catch(() => {});
+    },
+    onError: (err) => toast.error(`Couldn't refresh the PO status: ${serializeError(err)}`),
+  });
+}
+
 // ── PO Line Item mutations ────────────────────────────────────────────────────
 
 /** Inserts a new line item row and syncs the PO totals. */
@@ -855,7 +894,7 @@ export function useAddPOLineItem() {
         part_number: item.partNumber,
         quantity: item.quantity,
         unit_cost: item.unitCost,
-        total_cost: item.totalCost,
+        total_cost: Math.round(item.totalCost),
         project_id: item.projectId ?? null,
         notes: item.notes ?? null,
         taxable: item.taxable,
@@ -863,7 +902,7 @@ export function useAddPOLineItem() {
       if (lineErr) throw lineErr;
       const { error: poErr } = await supabase
         .from("purchase_orders")
-        .update({ subtotal, sales_tax: salesTax, grand_total: grandTotal })
+        .update({ subtotal: Math.round(subtotal), sales_tax: Math.round(salesTax), grand_total: Math.round(grandTotal) })
         .eq("id", poId);
       if (poErr) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -929,7 +968,7 @@ export function useUpdatePOLineItem() {
         .update({
           quantity: item.quantity,
           unit_cost: item.unitCost,
-          total_cost: item.totalCost,
+          total_cost: Math.round(item.totalCost),
           project_id: item.projectId ?? null,
           notes: item.notes ?? null,
           taxable: item.taxable,
@@ -946,7 +985,7 @@ export function useUpdatePOLineItem() {
       }
       const { error: poErr } = await supabase
         .from("purchase_orders")
-        .update({ subtotal, sales_tax: salesTax, grand_total: grandTotal })
+        .update({ subtotal: Math.round(subtotal), sales_tax: Math.round(salesTax), grand_total: Math.round(grandTotal) })
         .eq("id", poId);
       if (poErr) {
         await supabase
@@ -1166,7 +1205,10 @@ export function useDeletePOLineItem() {
           }
         }
 
-        const productDelta = await clampProductReduction(supabase, productId, -totalReceived);
+        // When a linked part was corrected above, sync_part_stock_to_product
+        // already mirrored its new quantity onto this product — taking the
+        // received units off the product again moved it twice.
+        const productDelta = reversedPartId ? 0 : await clampProductReduction(supabase, productId, -totalReceived);
         if (productDelta !== 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { error: prodAdjustErr } = await (supabase.rpc as any)("adjust_product_item_quantity", {
@@ -1206,7 +1248,7 @@ export function useDeletePOLineItem() {
 
       const { error: poErr } = await supabase
         .from("purchase_orders")
-        .update({ subtotal, sales_tax: salesTax, grand_total: grandTotal })
+        .update({ subtotal: Math.round(subtotal), sales_tax: Math.round(salesTax), grand_total: Math.round(grandTotal) })
         .eq("id", poId);
       if (poErr) {
         // Header total update failed after the line item (and any inventory

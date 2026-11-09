@@ -39,7 +39,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useConfirm } from "@/components/shared/useConfirm";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useApiKeys } from "@/lib/hooks/use-api-keys";
 
 const AVATAR_COLORS = [
   "bg-violet-500", "bg-blue-500", "bg-emerald-500", "bg-amber-500",
@@ -641,17 +642,110 @@ function ResetPasswordDialog({ user, onOpenChange }: ResetPasswordDialogProps) {
 }
 
 // ---------------------------------------------------------------------------
+// DeactivateUserDialog
+// ---------------------------------------------------------------------------
+
+/**
+ * Deactivating a login also deactivates the person's employee record (the two
+ * are kept in sync), pauses report schedules they created, and — because API
+ * keys keep working after their creator leaves — lists the keys they created
+ * with "Revoke these keys" checked by default.
+ */
+function DeactivateUserDialog({
+  user,
+  onOpenChange,
+}: {
+  user: OrgUser | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { mutate: deactivate, isPending } = useDeactivateUser();
+  const { data: keys = [], isLoading: keysLoading } = useApiKeys({ enabled: !!user });
+  const [revokeKeys, setRevokeKeys] = useState(true);
+  const theirKeys = user ? keys.filter((k) => k.createdBy === user.id && !k.revokedAt) : [];
+
+  function submit() {
+    if (!user) return;
+    deactivate(
+      { userId: user.id, revokeApiKeys: theirKeys.length > 0 && revokeKeys },
+      {
+        onSuccess: (result) => {
+          toast.success(
+            `${user.name} deactivated` +
+              (result.revokedKeys ? ` and ${result.revokedKeys} API key${result.revokedKeys === 1 ? "" : "s"} revoked` : "")
+          );
+          if (result.warning) toast.warning(result.warning);
+          onOpenChange(false);
+        },
+        onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to deactivate user"),
+      }
+    );
+  }
+
+  return (
+    <Dialog
+      open={!!user}
+      onOpenChange={(open) => {
+        if (!open) setRevokeKeys(true);
+        onOpenChange(open);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Deactivate {user?.name ?? "this user"}?</DialogTitle>
+          <DialogDescription>
+            They lose access to the platform immediately. Their employee record (Team → Employees) is deactivated too,
+            and report schedules they created are paused until an admin takes them over. You can reactivate them later,
+            which also reactivates the employee record.
+          </DialogDescription>
+        </DialogHeader>
+
+        {keysLoading ? (
+          <p className="text-xs text-muted-foreground">Checking for API keys…</p>
+        ) : theirKeys.length > 0 ? (
+          <div className="rounded-md border p-3">
+            <p className="text-sm font-medium text-slate-900 dark:text-neutral-100">
+              API keys they created ({theirKeys.length})
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              These keep working after deactivation unless revoked.
+            </p>
+            <ul className="mt-2 space-y-0.5">
+              {theirKeys.map((k) => (
+                <li key={k.id} className="text-xs text-slate-700 dark:text-neutral-300">
+                  {k.name} <span className="font-mono text-muted-foreground">{k.keyPrefix}…</span>
+                </li>
+              ))}
+            </ul>
+            <label className="mt-3 flex items-center gap-2 text-sm text-slate-700 dark:text-neutral-300">
+              <Checkbox checked={revokeKeys} onCheckedChange={(c) => setRevokeKeys(c === true)} />
+              Revoke these keys
+            </label>
+          </div>
+        ) : null}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={submit} disabled={isPending || keysLoading}>
+            {isPending ? "Deactivating…" : "Deactivate"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // UsersPage
 // ---------------------------------------------------------------------------
 
 export function UsersPage() {
-  const [confirm, confirmDialog] = useConfirm();
   const { currentUser } = useCurrentUserStore();
   const isAdmin = currentUser.role === "admin";
   const { data: rawUsers = [], isLoading } = useUsers();
   const { mutate: inviteUser, isPending: inviting } = useInviteUser();
   const { mutate: updateRole } = useUpdateUserRole();
-  const { mutate: deactivate } = useDeactivateUser();
   const { mutate: reactivate } = useReactivateUser();
   const { mutate: updatePhotoAccess } = useUpdatePhotoModuleAccess();
   const [resendingId, setResendingId] = useState<string | null>(null);
@@ -712,6 +806,7 @@ export function UsersPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [crewDialogOpen, setCrewDialogOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<OrgUser | null>(null);
+  const [deactivateUser, setDeactivateUser] = useState<OrgUser | null>(null);
 
   const totalUsers = users.length;
   const activeUsers = users.filter((u) => u.status === "active").length;
@@ -721,21 +816,13 @@ export function UsersPage() {
     updateRole({ userId, role: newRole });
   }
 
-  async function handleDeactivate(userId: string) {
-    const confirmed = await confirm({
-      title: "Deactivate this user?",
-      description: "They will immediately lose access to the platform. You can reactivate them later.",
-      confirmLabel: "Deactivate",
-      destructive: true,
-    });
-    if (!confirmed) return;
-    deactivate(userId, {
-      onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to deactivate user"),
-    });
-  }
-
   function handleReactivate(userId: string) {
     reactivate(userId, {
+      // Reactivating the login also reactivates their employee record.
+      onSuccess: (result) => {
+        toast.success("User reactivated — their employee record is active again too.");
+        if (result.warning) toast.warning(result.warning);
+      },
       onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to reactivate user"),
     });
   }
@@ -914,7 +1001,7 @@ export function UsersPage() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-slate-400 dark:text-neutral-500 hover:text-red-500 dark:hover:text-red-400"
-                            onClick={() => void handleDeactivate(user.id)}
+                            onClick={() => setDeactivateUser(user)}
                             aria-label={`Deactivate ${user.name}`}
                             title="Deactivate user"
                           >
@@ -974,7 +1061,11 @@ export function UsersPage() {
         user={resetPasswordUser}
         onOpenChange={(open) => { if (!open) setResetPasswordUser(null); }}
       />
-      {confirmDialog}
+
+      <DeactivateUserDialog
+        user={deactivateUser}
+        onOpenChange={(open) => { if (!open) setDeactivateUser(null); }}
+      />
     </div>
   );
 }

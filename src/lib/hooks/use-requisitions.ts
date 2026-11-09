@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { mapRequisition } from "@/lib/supabase/mappers";
 import { submitEntityForApproval } from "@/lib/hooks/use-approval-requests";
 import type { ApprovalStatus, LineItem, Requisition } from "@/types";
@@ -51,13 +52,15 @@ export function useRequisitions() {
     queryKey: ["requisitions"],
     queryFn: async () => {
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("requisitions")
-        .select(REQ_SELECT)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
+      // Every page, not just the first: PostgREST caps a response at 1,000
+      // rows, and a capped list silently hid records past it.
+      const data = await fetchAllRows<Parameters<typeof mapRequisition>[0]>(() =>
+        supabase
+          .from("requisitions")
+          .select(REQ_SELECT)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+      );
       return (data.map(mapRequisition)) as Requisition[];
     },
   });
@@ -151,7 +154,7 @@ export function useCreateRequisition() {
               part_number: li.partNumber,
               quantity: li.quantity,
               unit_cost: li.unitCost,
-              total_cost: li.totalCost,
+              total_cost: Math.round(li.totalCost),
               project_id: li.projectId ?? null,
               notes: li.notes ?? null,
             }))
@@ -211,7 +214,7 @@ export function useAddRequisitionLineItem() {
           part_number: lineItem.partNumber,
           quantity: lineItem.quantity,
           unit_cost: lineItem.unitCost,
-          total_cost: lineItem.totalCost,
+          total_cost: Math.round(lineItem.totalCost),
           project_id: lineItem.projectId ?? null,
           notes: lineItem.notes ?? null,
         })
@@ -221,7 +224,7 @@ export function useAddRequisitionLineItem() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: reqErr } = await (supabase as any)
         .from("requisitions")
-        .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
+        .update({ subtotal: Math.round(newSubtotal), sales_tax: Math.round(newSalesTax), grand_total: Math.round(newGrandTotal) })
         .eq("id", requisitionId);
       if (reqErr) {
         // Header total update failed after the line item was already committed —
@@ -463,7 +466,7 @@ export function useUpdateRequisitionLineItem() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: reqErr } = await (supabase as any)
         .from("requisitions")
-        .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
+        .update({ subtotal: Math.round(newSubtotal), sales_tax: Math.round(newSalesTax), grand_total: Math.round(newGrandTotal) })
         .eq("id", requisitionId);
       if (reqErr) {
         // Header total update failed after the line item was already committed —
@@ -523,7 +526,7 @@ export function useDeleteRequisitionLineItem() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: reqErr } = await (supabase as any)
         .from("requisitions")
-        .update({ subtotal: newSubtotal, sales_tax: newSalesTax, grand_total: newGrandTotal })
+        .update({ subtotal: Math.round(newSubtotal), sales_tax: Math.round(newSalesTax), grand_total: Math.round(newGrandTotal) })
         .eq("id", requisitionId);
       if (reqErr) {
         // Header total update failed after the line item was already deleted —

@@ -468,7 +468,7 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
   /** Asks (with the count computed first) before replacing upcoming visits on the edited schedule. */
   async function offerReschedule(scheduleId: string) {
     try {
-      const post = async (action: 'preview' | 'apply') => {
+      const post = async (action: 'preview' | 'apply' | 'keep') => {
         const res = await fetch(`/api/crm/schedules/${scheduleId}/reschedule`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -488,11 +488,19 @@ function ScheduleDialog({ open, schedule, onClose }: ScheduleDialogProps) {
       }
       const ok = await confirm({
         title: `Remove ${count} upcoming visit${count !== 1 ? 's' : ''} the new schedule drops?`,
-        description: `${count} upcoming visit${count !== 1 ? 's' : ''} on dates this schedule no longer includes (not dispatched, started, moved by hand or invoiced) will be removed, and visits for the new dates generated. Visits on dates the schedule keeps stay as they are, with their crew, time and notes. Choose "Keep existing visits" to leave them all where they are; new visits will still follow the new schedule.`,
+        description: `${count} upcoming visit${count !== 1 ? 's' : ''} on dates this schedule no longer includes (not dispatched, started, moved by hand or invoiced) will be removed, and visits for the new dates generated. Visits on dates the schedule keeps stay as they are, with their crew, time and notes. Choose "Keep existing visits" to leave every visit already on the calendar where it is: each job's new-schedule visits then start only after its last existing visit, so no week gets two.`,
         confirmLabel: 'Update visits',
         cancelLabel: 'Keep existing visits',
       });
-      if (!ok) return;
+      if (!ok) {
+        // Keeping them still has to stop the new rules from adding a second
+        // visit in the weeks already on the calendar (the daily top-up would).
+        const kept = await post('keep');
+        if ((kept.count ?? 0) > 0) {
+          toast.success(`Existing visits kept — new-schedule visits start after each job's last visit already on the calendar`);
+        }
+        return;
+      }
       const out = await post('apply');
       toast.success(`Visits rescheduled: ${count} removed, ${out.generated ?? 0} scheduled`);
       await qc.invalidateQueries({ queryKey: ['crm-job-visits'] });
