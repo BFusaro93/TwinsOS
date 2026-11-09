@@ -28,9 +28,8 @@ LEVELS=20,60,120 SECS=20 node scripts/stress/s5-load.js   # mixed multi-org load
 node scripts/stress/s6-saturation.js     # database-only ceiling (no Next in the path)
 ```
 
-Results append to `results.json` (gitignored). Expected today: everything passes except `H4`, whose
-original pass criterion was wrong (the limiter admits fewer than its limit under a burst, never more),
-and `P4`, a documented known limit. Scripts that seed data are not idempotent across runs of the same
+Results append to `results.json` (gitignored). Expected today: everything passes. `P4` always "passes" by design: it records a documented known limit
+(three different messages from one email in the same instant can still create duplicate clients). Scripts that seed data are not idempotent across runs of the same
 fixtures (use fresh emails/part numbers, or rerun `setup-fixtures.js`).
 
 Reading the load numbers: the throughput ceiling you see is the TEST database's compute tier, not the

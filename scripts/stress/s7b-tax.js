@@ -3,9 +3,10 @@ const { ensureFreshSessions, cookieFor, req } = require("./http");
 (async () => {
   const { fix } = await ensureFreshSessions(); const sb = admin(); const today = new Date().toISOString().slice(0, 10);
   // totals on every invoice the previous concurrent run produced
-  const { data: inv } = await sb.from("crm_invoices").select("subtotal_cents, tax_cents, total_cents, balance_cents, auto_bill_period_start").not("auto_bill_period_start", "is", null).is("deleted_at", null);
-  const bad = inv.filter((i) => i.subtotal_cents !== 10000 || i.total_cents !== 10000 || i.balance_cents !== 10000);
-  record({ name: "I3 totals on all period drafts created by the zero-header path (untaxed)", pass: inv.length > 0 && bad.length === 0, detail: `${inv.length} invoices with the period key, wrong totals=${bad.length} (want subtotal=total=balance=10000)`, extra: { sample: bad.slice(0, 2) } });
+  const { data: inv } = await sb.from("crm_invoices").select("subtotal_cents, tax_cents, total_cents, balance_cents").not("auto_bill_period_start", "is", null).is("deleted_at", null);
+  // Every period-key invoice is one of the two fixtures: untaxed 10000, or taxable 10000 + 800 tax = 10800.
+  const bad = inv.filter((i) => !((i.subtotal_cents === 10000 && i.tax_cents === 0 && i.total_cents === 10000 && i.balance_cents === 10000) || (i.subtotal_cents === 10000 && i.tax_cents === 800 && i.total_cents === 10800 && i.balance_cents === 10800)));
+  record({ name: "I3 totals on every period draft created by the zero-header path", pass: inv.length > 0 && bad.length === 0, detail: `${inv.length} invoices with the period key, unexpected totals=${bad.length}`, extra: { sample: bad.slice(0, 2) } });
   // taxable variant: tax must be 8% of the TAXABLE lines whichever visit's lines land first
   const trials = [];
   for (const o of fix.orgs) {
