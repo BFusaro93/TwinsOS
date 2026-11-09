@@ -22,7 +22,7 @@ import {
   type PayrollRow,
 } from "@/lib/hooks/use-payroll";
 import {
-  DAILY_HEADERS, LONG_BREAK_MINUTES, SUMMARY_HEADERS, breakDetail, dailyRows, groupPayrollByMember, isLongBreak, periodLabel, summaryRows,
+  DAILY_HEADERS, LONG_BREAK_MINUTES, SUMMARY_HEADERS, dailyRows, groupPayrollByMember, isLongBreak, offClockBreakdown, periodLabel, summaryRows,
 } from "@/lib/payroll/export";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
@@ -251,7 +251,12 @@ function DayRow({ row, tz }: { row: PayrollRow; tz: string }) {
           {row.noShift ? "No day punch" : `${clock(row.shiftStart)} – ${row.openShift ? "still open" : clock(row.shiftEnd)}`}
         </div>
         {row.breakGaps.length > 0 && (
-          <div className="text-xs text-muted-foreground">Out: {breakDetail(row, tz)}</div>
+          <div className="text-xs text-muted-foreground">
+            Out: {row.breakGaps.map((g) => `${clock(g.from)} – ${clock(g.to)} (${g.minutes} min)`).join("; ")}
+          </div>
+        )}
+        {offClockBreakdown(row).length > 0 && (
+          <div className="text-xs text-muted-foreground">{offClockBreakdown(row).join(" · ")}</div>
         )}
         {isLongBreak(row) && (
           <div className="flex items-center gap-1 text-xs text-amber-600">

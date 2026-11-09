@@ -52,9 +52,21 @@ function clock(iso: string | null, tz: string): string {
   return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz });
 }
 
-/** "7:04 AM – 12:04 PM (300 min)": when each stretch marked out of the day began and ended. */
-export function breakDetail(d: Pick<PayrollRow, "breakGaps">, tz: string): string {
-  return d.breakGaps.map((g) => `${clock(g.from, tz)} – ${clock(g.to, tz)} (${g.minutes} min)`).join("; ");
+/** "Lunch 30 min · breaks 12 min · job pauses 8 min": the job-punch time off, in minutes (no clock times are stored). */
+export function offClockBreakdown(d: Pick<PayrollRow, "lunchMinutes" | "jobBreakMinutes" | "jobPauseMinutes">): string[] {
+  const parts: string[] = [];
+  if (d.lunchMinutes > 0) parts.push(`Lunch ${d.lunchMinutes} min`);
+  if (d.jobBreakMinutes > 0) parts.push(`breaks ${d.jobBreakMinutes} min`);
+  if (d.jobPauseMinutes > 0) parts.push(`job pauses ${d.jobPauseMinutes} min`);
+  return parts;
+}
+
+/** "7:04 AM – 12:04 PM (300 min)" for each stretch marked out of the day, then the lunch/break/pause minutes. */
+export function breakDetail(d: Pick<PayrollRow, "breakGaps" | "lunchMinutes" | "jobBreakMinutes" | "jobPauseMinutes">, tz: string): string {
+  return [
+    ...d.breakGaps.map((g) => `${clock(g.from, tz)} – ${clock(g.to, tz)} (${g.minutes} min)`),
+    ...offClockBreakdown(d),
+  ].join("; ");
 }
 
 export const DAILY_HEADERS = [

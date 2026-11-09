@@ -53,6 +53,10 @@ export interface PayrollRow {
    * added to the shift's break when they return, so this is where a long break came from.
    */
   breakGaps: PayrollBreakGap[];
+  /** Where the recorded job-punch time off came from, in minutes (no clock times are stored for these). */
+  lunchMinutes: number;
+  jobBreakMinutes: number;
+  jobPauseMinutes: number;
 }
 
 export interface PayrollBreakGap {
@@ -189,13 +193,13 @@ export async function computePayroll(
   };
 
   // Per member-day: job hours, off-clock minutes recorded on jobs, open punches.
-  const jobs = new Map<string, { jobHours: number; offClockMinutes: number; open: number }>();
+  const jobs = new Map<string, { jobHours: number; offClockMinutes: number; open: number; lunch: number; breaks: number; pause: number }>();
   for (const p of punches) {
     if (!p.clocked_in_at) continue;
     const date = punchDate(p.crew_member_id, p.clocked_in_at);
     if (date < from || date > to) continue;
     const k = `${p.crew_member_id}|${date}`;
-    const cur = jobs.get(k) ?? { jobHours: 0, offClockMinutes: 0, open: 0 };
+    const cur = jobs.get(k) ?? { jobHours: 0, offClockMinutes: 0, open: 0, lunch: 0, breaks: 0, pause: 0 };
     if (!p.clocked_out_at) {
       cur.open += 1;
     } else {
@@ -217,6 +221,9 @@ export async function computePayroll(
       cur.jobHours += Math.max(0, spanHours - (own + visitPause) / 60);
       // Never take more off the day than the punch itself lasted.
       cur.offClockMinutes += Math.min(own + visitPause, Math.round(spanHours * 60));
+      cur.lunch += Number(p.lunch_minutes ?? 0);
+      cur.breaks += Number(p.break_minutes ?? 0);
+      cur.pause += visitPause;
     }
     jobs.set(k, cur);
   }
@@ -230,7 +237,7 @@ export async function computePayroll(
     if (!member) continue;
     const dayCrewId = overrideByDay.get(k) ?? member.crewId;
     const shift = shiftByKey.get(k);
-    const job = jobs.get(k) ?? { jobHours: 0, offClockMinutes: 0, open: 0 };
+    const job = jobs.get(k) ?? { jobHours: 0, offClockMinutes: 0, open: 0, lunch: 0, breaks: 0, pause: 0 };
     const adj = adjByKey.get(k);
 
     // Corrected times win over the recorded shift (and can supply a day that
@@ -281,6 +288,9 @@ export async function computePayroll(
       recordedStart: shift?.started_at ?? null,
       recordedEnd: shift?.ended_at ?? null,
       recordedBreakMinutes,
+      lunchMinutes: Math.round(job.lunch),
+      jobBreakMinutes: Math.round(job.breaks),
+      jobPauseMinutes: Math.round(job.pause),
       breakGaps: (gapsByKey.get(k) ?? []).sort((a, b) => a.from.localeCompare(b.from)),
     });
   }
