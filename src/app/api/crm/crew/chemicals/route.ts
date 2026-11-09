@@ -41,7 +41,7 @@ export async function GET(request: Request) {
   const { data, error } = await (supabase as any)
     .from("crm_chemical_applications")
     .select(
-      "id, visit_id, product_id, chemical_amount, solution_amount, used, application_rate_label, preloaded, confirmed_at, application_method_id, target_ids, areas_treated_ids, " +
+      "id, visit_id, product_id, chemical_amount, unit_of_measure_id, solution_amount, used, application_rate_label, preloaded, confirmed_at, application_method_id, target_ids, areas_treated_ids, " +
       "product:product_id(name, epa_registration_number, re_entry_interval, label_instructions, restricted_product), unit:unit_of_measure_id(name), " +
       "solution_unit:solution_unit_of_measure_id(name)"
     )
@@ -57,6 +57,7 @@ export async function GET(request: Request) {
     productName: row.product?.name ?? null,
     used: row.used ?? true,
     chemicalAmount: row.chemical_amount,
+    unitOfMeasureId: row.unit_of_measure_id ?? null,
     unitName: row.unit?.name ?? null,
     solutionAmount: row.solution_amount,
     solutionUnitName: row.solution_unit?.name ?? null,

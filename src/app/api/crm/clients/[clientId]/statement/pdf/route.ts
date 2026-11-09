@@ -103,6 +103,8 @@ export async function GET(
     rows: showDetail ? activity.rows : [],
     endingBalanceCents: activity.endingBalanceCents,
     lastPayment: activity.lastPayment,
+    // A parent account rolls up its sub-accounts, one section each (no activity lines when detail is off).
+    groups: showDetail ? activity.groups : activity.groups.map((g) => ({ ...g, rows: [] })),
   };
 
   const orgData: OrgPDFData = {

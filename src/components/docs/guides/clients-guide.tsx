@@ -160,7 +160,10 @@ export function ClientsGuide() {
             changed client gets a timeline entry. You can close the tab once the success message
             shows. Automations they set off (for example &quot;when tag X is added&quot;) run right
             away for up to 50 clients; for a bigger selection they are queued and go out within
-            about 15 minutes.
+            about 15 minutes. Bulk Edit&apos;s <strong>Status = inactive</strong> leaves leads and
+            lost leads alone (they were never clients), and <strong>Do Not Market</strong> can only
+            be turned <em>on</em> in bulk, so people who unsubscribed can&apos;t be re-subscribed
+            by accident.
           </li>
           <li>
             <strong>Export.</strong> <strong>Import / Export &gt; Export</strong> downloads a CSV of
@@ -547,6 +550,17 @@ export function ClientsGuide() {
           line labelled <strong>Paid by parent account</strong> with the method and invoice number,
           for just the share applied to the child&apos;s invoices (net of any refund). The
           child&apos;s balance on the statement therefore matches what the child actually owes.
+        </p>
+        <p>
+          <strong>Parent accounts roll up their sub-accounts.</strong> A parent account&apos;s statement
+          includes its own invoices and payments <em>and</em> every sub-account&apos;s, grouped into one
+          section per account (labelled with the sub-account&apos;s name and service address), each with its
+          own balance, and one <strong>Total Amount Due — all accounts</strong> at the bottom. A payment the
+          parent made for a sub-account&apos;s invoice appears in that sub-account&apos;s section. The
+          minimum-balance filter compares against that total. On <strong>Accounting &gt; Statements</strong>{" "}
+          a parent is listed with its sub-accounts&apos; balances added (marked &quot;incl. N
+          sub-accounts&quot;), even when the parent itself owes nothing; the sub-accounts are still listed
+          for their own statements.
         </p>
       </Section>
       <Section id="good-to-know" title="Good to know">

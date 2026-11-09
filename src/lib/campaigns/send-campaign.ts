@@ -7,6 +7,7 @@ import {
 } from "@/lib/email/send";
 import { getOrgReplyTo } from "@/lib/email/reply-to";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { findMarketingOptedOutAddresses } from "@/lib/email/marketing-opt-outs";
 
 const SEND_CONCURRENCY = 5;
 // A campaign claimed into "sending" sets updated_at to the claim time (see
@@ -199,6 +200,31 @@ export async function sendCampaignEmails(
       from += page.length;
     }
   }
+
+  // Opt-outs are per address: drop anyone whose address belongs to ANY opted-out
+  // client in the org (e.g. an account created after the person unsubscribed),
+  // then send ONE copy per address — two accounts sharing a mailbox used to get
+  // the campaign twice. The first account (by id) supplies the merge tags; the
+  // others are logged as reached by that same copy.
+  let optedOutAddresses: Set<string>;
+  try {
+    optedOutAddresses = await findMarketingOptedOutAddresses(orgId, recipients.map((r) => r.primary_email));
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Could not check marketing opt-outs" };
+  }
+  const addressKey = (email: string) => email.trim().toLowerCase();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sharedBy = new Map<string, any[]>();
+  for (const r of recipients) {
+    const key = addressKey(r.primary_email);
+    if (!key || optedOutAddresses.has(key)) continue;
+    const group = sharedBy.get(key);
+    if (group) group.push(r);
+    else sharedBy.set(key, [r]);
+  }
+  recipients.length = 0;
+  for (const group of sharedBy.values()) recipients.push(group[0]);
+
   if (recipients.length === 0) {
     // The scheduled-send cron (createdBy === null) retried an empty audience
     // every hour forever, logging an error each time. Nothing will ever send:
@@ -266,7 +292,8 @@ export async function sendCampaignEmails(
 
   // A re-claimed campaign (stuck in 'sending' and recovered) may already have
   // mailed part of the audience before the route died — each successful send
-  // logged a client_activity row, so skip those clients rather than re-send.
+  // logged a client_activity row, so skip those clients (and any address one of
+  // them shares) rather than re-send.
   const alreadySent = new Set<string>();
   for (let from = 0; ; ) {
     const { data: sentRows } = await db
@@ -405,6 +432,8 @@ export async function sendCampaignEmails(
     // it re-sent) — retry the insert once, then log loudly and move on.
     delivered += 1;
     alreadySent.add(recipient.id);
+    const sharing = (sharedBy.get(addressKey(recipient.primary_email)) ?? []).filter((r) => r.id !== recipient.id);
+    for (const other of sharing) alreadySent.add(other.id);
     const activityRow = {
       org_id: orgId,
       client_id: recipient.id,
@@ -428,9 +457,24 @@ export async function sendCampaignEmails(
         );
       }
     }
+    // The other accounts at this address got the same copy: put it on their
+    // timelines too (no resend_message_id — delivery webhooks look that up as
+    // one row, the first account's). Best effort.
+    if (sharing.length > 0) {
+      await db.from("client_activity").insert(
+        sharing.map((other) => ({
+          ...activityRow,
+          client_id: other.id,
+          body: `Campaign "${campaign.name}" sent to ${recipient.primary_email} (one copy shared with ${recipient.display_name ?? "another account"})`,
+          resend_message_id: null,
+        }))
+      );
+    }
   };
 
-  const todo = (recipients as Recipient[]).filter((r) => !alreadySent.has(r.id));
+  const todo = (recipients as Recipient[]).filter(
+    (r) => !(sharedBy.get(addressKey(r.primary_email)) ?? [r]).some((m) => alreadySent.has(m.id))
+  );
   await sendInBatches(todo, (r) => sendOne(r, false), heartbeat);
   // One more bounded pass over first-pass failures (transient provider/network
   // trouble often clears); whatever fails again is counted as failed.
@@ -455,7 +499,14 @@ export async function sendCampaignEmails(
   // alreadySent holds everyone reached by this campaign across ALL runs (the
   // pre-existing activity rows plus this run's sends). On a resumed send,
   // counting only this run's `delivered` understated the campaign's reach.
-  const deliveredTotal = alreadySent.size;
+  // Counted per address: accounts sharing one mailbox got one copy.
+  const groupedIds = new Set<string>();
+  let addressesReached = 0;
+  for (const group of sharedBy.values()) {
+    for (const m of group) groupedIds.add(m.id);
+    if (group.some((m) => alreadySent.has(m.id))) addressesReached += 1;
+  }
+  const deliveredTotal = addressesReached + [...alreadySent].filter((id) => !groupedIds.has(id)).length;
   await db.from("crm_campaigns").update({
     status: "completed",
     sent_at: new Date().toISOString(),

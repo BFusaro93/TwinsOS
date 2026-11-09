@@ -12,6 +12,7 @@ import {
 import { resolveReplyTo, type ReplyToMode } from "@/lib/email/reply-to";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { allRecipientsBouncedMessage } from "@/lib/email/bounced-addresses";
+import { findMarketingOptedOutAddresses } from "@/lib/email/marketing-opt-outs";
 
 export async function POST(
   req: Request,
@@ -135,6 +136,22 @@ export async function POST(
       { error: "Client has opted out of marketing email" },
       { status: 422 }
     );
+  }
+  // Opt-outs are per address: another account with this same email may have
+  // unsubscribed (or been marked Do Not Market) — that person opted out.
+  if (isMarketing) {
+    let optedOut: Set<string>;
+    try {
+      optedOut = await findMarketingOptedOutAddresses(effOrgId, [client.primary_email]);
+    } catch {
+      return NextResponse.json({ error: "Could not check marketing opt-outs — try again" }, { status: 503 });
+    }
+    if (optedOut.size > 0) {
+      return NextResponse.json(
+        { error: "This email address opted out of marketing on another client account" },
+        { status: 422 }
+      );
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

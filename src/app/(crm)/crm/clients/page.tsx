@@ -20,16 +20,9 @@ import type { Client } from "@/types/crm";
 import type { FilterRow } from "@/lib/client-filters";
 import { usePermissions } from "@/lib/hooks/use-permissions";
 import { PermissionGate } from "@/components/shared/PermissionGate";
+// Shared with Settings → Import / Export so both import the same columns.
+import { CLIENT_REQUIRED_COLUMNS, CLIENT_TEMPLATE_COLUMNS, clientToCsvRow } from "@/lib/crm/import-export-columns";
 
-// status, clientSince, names, billing email, notes, tags (separate with |) and the parent's
-// account number make a Service Autopilot export — and our own export — round-trip intact.
-const CLIENT_TEMPLATE_COLUMNS = [
-  "displayName", "firstName", "lastName", "accountType", "status", "clientSince",
-  "primaryPhone", "primaryEmail", "billingEmail",
-  "billingAddress", "billingCity", "billingState", "billingZip",
-  "serviceAddress", "serviceCity", "serviceState", "serviceZip",
-  "source", "accountNumber", "parentAccountNumber", "tags", "notesToCrew",
-];
 
 // useSearchParams (for ?status= dashboard deep-links) needs a Suspense boundary.
 export default function ClientsPage() {
@@ -105,7 +98,7 @@ function ClientsPageInner() {
               entityLabel="Clients"
               templateColumns={CLIENT_TEMPLATE_COLUMNS}
               templateFilename="clients-template.csv"
-              requiredColumns={["displayName"]}
+              requiredColumns={CLIENT_REQUIRED_COLUMNS}
               onExport={async () => {
                 // Exports what the current search + filters match — fetched
                 // in full on demand, since the list itself is paged.
@@ -122,30 +115,7 @@ function ClientsPageInner() {
                     for (const [id, acct] of await fetchClientAccountNumbers(missingParents)) accountById.set(id, acct);
                   }
                   exportCSV(
-                    clients.map((c) => ({
-                      displayName: c.displayName,
-                      firstName: c.firstName ?? "",
-                      lastName: c.lastName ?? "",
-                      accountType: c.accountType,
-                      status: c.status,
-                      clientSince: c.clientSince ?? "",
-                      primaryPhone: c.primaryPhone ?? "",
-                      primaryEmail: c.primaryEmail ?? "",
-                      billingEmail: c.billingEmail ?? "",
-                      billingAddress: c.billingAddress ?? "",
-                      billingCity: c.billingCity ?? "",
-                      billingState: c.billingState ?? "",
-                      billingZip: c.billingZip ?? "",
-                      serviceAddress: c.serviceAddress ?? "",
-                      serviceCity: c.serviceCity ?? "",
-                      serviceState: c.serviceState ?? "",
-                      serviceZip: c.serviceZip ?? "",
-                      source: c.source ?? "",
-                      accountNumber: c.accountNumber ?? "",
-                      parentAccountNumber: c.parentClientId ? accountById.get(c.parentClientId) ?? "" : "",
-                      tags: (c.tags ?? []).join("|"),
-                      notesToCrew: c.notesToCrew ?? "",
-                    })),
+                    clients.map((c) => clientToCsvRow(c, accountById)),
                     "clients-export.csv"
                   );
                 } catch {

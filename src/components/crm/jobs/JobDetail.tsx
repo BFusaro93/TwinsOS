@@ -55,6 +55,8 @@ import { createClient } from "@/lib/supabase/client";
 import { applyJobStatusToVisits, resumeJobVisits } from "@/lib/visits/job-status-visits";
 import { computeActualHours } from "@/lib/utils/visit-hours";
 import { stripHtml } from "@/lib/utils/strip-html";
+import { useServiceTreatedAreaKinds } from "@/lib/hooks/use-chemical-tracking";
+import { areaKindLabel } from "@/lib/chemical-area";
 import { lineTotalCents } from "@/lib/invoices/auto-invoice-tax";
 import { snowServiceRule } from "@/lib/snow-billing";
 import { toast } from "sonner";
@@ -199,6 +201,8 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
   const deleteJobService = useDeleteJobService();
   const { data: crmServices = [] } = useCRMServices();
   const { data: jobProducts = [] } = useCRMJobProducts(jobId);
+  // A perimeter/edging service's treated area is linear feet, not square feet.
+  const { data: treatedAreaKinds } = useServiceTreatedAreaKinds((job?.services ?? []).map((s) => s.serviceId));
   const { data: subitemTicks = {} } = useJobSubitemTicks(jobId);
   const deleteVisit = useDeleteVisit();
   const deleteVisitsByDay = useDeleteVisitsByDayOfWeek();
@@ -1633,11 +1637,11 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                                 placeholder="property"
                                 className="h-6 w-24 text-right text-xs"
                               />
-                              sq ft
+                              {areaKindLabel((s.serviceId && treatedAreaKinds?.get(s.serviceId)) || "area")}
                             </label>
                           ) : s.treatedArea != null ? (
                             <p className="mt-0.5 text-xs font-normal text-slate-500 dark:text-neutral-400">
-                              Treated area: {s.treatedArea.toLocaleString()}
+                              Treated area: {s.treatedArea.toLocaleString()} {areaKindLabel((s.serviceId && treatedAreaKinds?.get(s.serviceId)) || "area")}
                             </p>
                           ) : null}
                           {editingSvcId === s.id ? (

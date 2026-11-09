@@ -10,6 +10,7 @@ import { todayInZone } from "@/lib/time/zone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
+import { contractCoversServiceDay } from "@/lib/contract-billing";
 
 /** `.in()` list size per request — keeps the query string well under URL limits. */
 const IN_CHUNK = 200;
@@ -51,6 +52,16 @@ export interface SnowContractRow {
   end_date: string | null;
   /** Storms before start_date / after end_date: 'bill_per_event' (default) or 'included'. */
   snow_outside_dates: string | null;
+  // What the contract has billed — a cancelled/expired/paused contract still
+  // covers storms inside a cycle it already invoiced (contractCoversServiceDay).
+  last_billed_date?: string | null;
+  billing_anchor_date?: string | null;
+  first_period_prorated_at?: string | null;
+  billing_frequency?: string | null;
+  billing_day_of_month?: number | null;
+  bill_month_in_advance?: boolean | null;
+  signed_at?: string | null;
+  created_at?: string | null;
 }
 
 /** Missing, deleted, switched inactive, cancelled or expired — covers nothing. */
@@ -63,15 +74,18 @@ function stormsOutsideDatesIncluded(c: SnowContractRow): boolean {
 }
 
 /** Billing: the contract does NOT cover a storm visit on `day` (so Snow
- *  Invoicing bills it per event). A dead contract never covers; a live one
- *  covers visits inside its start–end dates, and visits outside them only when
- *  the contract's "Storms outside the contract dates" is set to included.
- *  Draft/sent contracts are NOT ended. */
+ *  Invoicing bills it per event). A live contract covers visits inside its
+ *  start–end dates (and past the end through the last cycle it billed in
+ *  full), and visits outside them only when the contract's "Storms outside the
+ *  contract dates" is set to included. A cancelled / expired / switched-off
+ *  contract covers only storms inside a cycle it already billed — anything
+ *  later bills per event, anything earlier must not be billed twice. A
+ *  missing or deleted contract covers nothing. Draft/sent contracts are NOT
+ *  ended. Same rule as the per-visit auto-invoice (contractCoversServiceDay). */
 export function isSnowContractEnded(c: SnowContractRow | undefined, day: string | null | undefined): boolean {
-  if (isSnowContractDead(c)) return true;
-  const contract = c as SnowContractRow;
-  if (!day || stormsOutsideDatesIncluded(contract)) return false;
-  return (contract.end_date != null && contract.end_date < day) || (contract.start_date != null && day < contract.start_date);
+  if (!c || c.deleted_at != null) return true;
+  if (!day) return isSnowContractDead(c);
+  return !contractCoversServiceDay(c, day, { outsideDatesIncluded: stormsOutsideDatesIncluded(c) });
 }
 
 /** Dispatch: the contract's job is no longer served — dead, or past its end
@@ -93,7 +107,7 @@ export async function loadContractsById(
     const rows = await fetchAllRows<SnowContractRow>(() =>
       supabase
         .from("crm_contracts")
-        .select("id, status, is_active, deleted_at, start_date, end_date, snow_outside_dates")
+        .select("id, status, is_active, deleted_at, start_date, end_date, snow_outside_dates, last_billed_date, billing_anchor_date, first_period_prorated_at, billing_frequency, billing_day_of_month, bill_month_in_advance, signed_at, created_at")
         .in("id", ids)
         .order("id", { ascending: true })
     );

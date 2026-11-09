@@ -1,7 +1,7 @@
 import { formatCurrency } from "@/lib/utils";
 import {
   MONTH_KEYS,
-  billingAnchor,
+  cycleStartMonths,
   normalizeBillingFrequency,
   type BillingContractRow,
   type MonthKey,
@@ -110,19 +110,14 @@ const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 
 /**
  * The calendar months a quarterly/annual contract invoices in, as month keys in
- * calendar order. Mirrors contract-billing.ts: the cadence runs from the
- * anchor's month (start date → signed → created), and "bill 1 month in
- * advance" dates each invoice in the following month. Empty for any other
- * frequency.
+ * calendar order: the months its cycles start in (contract-billing.ts
+ * cycleStartMonths — the first billing day on/after the start date, or the
+ * grid it has already been billing on). Each invoice is dated on its cycle's
+ * start ("bill 1 month in advance" creates it a month earlier). Empty for any
+ * other frequency.
  */
 export function contractBillingMonths(contract: BillingContractRow, today: Date = new Date()): MonthKey[] {
-  const frequency = normalizeBillingFrequency(contract.billing_frequency);
-  if (frequency !== "quarterly" && frequency !== "annual") return [];
-  const span = frequency === "quarterly" ? 3 : 12;
-  const first = billingAnchor(contract, today).m - 1 + (contract.bill_month_in_advance ? 1 : 0);
-  const indexes = new Set<number>();
-  for (let k = 0; k < 12; k += span) indexes.add((first + k) % 12);
-  return [...indexes].sort((a, b) => a - b).map((i) => MONTH_KEYS[i]);
+  return cycleStartMonths(contract, today).map((m) => MONTH_KEYS[m - 1]);
 }
 
 /** "Jan, Apr, Jul, Oct" */

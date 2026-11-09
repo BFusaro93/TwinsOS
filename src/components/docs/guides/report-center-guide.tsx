@@ -62,7 +62,7 @@ export function ReportCenterGuide() {
           <TOCLink href="#report-center">The Report Center tab</TOCLink>
           <TOCLink href="#how-a-report-runs">How a report actually runs</TOCLink>
           <TOCLink href="#worked-example">Worked example: Production Rate Accuracy</TOCLink>
-          <TOCLink href="#dates-and-limits">Date ranges, Eastern time, and large results</TOCLink>
+          <TOCLink href="#dates-and-limits">Date ranges, time zones, money rules, and large results</TOCLink>
           <TOCLink href="#custom-analysis">Custom analyses (&quot;My Reports&quot;)</TOCLink>
           <TOCLink href="#dashboards-vs-reports">Dashboards vs. individual reports</TOCLink>
           <TOCLink href="#payroll">The Payroll tab</TOCLink>
@@ -240,7 +240,7 @@ export function ReportCenterGuide() {
         </Callout>
       </Section>
 
-      <Section id="dates-and-limits" title="Date ranges, Eastern time, and large results">
+      <Section id="dates-and-limits" title="Date ranges, time zones, money rules, and large results">
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Everything runs on the org&apos;s own clock, not the viewer&apos;s.</strong>{" "}
@@ -260,6 +260,30 @@ export function ReportCenterGuide() {
             <strong>&quot;All Time&quot; means all time.</strong> Picking All Time in a date-range
             filter (or clearing both From and To) sends an explicitly unbounded window. It used
             to quietly run the report&apos;s default preset instead.
+          </li>
+          <li>
+            <strong>Revenue never includes sales tax.</strong> Every revenue figure — Profit /
+            Loss, Revenue by Service and by Postal Code, the Sales Comparison Chart, Avg. Gross
+            Revenue per Client, the KPI Scorecard, the home Revenue YTD card, the sales-rep quota
+            gauge, and the dashboard revenue panels — is the invoice total minus sales tax, i.e.
+            after discounts and before tax. Line-based reports (Profit / Loss, Revenue by Service)
+            also take the invoice-level discount off, spread across that invoice&apos;s lines in
+            proportion to their amounts. Columns labeled &quot;Total&quot; or &quot;incl. tax&quot;
+            on invoice listings (Invoiced Income by Client, Invoices with Balances, Invoices and
+            Payments) still show the full invoice amount the client owes.
+          </li>
+          <li>
+            <strong>One aging rule.</strong> An open invoice is past due from its due date, or —
+            if it has no due date — from its invoice date. A/R Aging, Invoices with Balances
+            (Days Overdue), Financials, the Company Report, the KPI Scorecard&apos;s AR Over 60
+            Days, the home Overdue AR card, and the Invoices list&apos;s Past Due tab all use it.
+          </li>
+          <li>
+            <strong>Consolidated and merged invoices keep their link.</strong> When invoices are
+            consolidated or merged into another invoice, the originals still count toward the
+            contract, project, or estimate they were billed for (Over / Under, the WIP Report,
+            Accepted Estimates — Estimated vs Invoiced) once the combined invoice is issued; the
+            combined invoice itself is not counted again.
           </li>
           <li>
             <strong>Large results are truncated, and say so.</strong> The engine returns at most
@@ -379,9 +403,9 @@ export function ReportCenterGuide() {
           <strong>Panel dates.</strong> A tab can carry a shared date picker, and each panel
           chooses whether to follow it. A panel can instead pin its own relative window —{" "}
           <strong>Filter to today</strong>, <strong>Filter to yesterday</strong>,{" "}
-          <strong>Month to date</strong>, or <strong>Year to date</strong> — computed in Eastern
-          time every time the dashboard loads. The seeded templates use this for their annual
-          gauges: &quot;Invoiced Revenue (YTD)&quot;, &quot;New Leads YTD&quot;, and &quot;New
+          <strong>Month to date</strong>, or <strong>Year to date</strong> — computed in your
+          company&apos;s time zone every time the dashboard loads. The seeded templates use this for their annual
+          gauges: &quot;Invoiced Revenue (YTD, pre-tax)&quot;, &quot;New Leads YTD&quot;, and &quot;New
           Clients / Converted Leads YTD&quot; are true January-1-to-today figures and{" "}
           <em>do not</em> move when you change the tab&apos;s date picker, so the gauge maximum
           keeps meaning an annual target.
@@ -545,11 +569,14 @@ export function ReportCenterGuide() {
             <strong>Auto</strong> — computed live from Landscapt data every time the page loads
             (invoices, payments, jobs, visits, timesheets, estimates, clients, employees, tickets).
             Nothing is cached, so the number is never stale. Hover the <em>auto</em> badge for the
-            exact definition. Revenue metrics count issued invoices only (no drafts or voids), and
+            exact definition. Revenue metrics count issued invoices only (no drafts or voids) and
+            exclude sales tax, and
             Cash Collected counts cash payments only — no account credits or AR write-offs, net of
             refunds. A dash means there was nothing to compute from for that year — for
             example Revenue (Sold) needs jobs with a Date Sold, and Maintenance Retention needs
-            recurring or package jobs that existed before January&nbsp;1. A package counts as
+            recurring or package jobs that existed before January&nbsp;1. AR Outstanding and AR Over
+            60 Days are always as of today, so AR Days (today&apos;s open balance ÷ the year&apos;s
+            average daily invoicing) is left blank when you score a past year. A package counts as
             retained only when its program window reaches the year you are scoring, so last
             season&apos;s package that wasn&apos;t renewed counts as lost. Metrics built on visit
             labor cost (Gross Profit, Labor % of Revenue, Revenue per Man-Hour) need one of the
@@ -808,7 +835,8 @@ export function ReportCenterGuide() {
           month, or e.g. the last Friday), between an optional start and end date, as a{" "}
           <strong>PDF</strong> or an <strong>Excel</strong> file, with an optional custom{" "}
           <strong>subject</strong> and <strong>message</strong>. The send time is an hour of the
-          day on your company&apos;s clock. An hourly job delivers each schedule on the{" "}
+          day on your company&apos;s clock (Settings &gt; Organization), and times inside the file
+          and the date ranges the report covers use that time zone too. An hourly job delivers each schedule on the{" "}
           <strong>first run at or after its scheduled hour</strong> — so a 7 AM schedule goes out
           on the 7 AM run, or the 8 AM run if the 7 AM one fired late — and never twice in the same
           day. Creating a schedule, changing its recipients or turning it back on needs Manage

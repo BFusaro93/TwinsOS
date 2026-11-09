@@ -92,7 +92,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       "Shows forms and the number of responses received in any given time frame.",
     filters: [dateRangeFilterDef("Responses Between", "all_time")],
     notes: [
-      "Responses marked Spam or Ignored are not counted. Date bounds are calendar days in Eastern time.",
+      "Responses marked Spam or Ignored are not counted. Date bounds are calendar days in your company's time zone.",
     ],
     run: async ({ supabase, params, timeZone }) => {
       const { from, to } = resolveDateRange(params, "all_time", timeZone);
@@ -116,7 +116,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
       );
 
       // crm_form_responses.created_at is timestamptz — bound it by the
-      // Eastern calendar day, not a bare (UTC-interpreted) literal.
+      // org's calendar day, not a bare (UTC-interpreted) literal.
       const responses = await fetchAllRows<RespRow>(() => {
         let respQuery = supabase
           .from("crm_form_responses")
@@ -327,7 +327,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         supabase
           .from("crm_contracts")
           .select(
-            "id, title, status, start_date, end_date, signed_at, created_at, billing_frequency, billing_day_of_month, bill_month_in_advance, monthly_amount_cents, monthly_amounts, clients:client_id(display_name)"
+            "id, title, status, start_date, end_date, signed_at, created_at, billing_frequency, billing_day_of_month, bill_month_in_advance, last_billed_date, billing_anchor_date, monthly_amount_cents, monthly_amounts, clients:client_id(display_name)"
           )
           // Same gate the billing paths use: only signed/active contracts are
           // ever invoiced, so only they carry a budget.
@@ -343,9 +343,29 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         total_cents: number | null;
         amount_paid_cents: number | null;
       }
+      interface BilledRow {
+        contract_id: string | null;
+        revenue_ex_tax_cents: number | null;
+      }
       // Ids go on the URL, so query them in chunks.
       for (let i = 0; i < ids.length; i += 100) {
         const chunk = ids.slice(i, i + 100);
+        // Invoiced = pre-tax billed (contract amounts are pre-tax), read from
+        // rpt_invoice_link_billing so a contract invoice later consolidated or
+        // merged into another invoice still counts toward its contract.
+        const billed = await fetchAllRows<BilledRow>(() =>
+          supabase
+            .from("rpt_invoice_link_billing")
+            .select("contract_id, revenue_ex_tax_cents")
+            .in("contract_id", chunk)
+            .order("invoice_id")
+        );
+        for (const b of billed) {
+          if (!b.contract_id) continue;
+          const entry = invoicedByContract.get(b.contract_id) ?? { invoiced: 0, paid: 0 };
+          entry.invoiced += b.revenue_ex_tax_cents ?? 0;
+          invoicedByContract.set(b.contract_id, entry);
+        }
         const invoices = await fetchAllRows<InvRow>(() =>
           supabase
             .from("crm_invoices")
@@ -353,11 +373,11 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
             .in("contract_id", chunk)
             .is("deleted_at", null)
             .in("status", ISSUED_INVOICE_STATUSES)
+            .order("id")
         );
         for (const inv of invoices) {
           if (!inv.contract_id) continue;
           const entry = invoicedByContract.get(inv.contract_id) ?? { invoiced: 0, paid: 0 };
-          entry.invoiced += inv.total_cents ?? 0;
           entry.paid += inv.amount_paid_cents ?? 0;
           invoicedByContract.set(inv.contract_id, entry);
         }
@@ -415,6 +435,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
           "Budgeted to Date sums every invoice the contract's billing schedule (frequency, billing day, bill-in-advance) has come due from its start through today (or the contract end) — the contract amount is per invoice, so a quarterly contract budgets it once a quarter.",
           "Only signed/active contracts are included — the same ones the billing run invoices.",
           "Over / (Under) is invoiced-to-date minus budgeted-to-date.",
+          "Invoiced to Date is pre-tax (invoice total − sales tax) and includes contract invoices that were later consolidated or merged into another invoice. Paid to Date is the payments recorded on the contract's own live invoices.",
         ]
       );
     },
@@ -591,7 +612,7 @@ export const ADDITIONAL_REPORTS: PrebuiltReportDef[] = [
         ],
         rows,
         [
-          "Based on visits currently in Scheduled or Dispatched status from today through the next 365 days (Eastern calendar dates).",
+          "Based on visits currently in Scheduled or Dispatched status from today through the next 365 days (calendar dates in your company's time zone).",
           "Budgeted Man-Hours are duration × number of men.",
         ]
       );

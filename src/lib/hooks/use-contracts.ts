@@ -4,9 +4,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
-import { alreadyBilledReason, billedInPeriod, planContractBilling, planFirstPeriodProration, prorationPending, termSkipReason } from "@/lib/contract-billing";
+import { alreadyBilledReason, billedInPeriod, billingAnchorStamp, currentPeriodBillingDate, planContractBilling, planFirstPeriodProration, prorationPending, termSkipReason } from "@/lib/contract-billing";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
-import { getOrgTimeZone } from "@/lib/time/org-timezone";
+import { getMyTimeZone, getOrgTimeZone } from "@/lib/time/org-timezone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { normalizeCsvDate, parseCsvMoneyCents } from "@/lib/hooks/use-invoices";
 import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
@@ -47,6 +47,7 @@ function mapContract(row: any): CRMContract {
     salesRepId: row.sales_rep_id ?? null,
     saleType: row.sale_type ?? null,
     lastBilledDate: row.last_billed_date ?? null,
+    billingAnchorDate: row.billing_anchor_date ?? null,
     startBillingMode: row.start_billing_mode === "prorate_first_period" ? "prorate_first_period" : "first_full_cycle",
     firstPeriodProratedAt: row.first_period_prorated_at ?? null,
     changedSinceSignedAt: row.changed_since_signed_at ?? null,
@@ -199,6 +200,7 @@ export const CONTRACT_CSV_COLUMNS = [
   "billingDayOfMonth", "billMonthInAdvance", "paymentType", "poNumber", "autoGenerate", "isActive",
   "includeSubProperties", "defaultService", "invoiceLineItems",
   ...MONTH_KEYS.map((m) => `${m}Amount`),
+  "lastBilledDate",
 ] as const;
 
 const yesNo = (raw: string | undefined, fallback: boolean): boolean => {
@@ -216,6 +218,7 @@ export function contractToCsvRow(c: CRMContract): string[] {
     c.autoGenerate ? "yes" : "no", c.isActive ? "yes" : "no", c.includeSubProperties ? "yes" : "no",
     c.defaultService ?? "", (c.invoiceLineItems ?? []).join(" | "),
     ...MONTH_KEYS.map((m) => (c.monthlyAmounts?.[m] != null ? (c.monthlyAmounts[m]! / 100).toFixed(2) : "")),
+    c.lastBilledDate ?? "",
   ];
 }
 
@@ -223,6 +226,11 @@ export function contractToCsvRow(c: CRMContract): string[] {
  * Bulk import from the Settings → Import / Export tab. Clients are matched by exact display name
  * (ambiguous names are skipped, not guessed). A row whose client + title + start date already
  * exists is skipped so re-importing a file doesn't double up. Imports don't fire automations.
+ *
+ * Imported contracts were billed up to now by the system they came from, so a contract whose
+ * start date is already past is marked as billed for the period in progress (last_billed_date =
+ * that period's billing date) unless the file gives its own lastBilledDate — otherwise the
+ * first cron run would invoice the current period a second time.
  */
 export function useBulkImportContracts() {
   const qc = useQueryClient();
@@ -246,6 +254,9 @@ export function useBulkImportContracts() {
         (supabase as any).from("crm_contracts").select("client_id, title, start_date").is("deleted_at", null).order("id")
       );
       const seen = new Set(existing.map((e) => `${e.client_id}|${String(e.title).trim().toLowerCase()}|${e.start_date ?? ""}`));
+      const orgTz = await getMyTimeZone(supabase);
+      const orgTodayStr = todayInZone(orgTz);
+      const orgTodayDate = todayInZoneAsLocalMidnight(orgTz);
 
       let created = 0;
       let skipped = 0;
@@ -280,10 +291,14 @@ export function useBulkImportContracts() {
         if (!IMPORT_FREQUENCIES.has(rawFreq)) warnings.push({ row: rowNo, reason: `unrecognized billing frequency "${r.billingFrequency?.trim()}" imported as "monthly"` });
 
         const monthlyAmounts: MonthlyAmounts = {};
-        let anyMonth = false;
-        for (const m of MONTH_KEYS) {
-          const raw = r[`${m}Amount`];
-          if (raw != null && raw.trim() !== "") { monthlyAmounts[m] = parseCsvMoneyCents(raw); anyMonth = true; }
+        const anyMonth = MONTH_KEYS.some((m) => (r[`${m}Amount`] ?? "").trim() !== "");
+        // Once any month is filled in, the columns are a 12-month schedule: a blank month
+        // bills $0 (stored as 0), not the flat amount.
+        if (anyMonth) {
+          for (const m of MONTH_KEYS) {
+            const raw = r[`${m}Amount`];
+            monthlyAmounts[m] = raw != null && raw.trim() !== "" ? parseCsvMoneyCents(raw) : 0;
+          }
         }
         let monthlyAmountCents = parseCsvMoneyCents(r.monthlyAmount);
         if (anyMonth && !monthlyAmountCents) {
@@ -292,7 +307,21 @@ export function useBulkImportContracts() {
           monthlyAmountCents = billed.length ? Math.round(billed.reduce((s, v) => s + v, 0) / billed.length) : 0;
         }
         const day = Math.round(Number(r.billingDayOfMonth));
+        const billingDayOfMonth = Number.isFinite(day) && day >= 1 && day <= 31 ? day : 1;
+        const billMonthInAdvance = yesNo(r.billMonthInAdvance, false);
         const lineItems = (r.invoiceLineItems ?? "").split("|").map((x) => x.trim()).filter(Boolean);
+
+        let lastBilledDate: string | null = null;
+        if (r.lastBilledDate?.trim()) {
+          lastBilledDate = normalizeCsvDate(r.lastBilledDate);
+          if (!lastBilledDate) warnings.push({ row: rowNo, reason: `lastBilledDate "${r.lastBilledDate.trim()}" isn't a valid date (use YYYY-MM-DD or M/D/YYYY) — ignored` });
+        }
+        if (!lastBilledDate && startDate && startDate < orgTodayStr) {
+          lastBilledDate = currentPeriodBillingDate(
+            { billing_frequency: billingFrequency, billing_day_of_month: billingDayOfMonth, bill_month_in_advance: billMonthInAdvance, start_date: startDate },
+            orgTodayDate,
+          );
+        }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any).from("crm_contracts").insert({
@@ -303,8 +332,12 @@ export function useBulkImportContracts() {
           end_date: endDate,
           monthly_amount_cents: monthlyAmountCents,
           billing_frequency: billingFrequency,
-          billing_day_of_month: Number.isFinite(day) && day >= 1 && day <= 31 ? day : 1,
-          bill_month_in_advance: yesNo(r.billMonthInAdvance, false),
+          billing_day_of_month: billingDayOfMonth,
+          bill_month_in_advance: billMonthInAdvance,
+          last_billed_date: lastBilledDate,
+          // Imported as already billing: its last billed date pins a quarterly/annual grid to the
+          // months the previous system billed in (contract-billing.ts monthGrid).
+          billing_anchor_date: lastBilledDate && (billingFrequency === "quarterly" || billingFrequency === "annual") ? lastBilledDate : null,
           payment_type: r.paymentType?.trim() || null,
           po_number: r.poNumber?.trim() || null,
           auto_generate: yesNo(r.autoGenerate, true),
@@ -746,7 +779,7 @@ export function useGenerateContractInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: contract, error: fetchErr } = await (supabase as any)
           .from("crm_contracts")
-          .select("id, org_id, client_id, title, status, po_number, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, start_billing_mode, first_period_prorated_at, clients!inner(deleted_at, default_terms, status)")
+          .select("id, org_id, client_id, title, status, po_number, start_date, end_date, monthly_amount_cents, monthly_amounts, invoice_line_items, sales_rep_id, bill_month_in_advance, billing_day_of_month, billing_frequency, last_billed_date, billing_anchor_date, signed_at, created_at, start_billing_mode, first_period_prorated_at, clients!inner(deleted_at, default_terms, status)")
           .eq("id", contractId)
           .is("clients.deleted_at", null)
           .is("deleted_at", null)
@@ -756,11 +789,16 @@ export function useGenerateContractInvoices() {
           continue;
         }
         // A cancelled, inactive or lost client is off service (no visits are generated), so
-        // the contract doesn't bill either — same rule as the daily cron.
+        // the contract doesn't bill either — same rule as the daily cron. A lead isn't a
+        // customer yet (the cron skips leads too).
         {
           const clientStatus = (contract.clients as { status?: string | null } | null)?.status ?? null;
           if (clientStatus === "cancelled" || clientStatus === "inactive" || clientStatus === "lost") {
             results.push({ contractId, status: "skipped", reason: `client is ${clientStatus} — reactivate the client to bill this contract` });
+            continue;
+          }
+          if (clientStatus === "lead") {
+            results.push({ contractId, status: "skipped", reason: "client is still a lead — mark the client active to bill this contract" });
             continue;
           }
         }
@@ -781,7 +819,10 @@ export function useGenerateContractInvoices() {
         // The org's calendar day (as a local-midnight Date, like the cron): the viewer's browser
         // clock dates the invoice, picks the monthly_amounts month and sets the idempotency
         // window, so a user in another timezone could bill the wrong month.
-        const now = todayInZoneAsLocalMidnight(await getOrgTimeZone(supabase, contract.org_id));
+        const orgTz = await getOrgTimeZone(supabase, contract.org_id);
+        const now = todayInZoneAsLocalMidnight(orgTz);
+        // Not a column: lets the schedule math read signed_at/created_at on the org's calendar.
+        contract.time_zone = orgTz;
         const plan = planContractBilling(contract, now, { billNow: true });
 
         // ── prorated first-period stub ─────────────────────────────────────
@@ -802,7 +843,7 @@ export function useGenerateContractInvoices() {
               .is("deleted_at", null)
               .limit(1)
               .maybeSingle();
-            if (prorationPending(contract, !!liveStub)) {
+            if (prorationPending(contract, !!liveStub, stub)) {
               const stubResult = await createProratedFirstInvoice(supabase, contract, stub, orgToday);
               results.push(stubResult);
               if (orgToday <= stub.periodEnd) continue;
@@ -903,12 +944,13 @@ export function useGenerateContractInvoices() {
           .select("id")
           .single();
         if (invErr || !invoice) {
-          // 23505 = unique_violation on crm_invoices_one_per_contract_month —
-          // a concurrent request (double-click, another tab, or the daily
-          // cron) already inserted this month's invoice between our SELECT
-          // check above and this INSERT; report it the same as the
-          // pre-existing skip path rather than surfacing a raw DB error.
-          const reason = invErr?.code === "23505" ? "already billed for this month" : (invErr?.message ?? "insert failed");
+          // 23505 = unique_violation on crm_invoices_one_per_contract_date
+          // (contract_id, invoice_date) — a concurrent request (double-click,
+          // another tab, or the daily cron) already inserted this date's
+          // invoice between our SELECT check above and this INSERT; report it
+          // the same as the pre-existing skip path rather than surfacing a raw
+          // DB error.
+          const reason = invErr?.code === "23505" ? alreadyBilledReason(plan) : (invErr?.message ?? "insert failed");
           results.push({ contractId, status: "skipped", reason });
           continue;
         }
@@ -949,7 +991,8 @@ export function useGenerateContractInvoices() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (supabase as any)
           .from("crm_contracts")
-          .update({ last_billed_date: plan.invoiceDate })
+          // A quarterly/annual contract's first billed cycle pins its grid (billing_anchor_date).
+          .update({ last_billed_date: plan.invoiceDate, ...(billingAnchorStamp(contract, plan) ? { billing_anchor_date: billingAnchorStamp(contract, plan) } : {}) })
           .eq("id", contractId);
 
         results.push({

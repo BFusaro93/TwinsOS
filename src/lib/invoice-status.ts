@@ -1,11 +1,40 @@
 import type { InvoiceStatus } from "@/types/crm-invoices";
-import { DEFAULT_TIME_ZONE, todayInZone } from "@/lib/time/zone";
+import { DEFAULT_TIME_ZONE, daysBetweenYmd, todayInZone } from "@/lib/time/zone";
 
 interface OverdueCheckFields {
   balanceCents: number;
   dueDate: string | null;
   invoiceDate: string;
-  terms: string | null;
+  /** No longer consulted: an invoice with no due date ages from its invoice
+   *  date whatever its terms (see invoiceAgingAnchor). Kept so callers that
+   *  pass it still type-check. */
+  terms?: string | null;
+}
+
+/**
+ * The ONE aging rule for issued invoices, used by every receivables figure
+ * (A/R Aging, Financials, Company Report collections, the KPI scorecard's
+ * AR > 60 days, the home Overdue AR card, the Invoices list's Past Due tab):
+ * an invoice ages from its due date, or — when it has none — from its invoice
+ * date. rpt_invoices.days_overdue applies the same rule in SQL
+ * (coalesce(due_date, invoice_date)).
+ */
+export function invoiceAgingAnchor(invoice: {
+  dueDate: string | null | undefined;
+  invoiceDate: string | null | undefined;
+}): string | null {
+  const anchor = invoice.dueDate ?? invoice.invoiceDate;
+  return anchor ? anchor.slice(0, 10) : null;
+}
+
+/** Whole days past the aging anchor on the given org calendar day: 0 on the
+ *  due day, negative before it, 0 when the invoice has neither date. */
+export function invoiceDaysPastDue(
+  invoice: { dueDate: string | null | undefined; invoiceDate: string | null | undefined },
+  todayYmd: string
+): number {
+  const anchor = invoiceAgingAnchor(invoice);
+  return anchor ? daysBetweenYmd(anchor, todayYmd) : 0;
 }
 
 /** No cron/automation ever flips the stored `status` column to "overdue" —
@@ -21,10 +50,10 @@ export function isInvoiceOverdue(
   todayYmd: string = todayInZone(DEFAULT_TIME_ZONE)
 ): boolean {
   if (invoice.balanceCents <= 0) return false;
-  const effectiveDue = invoice.dueDate ?? (invoice.terms === "due_on_receipt" ? invoice.invoiceDate : null);
-  if (!effectiveDue) return false;
+  const anchor = invoiceAgingAnchor(invoice);
+  if (!anchor) return false;
   // Overdue once the due DAY has fully passed.
-  return effectiveDue.slice(0, 10) < todayYmd;
+  return anchor < todayYmd;
 }
 
 /** The status to actually display — overrides a stale "sent"/"printed"/etc.

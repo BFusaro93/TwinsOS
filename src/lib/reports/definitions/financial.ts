@@ -13,7 +13,8 @@ import {
 } from "@/lib/reports/helpers";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { daysBetweenYmd, todayInZone } from "@/lib/time/zone";
+import { todayInZone } from "@/lib/time/zone";
+import { invoiceDaysPastDue } from "@/lib/invoice-status";
 
 // ============================================================
 // Financial section — pre-built reports.
@@ -21,6 +22,10 @@ import { daysBetweenYmd, todayInZone } from "@/lib/time/zone";
 
 /**
  * Sum job-material costs (by created_at) and field-labor costs in a window.
+ * Materials = crm_job_materials rows plus catalog products recorded as used on
+ * a job (crm_job_products used / used_no_invoice / invoiced: qty × unit cost),
+ * the same two sources Job Costing / COGS cost a visit with
+ * (src/lib/visit-costing.ts loadMaterials), both dated by created_at.
  * Labor reads rpt_job_visits (completed visits, by worked_date) — the same
  * source and day basis as Job Costing / COGS — so the figures agree, rather
  * than raw crm_job_visits.actual_labor_cost_cents, which is 0 for visits whose
@@ -57,7 +62,21 @@ async function sumExpenses(
     return q.order("id");
   });
 
-  const materialsCents = matData.reduce((sum, r) => sum + (r.total_cost_cents ?? 0), 0);
+  type ProductRow = { qty: number | string | null; unit_cost_cents: number | null };
+  const productData = await fetchAllRows<ProductRow>(() => {
+    let q = supabase
+      .from("crm_job_products")
+      .select("qty, unit_cost_cents")
+      .in("status", ["used", "used_no_invoice", "invoiced"])
+      .is("deleted_at", null);
+    if (bounds.gte) q = q.gte("created_at", bounds.gte);
+    if (bounds.lt) q = q.lt("created_at", bounds.lt);
+    return q.order("id");
+  });
+
+  const materialsCents =
+    matData.reduce((sum, r) => sum + (r.total_cost_cents ?? 0), 0) +
+    productData.reduce((sum, r) => sum + Math.round(Number(r.qty ?? 0) * (r.unit_cost_cents ?? 0)), 0);
   const laborCents = laborData.reduce((sum, r) => sum + (r.actual_labor_cost_cents ?? 0), 0);
   return { materialsCents, laborCents };
 }
@@ -74,7 +93,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     section: "financial",
     name: "Invoiced Income by Client",
     description:
-      "Totals invoiced income per client — subtotal, tax, total, and amount paid.",
+      "Totals invoiced income per client — subtotal, tax, total, pre-tax revenue (after discounts), and amount paid.",
     filters: [dateRangeFilterDef("Invoice Date", "this_year")],
     notes: ["Excludes draft and void invoices."],
     analysis: (params, timeZone) => ({
@@ -90,6 +109,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
         { column: "subtotal_cents", fn: "sum" },
         { column: "tax_cents", fn: "sum" },
         { column: "total_cents", fn: "sum" },
+        { column: "revenue_ex_tax_cents", fn: "sum" },
         { column: "amount_paid_cents", fn: "sum" },
       ],
       sortColumn: "sum_total_cents",
@@ -167,31 +187,29 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
     run: async ({ supabase, params, timeZone }) => {
       const { from, to } = resolveDateRange(params, "this_month", timeZone);
 
-      // Rule A (issued invoices only) and the soft-delete guard are applied on
-      // the joined parent; `!inner` drops line items whose invoice fails them.
-      const data = await fetchAllRows<unknown>(() => {
-        let lineQuery = supabase
-          .from("crm_invoice_line_items")
-          .select("name, description, total_cents, crm_invoices:invoice_id!inner(invoice_date, status)")
-          .is("crm_invoices.deleted_at", null)
-          .in("crm_invoices.status", ISSUED_INVOICE_STATUSES);
-        if (from) lineQuery = lineQuery.gte("crm_invoices.invoice_date", from);
-        if (to) lineQuery = lineQuery.lte("crm_invoices.invoice_date", to);
-        return lineQuery.order("id");
-      });
-
+      // rpt_invoice_line_items skips soft-deleted invoices; is_issued is Rule A.
+      // revenue_ex_tax_cents is each line's share of the invoice's pre-tax,
+      // after-discount total (total − tax), split by the lines' net amounts —
+      // so both line discounts and the invoice-level discount come off income.
       type LineRow = {
         name: string | null;
         description: string | null;
-        total_cents: number | null;
-        crm_invoices: { invoice_date: string | null; status: string | null } | null;
+        revenue_ex_tax_cents: number | null;
       };
-      const lines = (data ?? []) as unknown as LineRow[];
+      const lines = await fetchAllRows<LineRow>(() => {
+        let lineQuery = supabase
+          .from("rpt_invoice_line_items")
+          .select("name, description, revenue_ex_tax_cents")
+          .eq("is_issued", true);
+        if (from) lineQuery = lineQuery.gte("invoice_date", from);
+        if (to) lineQuery = lineQuery.lte("invoice_date", to);
+        return lineQuery.order("id");
+      });
 
       const incomeByName = new Map<string, number>();
       for (const line of lines) {
         const name = line.name || line.description || "(unnamed)";
-        incomeByName.set(name, (incomeByName.get(name) ?? 0) + (line.total_cents ?? 0));
+        incomeByName.set(name, (incomeByName.get(name) ?? 0) + (line.revenue_ex_tax_cents ?? 0));
       }
       const incomeRows = [...incomeByName.entries()]
         .sort((a, b) => b[1] - a[1])
@@ -210,7 +228,8 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
 
       return buildResult(PROFIT_LOSS_COLUMNS, rows, [
         "Accrual basis: income is counted on the invoice date regardless of when payment is received. Draft and void invoices are excluded.",
-        "Expenses include job material costs (by purchase date) and field labor costs (by visit completion). Overhead and non-job expenses are not included.",
+        "Income is pre-tax and after discounts: each line's amount net of its own discount, with the invoice-level discount spread across the invoice's lines in proportion to their amounts. Sales tax is not income.",
+        "Expenses include job material costs and catalog products recorded as used on jobs (by the date they were logged) and field labor costs (by visit completion). Overhead and non-job expenses are not included.",
       ]);
     },
   },
@@ -271,7 +290,7 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       return buildResult(PROFIT_LOSS_COLUMNS, rows, [
         "Cash basis: income is counted when payment is received, not when work is invoiced. Cash only: excludes account credits and AR write-offs; net of refunds.",
         "Credit card processing fees are the surcharge collected from clients on card payments (never on ACH) — separate from the invoice amount itself.",
-        "Expenses include job material costs (by purchase date) and field labor costs (by visit completion). Overhead and non-job expenses are not included.",
+        "Expenses include job material costs and catalog products recorded as used on jobs (by the date they were logged) and field labor costs (by visit completion). Overhead and non-job expenses are not included.",
       ]);
     },
   },
@@ -435,7 +454,10 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
 
       type InvRow = { subtotal_cents: number | null; tax_cents: number | null; total_cents: number | null };
       const invoices = (invData ?? []) as unknown as InvRow[];
-      const preTaxTotal = invoices.reduce((sum, r) => sum + (r.subtotal_cents ?? 0), 0);
+      // Pre-tax = what was billed after discounts, before sales tax (total − tax).
+      // The subtotal is BEFORE the invoice-level discount, so it overstated
+      // revenue on every discounted invoice.
+      const preTaxTotal = invoices.reduce((sum, r) => sum + (r.total_cents ?? 0) - (r.tax_cents ?? 0), 0);
       const salesTax = invoices.reduce((sum, r) => sum + (r.tax_cents ?? 0), 0);
       const invoiceTotal = invoices.reduce((sum, r) => sum + (r.total_cents ?? 0), 0);
 
@@ -452,8 +474,8 @@ export const FINANCIAL_REPORTS: PrebuiltReportDef[] = [
       let d31_60 = 0;
       let d61_plus = 0;
       for (const r of (balData ?? []) as unknown as BalRow[]) {
-        const anchor = r.due_date ?? r.invoice_date;
-        const daysPastDue = anchor ? daysBetweenYmd(anchor, today) : 0;
+        // Shared aging rule: due date, else invoice date (same as A/R Aging).
+        const daysPastDue = invoiceDaysPastDue({ dueDate: r.due_date, invoiceDate: r.invoice_date }, today);
         const balance = r.balance_cents ?? 0;
         if (daysPastDue <= 30) d0_30 += balance;
         else if (daysPastDue <= 60) d31_60 += balance;

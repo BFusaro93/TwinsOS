@@ -55,7 +55,8 @@ export function QuickBooksGuide() {
         <p>
           Only records created <strong>after you connect</strong> are sent. Invoices and payments that already
           existed in Landscapt are not backfilled, so QuickBooks never ends up with duplicates of work you already
-          entered there by hand.
+          entered there by hand. A payment counts from when it is <strong>applied</strong> to an invoice, so a
+          prepayment or deposit taken before you connected is sent once you apply it to an invoice afterwards.
         </p>
       </Section>
 
@@ -163,6 +164,15 @@ export function QuickBooksGuide() {
               </td>
             </tr>
             <tr className={ROW}>
+              <td className={CELL_LABEL}>Already in QuickBooks</td>
+              <td className={CELL}>
+                Before creating an invoice, Landscapt looks in QuickBooks for an open invoice with the same number for
+                the same customer and links to it instead of creating a copy (for example after reconnecting, or an
+                invoice you also entered there by hand). If its amounts differ it is updated to match Landscapt, the
+                same as an edit. The same number on a different customer&apos;s invoice is treated as a different invoice.
+              </td>
+            </tr>
+            <tr className={ROW}>
               <td className={CELL_LABEL}>Edits after sending</td>
               <td className={CELL}>
                 Saving the invoice, changing a line, the taxable flag, the number, the date or the terms updates the
@@ -204,6 +214,20 @@ export function QuickBooksGuide() {
             refunded in full, or reduces it for a partial refund.
           </li>
           <li>
+            <strong>Editing a payment.</strong> Changing a payment&apos;s amount, date, reference or how it is split
+            updates the matching QuickBooks payments. Moving it to a different invoice voids the QuickBooks payment on
+            the old invoice and sends one for the new invoice, so the money is never counted twice.
+          </li>
+          <li>
+            <strong>Lowering an invoice total.</strong> When an invoice&apos;s new total is less than what was paid on
+            it, the extra moves to the client&apos;s credit in Landscapt, and the QuickBooks payment is reduced (or
+            voided) to match before the QuickBooks invoice is updated.
+          </li>
+          <li>
+            <strong>Applying credit.</strong> Applying a client&apos;s prepayment, deposit or account credit to an
+            invoice sends it to QuickBooks as soon as it is applied.
+          </li>
+          <li>
             <strong>Write-offs.</strong> An AR write-off isn&apos;t money received, so it goes to QuickBooks as a credit
             memo applied to the invoice, not as a payment.
           </li>
@@ -236,15 +260,16 @@ export function QuickBooksGuide() {
               <td className={CELL}>About two seconds after you stop editing.</td>
             </tr>
             <tr className={ROW}>
-              <td className={CELL_LABEL}>Take or refund a payment</td>
+              <td className={CELL_LABEL}>Take, edit or refund a payment, or apply credit</td>
               <td className={CELL}>Immediately.</td>
             </tr>
             <tr>
               <td className={CELL_LABEL}>Anything that was missed</td>
               <td className={CELL}>
                 A safety-net job runs every 15 minutes and catches invoices and payments created or changed outside the
-                normal screens — for example by the API, Zapier, or an automation. It leaves anything touched in the
-                last 10 minutes alone, and re-tries failed items about once an hour.
+                normal screens — for example by the API, Zapier, an automation, or a payment edit or invoice change
+                that wasn&apos;t sent right away. It leaves anything touched in the last 10 minutes alone, and re-tries
+                failed items about once an hour.
               </td>
             </tr>
           </tbody>
@@ -285,6 +310,19 @@ export function QuickBooksGuide() {
               </td>
             </tr>
             <tr className={ROW}>
+              <td className={CELL_LABEL}>Changed in Landscapt — waiting to update the QuickBooks payment</td>
+              <td className={CELL}>
+                The payment was edited (or its invoice total lowered) and the QuickBooks payment hasn&apos;t been updated
+                yet. It usually clears within seconds; otherwise the 15-minute job or Retry updates it.
+              </td>
+            </tr>
+            <tr className={ROW}>
+              <td className={CELL_LABEL}>QuickBooks has more than one open invoice #N for this customer</td>
+              <td className={CELL}>
+                Landscapt can&apos;t tell which one is this invoice. Void the extra one in QuickBooks, then Retry.
+              </td>
+            </tr>
+            <tr className={ROW}>
               <td className={CELL_LABEL}>A payment&apos;s refund or chargeback didn&apos;t update in QuickBooks</td>
               <td className={CELL}>
                 Click Retry. Landscapt re-runs the void or the reduction on the QuickBooks payment and clears the error
@@ -294,7 +332,8 @@ export function QuickBooksGuide() {
             <tr>
               <td className={CELL_LABEL}>QuickBooks error or connection expired</td>
               <td className={CELL}>
-                Retry. If it keeps failing, disconnect and reconnect to the same QuickBooks company, which refreshes the sign-in.
+                Retry. If it keeps failing, click <strong>Connect QuickBooks</strong> again (or disconnect and reconnect)
+                and choose the <strong>same</strong> QuickBooks company. That refreshes the sign-in and keeps every link.
               </td>
             </tr>
           </tbody>
@@ -306,9 +345,8 @@ export function QuickBooksGuide() {
           <li>Anything entered or changed in QuickBooks — the sync is one-way.</li>
           <li>Invoices and payments created before you connected (no backfill).</li>
           <li>
-            Credits you apply to an invoice (the original prepayment is already in QuickBooks), prepayments and credits
-            that aren&apos;t applied to an invoice, and edits to an existing payment&apos;s
-            allocations after it was recorded.
+            Prepayments, deposits and credits that aren&apos;t applied to an invoice yet. They are sent when you apply
+            them.
           </li>
           <li>Estimates, contracts, jobs, purchase orders, and vendor bills.</li>
           <li>Per-service income accounts and class/location tracking — services map to QuickBooks items only.</li>
@@ -318,15 +356,20 @@ export function QuickBooksGuide() {
       <Section id="disconnecting" title="Disconnecting or reconnecting">
         <p>
           Click <strong>Disconnect</strong> on the QuickBooks card to stop syncing; Landscapt also revokes its access
-          at Intuit. Nothing is deleted in either system. Landscapt forgets which QuickBooks customer, invoice, item
-          and payment each record was linked to, because those links only mean something in the company you
-          disconnected from.
+          at Intuit. Nothing is deleted in either system, and Landscapt remembers which QuickBooks company it was
+          connected to.
         </p>
         <p>
-          Reconnecting restarts the &quot;after you connect&quot; cut-off: invoices and payments created while you were
-          disconnected are not sent automatically. Records sent before you disconnected are matched again by
-          name and number the next time they sync. Connecting a <strong>different</strong> QuickBooks company
-          starts fresh: nothing in the new company is overwritten with data meant for the old one.
+          <strong>Reconnecting the same company</strong> picks up where it left off: every client, invoice and payment
+          keeps its link, so nothing is sent twice, and invoices and payments created while you were disconnected are
+          sent by the 15-minute job. An invoice QuickBooks already has is matched by number and customer rather than
+          created again.
+        </p>
+        <p>
+          <strong>Connecting a different company</strong> starts fresh. Landscapt forgets the old links, because they
+          only mean something in the old company, and only invoices and payments created from that moment on are sent,
+          so the new company isn&apos;t filled with your whole history. Nothing in the new company is overwritten with
+          data meant for the old one.
         </p>
       </Section>
       <Section id="good-to-know" title="Good to know">
@@ -341,10 +384,10 @@ export function QuickBooksGuide() {
             <strong>“Name exists as a vendor or employee”.</strong> QuickBooks won&apos;t create a customer whose name already belongs to a vendor or employee. When that happens the invoice shows this message and stops retrying. Rename the customer or link it to the existing QuickBooks customer, then edit and save the invoice to retry.
           </li>
           <li>
-            <strong>Editing a payment.</strong> Changing a payment&apos;s date, memo or split keeps its link to the QuickBooks payment, so it is updated rather than sent a second time.
+            <strong>Editing a payment.</strong> Changing a payment&apos;s amount, date, reference or split keeps its link to the QuickBooks payment, which is updated rather than sent a second time. An invoice taken out of the split has its QuickBooks payment voided.
           </li>
           <li>
-            <strong>Several companies, one Landscapt.</strong> Each Landscapt company keeps its own QuickBooks links. Two companies connected to two different QuickBooks files never collide.
+            <strong>Several companies, one Landscapt.</strong> Each Landscapt company keeps its own QuickBooks links. Two companies connected to two different QuickBooks files never collide, even when QuickBooks gives their payments the same number.
           </li>
         </ul>
       </Section>

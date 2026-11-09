@@ -343,3 +343,30 @@ async function fetchFieldMeasures(supabase: SupabaseClient, fieldIds: string[]):
   }
   return out;
 }
+
+/**
+ * service_id -> what its treated-area override is measured in: linear feet for a
+ * service that sizes from a linear-foot field (Perimeter, Edging), square feet
+ * otherwise — the same rule buildChemicalAreaResolver applies to the override.
+ */
+export async function fetchServiceAreaKinds(
+  supabase: SupabaseClient,
+  orgAreaFieldId: string | null,
+  serviceIds: string[]
+): Promise<Map<string, AreaKind>> {
+  const out = new Map<string, AreaKind>();
+  const ids = [...new Set(serviceIds.filter(Boolean))];
+  if (ids.length === 0) return out;
+  const { data } = await supabase.from("crm_services").select("id, chemical_area_field_id").in("id", ids);
+  const fieldByService = new Map<string, string | null>();
+  for (const row of (data ?? []) as { id: string; chemical_area_field_id: string | null }[]) {
+    fieldByService.set(row.id, row.chemical_area_field_id ?? orgAreaFieldId);
+  }
+  const fieldIds = [...new Set([...fieldByService.values()].filter(Boolean))] as string[];
+  const measures = await fetchFieldMeasures(supabase, fieldIds);
+  for (const id of ids) {
+    const fieldId = fieldByService.get(id) ?? orgAreaFieldId;
+    out.set(id, (fieldId ? measures.get(fieldId)?.kind : undefined) ?? "area");
+  }
+  return out;
+}

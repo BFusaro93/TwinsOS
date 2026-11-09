@@ -91,7 +91,18 @@ import { useEstimateTemplates } from "@/lib/hooks/use-estimate-templates";
 import { useInvoicePDFTemplates } from "@/lib/hooks/use-invoice-pdf-templates";
 import { ApprovalFlowsPage } from "@/components/settings/ApprovalFlowsPage";
 import { BILLING_TERMS_OPTIONS } from "@/lib/constants";
-import { downloadCSV, readCSVFile, isBulkImportResult, summarizeImportFailures } from "@/lib/csv";
+import { downloadCSV, exportCSV, readCSVFile, isBulkImportResult } from "@/lib/csv";
+import {
+  CLIENT_REQUIRED_COLUMNS, CLIENT_TEMPLATE_COLUMNS, clientToCsvRow,
+  LEAD_REQUIRED_COLUMNS, LEAD_TEMPLATE_COLUMNS, leadToCsvRow,
+  ESTIMATE_REQUIRED_COLUMNS, ESTIMATE_TEMPLATE_COLUMNS, estimateToCsvRow,
+  INVOICE_REQUIRED_COLUMNS, INVOICE_TEMPLATE_COLUMNS, invoiceToCsvRow,
+  PAYMENT_REQUIRED_COLUMNS, PAYMENT_TEMPLATE_COLUMNS, paymentToCsvRow,
+  TICKET_REQUIRED_COLUMNS, TICKET_TEMPLATE_COLUMNS,
+  SERVICE_REQUIRED_COLUMNS, SERVICE_TEMPLATE_COLUMNS, serviceToCsvRow,
+  SCHEDULE_REQUIRED_COLUMNS, SCHEDULE_TEMPLATE_COLUMNS,
+  EMPLOYEE_REQUIRED_COLUMNS, EMPLOYEE_TEMPLATE_COLUMNS,
+} from "@/lib/crm/import-export-columns";
 import { autoMapColumns, remapRows } from "@/components/shared/ImportExportMenu";
 import { useClients, useLeads, useBulkImportClients, useBulkImportLeads } from "@/lib/hooks/use-clients";
 import { useEstimates, useBulkImportEstimates } from "@/lib/hooks/use-estimates";
@@ -2180,6 +2191,64 @@ function IntegrationsTab() {
 
 // ── Import tile (renders as icon+label tile, opens file picker → mapping dialog) ─
 
+type ImportRowNote = { row: number; error: string };
+/** One importer's result in a common shape. The importers return several shapes
+ *  (BulkImportResult; {created, updated, skipped, failed}; {created, skipped};
+ *  {created, skipped, duplicates, linesAdded}; {created, skipped, warnings}) and
+ *  the tile used to report "Successfully imported N" for all but the first. */
+interface ImportTileSummary {
+  imported: number;
+  /** Counts without row detail, e.g. "3 updated", "2 skipped (missing name …)". */
+  notes: string[];
+  failed: ImportRowNote[];
+  skipped: ImportRowNote[];
+  warnings: ImportRowNote[];
+  /** Something other than a clean import happened: keep the dialog open. */
+  needsReview: boolean;
+}
+
+function summarizeImportResult(result: unknown, rowCount: number): ImportTileSummary {
+  const toNotes = (v: unknown): ImportRowNote[] =>
+    Array.isArray(v)
+      ? v.map((n: { row?: number; error?: string; reason?: string }) => ({ row: n.row ?? 0, error: n.error ?? n.reason ?? "" }))
+      : [];
+  if (isBulkImportResult(result)) {
+    const r = result as typeof result & { matched?: number };
+    const failed = r.failed;
+    const skipped = r.skipped ?? [];
+    const warnings = r.warnings ?? [];
+    return { imported: r.succeeded, notes: [], failed, skipped, warnings, needsReview: failed.length + skipped.length + warnings.length > 0 };
+  }
+  if (result && typeof result === "object" && "created" in result) {
+    const r = result as { created: number; updated?: number; skipped?: number | unknown[]; duplicates?: number; linesAdded?: number; failed?: unknown; warnings?: unknown; failures?: unknown };
+    const notes: string[] = [];
+    if (r.updated) notes.push(`${r.updated} updated`);
+    const skippedCount = typeof r.skipped === "number" ? r.skipped : 0;
+    // Some importers (contracts) list a skipped row's reason among their warnings.
+    const allWarnings = [...toNotes(r.warnings), ...toNotes(r.failures)];
+    const notImported = allWarnings.filter((n) => /row skipped|not imported|could not be imported/i.test(n.error));
+    const warnings = allWarnings.filter((n) => !notImported.includes(n));
+    const failed = [...toNotes(r.failed), ...notImported];
+    const unlisted = Math.max(0, skippedCount - notImported.length);
+    if (r.duplicates) notes.push(`${r.duplicates} already existed (skipped)`);
+    if (unlisted) notes.push(`${unlisted} row${unlisted !== 1 ? "s" : ""} not imported (missing or unmatched values — check the file)`);
+    if (r.linesAdded) notes.push(`${r.linesAdded} with an imported total line`);
+    const skipped = Array.isArray(r.skipped) ? toNotes(r.skipped) : [];
+    return {
+      imported: r.created,
+      notes,
+      failed,
+      skipped,
+      warnings,
+      needsReview: skippedCount + (r.duplicates ?? 0) + failed.length + warnings.length + skipped.length > 0,
+    };
+  }
+  if (result && typeof result === "object" && "imported" in result && typeof (result as { imported: unknown }).imported === "number") {
+    return { imported: (result as { imported: number }).imported, notes: [], failed: [], skipped: [], warnings: [], needsReview: false };
+  }
+  return { imported: rowCount, notes: [], failed: [], skipped: [], warnings: [], needsReview: false };
+}
+
 function ImportTile({
   label,
   icon,
@@ -2204,6 +2273,8 @@ function ImportTile({
   const [parsedRows, setParsedRows] = useState<Record<string, string>[]>([]);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<ImportTileSummary | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -2242,25 +2313,20 @@ function ImportTile({
   async function handleConfirm() {
     setImporting(true);
     setImportError(null);
+    setSummary(null);
     try {
-      const result = await onImport(parsedRows);
-      if (isBulkImportResult(result)) {
-        // Row-level result: a partial failure must not read as full success.
-        if (result.failed.length > 0) {
-          setImportError(summarizeImportFailures(result));
-          return;
-        }
-        setPreviewOpen(false);
-        onStatus({ type: "success", message: `Successfully imported ${result.succeeded} ${label.toLowerCase()}.` });
+      const result = summarizeImportResult(await onImport(parsedRows), parsedRows.length);
+      const headline = [`${result.imported} ${label.toLowerCase()} imported`, ...result.notes].join(", ");
+      if (result.needsReview) {
+        // Failed, skipped or adjusted rows: keep the dialog open with the details,
+        // the same summary the page's Import / Export menu shows.
+        setSummary(result);
+        setShowDetails(false);
+        onStatus({ type: result.failed.length > 0 ? "error" : "success", message: `${headline}. See the import dialog for details.` });
         return;
       }
       setPreviewOpen(false);
-      // An importer that skips rows can report how many it actually created; otherwise assume all.
-      const imported =
-        result && typeof result === "object" && "imported" in result && typeof (result as { imported: unknown }).imported === "number"
-          ? (result as { imported: number }).imported
-          : parsedRows.length;
-      onStatus({ type: "success", message: `Successfully imported ${imported} ${label.toLowerCase()}.` });
+      onStatus({ type: "success", message: `Successfully imported ${result.imported} ${label.toLowerCase()}.` });
     } catch (err) {
       const message =
         err instanceof Error ? err.message :
@@ -2270,7 +2336,7 @@ function ImportTile({
     } finally { setImporting(false); }
   }
 
-  function resetAll() { setMappingOpen(false); setPreviewOpen(false); setRawRows([]); setCsvColumns([]); setColumnMapping({}); setParsedRows([]); setImportError(null); }
+  function resetAll() { setMappingOpen(false); setPreviewOpen(false); setRawRows([]); setCsvColumns([]); setColumnMapping({}); setParsedRows([]); setImportError(null); setSummary(null); setShowDetails(false); }
 
   const fieldLabel = (f: string) => f.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()).trim();
 
@@ -2338,9 +2404,40 @@ function ImportTile({
             </div>
           )}
           {importError && <div className="rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm text-red-700 dark:text-red-400">{importError}</div>}
+          {summary && (
+            <div className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+              <p className="font-medium">
+                {summary.imported} imported
+                {summary.notes.map((n) => `, ${n}`).join("")}
+                {summary.failed.length > 0 && `, ${summary.failed.length} failed`}
+                {summary.skipped.length > 0 && `, ${summary.skipped.length} skipped (already exist)`}
+                {summary.warnings.length > 0 && `, ${summary.warnings.length} with warnings`}
+              </p>
+              {summary.failed.length + summary.skipped.length + summary.warnings.length > 0 && (
+                <>
+                  <button type="button" onClick={() => setShowDetails((v) => !v)} className="mt-1 text-xs font-medium underline underline-offset-2">
+                    {showDetails ? "Hide details" : "Show details"}
+                  </button>
+                  {showDetails && (
+                    <ul className="mt-2 max-h-40 overflow-y-auto rounded border border-amber-200 dark:border-amber-800 bg-card text-xs">
+                      {summary.failed.map((f, i) => (
+                        <li key={`f${i}`} className="border-b border-amber-100 dark:border-amber-900 px-2 py-1 last:border-0"><span className="font-medium">Row {f.row}:</span> {f.error}</li>
+                      ))}
+                      {summary.skipped.map((f, i) => (
+                        <li key={`s${i}`} className="border-b border-amber-100 dark:border-amber-900 px-2 py-1 last:border-0"><span className="font-medium">Row {f.row} (skipped):</span> {f.error}</li>
+                      ))}
+                      {summary.warnings.map((f, i) => (
+                        <li key={`w${i}`} className="border-b border-amber-100 dark:border-amber-900 px-2 py-1 last:border-0"><span className="font-medium">{f.row ? `Row ${f.row}` : "Note"} (imported, check):</span> {f.error}</li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={resetAll}>Cancel</Button>
-            {!importError && <Button onClick={handleConfirm} disabled={importing}>{importing ? "Importing..." : `Import ${parsedRows.length} Rows`}</Button>}
+            <Button variant="outline" onClick={resetAll}>{summary ? "Close" : "Cancel"}</Button>
+            {!importError && !summary && <Button onClick={handleConfirm} disabled={importing}>{importing ? "Importing..." : `Import ${parsedRows.length} Rows`}</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2379,29 +2476,25 @@ function ImportExportTab() {
 
   function handleExport(label: string) {
     switch (label) {
-      case "Clients":
+      // Same columns as each page's own export (shared row builders), so a file
+      // exported here re-imports intact on either screen.
+      case "Clients": {
         if (!clients?.length) return;
-        downloadCSV("clients.csv",
-          ["displayName", "accountType", "primaryPhone", "primaryEmail", "billingAddress", "billingCity", "billingState", "billingZip", "source", "accountNumber"],
-          clients.map((c) => [c.displayName, c.accountType, c.primaryPhone ?? "", c.primaryEmail ?? "", c.billingAddress ?? "", c.billingCity ?? "", c.billingState ?? "", c.billingZip ?? "", c.source ?? "", c.accountNumber ?? ""]));
+        const accountById = new Map(clients.map((c) => [c.id, c.accountNumber ?? ""]));
+        exportCSV(clients.map((c) => clientToCsvRow(c, accountById)), "clients.csv");
         break;
+      }
       case "Leads":
         if (!leads?.length) return;
-        downloadCSV("leads.csv",
-          ["displayName", "accountType", "primaryPhone", "primaryEmail", "billingAddress", "billingCity", "billingState", "billingZip", "source"],
-          leads.map((c) => [c.displayName, c.accountType, c.primaryPhone ?? "", c.primaryEmail ?? "", c.billingAddress ?? "", c.billingCity ?? "", c.billingState ?? "", c.billingZip ?? "", c.source ?? ""]));
+        exportCSV(leads.map(leadToCsvRow), "leads.csv");
         break;
       case "Estimates":
         if (!estimates?.length) return;
-        downloadCSV("estimates.csv",
-          ["clientName", "description", "estimateDate", "validUntilDate", "poNumber", "stage"],
-          estimates.map((e) => [e.clientName ?? "", e.description, e.estimateDate, e.validUntilDate ?? "", e.poNumber ?? "", e.stage]));
+        exportCSV(estimates.map(estimateToCsvRow), "estimates.csv");
         break;
       case "Invoices":
         if (!invoices?.length) return;
-        downloadCSV("invoices.csv",
-          ["clientName", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "taxAmount"],
-          invoices.map((inv) => [inv.clientName ?? "", inv.description, inv.invoiceDate, inv.dueDate ?? "", inv.poNumber ?? "", inv.status, (inv.subtotalCents / 100).toFixed(2), (inv.taxCents / 100).toFixed(2)]));
+        exportCSV(invoices.map(invoiceToCsvRow), "invoices.csv");
         break;
       case "Contracts":
         if (!contracts?.length) return;
@@ -2409,9 +2502,7 @@ function ImportExportTab() {
         break;
       case "Payments":
         if (!payments?.length) return;
-        downloadCSV("payments.csv",
-          ["clientName", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"],
-          payments.map((p) => [p.clientName ?? "", (p.amountCents / 100).toFixed(2), p.paymentDate, p.method, p.reference ?? "", p.memo ?? "", p.invoiceNumber != null ? String(p.invoiceNumber) : ""]));
+        exportCSV(payments.map(paymentToCsvRow), "payments.csv");
         break;
       case "Tickets":
         if (!tickets?.length) return;
@@ -2421,9 +2512,7 @@ function ImportExportTab() {
         break;
       case "Services":
         if (!services?.length) return;
-        downloadCSV("services.csv",
-          ["name", "code", "category", "unit", "defaultRate", "productionRate", "isActive"],
-          services.map((s) => [s.name, s.code ?? "", s.category, s.unit, s.defaultRateCents != null ? (s.defaultRateCents / 100).toFixed(2) : "", s.productionRateSqftPerHr != null ? String(s.productionRateSqftPerHr) : "", s.isActive ? "yes" : "no"]));
+        exportCSV(services.map(serviceToCsvRow), "services.csv");
         break;
       case "Schedules":
         if (!schedules?.length) return;
@@ -2504,33 +2593,18 @@ function ImportExportTab() {
         <div className="p-6">
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {[
-              { label: "Clients",   icon: <Users className="h-6 w-6" />,       onImport: (r: Record<string, string>[]) => bulkImportClients(r),   templateColumns: ["displayName", "accountType", "primaryPhone", "primaryEmail", "billingAddress", "billingCity", "billingState", "billingZip", "serviceAddress", "serviceCity", "serviceState", "serviceZip", "source", "accountNumber"], required: ["displayName"] },
-              { label: "Leads",     icon: <UserPlus className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportLeads(r),      templateColumns: ["displayName", "accountType", "primaryPhone", "primaryEmail", "billingAddress", "billingCity", "billingState", "billingZip", "source"], required: ["displayName"] },
-              { label: "Estimates", icon: <FileText className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportEstimates(r),  templateColumns: ["clientName", "description", "estimateDate", "validUntilDate", "poNumber", "stage"], required: ["clientName", "description"] },
-              { label: "Invoices",  icon: <Receipt className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportInvoices(r),   templateColumns: ["clientName", "service", "description", "invoiceDate", "dueDate", "poNumber", "status", "amount", "taxAmount"], required: ["clientName", "service", "description", "amount"] },
-              { label: "Contracts", icon: <FileSignature className="h-6 w-6" />, onImport: async (r: Record<string, string>[]) => {
-                const { created, warnings } = await bulkImportContracts(r);
-                if (warnings.length > 0) {
-                  toast.warning(`${warnings.length} contract row${warnings.length !== 1 ? "s" : ""} need attention`, {
-                    description: warnings.slice(0, 5).map((f) => `Row ${f.row}: ${f.reason}`).join("\n") + (warnings.length > 5 ? `\n…and ${warnings.length - 5} more` : ""),
-                    duration: 15000,
-                  });
-                }
-                return { imported: created };
-              }, templateColumns: [...CONTRACT_CSV_COLUMNS], required: ["clientName", "title"] },
-              { label: "Payments",  icon: <DollarSign className="h-6 w-6" />,  onImport: async (r: Record<string, string>[]) => {
-                const { failures } = await bulkImportPayments(r);
-                if (failures.length > 0) {
-                  toast.warning(`${failures.length} payment row${failures.length !== 1 ? "s" : ""} need attention`, {
-                    description: failures.slice(0, 5).map((f) => `Row ${f.row}: ${f.reason}`).join("\n") + (failures.length > 5 ? `\n…and ${failures.length - 5} more` : ""),
-                    duration: 15000,
-                  });
-                }
-              },   templateColumns: ["clientName", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"], required: ["clientName", "amount"] },
-              { label: "Tickets",   icon: <TicketIcon className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportTickets(r),    templateColumns: ["subject", "clientName", "type", "status", "priority", "category", "body", "dueDate"], required: ["subject"] },
-              { label: "Services",  icon: <Wrench className="h-6 w-6" />,      onImport: (r: Record<string, string>[]) => bulkImportServices(r),   templateColumns: ["name", "code", "category", "unit", "defaultRate", "productionRate", "isActive"], required: ["name"] },
-              { label: "Schedules", icon: <CalendarDays className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportSchedules(r), templateColumns: ["name", "frequency", "dayOfWeek", "weekPattern", "anchorDate", "seasonStart", "seasonEnd", "weekOfMonth", "customDates", "excludedDates"], required: ["name", "frequency"] },
-              { label: "Employees", icon: <UserCog className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportEmployees(r),  templateColumns: ["firstName", "lastName", "email", "phone", "cellPhone", "address", "city", "state", "zip", "dateHired", "resourceCode", "hourlyRate"], required: ["firstName", "lastName"] },
+              // Column lists are the page importers' own (lib/crm/import-export-columns), and the
+              // raw importer result goes to the tile, which reports it in full.
+              { label: "Clients",   icon: <Users className="h-6 w-6" />,       onImport: (r: Record<string, string>[]) => bulkImportClients(r),   templateColumns: CLIENT_TEMPLATE_COLUMNS,   required: CLIENT_REQUIRED_COLUMNS },
+              { label: "Leads",     icon: <UserPlus className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportLeads(r),     templateColumns: LEAD_TEMPLATE_COLUMNS,     required: LEAD_REQUIRED_COLUMNS },
+              { label: "Estimates", icon: <FileText className="h-6 w-6" />,    onImport: (r: Record<string, string>[]) => bulkImportEstimates(r), templateColumns: ESTIMATE_TEMPLATE_COLUMNS, required: ESTIMATE_REQUIRED_COLUMNS },
+              { label: "Invoices",  icon: <Receipt className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportInvoices(r),  templateColumns: INVOICE_TEMPLATE_COLUMNS,  required: INVOICE_REQUIRED_COLUMNS },
+              { label: "Contracts", icon: <FileSignature className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportContracts(r), templateColumns: [...CONTRACT_CSV_COLUMNS], required: ["clientName", "title"] },
+              { label: "Payments",  icon: <DollarSign className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportPayments(r),  templateColumns: PAYMENT_TEMPLATE_COLUMNS,  required: PAYMENT_REQUIRED_COLUMNS },
+              { label: "Tickets",   icon: <TicketIcon className="h-6 w-6" />,  onImport: (r: Record<string, string>[]) => bulkImportTickets(r),   templateColumns: TICKET_TEMPLATE_COLUMNS,   required: TICKET_REQUIRED_COLUMNS },
+              { label: "Services",  icon: <Wrench className="h-6 w-6" />,      onImport: (r: Record<string, string>[]) => bulkImportServices(r),  templateColumns: SERVICE_TEMPLATE_COLUMNS,  required: SERVICE_REQUIRED_COLUMNS },
+              { label: "Schedules", icon: <CalendarDays className="h-6 w-6" />, onImport: (r: Record<string, string>[]) => bulkImportSchedules(r), templateColumns: SCHEDULE_TEMPLATE_COLUMNS, required: SCHEDULE_REQUIRED_COLUMNS },
+              { label: "Employees", icon: <UserCog className="h-6 w-6" />,     onImport: (r: Record<string, string>[]) => bulkImportEmployees(r), templateColumns: EMPLOYEE_TEMPLATE_COLUMNS, required: EMPLOYEE_REQUIRED_COLUMNS },
             ].map((tile) => (
               <ImportTile
                 key={tile.label}

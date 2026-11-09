@@ -39,7 +39,7 @@ export const JOB_COSTING_REPORTS: PrebuiltReportDef[] = [
     ],
     notes: [
       "Budgeted and Actual Man-Hours are both duration × number of men.",
-      "Worked Date is the completion date (Eastern time), or the scheduled date for visits completed without a timestamp — the same date the Job Costing page uses.",
+      "Visits are included by when they were completed (Completed Between, in your company's time zone); a visit marked complete without a completion time is not listed. Worked Date is that completion date in your company's time zone.",
       "Revenue is the visit's own rate for per-service visits, otherwise the live sum of the job's included service lines (so re-pricing a line is reflected), otherwise the job rate.",
       LABOR_COST_NOTE,
     ],

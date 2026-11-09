@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRouteAuth, assertCallerOwnsVisit, effectiveVisitCrewId } from "@/lib/supabase/route-auth";
 import { adminClient } from "@/lib/api/auth";
+import { loadProductRateInfo } from "@/lib/chemical/rate-info";
 
 /**
  * The crew adds a chemical the office didn't preload (an extra spot treatment, a
@@ -76,6 +77,8 @@ export async function POST(request: Request) {
     .select("id")
     .eq("id", unitOfMeasureId)
     .eq("org_id", visit.org_id)
+    // An amount unit, never a target / method / area row's id.
+    .eq("list_type", "volume_unit")
     .is("deleted_at", null)
     .maybeSingle();
   if (!unit) return NextResponse.json({ error: "Unknown unit." }, { status: 400 });
@@ -123,14 +126,9 @@ export async function POST(request: Request) {
     }
   }
 
-  // The product's default application method, when it has one.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: rate } = await (db as any)
-    .from("crm_chemical_application_rates")
-    .select("application_method_id")
-    .eq("product_id", productId)
-    .eq("is_default", true)
-    .maybeSingle();
+  // The product's default rate: its method (when the crew didn't pick one) and the rate label
+  // the compliance record keeps. Tolerates a product with several rates marked default.
+  const rate = (await loadProductRateInfo(db, visit.org_id, [productId])).get(productId);
 
   const nowIso = new Date().toISOString();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -144,7 +142,8 @@ export async function POST(request: Request) {
       used: true,
       chemical_amount: chemicalAmount,
       unit_of_measure_id: unitOfMeasureId,
-      application_method_id: applicationMethodId !== undefined ? applicationMethodId : rate?.application_method_id ?? null,
+      application_method_id: applicationMethodId !== undefined ? applicationMethodId : rate?.applicationMethodId ?? null,
+      application_rate_label: rate?.rateLabel ?? null,
       ...(targetIds !== undefined ? { target_ids: targetIds } : {}),
       ...(areasTreatedIds !== undefined ? { areas_treated_ids: areasTreatedIds } : {}),
       ...(conditions?.temperature !== undefined ? { temperature: conditions.temperature } : {}),

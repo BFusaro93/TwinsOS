@@ -24,6 +24,7 @@ import {
   useOrgTags,
   useCancelClient,
   useActivateClient,
+  useClientSelfOptOut,
 } from "@/lib/hooks/use-clients";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { TagEditor } from "@/components/crm/TagEditor";
@@ -83,7 +84,7 @@ import { NewJobDialog } from "./jobs/NewJobDialog";
 import { InvoiceDetailSheet } from "./invoices/InvoiceDetailSheet";
 import { getDisplayInvoiceStatus, INVOICE_STATUS_COLOR } from "@/lib/invoice-status";
 import { NewInvoiceSheet } from "./invoices/NewInvoiceSheet";
-import { AddPaymentDialog, RefundDialog } from "./payments/PaymentsList";
+import { AddPaymentDialog, RefundDialog, isRefundablePayment } from "./payments/PaymentsList";
 import { ContractsList, ContractDialog } from "./contracts/ContractsList";
 import { ClientFilesTab } from "./ClientFilesTab";
 import { SendClientEmailDialog } from "./SendClientEmailDialog";
@@ -564,8 +565,10 @@ function PaymentDetailDialog({
           )}
           <DialogFooter className="gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>Edit</Button>
-            <Button variant="outline" size="sm" className="text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/40"
-              onClick={() => setRefundOpen(true)}>Refund</Button>
+            {payment && isRefundablePayment(payment) && (
+              <Button variant="outline" size="sm" className="text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/40"
+                onClick={() => setRefundOpen(true)}>Refund</Button>
+            )}
             <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
           </DialogFooter>
         </DialogContent>
@@ -862,6 +865,8 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
   // is mid-edit doesn't clobber their unsaved typing.
   const customValuesSyncedForRef = useRef<string | null>(null);
   const consentBaseline = useRef({ doNotMarket: client.doNotMarket, smsOptIn: client.smsOptIn ?? false });
+  // Did the client unsubscribe themselves? Then turning Do Not Market off needs a clear warning.
+  const { data: selfOptOut } = useClientSelfOptOut(client.id, open && client.doNotMarket);
   // Office notes as loaded; sent back only when edited. The DB rejects a notes change from a
   // login without client_view_notes, and "" vs null counted as a change, so every save of a
   // client with no notes failed for those logins.
@@ -1459,6 +1464,12 @@ function EditClientDialog({ client, open, onOpenChange }: { client: Client; open
                 />
                 <label htmlFor="doNotMarket" className="text-sm cursor-pointer">Do not market</label>
               </div>
+              {!form.doNotMarket && consentBaseline.current.doNotMarket && selfOptOut && (
+                <p className="rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                  This client {selfOptOut.subject.startsWith("Reported") ? "reported one of your emails as spam" : "unsubscribed themselves"} on {formatDate(selfOptOut.at.slice(0, 10))}.
+                  Only turn Do Not Market off if they have asked to receive marketing emails again — saving will re-subscribe them.
+                </p>
+              )}
               <div className="flex items-center gap-2 pt-1">
                 <input
                   type="checkbox"

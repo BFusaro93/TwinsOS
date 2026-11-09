@@ -370,7 +370,10 @@ export function CrewAppGuide() {
           service the crew skipped (or the office cancelled) aren&apos;t listed to mix or confirm and
           never hold up Stop Job. If the crew starts a stop the office never dispatched, its
           chemicals are loaded at Start Job so the card, the confirmation and the stock deduction
-          still work.
+          still work. Chemicals the office added to the stop before it started are part of the plan
+          too and are confirmed the same way. If a planned chemical has no unit (nothing was
+          estimated), pick the unit next to the amount before confirming. Confirming a chemical that
+          another phone already confirmed simply skips it.
         </p>
         <p>
           <strong>Label, how applied, conditions and extra products.</strong> These work the same in the browser crew page and in the iOS and Android crew app. Each chemical has a{" "}
@@ -383,9 +386,11 @@ export function CrewAppGuide() {
           property (tap <strong>Update</strong> to refresh it) and can be corrected; if no reading is
           available they are typed as before. They&apos;re optional and are saved on every chemical confirmed in that tap.{" "}
           <strong>Add a chemical</strong> records a product the office didn&apos;t preload, such as a
-          spot treatment or a substitute: choose the product, the amount and the unit, and
-          optionally how it was applied and the conditions (inside the confirm card it uses the
-          conditions already entered there). A stop with no chemicals planned shows a small{" "}
+          spot treatment or a substitute: choose the product, the <strong>Concentrate used</strong>{" "}
+          &mdash; the product itself before mixing, not the finished spray, so the unit starts on the
+          product&apos;s own unit &mdash; and optionally how it was applied and the conditions (inside
+          the confirm card it uses the conditions already entered there; on the iOS and Android app
+          too). The product&apos;s application rate is kept on the record. A stop with no chemicals planned shows a small{" "}
           <strong>Chemicals</strong> card with the same button, as long as the company tracks at least
           one chemical product, so a crew can still record a treatment the office didn&apos;t plan.
           It is saved already confirmed, with the foreman as

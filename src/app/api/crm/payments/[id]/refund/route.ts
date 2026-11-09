@@ -10,6 +10,7 @@ import { logger } from "@/lib/logger";
 import { syncEstimateDepositWithPayment } from "@/lib/stripe/record-estimate-deposit";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 import { firstIssueMessage } from "@/lib/utils/zod-message";
+import { AR_WRITE_OFF_METHOD } from "@/lib/reports/helpers";
 
 const log = logger.child("crm payments refund");
 
@@ -84,7 +85,7 @@ export async function POST(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: payment, error: paymentErr } = await (db as any)
     .from("crm_payments")
-    .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, stripe_payment_intent_id, method, processing_fee_cents")
+    .select("id, org_id, client_id, invoice_id, amount_cents, refunded_amount_cents, stripe_payment_intent_id, method, processing_fee_cents, is_credit")
     .eq("id", paymentId)
     .eq("org_id", effOrgId)
     // A soft-deleted payment is gone from the books — refunding it would
@@ -92,6 +93,16 @@ export async function POST(
     .is("deleted_at", null)
     .single();
   if (paymentErr || !payment) return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+
+  // An account credit or an AR write-off is not money the client paid, so there is nothing to
+  // give back: "refunding" one only recorded a refund nobody received. Edit or remove the
+  // credit / write-off instead.
+  if (payment.is_credit === true || payment.method === AR_WRITE_OFF_METHOD) {
+    return NextResponse.json(
+      { error: "Account credits and write-offs aren't cash, so they can't be refunded. Edit the credit or write-off instead." },
+      { status: 400 }
+    );
+  }
 
   if (payment.refunded_amount_cents + refundAmountCents > payment.amount_cents) {
     return NextResponse.json({ error: "Refund amount exceeds remaining refundable balance" }, { status: 400 });

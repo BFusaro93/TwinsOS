@@ -228,9 +228,12 @@ async function computeInvoices(supabase: Client, w: YearWindow): Promise<Values>
   const arCents = num(openAll?.sum_balance_cents);
   const arOver60Cents = num(openOver60?.sum_balance_cents);
 
-  // DSO: open AR ÷ average daily issued revenue for the year so far.
+  // DSO: open AR ÷ average daily issued revenue for the year so far. Open AR
+  // is only known as of TODAY, so dividing it by a past year's daily revenue
+  // mixes two periods — left blank for a past year rather than reported wrong.
+  const isPastYear = w.to < todayInZone(w.timeZone);
   let arDays: number | null = null;
-  if (billedCents > 0 && w.daysElapsed > 0) {
+  if (!isPastYear && billedCents > 0 && w.daysElapsed > 0) {
     arDays = round(arCents / (billedCents / w.daysElapsed));
   }
 

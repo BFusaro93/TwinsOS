@@ -665,6 +665,37 @@ export function useClientActivity(clientId: string) {
   });
 }
 
+/** Timeline subjects written when the CLIENT opted out themselves: the unsubscribe
+ *  link (crm_unsubscribe_client) and a spam complaint (Resend webhook). */
+const SELF_OPT_OUT_SUBJECTS = [
+  "Unsubscribed from marketing emails",
+  "Reported an email as spam — removed from marketing",
+];
+
+/** When the client most recently opted out of marketing themselves (unsubscribe
+ *  link or spam report), or null. Lets the edit form warn before office staff
+ *  turn Do Not Market back off. */
+export function useClientSelfOptOut(clientId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["clients", clientId, "self-opt-out"],
+    queryFn: async (): Promise<{ at: string; subject: string } | null> => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("client_activity")
+        .select("subject, occurred_at")
+        .eq("client_id", clientId)
+        .eq("activity_type", "note")
+        .in("subject", SELF_OPT_OUT_SUBJECTS)
+        .order("occurred_at", { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      const row = data?.[0];
+      return row ? { at: row.occurred_at as string, subject: row.subject as string } : null;
+    },
+    enabled: !!clientId && enabled,
+  });
+}
+
 /** Measured areas ("takeoffs") stored on both `clients` and `client_properties`. A key left undefined is not touched; null clears it. */
 export interface TakeoffInput {
   turfSqft?: number | null;
@@ -1029,6 +1060,14 @@ function nameAddressKey(name: string | null | undefined, address: string | null 
   return n && a ? `${n}|${a}` : null;
 }
 
+/** First address of a cell that may hold several ("a@x.com; b@x.com", "a@x.com, b@x.com"). */
+function firstCsvEmail(raw: string | null | undefined): string | null {
+  const cell = (raw ?? "").trim();
+  if (!cell) return null;
+  if ((cell.match(/@/g) ?? []).length < 2) return cell;
+  return cell.split(/[;,\s]+/).map((p) => p.trim()).filter(Boolean)[0] ?? null;
+}
+
 const IMPORT_STATUS_MAP: Record<string, "active" | "lead" | "inactive" | "cancelled" | "lost"> = {
   active: "active", current: "active", client: "active", customer: "active",
   lead: "lead", prospect: "lead",
@@ -1056,7 +1095,9 @@ export function useBulkImportClients() {
         supabase.from("clients").select("id, display_name, service_address").is("deleted_at", null).order("id"),
       );
       const byNameAddress = new Map<string, string>();
+      const nameById = new Map<string, string>();
       for (const c of existingNameAddr ?? []) {
+        nameById.set(c.id, c.display_name);
         const k = nameAddressKey(c.display_name, c.service_address);
         if (k) byNameAddress.set(k, c.id);
       }
@@ -1066,7 +1107,11 @@ export function useBulkImportClients() {
       const skipped: BulkImportResult["failed"] = [];
       const warnings: BulkImportResult["failed"] = [];
       // Parent links resolve after every row is in, so a child can precede its parent in the file.
-      const parentLinks: { row: number; clientId: string; parentAccountNumber: string; displayName: string }[] = [];
+      // onlyIfUnlinked: a row skipped as a duplicate of an existing client links that client
+      // only when it has no parent yet (a retry completing an earlier, interrupted import).
+      const parentLinks: { row: number; clientId: string; parentAccountNumber: string; displayName: string; onlyIfUnlinked?: boolean }[] = [];
+      // Accounts made active from lead/lost by this import (re-import with Status = active).
+      const convertedIds: string[] = [];
       const tagRows: { clientId: string; tags: string[] }[] = [];
 
       for (let i = 0; i < rows.length; i++) {
@@ -1080,7 +1125,12 @@ export function useBulkImportClients() {
             continue;
           }
 
-          const emailRaw = r.primaryEmail?.trim() || null;
+          // Service Autopilot puts several addresses in one cell ("a@x.com;b@x.com"):
+          // import the first and say so, rather than failing the row as invalid.
+          const emailRaw = firstCsvEmail(r.primaryEmail);
+          if (emailRaw && emailRaw !== r.primaryEmail?.trim()) {
+            warnings.push({ row: rowNum, error: `"${displayName}": more than one email ("${r.primaryEmail?.trim()}") — imported ${emailRaw}` });
+          }
           if (emailRaw && !EMAIL_RE.test(emailRaw)) {
             failed.push({ row: rowNum, error: `"${displayName}": invalid email format ("${emailRaw}")` });
             continue;
@@ -1099,13 +1149,18 @@ export function useBulkImportClients() {
           // phone check ran first and skipped re-imports of existing
           // accounts as "likely duplicates" instead of updating them.
           const CLIENT_UPDATE_COLS =
-            "id, display_name, primary_phone, primary_email, billing_address, billing_city, billing_state, billing_zip, service_address, service_city, service_state, service_zip, source";
+            "id, display_name, status, client_since, primary_phone, primary_email, billing_address, billing_city, billing_state, billing_zip, service_address, service_city, service_state, service_zip, source";
           let existingByAccount: {
-            id: string; display_name: string; primary_phone: string | null; primary_email: string | null;
+            id: string; display_name: string; status: string; client_since: string | null;
+            primary_phone: string | null; primary_email: string | null;
             billing_address: string | null; billing_city: string | null; billing_state: string | null; billing_zip: string | null;
             service_address: string | null; service_city: string | null; service_state: string | null; service_zip: string | null;
             source: string | null;
           } | null = null;
+          const csvTags = (r.tags ?? "").split(/[|;]/).map((t) => t.trim()).filter(Boolean);
+          const parentAccountNumber = r.parentAccountNumber?.trim() || null;
+          // Set when a row with a NEW account number shares an email/phone with another client.
+          let sharesContactWith: string | null = null;
           if (accountNumber) {
             const { data: byAccount, error: accountLookupError } = await supabase
               .from("clients")
@@ -1119,20 +1174,34 @@ export function useBulkImportClients() {
             }
             existingByAccount = byAccount;
           }
+          // A skipped duplicate still gets the row's tags and parent link, so re-running an
+          // import that stopped part-way (tags/links are applied after all rows) completes them.
+          const completeMatched = (clientId: string) => {
+            if (csvTags.length) tagRows.push({ clientId, tags: csvTags });
+            if (parentAccountNumber) parentLinks.push({ row: rowNum, clientId, parentAccountNumber, displayName, onlyIfUnlinked: true });
+            return csvTags.length || parentAccountNumber ? " (its tags / parent link were still applied)" : "";
+          };
           if (!existingByAccount) {
-            // No account match (blank, or a NEW account number): a matching
-            // email/phone means this is the same customer — skip, don't create
-            // a duplicate.
             const matchedClientId = (email && byEmail.get(email)) || (phoneDigits && byPhone.get(phoneDigits));
-            if (matchedClientId) {
-              skipped.push({ row: rowNum, error: `"${displayName}": matches an existing client by email or phone — skipped` });
+            if (matchedClientId && accountNumber) {
+              // A NEW (unused) account number is its own account — e.g. a second
+              // property billed separately, or a family member at the same address.
+              // Create it, and flag the shared contact info for review.
+              sharesContactWith = nameById.get(matchedClientId) ?? "another client";
+            } else if (matchedClientId) {
+              // No account number: a matching email/phone means this is the same
+              // customer — skip, don't create a duplicate.
+              const note = completeMatched(matchedClientId);
+              skipped.push({ row: rowNum, error: `"${displayName}": matches an existing client by email or phone — skipped${note}` });
               continue;
             }
             // No email or phone to compare: the same name at the same service street is the same client.
             if (!email && !phoneDigits && !accountNumber) {
               const nk = nameAddressKey(displayName, r.serviceAddress);
-              if (nk && byNameAddress.has(nk)) {
-                skipped.push({ row: rowNum, error: `"${displayName}": matches an existing client by name and service address — skipped` });
+              const nameAddrId = nk ? byNameAddress.get(nk) : undefined;
+              if (nameAddrId) {
+                const note = completeMatched(nameAddrId);
+                skipped.push({ row: rowNum, error: `"${displayName}": matches an existing client by name and service address — skipped${note}` });
                 continue;
               }
             }
@@ -1152,13 +1221,14 @@ export function useBulkImportClients() {
           if (r.clientSince?.trim() && !clientSinceCsv) {
             warnings.push({ row: rowNum, error: `"${displayName}": couldn't read client since "${r.clientSince}" — left as ${status === "lead" ? "blank" : "today"}` });
           }
-          const billingEmailRaw = r.billingEmail?.trim() || null;
+          const billingEmailRaw = firstCsvEmail(r.billingEmail);
+          if (billingEmailRaw && billingEmailRaw !== r.billingEmail?.trim()) {
+            warnings.push({ row: rowNum, error: `"${displayName}": more than one billing email ("${r.billingEmail?.trim()}") — imported ${billingEmailRaw}` });
+          }
           if (billingEmailRaw && !EMAIL_RE.test(billingEmailRaw)) {
             warnings.push({ row: rowNum, error: `"${displayName}": invalid billing email "${billingEmailRaw}" — not imported` });
           }
           const billingEmail = billingEmailRaw && EMAIL_RE.test(billingEmailRaw) ? billingEmailRaw : null;
-          const csvTags = (r.tags ?? "").split(/[|;]/).map((t) => t.trim()).filter(Boolean);
-          const parentAccountNumber = r.parentAccountNumber?.trim() || null;
 
           const row = {
             display_name: displayName,
@@ -1182,6 +1252,8 @@ export function useBulkImportClients() {
             ...(status ? { status } : {}),
             // The file's own date when it has one; a lead has no client-since until it converts.
             client_since: clientSinceCsv ?? (status === "lead" || status === "lost" ? null : todayInZone(importOrgTimeZone)),
+            // Cancelled / lost records carry the date they closed (the cancel actions stamp it too).
+            ...(status === "cancelled" || status === "lost" ? { closed_at: new Date().toISOString() } : {}),
           };
 
           const { data: newClient, error } = existingByAccount
@@ -1245,8 +1317,20 @@ export function useBulkImportClients() {
               if (value) patch[key] = value;
             }
             if (r.accountType?.trim()) patch.account_type = row.account_type;
-            if (status) patch.status = status;
             if (clientSinceCsv) patch.client_since = clientSinceCsv;
+            if (status && status !== existing.status) {
+              patch.status = status;
+              const wasLead = existing.status === "lead" || existing.status === "lost";
+              if (status === "active") {
+                // Same as Activate / Convert: a lead made active is a conversion and
+                // gets its client-since date; a reactivated client sheds its closure.
+                patch.closed_at = null;
+                patch.cancellation_reason = null;
+                if (wasLead && !clientSinceCsv && !existing.client_since) patch.client_since = todayInZone(importOrgTimeZone);
+              } else if (status === "cancelled" || status === "lost") {
+                patch.closed_at = new Date().toISOString();
+              }
+            }
 
             const ADDRESS_KEYS = [
               "billing_address", "billing_city", "billing_state", "billing_zip",
@@ -1280,6 +1364,9 @@ export function useBulkImportClients() {
                 failed.push({ row: rowNum, error: `"${displayName}": ${updateError.message}` });
                 continue;
               }
+              if (patch.status === "active" && (existing.status === "lead" || existing.status === "lost")) {
+                convertedIds.push(existing.id);
+              }
             }
             if (csvTags.length) tagRows.push({ clientId: existing.id, tags: csvTags });
             if (parentAccountNumber) parentLinks.push({ row: rowNum, clientId: existing.id, parentAccountNumber, displayName });
@@ -1289,8 +1376,15 @@ export function useBulkImportClients() {
           } else if (newClient) {
             // Keep the dedup maps current so two rows in the SAME csv sharing
             // an email/phone match each other instead of both inserting.
-            if (email) byEmail.set(email, newClient.id);
-            if (phoneDigits) byPhone.set(phoneDigits, newClient.id);
+            if (email && !byEmail.has(email)) byEmail.set(email, newClient.id);
+            if (phoneDigits && !byPhone.has(phoneDigits)) byPhone.set(phoneDigits, newClient.id);
+            nameById.set(newClient.id, displayName);
+            if (sharesContactWith) {
+              warnings.push({
+                row: rowNum,
+                error: `"${displayName}": shares an email or phone with "${sharesContactWith}" — created as a separate account (new account number ${accountNumber}); merge them if it's the same customer`,
+              });
+            }
             const nk = nameAddressKey(displayName, r.serviceAddress);
             if (nk) byNameAddress.set(nk, newClient.id);
             if (csvTags.length) tagRows.push({ clientId: newClient.id, tags: csvTags });
@@ -1346,8 +1440,15 @@ export function useBulkImportClients() {
           warnings.push({ row: link.row, error: `"${link.displayName}": parent account ${link.parentAccountNumber} not found — not linked` });
           continue;
         }
-        const { error: linkErr } = await supabase.from("clients").update({ parent_client_id: parent.id }).eq("id", link.clientId);
+        let linkQuery = supabase.from("clients").update({ parent_client_id: parent.id }).eq("id", link.clientId);
+        if (link.onlyIfUnlinked) linkQuery = linkQuery.is("parent_client_id", null);
+        const { error: linkErr } = await linkQuery;
         if (linkErr) warnings.push({ row: link.row, error: `"${link.displayName}": could not link to parent ${link.parentAccountNumber}: ${linkErr.message}` });
+      }
+
+      // Timeline entry for leads the import converted (no automations: imports don't fire them).
+      for (const id of convertedIds) {
+        await logClientActivity(supabase, id, "Converted from lead to client (import)");
       }
 
       return { succeeded, failed, skipped, warnings };
@@ -2101,6 +2202,7 @@ export function useBulkImportLeads() {
       let matched = 0;
       const failed: BulkImportResult["failed"] = [];
       const skipped: BulkImportResult["failed"] = [];
+      const warnings: BulkImportResult["failed"] = [];
 
       for (const [i, r] of rows.entries()) {
         // The CSV's own line number (line 1 is the header).
@@ -2111,10 +2213,14 @@ export function useBulkImportLeads() {
         const displayName = r.displayName?.trim();
         if (!displayName) { failed.push({ row: rowNum, error: "Missing required field: Display Name" }); continue; }
 
-        const emailRaw = r.primaryEmail?.trim() || null;
+        // Several addresses in one cell (Service Autopilot): the first is imported.
+        const emailRaw = firstCsvEmail(r.primaryEmail);
         if (emailRaw && !EMAIL_RE.test(emailRaw)) { failed.push({ row: rowNum, error: `"${displayName}": invalid email format ("${emailRaw}")` }); continue; }
+        if (emailRaw && emailRaw !== r.primaryEmail?.trim()) {
+          warnings.push({ row: rowNum, error: `"${displayName}": more than one email ("${r.primaryEmail?.trim()}") — imported ${emailRaw}` });
+        }
 
-        const email = r.primaryEmail?.trim().toLowerCase() || null;
+        const email = emailRaw?.toLowerCase() || null;
         const phone = toE164Us(r.primaryPhone);
         const phoneDigits = phoneDedupeKey(r.primaryPhone);
         const matchedClientId = (email && byEmail.get(email)) || (phoneDigits && byPhone.get(phoneDigits));
@@ -2139,7 +2245,7 @@ export function useBulkImportLeads() {
           display_name: displayName,
           account_type: r.accountType?.trim().toLowerCase() === "commercial" ? "commercial" : "residential",
           primary_phone: phone,
-          primary_email: r.primaryEmail?.trim() || null,
+          primary_email: emailRaw,
           billing_address: r.billingAddress?.trim() || null,
           billing_city: r.billingCity?.trim() || null,
           billing_state: r.billingState?.trim() || null,
@@ -2169,7 +2275,7 @@ export function useBulkImportLeads() {
         }
       }
 
-      return { succeeded: created, failed, skipped, created, matched };
+      return { succeeded: created, failed, skipped, warnings, created, matched };
     },
     onSuccess: () => {
       invalidateClientLists(qc);
@@ -2376,7 +2482,7 @@ export function useActivateClient() {
       if (!before || before.status === "active") return { changed: false, wasLead: false };
       // A lost lead never became a client, so bringing it back is a conversion too.
       const wasLead = before.status === "lead" || before.status === "lost";
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from("clients")
         .update({
           status: "active",
@@ -2385,8 +2491,12 @@ export function useActivateClient() {
           ...(wasLead && { client_since: todayInZone(orgTimeZone) }),
         })
         .eq("id", clientId)
-        .eq("status", before.status);
+        .eq("status", before.status)
+        .select("id");
       if (error) throw error;
+      // 0 rows: someone else changed the status first (a double-click, another tab)
+      // or RLS refused it — no change, so no timeline entry and no automation.
+      if (!updated?.length) return { changed: false, wasLead: false };
       await logClientActivity(supabase, clientId, wasLead ? "Converted from lead to client" : `Client reactivated (was ${before.status})`);
       return { changed: true, wasLead };
     },

@@ -4,6 +4,7 @@ import type { Database } from "@/types/supabase";
 import {
   alreadyBilledReason,
   billedInPeriod,
+  billingAnchorStamp,
   isBillingDueOn,
   planContractBilling,
   planFirstPeriodProration,
@@ -14,7 +15,7 @@ import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import { createOrgCanceledResolver } from "@/lib/orgs/org-canceled";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
+import { isoInZone, todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
 
 /**
  * GET /api/cron/contract-invoices — called daily by Vercel Cron at 08:00 UTC
@@ -27,10 +28,14 @@ import { todayInZone, todayInZoneAsLocalMidnight } from "@/lib/time/zone";
  *     has expired, must never be auto-billed)
  *   - the client it bills hasn't been soft-deleted (nothing re-checks this
  *     once a contract is attached, so without it a deleted client keeps
- *     getting invoiced forever)
- *   - start_date is null or has already arrived, and end_date is null or
- *     hasn't passed yet (nothing else transitions status to "expired" when
- *     end_date arrives, so this is the only thing stopping billing past term)
+ *     getting invoiced forever), and is a customer in service — not a lead,
+ *     and not cancelled / inactive / lost
+ *   - the billing cycle being invoiced starts on or after start_date (no
+ *     invoice is dated before the start, and a cycle that began before it is
+ *     never billed — the prorated stub covers that gap in prorate mode), and
+ *     starts on or before end_date (the last cycle is billed in full; nothing
+ *     else transitions status to "expired" when end_date arrives, so this is
+ *     the only thing stopping billing past term) — see termSkipReason
  *   - today is a billing day for the contract's own billing_frequency —
  *     see src/lib/contract-billing.ts for the per-frequency cadence. For
  *     `monthly` (every live contract on PROD today) that is exactly the
@@ -88,12 +93,12 @@ export async function GET(request: Request) {
   // isBillingDueOn/planContractBilling both read local Date components, so
   // handing them a Date at the org's local midnight makes them org-correct
   // without changing contract-billing.ts itself.
-  const orgTodayCache = new Map<string, { str: string; date: Date }>();
-  async function orgToday(orgId: string): Promise<{ str: string; date: Date }> {
+  const orgTodayCache = new Map<string, { str: string; date: Date; tz: string }>();
+  async function orgToday(orgId: string): Promise<{ str: string; date: Date; tz: string }> {
     let hit = orgTodayCache.get(orgId);
     if (!hit) {
       const tz = await getOrgTimeZone(supabase, orgId);
-      hit = { str: todayInZone(tz), date: todayInZoneAsLocalMidnight(tz) };
+      hit = { str: todayInZone(tz), date: todayInZoneAsLocalMidnight(tz), tz };
       orgTodayCache.set(orgId, hit);
     }
     return hit;
@@ -111,7 +116,7 @@ export async function GET(request: Request) {
     contracts = await fetchAllRows<Record<string, unknown>>(() =>
       sb
         .from("crm_contracts")
-        .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, signed_at, created_at, start_billing_mode, first_period_prorated_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at, default_terms, status)")
+        .select("id, org_id, client_id, title, status, start_date, end_date, billing_day_of_month, billing_frequency, last_billed_date, billing_anchor_date, signed_at, created_at, start_billing_mode, first_period_prorated_at, monthly_amount_cents, monthly_amounts, invoice_line_items, bill_month_in_advance, payment_type, po_number, sales_rep_id, clients!inner(deleted_at, default_terms, status)")
         // A cancelled client's contract must not keep billing — generate.ts already
         // treats cancelled clients (and deleted ones) as inactive for visits, but the
         // invoicing paths only checked deleted_at, so a cancelled client kept getting
@@ -119,7 +124,8 @@ export async function GET(request: Request) {
         .is("clients.deleted_at", null)
         // Inactive and lost clients are off service too: generate.ts stops their visits, so
         // billing follows (reactivating the client resumes it next cycle, no backfill).
-        .not("clients.status", "in", "(cancelled,inactive,lost)")
+        // A lead isn't a customer yet: converting it to active starts billing.
+        .not("clients.status", "in", "(cancelled,inactive,lost,lead)")
         .eq("is_active", true)
         .eq("auto_generate", true)
         // Only a contract the client has actually agreed to should be auto-billed.
@@ -136,21 +142,74 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: fetchErr instanceof Error ? fetchErr.message : "fetch failed" }, { status: 500 });
   }
 
+  // ── when each contract / client became billable ──────────────────────────
+  // Read from the audit trail (fn_audit_log writes a status_changed row with
+  // old/new status); created_at / signed_at cover rows created already billable.
+  //  - Contract signed / switched to active, or client converted from a lead:
+  //    the contract became billable then. A cycle whose billing day passed
+  //    before that is still billed, dated the day it is created (never
+  //    back-dated) — see cronInvoiceDate in contract-billing.ts.
+  //  - Client REACTIVATED (cancelled / inactive / lost → active): a cycle
+  //    whose billing day passed while the client was off service is not
+  //    back-billed; billing resumes at the next cycle.
+  // One paged read for the whole run; a failure falls back to the columns.
+  const becameBillableAt = new Map<string, string>(); // contract id, or "lead:<client id>" → latest instant
+  const clientReactivatedAt = new Map<string, string>(); // client id → latest instant
+  const keepLatest = (map: Map<string, string>, key: string, instant: string) => {
+    const prev = map.get(key);
+    if (!prev || Date.parse(instant) > Date.parse(prev)) map.set(key, instant);
+  };
+  try {
+    const auditRows = await fetchAllRows<{ record_type: string; record_id: string; old_value: string | null; new_value: string | null; created_at: string }>(() =>
+      sb
+        .from("audit_log")
+        .select("id, record_type, record_id, old_value, new_value, created_at")
+        .in("record_type", ["contract", "client"])
+        .eq("action", "status_changed")
+        .in("new_value", ["signed", "active"])
+        .is("deleted_at", null)
+    );
+    for (const r of auditRows) {
+      if (r.record_type === "contract") {
+        if (r.old_value === "signed" || r.old_value === "active") continue; // signed → active: already billable
+        keepLatest(becameBillableAt, r.record_id, r.created_at);
+      } else if (r.new_value === "active" && r.old_value !== "active") {
+        if (r.old_value === "lead") keepLatest(becameBillableAt, `lead:${r.record_id}`, r.created_at);
+        else keepLatest(clientReactivatedAt, r.record_id, r.created_at);
+      }
+    }
+  } catch (auditErr) {
+    console.error("[contract-invoices] audit trail read failed; catch-up uses created_at/signed_at only:", auditErr);
+  }
+  const latestDay = (instants: (string | null | undefined)[], tz: string): string | null => {
+    let latest: string | null = null;
+    for (const instant of instants) {
+      if (!instant || Number.isNaN(Date.parse(instant))) continue;
+      const day = isoInZone(new Date(instant), tz);
+      if (!latest || day > latest) latest = day;
+    }
+    return latest;
+  };
+
   // Filter to contracts due today for their own billing_frequency (see
-  // isBillingDueOn — for `monthly` this is the unchanged day-of-month rule),
-  // that have actually started, and whose end_date (if any) hasn't passed —
-  // nothing else transitions a contract's status to "expired" automatically
-  // when its end_date arrives, so this cron is the only backstop against
-  // billing past a lapsed term.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // isBillingDueOn — for `monthly` this is the unchanged day-of-month rule)
+  // whose billed cycle falls inside the term (termSkipReason: it starts on/after
+  // start_date and on/before end_date — nothing else transitions a contract's
+  // status to "expired" automatically when its end_date arrives, so this cron
+  // is the only backstop against billing past a lapsed term).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const dueTodayContracts: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orgCanceled = createOrgCanceledResolver(supabase);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const c of ((contracts ?? []) as any[])) {
     if (await orgCanceled(c.org_id)) continue; // canceled orgs get no automated invoices
-    const { date: todayDate } = await orgToday(c.org_id);
+    const { date: todayDate, tz } = await orgToday(c.org_id);
+    // Not columns — read by the schedule math (see BillingContractRow): the
+    // org's calendar for signed_at/created_at, the late-start invoice date and
+    // the reactivation rail.
+    c.time_zone = tz;
+    c.billable_since = latestDay([c.created_at, c.signed_at, becameBillableAt.get(c.id), becameBillableAt.get(`lead:${c.client_id}`)], tz);
+    c.client_active_since = latestDay([clientReactivatedAt.get(c.client_id)], tz);
     // Term vs the BILLED period (advance-shifted), not today — see termSkipReason.
     if (termSkipReason(planContractBilling(c, todayDate, { billNow: false }), c)) continue;
     if (isBillingDueOn(c, todayDate)) dueTodayContracts.push(c);
@@ -182,7 +241,7 @@ export async function GET(request: Request) {
       .is("deleted_at", null)
       .limit(1)
       .maybeSingle();
-    if (!prorationPending(contract, !!liveStub)) continue;
+    if (!prorationPending(contract, !!liveStub, stub)) continue;
 
     const { data: orgTermsRow } = await sb
       .from("organizations")
@@ -291,6 +350,11 @@ export async function GET(request: Request) {
     // ── idempotency: skip if an invoice already exists for this contract
     // inside the billing period. one_time has an unbounded window (both
     // bounds null) — any live invoice on the contract at all blocks it.
+    // The window is the CYCLE's period (its calendar month / quarter / year),
+    // not one invoice date: a late-start invoice dated the day it was created,
+    // a manual Create Invoices dated the click day and the billing-day invoice
+    // all fall inside it, so whichever came first blocks the others even
+    // though their dates differ (the per-date unique index alone wouldn't).
     let existingQuery = sb
       .from("crm_invoices")
       .select("id")
@@ -456,10 +520,11 @@ export async function GET(request: Request) {
       console.error(`[contract-invoices] client activity insert error for contract ${contract.id}:`, activityErr);
     }
 
-    // ── update last_billed_date ───────────────────────────────────────────
+    // ── update last_billed_date (and pin a quarterly/annual grid) ─────────
+    const anchorStamp = billingAnchorStamp(contract, plan);
     await sb
       .from("crm_contracts")
-      .update({ last_billed_date: plan.invoiceDate })
+      .update({ last_billed_date: plan.invoiceDate, ...(anchorStamp ? { billing_anchor_date: anchorStamp } : {}) })
       .eq("id", contract.id);
 
     results.push({ contractId: contract.id, status: "created" });

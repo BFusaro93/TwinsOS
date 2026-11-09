@@ -1,5 +1,6 @@
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
-import { daysBetweenYmd, todayInZone } from "@/lib/time/zone";
+import { todayInZone } from "@/lib/time/zone";
+import { invoiceDaysPastDue } from "@/lib/invoice-status";
 import {
   AR_WRITE_OFF_METHOD,
   ISSUED_INVOICE_STATUSES,
@@ -77,8 +78,8 @@ export const RECEIVABLES_REPORTS: PrebuiltReportDef[] = [
             total_cents: 0,
           };
         const balance = r.balance_cents ?? 0;
-        const anchor = r.due_date ?? r.invoice_date;
-        const daysPastDue = anchor ? daysBetweenYmd(anchor, today) : 0;
+        // Shared aging rule: due date, else invoice date.
+        const daysPastDue = invoiceDaysPastDue({ dueDate: r.due_date, invoiceDate: r.invoice_date }, today);
         if (daysPastDue <= 0) buckets.current_cents += balance;
         else if (daysPastDue <= 30) buckets.d1_30_cents += balance;
         else if (daysPastDue <= 60) buckets.d31_60_cents += balance;

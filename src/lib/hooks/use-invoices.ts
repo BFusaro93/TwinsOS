@@ -10,6 +10,7 @@ import type { CRMInvoice, InvoiceLineItem, CRMPayment } from "@/types/crm-invoic
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { todayInZone } from "@/lib/time/zone";
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
+import type { BulkImportResult } from "@/lib/csv";
 import { computeDueDate, resolveInvoiceTerms } from "@/lib/invoices/due-date";
 import {
   createInvoiceFromJob,
@@ -151,6 +152,7 @@ function mapLineItem(row: any): InvoiceLineItem {
     men: row.men ?? null,
     visitId: row.visit_id ?? null,
     serviceId: row.service_id ?? null,
+    serviceName: row.crm_services?.name ?? null,
     isOtherCharge: !!row.is_other_charge,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -282,7 +284,7 @@ export function useInvoices(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q = (supabase as any)
         .from("crm_invoices")
-        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, default_payment_method, balance_outstanding_cents, balance_prepay_cents, balance_credits_cents, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_contracts(billing_frequency), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable)")
+        .select("*, clients(display_name, billing_address, billing_city, billing_state, billing_zip, invoice_delivery, default_payment_method, balance_outstanding_cents, balance_prepay_cents, balance_credits_cents, saved_payment_method_type, saved_payment_method_summary, autopay_enabled), sales_rep:crm_employees!crm_invoices_sales_rep_id_fkey(first_name,last_name), crm_contracts(billing_frequency), crm_invoice_line_items(id, name, description, total_cents, discount_cents, is_taxable, service_id, sort_order, is_other_charge, crm_services(name))")
         .is("deleted_at", null)
         // `invoice_date` is a DATE, so batch-generated invoices tie in droves.
         // Without a tiebreaker Postgres returns tied rows in physical heap
@@ -676,7 +678,7 @@ export function useBulkImportInvoices() {
   const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -723,23 +725,50 @@ export function useBulkImportInvoices() {
         ((serviceRows ?? []) as any[]).map((s) => [String(s.name).trim().toLowerCase(), s.id as string]),
       );
 
+      // Re-running an import (after an error, a closed tab, or by mistake) must
+      // not duplicate invoices. A row matches a live invoice of the same client
+      // with the same date, total and description — or, when the file has an
+      // invoiceNumber column, the same number and total. Each existing invoice
+      // absorbs at most ONE row, so a file that legitimately holds two
+      // identical invoices still imports the second the first time round.
+      const existingInvoices = await fetchAllRows<{
+        id: string; client_id: string; invoice_date: string; total_cents: number; description: string | null; invoice_number: number | null;
+      }>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("crm_invoices")
+          .select("id, client_id, invoice_date, total_cents, description, invoice_number")
+          .is("deleted_at", null)
+          .order("id")
+      );
+      const dupKey = (clientId: string, date: string, totalCents: number, description: string) =>
+        `${clientId}|${date}|${totalCents}|${description.trim().toLowerCase().replace(/\s+/g, " ")}`;
+      const existingByKey = new Map<string, string[]>();
+      const existingByNumber = new Map<string, { id: string; totalCents: number }>();
+      for (const inv of existingInvoices) {
+        const k = dupKey(inv.client_id, inv.invoice_date, inv.total_cents, inv.description ?? "");
+        existingByKey.set(k, [...(existingByKey.get(k) ?? []), inv.id]);
+        if (inv.invoice_number != null) existingByNumber.set(`${inv.client_id}|${inv.invoice_number}`, { id: inv.id, totalCents: inv.total_cents });
+      }
+      const matchedExisting = new Set<string>();
+
       let created = 0;
-      let skipped = 0;
-      // Row-level notes surfaced to the importer (1-based data-row numbers).
-      const warnings: { row: number; reason: string }[] = [];
+      const failed: BulkImportResult["failed"] = [];
+      const skipped: BulkImportResult["failed"] = [];
+      // Imported, but adjusted (e.g. a paid status brought in as sent).
+      const warnings: BulkImportResult["failed"] = [];
 
       for (const [idx, r] of rows.entries()) {
-        const rowNo = idx + 1;
+        // The CSV's own line number (line 1 is the header), like every other importer.
+        const rowNo = idx + 2;
         const serviceId = serviceByName.get((r.service ?? "").trim().toLowerCase());
         if (!serviceId) {
-          warnings.push({ row: rowNo, reason: `service "${(r.service ?? "").trim()}" is not in your service catalog — row skipped` });
-          skipped++;
+          failed.push({ row: rowNo, error: `service "${(r.service ?? "").trim()}" is not in your service catalog — not imported` });
           continue;
         }
         const nameKey = r.clientName?.trim().toLowerCase() ?? "";
         if (ambiguousNames.has(nameKey)) {
-          warnings.push({ row: rowNo, reason: `more than one client is named "${r.clientName?.trim()}" — row skipped` });
-          skipped++;
+          failed.push({ row: rowNo, error: `more than one client is named "${r.clientName?.trim()}" — not imported` });
           continue;
         }
         const clientId = byName.get(nameKey);
@@ -748,7 +777,18 @@ export function useBulkImportInvoices() {
         // export writes. parseCsvMoneyCents strips "$" and thousands
         // separators: parseFloat("1,250.00") is 1, not 1250.
         const amountCents = parseCsvMoneyCents(r.amount);
-        if (!clientId || !r.description?.trim() || !amountCents) { skipped++; continue; }
+        if (!clientId) {
+          failed.push({ row: rowNo, error: `client "${r.clientName?.trim() ?? ""}" not found — not imported` });
+          continue;
+        }
+        if (!r.description?.trim()) {
+          failed.push({ row: rowNo, error: "description is missing — not imported" });
+          continue;
+        }
+        if (!amountCents) {
+          failed.push({ row: rowNo, error: `amount "${r.amount?.trim() ?? ""}" is missing or not a number — not imported` });
+          continue;
+        }
 
         const discountCents = Math.max(0, parseCsvMoneyCents(r.discount));
         const taxCents = Math.max(0, parseCsvMoneyCents(r.taxAmount));
@@ -772,18 +812,17 @@ export function useBulkImportInvoices() {
           status = rawStatus;
         } else if (rawStatus === "paid" || rawStatus === "partial" || rawStatus === "overdue") {
           status = "sent";
-          warnings.push({ row: rowNo, reason: `status "${rawStatus}" imported as "sent" — record the payment to update it` });
+          warnings.push({ row: rowNo, error: `status "${rawStatus}" imported as "sent" — record the payment to update it` });
         } else {
           status = "draft";
-          warnings.push({ row: rowNo, reason: `unrecognized status "${r.status?.trim()}" imported as "draft"` });
+          warnings.push({ row: rowNo, error: `unrecognized status "${r.status?.trim()}" imported as "draft"` });
         }
 
         // A negative amount (or a discount past the amount) would violate the
         // total_cents >= 0 constraint; report the row rather than aborting the
         // rest of the import part-way.
         if (totalCents < 0) {
-          warnings.push({ row: rowNo, reason: "total is negative (discount exceeds amount) — row skipped" });
-          skipped++;
+          failed.push({ row: rowNo, error: "total is negative (discount exceeds amount) — not imported" });
           continue;
         }
 
@@ -792,8 +831,24 @@ export function useBulkImportInvoices() {
         const invoiceDate = r.invoiceDate?.trim() ? normalizeCsvDate(r.invoiceDate) : todayInZone(orgTimeZone);
         const importedDueDate = r.dueDate?.trim() ? normalizeCsvDate(r.dueDate) : null;
         if (!invoiceDate || (r.dueDate?.trim() && !importedDueDate)) {
-          warnings.push({ row: rowNo, reason: `date "${(!invoiceDate ? r.invoiceDate : r.dueDate)?.trim()}" is not a valid date (use YYYY-MM-DD or M/D/YYYY) — row skipped` });
-          skipped++;
+          failed.push({ row: rowNo, error: `date "${(!invoiceDate ? r.invoiceDate : r.dueDate)?.trim()}" is not a valid date (use YYYY-MM-DD or M/D/YYYY) — not imported` });
+          continue;
+        }
+
+        // Already imported (a retry, or a re-import of an export)?
+        const csvNumber = r.invoiceNumber?.trim() ? parseInt(r.invoiceNumber.replace(/^#/, "").trim(), 10) : NaN;
+        const byNumber = Number.isFinite(csvNumber) ? existingByNumber.get(`${clientId}|${csvNumber}`) : undefined;
+        const sameNumber = byNumber && byNumber.totalCents === totalCents && !matchedExisting.has(byNumber.id) ? byNumber.id : null;
+        const sameDetails = (existingByKey.get(dupKey(clientId, invoiceDate, totalCents, r.description)) ?? []).find((id) => !matchedExisting.has(id));
+        const duplicateOf = sameNumber ?? sameDetails ?? null;
+        if (duplicateOf) {
+          matchedExisting.add(duplicateOf);
+          skipped.push({
+            row: rowNo,
+            error: sameNumber
+              ? `invoice #${csvNumber} for "${r.clientName?.trim()}" already exists — skipped`
+              : `an invoice for "${r.clientName?.trim()}" on ${invoiceDate} with this description and total already exists — skipped`,
+          });
           continue;
         }
         // A blank due date derives from the client's/org's terms — a null
@@ -825,13 +880,9 @@ export function useBulkImportInvoices() {
         if (error || !invoice) {
           // Report the row and keep going — throwing here left earlier rows
           // created with no result ever shown to the importer.
-          warnings.push({ row: rowNo, reason: `could not be imported: ${error?.message ?? "insert failed"}` });
-          skipped++;
+          failed.push({ row: rowNo, error: `could not be imported: ${error?.message ?? "insert failed"}` });
           continue;
         }
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: invoiceNumber } = await (supabase as any).rpc("assign_invoice_number", { p_invoice_id: invoice.id });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: itemErr } = await (supabase as any).from("crm_invoice_line_items").insert({
@@ -844,8 +895,24 @@ export function useBulkImportInvoices() {
           is_taxable: taxCents > 0,
         });
         // An invoice header with no line item would recalculate to $0 on its
-        // first edit — surface the failure instead of importing it silently.
-        if (itemErr) throw itemErr;
+        // first edit. Throwing here used to abort the rest of the file AND leave
+        // that empty header behind; now the header is soft-deleted (it has no
+        // number yet — numbers are assigned below) and the row is reported.
+        if (itemErr) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { error: undoErr } = await (supabase as any)
+            .from("crm_invoices")
+            .update({ deleted_at: new Date().toISOString() })
+            .eq("id", invoice.id);
+          failed.push({
+            row: rowNo,
+            error: `line item could not be saved (${itemErr.message ?? "insert failed"}) — not imported${undoErr ? `; the empty draft invoice could not be removed: ${undoErr.message}` : ""}`,
+          });
+          continue;
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: invoiceNumber } = await (supabase as any).rpc("assign_invoice_number", { p_invoice_id: invoice.id });
 
         // Log to the client's activity timeline (same as useAssignInvoiceNumber).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -860,7 +927,7 @@ export function useBulkImportInvoices() {
         created++;
       }
 
-      return { created, skipped, warnings };
+      return { succeeded: created, failed, skipped, warnings };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
@@ -1336,6 +1403,9 @@ export function useUpdatePayment() {
       for (const n of result?.newlyPaid ?? []) {
         fireAutomationTrigger({ triggerType: "invoice_paid", clientId: n.clientId ?? vars.clientId, invoiceId: n.invoiceId });
       }
+      // Updates, voids or pushes this payment's QuickBooks side to match the edit
+      // (crm_update_payment flags changed links and queues removed ones).
+      fireQuickBooksPaymentSync(vars.id);
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["clients", vars.clientId] });
@@ -1723,7 +1793,7 @@ export function useBulkImportPayments() {
   const orgTimeZone = useOrgTimeZone();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (rows: Record<string, string>[]) => {
+    mutationFn: async (rows: Record<string, string>[]): Promise<BulkImportResult> => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -1780,18 +1850,42 @@ export function useBulkImportPayments() {
           .map((i: { invoice_number: number; client_id: string; id: string }): [string, string] => [`${i.client_id}:${i.invoice_number}`, i.id])
       );
 
+      // Re-running an import must not record the same payment twice: a row
+      // matching a live payment of the same client, amount, date and
+      // reference / check # is skipped. Each existing payment absorbs at most
+      // ONE row, so two genuinely identical payments in one file still both
+      // import the first time.
+      const existingPayments = await fetchAllRows<{
+        id: string; client_id: string; amount_cents: number; payment_date: string; reference: string | null;
+      }>(() =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("crm_payments")
+          .select("id, client_id, amount_cents, payment_date, reference")
+          .is("deleted_at", null)
+          .order("id")
+      );
+      const paymentKey = (clientId: string, amountCents: number, date: string, reference: string | null | undefined) =>
+        `${clientId}|${amountCents}|${date}|${(reference ?? "").trim().toLowerCase()}`;
+      const existingByKey = new Map<string, string[]>();
+      for (const p of existingPayments) {
+        const k = paymentKey(p.client_id, p.amount_cents, p.payment_date, p.reference);
+        existingByKey.set(k, [...(existingByKey.get(k) ?? []), p.id]);
+      }
+
       let created = 0;
-      let skipped = 0;
-      /** Rows that were imported but couldn't be (fully) applied to their
-       * invoice, or that failed outright — 1-based CSV data row numbers. */
-      const failures: { row: number; reason: string }[] = [];
+      // CSV line numbers (line 1 is the header), like every other importer.
+      const failed: BulkImportResult["failed"] = [];
+      const skipped: BulkImportResult["failed"] = [];
+      /** Imported, but not (fully) applied to the invoice named — kept as account credit. */
+      const warnings: BulkImportResult["failed"] = [];
       const touchedClientIds = new Set<string>();
 
       for (const [index, r] of rows.entries()) {
-        const rowNumber = index + 1;
+        const rowNumber = index + 2;
         const { clientId, reason: clientReason } = resolveClient(r);
         if (clientReason) {
-          failures.push({ row: rowNumber, reason: clientReason });
+          failed.push({ row: rowNumber, error: clientReason });
           continue;
         }
         // parseFloat("1,234.50") was 1 and parseFloat("$500") was NaN: an Excel /
@@ -1799,17 +1893,29 @@ export function useBulkImportPayments() {
         // the invoice importer ($ and thousands separators stripped).
         const rawAmount = (r.amount ?? "").trim();
         const amountCents = parseCsvMoneyCents(rawAmount);
-        if (!clientId || amountCents <= 0) {
-          if (clientId && rawAmount) {
-            failures.push({ row: rowNumber, reason: `Amount "${rawAmount}" is not a positive dollar amount — not imported` });
-          } else {
-            skipped++;
-          }
+        if (!clientId) {
+          failed.push({ row: rowNumber, error: `Client "${r.clientName?.trim() ?? ""}" not found — not imported` });
+          continue;
+        }
+        if (amountCents <= 0) {
+          failed.push({
+            row: rowNumber,
+            error: rawAmount ? `Amount "${rawAmount}" is not a positive dollar amount — not imported` : "Amount is missing — not imported",
+          });
           continue;
         }
         const paymentDate = r.paymentDate?.trim() ? normalizeCsvDate(r.paymentDate) : todayInZone(orgTimeZone);
         if (!paymentDate) {
-          failures.push({ row: rowNumber, reason: `Date "${r.paymentDate?.trim()}" is not a valid date (use YYYY-MM-DD or M/D/YYYY) — not imported` });
+          failed.push({ row: rowNumber, error: `Date "${r.paymentDate?.trim()}" is not a valid date (use YYYY-MM-DD or M/D/YYYY) — not imported` });
+          continue;
+        }
+        const dupCandidates = existingByKey.get(paymentKey(clientId, amountCents, paymentDate, r.reference));
+        if (dupCandidates?.length) {
+          dupCandidates.shift();
+          skipped.push({
+            row: rowNumber,
+            error: `A ${formatCents(amountCents)} payment on ${paymentDate}${r.reference?.trim() ? ` (ref ${r.reference.trim()})` : ""} is already recorded for this client — skipped`,
+          });
           continue;
         }
 
@@ -1817,7 +1923,7 @@ export function useBulkImportPayments() {
         const invoiceNumber = r.invoiceNumber ? parseInt(r.invoiceNumber, 10) : null;
         const invoiceId = invoiceNumber ? invoiceByNumberAndClient.get(`${clientId}:${invoiceNumber}`) ?? null : null;
         if (invoiceNumber && !invoiceId) {
-          failures.push({ row: rowNumber, reason: `Invoice #${invoiceNumber} not found for this client — recorded as account credit` });
+          warnings.push({ row: rowNumber, error: `Invoice #${invoiceNumber} not found for this client — recorded as account credit` });
         }
 
         // Inserted as unapplied credit first; the application below goes
@@ -1842,7 +1948,7 @@ export function useBulkImportPayments() {
           memo: r.memo?.trim() || null,
         }).select("id").single();
         if (error) {
-          failures.push({ row: rowNumber, reason: `Not imported: ${error.message ?? "insert failed"}` });
+          failed.push({ row: rowNumber, error: `Not imported: ${error.message ?? "insert failed"}` });
           continue;
         }
         created++;
@@ -1856,9 +1962,9 @@ export function useBulkImportPayments() {
             p_amount_cents: amountCents,
           });
           if (applyErr) {
-            failures.push({
+            warnings.push({
               row: rowNumber,
-              reason: `Invoice #${invoiceNumber}: ${applyErr.message ?? "could not apply"} — recorded as account credit`,
+              error: `Invoice #${invoiceNumber}: ${applyErr.message ?? "could not apply"} — recorded as account credit`,
             });
             continue;
           }
@@ -1871,12 +1977,12 @@ export function useBulkImportPayments() {
               .from("crm_payments")
               .update({ invoice_id: invoiceId })
               .eq("id", payment.id);
-            if (linkErr) failures.push({ row: rowNumber, reason: `Applied, but linking to invoice #${invoiceNumber} failed: ${linkErr.message}` });
+            if (linkErr) warnings.push({ row: rowNumber, error: `Applied, but linking to invoice #${invoiceNumber} failed: ${linkErr.message}` });
           }
           if (applied < amountCents) {
-            failures.push({
+            warnings.push({
               row: rowNumber,
-              reason: `Invoice #${invoiceNumber} only had ${formatCents(applied)} open — ${formatCents(amountCents - applied)} recorded as account credit`,
+              error: `Invoice #${invoiceNumber} only had ${formatCents(applied)} open — ${formatCents(amountCents - applied)} recorded as account credit`,
             });
           }
         }
@@ -1887,7 +1993,7 @@ export function useBulkImportPayments() {
         await (supabase.rpc as any)("sync_client_balance", { p_client_id: clientId });
       }
 
-      return { created, skipped, failures };
+      return { succeeded: created, failed, skipped, warnings };
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
@@ -1987,6 +2093,8 @@ export function useApplyCreditToInvoice() {
       qc.invalidateQueries({ queryKey: ["crm-invoices"] });
       qc.invalidateQueries({ queryKey: ["crm-payments"] });
       invalidateClientBalances(qc);
+      // The applied credit (or prepayment) is new money on that invoice for QuickBooks.
+      if ((result?.appliedCents ?? 0) > 0) fireQuickBooksPaymentSync(vars.paymentId);
     },
   });
 }

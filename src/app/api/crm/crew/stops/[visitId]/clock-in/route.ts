@@ -269,9 +269,13 @@ export async function POST(
   // the confirmation gate, stock depletion and the compliance report would all
   // silently skip it. Load them now; a no-op when dispatch already did. The
   // crew login can't write chemical applications, so this uses the service role
-  // (ownership of the stop was proven above). Best-effort.
+  // (ownership of the stop was proven above), stamping the crew login as creator.
+  // Best-effort: a failure is logged, never blocks the clock-in.
   for (const id of siblingIds) {
-    await loadServiceChemicalsForVisit(createServiceClient(), id).catch(() => 0);
+    await loadServiceChemicalsForVisit(createServiceClient(), id, { actingUserId: user.id }).catch((err: unknown) => {
+      log.warn("chemical preload failed", { visitId: id, error: (err as { message?: string } | null)?.message ?? String(err) });
+      return 0;
+    });
   }
 
   // If nobody tapped Start Day, the first job opens the day so payroll still

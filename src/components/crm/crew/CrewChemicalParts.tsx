@@ -229,7 +229,8 @@ export function AddChemicalForm({
               step="any"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              placeholder={t("Amount used")}
+              placeholder={t("Concentrate used")}
+              aria-label={t("Concentrate used")}
               className="h-11 w-36 text-base"
             />
             <Select value={unitId} onValueChange={setUnitId}>
@@ -239,6 +240,7 @@ export function AddChemicalForm({
               </SelectContent>
             </Select>
           </div>
+          <p className="text-xs text-muted-foreground">{t("The product itself, before mixing — not the finished spray.")}</p>
           <ChemicalApplyFields
             chemical={{ applicationMethodId: null, targetIds: [], areasTreatedIds: [] }}
             catalog={catalog}
@@ -257,7 +259,7 @@ export function AddChemicalForm({
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="h-11 flex-1" onClick={() => setOpen(false)}>{t("Cancel")}</Button>
             <Button type="button" className="h-11 flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={submit} disabled={add.isPending}>
-              {add.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save chemical"}
+              {add.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : t("Save chemical")}
             </Button>
           </div>
         </>

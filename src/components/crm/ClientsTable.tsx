@@ -150,13 +150,15 @@ function BulkEditDialog({
     // Only "inactive" here: cancel / lost / activate carry side effects (reason,
     // closed_at, client_since, automations, timeline) that a raw column write
     // skips — use the dedicated bulk Cancel / Activate / Close-as-lost actions.
-    { key: "status",       label: "Status",       options: ["inactive"] },
+    { key: "status",       label: "Status",       options: ["inactive"], hint: "Leads and lost leads in the selection are left as they are." },
     { key: "account_type", label: "Account Type", options: ["residential", "commercial"] },
     { key: "source",       label: "Source",       options: [] },
     { key: "priority",     label: "Priority",     options: ["low", "normal", "high"] },
     { key: "ok_to_email",  label: "OK to Email",  options: ["true", "false"] },
-    { key: "do_not_market", label: "Do Not Market", options: ["true", "false"] },
-  ];
+    // On only: clearing it in bulk would re-subscribe clients who unsubscribed
+    // (the bulk route refuses it). Turn it off on a single client instead.
+    { key: "do_not_market", label: "Do Not Market", options: ["true"], hint: "Can only be turned on in bulk. To turn it off, edit the client individually." },
+  ] as { key: string; label: string; options: string[]; hint?: string }[];
 
   const selected = FIELDS.find((f) => f.key === field);
 
@@ -201,6 +203,7 @@ function BulkEditDialog({
               ) : (
                 <Input className="mt-1" value={value} onChange={(e) => setValue(e.target.value)} placeholder={`New ${selected.label.toLowerCase()}…`} />
               )}
+              {selected.hint && <p className="mt-1 text-xs text-muted-foreground">{selected.hint}</p>}
             </div>
           )}
         </div>
