@@ -34,6 +34,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
+import { resultCellColors } from "@/lib/reports/cell-colors";
+import { aggregateExportRows, type ViewAggregateFn } from "@/lib/reports/table-view";
 import { exportReportPDF } from "@/lib/reports/export-pdf";
 import type { ReportExportChartInput } from "@/lib/reports/export-pdf";
 import {
@@ -108,6 +110,9 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
   const [kpiColumn, setKpiColumn] = useState("");
   const [formatRules, setFormatRules] = useState<FormatRule[]>([]);
   const [colorSpectrumColumns, setColorSpectrumColumns] = useState<string[]>([]);
+  // Column summaries picked in the table's header menu; saved with the analysis
+  // and added to every export.
+  const [tableAggregates, setTableAggregates] = useState<Record<string, ViewAggregateFn>>({});
   const [headerVisual, setHeaderVisual] = useState<VisualSpec | undefined>(undefined);
   const [headerVisualTitle, setHeaderVisualTitle] = useState("");
   const [headerChartResult, setHeaderChartResult] = useState<ReportResult | undefined>(undefined);
@@ -137,6 +142,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     setKpiColumn(existing.kpiColumn ?? "");
     setFormatRules(existing.formatRules ?? []);
     setColorSpectrumColumns(existing.colorSpectrumColumns ?? []);
+    setTableAggregates(existing.tableAggregates ?? {});
     setHeaderVisual(existing.headerVisual ?? undefined);
     setHeaderVisualTitle(existing.headerVisualTitle ?? "");
     setHydrated(true);
@@ -238,6 +244,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           kpiColumn: kpiColumn || null,
           formatRules,
           colorSpectrumColumns,
+          tableAggregates,
           headerVisual: headerVisual ?? null,
           headerVisualTitle: headerVisual ? headerVisualTitle || null : null,
         });
@@ -252,6 +259,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           kpiColumn: kpiColumn || null,
           formatRules,
           colorSpectrumColumns,
+          tableAggregates,
           headerVisual: headerVisual ?? null,
           headerVisualTitle: headerVisual ? headerVisualTitle || null : null,
         });
@@ -281,19 +289,26 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     downloadCSV(
       `${name.trim() || "analysis"}.csv`,
       result.columns.map((c) => c.label),
-      result.rows.map((row) => result.columns.map((c) => csvCellValue(row[c.key], c.type)))
+      [
+        ...result.rows.map((row) => result.columns.map((c) => csvCellValue(row[c.key], c.type))),
+        ...aggregateExportRows(result.columns, result.rows, tableAggregates, csvCellValue),
+      ]
     );
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     const result = runAnalysis.data;
     if (!result) return;
     try {
-      downloadXLSX(`${name.trim() || "analysis"}.xlsx`, [
+      await downloadXLSX(`${name.trim() || "analysis"}.xlsx`, [
         {
           name: name.trim() || "Analysis",
           headers: result.columns.map((c) => c.label),
-          rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+          rows: [
+            ...result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+            ...aggregateExportRows(result.columns, result.rows, tableAggregates, exportCellValue),
+          ],
+          cellColors: resultCellColors(result, formatRules, colorSpectrumColumns),
         },
       ]);
     } catch (err) {
@@ -319,6 +334,8 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
             heading: "",
             columns: result.columns.map((c) => c.label),
             rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
+            cellColors: resultCellColors(result, formatRules, colorSpectrumColumns),
+            footers: aggregateExportRows(result.columns, result.rows, tableAggregates, formatCellValue),
           },
         ],
         charts.length > 0 ? charts : undefined
@@ -769,6 +786,8 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
               result={runAnalysis.data}
               formatRules={formatRules}
               colorSpectrumColumns={colorSpectrumColumns}
+              onAggregatesChange={setTableAggregates}
+              initialAggregates={tableAggregates}
             />
           ) : visualSpec ? (
             <Card>

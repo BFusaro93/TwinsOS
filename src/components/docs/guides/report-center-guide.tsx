@@ -301,6 +301,12 @@ export function ReportCenterGuide() {
             <strong>Exports carry the totals row.</strong> CSV, Excel, and PDF downloads end with
             the same Totals row the on-screen table shows.
           </li>
+          <li>
+            <strong>Exports keep the cell colors.</strong> Conditional-format rules and the color
+            spectrum a report or saved analysis is set up with are filled into the Excel and PDF
+            downloads and the scheduled sends, the same colors the screen shows. CSV has no
+            colors.
+          </li>
         </ul>
       </Section>
 
@@ -362,10 +368,19 @@ export function ReportCenterGuide() {
         </ul>
         <p>
           Every report table also has a menu on each column header: <strong>sort</strong>,{" "}
-          <strong>filter</strong>, <strong>format</strong> (alignment, number, currency, percent,
+          <strong>filter</strong>, <strong>aggregate</strong> (Sum, Average, Standard Deviation,
+          Count, Distinct Count, Maximum, Minimum — shown as a footer row under the Totals row),{" "}
+          <strong>format</strong> (alignment, number, currency, percent,
           timespan, true/false, color spectrum, bar gauges), <strong>merge duplicate cells</strong>{" "}
           and <strong>hide column</strong>. These change only what&apos;s on screen — exports and the
-          saved report stay as run — and <em>Reset view</em> undoes them. Filters apply to the rows
+          saved report stay as run, so a color spectrum or bar gauge picked here isn&apos;t in
+          downloads — and <em>Reset view</em> undoes them. The exception is <strong>aggregate</strong>{" "}
+          footers: on the report page and the analysis builder, CSV, Excel and PDF downloads add
+          the same summary rows, computed over the whole result rather than the filtered view
+          (not on dashboards). In the analysis builder the aggregates you pick are{" "}
+          <strong>saved with the analysis</strong>, so they come back when you reopen it and are
+          added to its scheduled Excel and PDF sends (left off a partial, row-capped result, like
+          the Totals row). Filters apply to the rows
           already loaded, and the totals row follows them.
         </p>
         <p>

@@ -8,6 +8,7 @@ import { runAnalysis } from "@/lib/reports/engine";
 import { buildGroupedPdfSection } from "@/lib/reports/pdf-grouping";
 import { buildTotalsRow, exportRowsWithTotals } from "@/lib/reports/export-rows";
 import { xlsxBuffer } from "@/lib/xlsx-export";
+import { resultCellColors } from "@/lib/reports/cell-colors";
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
 import type { ReportColumnDef, ReportFieldType, ReportResult } from "@/types/crm-reports";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -124,7 +125,14 @@ export async function renderScheduledReport(
     const rows = result.truncated
       ? result.rows.map((row) => result.columns.map((c) => exportCellValueServer(row[c.key], c.type, timeZone)))
       : exportRowsWithTotals(result, (v, t) => exportCellValueServer(v, t, timeZone));
-    const content = xlsxBuffer([{ name: def.name, headers: result.columns.map((c) => c.label), rows }]);
+    const content = await xlsxBuffer([
+      {
+        name: def.name,
+        headers: result.columns.map((c) => c.label),
+        rows,
+        cellColors: resultCellColors(result, def.formatRules, undefined),
+      },
+    ]);
     return {
       content,
       filename: `${baseName}.xlsx`,
@@ -210,6 +218,7 @@ async function renderScheduledReportPdf(
           rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => formatCellValueServer(row[c.key], c.type, timeZone))),
           totals: grouped || result.truncated ? undefined : buildTotalsRow(result, (v, t) => formatCellValueServer(v, t, timeZone)) ?? undefined,
           grouped,
+          cellColors: grouped ? undefined : resultCellColors(result, def.formatRules, undefined),
         },
       ],
     })

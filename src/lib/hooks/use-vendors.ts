@@ -3,6 +3,7 @@ import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
 import { mapVendor } from "@/lib/supabase/mappers";
 import type { BulkImportResult } from "@/lib/csv";
+import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
 import type { Vendor } from "@/types";
 
 export function useVendors() {
@@ -10,12 +11,11 @@ export function useVendors() {
     queryKey: ["vendors"],
     queryFn: async () => {
       const supabase = createClient();
-      const { data, error } = await supabase
-        .from("vendors")
-        .select("*")
-        .is("deleted_at", null)
-        .order("name");
-      if (error) throw error;
+      // Paged: a bare select stops at PostgREST's 1000-row cap, so past 1000 rows the oldest silently vanish from the list.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await fetchAllRows<any>(() =>
+        supabase.from("vendors").select("*").is("deleted_at", null).order("name")
+      );
       return (data.map(mapVendor)) as Vendor[];
     },
   });

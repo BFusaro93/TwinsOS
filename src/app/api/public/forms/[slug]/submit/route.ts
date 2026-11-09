@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { submitFormResponse } from "@/lib/forms/submit-form-response";
@@ -64,6 +65,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const turnstileResult = await verifyTurnstileToken(body.turnstileToken, forwardedFor?.split(",")[0]?.trim());
   if (!turnstileResult.ok) {
     return NextResponse.json({ error: turnstileResult.error }, { status: 400 });
+  }
+
+  // Exact-duplicate guard. Matching an existing client is a SELECT followed by an INSERT, so
+  // a double-click or client retry (identical payload, milliseconds apart) made every copy
+  // miss the others and create its own lead, client contact and ticket: the 2026-11-08 stress
+  // sweep got up to 5 clients for one email. The limiter is an atomic counter, so exactly one
+  // of N identical in-flight submissions proceeds and the rest are acknowledged without
+  // re-processing. Keyed on the full payload, so a different second message from the same
+  // person is never dropped. (Fixed 5s window: a pair straddling a boundary can still both
+  // pass; that is rare and far narrower than before.)
+  const payloadKey = createHash("sha256")
+    .update(JSON.stringify(Object.keys(formData).sort().map((k) => [k, formData[k]])))
+    .digest("hex");
+  if (!(await checkAuthRateLimit(`form-dup:${form.id}:${payloadKey}`, 1, 5))) {
+    return NextResponse.json({ ok: true });
   }
 
   // submitFormResponse matches/creates clients, tickets, tags, and fires

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { randomBytes } from "crypto";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { rejectWithoutFormsPermission } from "@/lib/auth/forms-permission";
 import { getEffectiveOrgId } from "@/lib/supabase/effective-org";
 
@@ -120,10 +121,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // is the one action that can trigger that, so resolve it here rather than
   // surfacing a raw constraint-violation error the user has no way to act
   // on — there's no slug editor in the UI.
+  //
+  // The collision lookup MUST use the service client: published slugs are one
+  // global namespace, but the caller's RLS view only contains their own org's
+  // forms (the old anon/public read policies that used to make other orgs'
+  // published forms visible here were dropped on 2026-11-08 because they
+  // exposed every tenant's form settings). It returns only an id, never data.
+  let baseSlug: string | null = null;
   if (allowed.status === "published") {
     const { data: form } = await db.from("crm_forms").select("slug").eq("id", id).eq("org_id", orgId).maybeSingle();
     if (form?.slug) {
-      const { data: collision } = await db
+      baseSlug = form.slug as string;
+      const { data: collision } = await createServiceClient()
         .from("crm_forms")
         .select("id")
         .eq("slug", form.slug)
@@ -132,21 +141,34 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         .neq("id", id)
         .maybeSingle();
       if (collision) {
-        allowed.slug = `${form.slug}-${Date.now().toString(36)}`;
+        allowed.slug = `${form.slug}-${randomBytes(3).toString("hex")}`;
       }
     }
   }
 
-  const { data, error } = await db
-    .from("crm_forms")
-    .update(allowed)
-    .eq("id", id)
-    .eq("org_id", orgId)
-    .select()
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  // The lookup above is check-then-act: two orgs publishing the same name in the
+  // same instant both see "free" and one then hits crm_forms_slug_published_key
+  // (23505). Re-suffix and retry instead of surfacing the constraint error.
+  let attempt = 0;
+  for (;;) {
+    const { data, error } = await db
+      .from("crm_forms")
+      .update(allowed)
+      .eq("id", id)
+      .eq("org_id", orgId)
+      .select()
+      .single();
+    if (!error) return NextResponse.json(data);
+    if (error.code === "23505" && baseSlug && attempt < 3) {
+      allowed.slug = `${baseSlug}-${randomBytes(3).toString("hex")}`;
+      attempt++;
+      continue;
+    }
+    if (error.code === "23505") {
+      return NextResponse.json({ error: "Another form already uses this address. Rename the form and publish again." }, { status: 409 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
 
 // DELETE /api/crm/forms/[id]

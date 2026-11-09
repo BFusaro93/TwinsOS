@@ -16,7 +16,9 @@ import {
 } from "@/lib/reports/run-scheduled";
 import { xlsxBuffer } from "@/lib/xlsx-export";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import type { AnalysisConfig, ReportFieldType } from "@/types/crm-reports";
+import { resultCellColors } from "@/lib/reports/cell-colors";
+import { aggregateExportRows, type ViewAggregateFn } from "@/lib/reports/table-view";
+import type { AnalysisConfig, FormatRule, ReportFieldType } from "@/types/crm-reports";
 
 /**
  * Runs a SAVED custom analysis for a schedule and renders it. `config` must be
@@ -37,6 +39,11 @@ export async function renderScheduledAnalysis(
     dateColumn: string | null;
     dateWindow: DateWindow | null;
     now: Date;
+    /** The saved analysis's cell coloring — same as on screen. */
+    formatRules?: FormatRule[];
+    colorSpectrumColumns?: string[];
+    /** The saved analysis's column footer summaries. */
+    tableAggregates?: Record<string, ViewAggregateFn>;
   }
 ): Promise<RenderedScheduledReport> {
   const { name, orgId, userId, format } = input;
@@ -80,7 +87,17 @@ export async function renderScheduledAnalysis(
     const rows = result.truncated
       ? result.rows.map((row) => result.columns.map((c) => exportCellValueServer(row[c.key], c.type, timeZone)))
       : exportRowsWithTotals(result, (v, t) => exportCellValueServer(v, t, timeZone));
-    const content = xlsxBuffer([{ name: name.slice(0, 31) || "Analysis", headers: result.columns.map((c) => c.label), rows }]);
+    const content = await xlsxBuffer([
+      {
+        name: name.slice(0, 31) || "Analysis",
+        headers: result.columns.map((c) => c.label),
+        // Like the totals row, summaries are left off a partial (row-capped) result.
+        rows: result.truncated
+          ? rows
+          : [...rows, ...aggregateExportRows(result.columns, result.rows, input.tableAggregates ?? {}, (v, t) => exportCellValueServer(v, t, timeZone))],
+        cellColors: resultCellColors(result, input.formatRules, input.colorSpectrumColumns),
+      },
+    ]);
     return { content, filename: `${baseName}.xlsx`, ...meta };
   }
 
@@ -104,6 +121,11 @@ export async function renderScheduledAnalysis(
           rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => fmt(row[c.key], c.type))),
           totals: grouped || result.truncated ? undefined : buildTotalsRow(result, fmt) ?? undefined,
           grouped,
+          cellColors: grouped ? undefined : resultCellColors(result, input.formatRules, input.colorSpectrumColumns),
+          footers:
+            grouped || result.truncated
+              ? undefined
+              : aggregateExportRows(result.columns, result.rows, input.tableAggregates ?? {}, fmt),
         },
       ],
     })

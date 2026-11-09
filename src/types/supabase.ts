@@ -4407,6 +4407,7 @@ export type Database = {
       crm_custom_reports: {
         Row: {
           color_spectrum_columns: string[]
+          table_aggregates: Json
           config: Json
           created_at: string
           created_by: string | null
@@ -4426,6 +4427,7 @@ export type Database = {
         }
         Insert: {
           color_spectrum_columns?: string[]
+          table_aggregates?: Json
           config?: Json
           created_at?: string
           created_by?: string | null
@@ -4445,6 +4447,7 @@ export type Database = {
         }
         Update: {
           color_spectrum_columns?: string[]
+          table_aggregates?: Json
           config?: Json
           created_at?: string
           created_by?: string | null
@@ -5677,6 +5680,7 @@ export type Database = {
       crm_invoices: {
         Row: {
           amount_paid_cents: number
+          auto_bill_period_start: string | null
           applied_discount_id: string | null
           balance_cents: number
           client_id: string
@@ -5726,6 +5730,7 @@ export type Database = {
         }
         Insert: {
           amount_paid_cents?: number
+          auto_bill_period_start?: string | null
           applied_discount_id?: string | null
           balance_cents?: number
           client_id: string
@@ -5775,6 +5780,7 @@ export type Database = {
         }
         Update: {
           amount_paid_cents?: number
+          auto_bill_period_start?: string | null
           applied_discount_id?: string | null
           balance_cents?: number
           client_id?: string

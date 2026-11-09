@@ -1,4 +1,4 @@
-import type { ReportColumnDef, ReportFieldType, ReportResultRow } from "@/types/crm-reports";
+import type { ViewAggregateFnName, ReportColumnDef, ReportFieldType, ReportResultRow } from "@/types/crm-reports";
 
 // ============================================================
 // Display-only view state for a rendered report table — the
@@ -38,6 +38,19 @@ export interface ViewColumnFormat {
   bars?: boolean;
 }
 
+/** A per-column summary shown in a footer row (SA's header "Aggregate" menu). */
+export type ViewAggregateFn = ViewAggregateFnName;
+
+export const AGGREGATE_FNS: { value: ViewAggregateFn; label: string }[] = [
+  { value: "sum", label: "Sum" },
+  { value: "avg", label: "Average" },
+  { value: "stddev", label: "Standard Deviation" },
+  { value: "count", label: "Count" },
+  { value: "distinct", label: "Distinct Count" },
+  { value: "max", label: "Maximum" },
+  { value: "min", label: "Minimum" },
+];
+
 export interface TableViewState {
   sort: { key: string; dir: "asc" | "desc" } | null;
   filters: Record<string, ViewFilter>;
@@ -45,6 +58,8 @@ export interface TableViewState {
   formats: Record<string, ViewColumnFormat>;
   /** Columns whose repeated values show once (consecutive duplicates blanked). */
   merged: string[];
+  /** Footer summary picked per column. */
+  aggregates: Record<string, ViewAggregateFn>;
 }
 
 export const EMPTY_VIEW: TableViewState = {
@@ -53,6 +68,7 @@ export const EMPTY_VIEW: TableViewState = {
   hidden: [],
   formats: {},
   merged: [],
+  aggregates: {},
 };
 
 export function isViewActive(v: TableViewState): boolean {
@@ -61,7 +77,8 @@ export function isViewActive(v: TableViewState): boolean {
     v.hidden.length > 0 ||
     v.merged.length > 0 ||
     Object.keys(v.filters).length > 0 ||
-    Object.keys(v.formats).length > 0
+    Object.keys(v.formats).length > 0 ||
+    Object.keys(v.aggregates).length > 0
   );
 }
 
@@ -271,4 +288,104 @@ export function numericRange(rows: ReportResultRow[], key: string): { min: numbe
     }
   }
   return min === Infinity ? null : { min, max };
+}
+
+/** Aggregate functions a column of this type supports: numbers get all of
+ *  them, everything else can only be counted. */
+export function aggregateFnsFor(type: ReportFieldType): { value: ViewAggregateFn; label: string }[] {
+  return isNumericType(type)
+    ? AGGREGATE_FNS
+    : AGGREGATE_FNS.filter((f) => f.value === "count" || f.value === "distinct");
+}
+
+/** One column's aggregate over `rows`; null when there is nothing to compute
+ *  it from (e.g. an average of no numbers). Blank cells are skipped. */
+export function computeAggregate(rows: ReportResultRow[], key: string, fn: ViewAggregateFn): number | null {
+  if (fn === "count") {
+    let n = 0;
+    for (const row of rows) if (!isBlank(row[key])) n += 1;
+    return n;
+  }
+  if (fn === "distinct") {
+    const seen = new Set<string>();
+    for (const row of rows) if (!isBlank(row[key])) seen.add(String(row[key]));
+    return seen.size;
+  }
+  const nums: number[] = [];
+  for (const row of rows) {
+    const v = row[key];
+    if (typeof v === "number" && Number.isFinite(v)) nums.push(v);
+  }
+  if (nums.length === 0) return null;
+  const sum = nums.reduce((a, b) => a + b, 0);
+  switch (fn) {
+    case "sum":
+      return sum;
+    case "avg":
+      return sum / nums.length;
+    case "stddev": {
+      // Sample standard deviation (n - 1); a single value has none.
+      if (nums.length < 2) return null;
+      const mean = sum / nums.length;
+      return Math.sqrt(nums.reduce((a, b) => a + (b - mean) ** 2, 0) / (nums.length - 1));
+    }
+    case "max":
+      return Math.max(...nums);
+    case "min":
+      return Math.min(...nums);
+    default:
+      return null;
+  }
+}
+
+/** One footer row per distinct function in use, in menu order: its label and a
+ *  value for each column that picked it. */
+export function aggregateFooters(
+  columns: ReportColumnDef[],
+  rows: ReportResultRow[],
+  aggregates: Record<string, ViewAggregateFn>
+): { fn: ViewAggregateFn; label: string; values: Record<string, number | null> }[] {
+  const out: { fn: ViewAggregateFn; label: string; values: Record<string, number | null> }[] = [];
+  for (const { value: fn, label } of AGGREGATE_FNS) {
+    const keys = columns.filter((c) => aggregates[c.key] === fn).map((c) => c.key);
+    if (keys.length === 0) continue;
+    out.push({ fn, label, values: Object.fromEntries(keys.map((k) => [k, computeAggregate(rows, k, fn)])) });
+  }
+  return out;
+}
+
+/** Display text for an aggregate value: counts are whole numbers, everything
+ *  else follows the column's own formatting (formatCell is the caller's). */
+export function formatAggregateValue(
+  value: number | null,
+  fn: ViewAggregateFn,
+  type: ReportFieldType,
+  formatCell: (value: unknown, type: ReportFieldType) => string
+): string {
+  if (value === null) return "";
+  if (fn === "count" || fn === "distinct") return value.toLocaleString();
+  return formatCell(value, type);
+}
+
+/** Footer rows for CSV/Excel/PDF exports, aligned to `columns`, computed over
+ *  the full result: [label, ...cells]. The label goes in the first column that
+ *  has no value in that row. `formatCell` shapes each cell (strings for
+ *  CSV/PDF, raw numbers for Excel). */
+export function aggregateExportRows<T>(
+  columns: ReportColumnDef[],
+  rows: ReportResultRow[],
+  aggregates: Record<string, ViewAggregateFn>,
+  formatCell: (value: unknown, type: ReportFieldType) => T
+): (T | string)[][] {
+  return aggregateFooters(columns, rows, aggregates).map((footer) => {
+    const cells: (T | string)[] = columns.map((c) => {
+      const v = footer.values[c.key];
+      if (v === undefined || v === null) return "";
+      return footer.fn === "count" || footer.fn === "distinct" ? v.toLocaleString() : formatCell(v, c.type);
+    });
+    const labelIdx = columns.findIndex((c) => footer.values[c.key] === undefined);
+    if (labelIdx === -1) cells[0] = `${footer.label} ${String(cells[0])}`.trim();
+    else cells[labelIdx] = footer.label;
+    return cells;
+  });
 }
