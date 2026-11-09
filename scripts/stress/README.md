@@ -26,6 +26,9 @@ node scripts/stress/s10-cap.js           # 1,200 vendors: unpaged read is capped
 node scripts/stress/s11-toctou.js        # dispatcher edit vs crew clock-in on the same visit
 LEVELS=20,60,120 SECS=20 node scripts/stress/s5-load.js   # mixed multi-org load (pages, API routes, PostgREST)
 node scripts/stress/s6-saturation.js     # database-only ceiling (no Next in the path)
+TABS=60,120,180 RATES=5,20 node scripts/stress/s12-realtime.js   # Realtime: 12-channel tabs, fan-out, refetch storm, reconnect storm
+#   variants vs today's app: FILTER=1 (org-filtered subscriptions)  THROTTLE=3000 (refetch at most once per 3s)
+#   VIEW_SHARE=0 (nobody on the list)  WAVE=2 (tabs connecting per second)  SKIP_STORM=1  - read the extra/detail in results.json
 ```
 
 Results append to `results.json` (gitignored). Expected today: everything passes. `P4` always "passes" by design: it records a documented known limit
