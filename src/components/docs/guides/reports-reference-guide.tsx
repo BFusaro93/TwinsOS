@@ -252,6 +252,16 @@ const SECTIONS: ReportSection[] = [
         ],
       },
       {
+        name: "Invoiced Products Report",
+        description: "Shows invoices that billed one or more products to the client — invoice date and number, product, quantity, price per unit, total, and the invoice's sales rep.",
+        filters: "Invoice Date, Sales Rep, Product",
+        notes: [
+          "Product lines only — lines billed from a product on a job (the product's catalog entry). Service lines and Other Charges are not listed.",
+          "Excludes line items on draft and void invoices.",
+          "Total is quantity × price per unit, before any line-level discount. Sales Rep is the rep on the invoice.",
+        ],
+      },
+      {
         name: "Revenue by Postal Code",
         description: "Totals invoiced revenue (pre-tax, after discounts) by billing postal code.",
         filters: "Invoice Date",
@@ -410,6 +420,16 @@ const SECTIONS: ReportSection[] = [
     id: "financial",
     label: "Financial",
     reports: [
+      {
+        name: "Credit Report",
+        description: "Lists account credits issued in a date range — the client, reference, memo, amount, what has been applied to invoices, and any unapplied balance still on account.",
+        filters: "Credit Date, Unapplied Balance",
+        notes: [
+          "Account credits only (payments recorded as a credit) — cash payments, prepayments and AR write-offs are not listed. Date is the credit's date.",
+          "Applied is the credit amount less its unapplied balance (and any refund); Applied To Invoices lists the invoices the credit was allocated to.",
+          "Unapplied Balance is what is still on account for this client and will reduce a future invoice.",
+        ],
+      },
       {
         name: "Invoiced Income by Client",
         description: "Totals invoiced income per client — subtotal, tax, total, pre-tax revenue (after discounts), and amount paid.",
@@ -588,6 +608,16 @@ const SECTIONS: ReportSection[] = [
         notes: ["Excludes declined line items (line status = lost)."],
       },
       {
+        name: "Won Estimates Service Products Report",
+        description: "Shows the products attached to services on accepted and invoiced estimates — estimate value, service, product, quantity, price, and total.",
+        filters: "Estimate Date, Sales Rep, Service, Product",
+        notes: [
+          "Won = accepted or invoiced estimates, dated by the estimate date (the same rule as Accepted Estimates by Service). Lines the client declined (line status = lost) are excluded.",
+          "One row per product attached to a service line. Estimate Value is the whole estimate's subtotal after discounts and before tax; it repeats on each of the estimate's rows and is not totalled.",
+          "Product Total is quantity × price for that product as quoted on the estimate.",
+        ],
+      },
+      {
         name: "Accepted Estimates — Estimated vs Invoiced Value",
         description: "Compares each accepted estimate's value against what was actually invoiced and paid.",
         filters: "Estimate Date",
@@ -649,6 +679,19 @@ const SECTIONS: ReportSection[] = [
           "These are job punches (clock-in/out on stops), which feed Job Costing. Paid hours for payroll come from the Start Day / End Day shift on the Report Center's Payroll tab instead, so the two can differ by drive and shop time.",
         ],
         filters: "Worked Between, Crew",
+      },
+      {
+        name: "Resource Time Utilization",
+        description: "Breaks down each crew member's day into time on services, drive time, shop/other paid time and unpaid breaks — hours, share of the total, and labor cost for each.",
+        filters: "Worked Between, Resource, Crew, Break Down By (day / week / month / quarter / year)",
+        notes: [
+          "Total time is the member's day from Start Day to End Day (the Payroll tab's shift, including office corrections to start/end/break). Payroll-only hour overrides and extra hours are not applied.",
+          "Time on Services: job punches net of the member's own breaks/lunch and unpaid stop pauses — the hours Job Costing and the Timesheet use, capped at the paid shift.",
+          "Drive Time: drive recorded by the member's crew that day. Drive is recorded per crew, not per person, so each member working on that crew that day is credited with the crew's full drive time, capped at the shift time not spent on jobs.",
+          "Shop / Other Paid Time: the rest of the paid shift — shop, loading, unrecorded driving or waiting.",
+          "Breaks & Lunch (unpaid): unpaid time off the clock inside the day. Paid pauses stay inside Time on Services. Breaks carry no cost.",
+          "Cost is hours × the crew member's labor burden rate. Days with no Start Day / End Day shift count job punches and recorded drive time only; the report lists how many such days, open shifts and members with no rate it found.",
+        ],
       },
     ],
   },

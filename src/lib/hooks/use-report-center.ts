@@ -150,7 +150,9 @@ export type ReportFilterOptionsSource =
   | "services"
   | "salesReps"
   | "crews"
-  | "paymentMethods";
+  | "paymentMethods"
+  | "products"
+  | "crewMembers";
 
 const PAYMENT_METHODS = [
   "Cash",
@@ -223,6 +225,38 @@ export function useReportFilterOptions(source?: ReportFilterOptionsSource) {
         return ((data ?? []) as { name: string | null }[])
           .filter((r): r is { name: string } => !!r.name)
           .map((r) => ({ value: r.name, label: r.name }));
+      }
+      if (source === "products") {
+        // Landscapt products: the shared catalog minus Equipt maintenance
+        // parts (same exclusion as the estimate/job product pickers). Values
+        // are names — the report rows carry the product's catalog name.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from("product_items")
+          .select("name")
+          .neq("category", "maintenance_part")
+          .is("deleted_at", null)
+          .order("name");
+        if (error) throw new Error(error.message);
+        const names = ((data ?? []) as { name: string | null }[])
+          .map((r) => r.name?.trim() ?? "")
+          .filter((n) => !!n);
+        return [...new Set(names)].map((n) => ({ value: n, label: n }));
+      }
+      if (source === "crewMembers") {
+        // Crew members (the people who punch in) by name — the same name
+        // the timesheet/payroll rows show.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from("crm_crew_members")
+          .select("name")
+          .is("deleted_at", null)
+          .order("name");
+        if (error) throw new Error(error.message);
+        const names = ((data ?? []) as { name: string | null }[])
+          .map((r) => r.name?.trim() ?? "")
+          .filter((n) => !!n);
+        return [...new Set(names)].map((n) => ({ value: n, label: n }));
       }
       return [];
     },

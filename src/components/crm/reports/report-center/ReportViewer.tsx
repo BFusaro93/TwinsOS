@@ -226,7 +226,7 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
                 <Printer className="mr-1.5 h-3.5 w-3.5" />
                 {printing ? "Preparing…" : "Print"}
               </Button>
-              {def.schedulable && <ReportScheduleDialog reportKey={def.key} reportName={def.name} />}
+              {def.schedulable && <ReportScheduleDialog reportKey={def.key} />}
             </>
           }
         />

@@ -49,6 +49,13 @@ export function AnalysisConfigEditor({
     formulas,
     sortColumn,
     sortDir,
+    sorts,
+    setSorts,
+    joins,
+    toggleJoin,
+    availableRelations,
+    baseFields,
+    outputOptions,
     setColumns,
     setFilters,
     setGroupBy,
@@ -90,6 +97,20 @@ export function AnalysisConfigEditor({
           {datasetDef && (
             <p className="text-xs text-muted-foreground">{datasetDef.description}</p>
           )}
+          {availableRelations.length > 0 && (
+            <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1.5 border-t pt-3 text-sm">
+              <span className="text-xs font-medium text-muted-foreground">Join in columns from:</span>
+              {availableRelations.map((r) => (
+                <label key={r.alias} className="flex cursor-pointer items-center gap-2">
+                  <Checkbox
+                    checked={joins.includes(r.alias)}
+                    onCheckedChange={(checked) => toggleJoin(r.alias, checked === true)}
+                  />
+                  {r.label} data
+                </label>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -109,7 +130,7 @@ export function AnalysisConfigEditor({
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2 text-xs"
-                      onClick={() => setColumns(fields.map((f) => f.key))}
+                      onClick={() => setColumns(baseFields.map((f) => f.key))}
                     >
                       Select All
                     </Button>
@@ -457,15 +478,16 @@ export function AnalysisConfigEditor({
                 variant="outline"
                 size="sm"
                 className="h-7 text-xs"
-                disabled={sortOptions.length === 0}
+                disabled={outputOptions.length === 0}
                 onClick={() =>
                   setFormulas((prev) => [
                     ...prev,
                     {
                       name: "",
-                      left: sortOptions[0]?.value ?? "",
+                      left: outputOptions[0]?.value ?? "",
                       operator: "+",
-                      right: sortOptions[0]?.value ?? "",
+                      right: outputOptions[0]?.value ?? "",
+                      rightConst: "",
                       displayType: "number",
                     },
                   ])
@@ -478,11 +500,20 @@ export function AnalysisConfigEditor({
             <CardContent className="flex flex-col gap-2">
               {formulas.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Build a calculated column from two existing output columns, e.g. &quot;Revenue −
-                  Cost&quot;.
+                  Build a calculated column from output columns, a fixed number, or an earlier
+                  formula — e.g. &quot;Revenue − Cost&quot;, or &quot;Profit ÷ Revenue × 100&quot;.
                 </p>
               )}
-              {formulas.map((formula, i) => (
+              {formulas.map((formula, i) => {
+                const operands = [
+                  ...outputOptions,
+                  ...formulas
+                    .slice(0, i)
+                    .filter((f) => f.name)
+                    .map((f) => ({ value: f.name, label: f.name })),
+                ];
+                const rightValue = formula.right || (formula.rightConst !== "" ? "__const__" : "");
+                return (
                 <div key={i} className="flex flex-wrap items-center gap-2">
                   <Input
                     value={formula.name}
@@ -505,7 +536,7 @@ export function AnalysisConfigEditor({
                       <SelectValue placeholder="Column" />
                     </SelectTrigger>
                     <SelectContent>
-                      {sortOptions.map((o) => (
+                      {operands.map((o) => (
                         <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                       ))}
                     </SelectContent>
@@ -528,20 +559,42 @@ export function AnalysisConfigEditor({
                     </SelectContent>
                   </Select>
                   <Select
-                    value={formula.right}
+                    value={rightValue}
                     onValueChange={(v) =>
-                      setFormulas((prev) => prev.map((f, j) => (j === i ? { ...f, right: v } : f)))
+                      setFormulas((prev) =>
+                        prev.map((f, j) =>
+                          j !== i
+                            ? f
+                            : v === "__const__"
+                              ? { ...f, right: "", rightConst: f.rightConst || "1" }
+                              : { ...f, right: v, rightConst: "" }
+                        )
+                      )
                     }
                   >
                     <SelectTrigger className="h-8 w-44 text-sm">
                       <SelectValue placeholder="Column" />
                     </SelectTrigger>
                     <SelectContent>
-                      {sortOptions.map((o) => (
+                      <SelectItem value="__const__">A number…</SelectItem>
+                      {operands.map((o) => (
                         <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {rightValue === "__const__" && (
+                    <Input
+                      type="number"
+                      value={formula.rightConst}
+                      onChange={(e) =>
+                        setFormulas((prev) =>
+                          prev.map((f, j) => (j === i ? { ...f, rightConst: e.target.value } : f))
+                        )
+                      }
+                      className="h-8 w-24 text-sm"
+                      aria-label="Number"
+                    />
+                  )}
                   <Select
                     value={formula.displayType}
                     onValueChange={(v) =>
@@ -571,7 +624,8 @@ export function AnalysisConfigEditor({
                     <X className="h-3.5 w-3.5" />
                   </Button>
                 </div>
-              ))}
+                );
+              })}
               {formulas.length > 0 && (
                 <p className="text-xs text-muted-foreground">
                   Pick a display type that matches the operands&apos; units — e.g. dividing a money
@@ -585,32 +639,95 @@ export function AnalysisConfigEditor({
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">{n(6)}. Sort</CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-wrap items-center gap-3">
-              <Select
-                value={sortColumn || "none"}
-                onValueChange={(v) => setSortColumn(v === "none" ? "" : v)}
-              >
-                <SelectTrigger className="h-8 w-56 text-sm">
-                  <SelectValue placeholder="Sort by…" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No sort</SelectItem>
-                  {sortOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={sortDir} onValueChange={(v) => setSortDir(v as "asc" | "desc")}>
-                <SelectTrigger className="h-8 w-32 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="asc">Ascending</SelectItem>
-                  <SelectItem value="desc">Descending</SelectItem>
-                </SelectContent>
-              </Select>
+            <CardContent className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="w-14 text-xs text-muted-foreground">Sort by</span>
+                <Select
+                  value={sortColumn || "none"}
+                  onValueChange={(v) => setSortColumn(v === "none" ? "" : v)}
+                >
+                  <SelectTrigger className="h-8 w-56 text-sm">
+                    <SelectValue placeholder="Sort by…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No sort</SelectItem>
+                    {sortOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={sortDir} onValueChange={(v) => setSortDir(v as "asc" | "desc")}>
+                  <SelectTrigger className="h-8 w-32 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asc">Ascending</SelectItem>
+                    <SelectItem value="desc">Descending</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {sorts.map((level, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-3">
+                  <span className="w-14 text-xs text-muted-foreground">then by</span>
+                  <Select
+                    value={level.column || "none"}
+                    onValueChange={(v) =>
+                      setSorts((prev) =>
+                        prev.map((x, j) => (j === i ? { ...x, column: v === "none" ? "" : v } : x))
+                      )
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-56 text-sm">
+                      <SelectValue placeholder="Then by…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortOptions.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={level.dir}
+                    onValueChange={(v) =>
+                      setSorts((prev) =>
+                        prev.map((x, j) => (j === i ? { ...x, dir: v as "asc" | "desc" } : x))
+                      )
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-32 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="asc">Ascending</SelectItem>
+                      <SelectItem value="desc">Descending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground"
+                    aria-label="Remove sort level"
+                    onClick={() => setSorts((prev) => prev.filter((_, j) => j !== i))}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+              {sortColumn && sorts.length < 4 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-fit text-xs"
+                  onClick={() => setSorts((prev) => [...prev, { column: "", dir: "asc" }])}
+                >
+                  <Plus className="mr-1 h-3 w-3" />
+                  Add sort level
+                </Button>
+              )}
             </CardContent>
           </Card>
         </>

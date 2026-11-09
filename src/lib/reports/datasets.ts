@@ -1,4 +1,4 @@
-import type { ReportDataset } from "@/types/crm-reports";
+import type { ReportDataset, ReportFieldType } from "@/types/crm-reports";
 
 // ============================================================
 // Dataset catalog — one entry per `rpt_*` reporting view.
@@ -433,6 +433,10 @@ export const REPORT_DATASETS: ReportDataset[] = [
       { key: "is_taxable", label: "Taxable", type: "boolean" },
       { key: "hours", label: "Hours", type: "hours" },
       { key: "men", label: "Men", type: "number" },
+      // 20261226000100_rpt_invoice_line_items_product_and_rep.sql
+      { key: "is_product", label: "Product Line", type: "boolean" },
+      { key: "product_name", label: "Product", type: "text" },
+      { key: "sales_rep", label: "Sales Rep", type: "text" },
     ],
   },
   {
@@ -846,4 +850,112 @@ export function getDataset(key: string): ReportDataset | undefined {
 
 export function getDatasetField(datasetKey: string, fieldKey: string) {
   return DATASET_MAP[datasetKey]?.fields.find((f) => f.key === fieldKey);
+}
+
+// ============================================================
+// Related-data joins + client custom fields
+// ============================================================
+
+/** Relation catalog: which datasets can be joined onto which, under what alias.
+ *  MUST mirror the `v_relations` constant in the crm_run_report /
+ *  rpt_resolve_column SQL functions (20261224000200) — the RPC refuses any join
+ *  that isn't in its own copy. Left-joined, many-to-one: a base row gets at most
+ *  one related row, so joining never multiplies rows. */
+export const REPORT_RELATIONS: Record<string, Record<string, { dataset: string; label: string }>> = {
+  rpt_invoices: { client: { dataset: "rpt_clients", label: "Client" } },
+  rpt_payments: { client: { dataset: "rpt_clients", label: "Client" } },
+  rpt_jobs: { client: { dataset: "rpt_clients", label: "Client" } },
+  rpt_estimates: { client: { dataset: "rpt_clients", label: "Client" } },
+  rpt_contracts: { client: { dataset: "rpt_clients", label: "Client" } },
+  rpt_invoice_line_items: { invoice: { dataset: "rpt_invoices", label: "Invoice" } },
+  rpt_estimate_line_items: { estimate: { dataset: "rpt_estimates", label: "Estimate" } },
+};
+
+/** Datasets whose rows carry a client link, so "cf:<id>" client custom-field
+ *  columns work on them (rpt_clients itself, plus every dataset with a client_id
+ *  column in the views — see 20261224000100). */
+export const CUSTOM_FIELD_DATASETS = new Set([
+  "rpt_clients",
+  "rpt_invoices",
+  "rpt_payments",
+  "rpt_jobs",
+  "rpt_estimates",
+  "rpt_contracts",
+]);
+
+export const CUSTOM_FIELD_KEY_RE = /^cf:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function customFieldKey(defId: string): string {
+  return `cf:${defId}`;
+}
+
+export function isCustomFieldKey(key: string): boolean {
+  return CUSTOM_FIELD_KEY_RE.test(key);
+}
+
+/** The relations available on a dataset, as [alias, {dataset, label}] pairs. */
+export function relationsFor(datasetKey: string): [string, { dataset: string; label: string }][] {
+  return Object.entries(REPORT_RELATIONS[datasetKey] ?? {});
+}
+
+export interface ResolvedField {
+  key: string;
+  label: string;
+  type: ReportFieldType;
+  totalable?: boolean;
+  /** Where the column comes from: the base dataset, a joined relation, or a client custom field. */
+  source: "base" | "joined" | "custom";
+}
+
+/**
+ * Resolves any column key an analysis may use — a plain base column, a
+ * "<alias>.<column>" column of a joined relation, or a "cf:<id>" client custom
+ * field — to its label and type. `joins` are the aliases the config joins on;
+ * `customFields` are the org's client custom-field defs (id → name/type), needed
+ * because custom fields are per-org data, not part of the static catalog.
+ * Returns undefined for anything unknown (the engine turns that into a
+ * "Unknown column" error).
+ */
+export function resolveReportField(
+  datasetKey: string,
+  key: string,
+  joins: string[] = [],
+  customFields?: Map<string, { name: string; type: "text" | "number" }>
+): ResolvedField | undefined {
+  if (isCustomFieldKey(key)) {
+    if (!CUSTOM_FIELD_DATASETS.has(datasetKey)) return undefined;
+    const def = customFields?.get(key.slice(3).toLowerCase());
+    return {
+      key,
+      label: def ? `Custom: ${def.name}` : "Custom field",
+      type: def?.type === "number" ? "number" : "text",
+      totalable: def?.type === "number",
+      source: "custom",
+    };
+  }
+  const dot = key.indexOf(".");
+  if (dot > 0) {
+    const alias = key.slice(0, dot);
+    const rel = REPORT_RELATIONS[datasetKey]?.[alias];
+    if (!rel || !joins.includes(alias)) return undefined;
+    const field = DATASET_MAP[rel.dataset]?.fields.find((f) => f.key === key.slice(dot + 1));
+    if (!field) return undefined;
+    return {
+      key,
+      label: `${rel.label}: ${field.label}`,
+      type: field.type,
+      // A joined column repeats per base row, so summing it down the table double counts.
+      totalable: false,
+      source: "joined",
+    };
+  }
+  const field = DATASET_MAP[datasetKey]?.fields.find((f) => f.key === key);
+  if (!field) return undefined;
+  return {
+    key,
+    label: field.label,
+    type: field.type,
+    totalable: field.totalable,
+    source: "base",
+  };
 }
