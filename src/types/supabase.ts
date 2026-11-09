@@ -4407,6 +4407,7 @@ export type Database = {
       crm_custom_reports: {
         Row: {
           color_spectrum_columns: string[]
+          table_aggregates: Json
           config: Json
           created_at: string
           created_by: string | null
@@ -4426,6 +4427,7 @@ export type Database = {
         }
         Insert: {
           color_spectrum_columns?: string[]
+          table_aggregates?: Json
           config?: Json
           created_at?: string
           created_by?: string | null
@@ -4445,6 +4447,7 @@ export type Database = {
         }
         Update: {
           color_spectrum_columns?: string[]
+          table_aggregates?: Json
           config?: Json
           created_at?: string
           created_by?: string | null

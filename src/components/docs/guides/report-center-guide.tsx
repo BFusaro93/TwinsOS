@@ -377,7 +377,10 @@ export function ReportCenterGuide() {
           downloads — and <em>Reset view</em> undoes them. The exception is <strong>aggregate</strong>{" "}
           footers: on the report page and the analysis builder, CSV, Excel and PDF downloads add
           the same summary rows, computed over the whole result rather than the filtered view
-          (not on dashboards, or in scheduled sends). Filters apply to the rows
+          (not on dashboards). In the analysis builder the aggregates you pick are{" "}
+          <strong>saved with the analysis</strong>, so they come back when you reopen it and are
+          added to its scheduled Excel and PDF sends (left off a partial, row-capped result, like
+          the Totals row). Filters apply to the rows
           already loaded, and the totals row follows them.
         </p>
         <p>

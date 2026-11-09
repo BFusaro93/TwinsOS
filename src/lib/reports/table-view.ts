@@ -1,4 +1,4 @@
-import type { ReportColumnDef, ReportFieldType, ReportResultRow } from "@/types/crm-reports";
+import type { ViewAggregateFnName, ReportColumnDef, ReportFieldType, ReportResultRow } from "@/types/crm-reports";
 
 // ============================================================
 // Display-only view state for a rendered report table — the
@@ -39,7 +39,7 @@ export interface ViewColumnFormat {
 }
 
 /** A per-column summary shown in a footer row (SA's header "Aggregate" menu). */
-export type ViewAggregateFn = "sum" | "avg" | "stddev" | "count" | "distinct" | "max" | "min";
+export type ViewAggregateFn = ViewAggregateFnName;
 
 export const AGGREGATE_FNS: { value: ViewAggregateFn; label: string }[] = [
   { value: "sum", label: "Sum" },

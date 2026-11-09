@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
@@ -164,6 +164,7 @@ export function ReportTable({
   formatRules,
   colorSpectrumColumns,
   onAggregatesChange,
+  initialAggregates,
 }: {
   result: ReportResult;
   formatRules?: FormatRule[];
@@ -171,15 +172,20 @@ export function ReportTable({
   /** Reports the footer summaries picked in the header menu, so the page can
    *  carry them into its CSV/Excel/PDF exports. */
   onAggregatesChange?: (aggregates: Record<string, ViewAggregateFn>) => void;
+  /** Footer summaries to start with (e.g. the ones saved with an analysis);
+   *  kept when a new result loads. */
+  initialAggregates?: Record<string, ViewAggregateFn>;
 }) {
   const [page, setPage] = useState(0);
   // Header-menu view (sort / filter / hide / format / merge). Display-only:
   // exports and the saved report stay as run. Reset whenever a new result loads.
   const [view, setView] = useState<TableViewState>(EMPTY_VIEW);
 
+  const initialAggregatesRef = useRef(initialAggregates);
+  initialAggregatesRef.current = initialAggregates;
   useEffect(() => {
     setPage(0);
-    setView(EMPTY_VIEW);
+    setView({ ...EMPTY_VIEW, aggregates: initialAggregatesRef.current ?? {} });
   }, [result]);
   useEffect(() => {
     setPage(0);
@@ -278,7 +284,7 @@ export function ReportTable({
               {view.hidden.length > 0 ? `${view.hidden.length} column${view.hidden.length === 1 ? "" : "s"} hidden. ` : ""}
               Table view only — exports use the full report{onAggregatesChange && view.aggregates && Object.keys(view.aggregates).length > 0 ? ", plus your column summaries" : ""}.
             </span>
-            <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={() => setView(EMPTY_VIEW)}>
+            <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={() => setView({ ...EMPTY_VIEW, aggregates: {} })}>
               <RotateCcw className="h-3 w-3" />
               Reset view
             </Button>

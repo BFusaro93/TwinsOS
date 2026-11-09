@@ -164,6 +164,10 @@ export const FORMAT_COLORS = [
 ] as const;
 export type FormatColor = (typeof FORMAT_COLORS)[number]["value"];
 
+/** A per-column footer summary picked from the table header menu. */
+export const viewAggregateFnSchema = z.enum(["sum", "avg", "stddev", "count", "distinct", "max", "min"]);
+export type ViewAggregateFnName = z.infer<typeof viewAggregateFnSchema>;
+
 export const formatRuleSchema = z.object({
   column: z.string().min(1),
   op: formatRuleOpSchema,
@@ -284,6 +288,8 @@ export const customReportInputSchema = z.object({
    *  VisualSpec.colorSpectrumColumns for the same feature on dashboard
    *  panels. */
   colorSpectrumColumns: z.array(z.string()).optional(),
+  /** Column footer summaries from the table header menu: column key → function. */
+  tableAggregates: z.record(z.string(), viewAggregateFnSchema).optional(),
   /** A chart shown above this analysis (and embedded above it in PDF
    *  export) — independent of `visualType`, so even a table-type analysis
    *  can carry a graphic. Usually picked from the Graphics Library, stored
@@ -305,6 +311,7 @@ export interface CustomReport {
   kpiColumn: string | null;
   formatRules: FormatRule[];
   colorSpectrumColumns: string[];
+  tableAggregates: Record<string, ViewAggregateFnName>;
   headerVisual: VisualSpec | null;
   headerVisualTitle: string | null;
   createdAt: string;

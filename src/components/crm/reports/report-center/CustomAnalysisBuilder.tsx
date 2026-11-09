@@ -110,6 +110,9 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
   const [kpiColumn, setKpiColumn] = useState("");
   const [formatRules, setFormatRules] = useState<FormatRule[]>([]);
   const [colorSpectrumColumns, setColorSpectrumColumns] = useState<string[]>([]);
+  // Column summaries picked in the table's header menu; saved with the analysis
+  // and added to every export.
+  const [tableAggregates, setTableAggregates] = useState<Record<string, ViewAggregateFn>>({});
   const [headerVisual, setHeaderVisual] = useState<VisualSpec | undefined>(undefined);
   const [headerVisualTitle, setHeaderVisualTitle] = useState("");
   const [headerChartResult, setHeaderChartResult] = useState<ReportResult | undefined>(undefined);
@@ -139,6 +142,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     setKpiColumn(existing.kpiColumn ?? "");
     setFormatRules(existing.formatRules ?? []);
     setColorSpectrumColumns(existing.colorSpectrumColumns ?? []);
+    setTableAggregates(existing.tableAggregates ?? {});
     setHeaderVisual(existing.headerVisual ?? undefined);
     setHeaderVisualTitle(existing.headerVisualTitle ?? "");
     setHydrated(true);
@@ -240,6 +244,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           kpiColumn: kpiColumn || null,
           formatRules,
           colorSpectrumColumns,
+          tableAggregates,
           headerVisual: headerVisual ?? null,
           headerVisualTitle: headerVisual ? headerVisualTitle || null : null,
         });
@@ -254,6 +259,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
           kpiColumn: kpiColumn || null,
           formatRules,
           colorSpectrumColumns,
+          tableAggregates,
           headerVisual: headerVisual ?? null,
           headerVisualTitle: headerVisual ? headerVisualTitle || null : null,
         });
@@ -276,10 +282,6 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     await deleteReport.mutateAsync(effectiveReportId);
     router.push("/crm/admin/reports?tab=custom");
   };
-
-  // Column summaries picked in the table's header menu, computed over the full
-  // result and appended to every export.
-  const [tableAggregates, setTableAggregates] = useState<Record<string, ViewAggregateFn>>({});
 
   const handleExport = () => {
     const result = runAnalysis.data;
@@ -785,6 +787,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
               formatRules={formatRules}
               colorSpectrumColumns={colorSpectrumColumns}
               onAggregatesChange={setTableAggregates}
+              initialAggregates={tableAggregates}
             />
           ) : visualSpec ? (
             <Card>

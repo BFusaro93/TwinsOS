@@ -17,6 +17,7 @@ import {
 import { xlsxBuffer } from "@/lib/xlsx-export";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { resultCellColors } from "@/lib/reports/cell-colors";
+import { aggregateExportRows, type ViewAggregateFn } from "@/lib/reports/table-view";
 import type { AnalysisConfig, FormatRule, ReportFieldType } from "@/types/crm-reports";
 
 /**
@@ -41,6 +42,8 @@ export async function renderScheduledAnalysis(
     /** The saved analysis's cell coloring — same as on screen. */
     formatRules?: FormatRule[];
     colorSpectrumColumns?: string[];
+    /** The saved analysis's column footer summaries. */
+    tableAggregates?: Record<string, ViewAggregateFn>;
   }
 ): Promise<RenderedScheduledReport> {
   const { name, orgId, userId, format } = input;
@@ -88,7 +91,10 @@ export async function renderScheduledAnalysis(
       {
         name: name.slice(0, 31) || "Analysis",
         headers: result.columns.map((c) => c.label),
-        rows,
+        // Like the totals row, summaries are left off a partial (row-capped) result.
+        rows: result.truncated
+          ? rows
+          : [...rows, ...aggregateExportRows(result.columns, result.rows, input.tableAggregates ?? {}, (v, t) => exportCellValueServer(v, t, timeZone))],
         cellColors: resultCellColors(result, input.formatRules, input.colorSpectrumColumns),
       },
     ]);
@@ -116,6 +122,10 @@ export async function renderScheduledAnalysis(
           totals: grouped || result.truncated ? undefined : buildTotalsRow(result, fmt) ?? undefined,
           grouped,
           cellColors: grouped ? undefined : resultCellColors(result, input.formatRules, input.colorSpectrumColumns),
+          footers:
+            grouped || result.truncated
+              ? undefined
+              : aggregateExportRows(result.columns, result.rows, input.tableAggregates ?? {}, fmt),
         },
       ],
     })
