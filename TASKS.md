@@ -211,3 +211,10 @@ Measured on TEST (same Micro-class limits as PROD) with `scripts/stress/s12-real
 - [ ] **Silently dead subscriptions after a connection burst.** At 10 tabs/s (or after a simultaneous reconnect) ~2% of tabs showed "joined", 0 errors, and never received another change (0 of 60 at a realistic 2 tabs/s). The app's 60 s `staleTime` + refetch-on-focus heals tabs the user touches, not a dispatch board left open. Options: jitter reconnects, invalidate every Realtime-backed list on (re)SUBSCRIBED, and/or a slow resync poll.
 - [ ] **Patch the cache from the payload** instead of refetching the whole list on each change (each refetch is up to 1,000 rows of `select *`), then the throttle can go away.
 - [ ] If any published table's change rate climbs (bulk imports, PM generation, an all-day dispatch board), use Broadcast for it: postgres_changes is processed one change at a time and a bigger compute tier helps it less than expected. At 1,200 deliveries/s the lag was 8-12 s.
+
+## Backlog — record lunch and pause clock times (payroll, 2026-11-09)
+The Payroll tab (#466) shows marked-out gaps with start/end times, but lunch, breaks and job pauses only as minute totals, because nothing stores when they started or ended: `crm_crew_member_times.break_minutes` / `lunch_minutes` are plain totals and a stop's pause is a single `crm_job_visits.break_minutes`. Showing real clock times means recording them going forward (past lunches have nothing to recover).
+
+- [ ] Store each lunch / break / pause interval (start + end) when the crew app starts and ends it (e.g. a `crm_crew_break_intervals` table keyed by punch or visit), keeping the existing minute totals in step so payroll and job costing are unchanged.
+- [ ] Show the intervals on the Payroll day row and in the Break Times export column next to the marked-out gaps.
+- [ ] Decide whether the office can edit an interval (it feeds the same "min off" total payroll already lets them override).
