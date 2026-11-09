@@ -22,13 +22,14 @@ import {
   type PayrollRow,
 } from "@/lib/hooks/use-payroll";
 import {
-  DAILY_HEADERS, SUMMARY_HEADERS, dailyRows, groupPayrollByMember, periodLabel, summaryRows,
+  DAILY_HEADERS, LONG_BREAK_MINUTES, SUMMARY_HEADERS, dailyRows, groupPayrollByMember, isLongBreak, offClockBreakdown, periodLabel, summaryRows,
 } from "@/lib/payroll/export";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
 import { exportReportPDF } from "@/lib/reports/export-pdf";
 
 const fmt = (n: number) => n.toFixed(2);
+const fmtDuration = (mins: number) => (mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`);
 
 // Presets run on the ORG's calendar (its today, Monday-start weeks), not the
 // viewer's laptop: an office in another zone, or a late-Sunday export, picked
@@ -62,7 +63,7 @@ export function PayrollReport() {
     setOpen((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const fileBase = `payroll-${from}-to-${to}`;
-  const flagged = members.reduce((s, m) => s + m.openShifts + m.openPunches + m.noShiftDays, 0);
+  const flagged = members.reduce((s, m) => s + m.openShifts + m.openPunches + m.noShiftDays + m.longBreakDays, 0);
 
   // Open and no-shift days are understated or missing — make the exporter acknowledge that.
   const unpaidFlags = members.reduce((s, m) => s + m.openShifts + m.noShiftDays, 0);
@@ -142,7 +143,7 @@ export function PayrollReport() {
       {flagged > 0 && (
         <p className="flex items-center gap-1.5 text-xs text-amber-600">
           <AlertTriangle className="h-3.5 w-3.5" />
-          {flagged} day{flagged === 1 ? "" : "s"} need a look: a day was never ended, a job punch is still open, or no one started the day. Expand a person to see which.
+          {flagged} day{flagged === 1 ? "" : "s"} need a look: a day was never ended, a job punch is still open, no one started the day, or a break is over {LONG_BREAK_MINUTES / 60} hours. Expand a person to see which.
         </p>
       )}
 
@@ -179,7 +180,7 @@ export function PayrollReport() {
                       <TableCell className="text-right tabular-nums">{fmt(m.extra)}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">{fmt(m.total)}</TableCell>
                       <TableCell className="space-x-1 whitespace-nowrap">
-                        {(m.openShifts + m.openPunches + m.noShiftDays) > 0 && (
+                        {(m.openShifts + m.openPunches + m.noShiftDays + m.longBreakDays) > 0 && (
                           <Badge variant="outline" className="gap-1 text-amber-600 border-amber-300">
                             <AlertTriangle className="h-3 w-3" /> check
                           </Badge>
@@ -204,18 +205,22 @@ function DayRow({ row, tz }: { row: PayrollRow; tz: string }) {
   const [hours, setHours] = useState(row.hoursOverride != null ? String(row.hoursOverride) : "");
   const [extra, setExtra] = useState(row.extraHours ? String(row.extraHours) : "");
   const [note, setNote] = useState(row.note ?? "");
-  // Time inputs show the corrected time when there is one, else stay blank with
-  // the recorded time as the placeholder.
+  // The inputs show what is paid for the day: the corrected value when the office set one,
+  // else the recorded value. Only a value that differs from the RECORDED one is saved as a
+  // correction, so leaving a field alone never creates an override.
   const wall = (iso: string | null) => (iso ? instantToZoneWallClock(new Date(iso), tz).time.slice(0, 5) : "");
-  const [startTime, setStartTime] = useState(wall(row.startOverride));
-  const [endTime, setEndTime] = useState(wall(row.endOverride));
-  const [breakMins, setBreakMins] = useState(row.breakOverride != null ? String(row.breakOverride) : "");
+  const initStart = wall(row.shiftStart);
+  const initEnd = wall(row.shiftEnd);
+  const initBreak = String(row.breakMinutes);
+  const [startTime, setStartTime] = useState(initStart);
+  const [endTime, setEndTime] = useState(initEnd);
+  const [breakMins, setBreakMins] = useState(initBreak);
 
   const parse = (s: string): number | null => (s.trim() === "" || Number.isNaN(Number(s)) ? null : Math.max(0, Number(s)));
+  const breakValue = parse(breakMins) != null ? Math.round(parse(breakMins) as number) : null;
   const dirty =
     parse(hours) !== row.hoursOverride || (parse(extra) ?? 0) !== row.extraHours || (note.trim() || null) !== row.note ||
-    (startTime || null) !== (wall(row.startOverride) || null) || (endTime || null) !== (wall(row.endOverride) || null) ||
-    (parse(breakMins) != null ? Math.round(parse(breakMins) as number) : null) !== row.breakOverride;
+    startTime !== initStart || endTime !== initEnd || breakMins !== initBreak;
   const computed = row.noShift ? row.jobHours : row.shiftHours;
   const clock = (iso: string | null) =>
     iso ? new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz }) : "—";
@@ -225,13 +230,16 @@ function DayRow({ row, tz }: { row: PayrollRow; tz: string }) {
       crewMemberId: row.crewMemberId,
       workDate: row.workDate,
       hoursOverride: clear ? null : parse(hours),
-      startTime: clear ? null : startTime || null,
-      endTime: clear ? null : endTime || null,
-      breakMinutes: clear || parse(breakMins) == null ? null : Math.round(parse(breakMins) as number),
+      startTime: clear || !startTime || startTime === wall(row.recordedStart) ? null : startTime,
+      endTime: clear || !endTime || endTime === wall(row.recordedEnd) ? null : endTime,
+      breakMinutes: clear || breakValue == null || breakValue === row.recordedBreakMinutes ? null : breakValue,
       extraHours: clear ? 0 : parse(extra) ?? 0,
       note: clear ? null : note.trim() || null,
     });
-    if (clear) { setHours(""); setExtra(""); setNote(""); setStartTime(""); setEndTime(""); setBreakMins(""); }
+    if (clear) {
+      setHours(""); setExtra(""); setNote("");
+      setStartTime(wall(row.recordedStart)); setEndTime(wall(row.recordedEnd)); setBreakMins(String(row.recordedBreakMinutes));
+    }
   }
 
   return (
@@ -242,15 +250,29 @@ function DayRow({ row, tz }: { row: PayrollRow; tz: string }) {
         <div className="text-xs text-muted-foreground">
           {row.noShift ? "No day punch" : `${clock(row.shiftStart)} – ${row.openShift ? "still open" : clock(row.shiftEnd)}`}
         </div>
+        {row.breakGaps.length > 0 && (
+          <div className="text-xs text-muted-foreground">
+            Out: {row.breakGaps.map((g) => `${clock(g.from)} – ${clock(g.to)} (${g.minutes} min)`).join("; ")}
+          </div>
+        )}
+        {offClockBreakdown(row).length > 0 && (
+          <div className="text-xs text-muted-foreground">{offClockBreakdown(row).join(" · ")}</div>
+        )}
+        {isLongBreak(row) && (
+          <div className="flex items-center gap-1 text-xs text-amber-600">
+            <AlertTriangle className="h-3 w-3" /> {fmtDuration(row.breakMinutes)} off the clock
+          </div>
+        )}
         {row.autoStart && <div className="text-xs text-amber-600">Started at first job</div>}
         {row.openPunches > 0 && <div className="text-xs text-amber-600">Job punch still open</div>}
       </TableCell>
       <TableCell>
         <div className="flex flex-wrap items-center gap-1">
-          <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} title={`Clock in (recorded ${clock(row.shiftStart)})`} className="h-8 w-28 text-xs" />
+          <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} title={`Clock in (recorded ${clock(row.recordedStart)})`} className="h-8 w-36 text-xs" />
           <span className="text-xs text-muted-foreground">to</span>
-          <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} title={`Clock out (recorded ${row.openShift ? "still open" : clock(row.shiftEnd)})`} className="h-8 w-28 text-xs" />
-          <Input value={breakMins} onChange={(e) => setBreakMins(e.target.value)} placeholder={`${row.breakMinutes} min off`} inputMode="numeric" title="Total unpaid minutes off the clock for the day (replaces the recorded breaks, job breaks included)" className="h-8 w-24 text-xs" />
+          <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} title={`Clock out (recorded ${row.recordedStart && !row.recordedEnd ? "still open" : clock(row.recordedEnd)})`} className="h-8 w-36 text-xs" />
+          <Input value={breakMins} onChange={(e) => setBreakMins(e.target.value)} inputMode="numeric" aria-label="Minutes off the clock" title={`Total unpaid minutes off the clock for the day (recorded ${row.recordedBreakMinutes}). Replaces the recorded breaks, job breaks included`} className="h-8 w-20 text-xs" />
+          <span className="text-xs text-muted-foreground">min off</span>
         </div>
         <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (why adjusted)" className="mt-1 h-8 text-xs" />
       </TableCell>
