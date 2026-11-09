@@ -29,6 +29,8 @@ import {
   useDeleteCustomReport,
 } from "@/lib/hooks/use-report-center";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { analysisScheduleProblem } from "@/lib/reports/scheduled-analysis";
+import { ReportScheduleEditorDialog } from "./ReportScheduleEditorDialog";
 import type { CustomReport } from "@/types/crm-reports";
 
 export function MyReportsList() {
@@ -38,6 +40,7 @@ export function MyReportsList() {
   const createReport = useCreateCustomReport();
   const deleteReport = useDeleteCustomReport();
   const [pendingDelete, setPendingDelete] = useState<CustomReport | null>(null);
+  const [scheduling, setScheduling] = useState<CustomReport | null>(null);
 
   const handleDuplicate = (report: CustomReport) => {
     createReport.mutate({
@@ -147,6 +150,18 @@ export function MyReportsList() {
                           </DropdownMenuItem>
                           {canManage && (
                             <>
+                              {(() => {
+                                const problem = analysisScheduleProblem(report.config);
+                                return (
+                                  <DropdownMenuItem
+                                    disabled={!!problem}
+                                    title={problem ?? undefined}
+                                    onClick={() => setScheduling(report)}
+                                  >
+                                    Schedule…
+                                  </DropdownMenuItem>
+                                );
+                              })()}
                               <DropdownMenuItem
                                 onClick={() => handleDuplicate(report)}
                               >
@@ -169,6 +184,19 @@ export function MyReportsList() {
             </table>
           </div>
         </div>
+      )}
+
+      {scheduling && (
+        <ReportScheduleEditorDialog
+          key={scheduling.id}
+          open
+          onOpenChange={(open) => {
+            if (!open) setScheduling(null);
+          }}
+          schedule={null}
+          reportKey={null}
+          customReportId={scheduling.id}
+        />
       )}
 
       <AlertDialog

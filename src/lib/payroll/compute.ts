@@ -1,5 +1,8 @@
 import { fetchAllRows } from "@/lib/reports/fetch-all-rows";
-import { getCrewBreaksUnpaid, isBreakUnpaid } from "@/lib/crew/visit-labor";
+// break-policy, not visit-labor: visit-labor pulls in the service client
+// (next/headers), and this module is also used by a Report Center definition
+// that is bundled into client components.
+import { getCrewBreaksUnpaid, isBreakUnpaid } from "@/lib/crew/break-policy";
 import { memberVisitPauseMinutes } from "@/lib/crew/visit-pause";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { isoInZone, shiftYmd, zoneWallClockToInstant } from "@/lib/time/zone";
@@ -111,11 +114,13 @@ export async function computePayroll(
       .lte("work_date", to)
   );
 
-  const [{ data: members }, { data: crews }, { data: overrides }, { data: adjustments }] = await Promise.all([
+  // The date-ranged lists are paged: the Report Center's Resource Time
+  // Utilization runs this over up to a year, past PostgREST's 1000-row cap.
+  const [{ data: members }, { data: crews }, overrides, adjustments] = await Promise.all([
     supabase.from("crm_crew_members").select("id, name, crew_id").eq("org_id", orgId),
     supabase.from("crm_crews").select("id, name").eq("org_id", orgId),
-    supabase.from("crm_crew_daily_members").select("member_id, crew_id, work_date").eq("org_id", orgId).gte("work_date", from).lte("work_date", to),
-    supabase.from("crm_payroll_adjustments").select("crew_member_id, work_date, hours_override, extra_hours, note, start_override, end_override, break_override").eq("org_id", orgId).is("deleted_at", null).gte("work_date", from).lte("work_date", to),
+    fetchAllRows<unknown>(() => supabase.from("crm_crew_daily_members").select("member_id, crew_id, work_date").eq("org_id", orgId).gte("work_date", from).lte("work_date", to)),
+    fetchAllRows<unknown>(() => supabase.from("crm_payroll_adjustments").select("crew_member_id, work_date, hours_override, extra_hours, note, start_override, end_override, break_override").eq("org_id", orgId).is("deleted_at", null).gte("work_date", from).lte("work_date", to)),
   ]);
 
   const memberById = new Map<string, { name: string; crewId: string | null }>(
