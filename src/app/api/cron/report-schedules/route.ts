@@ -6,7 +6,10 @@ import { getReport } from "@/lib/reports/registry";
 import { renderScheduledAnalysis } from "@/lib/reports/run-scheduled-analysis";
 import { analysisPermissionGroups } from "@/lib/reports/scheduled-analysis";
 import { isDateWindow } from "@/lib/reports/schedule-date-window";
-import { analysisConfigSchema } from "@/types/crm-reports";
+import { z } from "zod";
+import { analysisConfigSchema, formatRuleSchema } from "@/types/crm-reports";
+
+const formatRulesSchema = z.array(formatRuleSchema);
 import { renderScheduledReport, type ScheduledReportFormat } from "@/lib/reports/run-scheduled";
 import { escapeHtml, orgEmailFrom, sendEmailRetryingRateLimit } from "@/lib/email/send";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
@@ -155,7 +158,7 @@ export async function GET(request: Request) {
       // below, because this run uses the service role.
       const { data: saved } = await supabase
         .from("crm_custom_reports")
-        .select("name, config, org_id, deleted_at")
+        .select("name, config, org_id, deleted_at, format_rules, color_spectrum_columns")
         .eq("id", schedule.custom_report_id)
         .maybeSingle();
       if (!saved || saved.deleted_at || saved.org_id !== schedule.org_id) {
@@ -208,6 +211,10 @@ export async function GET(request: Request) {
           dateColumn: windowOk ? schedule.date_filter_column : null,
           dateWindow: windowOk && isDateWindow(schedule.date_window) ? schedule.date_window : null,
           now,
+          formatRules: formatRulesSchema.safeParse(saved.format_rules).data,
+          colorSpectrumColumns: Array.isArray(saved.color_spectrum_columns)
+            ? saved.color_spectrum_columns.filter((c: unknown): c is string => typeof c === "string")
+            : undefined,
         });
     } else {
       const def = getReport(schedule.report_key ?? "");

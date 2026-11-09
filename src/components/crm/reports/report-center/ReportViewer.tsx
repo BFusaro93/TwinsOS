@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
+import { resultCellColors } from "@/lib/reports/cell-colors";
 import { exportReportPDF, printReportPDF } from "@/lib/reports/export-pdf";
 import { useRunReport } from "@/lib/hooks/use-report-center";
 import { getReport } from "@/lib/reports/registry";
@@ -116,14 +117,15 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
     );
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!result) return;
     try {
-      downloadXLSX(`${def.key}.xlsx`, [
+      await downloadXLSX(`${def.key}.xlsx`, [
         {
           name: def.name,
           headers: result.columns.map((c) => c.label),
           rows: exportRowsWithTotals(result, exportCellValue),
+          cellColors: resultCellColors(result, def.formatRules, undefined),
         },
       ]);
     } catch (err) {
@@ -155,6 +157,7 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
             rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
             totals: grouped ? undefined : buildTotalsRow(result, formatCellValue) ?? undefined,
             grouped,
+            cellColors: grouped ? undefined : resultCellColors(result, def.formatRules, undefined),
           },
         ],
         charts

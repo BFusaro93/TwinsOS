@@ -3,6 +3,13 @@ export interface ReportExportGroupedInput {
   groups: { label: string; subtotal: string[]; rows: string[][] }[];
 }
 
+/** A cell's fill/text color in an export (`#rrggbb`). */
+export interface ReportExportCellColor {
+  bg: string;
+  text: string;
+  bold?: boolean;
+}
+
 export interface ReportExportSectionInput {
   heading: string;
   columns: string[];
@@ -14,6 +21,8 @@ export interface ReportExportSectionInput {
    *  then each group's subtotal row immediately followed by its detail rows
    *  (matches the legacy SA layout), via buildGroupedPdfSection. */
   grouped?: ReportExportGroupedInput;
+  /** Conditional-format / spectrum colors aligned to `rows` (null = none). */
+  cellColors?: (ReportExportCellColor | null)[][];
 }
 
 export interface ReportExportChartInput {

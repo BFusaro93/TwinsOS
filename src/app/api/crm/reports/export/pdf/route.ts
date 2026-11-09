@@ -17,6 +17,9 @@ const groupedSchema = z.object({
   ),
 });
 
+const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+const cellColorSchema = z.object({ bg: hexColor, text: hexColor, bold: z.boolean().optional() });
+
 const exportRequestSchema = z.object({
   title: z.string().min(1),
   sections: z
@@ -28,6 +31,8 @@ const exportRequestSchema = z.object({
         /** Flat sections only — a pre-formatted totals row rendered bold after the data rows. */
         totals: z.array(z.string()).optional(),
         grouped: groupedSchema.optional(),
+        /** Conditional-format / spectrum colors aligned to `rows`. */
+        cellColors: z.array(z.array(cellColorSchema.nullable())).optional(),
       })
     )
     .min(1),

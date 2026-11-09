@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
+import { resultCellColors } from "@/lib/reports/cell-colors";
 import { exportReportPDF, printReportPDF } from "@/lib/reports/export-pdf";
 import { buildGroupedPdfSection } from "@/lib/reports/pdf-grouping";
 import { buildTotalsRow } from "@/lib/reports/export-rows";
@@ -283,10 +284,10 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
     );
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!hasData) return;
     try {
-      downloadXLSX(
+      await downloadXLSX(
         `${dashboardName} - ${tab.name}.xlsx`,
         panelsWithData.map((panel) => {
           const result = panelResults[panel.id];
@@ -294,6 +295,7 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
             name: panel.title,
             headers: result.columns.map((c) => c.label),
             rows: exportRowsWithTotals(result, exportCellValue),
+            cellColors: resultCellColors(result, panel.visual.formatRules, panel.visual.colorSpectrumColumns),
           };
         })
       );
@@ -337,6 +339,9 @@ function DashboardTabView({ tab, dashboardName }: { tab: DashboardTab; dashboard
           rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
           totals: grouped ? undefined : buildTotalsRow(result, formatCellValue) ?? undefined,
           grouped,
+          cellColors: grouped
+            ? undefined
+            : resultCellColors(result, panel.visual.formatRules, panel.visual.colorSpectrumColumns),
         };
       });
       const title = `${dashboardName} — ${tab.name}`;

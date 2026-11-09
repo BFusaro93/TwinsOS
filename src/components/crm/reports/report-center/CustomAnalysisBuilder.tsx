@@ -34,6 +34,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
+import { resultCellColors } from "@/lib/reports/cell-colors";
 import { exportReportPDF } from "@/lib/reports/export-pdf";
 import type { ReportExportChartInput } from "@/lib/reports/export-pdf";
 import {
@@ -285,15 +286,16 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
     );
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     const result = runAnalysis.data;
     if (!result) return;
     try {
-      downloadXLSX(`${name.trim() || "analysis"}.xlsx`, [
+      await downloadXLSX(`${name.trim() || "analysis"}.xlsx`, [
         {
           name: name.trim() || "Analysis",
           headers: result.columns.map((c) => c.label),
           rows: result.rows.map((row) => result.columns.map((c) => exportCellValue(row[c.key], c.type))),
+          cellColors: resultCellColors(result, formatRules, colorSpectrumColumns),
         },
       ]);
     } catch (err) {
@@ -319,6 +321,7 @@ export function CustomAnalysisBuilder({ reportId }: { reportId?: string }) {
             heading: "",
             columns: result.columns.map((c) => c.label),
             rows: result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
+            cellColors: resultCellColors(result, formatRules, colorSpectrumColumns),
           },
         ],
         charts.length > 0 ? charts : undefined

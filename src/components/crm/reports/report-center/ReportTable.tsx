@@ -15,73 +15,12 @@ import {
   type TableViewState,
 } from "@/lib/reports/table-view";
 import { ColumnHeaderMenu } from "./ColumnHeaderMenu";
-import { FORMAT_COLORS } from "@/types/crm-reports";
+import { computeSpectrumRanges, matchFormatRule, spectrumColorFor } from "@/lib/reports/cell-colors";
 import type { FormatRule, ReportColumnDef, ReportFieldType, ReportResult, ReportResultRow } from "@/types/crm-reports";
 
 const PAGE_SIZE = 100;
 
 const NUMERIC_TYPES: ReportFieldType[] = ["money", "number", "hours", "percent", "bps"];
-
-/** First matching rule wins (rules are checked in order). Returns the
- *  background/text color pair to apply to that cell, or null. */
-function matchFormatRule(
-  value: unknown,
-  column: string,
-  rules: FormatRule[] | undefined
-): { bg: string; text: string } | null {
-  if (!rules || rules.length === 0 || typeof value !== "number") return null;
-  for (const rule of rules) {
-    if (rule.column !== column) continue;
-    const matches =
-      rule.op === "gt" ? value > rule.value :
-      rule.op === "gte" ? value >= rule.value :
-      rule.op === "lt" ? value < rule.value :
-      rule.op === "lte" ? value <= rule.value :
-      rule.op === "eq" ? value === rule.value :
-      value !== rule.value;
-    if (matches) {
-      const color = FORMAT_COLORS.find((c) => c.value === rule.color);
-      if (color) return { bg: color.bg, text: color.text };
-    }
-  }
-  return null;
-}
-
-/** Continuous magnitude-based cell shading (light-to-dark blue) — one min/max
- *  range per requested column, computed across the FULL result set (not just
- *  the current page) so the scale stays consistent as the user pages
- *  through. Complements (rather than replaces) FormatRule's discrete
- *  threshold coloring — a rule match always wins if both apply to a cell. */
-function computeSpectrumRanges(
-  rows: ReportResultRow[],
-  columns: string[] | undefined
-): Record<string, { min: number; max: number }> {
-  const ranges: Record<string, { min: number; max: number }> = {};
-  if (!columns || columns.length === 0) return ranges;
-  for (const key of columns) {
-    let min = Infinity;
-    let max = -Infinity;
-    for (const row of rows) {
-      const v = row[key];
-      if (typeof v === "number") {
-        if (v < min) min = v;
-        if (v > max) max = v;
-      }
-    }
-    if (min !== Infinity) ranges[key] = { min, max };
-  }
-  return ranges;
-}
-
-function spectrumColorFor(value: number, range: { min: number; max: number }): { bg: string; text: string } {
-  const t = range.max === range.min ? 0.5 : (value - range.min) / (range.max - range.min);
-  const clamped = Math.min(1, Math.max(0, t));
-  const lightness = 92 - clamped * 52; // 92% (near white, low) -> 40% (dark blue, high)
-  return {
-    bg: `hsl(217, 70%, ${lightness}%)`,
-    text: lightness < 55 ? "#ffffff" : "#1e3a5f",
-  };
-}
 
 /** Format a single cell for display (also used by CSV export). */
 export function formatCellValue(value: unknown, type: ReportFieldType): string {
