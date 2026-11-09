@@ -27,6 +27,7 @@ async function recalcParentEstimate(
   await recalcEstimateTotalsShared(supabase as any, li.estimate_id);
   queryClient.invalidateQueries({ queryKey: ["estimates", "detail", li.estimate_id] });
   queryClient.invalidateQueries({ queryKey: ["estimates"] });
+  queryClient.invalidateQueries({ queryKey: ["estimate-subitem-costs"] });
 }
 
 export interface LineItemSubitem {
@@ -210,5 +211,36 @@ export function useToggleSubitemPrint() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["subitems", variables.lineItemId] });
     },
+  });
+}
+
+/**
+ * Internal cost of the sub-items under the given estimate lines, split by type
+ * (product → Product/Materials, subservice → Service) for the estimate's cost
+ * breakdown. Mirrors recalcEstimateTotals: cost = unit cost × qty.
+ */
+export function useEstimateSubitemCosts(lineItemIds: string[]) {
+  const key = [...lineItemIds].sort().join(",");
+  return useQuery<{ product: number; subservice: number }>({
+    queryKey: ["estimate-subitem-costs", key],
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("estimate_line_item_subitems")
+        .select("type, cost_cents, qty")
+        .in("line_item_id", lineItemIds)
+        .is("deleted_at", null);
+      if (error) throw error;
+      const out = { product: 0, subservice: 0 };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const r of (data ?? []) as any[]) {
+        const cost = Math.round((r.cost_cents ?? 0) * (r.qty ?? 1));
+        if (r.type === "subservice") out.subservice += cost;
+        else out.product += cost;
+      }
+      return out;
+    },
+    enabled: lineItemIds.length > 0,
   });
 }

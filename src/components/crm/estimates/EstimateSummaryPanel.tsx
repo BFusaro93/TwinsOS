@@ -7,6 +7,7 @@ import { bpsToPercent } from "@/lib/estimate-calc";
 import { useDiscounts } from "@/lib/hooks/use-crm-discounts";
 import { useOverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { useEstimateEquipmentCost } from "@/lib/hooks/use-equipment";
+import { useEstimateSubitemCosts } from "@/lib/hooks/use-line-item-subitems";
 import { hasPerTypeOverhead } from "@/lib/estimate-calc";
 import {
   Select,
@@ -112,6 +113,9 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   const directCosts = estimate.directCosts ?? [];
   // Equipment attached to the counted lines — internal cost, folded into the Asset/Equipment row.
   const { data: equipmentCostCents = 0 } = useEstimateEquipmentCost(lineItems.map((li) => li.id));
+  // Sub-item cost (products + subservices under a line) is part of the estimate's
+  // cost in recalcEstimateTotals, so it must show in the breakdown too.
+  const { data: subitemCosts = { product: 0, subservice: 0 } } = useEstimateSubitemCosts(lineItems.map((li) => li.id));
   const { data: discounts = [] } = useDiscounts();
   const activeDiscounts = discounts.filter((d) => d.isActive);
   const { data: overheadSettings } = useOverheadSettings();
@@ -210,9 +214,11 @@ export function EstimateSummaryPanel({ estimate, onRecalculate, recalcPending }:
   });
   costByType.labor += lineItems.reduce((s, li) => s + li.totalCostCents, 0);
   costByType.asset_equipment += equipmentCostCents;
+  costByType.product_material += subitemCosts.product;
+  costByType.service += subitemCosts.subservice;
 
   const totalDirectCents  = directCosts.reduce((s, dc) => s + dc.totalCents, 0);
-  const totalCostCents    = lineItems.reduce((s, li) => s + li.totalCostCents, 0) + totalDirectCents + equipmentCostCents;
+  const totalCostCents    = lineItems.reduce((s, li) => s + li.totalCostCents, 0) + totalDirectCents + equipmentCostCents + subitemCosts.product + subitemCosts.subservice;
   const rev               = estimate.revenueCents;
   // Revenue is already net of BOTH discount sources (recalcEstimateTotals
   // subtracts each line item's discount_cents before summing to subtotal,
