@@ -11,11 +11,13 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { downloadCSV } from "@/lib/csv";
 import { downloadXLSX } from "@/lib/xlsx-export";
+import { resultCellColors } from "@/lib/reports/cell-colors";
+import { aggregateExportRows, type ViewAggregateFn } from "@/lib/reports/table-view";
 import { exportReportPDF, printReportPDF } from "@/lib/reports/export-pdf";
 import { useRunReport } from "@/lib/hooks/use-report-center";
 import { getReport } from "@/lib/reports/registry";
 import type { PrebuiltReportDef } from "@/lib/reports/definition-types";
-import type { ReportResult } from "@/types/crm-reports";
+import type { ReportFieldType, ReportResult } from "@/types/crm-reports";
 import { defaultFilterValues, ReportFilterBar } from "./ReportFilterBar";
 import { exportCellValue, formatCellValue, ReportTable } from "./ReportTable";
 import { HeaderVisual } from "./HeaderVisual";
@@ -105,6 +107,12 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
   // Every export carries the same totals row the on-screen table shows
   // (appended last for CSV/Excel/flat PDF; the grouped PDF already leads
   // with its own grand-total row via buildGroupedPdfSection).
+  // Column summaries picked in the table's header menu (Average, Count, ...),
+  // computed over the full result and appended after the totals row.
+  const [aggregates, setAggregates] = useState<Record<string, ViewAggregateFn>>({});
+  const summaryRows = <T,>(format: (v: unknown, t: ReportFieldType) => T) =>
+    result ? aggregateExportRows(result.columns, result.rows, aggregates, format) : [];
+
   const handleExport = () => {
     if (!result) return;
     downloadCSV(
@@ -112,18 +120,19 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
       result.columns.map((c) => c.label),
       // Raw numbers / blanks (like the Excel export) — formatCellValue's
       // "$1,234.00" and "—" strings open as text in a spreadsheet.
-      exportRowsWithTotals(result, exportCellValue)
+      [...exportRowsWithTotals(result, exportCellValue), ...summaryRows(exportCellValue)]
     );
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (!result) return;
     try {
-      downloadXLSX(`${def.key}.xlsx`, [
+      await downloadXLSX(`${def.key}.xlsx`, [
         {
           name: def.name,
           headers: result.columns.map((c) => c.label),
-          rows: exportRowsWithTotals(result, exportCellValue),
+          rows: [...exportRowsWithTotals(result, exportCellValue), ...summaryRows(exportCellValue)],
+          cellColors: resultCellColors(result, def.formatRules, undefined),
         },
       ]);
     } catch (err) {
@@ -155,6 +164,8 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
             rows: grouped ? [] : result.rows.map((row) => result.columns.map((c) => formatCellValue(row[c.key], c.type))),
             totals: grouped ? undefined : buildTotalsRow(result, formatCellValue) ?? undefined,
             grouped,
+            cellColors: grouped ? undefined : resultCellColors(result, def.formatRules, undefined),
+            footers: grouped ? undefined : summaryRows(formatCellValue),
           },
         ],
         charts
@@ -255,7 +266,7 @@ function PrebuiltReportRunner({ def }: { def: PrebuiltReportDef }) {
           <AlertDescription>{error.message}</AlertDescription>
         </Alert>
       ) : result ? (
-        <ReportTable result={result} formatRules={def.formatRules} />
+        <ReportTable result={result} formatRules={def.formatRules} onAggregatesChange={setAggregates} />
       ) : null}
     </div>
   );

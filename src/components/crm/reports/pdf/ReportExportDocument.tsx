@@ -6,6 +6,12 @@ export interface ReportExportGrouped {
   groups: { label: string; subtotal: string[]; rows: string[][] }[];
 }
 
+export interface ReportExportCellColor {
+  bg: string;
+  text: string;
+  bold?: boolean;
+}
+
 export interface ReportExportSection {
   heading: string;
   columns: string[];
@@ -15,6 +21,10 @@ export interface ReportExportSection {
    *  when `grouped` is set, which carries its own grand-total row. */
   totals?: string[];
   grouped?: ReportExportGrouped;
+  /** Conditional-format / spectrum colors aligned to `rows` (null = none). */
+  cellColors?: (ReportExportCellColor | null)[][];
+  /** Column-summary rows rendered bold after the totals row. */
+  footers?: string[][];
 }
 
 export interface ReportExportChart {
@@ -138,7 +148,7 @@ export function ReportExportDocument({ title, generatedAt, sections, charts, not
         {sections.map((section, si) => {
           const bodyRows = section.grouped
             ? [section.grouped.grandTotal, ...section.grouped.groups.flatMap((g) => [g.subtotal, ...g.rows])]
-            : [...section.rows, ...(section.totals ? [section.totals] : [])];
+            : [...section.rows, ...(section.totals ? [section.totals] : []), ...(section.footers ?? [])];
           const layout = layoutColumns(section.columns, bodyRows);
           const cellStyle = (base: Style, ci: number): Style | Style[] =>
             layout ? [base, { flex: layout.weights[ci] ?? 1, fontSize: layout.fontSize }] : base;
@@ -187,9 +197,29 @@ export function ReportExportDocument({ title, generatedAt, sections, charts, not
                 <>
                   {section.rows.map((row, ri) => (
                     <View key={ri} style={styles.row} wrap={false}>
-                      {row.map((cell, ci) => (
-                        <Text key={ci} style={cellStyle(styles.cell, ci)}>{cell}</Text>
-                      ))}
+                      {row.map((cell, ci) => {
+                        const color = section.cellColors?.[ri]?.[ci];
+                        const base = cellStyle(styles.cell, ci);
+                        return (
+                          <Text
+                            key={ci}
+                            style={
+                              color
+                                ? [
+                                    ...(Array.isArray(base) ? base : [base]),
+                                    {
+                                      backgroundColor: color.bg,
+                                      color: color.text,
+                                      ...(color.bold ? { fontWeight: 700 as const } : {}),
+                                    },
+                                  ]
+                                : base
+                            }
+                          >
+                            {cell}
+                          </Text>
+                        );
+                      })}
                     </View>
                   ))}
                   {section.rows.length === 0 && (
@@ -204,6 +234,14 @@ export function ReportExportDocument({ title, generatedAt, sections, charts, not
                       ))}
                     </View>
                   )}
+                  {section.rows.length > 0 &&
+                    (section.footers ?? []).map((footer, fi) => (
+                      <View key={`f${fi}`} style={styles.subtotalRow} wrap={false}>
+                        {footer.map((cell, ci) => (
+                          <Text key={ci} style={cellStyle(styles.cellBold, ci)}>{cell}</Text>
+                        ))}
+                      </View>
+                    ))}
                 </>
               )}
             </View>

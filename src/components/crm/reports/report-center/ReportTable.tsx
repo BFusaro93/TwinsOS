@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
@@ -8,80 +8,22 @@ import { computeTotals } from "@/lib/reports/engine";
 import { TOTALS_LABEL, totalsLabelIndex } from "@/lib/reports/export-rows";
 import {
   EMPTY_VIEW,
+  aggregateFooters,
   applyRowView,
+  formatAggregateValue,
   formatWithView,
   isViewActive,
   numericRange,
   type TableViewState,
+  type ViewAggregateFn,
 } from "@/lib/reports/table-view";
 import { ColumnHeaderMenu } from "./ColumnHeaderMenu";
-import { FORMAT_COLORS } from "@/types/crm-reports";
+import { computeSpectrumRanges, matchFormatRule, spectrumColorFor } from "@/lib/reports/cell-colors";
 import type { FormatRule, ReportColumnDef, ReportFieldType, ReportResult, ReportResultRow } from "@/types/crm-reports";
 
 const PAGE_SIZE = 100;
 
 const NUMERIC_TYPES: ReportFieldType[] = ["money", "number", "hours", "percent", "bps"];
-
-/** First matching rule wins (rules are checked in order). Returns the
- *  background/text color pair to apply to that cell, or null. */
-function matchFormatRule(
-  value: unknown,
-  column: string,
-  rules: FormatRule[] | undefined
-): { bg: string; text: string } | null {
-  if (!rules || rules.length === 0 || typeof value !== "number") return null;
-  for (const rule of rules) {
-    if (rule.column !== column) continue;
-    const matches =
-      rule.op === "gt" ? value > rule.value :
-      rule.op === "gte" ? value >= rule.value :
-      rule.op === "lt" ? value < rule.value :
-      rule.op === "lte" ? value <= rule.value :
-      rule.op === "eq" ? value === rule.value :
-      value !== rule.value;
-    if (matches) {
-      const color = FORMAT_COLORS.find((c) => c.value === rule.color);
-      if (color) return { bg: color.bg, text: color.text };
-    }
-  }
-  return null;
-}
-
-/** Continuous magnitude-based cell shading (light-to-dark blue) — one min/max
- *  range per requested column, computed across the FULL result set (not just
- *  the current page) so the scale stays consistent as the user pages
- *  through. Complements (rather than replaces) FormatRule's discrete
- *  threshold coloring — a rule match always wins if both apply to a cell. */
-function computeSpectrumRanges(
-  rows: ReportResultRow[],
-  columns: string[] | undefined
-): Record<string, { min: number; max: number }> {
-  const ranges: Record<string, { min: number; max: number }> = {};
-  if (!columns || columns.length === 0) return ranges;
-  for (const key of columns) {
-    let min = Infinity;
-    let max = -Infinity;
-    for (const row of rows) {
-      const v = row[key];
-      if (typeof v === "number") {
-        if (v < min) min = v;
-        if (v > max) max = v;
-      }
-    }
-    if (min !== Infinity) ranges[key] = { min, max };
-  }
-  return ranges;
-}
-
-function spectrumColorFor(value: number, range: { min: number; max: number }): { bg: string; text: string } {
-  const t = range.max === range.min ? 0.5 : (value - range.min) / (range.max - range.min);
-  const clamped = Math.min(1, Math.max(0, t));
-  const lightness = 92 - clamped * 52; // 92% (near white, low) -> 40% (dark blue, high)
-  return {
-    bg: `hsl(217, 70%, ${lightness}%)`,
-    text: lightness < 55 ? "#ffffff" : "#1e3a5f",
-  };
-}
 
 /** Format a single cell for display (also used by CSV export). */
 export function formatCellValue(value: unknown, type: ReportFieldType): string {
@@ -221,23 +163,37 @@ export function ReportTable({
   result,
   formatRules,
   colorSpectrumColumns,
+  onAggregatesChange,
+  initialAggregates,
 }: {
   result: ReportResult;
   formatRules?: FormatRule[];
   colorSpectrumColumns?: string[];
+  /** Reports the footer summaries picked in the header menu, so the page can
+   *  carry them into its CSV/Excel/PDF exports. */
+  onAggregatesChange?: (aggregates: Record<string, ViewAggregateFn>) => void;
+  /** Footer summaries to start with (e.g. the ones saved with an analysis);
+   *  kept when a new result loads. */
+  initialAggregates?: Record<string, ViewAggregateFn>;
 }) {
   const [page, setPage] = useState(0);
   // Header-menu view (sort / filter / hide / format / merge). Display-only:
   // exports and the saved report stay as run. Reset whenever a new result loads.
   const [view, setView] = useState<TableViewState>(EMPTY_VIEW);
 
+  const initialAggregatesRef = useRef(initialAggregates);
+  initialAggregatesRef.current = initialAggregates;
   useEffect(() => {
     setPage(0);
-    setView(EMPTY_VIEW);
+    setView({ ...EMPTY_VIEW, aggregates: initialAggregatesRef.current ?? {} });
   }, [result]);
   useEffect(() => {
     setPage(0);
   }, [view]);
+  useEffect(() => {
+    onAggregatesChange?.(view.aggregates);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.aggregates]);
 
   const subtotalMode = !!result.groupSubtotals;
   const viewRows = useMemo(
@@ -307,6 +263,13 @@ export function ReportTable({
   // overwriting that column's total.
   const totalsLabelIdx = totalsLabelIndex(displayColumns, sectionKey);
 
+  // Header-menu "Aggregate" footers follow the filter (like the Totals row);
+  // exports compute theirs over the full result.
+  const footers = useMemo(
+    () => aggregateFooters(displayColumns, viewRows, view.aggregates),
+    [displayColumns, viewRows, view.aggregates]
+  );
+
   const truncated = !!result.truncated;
 
   return (
@@ -319,9 +282,9 @@ export function ReportTable({
                 ? `Showing ${viewRows.length.toLocaleString()} of ${result.rows.length.toLocaleString()} rows. `
                 : ""}
               {view.hidden.length > 0 ? `${view.hidden.length} column${view.hidden.length === 1 ? "" : "s"} hidden. ` : ""}
-              Table view only — exports use the full report.
+              Table view only — exports use the full report{onAggregatesChange && view.aggregates && Object.keys(view.aggregates).length > 0 ? ", plus your column summaries" : ""}.
             </span>
-            <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={() => setView(EMPTY_VIEW)}>
+            <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={() => setView({ ...EMPTY_VIEW, aggregates: {} })}>
               <RotateCcw className="h-3 w-3" />
               Reset view
             </Button>
@@ -532,8 +495,9 @@ export function ReportTable({
                   );
                 })}
               </tbody>
-              {shownTotals && !result.groupSubtotals && (
+              {((shownTotals && !result.groupSubtotals) || footers.length > 0) && (
                 <tfoot>
+                  {shownTotals && !result.groupSubtotals && (
                   <tr className="border-t bg-slate-50 dark:bg-muted/40 font-medium text-slate-800 dark:text-neutral-100">
                     {displayColumns.map((col, i) => {
                       const total = shownTotals?.[col.key];
@@ -557,6 +521,37 @@ export function ReportTable({
                       );
                     })}
                   </tr>
+                  )}
+                  {footers.map((footer) => {
+                    const labelIdx = displayColumns.findIndex((c) => footer.values[c.key] === undefined);
+                    return (
+                      <tr
+                        key={footer.fn}
+                        className="border-t bg-slate-50 dark:bg-muted/40 text-slate-700 dark:text-neutral-200"
+                      >
+                        {displayColumns.map((col, i) => {
+                          const v = footer.values[col.key];
+                          const text = formatAggregateValue(v ?? null, footer.fn, col.type, formatCellValue);
+                          return (
+                            <td
+                              key={col.key}
+                              className={cn(
+                                "px-3 py-2",
+                                alignClass(col, view),
+                                NUMERIC_TYPES.includes(col.type) && "tabular-nums"
+                              )}
+                            >
+                              {i === labelIdx
+                                ? footer.label
+                                : labelIdx === -1 && i === 0
+                                  ? `${footer.label} ${text}`.trim()
+                                  : text}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </tfoot>
               )}
             </table>
