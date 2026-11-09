@@ -26,6 +26,18 @@ import {
 } from "@/lib/hooks/use-line-item-subitems";
 import { useProducts } from "@/lib/hooks/use-products";
 import { CatalogItemCombobox } from "@/components/shared/CatalogItemCombobox";
+import { useCRMServices } from "@/lib/hooks/use-crm-jobs";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 
 interface Props {
@@ -39,6 +51,7 @@ interface FormState {
   name: string;
   type: "product" | "subservice";
   productId: string | null;
+  serviceId: string | null;
   qty: number;
   rateDollars: number;
   costDollars: number;
@@ -54,6 +67,7 @@ function getInitialState(subitem?: LineItemSubitem): FormState {
       name: subitem.name,
       type: subitem.type,
       productId: subitem.productId,
+      serviceId: subitem.serviceId,
       qty: subitem.qty,
       rateDollars: subitem.rateCents / 100,
       costDollars: subitem.costCents / 100,
@@ -67,6 +81,7 @@ function getInitialState(subitem?: LineItemSubitem): FormState {
     name: "",
     type: "product",
     productId: null,
+    serviceId: null,
     qty: 1,
     rateDollars: 0,
     costDollars: 0,
@@ -82,6 +97,9 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
   const { mutateAsync: upsert, isPending } = useUpsertSubitem();
   const { data: allProducts = [] } = useProducts();
   const products = allProducts.filter((p) => p.category !== "maintenance_part");
+  const { data: services = [] } = useCRMServices();
+  const [servicePickerOpen, setServicePickerOpen] = useState(false);
+  const selectedService = form.serviceId ? services.find((s) => s.id === form.serviceId) ?? null : null;
 
   // Reset when dialog opens/closes or subitem changes
   useEffect(() => {
@@ -106,6 +124,19 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
     }));
   }
 
+  // Picking a catalog service pre-fills name, rate and cost from the service's
+  // defaults (all still editable) — same behavior as picking a product.
+  function selectService(serviceId: string) {
+    const service = services.find((s) => s.id === serviceId) ?? null;
+    setForm((prev) => ({
+      ...prev,
+      serviceId: service ? service.id : null,
+      name: service ? service.name : prev.name,
+      rateDollars: service?.defaultRateCents != null ? service.defaultRateCents / 100 : prev.rateDollars,
+      costDollars: service ? service.defaultBCostCents / 100 : prev.costDollars,
+    }));
+  }
+
   // Price off the ROUNDED per-unit rate that is stored, not the raw dollar
   // input: a rate typed as $0.145 saves as 15c (rateCents), so a total of
   // qty x 14.5c disagreed with the qty x rate printed beside it.
@@ -124,6 +155,7 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
           ...(subitem ? { id: subitem.id } : {}),
           type: form.type,
           productId: form.productId,
+          serviceId: form.serviceId,
           name: form.name.trim(),
           qty: form.qty,
           rateCents,
@@ -160,6 +192,7 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
               onValueChange={(v) => {
                 setField("type", v as "product" | "subservice");
                 if (v !== "product") setField("productId", null);
+                if (v !== "subservice") setField("serviceId", null);
               }}
             >
               <SelectTrigger>
@@ -183,6 +216,53 @@ export function AddSubitemDialog({ lineItemId, subitem, open, onClose }: Props) 
                 onValueChange={selectProduct}
                 placeholder="Select product…"
               />
+            </div>
+          )}
+
+          {/* Service catalog selection — pre-fills Name, Rate and Cost from the service */}
+          {form.type === "subservice" && (
+            <div className="space-y-1.5">
+              <Label>Service</Label>
+              <Popover open={servicePickerOpen} onOpenChange={setServicePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={servicePickerOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className={cn("truncate", !selectedService && "text-muted-foreground")}>
+                      {selectedService?.name ?? "Select service from catalog…"}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[320px] p-0" align="start" onWheel={(e) => e.stopPropagation()}>
+                  <Command
+                    filter={(itemValue, search) =>
+                      itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0
+                    }
+                  >
+                    <CommandInput placeholder="Search services..." />
+                    <CommandList className="!max-h-[240px]">
+                      <CommandEmpty>No services found.</CommandEmpty>
+                      <CommandGroup>
+                        {services.map((s) => (
+                          <CommandItem
+                            key={s.id}
+                            value={[s.name, s.code, s.category].filter(Boolean).join(" ")}
+                            onSelect={() => { selectService(s.id); setServicePickerOpen(false); }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4 shrink-0", form.serviceId === s.id ? "opacity-100" : "opacity-0")} />
+                            <p className="truncate text-sm font-medium">{s.name}</p>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <p className="text-[11px] text-muted-foreground">Or type a custom name below.</p>
             </div>
           )}
 

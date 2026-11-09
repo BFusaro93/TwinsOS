@@ -155,6 +155,23 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
             <span className="ml-2 rounded bg-slate-200 dark:bg-neutral-700 px-1 py-0.5 text-[10px] text-muted-foreground">
               {s.type === "product" ? "Product" : "Subservice"}
             </span>
+            {/* Like Service Autopilot: one click shows/hides this sub-item on the
+                client's estimate. Sits beside the name (not in the far-right
+                column) so it is visible without scrolling the grid sideways. */}
+            <button
+              type="button"
+              onClick={() => togglePrint({ id: s.id, lineItemId, field: "printOnEstimate", value: !s.printOnEstimate })}
+              title={s.printOnEstimate ? "Printed on the estimate — click to hide" : "Not printed on the estimate — click to show"}
+              aria-pressed={s.printOnEstimate}
+              className={`ml-2 inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium align-middle ${
+                s.printOnEstimate
+                  ? "border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400"
+                  : "border-slate-200 dark:border-neutral-700 text-slate-400 dark:text-neutral-500"
+              } hover:text-brand-700 dark:hover:text-brand-400`}
+            >
+              <Printer className="h-3 w-3" />
+              {s.printOnEstimate ? "On estimate" : "Hidden"}
+            </button>
           </td>
           <td className="w-12 px-2 py-1 text-right tabular-nums text-slate-600 dark:text-neutral-400">{s.qty}</td>
           <td colSpan={5} />
@@ -184,21 +201,7 @@ function SubitemRows({ lineItemId, onAddClick }: { lineItemId: string; onAddClic
               </button>
             </div>
           </td>
-          <td className="px-2 py-1">
-            <div className="flex items-center gap-1">
-              {/* Like Service Autopilot: one click shows/hides this sub-item on the
-                  client's estimate. Always visible so the state is readable. */}
-              <button
-                type="button"
-                onClick={() => togglePrint({ id: s.id, lineItemId, field: "printOnEstimate", value: !s.printOnEstimate })}
-                title={s.printOnEstimate ? "Printed on the estimate — click to hide" : "Not printed on the estimate — click to show"}
-                aria-pressed={s.printOnEstimate}
-                className={`rounded p-0.5 ${s.printOnEstimate ? "text-brand-600 dark:text-brand-400" : "text-slate-300 dark:text-neutral-600"} hover:text-brand-700 dark:hover:text-brand-400`}
-              >
-                <Printer className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </td>
+          <td />
         </tr>
       ))}
       <tr className="border-b border-slate-100 dark:border-neutral-800 bg-slate-50/40 dark:bg-muted/40">
@@ -615,9 +618,15 @@ function LineItemRow({
   // than persisting a derived per-unit value that would poison the NEXT
   // Qty/Budgeted-Hours edit (see estimate-calc.ts for the corruption that
   // caused — a stale derived rate silently re-multiplied by qty again).
+  // Sub-items are real priced rows under this line (see recalcEstimateTotals), so
+  // the line's displayed TP / T.Cost / GM% roll them up. The stored row values
+  // stay sub-item-free — the estimate rollup adds sub-items separately.
+  const subitemRevenueCents = subitems.reduce((a, si) => a + si.totalCents, 0);
+  const subitemCostCents = subitems.reduce((a, si) => a + Math.round(si.costCents * si.qty), 0);
+  const rolledRevenueCents = row.totalCents + subitemRevenueCents;
   const displayMarginBps =
-    equipmentCents > 0 && row.totalCents > 0
-      ? Math.round(((row.totalCents - row.totalCostCents - equipmentCents) / row.totalCents) * 10000)
+    (equipmentCents > 0 || subitems.length > 0) && rolledRevenueCents > 0
+      ? Math.round(((rolledRevenueCents - row.totalCostCents - equipmentCents - subitemCostCents) / rolledRevenueCents) * 10000)
       : row.marginBps;
   const isAutoCost = !costFocused && row.costCents === 0 && !!breakevenRateCents && row.budgetedHours > 0;
   const isComplexityAdjusted = row.complexityBps !== 10000;
@@ -853,11 +862,16 @@ function LineItemRow({
         <td className="w-20 px-2 py-1.5 text-right tabular-nums">
           {row.discountCents > 0 ? (
             <div className="flex flex-col items-end leading-tight">
-              <span className="text-[10px] text-slate-300 dark:text-neutral-500 line-through">{centsToDisplay(row.totalCents)}</span>
-              <span className="font-medium text-slate-700 dark:text-neutral-300">{centsToDisplay(row.totalCents - row.discountCents)}</span>
+              <span className="text-[10px] text-slate-300 dark:text-neutral-500 line-through">{centsToDisplay(rolledRevenueCents)}</span>
+              <span className="font-medium text-slate-700 dark:text-neutral-300">{centsToDisplay(rolledRevenueCents - row.discountCents)}</span>
             </div>
           ) : (
-            <span className="font-medium text-slate-700 dark:text-neutral-300">{centsToDisplay(row.totalCents)}</span>
+            <span
+              className="font-medium text-slate-700 dark:text-neutral-300"
+              title={subitemRevenueCents > 0 ? `${centsToDisplay(row.totalCents)} line + ${centsToDisplay(subitemRevenueCents)} sub-items` : undefined}
+            >
+              {centsToDisplay(rolledRevenueCents)}
+            </span>
           )}
         </td>
 
@@ -891,9 +905,9 @@ function LineItemRow({
         {/* T. Cost */}
         <td
           className="w-24 px-2 py-1.5 text-right tabular-nums text-muted-foreground"
-          title={equipmentCents > 0 ? `${centsToDisplay(row.totalCostCents)} line cost + ${centsToDisplay(equipmentCents)} equipment` : undefined}
+          title={equipmentCents > 0 || subitemCostCents > 0 ? `${centsToDisplay(row.totalCostCents)} line cost + ${centsToDisplay(subitemCostCents)} sub-items + ${centsToDisplay(equipmentCents)} equipment` : undefined}
         >
-          {centsToDisplay(row.totalCostCents + equipmentCents)}
+          {centsToDisplay(row.totalCostCents + equipmentCents + subitemCostCents)}
         </td>
 
         {/* Adj Rate */}
@@ -1024,8 +1038,8 @@ function LineItemRow({
       {expanded && (
         <LineItemEquipmentRows
           lineItemId={item.id}
-          revenueCents={row.totalCents}
-          lineCostCents={row.totalCostCents}
+          revenueCents={rolledRevenueCents}
+          lineCostCents={row.totalCostCents + subitemCostCents}
         />
       )}
 
