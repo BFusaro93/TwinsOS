@@ -1131,12 +1131,6 @@ function JobDetailSheet({
         : {}),
       is_high_priority: highPriorityOverride,
     };
-    // B. Hours is the visit's TOTAL (per-person hours x crew). When only the crew size changed,
-    // keep the per-person hours: 2 hrs for 1 person becomes 6 for 3 (same as Edit Job).
-    const oldMen = visit.menCount ?? job?.services?.find((s) => s.id === visit.jobServiceId)?.teamSize ?? 1;
-    if (parsedMenCount !== oldMen && oldMen > 0 && budgetedHoursInput === seedBudgeted && seedBudgeted !== "") {
-      updates.budgeted_hours = Math.round((parseFloat(seedBudgeted) / oldMen) * parsedMenCount * 100) / 100;
-    }
     if (status === "completed" && visit.status !== "completed") {
       updates.completed_at = new Date().toISOString();
     }
@@ -3620,16 +3614,9 @@ function VisitRow({
 
   function saveMenCount(value: string) {
     const n = parseInt(value, 10);
-    // Same rule as the visit sheet and useCreateVisit (at least one person).
-    const newMen = Number.isNaN(n) || n < 1 ? 1 : n;
-    // The B Hrs column is a TOTAL (hours per person x crew). Changing the crew size keeps the
-    // per-person hours, so 2 hrs with a crew of 1 becomes 6 with a crew of 3 (as in Edit Job).
-    const oldMen = visit.menCount ?? job?.services?.find((s) => s.id === visit.jobServiceId)?.teamSize ?? 1;
-    const rescaled = budgetedHours != null && oldMen > 0 && newMen !== oldMen
-      ? { budgeted_hours: Math.round((budgetedHours / oldMen) * newMen * 100) / 100 }
-      : {};
     updateVisit.mutate(
-      { id: visit.id, updates: { men_count: newMen, ...rescaled } },
+      // Same rule as the visit sheet and useCreateVisit (at least one person).
+      { id: visit.id, updates: { men_count: Number.isNaN(n) || n < 1 ? 1 : n } },
       { onError: () => toast.error("Failed to save crew size") }
     );
   }
