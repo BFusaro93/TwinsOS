@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
+import { reloadOnceForChunkError } from "@/lib/utils/chunk-load-recovery";
 
 interface Props {
   error: Error & { digest?: string };
@@ -10,6 +11,7 @@ interface Props {
 
 export default function GlobalError({ error, reset }: Props) {
   useEffect(() => {
+    if (reloadOnceForChunkError(error)) return;
     Sentry.captureException(error);
   }, [error]);
 
