@@ -140,9 +140,9 @@ export function InvoicePhotosPanel({ invoiceId, canEdit }: Props) {
                   <div className="relative">
                     {p.signedUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.signedUrl} alt={p.caption ?? "Invoice photo"} className="h-28 w-full rounded object-cover" />
+                      <img src={p.signedUrl} alt={p.caption ?? "Invoice photo"} className="aspect-[4/3] w-full rounded object-cover" />
                     ) : (
-                      <div className="flex h-28 w-full items-center justify-center rounded bg-muted text-[10px] text-slate-400 dark:text-neutral-500">Unavailable</div>
+                      <div className="flex aspect-[4/3] w-full items-center justify-center rounded bg-muted text-[10px] text-slate-400 dark:text-neutral-500">Unavailable</div>
                     )}
                     {canEdit && (
                       <button
@@ -202,9 +202,9 @@ export function InvoicePhotosPanel({ invoiceId, canEdit }: Props) {
                   <label key={key(c)} className="relative block cursor-pointer overflow-hidden rounded border bg-card">
                     {c.signedUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={c.signedUrl} alt={c.caption ?? "Photo"} loading="lazy" className="h-20 w-full object-cover" />
+                      <img src={c.signedUrl} alt={c.caption ?? "Photo"} loading="lazy" className="aspect-[4/3] w-full object-cover" />
                     ) : (
-                      <div className="flex h-20 items-center justify-center bg-muted text-[10px] text-slate-400 dark:text-neutral-500">Unavailable</div>
+                      <div className="flex aspect-[4/3] items-center justify-center bg-muted text-[10px] text-slate-400 dark:text-neutral-500">Unavailable</div>
                     )}
                     <Checkbox className="absolute left-1 top-1 bg-card" checked={selected.has(key(c))} onCheckedChange={() => toggle(c)} />
                   </label>

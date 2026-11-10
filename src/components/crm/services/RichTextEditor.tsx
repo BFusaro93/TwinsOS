@@ -465,7 +465,7 @@ function RichTextEditor({ value, onChange, placeholder, minHeight = 120, allowIm
       </div>
 
       {/* Editor area */}
-      <div className="px-3 py-2 text-sm text-slate-800 dark:text-neutral-100">
+      <div className="relative px-3 py-2 text-sm text-slate-800 dark:text-neutral-100">
         {!value && !editor.isFocused && (
           <p className="pointer-events-none absolute text-slate-400 dark:text-neutral-500 text-sm">{placeholder}</p>
         )}
