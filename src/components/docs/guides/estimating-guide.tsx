@@ -411,8 +411,15 @@ export function EstimatingGuide() {
           </li>
           <li>
             <strong>Equipment cost.</strong> A line can also carry internal equipment cost, which lowers
-            its margin but is never shown to the client. See <em>Equipment costs</em> in the Services
-            &amp; Pricing guide.
+            its margin but is never shown to the client. On each equipment row the bold amount is the{" "}
+            <strong>charge</strong> (what you type and what the line bills); the cost and margin sit
+            beside it in lighter text. See <em>Equipment costs</em> in the Services &amp; Pricing guide.
+          </li>
+          <li>
+            <strong>Line notes box.</strong> The note icon on a line opens Estimate Desc, Job Note,
+            Invoice Desc and Line Item tabs. For long quotes press <strong>Bigger</strong> at the top
+            right of the box to widen it and make the editor taller; <strong>Smaller</strong> puts it
+            back, and the browser remembers your choice.
           </li>
         </ul>
       </Section>

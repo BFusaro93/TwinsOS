@@ -166,7 +166,11 @@ export function JobsPackagesGuide() {
           </li>
           <li>
             <strong>One Time</strong>, <strong>Project</strong>, <strong>Waiting List</strong> — a
-            service line (or several), date or date range, crew, and team size.
+            service line (or several), date or date range, crew, and team size. Quantity boxes accept
+            decimals such as 0.5 or 0.01 when typed, but the up and down arrows move by 1. On a typed
+            service row, Budgeted Hours is <strong>per person</strong> (the job total is hours × team
+            size), and changing Team size keeps the total the same by re-spreading the per-person
+            hours (rounded to four decimals).
           </li>
         </ul>
         <p>
