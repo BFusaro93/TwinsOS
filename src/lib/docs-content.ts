@@ -2168,7 +2168,23 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
       },
       {
         q: "What are sub-items on a service bundle or estimate line?",
-        a: "A sub-item is a product or subservice attached to a bundle item or estimate line, with its own quantity and rate. Add them with + Add sub-item in the bundle editor (Settings > Estimates > Service Bundles); they come along when the bundle is applied. On an estimate, the printer icon beside a sub-item controls whether it is printed under the line for the client. When the estimate becomes a job, the office and the crew see each service's sub-items by name and quantity only, with no prices; they never bill and don't change inventory.",
+        a: "A sub-item is a product or subservice attached to a bundle item or estimate line, with its own quantity and rate. Add them with + Add sub-item in the bundle editor (Settings > Estimates > Service Bundles); they come along when the bundle is applied. On an estimate, the On estimate / Hidden button beside a sub-item's name controls whether it is printed under the line for the client. When the estimate becomes a job, the office and the crew see each service's sub-items by name and quantity only, with no prices; they never bill and don't change inventory.",
+      },
+      {
+        q: "How do I add a service from my catalog as a sub-item on an estimate line?",
+        a: "Expand the line, click + Add Product / Service, and set Type to Subservice. A Service picker lists your service catalog; choosing one fills in the name, rate (the service's default rate) and cost (its default budgeted cost), all still editable. Choose Product instead to pick from your product catalog. You can also type a custom name.",
+      },
+      {
+        q: "The estimate total is higher than I expected after adding sub-items. Is labor being counted twice?",
+        a: "Sub-items are added on top of the line's own Rate, and the line's TP, T.Cost and GM% include them. If the Rate already holds the full price for work you also entered as sub-items, it is counted twice. Fix it by lowering the Rate to cover only what the sub-items don't, for example the equipment charge, since equipment is never billed on its own. An amber pricing warning also shows under the line when the same catalog item appears twice.",
+      },
+      {
+        q: "Where does the blue Cost on an estimate line come from?",
+        a: "When the line has Budgeted Hours and the Cost box is blank, the Cost is calculated: budgeted hours times your Breakeven Labor Rate from the estimating settings. Typing a number in Cost replaces it. If the margin looks wrong, check that the breakeven rate in settings is right for your company.",
+      },
+      {
+        q: "What do the amber pricing warnings under an estimate line mean?",
+        a: "They are advisory and never block saving. They appear when the line's price is below its equipment charge (equipment isn't billed separately, so raise the line Rate), when an hourly subservice is priced under your breakeven labor rate, when the same catalog product or service is on the line twice, or when the line's costs exceed its price.",
       },
       {
         q: "What formatting does the text editor support? Can I add a table, change the font or highlight text?",

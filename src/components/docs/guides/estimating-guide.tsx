@@ -49,6 +49,7 @@ export function EstimatingGuide() {
           <TOCLink href="#complexity-and-rate-matrix">Complexity multiplier &amp; Rate Matrix pricing</TOCLink>
           <TOCLink href="#reading-the-grid">Reading the line-item grid</TOCLink>
           <TOCLink href="#bundles-subitems">Service bundles and sub-items</TOCLink>
+          <TOCLink href="#line-subitems">Sub-items, equipment and pricing warnings on a line</TOCLink>
           <TOCLink href="#packages-on-estimates">Packages on an estimate</TOCLink>
           <TOCLink href="#zone-measurements">Where zone measurements come from</TOCLink>
           <TOCLink href="#proposal-link">The client-facing proposal link</TOCLink>
@@ -397,10 +398,10 @@ export function EstimatingGuide() {
         </p>
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Print or hide on the estimate.</strong> On an estimate line, a printer icon beside
-            each sub-item toggles whether it is printed under the line on the client&apos;s PDF, the
-            preview and the emailed copy. New sub-items print by default; sub-items that existed before
-            this feature stay hidden so old estimates look the same.
+            <strong>Print or hide on the estimate.</strong> On an estimate line, the <em>On estimate</em> /{" "}
+            <em>Hidden</em> button beside each sub-item&apos;s name toggles whether it is printed under
+            the line on the client&apos;s PDF, the preview and the emailed copy. New sub-items print by
+            default; sub-items that existed before this feature stay hidden so old estimates look the same.
           </li>
           <li>
             <strong>On the job.</strong> When the estimate converts to a job, each service&apos;s
@@ -414,6 +415,49 @@ export function EstimatingGuide() {
             its margin but is never shown to the client. See <em>Equipment costs</em> in the Services
             &amp; Pricing guide.
           </li>
+        </ul>
+      </Section>
+
+      <Section id="line-subitems" title="Sub-items, equipment and pricing warnings on a line">
+        <p>
+          Expand an estimate line to add <strong>sub-items</strong> with <strong>+ Add Product / Service</strong>.
+          In the dialog, choose <strong>Product</strong> to pick from your product catalog or{" "}
+          <strong>Subservice</strong> to pick from your service catalog (or type a custom name). Picking a
+          catalog item fills in the name, rate and cost, and you can still change them. For a
+          subservice the rate is the service&apos;s default rate and the cost is its default budgeted
+          cost.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <strong>Sub-items are added on top of the line&apos;s own Rate.</strong> The line&apos;s TP,
+            T.Cost and GM% include its sub-items, and so do the estimate totals and the Costs breakdown
+            on the right (sub-services under <em>Service</em>, products under <em>Product/Materials</em>).
+            If you price a line as one lump sum in Rate and also add sub-items that make up the same
+            work, the work is counted twice. Either put the full price in Rate and hide the sub-items,
+            or leave Rate to cover only what the sub-items don&apos;t.
+          </li>
+          <li>
+            <strong>Equipment is never billed.</strong> Its charge only counts toward margin, so the
+            line&apos;s Rate has to cover it. Example: 40 labor hours at $50 ($2,000, a sub-item), 5
+            dump fees at $60 ($300, a sub-item) and $510 of equipment charge gives $2,810 when the line
+            Rate is $510.
+          </li>
+          <li>
+            <strong>Where a line&apos;s cost comes from.</strong> When Budgeted Hours are set and Cost is
+            left blank, the Cost shows in blue: budgeted hours times your organization&rsquo;s breakeven
+            (fully-burdened) labor rate. Typing a number in Cost replaces it. A sub-service&apos;s own cost is
+            separate, so a labor sub-item with a $0 cost doesn&apos;t double the line&apos;s labor cost.
+          </li>
+        </ul>
+        <p>
+          Under an expanded line, an amber <strong>pricing warning</strong> appears when something
+          usually means a mistake. Warnings never block saving.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>The line&apos;s own price is less than the equipment charge on it.</li>
+          <li>An hourly catalog subservice is priced below your breakeven labor rate.</li>
+          <li>The same catalog product or service appears more than once under the line.</li>
+          <li>The line&apos;s costs are higher than its price (a negative margin).</li>
         </ul>
       </Section>
 
