@@ -1806,7 +1806,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             className="h-7 w-20 text-right text-xs ml-auto" />
                         </td>
                         <td className="px-2 py-2 text-right">
-                          <Input type="number" min="0" step="0.01" value={newSvcQty}
+                          <Input type="number" min="0" step="any" value={newSvcQty}
                             onChange={(e) => {
                               const qty = e.target.value;
                               setNewSvcQty(qty);

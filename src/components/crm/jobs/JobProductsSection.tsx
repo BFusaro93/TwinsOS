@@ -219,12 +219,12 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
                       </Select>
                     </td>
                     <td className="px-2 py-2 text-right">
-                      <Input type="number" min="0" step="0.01" value={editProductQty}
+                      <Input type="number" min="0" step="any" value={editProductQty}
                         onChange={(e) => setEditProductQty(e.target.value)}
                         className="h-7 w-20 text-right text-sm ml-auto" />
                     </td>
                     <td className="px-2 py-2 text-right">
-                      <Input type="number" min="0" step="0.01" value={editProductInvoiceQty}
+                      <Input type="number" min="0" step="any" value={editProductInvoiceQty}
                         onChange={(e) => setEditProductInvoiceQty(e.target.value)}
                         placeholder={editProductQty || "same"}
                         title="Leave blank to invoice the same qty as used"
@@ -360,7 +360,7 @@ export function JobProductsSection({ jobId, services }: { jobId: string; service
                   </Select>
                 </td>
                 <td className="px-2 py-2 text-right">
-                  <Input type="number" min="0" step="0.01" value={newProductQty}
+                  <Input type="number" min="0" step="any" value={newProductQty}
                     onChange={(e) => setNewProductQty(e.target.value)}
                     className="h-7 w-20 text-right text-xs ml-auto" />
                 </td>
