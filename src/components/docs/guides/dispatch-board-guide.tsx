@@ -28,7 +28,7 @@ const COLUMNS: [string, string][] = [
   ["Assigned", "Which crew (or Unassigned) currently owns the visit."],
   ["Last Svc", "When this client was last serviced for this service — useful for spotting overdue recurring stops. A completed visit stamps its scheduled day, so a stop done on the 15th and marked complete on the 17th shows the 15th (a visit completed ahead of its scheduled day stamps today, and the date never moves backward)."],
   ["Start / End", "Scheduled arrival and departure window, editable inline."],
-  ["B Hrs", "Budgeted hours — from the job's linked service (production rate × team size), or the job-level total as a last resort. Shown to two decimals."],
+  ["B Hrs", "Budgeted hours — from the job's linked service (production rate × team size), or the job-level total as a last resort. Shown to two decimals. It is a total for the whole visit, and changing the crew count on the board does not change it (a 12-hour budget can be 2 hours × 6 people or 4 hours × 3). To change the budget, edit the job's services or the visit's hours; nothing set anywhere shows a dash."],
   ["Actual Hrs", "See the dedicated section below — this is the number that matters most for job costing. Shown to two decimals."],
   ["Hr Variance", "Actual minus budgeted, colored red when over and green when under."],
   ["Men", "Crew headcount used in the actual-hours fallback calculation. A value you set here is kept — editing the visit's times only fills Men in when it was blank."],
@@ -850,7 +850,11 @@ export function DispatchBoardGuide() {
           <li>
             <strong>Cards.</strong> Each visit is a solid block in its crew&apos;s color showing the
             client and service, with budgeted hours at the bottom right. A recurring job carries a
-            repeat icon and a completed visit carries a check mark.
+            repeat icon and a completed visit carries a check mark. A small <strong>camera icon with
+            a count</strong> means the crew uploaded photos from the tablet for that visit; open the
+            visit to see them, and add them to an invoice from its Photos tab. Cancelled visits are
+            hidden from the board unless you filter to Cancelled. Only visits that have been{" "}
+            <strong>dispatched</strong> appear on the crew&apos;s tablet.
           </li>
           <li>
             <strong>Budget bar.</strong> The bar inside each card is <em>actual vs. budgeted hours</em>,
