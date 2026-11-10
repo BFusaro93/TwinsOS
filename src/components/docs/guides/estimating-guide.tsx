@@ -444,8 +444,8 @@ export function EstimatingGuide() {
           </li>
           <li>
             <strong>Where a line&apos;s cost comes from.</strong> When Budgeted Hours are set and Cost is
-            left blank, the Cost shows in blue: budgeted hours times your Breakeven Labor Rate from the
-            estimating settings. Typing a number in Cost replaces it. A sub-service&apos;s own cost is
+            left blank, the Cost shows in blue: budgeted hours times your organization&rsquo;s breakeven
+            (fully-burdened) labor rate. Typing a number in Cost replaces it. A sub-service&apos;s own cost is
             separate, so a labor sub-item with a $0 cost doesn&apos;t double the line&apos;s labor cost.
           </li>
         </ul>
