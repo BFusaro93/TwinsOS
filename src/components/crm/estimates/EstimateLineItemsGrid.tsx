@@ -59,6 +59,8 @@ import { LineItemComplexityPopover } from "./LineItemComplexityPopover";
 import { LineItemDiscountPopover, type LineItemDiscountPatch } from "@/components/shared/LineItemDiscountPopover";
 import { AddSubitemDialog } from "./AddSubitemDialog";
 import { LineItemEquipmentRows } from "./LineItemEquipmentRows";
+import { computeLineWarnings } from "@/lib/estimate-warnings";
+import { effectiveChargeCents } from "@/lib/hooks/use-equipment";
 import { useLineItemEquipment, useApplyServiceEquipmentDefaults } from "@/lib/hooks/use-equipment";
 import {
   useLineItemSubitems,
@@ -624,6 +626,20 @@ function LineItemRow({
   const subitemRevenueCents = subitems.reduce((a, si) => a + si.totalCents, 0);
   const subitemCostCents = subitems.reduce((a, si) => a + Math.round(si.costCents * si.qty), 0);
   const rolledRevenueCents = row.totalCents + subitemRevenueCents;
+  const equipmentChargeCents = lineEquipment.reduce(
+    (a, e) => a + Math.round(e.qty * effectiveChargeCents(e.rateCents, e.chargeRateCents)),
+    0
+  );
+  const hourlyServiceIds = new Set((catalogServices ?? []).filter((s) => s.serviceMode === "hourly").map((s) => s.id));
+  const lineWarnings = computeLineWarnings({
+    lineRevenueCents: row.totalCents - row.discountCents,
+    rolledRevenueCents: rolledRevenueCents - row.discountCents,
+    totalCostCents: row.totalCostCents + subitemCostCents + equipmentCents,
+    equipmentChargeCents,
+    subitems,
+    hourlyServiceIds,
+    breakevenRateCents,
+  });
   const displayMarginBps =
     (equipmentCents > 0 || subitems.length > 0) && rolledRevenueCents > 0
       ? Math.round(((rolledRevenueCents - row.totalCostCents - equipmentCents - subitemCostCents) / rolledRevenueCents) * 10000)
@@ -1041,6 +1057,21 @@ function LineItemRow({
           revenueCents={rolledRevenueCents}
           lineCostCents={row.totalCostCents + subitemCostCents}
         />
+      )}
+
+      {expanded && lineWarnings.length > 0 && (
+        <tr className="border-b border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10">
+          <td colSpan={17} className="px-8 py-1.5">
+            <ul className="space-y-0.5 text-[11px] text-amber-800 dark:text-amber-300">
+              {lineWarnings.map((w) => (
+                <li key={w.code + w.message} className="flex items-start gap-1.5">
+                  <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span>{w.message}</span>
+                </li>
+              ))}
+            </ul>
+          </td>
+        </tr>
       )}
 
       {addSubitemOpen && (
