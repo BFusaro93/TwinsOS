@@ -145,7 +145,7 @@ export async function buildEstimatePDFData(
   // Client-facing copies of a sent estimate print the version the client was
   // sent, not unsent edits (see lib/estimates/proposal-content.ts).
   if (opts.published && est.stage === "sent") {
-    const published = await getPublishedProposal(supabase, estimateId);
+    const published = await getPublishedProposal(supabase, estimateId, orgId);
     if (published) {
       const c = published.content;
       Object.assign(estimateData, {
@@ -193,7 +193,7 @@ export async function buildEstimatePDFData(
     let doc: ProposalDocument | null = null;
     let mergeContent: ProposalContent | null = null;
     if (opts.published) {
-      const published = await getPublishedProposal(supabase, estimateId);
+      const published = await getPublishedProposal(supabase, estimateId, orgId);
       if (published) {
         doc = published.content.document ?? null;
         mergeContent = published.content;
@@ -204,7 +204,7 @@ export async function buildEstimatePDFData(
       doc = toProposalDocument(await resolveEstimateDocument(supabase, estimateId));
     }
     if (doc) {
-      const vars = await loadEstimateDocumentMergeVars(supabase, estimateId, { content: mergeContent, html: false });
+      const vars = await loadEstimateDocumentMergeVars(supabase, estimateId, { content: mergeContent, html: false, orgId });
       estimateData.document = { blocks: resolveDocumentBlocksForPdf(doc, vars) };
     }
   } catch (err) {

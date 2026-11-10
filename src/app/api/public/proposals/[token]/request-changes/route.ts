@@ -55,6 +55,7 @@ export async function POST(
     .from("estimates")
     .select("id, org_id, client_id, estimate_number, stage")
     .eq("id", shareToken.estimate_id)
+    .eq("org_id", shareToken.org_id)
     .is("deleted_at", null)
     .single();
 

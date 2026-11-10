@@ -71,6 +71,7 @@ export async function GET(
       estimate_line_items(*, estimate_line_item_subitems(*))
     `)
     .eq("id", shareToken.estimate_id)
+    .eq("org_id", shareToken.org_id)
     .is("deleted_at", null)
     .single();
 
@@ -84,6 +85,7 @@ export async function GET(
     .from("estimate_photos")
     .select("id, storage_path, caption")
     .eq("estimate_id", shareToken.estimate_id)
+    .eq("org_id", shareToken.org_id)
     .eq("customer_facing", true)
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
@@ -128,7 +130,7 @@ export async function GET(
   // keep editing a sent estimate without the client seeing (or accepting) a
   // half-finished revision. Falls back to live content when nothing has been
   // published with proposal content yet (estimates sent before this change).
-  const published = await getPublishedProposal(supabase, shareToken.estimate_id);
+  const published = await getPublishedProposal(supabase, shareToken.estimate_id, shareToken.org_id);
   const content = published?.content ?? buildProposalContent(est as Record<string, unknown>);
 
   // The Estimate-type document that laid out the version being viewed, rendered
@@ -139,7 +141,7 @@ export async function GET(
   let document: { name: string; beforeHtml: string; afterHtml: string } | null = null;
   if (content.document && content.document.blocks.length > 0) {
     try {
-      const vars = await loadEstimateDocumentMergeVars(supabase, shareToken.estimate_id, { content, shareToken: token, html: true });
+      const vars = await loadEstimateDocumentMergeVars(supabase, shareToken.estimate_id, { content, shareToken: token, html: true, orgId: shareToken.org_id });
       const rendered = renderProposalDocumentHtml(content.document, vars);
       if (rendered.beforeHtml || rendered.afterHtml) {
         document = { name: content.document.name, beforeHtml: rendered.beforeHtml, afterHtml: rendered.afterHtml };

@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { CalendarDays, CheckCircle2, Loader2, Wrench, Zap } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import { realtimeTopic } from "@/lib/supabase/realtime-topic";
 import { formatVisitWindow } from "@/lib/portal/visit-window";
-import { realtimeClientFilter } from "@/lib/portal/client-id-chunks";
+import { usePortalVisitStatuses } from "@/lib/hooks/use-portal-visit-statuses";
 import { SubAccountLabel } from "@/components/portal/SubAccountLabel";
 
 function fmtDate(iso: string) {
@@ -34,9 +32,6 @@ interface Visit {
 interface Props {
   upcoming: Visit[];
   completed: Visit[];
-  /** The login's client plus its sub-accounts (getPortalAccounts). */
-  clientIds: string[];
-  orgId: string;
 }
 
 const STATUS_PILL: Record<string, { label: string; color: string }> = {
@@ -46,47 +41,18 @@ const STATUS_PILL: Record<string, { label: string; color: string }> = {
   cancelled:   { label: "Cancelled",    color: "bg-slate-100 text-slate-500 border-slate-200" },
 };
 
-export default function PortalServicesPage({ upcoming: initialUpcoming, completed, clientIds, orgId }: Props) {
+export default function PortalServicesPage({ upcoming: initialUpcoming, completed }: Props) {
   const [upcoming, setUpcoming] = useState(initialUpcoming);
-  const [liveVisitId, setLiveVisitId] = useState<string | null>(
-    initialUpcoming.find((v) => v.status === "in_progress")?.id ?? null
-  );
 
-  // Supabase Realtime subscription for live visit status. crm_job_visits was
-  // added to the supabase_realtime publication in
-  // 20260826153000_crm_job_visits_realtime.sql; RLS's own portal-scoped
-  // policy (client_portal_multi_org.sql) is what actually restricts delivery
-  // to this client's rows — the client_id filter here is just to avoid
-  // subscribing to an unfiltered stream client-side.
-  const clientKey = clientIds.join(",");
+  // Live visit status. Portal users have no RLS read path to crm_job_visits
+  // (so no Realtime either: its payloads carried internal columns); the page
+  // polls the login-scoped status endpoint instead.
+  const { data: statuses } = usePortalVisitStatuses(initialUpcoming.map((v) => v.id));
   useEffect(() => {
-    const supabase = createClient();
-
-    const channel = supabase
-      .channel(realtimeTopic(`portal-visits-${clientIds[0]}`))
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "crm_job_visits",
-          filter: realtimeClientFilter(clientKey.split(","), orgId),
-        },
-        (payload) => {
-          const updated = payload.new as { id: string; status: string; client_id?: string };
-          // Only update visits that belong to this client's upcoming list
-          setUpcoming((prev) =>
-            prev.map((v) => v.id === updated.id ? { ...v, status: updated.status } : v)
-          );
-          if (updated.status === "in_progress") setLiveVisitId(updated.id);
-          else if (liveVisitId === updated.id) setLiveVisitId(null);
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientKey, orgId]);
+    if (!statuses) return;
+    const byId = new Map(statuses.map((s) => [s.id, s.status]));
+    setUpcoming((prev) => prev.map((v) => ({ ...v, status: byId.get(v.id) ?? v.status })));
+  }, [statuses]);
 
   const inProgressVisit = upcoming.find((v) => v.status === "in_progress");
 

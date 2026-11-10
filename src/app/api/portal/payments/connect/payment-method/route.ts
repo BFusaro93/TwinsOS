@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { getPortalContext } from "@/lib/portal/get-portal-context";
 import { getStripeForOrg, isStripeConfigured, isStripeTestConfigured } from "@/lib/stripe/server";
 import { logger } from "@/lib/logger";
@@ -11,7 +11,11 @@ export async function DELETE() {
   const ctx = await getPortalContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const supabase = await createClient();
+  // Portal users have no RLS read path to clients / crm_invoices — service
+
+  // client, scoped to this login (ctx is server-derived) on every query below.
+
+  const supabase = createServiceClient();
 
   const { data: client } = await supabase
     .from("clients")

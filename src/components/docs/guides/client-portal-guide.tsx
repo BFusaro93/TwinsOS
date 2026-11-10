@@ -186,9 +186,9 @@ export function ClientPortalGuide() {
         </Table>
         <p>
           The Home dashboard and the Services page both show an amber &quot;Service in Progress&quot; banner
-          when a visit&apos;s status is <code>in_progress</code>, kept live by a Supabase Realtime
-          subscription on <code>crm_job_visits</code> — the banner updates itself the moment staff mark a
-          visit in progress or complete, with no page refresh needed.
+          when a visit&apos;s status is <code>in_progress</code>. While the page is open it re-checks
+          visit status about once a minute, so the banner appears or clears within a minute of staff
+          marking a visit in progress or complete, with no page refresh needed.
         </p>
               <p>
           If two crews work the same stop, the portal shows it as a single visit &mdash; only the lead crew&apos;s visit is listed.
@@ -243,7 +243,9 @@ export function ClientPortalGuide() {
         <ul className="list-disc space-y-2 pl-5">
           <li>
             <strong>Drafts are never shown.</strong> Draft invoices and unsent estimates don&apos;t
-            appear in the portal, and a draft can&apos;t be paid from it. A fully paid or $0 invoice
+            appear in the portal, and a draft can&apos;t be paid from it. Deleted invoices and visits
+            don&apos;t appear either, and the portal never shows internal fields such as crew notes,
+            labor cost or office notes. A fully paid or $0 invoice
             doesn&apos;t count as outstanding or flag the account as past due.
           </li>
           <li>

@@ -60,10 +60,10 @@ function installmentSummary(
 export async function loadEstimateDocumentMergeVars(
   supabase: AnySupabase,
   estimateId: string,
-  opts: { content?: ProposalContent | null; shareToken?: string | null; html: boolean },
+  opts: { content?: ProposalContent | null; shareToken?: string | null; html: boolean; orgId?: string },
 ): Promise<Record<string, string>> {
   try {
-    const { data: est } = await supabase
+    let estQuery = supabase
       .from("estimates")
       .select(
         "org_id, estimate_number, estimate_date, created_at, valid_until_date, notes, subtotal_cents, total_cents, discount_cents, " +
@@ -73,8 +73,10 @@ export async function loadEstimateDocumentMergeVars(
         "sales_rep:crm_employees!estimates_sales_rep_id_fkey(first_name,last_name), " +
         "estimate_milestones(amount_cents, deleted_at)",
       )
-      .eq("id", estimateId)
-      .maybeSingle();
+      .eq("id", estimateId);
+    // Service-role callers (public proposal page) pin the token's org.
+    if (opts.orgId) estQuery = estQuery.eq("org_id", opts.orgId);
+    const { data: est } = await estQuery.maybeSingle();
     if (!est) return {};
     const { data: org } = await supabase
       .from("organizations")

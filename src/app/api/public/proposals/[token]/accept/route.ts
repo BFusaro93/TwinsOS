@@ -108,6 +108,7 @@ export async function POST(
     .from("estimates")
     .select("stage, total_cents, valid_until_date, tiers_enabled")
     .eq("id", shareToken.estimate_id)
+    .eq("org_id", shareToken.org_id)
     .is("deleted_at", null)
     .single();
   if (!currentEstimate || currentEstimate.stage !== "sent") {
@@ -143,7 +144,7 @@ export async function POST(
 
   // The client can only accept the version their link shows. If staff have
   // edited past it, accepting would apply terms the client never saw.
-  if (await isChangedSinceSent(supabase, shareToken.estimate_id)) {
+  if (await isChangedSinceSent(supabase, shareToken.estimate_id, shareToken.org_id)) {
     await notifyStaffOfUnacceptedDeposit(supabase, shareToken.org_id, shareToken.estimate_id);
     return NextResponse.json(
       { error: "This proposal was updated after it was sent to you. We'll send you the latest version shortly." },
@@ -214,6 +215,7 @@ export async function POST(
     .from("estimates")
     .update({ stage: "accepted", updated_at: now })
     .eq("id", shareToken.estimate_id)
+    .eq("org_id", shareToken.org_id)
     .eq("stage", "sent")
     .select("id");
   if (stageErr || !stageMoved || stageMoved.length === 0) {
@@ -246,6 +248,7 @@ export async function POST(
       .from("estimates")
       .update({ stage: "sent", updated_at: new Date().toISOString() })
       .eq("id", shareToken.estimate_id)
+      .eq("org_id", shareToken.org_id)
       .eq("stage", "accepted");
     await supabase
       .from("estimate_share_tokens")
@@ -364,6 +367,7 @@ export async function POST(
       .from("estimates")
       .select("total_cents")
       .eq("id", shareToken.estimate_id)
+      .eq("org_id", shareToken.org_id)
       .single();
     if (recalcReadErr || !recalced) throw recalcReadErr ?? new Error("estimate not found after recalc");
     acceptedTotalCents = (recalced.total_cents as number | null) ?? 0;
@@ -430,6 +434,7 @@ export async function POST(
     .from("estimates")
     .select("client_id, estimate_number, org_id, total_cents, sales_rep_id, clients(primary_email, display_name, email_bounced_at)")
     .eq("id", shareToken.estimate_id)
+    .eq("org_id", shareToken.org_id)
     .single();
 
   if (est) {

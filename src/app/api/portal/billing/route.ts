@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { getPortalAccounts, getPortalContext } from "@/lib/portal/get-portal-context";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { byColumn, queryByClientIds } from "@/lib/portal/client-id-chunks";
 
 export async function GET() {
   const ctx = await getPortalContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const supabase = await createClient();
+  // Portal users have no RLS read path to crm_invoices (a direct read would
+  // expose drafts, deleted rows and internal columns) — service client,
+  // scoped below to this login's accounts + org, client-safe columns only.
+  const supabase = createServiceClient();
   // A parent client's login also sees its sub-accounts' invoices.
   const clientIds = (await getPortalAccounts(ctx)).map((a) => a.id);
 
