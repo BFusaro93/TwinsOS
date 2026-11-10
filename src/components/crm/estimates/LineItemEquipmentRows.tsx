@@ -96,15 +96,24 @@ function EquipmentRow({ row, lineItemId }: { row: LineItemEquipment; lineItemId:
             />
             {EQUIPMENT_UNIT_LABELS[row.unit]}
           </label>
-          <span className="tabular-nums font-medium text-slate-700 dark:text-neutral-300" title="Internal cost = qty × rate">
-            {centsToDisplay(row.totalCostCents)}
-          </span>
-          {chargeCents !== row.totalCostCents && (
-            <span
-              className="tabular-nums text-muted-foreground"
-              title={`Charge ${centsToDisplay(chargeCents)} − cost ${centsToDisplay(row.totalCostCents)}`}
-            >
-              charge {centsToDisplay(chargeCents)} · margin {centsToDisplay(chargeCents - row.totalCostCents)}
+          {chargeCents !== row.totalCostCents ? (
+            <>
+              <span
+                className="tabular-nums font-semibold text-slate-800 dark:text-neutral-100"
+                title="What the line price should cover = qty × charge rate"
+              >
+                charge {centsToDisplay(chargeCents)}
+              </span>
+              <span
+                className="tabular-nums text-muted-foreground"
+                title={`Internal cost = qty × rate. Charge ${centsToDisplay(chargeCents)} − cost ${centsToDisplay(row.totalCostCents)}`}
+              >
+                cost {centsToDisplay(row.totalCostCents)} · margin {centsToDisplay(chargeCents - row.totalCostCents)}
+              </span>
+            </>
+          ) : (
+            <span className="tabular-nums font-semibold text-slate-800 dark:text-neutral-100" title="Internal cost = qty × rate (no markup set, so the charge is the same)">
+              {centsToDisplay(row.totalCostCents)}
             </span>
           )}
           <button
