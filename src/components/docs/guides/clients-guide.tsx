@@ -176,6 +176,13 @@ export function ClientsGuide() {
             by accident.
           </li>
           <li>
+            <strong>Bulk email.</strong> <strong>Email</strong> on a selection sends one message per
+            email address, a few at a time to stay under the mail provider&apos;s rate limit. If some
+            fail, the dialog stays open and lists each failed client with the reason; the button
+            becomes <strong>Retry failed (N)</strong> and only re-sends those, so nobody who already
+            got the email is mailed twice.
+          </li>
+          <li>
             <strong>Export.</strong> <strong>Import / Export &gt; Export</strong> downloads a CSV of
             exactly the clients your current search and filters match, all of them, not just the
             ones loaded on screen. Clear the search and filters first to export everyone.
@@ -185,7 +192,10 @@ export function ClientsGuide() {
           <strong>Picking a client elsewhere.</strong> Client pickers on invoices, estimates, jobs,
           contracts, payments, tickets, projects and the global search (⌘K) search as you type and
           show up to 50 matches. If the client you want isn&apos;t listed, keep typing: a few
-          letters of the name, an account number or part of the address narrows it down.
+          letters of the name, an account number or part of the address narrows it down. The
+          global search also looks up invoices (by number or client name) and estimates (by number,
+          client name or description) as you type, up to 20 of each; a draft invoice with no number
+          yet shows as &quot;Draft invoice&quot;. Groups your role can&apos;t view aren&apos;t searched.
         </Callout>
       </Section>
 
@@ -664,6 +674,13 @@ export function ClientsGuide() {
             sub-accounts (only one level of hierarchy is allowed), so keep the parent instead or unlink first.
           </li>
           <li>
+            <strong>Payments in flight.</strong> A merge waits while the duplicate has an online bank transfer
+            still settling or waiting on bank verification, or a proposal deposit in flight; try again once it
+            settles (usually a few business days). A payment that still names the duplicate when it settles is
+            recorded on the client you kept, and any open online pay form for the duplicate&apos;s invoices is
+            canceled.
+          </li>
+          <li>
             <strong>Status isn&apos;t changed.</strong> If you keep an Inactive or Cancelled record and merge an
             active duplicate into it, reactivate the kept client afterwards if it&apos;s still a customer.
           </li>
@@ -679,6 +696,9 @@ export function ClientsGuide() {
           </li>
           <li>
             <strong>Changing the phone number clears text consent.</strong> Consent was given for the old number, so saving a different primary phone turns off “Opted in to text messages” and logs it, unless you tick the box yourself in the same save.
+          </li>
+          <li>
+            <strong>Numbers that opted out of texts.</strong> An amber &ldquo;Texts blocked for (508) 555-1234&rdquo; notice on the client lists each of its numbers (primary, other phones, contacts) that replied STOP or a similar word, or that the carrier reports as opted out, with the date. Texts skip only that number; the client&apos;s other numbers still get them. If the notice says a text <em>contained</em> an opt-out word, check with the client that they meant it. Only the texter can lift it, by replying START. When the client&apos;s primary phone opts out, “Opted in to text messages” is turned off too.
           </li>
           <li>
             <strong>The timeline records more.</strong> Cancelling, closing as lost and reactivating (with the reason), adding or changing contacts and properties, removing tags, and uploading or deleting files all leave an entry on the client&apos;s activity timeline.

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useProjects, useCreateProject, useUpdateProject } from "@/lib/hooks/use-projects";
+import { useProjects, useCreateProject, useUpdateProject, useProjectWip, useProjectLinkBilling } from "@/lib/hooks/use-projects";
 import { useClient } from "@/lib/hooks/use-clients";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useInvoices } from "@/lib/hooks/use-invoices";
@@ -108,10 +108,12 @@ function MilestoneTab({ project }: { project: Project }) {
       <div>
         <h3 className="text-sm font-semibold text-slate-700 dark:text-neutral-300">Billing Schedule</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Percentages are of the revised contract ({formatCurrency(project.contractPrice)}). Invoicing a
-          milestone creates a draft invoice on this project — and marks it invoiced on the estimate it
-          came from, since they are the same schedule. An approved change order adjusts the milestones
-          that haven&apos;t been invoiced yet, so anything already billed stays put.
+          Percentages are of the revised contract ({formatCurrency(project.contractPrice)}) — except an
+          add-on estimate&apos;s milestones (an estimate converted into this project after the one it came
+          from), which are a percentage of that estimate&apos;s own total. Invoicing a milestone creates a
+          draft invoice on this project — and marks it invoiced on the estimate it came from, since they
+          are the same schedule. An approved change order adjusts the milestones that haven&apos;t been
+          invoiced yet, so anything already billed stays put.
         </p>
       </div>
       <MilestoneScheduleEditor
@@ -147,8 +149,26 @@ function BillingTab({ project }: { project: Project }) {
   const scope = project.clientId ? { projectId: project.id } : { projectId: null };
   const { data: invoices } = useInvoices(project.clientId ?? undefined, scope);
   const { data: payments } = usePayments(project.clientId ?? undefined, scope);
+  // This project's invoices that were merged/consolidated into another invoice
+  // (rpt_invoice_link_billing — what the WIP report counts as billed). The source
+  // invoice is voided into its parent, so the invoice list above can't show it.
+  const { data: linkBilling } = useProjectLinkBilling(project.clientId ? project.id : null);
+  const listedInvoiceIds = new Set((invoices ?? []).map((inv) => inv.id));
+  const consolidatedRows = (linkBilling?.consolidatedSources ?? [])
+    .filter((c) => !listedInvoiceIds.has(c.billedInvoiceId))
+    .map((c) => ({
+      kind: "invoice" as BillingFilter,
+      id: c.billedInvoiceId,
+      type: "Invoice (combined)",
+      date: c.invoiceDate,
+      ref: c.billedInvoiceNumber != null ? String(c.billedInvoiceNumber) : "Draft",
+      memo: "This project's share of a combined invoice (pre-tax)",
+      status: c.billedInvoiceStatus ?? "",
+      totalCents: c.revenueExTaxCents,
+    }));
 
   const rows = [
+    ...consolidatedRows,
     ...(invoices ?? []).map((inv) => ({
       kind: "invoice" as BillingFilter,
       id: inv.id,
@@ -251,7 +271,7 @@ function BillingTab({ project }: { project: Project }) {
             ) : (
               filtered.map((r) => (
                 <tr
-                  key={`${r.kind}-${r.id}`}
+                  key={`${r.kind}-${r.type}-${r.id}`}
                   className={`border-b last:border-0 hover:bg-slate-50 dark:hover:bg-muted/40 ${r.kind === "invoice" ? "cursor-pointer" : ""}`}
                   onClick={r.kind === "invoice" ? () => router.push(`/crm/accounting/invoices/${r.id}`) : undefined}
                 >
@@ -307,19 +327,19 @@ function AnalysisTab({ project }: { project: Project }) {
   const scope = project.clientId ? { projectId: project.id } : { projectId: null };
   const { data: invoices } = useInvoices(project.clientId ?? undefined, scope);
   const { data: payments } = usePayments(project.clientId ?? undefined, scope);
+  const { data: linkBilling } = useProjectLinkBilling(project.clientId ? project.id : null);
+  const { data: wip } = useProjectWip(project.id);
 
-  // A voided invoice was never receivable, and a draft hasn't been issued yet — counting either
-  // as billed overstates revenue and understates what's left to bill. Mirrors rpt_projects_wip.
-  const totalInvoiced = (invoices ?? [])
-    .filter((inv) => inv.status !== "void" && inv.status !== "draft")
-    .reduce((s, inv) => s + inv.totalCents, 0);
+  // Billed = what rpt_projects_wip counts (rpt_invoice_link_billing): issued
+  // invoices, pre-tax — the contract price is pre-tax — with an invoice merged
+  // or consolidated into another still counted on THIS project. Voids and
+  // drafts never count.
+  const billedExTax = linkBilling?.billedExTaxCents ?? 0;
   const totalPayments = (payments ?? []).reduce((s, p) => s + p.amountCents, 0);
-  const amountDue = totalInvoiced - totalPayments;
-  // The contract price is pre-tax, so what's left to bill is measured against
-  // billed amounts excluding tax (same as rpt_projects_wip's billed_cents).
-  const billedExTax = (invoices ?? [])
+  // What the client still owes on this project's issued invoices.
+  const amountDue = (invoices ?? [])
     .filter((inv) => inv.status !== "void" && inv.status !== "draft")
-    .reduce((s, inv) => s + inv.totalCents - (inv.taxCents ?? 0), 0);
+    .reduce((s, inv) => s + Math.max(0, inv.balanceCents ?? 0), 0);
   const remainingToBill = project.contractPrice - billedExTax;
 
   // Budgeted labor cost = budgeted hours × the fully-loaded (burdened) rate
@@ -340,7 +360,7 @@ function AnalysisTab({ project }: { project: Project }) {
           {[
             { label: "Original Contract", value: formatCurrency(project.originalContractPrice) },
             { label: "Amount Due", value: formatCurrency(amountDue), red: amountDue > 0 },
-            { label: "Invoiced", value: formatCurrency(totalInvoiced) },
+            { label: "Invoiced (pre-tax)", value: formatCurrency(billedExTax) },
             { label: "Payments", value: formatCurrency(totalPayments) },
             { label: "Revised Contract", value: formatCurrency(project.contractPrice) },
             { label: "Remaining to Bill", value: formatCurrency(remainingToBill), red: remainingToBill < 0 },
@@ -362,9 +382,12 @@ function AnalysisTab({ project }: { project: Project }) {
         <div className="grid grid-cols-2 gap-px rounded border overflow-hidden bg-muted">
           {[
             { label: "Budgeted Man Hours", value: project.budgetHours != null ? `${project.budgetHours} Hrs` : "—" },
-            { label: "Actual Man Hours", value: project.laborHours != null ? `${project.laborHours} Hrs` : "—" },
+            // Crew hours on the project's completed visits + manual hours, at the
+            // project's locked LLR — the WIP report's labor figures.
+            { label: "Actual Man Hours", value: wip ? `${Math.round(wip.laborHours * 100) / 100} Hrs` : "—" },
             { label: "Budgeted Labor Cost", value: budgetedLaborCostCents != null ? formatCurrency(budgetedLaborCostCents) : "—" },
-            { label: "Actual Labor Cost", value: "—" },
+            { label: "Actual Labor Cost", value: wip ? formatCurrency(wip.laborCostCents) : "—" },
+            { label: "Overhead to Date", value: wip ? formatCurrency(wip.overheadCostCents) : "—" },
           ].map((row) => (
             <div key={row.label} className="flex items-center justify-between bg-card px-4 py-2.5 text-sm">
               <span className="text-muted-foreground">{row.label}</span>
@@ -532,6 +555,10 @@ function NewProjectDialog({
   const { breakevenLaborRateCents, burdenedLaborRateCents } = useSettingsStore();
   const isEditing = !!project;
   const isPending = creating || updating;
+  // Changing an existing project's contract needs the projects key (enforced
+  // in the database too, 20261230000420); other fields stay editable.
+  const { can } = usePermissions();
+  const contractLocked = isEditing && !can("sched_add_modify_projects");
 
   // Date defaults must be the browser's LOCAL calendar date — the UTC date
   // (toISOString) is already tomorrow after ~8 PM Eastern.
@@ -730,7 +757,11 @@ function NewProjectDialog({
               value={contractPrice}
               onChange={(e) => setContractPrice(e.target.value)}
               placeholder="0.00"
+              disabled={contractLocked}
             />
+            {contractLocked && (
+              <p className="text-[11px] text-muted-foreground">Changing the contract price needs the Projects permission.</p>
+            )}
             {isEditing && project && project.contractPrice !== project.originalContractPrice && (
               <p className="text-[11px] text-muted-foreground">
                 Revised contract is {formatCurrency(project.contractPrice)} after approved change

@@ -18,7 +18,7 @@ import { orgEmailFrom, mapSendError } from "@/lib/email/send";
 import { logger } from "@/lib/logger";
 import { allRecipientsBouncedMessage, partitionBouncedRecipients } from "@/lib/email/bounced-addresses";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
-import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
+import { findLiveShareToken, proposalUrlFor, shareLinkExpiry } from "@/lib/estimates/share-token";
 import { loadLiveProposalContent, withProposalDocument } from "@/lib/estimates/proposal-content";
 import { resolveEstimateDocument } from "@/lib/estimates/resolve-estimate-document";
 import { insertEstimateVersion } from "@/lib/estimates/versions";
@@ -224,8 +224,10 @@ export async function POST(
   const orgPhone = ((org?.address as Record<string, string>) ?? {}).phone ?? "";
 
   // Create or reuse a share token
+  // At least until the estimate's Valid until date is over (shareLinkExpiry);
+  // no expiresInDays = a link that never expires.
   const expiresAt = body.expiresInDays
-    ? new Date(Date.now() + body.expiresInDays * 86_400_000).toISOString()
+    ? shareLinkExpiry(new Date(Date.now() + body.expiresInDays * 86_400_000).toISOString(), est.valid_until_date as string | null)
     : null;
 
   // Re-sends (and retries after a failed send) reuse the estimate's existing

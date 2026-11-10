@@ -103,6 +103,8 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
       return <CircleAlert className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "estimate_deposit_failed":
       return <CircleAlert className={cn(cls, "text-red-500 dark:text-red-400")} />;
+    case "estimate_deposit_skipped":
+      return <CircleAlert className={cn(cls, "text-amber-500 dark:text-amber-400")} />;
     case "ticket_created":
     case "ticket_assigned":
     case "ticket_contributor_added":
@@ -124,6 +126,7 @@ function NotifIcon({ type }: { type: AppNotification["type"] }) {
     case "injury_reported":
       return <HeartPulse className={cn(cls, "text-red-500 dark:text-red-400")} />;
     case "payment_disputed":
+    case "payment_failed":
       return <CircleAlert className={cn(cls, "text-red-500 dark:text-red-400")} />;
     default:
       return <Bell className={cn(cls, "text-slate-400 dark:text-neutral-500")} />;
@@ -213,7 +216,7 @@ export function NotificationsBell() {
     id: string; type: string | null; title: string | null;
     message: string; entity_id: string | null; entity_type: string | null; created_at: string;
   };
-  const { data: dbNotifications = [] } = useQuery<DbNotificationRow[]>({
+  const { data: dbNotifications = [], isFetched: dbNotificationsFetched } = useQuery<DbNotificationRow[]>({
     queryKey: ["notifications", "bell", currentUser.id],
     enabled: !!currentUser.id,
     refetchInterval: 60_000,
@@ -224,7 +227,7 @@ export function NotificationsBell() {
         .from("notifications")
         .select("id, type, title, message, entity_id, entity_type, created_at")
         .eq("user_id", currentUser.id)
-        .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "estimate_deposit_unaccepted", "ticket_created", "ticket_assigned", "ticket_contributor_added", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed", "approved", "rejected"])
+        .in("type", ["wo_comment", "wo_status_changed", "estimate_change_request", "estimate_client_accepted", "estimate_client_rejected", "estimate_deposit_failed", "estimate_deposit_excess", "estimate_deposit_unaccepted", "estimate_deposit_skipped", "ticket_created", "ticket_assigned", "ticket_contributor_added", "ticket_comment", "contract_expiring", "warranty_expiring", "automation_alert", "comment_mention", "sales_meeting_reminder", "sales_meeting_assigned", "injury_reported", "part_stock_short", "payment_disputed", "payment_failed", "approved", "rejected"])
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -238,8 +241,10 @@ export function NotificationsBell() {
   // (readIds is seeded from localStorage immediately, then merged with DB rows)
   const { readIds, markRead, markAllRead: markAllReadIds } = useNotificationReads(
     useMemo(() => {
-      // We only need the IDs list for pruning — compute cheaply without full objects
-      if (!alertsLoaded) return [];
+      // We only need the IDs list for pruning — compute cheaply without full objects.
+      // The persisted-notifications query counts too: pruning before it returned
+      // dropped every "db-notif-…" read mark, so those all came back unread.
+      if (!alertsLoaded || (!!currentUser.id && !dbNotificationsFetched)) return [];
       return [
         ...requisitions.map((r) => `req-approval-${r.id}`),
         ...purchaseOrders.map((po) => `po-approval-${po.id}`),
@@ -251,7 +256,7 @@ export function NotificationsBell() {
         ...maintenanceRequests.map((mr) => `maint-req-${mr.id}`),
         ...dbNotifications.map((n) => `db-notif-${n.id}`),
       ];
-    }, [alertsLoaded, requisitions, purchaseOrders, estimates, overdueWorkOrders, assignedWorkOrders, parts, pmSchedules, maintenanceRequests, dbNotifications]),
+    }, [alertsLoaded, dbNotificationsFetched, currentUser.id, requisitions, purchaseOrders, estimates, overdueWorkOrders, assignedWorkOrders, parts, pmSchedules, maintenanceRequests, dbNotifications]),
     currentUser.id
   );
 
@@ -382,6 +387,7 @@ export function NotificationsBell() {
       estimate_client_rejected:   { href: (id) => `/crm/estimates/${id}`, title: "Estimate Declined" },
       estimate_deposit_excess:    { href: (id) => `/crm/estimates/${id}`, title: "Deposit Exceeds Total" },
       estimate_deposit_failed:    { href: (id) => `/crm/estimates/${id}`, title: "Deposit Failed" },
+      estimate_deposit_skipped:   { href: (id) => `/crm/estimates/${id}`, title: "Accepted Without Deposit" },
       estimate_deposit_unaccepted: { href: (id) => `/crm/estimates/${id}`, title: "Deposit Paid, Not Accepted" },
       ticket_created:             { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "New Ticket" },
       ticket_assigned:            { href: (id) => id ? `/crm/tickets?open=${id}` : "/crm/tickets", title: "Ticket Assigned" },
@@ -440,11 +446,11 @@ export function NotificationsBell() {
       // the invoice or (when the payment had none) the client, so its target
       // depends on entity_type. It was inserted but never in the fetch
       // allowlist above, so these alerts never reached the bell.
-      if (n.type === "payment_disputed") {
+      if (n.type === "payment_disputed" || n.type === "payment_failed") {
         items.push({
           id,
-          type: "payment_disputed",
-          title: n.title ?? "Payment Disputed",
+          type: n.type,
+          title: n.title ?? (n.type === "payment_failed" ? "Payment Failed" : "Payment Disputed"),
           body: n.message,
           href: n.entity_id
             ? (n.entity_type === "invoice" ? `/crm/accounting/invoices?open=${n.entity_id}` : `/crm/clients/${n.entity_id}`)

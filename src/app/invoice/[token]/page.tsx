@@ -119,6 +119,9 @@ export default function PublicInvoicePage() {
   // Set when a bank transfer needs the customer to verify their account.
   const [verifyUrl, setVerifyUrl] = useState<{ url: string | null } | null>(null);
   const [payMethod, setPayMethod] = useState<"card" | "us_bank_account">("card");
+  // A bank payment waiting on micro-deposit verification is blocking a new
+  // payment: offer to cancel it and pay by card instead.
+  const [bankPending, setBankPending] = useState(false);
 
   const loadInvoice = useCallback(() => {
     return fetch(`/api/public/invoices/${token}`)
@@ -142,17 +145,23 @@ export default function PublicInvoicePage() {
     return () => timers.forEach(clearTimeout);
   }, [paySucceeded, loadInvoice]);
 
-  async function handleStartPay() {
+  async function handleStartPay(opts: { cancelPendingBankPayment?: boolean } = {}) {
     setCreatingIntent(true);
     setPayError(null);
+    setBankPending(false);
+    const method = opts.cancelPendingBankPayment ? "card" : payMethod;
+    if (opts.cancelPendingBankPayment) setPayMethod("card");
     try {
       const res = await fetch(`/api/public/invoices/${token}/create-intent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentMethod: payMethod }),
+        body: JSON.stringify({ paymentMethod: method, cancelPendingBankPayment: opts.cancelPendingBankPayment }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to start payment");
+      if (!res.ok) {
+        setBankPending(data.code === "microdeposits_pending");
+        throw new Error(data.error ?? "Failed to start payment");
+      }
       setIntent(data);
       setPayOpen(true);
     } catch (err) {
@@ -335,8 +344,18 @@ export default function PublicInvoicePage() {
               <p className="mt-2 text-xs text-slate-500">No card fee. Bank transfers take a few business days to clear; we&apos;ll update your balance when it does.</p>
             )}
             {payError && <p className="mt-6 text-center text-sm text-red-600">{payError}</p>}
+            {bankPending && (
+              <button
+                type="button"
+                onClick={() => handleStartPay({ cancelPendingBankPayment: true })}
+                disabled={creatingIntent}
+                className="mt-3 w-full rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                Cancel the bank payment and pay by card
+              </button>
+            )}
             <button
-              onClick={handleStartPay}
+              onClick={() => handleStartPay()}
               disabled={creatingIntent}
               className="mt-8 flex w-full items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
             >

@@ -319,7 +319,9 @@ export function ContractsGuide() {
           <strong>Exporting.</strong> The contracts list&apos;s Export button writes Billing
           Frequency, Billing Day (blank for weekly, every-2-weeks and one-time contracts), Amount per
           invoice (&quot;varies by month&quot; for a seasonal grid with different amounts) and Yearly
-          Total (blank for one-time contracts).
+          Total (blank for one-time contracts). Export needs the Export Lists permission. Make
+          Active / Make Inactive on a selection applies to every contract it can and reports how
+          many couldn&apos;t be changed, with the reason.
         </p>
       </Section>
 

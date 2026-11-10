@@ -9,7 +9,8 @@ import { escapeHtml } from "@/lib/utils/escape-html";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
 import { notifyStaffOfDepositExcess, notifyStaffOfUnacceptedDeposit } from "@/lib/estimate-deposit-excess-notify";
 import { recordAcceptedVersion } from "@/lib/estimates/versions";
-import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
+import { getPublishedProposal, isChangedSinceSent } from "@/lib/estimates/proposal-content";
+import { notifyStaffOfSkippedDeposit } from "@/lib/estimate-deposit-notify";
 import { sendConfiguredAcceptanceConfirmation } from "@/lib/estimates/accept-confirmation";
 import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
 
@@ -19,6 +20,16 @@ const log = logger.child("proposal-accept");
 // the column can't be abused as blob storage (a 520×120 signature is ~5-20KB).
 const SIGNATURE_DATA_RE = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/;
 const SIGNATURE_MAX_CHARS = 512 * 1024;
+
+// Every accepted_* field, cleared together (see the stage-race rollback).
+const CLEARED_ACCEPTANCE = {
+  accepted_at: null,
+  accepted_by_name: null,
+  signature_data: null,
+  ip_address: null,
+  accepted_version_number: null,
+  accepted_user_agent: null,
+};
 
 const serviceClient = () =>
   createClient(
@@ -40,6 +51,7 @@ export async function POST(
     depositReference?: string;
     depositNotes?: string;
     depositAmount?: number;          // cents
+    depositSkipped?: boolean;        // the client pressed "Skip for now" on a required deposit
   };
   if (!body || typeof body !== "object") return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 
@@ -80,6 +92,9 @@ export async function POST(
   const supabase = serviceClient();
   // x-forwarded-for is a comma list (client, proxies...); the signature record wants the client hop only.
   const ipAddress = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || null;
+  // Part of the signature evidence, frozen with it once accepted (DB trigger
+  // trg_share_token_acceptance_frozen).
+  const userAgent = req.headers.get("user-agent")?.slice(0, 500) || null;
 
   // Validate token
   const { data: shareToken, error: tokenErr } = await supabase
@@ -183,6 +198,10 @@ export async function POST(
 
   const now = new Date().toISOString();
 
+  // The version the client is signing — the newest published one, which is
+  // what the link shows (isChangedSinceSent above guarantees it is current).
+  const signedVersion = await getPublishedProposal(supabase, shareToken.estimate_id, shareToken.org_id);
+
   // 1. Mark token as accepted — conditioned on accepted_at still being null so
   // two concurrent submits (double-click, retry after a timeout) can't both
   // pass the read check above and then both proceed: only the first UPDATE
@@ -196,6 +215,8 @@ export async function POST(
       accepted_by_name: body.acceptedByName.trim().slice(0, 200),
       signature_data: signature,
       ip_address: ipAddress,
+      accepted_version_number: signedVersion?.versionNumber ?? null,
+      accepted_user_agent: userAgent,
     })
     .eq("id", shareToken.id)
     .is("accepted_at", null)
@@ -219,9 +240,13 @@ export async function POST(
     .eq("stage", "sent")
     .select("id");
   if (stageErr || !stageMoved || stageMoved.length === 0) {
+    // Release the claim as ONE write clearing the whole signature record —
+    // the only shape the freeze trigger lets the service role make. Clearing
+    // accepted_at alone left the name/signature/IP of an acceptance that never
+    // happened on a link that could then be signed again.
     await supabase
       .from("estimate_share_tokens")
-      .update({ accepted_at: null })
+      .update(CLEARED_ACCEPTANCE)
       .eq("id", shareToken.id);
     return NextResponse.json(
       { error: stageErr ? "Failed to record acceptance" : "This proposal is no longer actionable" },
@@ -252,7 +277,7 @@ export async function POST(
       .eq("stage", "accepted");
     await supabase
       .from("estimate_share_tokens")
-      .update({ accepted_at: null, accepted_by_name: null, signature_data: null, ip_address: null })
+      .update(CLEARED_ACCEPTANCE)
       .eq("id", shareToken.id);
     try {
       await recalcEstimateTotals(supabase, shareToken.estimate_id);
@@ -397,23 +422,26 @@ export async function POST(
 
   // 3d. Record the deposit the client says they are sending.
   //
-  // This is a CLAIM, not money received: the client picks a method and types
-  // an amount on the proposal page, and nothing is charged. So it is recorded
-  // for staff to chase and reconcile — deliberately NOT turned into a
-  // crm_payments row or an invoice credit, which would book money that may
-  // never arrive. It is also not yet deducted from what the job invoices; see
-  // the note below.
+  // This is a PROMISE, not money received: the client picks a method on the
+  // proposal page and nothing is charged. It goes in deposit_promised_*, never
+  // deposit_collected_* — those are written only by the Stripe webhook, and a
+  // promise there showed a green "Collected" badge, blocked the client from
+  // paying online later, and could overwrite a real card deposit's reference.
+  // Conditional too: if a real deposit has meanwhile been recorded (a card
+  // payment from another tab), the promise is moot and nothing is written.
   if (depositAmountCents !== null) {
     const { error: depositErr } = await supabase
       .from("estimates")
       .update({
-        deposit_method: body.depositMethod,
-        deposit_reference: depositReference,
-        deposit_notes: depositNotes,
-        deposit_collected_cents: depositAmountCents,
-        deposit_collected_at: now,
+        deposit_promised_method: body.depositMethod,
+        deposit_promised_reference: depositReference,
+        deposit_promised_notes: depositNotes,
+        deposit_promised_cents: depositAmountCents,
+        deposit_promised_at: now,
       })
-      .eq("id", shareToken.estimate_id);
+      .eq("id", shareToken.estimate_id)
+      .eq("org_id", shareToken.org_id)
+      .or("deposit_collected_cents.is.null,deposit_collected_cents.eq.0");
     // Previously unchecked, so a rejected write (e.g. a non-integer amount)
     // was invisible: the client saw their deposit accepted and no record of it
     // existed. The acceptance itself is already committed and must stand, so
@@ -428,6 +456,20 @@ export async function POST(
   }
 
   await recordAcceptedVersion(supabase, shareToken.estimate_id, body.acceptedByName.trim().slice(0, 200), "proposal_link");
+
+  // A required deposit the client skipped (deposits are optional). Not when
+  // they promised one, paid one online (the card flow accepts with no deposit
+  // fields while the webhook records the charge — a deposit intent exists),
+  // or one is already recorded / clearing. notifyStaffOfSkippedDeposit
+  // re-reads the estimate and no-ops in those cases too.
+  if (depositAmountCents === null) {
+    await notifyStaffOfSkippedDeposit(supabase, {
+      orgId: shareToken.org_id,
+      estimateId: shareToken.estimate_id,
+      via: "proposal_link",
+      explicitSkip: body.depositSkipped === true,
+    });
+  }
 
   // 4. Log to client_activity
   const { data: est } = await supabase

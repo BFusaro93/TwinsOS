@@ -201,8 +201,9 @@ export function ClientPortalGuide() {
           <strong>History</strong>, with a running balance-due total and a PDF download for each invoice. A
           client with exactly one outstanding invoice gets a one-click <strong>Pay Now</strong>; with more than
           one, they can pay one from its row or tick several (or <strong>Select all unpaid</strong>) and pay
-          them in a single payment. Invoices that belong to different accounts, such as a property
-          manager&apos;s sub-accounts, are paid separately.
+          them in a single payment. A property manager can tick their own invoices and their
+          sub-accounts&apos; invoices together and pay them all at once: the payment is recorded on the
+          property manager&apos;s account and applied to each invoice. Up to 10 invoices fit in one payment.
         </p>
         <p>
           Below the invoices, <strong>Payments &amp; Credits</strong> lists each payment, credit and
@@ -227,6 +228,20 @@ export function ClientPortalGuide() {
           the sub-accounts); the credit only applies to that account&apos;s invoices. If a bank-transfer
           prepayment is later returned by the bank, it is logged on the client&apos;s timeline and fires the
           same <em>Credit card charge failed</em> automation trigger as a failed invoice payment.
+        </p>
+        <p>
+          <strong>One payment form at a time.</strong> Opening the pay form again for the same invoices
+          (another tab, a reload) picks up the payment already started instead of starting a second one.
+          Changing the amount, the invoices or switching between card and bank transfer cancels the earlier
+          form, and so does anything that changes the invoice in the meantime (you record a payment, charge a
+          saved card, void, merge or edit it), so an old form left open can&apos;t be submitted later.
+        </p>
+        <p>
+          <strong>Bank account waiting on verification.</strong> A bank account typed in by hand is verified
+          with two small deposits before the transfer goes through. While that is pending, trying to pay the
+          same invoice again says so (rather than &ldquo;already submitted&rdquo;) and offers{" "}
+          <strong>Cancel the bank payment and pay by card</strong>, which cancels the waiting transfer and
+          opens the card form. A transfer that is already processing can&apos;t be canceled this way.
         </p>
         <p>
           The public invoice link (the one in the invoice email, no login needed) also offers{" "}
@@ -361,7 +376,7 @@ export function ClientPortalGuide() {
       <Section id="good-to-know" title="Good to know">
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Property managers see their sub-accounts.</strong> A client with sub-accounts (commercial property managers) sees the sub-accounts&apos; invoices, estimates, visits and tickets alongside their own when they sign in, each tagged with the sub-account&apos;s name. They can pay a sub-account&apos;s invoice (the payment is recorded on that sub-account&apos;s invoice) and choose which account a new ticket is for. Saved cards and autopay stay with the account that saved them.
+            <strong>Property managers see their sub-accounts.</strong> A client with sub-accounts (commercial property managers) sees the sub-accounts&apos; invoices, estimates, visits and tickets alongside their own when they sign in, each tagged with the sub-account&apos;s name. They can pay a sub-account&apos;s invoice on its own (recorded on that sub-account) or together with their own invoices in one payment (recorded on the property manager&apos;s account and applied to each invoice), and choose which account a new ticket is for. Saved cards and autopay stay with the account that saved them.
           </li>
           <li>
             <strong>Autopay is the client&apos;s choice.</strong> On the Account page a client with a saved card sees an <strong>Autopay</strong> switch. Saving a card has a “Use this card for autopay” checkbox that starts unticked, and removing the saved card turns autopay off.

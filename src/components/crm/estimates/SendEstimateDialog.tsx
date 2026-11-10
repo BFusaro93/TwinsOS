@@ -203,6 +203,9 @@ export function SendEstimateDialog({
     }
     setSending(true);
     try {
+      // 30 days is the floor: the route extends the link to cover the
+      // estimate's Valid until date when that is later (shareLinkExpiry), and
+      // an accepted link never expires.
       const res = await fetch(`/api/crm/estimates/${estimateId}/send-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

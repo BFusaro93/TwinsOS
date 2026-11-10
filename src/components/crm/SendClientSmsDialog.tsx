@@ -9,23 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useSmsReadiness, SMS_NOT_READY_MESSAGE } from "@/lib/hooks/use-sms-readiness";
+import { smsSegmentInfo } from "@/lib/sms/segments";
 
 const MERGE_TAG_HINT = "[clientfirstname] [clientfullname] [companyname]";
 
 /** Twilio's hard ceiling per message — the route rejects anything longer. */
 const MAX_SMS_LENGTH = 1600;
-
-/**
- * Segments a carrier will bill for. A single GSM-7 message holds 160
- * characters; once it has to be split, each part gives up 7 characters to the
- * concatenation header, leaving 153. Deliberately approximate — a body with
- * emoji or curly quotes encodes as UCS-2 and splits far sooner — so this is
- * shown as guidance, never used to block a send.
- */
-function segmentCount(length: number): number {
-  if (length === 0) return 0;
-  return length <= 160 ? 1 : Math.ceil(length / 153);
-}
 
 export function SendClientSmsDialog({
   open,
@@ -80,7 +69,11 @@ export function SendClientSmsDialog({
   }
 
   const length = body.length;
-  const segments = segmentCount(length);
+  // Segments are what carriers bill and what the SMS add-on's usage counts.
+  // GSM-7 holds 160 characters (153 once split); an emoji or curly quote
+  // switches the whole text to UCS-2 — 70 (67 once split). Merge tags are
+  // filled in after this count, so a long name can add a segment.
+  const { segments, encoding } = smsSegmentInfo(body);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -117,6 +110,9 @@ export function SendClientSmsDialog({
                 <span>Merge tags: {MERGE_TAG_HINT}</span>
                 <span className={length > MAX_SMS_LENGTH - 100 ? "text-amber-600 dark:text-amber-400" : undefined}>
                   {length}/{MAX_SMS_LENGTH} · {segments} segment{segments === 1 ? "" : "s"}
+                  {encoding === "UCS-2" && length > 0 && (
+                    <span title="An emoji or special character makes every segment hold 70 characters instead of 160"> (emoji/special characters)</span>
+                  )}
                 </span>
               </div>
             </div>

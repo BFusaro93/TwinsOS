@@ -45,6 +45,7 @@ import { EstimateMilestonesEditor } from "./EstimateMilestonesEditor";
 import { EstimateSummaryPanel } from "./EstimateSummaryPanel";
 import { AIDraftDialog } from "./AIDraftDialog";
 import { ConvertToJobDialog } from "./ConvertToJobDialog";
+import { ReservedDepositNotice } from "./ReservedDepositNotice";
 import { mutationErrorMessage } from "@/lib/utils/mutation-error";
 import { WonLostReasonDialog } from "./WonLostReasonDialog";
 import { packageHeadersEmptiedBy } from "@/lib/estimates/package-group";
@@ -1280,6 +1281,16 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
 
           {activeTab === "details" && (
             <>
+              {/* A lost estimate still holding the client's reserved deposit:
+                  prompt to refund it or release it to general credit. */}
+              {estimate.stage === "lost" && (
+                <ReservedDepositNotice
+                  estimateId={estimate.id}
+                  stage={estimate.stage}
+                  canRelease={can("acct_add_modify_payments") || can("acct_add_modify_credits")}
+                />
+              )}
+
               {/* The client's link shows the last SENT version (see
                   lib/estimates/proposal-content.ts). Once staff edit past it,
                   say so — the client still sees the old version and can't
@@ -1999,6 +2010,25 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
                         {estimate.depositMethod ? ` via ${estimate.depositMethod}` : ""}
                         {estimate.depositCollectedAt
                           ? ` on ${new Date(estimate.depositCollectedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                          : ""}
+                      </span>
+                    )}
+                    {estimate.stage !== "lost" && (
+                      <ReservedDepositNotice estimateId={estimate.id} stage={estimate.stage} canRelease={false} />
+                    )}
+                    {/* The client said how they'd pay ("I'll send a check")
+                        when accepting the proposal. A promise, not money —
+                        amber, never the green "Collected". Hidden once a real
+                        deposit is recorded. */}
+                    {estimate.depositCollectedCents === 0 && (estimate.depositPromisedCents ?? 0) > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300"
+                        title={`Nothing has been received yet — the client chose this on the proposal page when accepting.${estimate.depositPromisedReference ? ` Reference: ${estimate.depositPromisedReference}.` : ""} Record the payment when it arrives.`}
+                      >
+                        Client says they&apos;ll pay {formatCurrency(estimate.depositPromisedCents ?? 0)} by{" "}
+                        {{ cash: "cash", check: "check", ach: "ACH", credit_card: "credit card", other: "other means" }[estimate.depositPromisedMethod ?? "other"]}
+                        {estimate.depositPromisedAt
+                          ? ` — ${new Date(estimate.depositPromisedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
                           : ""}
                       </span>
                     )}

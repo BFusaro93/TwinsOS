@@ -168,6 +168,7 @@ export function mapProject(row: ProjectRow): Project {
     notes: row.notes,
     isArchived: (row as Record<string, unknown>).is_archived === true,
     clientId: (row as Record<string, unknown>).client_id as string | null ?? null,
+    sourceEstimateId: (row as Record<string, unknown>).source_estimate_id as string | null ?? null,
     progressPct: Number((row as Record<string, unknown>).progress_pct ?? 0),
     clientName: (row as Record<string, unknown>).clients
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

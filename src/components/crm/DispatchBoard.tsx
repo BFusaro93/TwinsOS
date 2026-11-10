@@ -4315,7 +4315,10 @@ function parseISODateParam(raw: string | null): string | null {
 }
 
 export function DispatchBoard() {
-  const { can, isAdmin, isLoading: permissionsLoading } = usePermissions();
+  const { can, isAdmin, roleId, isLoading: permissionsLoading } = usePermissions();
+  // Same rule as ImportExportMenu: a CRM role needs export_lists; admins and
+  // logins without a CRM role keep export.
+  const canExportLists = isAdmin || !roleId || can("export_lists");
   const [confirm, confirmDialog] = useConfirm();
   // Selected day lives in the URL (?date=YYYY-MM-DD) so browser Back from a
   // client link, refresh, and shared links all land on the same day. Today is
@@ -4809,9 +4812,27 @@ export function DispatchBoard() {
 
   function applySavedView(view: DispatchSavedView) {
     const f = view.filters;
-    setServiceFilters(f.serviceFilters ?? []);
-    setCrewFilters(f.crewFilters ?? []);
-    setTagFilters(f.tagFilters ?? []);
+    // A crew, service or tag deleted since the view was saved is dropped: it
+    // can't match anything (the board would just show nothing) and it isn't
+    // listed in its filter popover, so it couldn't be unticked either. Each
+    // list is only checked once it has loaded.
+    const knownCrewIds = crews ? new Set(crews.map((c) => c.id)) : null;
+    const knownServiceNames = allServices ? new Set(allServices.map((svc) => svc.name)) : null;
+    const knownTags = orgTags.length > 0 ? new Set(orgTags) : null;
+    const savedServices = f.serviceFilters ?? [];
+    const savedCrews = f.crewFilters ?? [];
+    const savedTags = f.tagFilters ?? [];
+    const nextServices = knownServiceNames ? savedServices.filter((n) => knownServiceNames.has(n)) : savedServices;
+    const nextCrews = knownCrewIds ? savedCrews.filter((id) => knownCrewIds.has(id)) : savedCrews;
+    const nextTags = knownTags ? savedTags.filter((t) => knownTags.has(t)) : savedTags;
+    const dropped =
+      (savedServices.length - nextServices.length) + (savedCrews.length - nextCrews.length) + (savedTags.length - nextTags.length);
+    if (dropped > 0) {
+      toast.info(`${dropped} filter${dropped !== 1 ? "s" : ""} in "${view.name}" no longer exist${dropped === 1 ? "s" : ""} and ${dropped !== 1 ? "were" : "was"} skipped — save the view again to update it.`);
+    }
+    setServiceFilters(nextServices);
+    setCrewFilters(nextCrews);
+    setTagFilters(nextTags);
     setPriorityFilters(f.priorityFilters ?? []);
     setStatusFilter(FILTER_TABS.some((t) => t.value === f.statusFilter) ? (f.statusFilter as FilterTab) : "all");
     setSearch(f.search ?? "");
@@ -5309,6 +5330,7 @@ export function DispatchBoard() {
    *  banner row on screen and so never made it into the old fixed-column
    *  CSV. Rows follow the board's current sort/route order. */
   function handleExportXLSX() {
+    if (!canExportLists) return;
     const cellCtx = { serviceCodeById, crewCodeById };
     const visibleCols = COL_DEFS.filter((c) => isVisible(c.key));
     const visibleExtraCols = EXTRA_COL_DEFS.filter((c) => isVisible(c.key));
@@ -5788,10 +5810,12 @@ export function DispatchBoard() {
             <MapPin className="h-3.5 w-3.5" />
             Group Stops
           </Button>
-          <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={handleExportXLSX} title="Export to Excel">
-            <Download className="h-3.5 w-3.5" />
-            Export
-          </Button>
+          {canExportLists && (
+            <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={handleExportXLSX} title="Export to Excel">
+              <Download className="h-3.5 w-3.5" />
+              Export
+            </Button>
+          )}
           <Button size="sm" variant="outline" className="h-7 max-lg:h-10 gap-1.5 px-2.5 text-xs" onClick={() => setPrintOpen(true)} title="Print route sheets">
             <Printer className="h-3.5 w-3.5" />
             Print

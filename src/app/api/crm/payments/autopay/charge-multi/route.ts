@@ -78,17 +78,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "This client has no saved payment method on file" }, { status: 400 });
   }
 
+  // A parent account can pay its sub-accounts' invoices in the same charge: the
+  // parent is the payer and each invoice gets its own allocation
+  // (record_stripe_invoice_payment accepts the payer's or a child's invoice).
+  const { data: subAccounts } = await supabase
+    .from("clients")
+    .select("id")
+    .eq("parent_client_id", clientId)
+    .eq("org_id", effOrgId)
+    .is("deleted_at", null);
+  const payableClientIds = [clientId, ...((subAccounts ?? []) as { id: string }[]).map((c) => c.id)];
+
   const invoiceIds = allocations.map((a) => a.invoiceId);
   const { data: invoices } = await supabase
     .from("crm_invoices")
-    .select("id, balance_cents, status, open_dispute_payment_id")
+    .select("id, client_id, balance_cents, status, open_dispute_payment_id")
     .in("id", invoiceIds)
-    .eq("client_id", clientId)
+    .in("client_id", payableClientIds)
     .eq("org_id", effOrgId)
     .is("deleted_at", null);
   if (!invoices || invoices.length !== invoiceIds.length) {
-    return NextResponse.json({ error: "One or more invoices were not found for this client" }, { status: 404 });
+    return NextResponse.json({ error: "One or more invoices were not found for this client or its sub-accounts" }, { status: 404 });
   }
+  const invoiceClient = new Map(invoices.map((i) => [i.id, i.client_id as string]));
   if (invoices.some((i) => i.status === "draft" || i.status === "void")) {
     return NextResponse.json({ error: "Draft and voided invoices can't be charged — remove them from this payment" }, { status: 400 });
   }
@@ -167,7 +179,8 @@ export async function POST(request: Request) {
     for (const a of allocations) {
       a.amountCents = await applyCreditBeforeCharge(supabase, {
         id: a.invoiceId,
-        client_id: clientId,
+        // Each invoice is settled from its own account's credit.
+        client_id: invoiceClient.get(a.invoiceId) ?? clientId,
         balance_cents: a.amountCents,
       });
     }

@@ -14,6 +14,7 @@ import { groupIntoSections, type DisplaySettings } from "@/lib/estimate-display-
 import { unitLabel } from "@/lib/estimates/units";
 import { LineDescription } from "@/components/shared/LineDescription";
 import { deriveProposalTotals, proposalLineNet } from "@/lib/estimates/proposal-totals";
+import { proposalDepositCents } from "@/lib/estimates/proposal-deposit";
 
 const TIERS = ["basic", "standard", "premium"] as const;
 type Tier = (typeof TIERS)[number];
@@ -21,6 +22,14 @@ type Tier = (typeof TIERS)[number];
 function cents(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n / 100);
 }
+
+const PROMISE_METHOD_LABEL: Record<string, string> = {
+  check: "check",
+  cash: "cash",
+  ach: "ACH",
+  credit_card: "credit card",
+  other: "another method",
+};
 
 interface DepositIntent {
   clientSecret: string;
@@ -51,12 +60,16 @@ function DepositCardForm({
   onPaid,
   onBack,
   disabled,
+  accepting = true,
 }: {
   intent: DepositIntent;
   brand: string;
   onPaid: () => void;
   onBack: () => void;
   disabled: boolean;
+  /** False when the proposal is already accepted (paying a deposit still
+   *  due, or retrying a bounced one) — the button then just says "Pay". */
+  accepting?: boolean;
 }) {
   const isAch = intent.paymentMethod === "us_bank_account";
   const stripe = useStripe();
@@ -113,8 +126,8 @@ function DepositCardForm({
 
       {isAch && (
         <p className="text-xs text-slate-500">
-          Bank transfers take a few business days to clear. You don&apos;t need to wait —
-          your proposal is accepted as soon as you submit this.
+          Bank transfers take a few business days to clear.
+          {accepting ? <> You don&apos;t need to wait — your proposal is accepted as soon as you submit this.</> : null}
         </p>
       )}
 
@@ -129,7 +142,7 @@ function DepositCardForm({
           {submitting ? (
             <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing…</>
           ) : (
-            <>Pay {cents(intent.totalChargeCents)} &amp; Accept</>
+            <>Pay {cents(intent.totalChargeCents)}{accepting ? <> &amp; Accept</> : null}</>
           )}
         </Button>
         <Button variant="outline" className="h-11 px-5" disabled={submitting || disabled} onClick={onBack}>
@@ -430,6 +443,10 @@ export default function ProposalPage() {
   // to collect a deposit that is now in flight. The server state won't agree
   // until the webhook lands (instantly for a card, days later for ACH).
   const [retryPaid, setRetryPaid] = useState(false);
+  // A deposit paid online in THIS visit. The server keeps calling it due until
+  // the webhook lands (instantly for a card, days for ACH), so the accepted
+  // screen must not ask for it again meanwhile.
+  const [depositPaidHere, setDepositPaidHere] = useState(false);
   // Pending accept payload — held while deposit step is shown
   const [pendingAcceptPayload, setPendingAcceptPayload] = useState<{
     acceptedByName: string;
@@ -449,11 +466,25 @@ export default function ProposalPage() {
         setSelectedIds(new Set(data.lineItems.filter((li) => li.rowType !== "section").map((li) => li.id)));
         const firstTier = tiersWithLines(data.lineItems)[0];
         if (firstTier) setSelectedTier(firstTier);
-        if (data.alreadyAccepted) setAccepted(true);
+        // Accepted here, or in the client portal / by the office.
+        if (data.alreadyAccepted || data.acceptedElsewhere) setAccepted(true);
       })
       .catch(() => setError("Failed to load proposal."))
       .finally(() => setLoading(false));
   }, [token]);
+
+  /** Re-reads the proposal after accepting, so the accepted screen shows what
+   *  the server now says (e.g. a skipped deposit as due). Keeps the page as is
+   *  if the read fails. */
+  async function refreshProposal() {
+    try {
+      const res = await fetch(`/api/public/proposals/${token}`);
+      const data = (await res.json()) as ProposalData & { error?: string };
+      if (res.ok && !data.error) setProposal(data);
+    } catch {
+      // keep the current state
+    }
+  }
 
   // A package is all-or-nothing: ticking or unticking one of its lines
   // flips every line of that package together.
@@ -513,6 +544,12 @@ export default function ProposalPage() {
           totalCents: proposal.totalCents,
         }
       : deriveTotals(proposal, selectedTotal);
+  // The deposit for what the client is accepting — capped at the SELECTED
+  // tier's total on a Good/Better/Best proposal. The deposit-intent route
+  // charges with the same function, so the figure shown is the figure charged.
+  const depositForSelection = proposal
+    ? proposalDepositCents(proposal, proposal.tiersEnabled ? selectedTier : null)
+    : 0;
   const discountLabel = proposal?.discountType === "percent" && proposal.discountValue
     ? `Discount (${(proposal.discountValue / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%)`
     : "Discount";
@@ -522,6 +559,7 @@ export default function ProposalPage() {
     depositReference?: string;
     depositNotes?: string;
     depositAmount?: number;
+    depositSkipped?: boolean;
   }) {
     const payload = pendingAcceptPayload ?? {
       acceptedByName: acceptedByName.trim(),
@@ -542,6 +580,7 @@ export default function ProposalPage() {
       }
       setDepositStep('done');
       setAccepted(true);
+      await refreshProposal();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -561,7 +600,7 @@ export default function ProposalPage() {
     // If deposit is required and not yet collected, show the deposit step
     if (
       proposal &&
-      proposal.depositRequiredCents > 0 &&
+      depositForSelection > 0 &&
       proposal.depositCollectedCents === 0 &&
       depositStep === 'idle'
     ) {
@@ -584,12 +623,14 @@ export default function ProposalPage() {
       depositMethod,
       depositReference: depositReference.trim() || undefined,
       depositNotes: depositNotes.trim() || undefined,
-      depositAmount: proposal?.depositRequiredCents,
+      depositAmount: depositForSelection,
     });
   }
 
   async function handleDepositSkip() {
-    await submitAccept();
+    // Deposits are optional; staff are told it was skipped and the accepted
+    // page keeps showing it as due.
+    await submitAccept({ depositSkipped: true });
   }
 
   /** Fetches a PaymentIntent for the deposit and switches the step into card
@@ -601,7 +642,12 @@ export default function ProposalPage() {
       const res = await fetch(`/api/public/proposals/${token}/deposit-intent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentMethod }),
+        // The selected package caps the deposit (before acceptance only —
+        // after it, the accepted total does).
+        body: JSON.stringify({
+          paymentMethod,
+          ...(proposal?.tiersEnabled && !accepted ? { selectedTier } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Couldn't start the payment");
@@ -618,6 +664,7 @@ export default function ProposalPage() {
    * deposit_collected_* columns, so sending them from here would race it and
    * could overwrite a real Stripe reference with a guess. */
   async function handleCardDepositPaid() {
+    setDepositPaidHere(true);
     await submitAccept();
   }
 
@@ -629,6 +676,7 @@ export default function ProposalPage() {
   function handleRetryDepositPaid() {
     setDepositIntent(null);
     setRetryPaid(true);
+    setDepositPaidHere(true);
   }
 
   // ── Loading / error states ──────────────────────────────────────────────────
@@ -672,6 +720,9 @@ export default function ProposalPage() {
     proposal.depositCollectedCents === 0 &&
     proposal.depositRequiredCents > 0;
   const retryAmountCents = proposal.depositFailedCents ?? proposal.depositRequiredCents;
+  // Still owed on an accepted proposal (server-computed: nothing collected or
+  // clearing). Not while a payment made on this visit is still being recorded.
+  const depositDue = !depositPaidHere && !depositNeedsRetry ? (proposal.depositDueCents ?? 0) : 0;
 
   // ── Accepted confirmation screen ────────────────────────────────────────────
   if (accepted) {
@@ -740,6 +791,7 @@ export default function ProposalPage() {
                   disabled={false}
                   onPaid={handleRetryDepositPaid}
                   onBack={() => setDepositIntent(null)}
+                  accepting={false}
                 />
               </Elements>
             )}
@@ -769,6 +821,11 @@ export default function ProposalPage() {
             Thank you{proposal.acceptedByName ? `, ${proposal.acceptedByName}` : ""}. We&apos;ve received your confirmation and will
             be in touch shortly to schedule your services.
           </p>
+          {proposal.acceptedAt && (
+            <p className="mt-1 text-xs text-slate-400">
+              Accepted {new Date(proposal.acceptedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+            </p>
+          )}
           {/* A bank debit is authorized here but settles days later, and the
               office sees the same pending state on the estimate. Saying so
               closes the loop: the client knows the money hasn't moved yet and
@@ -785,6 +842,69 @@ export default function ProposalPage() {
               been submitted. Bank transfers take a few business days to clear — we&apos;ll
               email you if anything goes wrong. Your acceptance is already recorded either way.
             </p>
+          )}
+          {/* A required deposit still owed — skipped at acceptance, or the
+              client said they'd send a check. Deposits are optional, so this
+              doesn't undo the acceptance; it just keeps the amount visible
+              and payable. */}
+          {depositDue && (
+            <div className="mt-5 rounded-lg border border-amber-200 bg-white p-4 text-left shadow-sm space-y-3">
+              <div>
+                <p className="font-semibold text-slate-800">Deposit due: {cents(depositDue)}</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {(proposal.depositPromisedCents ?? 0) > 0
+                    ? `You told us you'd pay by ${PROMISE_METHOD_LABEL[proposal.depositPromisedMethod ?? "other"] ?? "another method"} — we'll mark it paid when it arrives.`
+                    : "Your proposal is accepted. The deposit hasn't been paid yet."}
+                  {canPayByCard ? " You can also pay it online now." : ""}
+                </p>
+              </div>
+              {canPayByCard && !depositIntent && (
+                <div className="space-y-2">
+                  <Button
+                    className="h-11 w-full text-base font-semibold"
+                    style={{ backgroundColor: brand, borderColor: brand }}
+                    disabled={!!startingCardPayment}
+                    onClick={() => handleStartCardDeposit("card")}
+                  >
+                    {startingCardPayment === "card" ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting…</>
+                    ) : (
+                      <><CreditCard className="mr-2 h-4 w-4" />Pay {cents(depositDue)} by card</>
+                    )}
+                  </Button>
+                  {proposal.achDepositAvailable && (
+                    <Button
+                      variant="outline"
+                      className="h-11 w-full text-base font-semibold"
+                      disabled={!!startingCardPayment}
+                      onClick={() => handleStartCardDeposit("us_bank_account")}
+                    >
+                      {startingCardPayment === "us_bank_account" ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting…</>
+                      ) : (
+                        <><Landmark className="mr-2 h-4 w-4" />Pay by bank transfer</>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              )}
+              {canPayByCard && depositIntent && (
+                <Elements
+                  stripe={getScopedStripeJs(depositIntent.connectedAccountId, depositIntent.livemode)}
+                  options={{ clientSecret: depositIntent.clientSecret }}
+                >
+                  <DepositCardForm
+                    intent={depositIntent}
+                    brand={brand}
+                    disabled={false}
+                    onPaid={handleRetryDepositPaid}
+                    onBack={() => setDepositIntent(null)}
+                    accepting={false}
+                  />
+                </Elements>
+              )}
+              {error && <p className="text-sm text-red-600">{error}</p>}
+            </div>
           )}
           <DownloadPdfButton token={token} className="mt-5" />
           {proposal.orgPhone && (
@@ -1130,7 +1250,7 @@ export default function ProposalPage() {
           <div>
             <h2 className="text-lg font-bold text-slate-800">Deposit Required</h2>
             <p className="text-sm text-slate-500 mt-1">
-              {cents(proposal.depositRequiredCents)} due to confirm your project
+              {cents(depositForSelection)} due to confirm your project
             </p>
           </div>
 
@@ -1149,7 +1269,7 @@ export default function ProposalPage() {
                 {startingCardPayment === "card" ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Starting…</>
                 ) : (
-                  <><CreditCard className="mr-2 h-4 w-4" />Pay {cents(proposal.depositRequiredCents)} by card</>
+                  <><CreditCard className="mr-2 h-4 w-4" />Pay {cents(depositForSelection)} by card</>
                 )}
               </Button>
               {proposal.achDepositAvailable && (
@@ -1286,8 +1406,27 @@ export default function ProposalPage() {
         </div>
       )}
 
+      {/* Not open for acceptance: staff are revising it, or it was closed.
+          (The accept route refuses these too; without this the client only
+          found out after signing.) */}
+      {depositStep === 'idle' && !proposal.expired && proposal.actionable === false && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-6 text-sm text-slate-700">
+          {proposal.closedReason === "updating" ? (
+            <>
+              <p className="font-semibold">This proposal is being updated.</p>
+              <p className="mt-1">We&apos;re making changes and will send you the latest version shortly. You can still ask us a question below.</p>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold">This proposal is no longer open for acceptance.</p>
+              <p className="mt-1">Please contact us{proposal.orgPhone ? <> at <strong>{proposal.orgPhone}</strong></> : ""} if you&apos;d like an updated proposal.</p>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Accept section */}
-      {depositStep === 'idle' && !proposal.expired && (
+      {depositStep === 'idle' && !proposal.expired && proposal.actionable !== false && (
       <div className="rounded-lg border bg-white p-6 shadow-sm space-y-5">
         <div>
           <h2 className="text-lg font-bold text-slate-800">Accept This Proposal</h2>

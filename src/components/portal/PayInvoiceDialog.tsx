@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Loader2, CreditCard, Check, X } from "lucide-react";
-import { useCreatePortalPaymentIntent, type CreatePaymentIntentResult } from "@/lib/hooks/use-portal-payments";
+import { useCreatePortalPaymentIntent, PaymentStartError, type CreatePaymentIntentResult } from "@/lib/hooks/use-portal-payments";
 import { hasPublishableKey, getScopedStripeJs } from "@/lib/stripe/client";
 import { STRIPE_ELEMENT_MIN_HEIGHT } from "@/lib/stripe/dialog-guard";
 import { payOutcome, payOutcomeMessage, payOutcomeTitle, type PayOutcome } from "@/lib/stripe/pay-outcome";
@@ -102,6 +102,9 @@ export function PayInvoiceDialog({
   const [succeeded, setSucceeded] = useState<PayOutcome | null>(null);
   const [verify, setVerify] = useState<VerifyInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A bank payment waiting on micro-deposit verification is in the way: offer
+  // to cancel it and pay by card instead.
+  const [bankPending, setBankPending] = useState(false);
   const [prepayInput, setPrepayInput] = useState("");
   const [prepayAccountId, setPrepayAccountId] = useState<string | undefined>(
     () => (target.kind === "prepayment" ? target.accountId : undefined) ?? accounts.find((a) => a.isSelf)?.id
@@ -123,21 +126,26 @@ export function PayInvoiceDialog({
     setSucceeded(null);
     setVerify(null);
     setError(null);
+    setBankPending(false);
     setPrepayInput("");
     onClose();
   }
 
-  async function start() {
+  async function start(opts: { cancelPendingBankPayment?: boolean } = {}) {
     setError(null);
+    setBankPending(false);
+    const method = opts.cancelPendingBankPayment ? "card" : paymentMethod;
+    if (opts.cancelPendingBankPayment) setPaymentMethod("card");
     try {
       const result = await createIntent.mutateAsync(
         target.kind === "prepayment"
-          ? { prepaymentCents: prepayCents, nonce, accountId: prepayAccountId, paymentMethod }
-          : { invoiceIds: target.invoiceIds, paymentMethod }
+          ? { prepaymentCents: prepayCents, nonce, accountId: prepayAccountId, paymentMethod: method }
+          : { invoiceIds: target.invoiceIds, paymentMethod: method, cancelPendingBankPayment: opts.cancelPendingBankPayment }
       );
       setIntent(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start payment");
+      setBankPending(err instanceof PaymentStartError && err.code === "microdeposits_pending");
     }
   }
 
@@ -264,8 +272,18 @@ export function PayInvoiceDialog({
                 </button>
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
+              {bankPending && (
+                <button
+                  type="button"
+                  onClick={() => start({ cancelPendingBankPayment: true })}
+                  disabled={createIntent.isPending}
+                  className="w-full rounded-lg border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                >
+                  Cancel the bank payment and pay by card
+                </button>
+              )}
               <button
-                onClick={start}
+                onClick={() => start()}
                 disabled={createIntent.isPending || (isPrepay && !prepayValid)}
                 className="w-full h-10 rounded-lg bg-brand-500 text-white text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
               >

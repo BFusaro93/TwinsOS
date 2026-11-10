@@ -32,6 +32,10 @@ export interface Project extends BaseRecord {
   isArchived: boolean;
   // CRM linkage
   clientId: string | null;
+  /** The estimate that seeded the project (first one converted into it). Any other estimate
+   *  converted into it is an add-on: an approved change order whose milestones bill against
+   *  that estimate's own total. */
+  sourceEstimateId?: string | null;
   progressPct: number;
   // joined
   clientName?: string;

@@ -43,7 +43,9 @@ export const INVOICE_TEMPLATE_COLUMNS = [
 export const INVOICE_REQUIRED_COLUMNS = ["clientName", "service", "description", "amount"];
 
 // accountNumber (optional) disambiguates clients that share a display name.
-export const PAYMENT_TEMPLATE_COLUMNS = ["clientName", "accountNumber", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber"];
+// "deleted" is filled in only by an export from the Payments Deleted tab; the
+// importer skips any row where it is set, so deleted payments never come back.
+export const PAYMENT_TEMPLATE_COLUMNS = ["clientName", "accountNumber", "amount", "paymentDate", "method", "reference", "memo", "invoiceNumber", "deleted"];
 export const PAYMENT_REQUIRED_COLUMNS = ["clientName", "amount"];
 
 export const TICKET_TEMPLATE_COLUMNS = ["subject", "clientName", "type", "status", "priority", "category", "body", "dueDate"];

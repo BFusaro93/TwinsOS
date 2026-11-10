@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getStripeForOrg } from "@/lib/stripe/server";
 import { settleSurchargeAuthorization } from "@/lib/stripe/surcharge-capture";
 import { logger } from "@/lib/logger";
+import { drainIntentCancellations } from "@/lib/stripe/open-intent";
 
 const log = logger.child("settle card surcharges cron");
 
@@ -16,6 +17,11 @@ export const maxDuration = 120;
  * the invoice balance only — see lib/stripe/surcharge-capture.ts). This sweep captures any that the
  * webhook missed (event not subscribed, a failed delivery) so a customer's authorization is never
  * left uncaptured until Stripe expires it after 7 days with the invoice still unpaid.
+ *
+ * It also cancels customer pay forms made stale by another change to their
+ * invoice (paid another way, voided, merged, total edited) — see
+ * lib/stripe/open-intent.ts. The payment paths drain that queue themselves
+ * right away; this sweep catches the rest (e.g. a payment staff recorded by hand).
  *
  * Security: Vercel passes Authorization: Bearer {CRON_SECRET}.
  */
@@ -62,5 +68,7 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, settled, failed });
+  const stale = await drainIntentCancellations(supabase, { limit: 200 });
+
+  return NextResponse.json({ ok: true, settled, failed, staleFormsCanceled: stale.canceled, staleFormsFailed: stale.failed });
 }

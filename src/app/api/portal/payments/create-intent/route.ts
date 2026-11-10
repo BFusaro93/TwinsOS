@@ -11,7 +11,8 @@ import { computeProcessingFee } from "@/lib/stripe/crm-payments";
 import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
-import { refuseIfChargeInFlight, ensureIntentCustomer } from "@/lib/stripe/duplicate-charge";
+import { refuseIfChargeInFlight, ensureIntentCustomer, cancelMicrodepositIntents } from "@/lib/stripe/duplicate-charge";
+import { reuseOrCancelOpenIntent, rememberOpenIntent } from "@/lib/stripe/open-intent";
 
 const log = logger.child("portal create-intent");
 
@@ -21,6 +22,9 @@ const STRIPE_MIN_CHARGE_CENTS = 50;
 const CreateIntentSchema = z.object({
   invoiceId: z.string().uuid(),
   paymentMethod: z.enum(["card", "us_bank_account"]).default("card"),
+  /** The customer chose to cancel a bank payment that is waiting on
+   * micro-deposit verification and pay another way instead. */
+  cancelPendingBankPayment: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -41,7 +45,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { invoiceId, paymentMethod } = parsed.data;
+  const { invoiceId, paymentMethod, cancelPendingBankPayment } = parsed.data;
 
   // Portal users have no RLS read path to clients / crm_invoices — service
 
@@ -114,6 +118,15 @@ export async function POST(request: Request) {
     orgId: invoice.org_id,
     clientId: invoice.client_id,
   });
+  if (cancelPendingBankPayment) {
+    await cancelMicrodepositIntents({
+      stripe,
+      connectedAccountId: org.stripe_connect_account_id,
+      db: service,
+      invoiceIds: [invoice.id],
+      customerId,
+    });
+  }
   const refusal = await refuseIfChargeInFlight({
     stripe,
     connectedAccountId: org.stripe_connect_account_id,
@@ -162,6 +175,38 @@ export async function POST(request: Request) {
   }
 
 
+  // One open form per invoice: hand back the intent already open for exactly
+  // this payment, and cancel any other open one so a stale second form (another
+  // tab, an old amount, the other method) can't be submitted as well.
+  const intentMetadata = {
+    source: "crm_invoice",
+    org_id: invoice.org_id,
+    invoice_id: invoice.id,
+    client_id: invoice.client_id,
+    balance_cents: String(invoice.balance_cents),
+    fee_cents: String(feeCents),
+  };
+  const reused = await reuseOrCancelOpenIntent({
+    stripe,
+    connectedAccountId: org.stripe_connect_account_id,
+    db: service,
+    orgId: invoice.org_id,
+    invoiceIds: [invoice.id],
+    amountCents: totalChargeCents,
+    paymentMethod,
+    metadata: intentMetadata,
+  });
+  if (reused) {
+    return NextResponse.json({
+      clientSecret: reused.client_secret,
+      connectedAccountId: org.stripe_connect_account_id,
+      livemode: org.stripe_connect_livemode ?? true,
+      balanceCents: invoice.balance_cents,
+      feeCents,
+      totalChargeCents,
+    });
+  }
+
   // Direct charge on the org's connected account — see create-intent/route.ts
   // (CRM staff-facing version) for the same pattern.
   const paymentIntent = await stripe.paymentIntents.create(
@@ -172,12 +217,7 @@ export async function POST(request: Request) {
       ...surchargeIntentParams(feeCents, paymentMethod === "card"),
       ...(customerId ? { customer: customerId } : {}),
       metadata: {
-        source: "crm_invoice",
-        org_id: invoice.org_id,
-        invoice_id: invoice.id,
-        client_id: invoice.client_id,
-        balance_cents: String(invoice.balance_cents),
-        fee_cents: String(feeCents),
+        ...intentMetadata,
         ...surchargeIntentMetadata(feeCents, paymentMethod === "card"),
       },
     },
@@ -186,6 +226,7 @@ export async function POST(request: Request) {
       idempotencyKey: chargeIdempotencyKey(["crm_invoice_portal", invoice.id, totalChargeCents, paymentMethod]),
     }
   );
+  await rememberOpenIntent(service, invoice.org_id, [invoice.id], paymentIntent.id);
 
   return NextResponse.json({
     clientSecret: paymentIntent.client_secret,

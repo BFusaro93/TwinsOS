@@ -8,11 +8,19 @@ import { achEnabledForAccount } from "@/lib/stripe/connect";
 import { chargeIdempotencyKey } from "@/lib/stripe/idempotency";
 import { surchargeIntentMetadata, surchargeIntentParams } from "@/lib/stripe/surcharge-capture";
 import { isEstimatePastValidUntil } from "@/lib/estimates/validity";
-import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
+import { buildProposalContent, getPublishedProposal, isChangedSinceSent, PROPOSAL_ESTIMATE_SELECT } from "@/lib/estimates/proposal-content";
+import { PROPOSAL_TIERS, proposalDepositCents } from "@/lib/estimates/proposal-deposit";
 
 const BodySchema = z.object({
   paymentMethod: z.enum(["card", "us_bank_account"]).default("card"),
+  // The Good/Better/Best package the client has selected on the page. Only
+  // used to CAP the deposit at that package's total; validated against the
+  // tiers the proposal actually has (proposalDepositCents).
+  selectedTier: z.enum(PROPOSAL_TIERS).optional(),
 });
+
+// Stages that mean the proposal has been accepted (by any route).
+const ACCEPTED_STAGES = ["accepted", "won", "invoiced"];
 
 /**
  * Public, unauthenticated "pay the deposit on this proposal" endpoint.
@@ -60,7 +68,7 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid payment method" }, { status: 400 });
   }
-  const { paymentMethod } = parsed.data;
+  const { paymentMethod, selectedTier } = parsed.data;
   const supabase = serviceClient();
 
   const { data: shareToken, error: tokenErr } = await supabase
@@ -79,7 +87,7 @@ export async function POST(
 
   const { data: estimate } = await supabase
     .from("estimates")
-    .select("id, org_id, client_id, estimate_number, stage, deposit_required_cents, deposit_collected_cents, total_cents, deposit_pending_intent_id, deposit_pending_method, deposit_failed_at")
+    .select("id, org_id, client_id, estimate_number, stage, deposit_required_cents, deposit_collected_cents, deposit_pending_cents, total_cents, deposit_pending_intent_id, deposit_pending_method, deposit_failed_at, portal_accepted_at")
     .eq("id", shareToken.estimate_id)
     .eq("org_id", shareToken.org_id)
     .is("deleted_at", null)
@@ -119,13 +127,25 @@ export async function POST(
   // new power — only another attempt at the same number. The webhook clears
   // deposit_failed_at the moment a deposit lands, which closes the link again.
   const isRetry = !!estimate.deposit_failed_at && (estimate.deposit_collected_cents ?? 0) === 0;
+  // A required deposit the client skipped at acceptance (deposits are
+  // optional) is still due, and the accepted page shows it with a way to pay.
+  // Same narrow shape as a retry: accepted, nothing collected, nothing
+  // clearing, amount from the estimate.
+  const isAccepted =
+    !!shareToken.accepted_at || !!estimate.portal_accepted_at || ACCEPTED_STAGES.includes(estimate.stage as string);
+  const isOwed =
+    isAccepted &&
+    (estimate.deposit_required_cents ?? 0) > 0 &&
+    (estimate.deposit_collected_cents ?? 0) === 0 &&
+    (estimate.deposit_pending_cents ?? 0) === 0;
+  const isAfterAcceptance = isRetry || isOwed;
 
-  if (tokenExpired && !isRetry) {
+  if (tokenExpired && !isAfterAcceptance) {
     return NextResponse.json({ error: "Proposal link has expired" }, { status: 410 });
   }
 
-  if (!isRetry) {
-    if (shareToken.accepted_at) {
+  if (!isAfterAcceptance) {
+    if (isAccepted) {
       return NextResponse.json({ error: "This proposal has already been accepted" }, { status: 409 });
     }
     // Same gate the accept route applies — a proposal staff have moved on
@@ -141,16 +161,39 @@ export async function POST(
   }
 
   // A deposit is a down payment on the job, so it can never be more than the
-  // proposal's current total (e.g. staff later cut scope below a fixed-dollar
-  // deposit). The client's un-submitted line selection isn't known here, so
-  // this clamps to the whole-estimate total; the accept route separately
-  // rejects a claimed deposit above the ACCEPTED total.
-  const depositCents = Math.min(
-    estimate.deposit_required_cents ?? 0,
-    estimate.total_cents != null && estimate.total_cents > 0
-      ? estimate.total_cents
-      : (estimate.deposit_required_cents ?? 0),
-  );
+  // total being accepted (e.g. staff later cut scope below a fixed-dollar
+  // deposit). After acceptance that is the stored total (recalculated to the
+  // accepted scope). Before it, on a Good/Better/Best proposal, it is the
+  // SELECTED package's total — total_cents is priced on the cheapest tier, so
+  // capping against it charged less than the page quoted for a bigger one.
+  // proposalDepositCents is the same function the page displays with.
+  let depositCents: number;
+  if (isAfterAcceptance) {
+    depositCents = Math.min(
+      estimate.deposit_required_cents ?? 0,
+      estimate.total_cents != null && estimate.total_cents > 0
+        ? estimate.total_cents
+        : (estimate.deposit_required_cents ?? 0),
+    );
+  } else {
+    const published = await getPublishedProposal(supabase, estimate.id, estimate.org_id);
+    let content = published?.content ?? null;
+    if (!content) {
+      const { data: live } = await supabase
+        .from("estimates")
+        .select(PROPOSAL_ESTIMATE_SELECT)
+        .eq("id", estimate.id)
+        .eq("org_id", estimate.org_id)
+        .maybeSingle();
+      content = live ? buildProposalContent(live as Record<string, unknown>) : null;
+    }
+    depositCents = content
+      ? proposalDepositCents(
+          { ...content, depositRequiredCents: estimate.deposit_required_cents ?? 0 },
+          selectedTier ?? null,
+        )
+      : 0;
+  }
   if (depositCents <= 0) {
     return NextResponse.json({ error: "This proposal has no deposit due" }, { status: 400 });
   }
@@ -232,7 +275,9 @@ export async function POST(
         {},
         { stripeAccount: org.stripe_connect_account_id }
       );
-      if (existing.status === "succeeded" || existing.status === "processing") {
+      // requires_capture is an authorized card awaiting capture — money the
+      // client has committed, so a second intent must not be minted beside it.
+      if (existing.status === "succeeded" || existing.status === "processing" || existing.status === "requires_capture") {
         return NextResponse.json(
           { error: "A deposit for this proposal has already been submitted." },
           { status: 409 }

@@ -2,6 +2,7 @@ import type { EstimateLineItem, DirectCostType } from "@/types/crm-estimates";
 import type { CRMService } from "@/types/crm-jobs";
 import type { OverheadSettings } from "@/lib/hooks/use-overhead-settings";
 import { productionRateAppliesToUnit } from "@/lib/estimates/units";
+import { resolvePercentMilestoneAmounts } from "@/lib/utils/milestone-amounts";
 
 // Duplicated from use-overhead-settings.ts rather than imported — that module
 // is "use client" and pulls in @tanstack/react-query + the browser Supabase
@@ -785,19 +786,31 @@ export async function recalcEstimateTotals(supabase: AnySupabaseClient, estimate
   // a project are skipped: their basis is the project's contract_price
   // (project-first, see 20260913193000), which change orders move — syncing
   // them to the estimate total here would undo a change order.
+  // Invoiced rows are read too: the last pending percent row takes the
+  // rounding remainder of the whole percent schedule (resolvePercentMilestoneAmounts,
+  // the same rule invoicing applies), so 50/50 of an odd-cent total adds up.
   const { data: milestones } = await supabase
     .from("estimate_milestones")
-    .select("id, milestone_type, milestone_value, amount_cents")
+    .select("id, milestone_type, milestone_value, amount_cents, status, sort_order, created_at")
     .eq("estimate_id", estimateId)
-    .eq("status", "pending")
     .is("project_id", null)
     .is("deleted_at", null);
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const m of (milestones ?? []) as any[]) {
-    if (m.milestone_type !== "percent") continue;
-    const newAmountCents = Math.round((totalCents * m.milestone_value) / 10000);
-    if (newAmountCents !== m.amount_cents) {
+  const msRows = ((milestones ?? []) as any[]).map((m) => ({
+    id: m.id as string,
+    milestoneType: m.milestone_type as "flat" | "percent",
+    milestoneValue: m.milestone_value as number,
+    status: m.status as string,
+    sortOrder: (m.sort_order as number) ?? 0,
+    createdAt: m.created_at as string,
+    amountCents: m.amount_cents as number,
+  }));
+  const resolvedPercent = resolvePercentMilestoneAmounts(msRows, () => ({ key: "estimate", basisCents: totalCents }));
+
+  for (const m of msRows) {
+    if (m.milestoneType !== "percent" || m.status !== "pending") continue;
+    const newAmountCents = resolvedPercent.get(m.id) ?? Math.round((totalCents * m.milestoneValue) / 10000);
+    if (newAmountCents !== m.amountCents) {
       const { error: msErr } = await supabase
         .from("estimate_milestones")
         .update({ amount_cents: newAmountCents })

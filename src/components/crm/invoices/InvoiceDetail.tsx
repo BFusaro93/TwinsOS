@@ -722,7 +722,7 @@ export function InvoiceDetail({
   const { mutateAsync: deleteInvoice } = useDeleteInvoice();
   const { mutateAsync: voidInvoice } = useVoidInvoice();
   const applyCredit = useApplyCreditToInvoice();
-  const { data: unappliedPayments = [] } = useUnappliedPayments(invoice?.clientId);
+  const { data: unappliedPayments = [] } = useUnappliedPayments(invoice?.clientId, invoice?.id);
   const unappliedCents = unappliedPayments.reduce((s, p) => s + p.unusedAmountCents, 0);
   const { data: savedServices } = useCRMServices();
   const { data: otherCharges } = useOtherCharges();

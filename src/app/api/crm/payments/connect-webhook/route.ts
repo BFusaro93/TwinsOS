@@ -16,6 +16,7 @@ import {
 import { recordClientPrepaymentCharge } from "@/lib/stripe/record-client-prepayment";
 import { clearPendingCharge, markInvoicesPendingCharge, isPendingChargeStatus } from "@/lib/stripe/pending-charge";
 import { decodeAllocations } from "@/lib/stripe/crm-payments";
+import { forgetOpenIntent } from "@/lib/stripe/open-intent";
 import { settleSurchargeAuthorization } from "@/lib/stripe/surcharge-capture";
 import { summarizePaymentMethod } from "@/lib/stripe/saved-payment-methods";
 import { fireSimpleTrigger } from "@/lib/automations/sequence-enrollment";
@@ -215,6 +216,14 @@ export async function POST(request: Request) {
           clientId: failedClientId,
           triggerType: "credit_card_charge_failed",
         });
+        // A card decline happens in front of whoever is paying; a bank debit
+        // returned days later (NSF, closed account) doesn't — and nothing was
+        // ever written to the ledger for it, so without this the office had no
+        // trace at all. Same timeline entry as a failed prepayment, plus a
+        // staff notification (a system event: nobody is excluded).
+        if (failedIntent.payment_method_types.includes("us_bank_account")) {
+          await recordFailedAchInvoicePayment(db, supabase, failedOrgId, failedClientId, failedIntent);
+        }
         // The charge is dead — drop the "payment in flight" marker so the
         // invoice becomes chargeable again instead of looking pending forever.
         await clearPendingCharge(db, failedIntent.id);
@@ -269,6 +278,7 @@ export async function POST(request: Request) {
       const canceledSource = canceledIntent.metadata?.source;
       if (canceledSource === "crm_invoice" || canceledSource === "crm_invoice_multi") {
         await clearPendingCharge(db, canceledIntent.id);
+        await forgetOpenIntent(db, canceledIntent.id);
       } else if (canceledSource === "crm_estimate_deposit") {
         await clearEstimateDepositPending(db, canceledIntent.id);
       }
@@ -302,6 +312,10 @@ export async function POST(request: Request) {
       }
 
       await markIntentInvoicesPending(db, pendingIntent, event.account ?? null);
+      // Submitted: no longer an open form to reuse or cancel.
+      if (pendingSource === "crm_invoice" || pendingSource === "crm_invoice_multi") {
+        await forgetOpenIntent(db, pendingIntent.id);
+      }
       break;
     }
 
@@ -350,7 +364,12 @@ export async function POST(request: Request) {
       if (metaOrg && event.account) {
         const ownership = await classifyChargeAccount(db, metaOrg, event.account);
         if (ownership === "orphaned") {
-          await notifyOrphanedAccountCharge(db, metaOrg, paymentIntent);
+          await notifyUnrecordedCharge(
+            db,
+            metaOrg,
+            paymentIntent,
+            "settled on the Stripe account you used before reconnecting Stripe, so it couldn't be recorded automatically"
+          );
           await clearPendingCharge(db, paymentIntent.id);
           break;
         }
@@ -378,6 +397,23 @@ export async function POST(request: Request) {
       if (result === "error") {
         return NextResponse.json({ error: "Failed to apply payment to invoice" }, { status: 500 });
       }
+      if (result === "unrecordable") {
+        // Permanent: the invoice/client the payment names can't take it, even
+        // after following a client merge. A 500 would only make Stripe redeliver
+        // for three days with nothing recorded and nobody told — alert the
+        // org's admins to record it by hand and acknowledge the event.
+        if (metaOrg) {
+          await notifyUnrecordedCharge(
+            db,
+            metaOrg,
+            paymentIntent,
+            "couldn't be matched to its invoice or client automatically (the client may have been merged or deleted while the payment was in flight)"
+          );
+        }
+        await clearPendingCharge(db, paymentIntent.id);
+        await forgetOpenIntent(db, paymentIntent.id);
+        break;
+      }
       // The deposit is charged before the acceptance is submitted. If the
       // proposal can't be accepted any more (expired / edited since sent in
       // between), tell staff — the money is on the client's account as credit.
@@ -388,6 +424,7 @@ export async function POST(request: Request) {
       // pending marker has done its job. Cleared by intent id, so this covers
       // single and combined charges alike and is safe to run twice.
       await clearPendingCharge(db, paymentIntent.id);
+      await forgetOpenIntent(db, paymentIntent.id);
       break;
     }
 
@@ -588,7 +625,7 @@ async function applyCrmInvoicePayment(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   event: Stripe.Event
-): Promise<"applied" | "skipped" | "error"> {
+): Promise<"applied" | "skipped" | "error" | "unrecordable"> {
   const paymentIntent = event.data.object as Stripe.PaymentIntent;
   if (paymentIntent.metadata?.source !== "crm_invoice") return "skipped";
   if (!event.account) {
@@ -606,7 +643,7 @@ async function applyCrmInvoiceMultiPayment(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   event: Stripe.Event
-): Promise<"applied" | "skipped" | "error"> {
+): Promise<"applied" | "skipped" | "error" | "unrecordable"> {
   const paymentIntent = event.data.object as Stripe.PaymentIntent;
   if (paymentIntent.metadata?.source !== "crm_invoice_multi") return "skipped";
   if (!event.account) {
@@ -918,18 +955,21 @@ async function markIntentInvoicesPending(
   await markInvoicesPendingCharge({ db, orgId, paymentIntent: intent, amountsByInvoiceId: amounts });
 }
 
-/** One alert per intent to the org's admins: money settled on a Stripe account the org has
- *  since disconnected, so it must be recorded by hand. */
-async function notifyOrphanedAccountCharge(
+/** One alert per intent to the org's admins: money settled that can't be recorded
+ *  automatically (on a Stripe account the org has since disconnected, or naming an
+ *  invoice/client that can no longer take it), so it must be recorded by hand. */
+async function notifyUnrecordedCharge(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
   orgId: string,
-  intent: Stripe.PaymentIntent
+  intent: Stripe.PaymentIntent,
+  why: string
 ): Promise<void> {
   const amount = `$${((intent.amount_received || intent.amount) / 100).toFixed(2)}`;
-  log.error("payment settled on a Stripe account the org no longer uses — needs manual recording", {
+  log.error("settled payment can't be recorded automatically — needs manual recording", {
     paymentIntentId: intent.id,
     orgId,
+    why,
   });
   try {
     const { count } = await db
@@ -950,12 +990,90 @@ async function notifyOrphanedAccountCharge(
       user_id: a.id,
       type: "automation_alert",
       title: `Payment of ${amount} needs to be recorded`,
-      message: `A ${amount} online payment settled on the Stripe account you used before reconnecting Stripe, so it couldn't be recorded automatically. Record it on the invoice by hand (Stripe payment ${intent.id}).`,
+      message: `A ${amount} online payment ${why}. Record it on the invoice by hand (Stripe payment ${intent.id}).`,
       entity_id: intent.metadata?.invoice_id ?? null,
       entity_type: intent.metadata?.invoice_id ? "invoice" : null,
     }));
     if (rows.length) await db.from("notifications").insert(rows);
   } catch (err) {
-    log.error("failed to notify admins about an orphaned-account payment", { error: err, paymentIntentId: intent.id });
+    log.error("failed to notify admins about an unrecorded payment", { error: err, paymentIntentId: intent.id });
+  }
+}
+
+/**
+ * A bank (ACH) invoice payment the bank returned. Leaves the same timeline entry
+ * the failed-prepayment branch writes and notifies staff (the payment-alert
+ * audience, default admins + managers). Once per intent: the activity row is the
+ * dedupe key, so a redelivered event writes nothing twice. Never throws.
+ */
+async function recordFailedAchInvoicePayment(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  orgId: string,
+  metadataClientId: string,
+  intent: Stripe.PaymentIntent
+): Promise<void> {
+  try {
+    // The client may have been merged away while the debit was in flight.
+    const { data: resolved } = await db.rpc("resolve_merged_client", { p_org_id: orgId, p_client_id: metadataClientId });
+    const clientId = (resolved as string | null) ?? metadataClientId;
+    const invoiceIds =
+      intent.metadata?.source === "crm_invoice_multi" && intent.metadata?.allocations
+        ? decodeAllocations(intent.metadata.allocations).map((a) => a.invoiceId)
+        : intent.metadata?.invoice_id
+          ? [intent.metadata.invoice_id]
+          : [];
+    const { data: invoices } = invoiceIds.length
+      ? await db.from("crm_invoices").select("id, invoice_number").eq("org_id", orgId).in("id", invoiceIds)
+      : { data: [] };
+    const numbers = ((invoices ?? []) as { invoice_number: number | string | null }[])
+      .map((i) => (i.invoice_number != null ? `#${i.invoice_number}` : null))
+      .filter(Boolean)
+      .join(", ");
+    const cents = Number.parseInt(intent.metadata?.balance_cents ?? "", 10) || intent.amount;
+    const amount = (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+    const reason = intent.last_payment_error?.message?.trim() || "The bank returned the transfer.";
+    const subject = `Payment failed: ${amount} bank transfer${numbers ? ` for invoice ${numbers}` : ""} — ${reason}`;
+
+    const { count } = await db
+      .from("client_activity")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("client_id", clientId)
+      .eq("activity_type", "payment")
+      .like("subject", "Payment failed:%")
+      .ilike("body", `%${intent.id}%`);
+    if ((count ?? 0) > 0) return;
+
+    const { error: activityErr } = await db.from("client_activity").insert({
+      org_id: orgId,
+      client_id: clientId,
+      activity_type: "payment",
+      subject,
+      body: `Stripe payment ${intent.id}. The invoice balance was never reduced, so nothing needs reversing — it is open again and can be collected another way.`,
+    });
+    if (activityErr) log.error("failed to log a failed bank invoice payment", { error: activityErr, paymentIntentId: intent.id });
+
+    const recipients = await resolveBroadcastRecipients(supabase, orgId, "paymentDisputeRecipientIds");
+    if (recipients.length) {
+      const singleInvoice = invoiceIds.length === 1 ? invoiceIds[0] : null;
+      const { error: notifyErr } = await db.from("notifications").insert(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recipients.map((p: any) => ({
+          org_id: orgId,
+          user_id: p.id,
+          type: "payment_failed",
+          title: `Bank payment failed — ${amount}`,
+          message: `A ${amount} bank transfer${numbers ? ` for invoice ${numbers}` : ""} was returned by the client's bank (${reason}). The invoice is open again.`,
+          entity_id: singleInvoice ?? clientId,
+          entity_type: singleInvoice ? "invoice" : "client",
+        }))
+      );
+      if (notifyErr) log.error("failed to notify staff of a failed bank payment", { error: notifyErr, paymentIntentId: intent.id });
+    }
+  } catch (err) {
+    log.error("failed to record a failed bank invoice payment", { error: err, paymentIntentId: intent.id });
   }
 }

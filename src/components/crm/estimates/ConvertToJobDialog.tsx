@@ -272,7 +272,14 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
   const { mutateAsync: convertLead } = useConvertLeadToClient();
   // All-in estimated cost (revenue - net profit) — seeds a linked project's EAC
   // if it's still unset. See rpt_projects_wip / the WIP report this feeds.
-  const eacHintCents = estimate.revenueCents - estimate.netProfitCents;
+  // A project that already came from ANOTHER estimate takes this one as an add-on
+  // (link_estimate_to_project): an approved change order for this estimate's
+  // pre-tax revenue, with its milestones billing against this estimate's total.
+  const selectedProject = (clientProjects ?? []).find((p) => p.id === projectId) ?? null;
+  const isAddOnProject =
+    !!selectedProject?.sourceEstimateId && selectedProject.sourceEstimateId !== estimate.id;
+  const addOnRevenueCents =
+    estimate.revenueCents > 0 ? estimate.revenueCents : Math.max(0, estimate.subtotalCents - estimate.discountCents);
 
   const convertibleLines = lineItems.filter((li) => !isConverted(li));
 
@@ -468,7 +475,6 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
         schedule: effectiveJobType === "recurring" ? schedule : null,
         notesToCrew: isBlankRich(notesToCrew) ? null : notesToCrew,
         projectId: effectiveJobType === "project" ? projectId : null,
-        eacHintCents,
         salesRepId,
         dateSold: dateSold || null,
         services: selectedItems.map((li) => {
@@ -774,6 +780,13 @@ export function ConvertToJobDialog({ open, estimate, onClose, onConverted }: Pro
               <p className="text-[11px] text-slate-400 dark:text-neutral-500">
                 Links this job to a Projects (PO cost-tracking) record for job costing and the WIP report.
               </p>
+              {isAddOnProject && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                  {selectedProject?.name} came from another estimate, so this one is added as an approved change
+                  order (+{formatCurrency(addOnRevenueCents)} to the contract). Its milestones bill against this
+                  estimate&apos;s own total.
+                </p>
+              )}
             </div>
           )}
 

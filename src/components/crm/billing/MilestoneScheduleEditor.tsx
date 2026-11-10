@@ -28,6 +28,7 @@ import {
 import type { EstimateMilestone } from "@/types/crm-estimates";
 import { useQuery } from "@/lib/hooks/use-query";
 import { createClient } from "@/lib/supabase/client";
+import { resolvePercentMilestoneAmounts, type MilestoneBasis } from "@/lib/utils/milestone-amounts";
 
 export function amountFor(type: "flat" | "percent", value: number, totalCents: number): number {
   return type === "percent" ? Math.round((totalCents * value) / 10000) : value;
@@ -36,6 +37,7 @@ export function amountFor(type: "flat" | "percent", value: number, totalCents: n
 function MilestoneRow({
   milestone,
   totalCents,
+  resolvedAmountCents,
   overAllocated,
   clientId,
   salesRepId,
@@ -44,7 +46,11 @@ function MilestoneRow({
   canInvoice,
 }: {
   milestone: EstimateMilestone;
+  /** This row's percent basis: the project contract, an add-on estimate's own total, or the estimate total. */
   totalCents: number;
+  /** What the saved row bills (percent rows: its basis share, with the last pending row of the
+   *  basis absorbing the rounding remainder — the same rule invoicing uses). */
+  resolvedAmountCents: number | undefined;
   /** Milestones collectively total more than the basis — block invoicing
    *  until amounts are corrected, so an over-allocation can't turn into a
    *  real invoice that overbills the client past what they agreed to. */
@@ -92,10 +98,13 @@ function MilestoneRow({
   // lifts the contract to $60,000 — the invoice is a fact, and the whole point
   // of change orders adjusting only pending milestones is that billed money
   // stays put.
+  const unedited = type === milestone.milestoneType && toMilestoneValue(valueStr) === milestone.milestoneValue;
   const amountCents =
     milestone.status === "invoiced"
       ? milestone.amountCents
-      : amountFor(type, toMilestoneValue(valueStr), totalCents);
+      : unedited && resolvedAmountCents !== undefined
+        ? resolvedAmountCents
+        : amountFor(type, toMilestoneValue(valueStr), totalCents);
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 dark:border-neutral-800 bg-slate-50 dark:bg-muted/40 p-2.5">
@@ -221,7 +230,9 @@ function MilestoneRow({
  * same record, and invoicing it from either surface marks it invoiced on both.
  *
  * `totalCents` is the basis percent milestones resolve against: the estimate
- * total on an estimate, the contract price on a project.
+ * total on an estimate, the contract price on a project — except an ADD-ON
+ * estimate's rows on a project (an estimate converted into a project that came
+ * from another one), which resolve against that estimate's own total.
  */
 export function MilestoneScheduleEditor({
   estimateId,
@@ -293,35 +304,57 @@ export function MilestoneScheduleEditor({
   // taxed estimate holds a gross figure (the invoice bills it as entered, tax inside). Compare
   // its pre-tax share, or a complete gross schedule read as over-allocated and every Invoice
   // button was disabled on the project.
-  const { data: netShareById } = useQuery({
+  // An ADD-ON estimate's rows (any estimate but the one that seeded the
+  // project) resolve against that estimate's own total: its pre-tax share on a
+  // pre-tax project, the tax-inclusive total otherwise — the same basis
+  // create_invoice_from_milestone bills (20261230000400).
+  const { data: projectBasis } = useQuery({
     queryKey: ["project-milestones", projectId, "net-share"],
     enabled: !!projectId,
     queryFn: async () => {
       const supabase = createClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("estimate_milestones")
-        .select("id, amount_is_pretax, estimate_id, estimates(total_cents, tax_cents)")
-        .eq("project_id", projectId)
-        .is("deleted_at", null);
-      if (error) throw error;
-      const map = new Map<string, number>();
-      for (const r of (data ?? []) as { id: string; amount_is_pretax: boolean | null; estimate_id: string | null; estimates: { total_cents: number | null; tax_cents: number | null } | null }[]) {
+      const db = supabase as any;
+      const [rowsRes, projRes] = await Promise.all([
+        db
+          .from("estimate_milestones")
+          .select("id, amount_is_pretax, estimate_id, estimates(total_cents, tax_cents)")
+          .eq("project_id", projectId)
+          .is("deleted_at", null),
+        db.from("projects").select("source_estimate_id, contract_price_is_pretax").eq("id", projectId).maybeSingle(),
+      ]);
+      if (rowsRes.error) throw rowsRes.error;
+      if (projRes.error) throw projRes.error;
+      const seed = (projRes.data?.source_estimate_id as string | null) ?? null;
+      const pretax = projRes.data?.contract_price_is_pretax !== false;
+      const netShare = new Map<string, number>();
+      const addOnBasis = new Map<string, MilestoneBasis>();
+      for (const r of (rowsRes.data ?? []) as { id: string; amount_is_pretax: boolean | null; estimate_id: string | null; estimates: { total_cents: number | null; tax_cents: number | null } | null }[]) {
         const total = r.estimates?.total_cents ?? 0;
         const tax = r.estimates?.tax_cents ?? 0;
-        if (r.estimate_id && !r.amount_is_pretax && total > 0 && tax > 0) map.set(r.id, (total - tax) / total);
+        if (r.estimate_id && !r.amount_is_pretax && total > 0 && tax > 0) netShare.set(r.id, (total - tax) / total);
+        if (r.estimate_id && seed && r.estimate_id !== seed) {
+          addOnBasis.set(r.id, { key: `addon:${r.estimate_id}`, basisCents: pretax ? total - tax : total });
+        }
       }
-      return map;
+      return { netShare, addOnBasis, pretax };
     },
   });
+  const basisOf = (m: EstimateMilestone): MilestoneBasis =>
+    projectBasis?.addOnBasis.get(m.id) ?? { key: projectId ? "project" : "estimate", basisCents: totalCents };
+  const resolvedPercent = resolvePercentMilestoneAmounts(milestones, basisOf);
+  // A gross figure (a flat row carried from a taxed estimate, or an add-on's
+  // percent share of its tax-inclusive total) compares by its pre-tax share
+  // against the pre-tax contract.
   const preTax = (m: EstimateMilestone, cents: number) => {
-    const share = m.milestoneType === "flat" ? netShareById?.get(m.id) : undefined;
+    const grossPercent = m.milestoneType === "percent" && projectBasis?.addOnBasis.has(m.id) && !projectBasis.pretax;
+    const share = m.milestoneType === "flat" || grossPercent ? projectBasis?.netShare.get(m.id) : undefined;
     return share != null ? Math.round(cents * share) : cents;
   };
   const liveAmount = (m: EstimateMilestone) =>
     m.status === "invoiced"
       ? preTax(m, m.amountCents)
-      : preTax(m, amountFor(m.milestoneType, m.milestoneValue, totalCents));
+      : preTax(m, resolvedPercent.get(m.id) ?? amountFor(m.milestoneType, m.milestoneValue, basisOf(m).basisCents));
 
   const totalAllocatedCents = milestones.reduce((s, m) => s + liveAmount(m), 0);
   const diffCents = totalCents - totalAllocatedCents;
@@ -350,7 +383,8 @@ export function MilestoneScheduleEditor({
         <MilestoneRow
           key={m.id}
           milestone={m}
-          totalCents={totalCents}
+          totalCents={basisOf(m).basisCents}
+          resolvedAmountCents={resolvedPercent.get(m.id)}
           overAllocated={overAllocated}
           clientId={clientId}
           salesRepId={salesRepId}

@@ -119,6 +119,14 @@ export async function findDuplicateChargeIntent({
  * needs different wording from a card: "wait a moment" is wrong for something
  * that takes days, and the invoice legitimately stays in the queue meanwhile. */
 export function duplicateChargeMessage(duplicate: Stripe.PaymentIntent, plural = false): string {
+  if (isAwaitingMicrodeposits(duplicate)) {
+    // Not "just submitted": a bank account typed in by hand is verified with two
+    // small deposits first, and the payment waits (for days) until the customer
+    // confirms them. The customer-facing pay forms offer to cancel it instead.
+    return plural
+      ? "A bank payment covering one or more of these invoices is waiting for the bank account to be verified (two small deposits from Stripe). It goes through once the account is verified — paying again now would charge twice."
+      : "A bank payment for this invoice is waiting for the bank account to be verified (two small deposits from Stripe). It goes through once the account is verified — paying again now would charge twice.";
+  }
   if (duplicate.status === "processing") {
     return plural
       ? "A bank debit covering one or more of these invoices is already in progress and hasn't settled yet. They stay in this queue until it does — charging again would debit the client twice."
@@ -181,9 +189,31 @@ export async function findInFlightMarkedIntent({
     ),
   ];
 
+  // The intents customer pay forms are open on (lib/stripe/open-intent.ts).
+  // One the customer has since submitted — a bank debit processing, or one
+  // waiting on micro-deposit verification when the requires_action webhook
+  // isn't subscribed — must block too. An unsubmitted form (or one mid card
+  // authentication) doesn't: it's reused or canceled by the create routes.
+  const { data: openRows } = await db
+    .from("crm_open_payment_intents")
+    .select("payment_intent_id")
+    .in("invoice_id", invoiceIds);
+  const openOnly = new Set(
+    ((openRows ?? []) as { payment_intent_id: string }[])
+      .map((r) => r.payment_intent_id)
+      .filter((id) => !intentIds.includes(id))
+  );
+  intentIds.push(...openOnly);
+
   for (const intentId of intentIds) {
     const pi = await stripe.paymentIntents.retrieve(intentId, undefined, { stripeAccount: connectedAccountId });
     if (!BLOCKING_PAYMENT_INTENT_STATUSES.has(pi.status)) continue;
+    if (
+      openOnly.has(intentId) &&
+      (pi.status === "requires_confirmation" || (pi.status === "requires_action" && !isAwaitingMicrodeposits(pi)))
+    ) {
+      continue;
+    }
     if (pi.status === "succeeded") {
       // Succeeded and already in the ledger → the balance we're about to
       // charge already reflects it; the marker is just stale.
@@ -209,9 +239,26 @@ export function inFlightChargeMessage(duplicate: Stripe.PaymentIntent, plural = 
   return duplicateChargeMessage(duplicate, plural);
 }
 
+/** A bank (ACH) PaymentIntent parked until the customer verifies their account
+ * with micro-deposits. */
+export function isAwaitingMicrodeposits(pi: Stripe.PaymentIntent): boolean {
+  return pi.status === "requires_action" && pi.next_action?.type === "verify_with_microdeposits";
+}
+
 export interface ChargeRefusal {
-  body: { error: string; code: "duplicate_charge" | "in_flight_check_failed"; inFlight: boolean };
+  body: {
+    error: string;
+    /** microdeposits_pending: the only thing in the way is a bank payment
+     * waiting on micro-deposit verification — the customer pay forms offer to
+     * cancel it (cancelPendingBankPayment) and pay by card instead. */
+    code: "duplicate_charge" | "in_flight_check_failed" | "microdeposits_pending";
+    inFlight: boolean;
+  };
   status: number;
+}
+
+function refusalCode(pi: Stripe.PaymentIntent): ChargeRefusal["body"]["code"] {
+  return isAwaitingMicrodeposits(pi) ? "microdeposits_pending" : "duplicate_charge";
 }
 
 /**
@@ -243,7 +290,7 @@ export async function refuseIfChargeInFlight(args: {
     const marked = await findInFlightMarkedIntent({ stripe, connectedAccountId, db, invoiceIds });
     if (marked) {
       return {
-        body: { error: inFlightChargeMessage(marked, plural), code: "duplicate_charge", inFlight: marked.status === "processing" },
+        body: { error: inFlightChargeMessage(marked, plural), code: refusalCode(marked), inFlight: marked.status === "processing" },
         status: 409,
       };
     }
@@ -264,7 +311,7 @@ export async function refuseIfChargeInFlight(args: {
       const duplicate = await findDuplicateChargeIntent({ stripe, connectedAccountId, customerId, invoiceIds, isAch, db });
       if (duplicate) {
         return {
-          body: { error: duplicateChargeMessage(duplicate, plural), code: "duplicate_charge", inFlight: duplicate.status === "processing" },
+          body: { error: duplicateChargeMessage(duplicate, plural), code: refusalCode(duplicate), inFlight: duplicate.status === "processing" },
           status: 409,
         };
       }
@@ -277,6 +324,76 @@ export async function refuseIfChargeInFlight(args: {
   }
 
   return null;
+}
+
+/**
+ * Cancels the bank payments covering these invoices that are parked waiting on
+ * micro-deposit verification, so the customer can pay by card instead (they
+ * asked to, from the pay form). Looks in the same two places the in-flight
+ * guard does — the invoices' pending marker and the customer's recent intents
+ * — and touches nothing else: a debit that is actually processing is real
+ * money and stays. Returns how many it canceled; the caller re-runs
+ * refuseIfChargeInFlight afterwards, which still refuses anything left.
+ */
+export async function cancelMicrodepositIntents(args: {
+  stripe: Stripe;
+  connectedAccountId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any;
+  invoiceIds: string[];
+  customerId: string | null;
+}): Promise<number> {
+  const { stripe, connectedAccountId, db, invoiceIds, customerId } = args;
+  const targets = new Set(invoiceIds);
+  const candidates = new Map<string, Stripe.PaymentIntent>();
+
+  const { data: rows } = await db
+    .from("crm_invoices")
+    .select("pending_payment_intent_id")
+    .in("id", invoiceIds)
+    .not("pending_payment_intent_id", "is", null);
+  const { data: openRows } = await db
+    .from("crm_open_payment_intents")
+    .select("payment_intent_id")
+    .in("invoice_id", invoiceIds);
+  const ids = new Set([
+    ...((rows ?? []) as { pending_payment_intent_id: string }[]).map((r) => r.pending_payment_intent_id),
+    ...((openRows ?? []) as { payment_intent_id: string }[]).map((r) => r.payment_intent_id),
+  ]);
+  for (const id of ids) {
+    try {
+      const pi = await stripe.paymentIntents.retrieve(id, undefined, { stripeAccount: connectedAccountId });
+      candidates.set(pi.id, pi);
+    } catch (err) {
+      log.error("failed to read a pending bank payment", { error: err, paymentIntentId: id });
+    }
+  }
+  if (customerId) {
+    try {
+      const recent = await stripe.paymentIntents.list(
+        { customer: customerId, created: { gte: Math.floor(Date.now() / 1000) - RECENT_ACH_CHARGE_WINDOW_SECONDS }, limit: 100 },
+        { stripeAccount: connectedAccountId }
+      );
+      for (const pi of recent.data) candidates.set(pi.id, pi);
+    } catch (err) {
+      log.error("failed to list recent payments for a micro-deposit cancel", { error: err, customerId });
+    }
+  }
+
+  let canceled = 0;
+  for (const pi of candidates.values()) {
+    if (!isAwaitingMicrodeposits(pi)) continue;
+    if (!invoicesCoveredBy(pi).some((id) => targets.has(id))) continue;
+    await stripe.paymentIntents.cancel(pi.id, {}, { stripeAccount: connectedAccountId });
+    // The canceled webhook clears this too; doing it now lets the card payment start immediately.
+    await db
+      .from("crm_invoices")
+      .update({ pending_payment_intent_id: null, pending_payment_cents: null, pending_payment_method: null, pending_payment_at: null })
+      .eq("pending_payment_intent_id", pi.id);
+    await db.from("crm_open_payment_intents").delete().eq("payment_intent_id", pi.id);
+    canceled++;
+  }
+  return canceled;
 }
 
 /**

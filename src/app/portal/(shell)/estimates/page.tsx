@@ -40,8 +40,14 @@ interface EstimateRow {
   discount_type: "percent" | "flat" | null;
   discount_value: number | null;
   tax_rate_bps: number | null;
+  deposit_required_cents: number | null;
+  deposit_collected_cents: number | null;
+  deposit_pending_cents: number | null;
   line_items: LineItemRow[];
 }
+
+// Stages that mean the estimate has been accepted (portal, link, or office).
+const ACCEPTED_STAGES = ["accepted", "won", "invoiced"];
 
 export default async function EstimatesPage() {
   const ctx = await getPortalContext();
@@ -77,6 +83,7 @@ export default async function EstimatesPage() {
         .select(
           "id, client_id, estimate_number, title:description, total_price_cents:total_cents, status:stage, expires_at:valid_until_date, created_at, display_settings, tiers_enabled, tier_labels, " +
             "discount_cents, discount_type, discount_value, tax_rate_bps, " +
+            "deposit_required_cents, deposit_collected_cents, deposit_pending_cents, " +
             "line_items:estimate_line_items(id, description:estimate_desc, quantity:qty, unit_price_cents:rate_cents, visits, total_cents, discount_cents, status, sort_order, row_type, section_name, tier, package_id, subitems:estimate_line_item_subitems(total_cents, deleted_at))"
         )
         .in("client_id", ids)
@@ -129,6 +136,7 @@ export default async function EstimatesPage() {
         discount_type: c.discountType,
         discount_value: c.discountValue,
         tax_rate_bps: c.taxRateBps,
+        deposit_required_cents: c.depositRequiredCents,
         // Lines already agreed (status 'won') are shown as such, not offered.
         line_items: [
           ...c.lineItems.map((li) => toPortalLine(li, li.status)),
@@ -154,13 +162,45 @@ export default async function EstimatesPage() {
     };
   }));
 
+  // A required deposit still owed on an accepted estimate (nothing collected
+  // or clearing). Deposits are optional, so accepting never waits on it — but
+  // it is shown as due, with the proposal link to pay it online when one
+  // exists (an accepted link never expires).
+  const depositDue = (e: (typeof normalized)[number]) => {
+    const required = e.deposit_required_cents ?? 0;
+    if (!ACCEPTED_STAGES.includes(e.status) || required <= 0) return 0;
+    if ((e.deposit_collected_cents ?? 0) > 0 || (e.deposit_pending_cents ?? 0) > 0) return 0;
+    return e.total_price_cents > 0 ? Math.min(required, e.total_price_cents) : required;
+  };
+  const dueIds = normalized.filter((e) => depositDue(e) > 0).map((e) => e.id);
+  const payUrlByEstimate = new Map<string, string>();
+  if (dueIds.length) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: tokenRows } = await (service as any)
+      .from("estimate_share_tokens")
+      .select("estimate_id, token, accepted_at, created_at")
+      .in("estimate_id", dueIds)
+      .eq("org_id", ctx.orgId)
+      .is("deleted_at", null)
+      .order("accepted_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false }) as { data: { estimate_id: string; token: string }[] | null };
+    for (const t of tokenRows ?? []) {
+      if (!payUrlByEstimate.has(t.estimate_id)) payUrlByEstimate.set(t.estimate_id, `/proposal/${t.token}`);
+    }
+  }
+
   // "Valid until" is a calendar date: expiry is judged on the org's day, the
   // same rule the accept route enforces (isEstimatePastValidUntil).
   const today = todayInZone(await getOrgTimeZone(service, ctx.orgId));
 
   return (
     <PortalEstimatesPage
-      estimates={normalized.map((e) => ({ ...e, accountName: accountNames.get(e.client_id) ?? null }))}
+      estimates={normalized.map((e) => ({
+        ...e,
+        accountName: accountNames.get(e.client_id) ?? null,
+        deposit_due_cents: depositDue(e),
+        deposit_pay_url: payUrlByEstimate.get(e.id) ?? null,
+      }))}
       today={today}
     />
   );

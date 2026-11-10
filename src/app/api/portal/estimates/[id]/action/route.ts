@@ -10,6 +10,7 @@ import { isChangedSinceSent } from "@/lib/estimates/proposal-content";
 import { logger } from "@/lib/logger";
 import { checkAuthRateLimit } from "@/lib/auth/rate-limit";
 import { fireServerTrigger } from "@/lib/automations/fire-server-trigger";
+import { notifyStaffOfSkippedDeposit } from "@/lib/estimate-deposit-notify";
 
 const log = logger.child("portal-estimate-action");
 
@@ -343,6 +344,11 @@ export async function POST(
   if (action === "accept") {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await recordAcceptedVersion(supabase as any, id, signatureName!.trim(), "client_portal");
+    // The portal has no deposit step: a required deposit is shown to the
+    // client as due on their Estimates page (with the proposal link to pay
+    // it), and staff are told it wasn't paid. No-op without a deposit, or when
+    // one is already collected, clearing or started online.
+    await notifyStaffOfSkippedDeposit(supabase, { orgId: estimate.org_id, estimateId: estimate.id, via: "client_portal" });
   }
 
   // A customer's portal decision is the same event as the office changing the stage

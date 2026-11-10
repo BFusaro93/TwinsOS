@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fireQuickBooksInvoiceUpdate } from "@/lib/integrations/quickbooks-client";
 import { invalidateClientBalances } from "@/lib/hooks/client-balance-invalidation";
 import { fireAutomationTrigger } from "@/lib/automations/fire-trigger-client";
-import { roundHours, formatMonthDay } from "@/lib/utils";
+import { roundHours, formatMonthDay, formatCurrency } from "@/lib/utils";
 import { useOrgTimeZone } from "@/lib/hooks/use-org-timezone";
 import { isoInZone, todayInZone } from "@/lib/time/zone";
 import { checkPackageMinDaysViolation, overridePackageMinDays } from "@/lib/package-visit-recalc";
@@ -2449,7 +2449,6 @@ export function useCreateJobsFromEstimate() {
       services,
       materials,
       projectId,
-      eacHintCents,
       manCount,
       salesRepId,
       dateSold,
@@ -2504,8 +2503,6 @@ export function useCreateJobsFromEstimate() {
       materials?: { productItemId: string; productName: string; qty: number; unitCostCents: number | null }[];
       /** Only meaningful when jobType === "project" — links the job to a Projects (PO cost-tracking) row. */
       projectId?: string | null;
-      /** Estimate's all-in cost (revenue - net profit) — seeds the linked project's EAC if it's still unset. */
-      eacHintCents?: number;
       /** Sales rep for the job. `undefined` = inherit estimates.sales_rep_id; `null` = explicitly unassigned. */
       salesRepId?: string | null;
       /** Date Sold (YYYY-MM-DD). Omitted/null = the estimate's acceptance date (portal or public
@@ -3023,75 +3020,35 @@ export function useCreateJobsFromEstimate() {
       const wonRow = (acceptedRows as { sales_rep_id: string | null }[] | null)?.[0];
       const estimateWon = wonRow ? { salesRepId: wonRow.sales_rep_id } : null;
 
-      // Seed the linked project's contract price from the accepted estimate —
-      // only while it is still unset, so a PM's figure is never clobbered.
-      // original_contract_price is what the project stores;
-      // contract_price is derived from it plus approved change orders
-      // (trg_projects_sync_contract_price). Without this a project created
-      // during conversion sat at a $0 contract and every percent milestone
-      // on it resolved to $0.
+      // Link the estimate to its project in one server-side step
+      // (link_estimate_to_project, 20261230000400):
+      //   * the FIRST estimate converted into a project seeds it — its pre-tax
+      //     revenue fills the contract and its all-in cost the EAC, each only
+      //     while still unset, so a PM's figures are never clobbered;
+      //   * any later estimate is an ADD-ON: it becomes an approved change
+      //     order (contract + its pre-tax revenue, EAC + its cost), and its
+      //     milestones bill against its own total, not the project contract
+      //     (a 50% deposit on a $3,656 add-on used to bill half the contract);
+      //   * either way the estimate's untouched milestones are carried onto the
+      //     project — the same rows, so 'invoiced' can't disagree between them.
+      // Best-effort like the writes it replaces: the job already exists.
+      let projectLink: { kind: string; coNumber: number | null; amountCents: number | null } | null = null;
+      let projectLinkError: string | null = null;
       if (projectId && jobType === "project") {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: estTotals } = await (supabase as any)
-          .from("estimates")
-          .select("revenue_cents, subtotal_cents, discount_cents, tax_cents, total_cents")
-          .eq("id", estimateId)
-          .maybeSingle();
-        // The contract price is PRE-tax: subtotal minus discounts, never the tax-
-        // inclusive total. Tax is added when each milestone invoice is created
-        // (create_invoice_from_milestone), so seeding the total made the client
-        // pay tax twice on percent milestones and overstated WIP/over-under-
-        // billing. revenue_cents is exactly subtotal - discount; the fallbacks
-        // cover estimates saved before that column existed.
-        const est = (estTotals ?? {}) as {
-          revenue_cents: number | null; subtotal_cents: number | null; discount_cents: number | null;
-          tax_cents: number | null; total_cents: number | null;
-        };
-        const contractCents =
-          est.revenue_cents && est.revenue_cents > 0
-            ? est.revenue_cents
-            : est.subtotal_cents != null
-              ? Math.max(0, est.subtotal_cents - (est.discount_cents ?? 0))
-              : Math.max(0, (est.total_cents ?? 0) - (est.tax_cents ?? 0));
-        if (contractCents > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any)
-            .from("projects")
-            .update({ original_contract_price: contractCents })
-            .eq("id", projectId)
-            .eq("original_contract_price", 0);
+        const { data: linkRows, error: linkErr } = await (supabase as any).rpc("link_estimate_to_project", {
+          p_project_id: projectId,
+          p_estimate_id: estimateId,
+        });
+        if (linkErr) {
+          projectLinkError = linkErr.message ?? "unknown error";
+        } else {
+          const row = (linkRows as { kind: string; co_number: number | null; amount_cents: number | null }[] | null)?.[0];
+          if (row) projectLink = { kind: row.kind, coNumber: row.co_number, amountCents: row.amount_cents };
         }
       }
 
-      // Seed the linked project's EAC (estimated cost at completion) from this
-      // estimate — but only if it's still unset (0), so we never clobber a PM's
-      // re-forecast. Best-effort: the job itself already exists either way.
-      if (projectId && jobType === "project" && eacHintCents && eacHintCents > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
-          .from("projects")
-          .update({ estimated_cost_cents: eacHintCents })
-          .eq("id", projectId)
-          .eq("estimated_cost_cents", 0);
-      }
-
-      // Carry the estimate's milestone billing schedule onto the project. The
-      // rows aren't copied — stamping project_id makes the same milestones
-      // reachable (and invoiceable) from the project, so an 'invoiced' flag
-      // can never disagree between the two surfaces. Only untouched
-      // milestones move: one already billed from the estimate keeps whatever
-      // project it was billed against.
-      if (projectId && jobType === "project") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase as any)
-          .from("estimate_milestones")
-          .update({ project_id: projectId })
-          .eq("estimate_id", estimateId)
-          .is("project_id", null)
-          .is("deleted_at", null);
-      }
-
-      return { jobId, clientId, jobType, projectId, estimateId, materialsFailed, packageId: packageId ?? null, estimateWon };
+      return { jobId, clientId, jobType, projectId, estimateId, materialsFailed, packageId: packageId ?? null, estimateWon, projectLink, projectLinkError };
     },
     onSuccess: (data) => {
       if (data.materialsFailed) {
@@ -3106,6 +3063,16 @@ export function useCreateJobsFromEstimate() {
         qc.invalidateQueries({ queryKey: ["projects"] });
         qc.invalidateQueries({ queryKey: ["client-projects"] });
         qc.invalidateQueries({ queryKey: ["project-milestones", data.projectId] });
+        qc.invalidateQueries({ queryKey: ["change-orders", data.projectId] });
+      }
+      if (data.projectLinkError) {
+        toast.warning(`Job created, but linking the estimate to the project failed (${data.projectLinkError}). Check the project's contract and milestones.`);
+      } else if (data.projectLink?.kind === "addon" && data.projectLink.coNumber != null) {
+        toast.success(
+          `Added to the project as approved change order #${data.projectLink.coNumber}` +
+          (data.projectLink.amountCents != null ? ` (+${formatCurrency(data.projectLink.amountCents)} contract)` : "") +
+          ". Its milestones bill against this estimate's own total."
+        );
       }
       fireAutomationTrigger({ triggerType: "job_created", clientId: data.clientId, matchValues: [data.jobType] });
       if (data.jobType === "package") {

@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { syncStripePaymentToQuickBooks } from "@/lib/integrations/quickbooks";
 import { getOrgTimeZone } from "@/lib/time/org-timezone";
 import { todayInZone } from "@/lib/time/zone";
+import { drainIntentCancellations } from "@/lib/stripe/open-intent";
 
 const log = logger.child("stripe record charge");
 
@@ -34,7 +35,11 @@ const log = logger.child("stripe record charge");
  * nothing is committed unless everything is, a failed attempt leaves no
  * half-recorded payment for a retry to trip over.
  */
-export type RecordStripeChargeResult = "applied" | "already_recorded" | "skipped" | "error";
+/** "unrecordable": a permanent attribution failure (the client/invoice the
+ * metadata names can't take the payment even after following a Merge Clients)
+ * — retrying can never succeed, so the webhook alerts an admin and
+ * acknowledges instead of returning 500 forever. "error" stays transient. */
+export type RecordStripeChargeResult = "applied" | "already_recorded" | "skipped" | "error" | "unrecordable";
 
 // any: the generated Supabase types don't cover every table this touches
 // (crm_payment_allocations, client_activity) — same pattern as the webhook
@@ -268,6 +273,13 @@ async function applyViaRpc({
     // Unique violation = the other writer (synchronous route vs webhook)
     // committed first despite the advisory lock (e.g. a pre-migration row).
     if (error.code === "23505") return "already_recorded";
+    // SQLSTATE UNREC (20261230000500): the invoice isn't the payer's (or a
+    // sub-account's) even after following a client merge, or it's gone from the
+    // org. Permanent — see RecordStripeChargeResult.
+    if (error.code === "UNREC") {
+      log.error("stripe payment can't be attributed to its invoice — needs manual recording", { error, paymentIntentId: paymentIntent.id });
+      return "unrecordable";
+    }
     log.error("failed to record stripe payment", { error, paymentIntentId: paymentIntent.id });
     return "error";
   }
@@ -284,18 +296,26 @@ async function applyViaRpc({
   const amountCents: number = row.amount_cents ?? 0;
   const newlyPaidInvoiceIds: string[] = row.newly_paid_invoice_ids ?? [];
 
+  // The client the RPC actually recorded against: differs from the metadata's
+  // when that client was merged into another while the payment was in flight.
+  let payerId = clientId;
+  {
+    const { data: recordedRow } = await db.from("crm_payments").select("client_id").eq("id", paymentId).maybeSingle();
+    if (recordedRow?.client_id) payerId = recordedRow.client_id as string;
+  }
+
   // Everything below is best-effort follow-up: the money is already
   // recorded atomically, so none of it may turn this into an "error" (that
   // would make the webhook 500 and Stripe retry a no-op forever).
   try {
     for (const invoiceId of newlyPaidInvoiceIds) {
-      await fireSimpleTrigger(supabase, { orgId, clientId, invoiceId, triggerType: "invoice_paid" });
+      await fireSimpleTrigger(supabase, { orgId, clientId: payerId, invoiceId, triggerType: "invoice_paid" });
     }
 
     const invoiceCount = new Set(allocations.map((a) => a.invoiceId)).size;
     await db.from("client_activity").insert({
       org_id: orgId,
-      client_id: clientId,
+      client_id: payerId,
       activity_type: "payment",
       subject: `Payment received: ${method} (online)${invoiceCount > 1 ? ` — ${invoiceCount} invoices` : ""}${
         unusedCents > 0 ? `${invoiceCount > 1 ? "," : " —"} partly credited to account` : ""
@@ -311,6 +331,10 @@ async function applyViaRpc({
   // Mirror into QuickBooks (no-op for orgs that haven't connected it). Its own
   // try/catch — it never throws, so it can't turn a recorded payment into an error.
   await syncStripePaymentToQuickBooks(db, orgId, paymentId);
+
+  // This payment changed invoice balances: cancel any open pay form it made
+  // stale (queued by the crm_invoices trigger). Never throws.
+  await drainIntentCancellations(db, { orgId });
 
   return "applied";
 }

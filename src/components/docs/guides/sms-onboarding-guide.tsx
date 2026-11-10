@@ -227,6 +227,24 @@ export function SmsOnboardingGuide() {
           <li>
             <strong>Where you&apos;ll see it before you&apos;re approved.</strong> Until registration is approved, the Send Text dialog and automation text steps show that text messaging isn&apos;t set up yet, and your admins get one notification the first time an automation skips a text.
           </li>
+          <li>
+            <strong>Opt-out words.</strong> A client (or contact) who replies <strong>STOP</strong>, <strong>STOPALL</strong>, <strong>UNSUBSCRIBE</strong>, <strong>CANCEL</strong>, <strong>END</strong>, <strong>QUIT</strong>, <strong>REVOKE</strong>, <strong>OPTOUT</strong> or <strong>OPT OUT</strong> stops getting texts from you at that number. Capitals, punctuation, quotes and emoji don&apos;t matter, and short phrases like &ldquo;stop please&rdquo;, &ldquo;unsubscribe me&rdquo; or &ldquo;stop texting me&rdquo; count too. A longer message that contains <strong>STOP</strong>, <strong>STOPALL</strong>, <strong>UNSUBSCRIBE</strong>, <strong>OPTOUT</strong>/<strong>OPT OUT</strong> or <strong>REVOKE</strong> as a word (&ldquo;please stop the texts after Tuesday&rdquo;) also opts the number out, and its ticket says &ldquo;Opted out because the message contained &lsquo;STOP&rsquo; — re-confirm if this was a misread&rdquo; so you can check with the client. <strong>CANCEL</strong>, <strong>END</strong> and <strong>QUIT</strong> are everyday words (&ldquo;cancel my Tuesday visit&rdquo;), so they opt out only when they are the whole reply. Only the texter can undo an opt-out, by replying <strong>START</strong> (a plain &ldquo;yes&rdquo; doesn&apos;t, since clients reply yes to other texts). A bare <strong>STOP</strong>, <strong>START</strong>, <strong>HELP</strong> or <strong>INFO</strong> is handled automatically and doesn&apos;t open a ticket. New registrations list REVOKE and OPTOUT with the carrier; registrations approved earlier keep their list, but the app honours every word above either way.
+          </li>
+          <li>
+            <strong>Blocked by the carrier.</strong> If a text fails because the number is on the carrier&apos;s opt-out list (Twilio error 21610), that number is marked opted out too. The client&apos;s own &ldquo;Opted in to text messages&rdquo; box is only turned off when it was the client&apos;s primary phone.
+          </li>
+          <li>
+            <strong>Picture messages.</strong> When a client texts a photo, it&apos;s saved to their activity timeline and a ticket is opened (or the reply is added to their open text ticket) even if the text has no words. Photos appear in the ticket&apos;s files; other attachment types (video, audio, contact cards) are kept as a link to the copy your texting provider holds.
+          </li>
+          <li>
+            <strong>Usage counts segments.</strong> Your SMS add-on&apos;s monthly usage counts message <em>segments</em>, which is how carriers bill: up to 160 characters is one segment (153 each once a text is split), but a single emoji or curly quote drops that to 70 (67 each once split). The Send Text box shows the segment count as you type.
+          </li>
+          <li>
+            <strong>Phone numbers with extensions.</strong> An extension typed after a number (&ldquo;x12&rdquo;, &ldquo;ext. 7&rdquo;, &ldquo;#3&rdquo;) is ignored when texting and when matching a reply to a client.
+          </li>
+          <li>
+            <strong>Fixing a rejected campaign.</strong> If only the campaign step is rejected, fix the fields and save: the campaign is resubmitted on the same texting number. You don&apos;t get (or pay for) a second number.
+          </li>
         </ul>
       </Section>
     </DocsFontScope>

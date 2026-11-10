@@ -22,6 +22,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateProject, useUpdateProject } from "@/lib/hooks/use-projects";
 import { useRoleCapabilities } from "@/lib/hooks/use-role-capabilities";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { useClient } from "@/lib/hooks/use-clients";
 import { ClientCombobox } from "@/components/shared/ClientCombobox";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -44,6 +45,10 @@ interface NewProjectDialogProps {
 
 export function NewProjectDialog({ open, onOpenChange, initialData, defaultClientId, onCreated, defaultContractPriceCents, defaultName }: NewProjectDialogProps) {
   const isEditing = !!initialData;
+  // Changing an existing project's contract needs the projects key (enforced
+  // in the database too, 20261230000420); purchasers still edit everything else.
+  const { can } = usePermissions();
+  const contractLocked = isEditing && !can("sched_add_modify_projects");
   // Viewers/requestors are read-only on projects (DB guard: 20261111040200).
   const { canWriteEquipt } = useRoleCapabilities();
   const [name, setName] = useState("");
@@ -283,7 +288,11 @@ export function NewProjectDialog({ open, onOpenChange, initialData, defaultClien
                 value={contractPrice}
                 onChange={(e) => setContractPrice(e.target.value)}
                 placeholder="0.00"
+                disabled={contractLocked}
               />
+              {contractLocked && (
+                <p className="text-[11px] text-muted-foreground">Changing the contract price needs the Projects permission.</p>
+              )}
               {isEditing && initialData && initialData.contractPrice !== (initialData.originalContractPrice ?? initialData.contractPrice) && (
                 <p className="text-[11px] text-muted-foreground">
                   Revised contract is {formatCurrency(initialData.contractPrice)} after approved change orders.

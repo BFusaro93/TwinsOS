@@ -366,6 +366,14 @@ export function InvoicingGuide() {
             invoices that made it into a PDF are locked and marked Printed &mdash; if one can&apos;t
             be loaded, a message says how many were left unchanged.
           </li>
+          <li>
+            <strong>Emailing several estimates at once asks first.</strong> On the Estimates list,
+            <strong> Actions &gt; Email Selected</strong> opens a dialog with the count and a
+            template, subject and body (client-type Documents, same as a single send). Estimates go
+            out one at a time, each to its own client with its own proposal link. Any that fail are
+            listed with the reason (for example no email on file, or approval pending), and{" "}
+            <strong>Retry failed</strong> re-sends only those.
+          </li>
         </ul>
       </Section>
 
@@ -517,7 +525,17 @@ export function InvoicingGuide() {
           from/to range. It opens on <strong>Last 30 Days</strong>; the <strong>All</strong> tab
           shows every payment regardless of age, and <strong>Deleted</strong> shows removed
           payments. Searching or filtering on a column also looks past the 30-day window, so an
-          older payment is never hidden from a search.
+          older payment is never hidden from a search. The page header counts live payments only
+          (on the Deleted tab it counts deleted ones). <strong>Export</strong> downloads live
+          payments; on the Deleted tab it downloads the deleted payments with a{" "}
+          <strong>deleted</strong> column (the date removed), and importing a file skips any row
+          with that column filled in, so a deleted payment is never recreated.
+        </p>
+        <p>
+          <strong>Selections and tabs.</strong> On the Invoices, Estimates, Tickets and Contracts
+          lists, changing the tab, the search or a column filter clears the selection, so a bulk
+          action only ever acts on rows you can see. Invoice due dates and the Past Due tab use
+          your company&apos;s time zone.
         </p>
       </Section>
 
@@ -729,7 +747,10 @@ export function InvoicingGuide() {
           prompt when that client has unapplied money on them — an overpayment, a prepayment, or a
           deposit taken when they accepted a proposal — with an{" "}
           <strong>Apply to this invoice</strong> button. It uses the oldest money first and never
-          applies more than the invoice still owes, leaving any remainder for next time.
+          applies more than the invoice still owes, leaving any remainder for next time. A proposal
+          deposit is reserved for its estimate: it only counts (and can only be applied) on invoices
+          for that estimate&apos;s job, project or contract, until you release it to general credit
+          from the estimate.
         </p>
       </Section>
 

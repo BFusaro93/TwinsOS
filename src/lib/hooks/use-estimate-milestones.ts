@@ -48,7 +48,9 @@ export function useEstimateMilestones(estimateId: string) {
         .select("*")
         .eq("estimate_id", estimateId)
         .is("deleted_at", null)
-        .order("sort_order", { ascending: true });
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true });
       if (error) throw error;
       return (data.map(mapMilestone)) as EstimateMilestone[];
     },
@@ -73,7 +75,9 @@ export function useProjectMilestones(projectId: string | null | undefined) {
         .select("*")
         .eq("project_id", projectId)
         .is("deleted_at", null)
-        .order("sort_order", { ascending: true });
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true });
       if (error) throw error;
       return (data.map(mapMilestone)) as EstimateMilestone[];
     },

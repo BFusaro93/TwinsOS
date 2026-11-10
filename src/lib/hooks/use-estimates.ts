@@ -133,6 +133,10 @@ function mapEstimate(row: any): Estimate {
     depositReference: (row.deposit_reference as string | null) ?? null,
     depositNotes: (row.deposit_notes as string | null) ?? null,
     depositCollectedAt: (row.deposit_collected_at as string | null) ?? null,
+    depositPromisedCents: (row.deposit_promised_cents as number | null) ?? null,
+    depositPromisedMethod: (row.deposit_promised_method as Estimate['depositPromisedMethod']) ?? null,
+    depositPromisedReference: (row.deposit_promised_reference as string | null) ?? null,
+    depositPromisedAt: (row.deposit_promised_at as string | null) ?? null,
     depositPendingCents: (row.deposit_pending_cents as number | null) ?? null,
     depositPendingMethod: (row.deposit_pending_method as Estimate['depositPendingMethod']) ?? null,
     depositPendingAt: (row.deposit_pending_at as string | null) ?? null,
@@ -1043,6 +1047,59 @@ export interface EstimateShareTokenInfo {
   acceptedAt: string | null;
   acceptedByName: string | null;
   expiresAt: string | null;
+}
+
+/** A proposal deposit still reserved for this estimate (crm_payments with
+ *  estimate_id set and money left on it). */
+export interface ReservedEstimateDeposit {
+  id: string;
+  unusedCents: number;
+  amountCents: number;
+  paymentDate: string;
+  method: string;
+}
+
+export function useEstimateReservedDeposits(estimateId: string | undefined) {
+  return useQuery<ReservedEstimateDeposit[]>({
+    queryKey: ["crm-payments", "reserved-for-estimate", estimateId ?? "none"],
+    enabled: !!estimateId,
+    queryFn: async () => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("crm_payments")
+        .select("id, unused_amount_cents, amount_cents, payment_date, method")
+        .eq("estimate_id", estimateId)
+        .is("deleted_at", null)
+        .gt("unused_amount_cents", 0)
+        .order("payment_date", { ascending: true });
+      if (error) throw error;
+      return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+        id: r.id as string,
+        unusedCents: (r.unused_amount_cents as number) ?? 0,
+        amountCents: (r.amount_cents as number) ?? 0,
+        paymentDate: r.payment_date as string,
+        method: r.method as string,
+      }));
+    },
+  });
+}
+
+/** Releases a reserved proposal deposit to the client's general credit, so it
+ *  can pay any of their invoices (crm_release_estimate_deposit). */
+export function useReleaseEstimateDeposit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (paymentId: string) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.rpc as any)("crm_release_estimate_deposit", { p_payment_id: paymentId });
+      if (error) throw new Error(error.message ?? "Couldn't release the deposit");
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crm-payments"] });
+    },
+  });
 }
 
 export function useEstimateShareTokens(estimateId: string) {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { findLiveShareToken, proposalUrlFor } from "@/lib/estimates/share-token";
+import { findLiveShareToken, proposalUrlFor, shareLinkExpiry } from "@/lib/estimates/share-token";
 import { logger } from "@/lib/logger";
 import { publishSharedVersion } from "@/lib/estimates/versions";
 import { getPublishedProposal, isChangedSinceSent } from "@/lib/estimates/proposal-content";
@@ -95,7 +95,7 @@ export async function POST(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: est } = await (supabase as any)
-    .from("estimates").select("id, org_id, approval_status, stage, sent_at, total_cents, approval_amount_cents, tiers_enabled").eq("id", estimateId).is("deleted_at", null).maybeSingle();
+    .from("estimates").select("id, org_id, approval_status, stage, sent_at, total_cents, approval_amount_cents, tiers_enabled, valid_until_date").eq("id", estimateId).is("deleted_at", null).maybeSingle();
   if (!est) return NextResponse.json({ error: "Estimate not found" }, { status: 404 });
 
   // A lost estimate must not hand out a live link (the public accept route
@@ -164,12 +164,22 @@ export async function POST(
     }).eq("id", estimateId).in("stage", ["draft", "quote"]);
   }
 
+  // The link lives at least until the estimate's Valid until date is over.
+  const expiresAt = shareLinkExpiry(new Date(Date.now() + expiresInDays * 86_400_000).toISOString(), est.valid_until_date as string | null);
+
   const live = await findLiveShareToken(supabase, estimateId);
   if (live) {
-    return NextResponse.json({ url: proposalUrlFor(live.token), token: live.token, expiresAt: live.expiresAt, created: false, publishedVersion });
+    // An existing link minted before Valid until was pushed out (or with a
+    // shorter lifetime) is extended rather than left to die first.
+    let liveExpiresAt = live.expiresAt;
+    if (liveExpiresAt && expiresAt && new Date(liveExpiresAt) < new Date(expiresAt)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from("estimate_share_tokens").update({ expires_at: expiresAt }).eq("id", live.id);
+      liveExpiresAt = expiresAt;
+    }
+    return NextResponse.json({ url: proposalUrlFor(live.token), token: live.token, expiresAt: liveExpiresAt, created: false, publishedVersion });
   }
 
-  const expiresAt = new Date(Date.now() + expiresInDays * 86_400_000).toISOString();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: inserted, error } = await (supabase as any)
     .from("estimate_share_tokens")
