@@ -10,6 +10,7 @@ import {
   useSaveEstimateFinancials,
   useUpsertLineItem,
   useDeleteLineItem,
+  useDeleteEstimate,
   useEstimateShareTokens,
   useEstimateShareLink,
   useEnsureEstimateShareLink,
@@ -408,6 +409,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const salesReps = (employees ?? []).filter((e) => e.isSalesRep);
   const { mutateAsync: updateEstimate } = useUpdateEstimate();
   const { mutateAsync: updateStage } = useUpdateEstimateStage();
+  const { mutateAsync: deleteEstimate, isPending: deletingEstimate } = useDeleteEstimate();
   const { mutateAsync: saveFinancials } = useSaveEstimateFinancials();
   const { data: overheadSettings } = useOverheadSettings();
   const { data: orgSettings } = useOrgSettings();
@@ -514,6 +516,7 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
   const [rateIncreaseOpen, setRateIncreaseOpen] = useState(false);
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [deleteEstimateOpen, setDeleteEstimateOpen] = useState(false);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [aiDraftOpen, setAiDraftOpen] = useState(false);
   const [selectedLineItemIds, setSelectedLineItemIds] = useState<string[]>([]);
@@ -789,6 +792,20 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
     });
   }
 
+  async function handleDeleteEstimate() {
+    if (!estimate) return;
+    try {
+      const { cleanupFailed } = await deleteEstimate({ id: estimate.id });
+      setDeleteEstimateOpen(false);
+      if (cleanupFailed) toast.warning("Estimate deleted, but its proposal link or follow-up sequence couldn't be switched off — check them from Support.");
+      else toast.success("Estimate deleted");
+      router.push("/crm/estimates");
+    } catch (err) {
+      setDeleteEstimateOpen(false);
+      toast.error(mutationErrorMessage(err, err instanceof Error && err.message ? err.message : "Failed to delete estimate"));
+    }
+  }
+
   async function handleBulkDelete() {
     if (!estimate) return;
     const affected = splitConverted(selectedVisibleLines());
@@ -1053,6 +1070,11 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
             title="Mark this estimate's stage as Draft — updates the estimate only, not individual line items"
             onClick={() => handleStage("draft")}>
             <Pencil className="mr-1 h-3.5 w-3.5 text-slate-400 dark:text-neutral-500" />Draft
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs text-red-600 dark:text-red-400"
+            title="Delete this whole estimate"
+            onClick={() => setDeleteEstimateOpen(true)}>
+            <Trash2 className="mr-1 h-3.5 w-3.5" />Delete
           </Button>
           {canSend && (
             <Button variant="outline" size="sm" className="h-8 text-xs"
@@ -2224,6 +2246,28 @@ export function EstimateDetail({ estimateId, onClose, compact = false }: Props) 
         onApply={handleBulkStatus}
         onCancel={() => setBulkStatusOpen(false)}
       />
+
+      <AlertDialog open={deleteEstimateOpen} onOpenChange={(open) => { if (!deletingEstimate) setDeleteEstimateOpen(open); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this estimate?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The whole estimate is removed from your estimate lists, its proposal link stops working and its follow-up
+              sequences stop. If it was made from a ticket, the ticket can be converted again. An estimate with a job,
+              invoice, contract, payment or project made from it can&apos;t be deleted — cancel or delete those first.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingEstimate}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletingEstimate}
+              onClick={(e) => { e.preventDefault(); void handleDeleteEstimate(); }}
+            >
+              {deletingEstimate ? "Deleting…" : "Delete estimate"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
         <AlertDialogContent>

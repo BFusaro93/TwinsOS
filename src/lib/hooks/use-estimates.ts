@@ -740,6 +740,74 @@ export function useUpsertLineItem() {
   });
 }
 
+// ── delete a whole estimate (soft) ────────────────────────────────────────────
+
+/** Things made from an estimate that would be left pointing at a deleted one. */
+async function estimateDeleteBlockers(estimateId: string): Promise<string[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createClient() as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const checks: { label: string; table: string; column: string; extra?: (q: any) => any }[] = [
+    { label: "job", table: "crm_jobs", column: "estimate_id", extra: (q) => q.neq("status", "cancelled") },
+    { label: "invoice", table: "crm_invoices", column: "estimate_id", extra: (q) => q.neq("status", "void") },
+    { label: "contract", table: "crm_contracts", column: "estimate_id" },
+    { label: "payment", table: "crm_payments", column: "estimate_id" },
+    { label: "project", table: "projects", column: "source_estimate_id" },
+    { label: "change order", table: "project_change_orders", column: "estimate_id" },
+  ];
+  const counts = await Promise.all(
+    checks.map(async (c) => {
+      let q = db.from(c.table).select("id", { count: "exact", head: true }).eq(c.column, estimateId).is("deleted_at", null);
+      if (c.extra) q = c.extra(q);
+      const { count, error } = await q;
+      if (error) throw error;
+      return { label: c.label, count: count ?? 0 };
+    })
+  );
+  return counts.filter((c) => c.count > 0).map((c) => `${c.count} ${c.label}${c.count > 1 ? "s" : ""}`);
+}
+
+/**
+ * Deletes a whole estimate (soft — it keeps its audit trail). Refused when jobs,
+ * invoices, contracts, payments or projects were made from it: those would be left
+ * pointing at a hidden estimate. Needs the Edit Estimate permission (the database
+ * enforces it). Its proposal links stop working, its follow-up sequences stop, and
+ * a ticket it was created from can be converted again.
+ */
+export function useDeleteEstimate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = createClient() as any;
+      const blockers = await estimateDeleteBlockers(id);
+      if (blockers.length > 0) {
+        throw new Error(
+          `This estimate can't be deleted — it has ${blockers.join(", ")} made from it. Cancel or delete those first.`
+        );
+      }
+      const deletedAt = new Date().toISOString();
+      const { data, error } = await db
+        .from("estimates")
+        .update({ deleted_at: deletedAt })
+        .eq("id", id)
+        .is("deleted_at", null)
+        .select("id");
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error("That estimate was already deleted or you don't have permission to delete it.");
+      // The estimate is gone from every list now; shut off what still points at it.
+      const [tokens, sequences] = await Promise.all([
+        db.from("estimate_share_tokens").update({ deleted_at: deletedAt }).eq("estimate_id", id).is("deleted_at", null),
+        db.from("crm_sequence_enrollments").update({ status: "stopped" }).eq("estimate_id", id).in("status", ["active", "paused"]),
+      ]);
+      return { id, cleanupFailed: !!(tokens.error || sequences.error) };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["estimates"] });
+    },
+  });
+}
+
 // ── delete line item (soft) ───────────────────────────────────────────────────
 
 export function useDeleteLineItem() {

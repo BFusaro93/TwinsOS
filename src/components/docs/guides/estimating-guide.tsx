@@ -507,6 +507,15 @@ export function EstimatingGuide() {
           visit, whatever its unit; on a per-unit line too small to carry the amount in whole cents, use
           a percentage instead.
         </p>
+        <p>
+          <strong>Deleting a whole estimate.</strong> Open the estimate and click <strong>Delete</strong>{" "}
+          (red, in the row of stage buttons), or tick estimates in the list and choose{" "}
+          <strong>Actions &gt; Delete Selected</strong>. You need the Edit Estimate permission. The
+          estimate leaves your lists, its proposal link stops working, and its follow-up sequences stop;
+          if it was made from a ticket, the ticket can be converted again. An estimate that has a job,
+          invoice, contract, payment or project made from it can&apos;t be deleted &mdash; cancel or delete
+          those first, or mark the estimate Lost if you only want it out of your open pipeline.
+        </p>
         <h3 className="text-base font-semibold">What the client sees</h3>
         <ul className="list-disc space-y-2 pl-5">
           <li>

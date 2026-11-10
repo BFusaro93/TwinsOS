@@ -2287,6 +2287,10 @@ export const FAQ_CATEGORIES: FAQCategory[] = [
         a: "Run the Custom Package Renewal Report (Report Center, Service Reports). It lists every package job with its season and a Renewal column: Renewed (with the new job's number and season), Not renewed, or Don't renew. Filter by Season and Renewal to get a to-do list. On a job, the header shows Renewed as #… or Renewal of #… with a link.",
       },
       {
+        q: "How do I delete an estimate?",
+        a: "Open the estimate and click Delete (the red button in the row of stage buttons), or tick one or more estimates in the Estimates list and choose Actions > Delete Selected. It asks you to confirm. You need the Edit Estimate permission. The estimate leaves your lists, its proposal link stops working and its follow-up sequences stop; if it was made from a ticket, the ticket can be converted again. An estimate with a job, invoice, contract, payment or project made from it can't be deleted until those are cancelled or deleted. To just take an estimate out of your open pipeline, mark it Lost instead.",
+      },
+      {
         q: "How do I change the status of or delete several estimate line items at once?",
         a: "Tick the lines in the grid (the header checkbox selects all lines). A bar appears above the grid with Change Status, Rate Increase and Delete. Delete asks you to confirm.",
       },
