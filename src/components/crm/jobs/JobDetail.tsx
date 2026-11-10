@@ -109,6 +109,7 @@ import { DAY_INDEX, parseLegacySchedule } from "@/lib/visits/recurrence";
 import { JobCostingTab } from "@/components/crm/jobs/JobCostingTab";
 import { AuditTrailTab } from "@/components/shared/AuditTrailTab";
 import { AttachmentsSection } from "@/components/shared/AttachmentsSection";
+import { JobVisitPhotos } from "@/components/crm/jobs/JobVisitPhotos";
 import { SnowRateTiersEditor } from "@/components/crm/jobs/SnowRateTiersEditor";
 import { SnowMonthlyBillingLink } from "@/components/crm/jobs/SnowMonthlyBillingLink";
 import { PermissionGate } from "@/components/shared/PermissionGate";
@@ -1922,7 +1923,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
                             className="h-7 w-20 text-right text-xs ml-auto" />
                         </td>
                         <td className="px-2 py-2 text-right">
-                          <Input type="number" min="0" step="0.01" value={newSvcQty}
+                          <Input type="number" min="0" step="any" value={newSvcQty}
                             onChange={(e) => {
                               const qty = e.target.value;
                               setNewSvcQty(qty);
@@ -2317,6 +2318,7 @@ export function JobDetail({ jobId, initialEditing = false, initialTab, onClose }
 
           {tab === "attachments" && (
             <div className="rounded-lg border bg-card p-4 shadow-sm">
+              <JobVisitPhotos jobId={job.id} />
               <AttachmentsSection recordType="job" recordId={job.id} />
             </div>
           )}

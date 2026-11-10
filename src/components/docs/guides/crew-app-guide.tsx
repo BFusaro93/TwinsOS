@@ -608,7 +608,7 @@ export function CrewAppGuide() {
       <Section id="good-to-know" title="Good to know">
         <ul className="list-disc space-y-2 pl-5">
           <li>
-            <strong>Gate codes and property notes.</strong> The stop shows the property&apos;s gate or lock code in large type, and the property&apos;s crew notes count as notes to read before Start Job, the same as job notes. The stop lists each note once: the job note, then each service&apos;s own note, then the property&apos;s standing note (which now shows even when the job or a service has its own note). A package step still waiting on the Waiting List isn&apos;t on the crew&apos;s list until the office dispatches it, the same as on the dispatch board.
+            <strong>Gate codes and property notes.</strong> The stop shows the property&apos;s gate or lock code in large type, and the property&apos;s crew notes count as notes to read before Start Job, the same as job notes. The stop lists each note once: the job note, then each service&apos;s own note, then the property&apos;s standing note (which now shows even when the job or a service has its own note). The crew only sees dispatched stops: a visit that is still Scheduled shows on the dispatch board but not on the crew&apos;s list until the office dispatches it (including a package step still waiting on the Waiting List).
           </li>
           <li>
             <strong>Full addresses.</strong> The stop page shows the full address, including state and zip, and wraps it rather than cutting it off. Map links use the full address too.

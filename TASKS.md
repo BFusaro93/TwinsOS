@@ -211,3 +211,16 @@ Measured on TEST (same Micro-class limits as PROD) with `scripts/stress/s12-real
 - [ ] **Silently dead subscriptions after a connection burst.** At 10 tabs/s (or after a simultaneous reconnect) ~2% of tabs showed "joined", 0 errors, and never received another change (0 of 60 at a realistic 2 tabs/s). The app's 60 s `staleTime` + refetch-on-focus heals tabs the user touches, not a dispatch board left open. Options: jitter reconnects, invalidate every Realtime-backed list on (re)SUBSCRIBED, and/or a slow resync poll.
 - [ ] **Patch the cache from the payload** instead of refetching the whole list on each change (each refetch is up to 1,000 rows of `select *`), then the throttle can go away.
 - [ ] If any published table's change rate climbs (bulk imports, PM generation, an all-day dispatch board), use Broadcast for it: postgres_changes is processed one change at a time and a bigger compute tier helps it less than expected. At 1,200 deliveries/s the lag was 8-12 s.
+
+## Backlog — record lunch and pause clock times (payroll, 2026-11-09)
+The Payroll tab (#466) shows marked-out gaps with start/end times, but lunch, breaks and job pauses only as minute totals, because nothing stores when they started or ended: `crm_crew_member_times.break_minutes` / `lunch_minutes` are plain totals and a stop's pause is a single `crm_job_visits.break_minutes`. Showing real clock times means recording them going forward (past lunches have nothing to recover).
+
+- [ ] Store each lunch / break / pause interval (start + end) when the crew app starts and ends it (e.g. a `crm_crew_break_intervals` table keyed by punch or visit), keeping the existing minute totals in step so payroll and job costing are unchanged.
+- [ ] Show the intervals on the Payroll day row and in the Break Times export column next to the marked-out gaps.
+- [ ] Decide whether the office can edit an interval (it feeds the same "min off" total payroll already lets them override).
+
+## Backlog — Harborscapes round 2 (2026-11-09) items not done
+- [ ] **One card per job on the crew app.** Visits group into one crew stop by client + date + crew + address (`stopKeyForVisit`, `src/lib/utils/visit-stops.ts`, deliberately without `job_id`). Adding `jobId` to the key splits them, but one punch owner per stop is assumed by the clock-in/out, pause, break-paid and `resolvePunchOwnerVisitId` paths, so two jobs at one address would need separate punches without double-counting hours ((out-in-breaks) x men). Do it behind an org setting and test with a two-job stop.
+- [ ] **Crew sees only dispatched jobs (org setting, default off).** Crews currently see `scheduled` and `dispatched`; recurring visits are generated `scheduled`, so making dispatched-only the default would empty crews' days unless someone clicks Dispatch All.
+- [ ] **Package "season ends / needs renewal" badge + reminder.** Packages are per season and renew by hand (`Renew for next season`, bulk Renew Packages); nothing reminds anyone, and a contract link can drop on renewal.
+- [ ] **Equipment on the office dispatch sheet / client Activity:** crew photos are now on the job's Attachments tab only.

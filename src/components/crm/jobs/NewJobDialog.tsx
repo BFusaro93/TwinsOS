@@ -254,6 +254,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
       setJobType(initialJobType ?? "one_time");
       setContractId(null);
       setSalesRepId(null);
+      setSaleType(null);
       setDateSold(today);
       setCrewId(null);
       setPropertyId(null);
@@ -541,15 +542,17 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
    * was set when the service was picked, and the job's man-hour total moves
    * with the crew instead of staying fixed at the work involved.
    *
-   * A manual row keeps the hours the user typed: those are already per-person
-   * by definition, and silently rescaling someone's own number would be worse
-   * than leaving it.
+   * A manual row holds the TOTAL budget steady too: the budget is the work involved, not the
+   * crew, so 4 hrs/person x 3 becomes 2 hrs/person x 6 (still 12). Only the per-person
+   * figure (what is stored) is re-derived; the Budget Hrs total never moves with crew size.
    */
   function updateTeamSize(i: number, teamSize: number) {
     const row = services[i];
     const svc = (crmServices ?? []).find((s) => s.id === row?.serviceId);
     if (svc && rowIsAutoHrs(row?.serviceId ?? "")) {
       updateService(i, { teamSize, budgetedHours: autoHoursPerPerson(svc, row?.qty ?? 1, teamSize) });
+    } else if (row && row.budgetedHours > 0 && row.teamSize > 0 && teamSize !== row.teamSize) {
+      updateService(i, { teamSize, budgetedHours: (row.budgetedHours * row.teamSize) / teamSize });
     } else {
       updateService(i, { teamSize });
     }
@@ -1220,7 +1223,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                   {showServiceDate && <span>Start Date</span>}
                   <span>{showCompleteBy ? "Complete By" : "Qty"}</span>
                   <span>Rate ($)</span>
-                  <span>B. Hrs</span>
+                  <span title="Budgeted hours per person. Total = B. Hrs x Team; changing Team keeps the total.">B. Hrs / person</span>
                   <span>Team</span>
                   <span>Subtotal</span>
                   <span />
@@ -1253,7 +1256,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                     {showCompleteBy ? (
                       <Input type="date" value={svc.completeByDate} onChange={(e) => updateService(i, { completeByDate: e.target.value })} className="h-7 px-1.5 text-xs" />
                     ) : (
-                      <Input type="number" min="0" step="0.01" value={svc.qty} onChange={(e) => updateQty(i, parsePositiveQty(e.target.value))} className="h-7 text-xs" />
+                      <Input type="number" min="0" step="any" value={svc.qty} onChange={(e) => updateQty(i, parsePositiveQty(e.target.value))} className="h-7 text-xs" />
                     )}
                     {serviceRateLocked ? (
                       <span className="flex h-7 items-center rounded border border-dashed px-2 text-xs text-slate-400 dark:text-neutral-500" title={snowRule?.note}>
@@ -1349,7 +1352,7 @@ export function NewJobDialog({ open, onOpenChange, clientId: defaultClientId, in
                         {productCatalog.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    <Input type="number" min="0" step="0.01" value={row.qty} onChange={(e) => updateProductRow(i, { qty: parsePositiveQty(e.target.value) })} className="h-7 text-xs" />
+                    <Input type="number" min="0" step="any" value={row.qty} onChange={(e) => updateProductRow(i, { qty: parsePositiveQty(e.target.value) })} className="h-7 text-xs" />
                     <DecimalInput
                       min={0}
                       className="h-7 text-xs"

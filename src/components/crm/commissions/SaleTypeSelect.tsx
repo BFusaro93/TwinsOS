@@ -30,7 +30,7 @@ export function SaleTypeSelect({
     >
       <SelectTrigger className={className ?? "h-8"}><SelectValue /></SelectTrigger>
       <SelectContent>
-        <SelectItem value={UNSET}>Default (new sale)</SelectItem>
+        <SelectItem value={UNSET}>Not set (inherit, else new sale)</SelectItem>
         <SelectItem value="new">New sale</SelectItem>
         <SelectItem value="renewal">Renewal / existing account</SelectItem>
       </SelectContent>

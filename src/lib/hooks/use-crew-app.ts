@@ -20,7 +20,7 @@ import {
   selectCarriedOverClockedInVisits,
   effectiveVisitCrewId,
   fetchCallerCrew,
-  isWaitingPackagePlaceholder,
+  isUndispatchedVisit,
   selectEffectiveCrewVisits,
   type VisitCrewRow,
 } from "@/lib/supabase/crew-id";
@@ -339,7 +339,11 @@ export function useMyCrewVisits(date: string, includeCarryOver = false) {
       // clocked into right now, which they still need to clock out of.
       const visible = (row: Record<string, unknown>) => {
         // Undispatched package steps wait on the Waiting List, as on the board.
-        if (isWaitingPackagePlaceholder(row)) return false;
+        // A cancelled visit (the office's Cancel on the dispatch board) disappears from the crew's
+        // day too, unless they are clocked into it right now and still need to clock out.
+        if (row.status === "cancelled" && !(row.clocked_in_at && !row.clocked_out_at)) return false;
+        // Only dispatched work reaches the crew; scheduled visits (incl. package placeholders) stay on the board.
+        if (isUndispatchedVisit(row)) return false;
         const jobStatus = (row.crm_jobs as { status?: string | null } | null)?.status;
         if (jobStatus !== "cancelled" && jobStatus !== "hold") return true;
         return !!row.clocked_in_at && !row.clocked_out_at;
@@ -1777,4 +1781,28 @@ export async function openCrewReference(id: string): Promise<void> {
     tab?.close();
     throw err;
   }
+}
+
+// ── useCrewEquipment ───────────────────────────────────────────────────────────
+
+export interface CrewEquipmentItem {
+  id: string;
+  kind: "asset" | "vehicle";
+  name: string;
+  tag: string | null;
+  type: string | null;
+}
+
+/** The trucks, trailers and equipment the office loaded on this crew for `date` (crew board drag-and-drop). */
+export function useCrewEquipment(date: string) {
+  return useQuery<CrewEquipmentItem[]>({
+    queryKey: ["crew-app-equipment", date],
+    enabled: !!date,
+    queryFn: async () => {
+      const res = await fetch(`/api/crm/crew/equipment?date=${date}`);
+      if (!res.ok) throw new Error("Could not load equipment");
+      const json = (await res.json()) as { items: CrewEquipmentItem[] };
+      return json.items;
+    },
+  });
 }

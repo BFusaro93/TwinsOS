@@ -5,8 +5,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { format, parseISO, differenceInMinutes } from "date-fns";
-import { MapPin, Clock, Users, Sun, Moon, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, BookOpen, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
-import { useMyCrewStops, useStopPartnerCrews, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive, useCrewDay, useCrewDayAction, useCrewTap } from "@/lib/hooks/use-crew-app";
+import { Truck, MapPin, Clock, Users, Sun, Moon, ChevronRight, CheckCircle2, XCircle, AlertCircle, Home, BookOpen, UserCircle2, Navigation, Car, Loader2 } from "lucide-react";
+import { useMyCrewStops, useStopPartnerCrews, useMyCrewInfo, useCrewDriveToday, useStartDrive, useEndDrive, useCrewDay, useCrewDayAction, useCrewTap, useCrewEquipment } from "@/lib/hooks/use-crew-app";
 import { useCurrentUserStore } from "@/stores";
 import { useOrgDates } from "@/lib/hooks/use-org-timezone";
 import { EditCrewDialog } from "@/components/crm/crew/EditCrewDialog";
@@ -77,15 +77,12 @@ function StopCard({ stop, partners, onClick, today }: { stop: Stop; partners: st
             </p>
           )}
           {stop.address && (
-            // max-w-full/min-w-0: a flex button sizes to its content, so without them a long
-            // address ran past the phone's edge and under the status pill.
-            <button
-              onClick={(e) => { e.stopPropagation(); openInMaps(stop.fullAddress || stop.address); }}
-              className="text-sm text-blue-600 dark:text-blue-400 flex max-w-full min-w-0 items-center gap-1 mt-0.5 py-1 text-left"
-            >
+            // Plain text, not a link: the address sits where people tap to open the job, and a
+            // link here sent crews to their maps app instead. The map button is on the right.
+            <p className="text-sm text-slate-600 dark:text-neutral-400 flex max-w-full min-w-0 items-center gap-1 mt-0.5">
               <MapPin className="h-3 w-3 shrink-0" />
               <span className="truncate">{stop.address}</span>
-            </button>
+            </p>
           )}
           {stop.gateCode && (
             <p className="mt-0.5 text-xs font-semibold text-slate-700 dark:text-neutral-300">Gate code: <span className="font-mono">{stop.gateCode}</span></p>
@@ -112,7 +109,17 @@ function StopCard({ stop, partners, onClick, today }: { stop: Stop; partners: st
               <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">{t("Running")}</span>
             )
           )}
-          <ChevronRight className="h-4 w-4 text-slate-300 dark:text-neutral-500 mt-1" />
+          {stop.address && (
+            <button
+              type="button"
+              aria-label={t("Open in maps")}
+              onClick={(e) => { e.stopPropagation(); openInMaps(stop.fullAddress || stop.address); }}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-blue-600 dark:text-blue-400 active:bg-muted"
+            >
+              <MapPin className="h-4 w-4" />
+            </button>
+          )}
+          <ChevronRight className="h-4 w-4 text-slate-300 dark:text-neutral-500" />
         </div>
       </div>
       {stop.notesToCrew && (
@@ -140,6 +147,7 @@ export default function CrewSchedulePage() {
   const { data: partnerCrews } = useStopPartnerCrews(stops.flatMap((s) => s.visits));
   const { data: crewInfo } = useMyCrewInfo();
   const { data: drive } = useCrewDriveToday(today);
+  const { data: equipment = [] } = useCrewEquipment(today);
   const startDrive = useStartDrive();
   const endDrive = useEndDrive();
   const { data: crewDay, isSuccess: crewDayLoaded } = useCrewDay();
@@ -392,6 +400,22 @@ export default function CrewSchedulePage() {
                 <p className="text-sm text-slate-400 dark:text-neutral-500 mt-1">{t("Check back later or contact the office.")}</p>
               </>
             )}
+          </div>
+        )}
+
+        {equipment.length > 0 && (
+          <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-neutral-400">
+              <Truck className="h-3.5 w-3.5" /> {t("Equipment today")}
+            </p>
+            <ul className="mt-1.5 space-y-0.5">
+              {equipment.map((e) => (
+                <li key={`${e.kind}:${e.id}`} className="text-sm text-slate-800 dark:text-neutral-200">
+                  {e.name}
+                  {e.tag && <span className="ml-1.5 text-xs text-slate-500 dark:text-neutral-400">{e.tag}</span>}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
